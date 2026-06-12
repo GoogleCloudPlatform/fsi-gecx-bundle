@@ -94,7 +94,7 @@ variable "github_app_installation_id" {
 
 variable "github_repo_remote_uri" {
   type    = string
-  default = "https://github.com/cloud-gtm/fsi-gecx-bundle.git"
+  default = "https://github.com/GoogleCloudPlatform/fsi-gecx-bundle.git"
 
   validation {
     condition     = var.deploy_cloud_build_triggers ? (var.github_repo_remote_uri != null && var.github_repo_remote_uri != "") : true
@@ -104,7 +104,7 @@ variable "github_repo_remote_uri" {
 
 variable "github_connection_name" {
   type    = string
-  default = "cloud-gtm"
+  default = "GoogleCloudPlatform"
 }
 
 variable "github_oauth_token_secret_name" {
