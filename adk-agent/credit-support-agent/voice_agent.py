@@ -256,29 +256,34 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         # Capture human handoff trigger and save to DB
         elif event_dict.get("type") == DataChannelEvent.HANDOFF_PENDING.value:
             nonlocal active_escalation_id
-            try:
-                import httpx
-                headers = agent_module.get_auth_headers()
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    escalate_url = f"{agent_module.BANKING_SERVICE_URL}/support/escalate"
-                    payload = {
-                        "room_name": room_name,
-                        "customer_id": agent_module.ACTIVE_CUSTOMER_ID,
-                        "reason": event_dict.get("reason", "User requested supervisor"),
-                        "transcript": conversation_transcript
-                    }
-                    if active_escalation_id is not None:
-                        payload["escalation_id"] = active_escalation_id
-                    
-                    resp = await client.post(escalate_url, json=payload, headers=headers)
-                    if resp.status_code == 200:
-                        res_data = resp.json()
-                        active_escalation_id = res_data.get("escalation_id")
-                        logger.info(f"Successfully synced support escalation via API: {active_escalation_id}")
-                    else:
-                        logger.error(f"Failed to sync support escalation via API: {resp.text}")
-            except Exception as ex:
-                logger.error(f"Failed to call support escalation API: {ex}", exc_info=True)
+            
+            async def sync_escalation():
+                nonlocal active_escalation_id
+                try:
+                    import httpx
+                    headers = agent_module.get_auth_headers()
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        escalate_url = f"{agent_module.BANKING_SERVICE_URL}/support/escalate"
+                        payload = {
+                            "room_name": room_name,
+                            "customer_id": agent_module.ACTIVE_CUSTOMER_ID,
+                            "reason": event_dict.get("reason", "User requested supervisor"),
+                            "transcript": conversation_transcript
+                        }
+                        if active_escalation_id is not None:
+                            payload["escalation_id"] = active_escalation_id
+                        
+                        resp = await client.post(escalate_url, json=payload, headers=headers)
+                        if resp.status_code == 200:
+                            res_data = resp.json()
+                            active_escalation_id = res_data.get("escalation_id")
+                            logger.info(f"Successfully synced support escalation via API: {active_escalation_id}")
+                        else:
+                            logger.error(f"Failed to sync support escalation via API: {resp.text}")
+                except Exception as ex:
+                    logger.error(f"Failed to call support escalation API: {ex}", exc_info=True)
+
+            loop.call_soon_threadsafe(lambda: asyncio.create_task(sync_escalation()))
 
     register_event_callback(on_agent_event)
 
