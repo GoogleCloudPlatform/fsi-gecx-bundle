@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Nova Horizon Credit Union - Next-generation retail banking with high-yield savings, low-rate loans, and premium digital experiences." />
+    <title>Nova Horizon Credit Union | Premium Digital Banking</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Runtime Configuration -->
+    <script src="/config.js"></script>
+    <script src="/fbConfig.js"></script>
+    <!-- CX Agent Studio Stylesheets -->
+    <link rel="stylesheet" href="https://www.gstatic.com/chat-messenger/sdk/prod/v1.16/themes/chat-messenger-default.css">
+    <link rel="stylesheet" href="https://www.gstatic.com/chat-messenger/sdk/prod/v1.16/themes/chat-messenger-layout.css">
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+      import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-analytics.js";
+      import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+      import { isSupported, getMessaging, onMessage, getToken } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-messaging.js";
+
+      // Initialize Firebase using loaded configuration
+      const app = initializeApp(self.firebaseConfig);
+      const analytics = getAnalytics(app);
+
+      // Initialize Auth
+      const auth = getAuth(app);
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
+
+      window.firebaseAuth = {
+        signInWithGoogle: () => {
+          if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            console.log("Localhost: using signInWithPopup");
+            return signInWithPopup(auth, provider);
+          } else {
+            console.log("Deployed: using signInWithRedirect");
+            return signInWithRedirect(auth, provider);
+          }
+        },
+        signOut: () => auth.signOut(),
+        onAuthStateChanged: (callback) => onAuthStateChanged(auth, callback),
+        getRedirectResult: () => getRedirectResult(auth),
+        getCurrentUser: () => auth.currentUser
+      };
+      window.dispatchEvent(new CustomEvent('firebase-auth-ready'));
+
+      let messaging = null;
+
+      // Request permissions and log Token
+      async function setupNotifications() {
+        if (!messaging) {
+          console.log("FCM Messaging is not initialized or unsupported.");
+          return;
+        }
+        try {
+          if (!('Notification' in window)) {
+            console.log('This browser does not support desktop notifications.');
+            return;
+          }
+          const permission = await Notification.requestPermission();
+          if (permission === 'granted') {
+            console.log('Notification permission granted.');
+            const vapidKey = window.env?.FIREBASE_VAPID_KEY;
+            const token = await getToken(messaging, vapidKey ? { vapidKey } : undefined);
+            if (token) {
+              const event = new CustomEvent('firebase-token-retrieved', { detail: token });
+              window.dispatchEvent(event);
+            } else {
+              console.log('No registration token available. Request permission to generate one.');
+            }
+          } else {
+            console.log('Unable to get permission to notify.');
+          }
+        } catch (err) {
+          console.warn('An error occurred while retrieving token:', err);
+        }
+      }
+
+      // Initialize Firebase Messaging only if supported by the browser
+      isSupported().then((supported) => {
+        if (supported) {
+          console.log("FCM Messaging is supported.");
+          messaging = getMessaging(app);
+
+          // Listen to foreground notifications and dispatch a custom event
+          onMessage(messaging, (payload) => {
+            console.log('Message received in foreground: ', payload);
+            const event = new CustomEvent('firebase-push-notification', { detail: payload });
+            window.dispatchEvent(event);
+          });
+
+          // Delay setup slightly to not block initial page rendering
+          setTimeout(setupNotifications, 2000);
+        } else {
+          console.warn("FCM Messaging is not supported in this browser.");
+        }
+      }).catch((err) => {
+        console.error("Error checking FCM support:", err);
+      });
+
+    </script>
+  </head>
+
+  <body class="bg-slate-950 text-slate-100 font-[Outfit] antialiased">
+    <div id="root"></div>
+    <div id="ccaas-widget"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

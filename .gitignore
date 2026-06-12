@@ -1,0 +1,33 @@
+.jetskicli
+.DS_Store
+.vscode
+*.zip
+
+# Ignore implementation plans and temp folders
+docs/impl-plans/
+docs/temp/
+.jetskicli/
+
+# Ignore all local environment configuration folders
+environment/
+
+# Python caching and environment ignores
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.venv/
+.ipynb_checkpoints/
+
+# Node.js dependencies and build output ignores
+node_modules/
+dist/
+.npm/
+npm-debug.log*
+
+# Local configuration secrets
+.env
+.env.local
+.env.*.local

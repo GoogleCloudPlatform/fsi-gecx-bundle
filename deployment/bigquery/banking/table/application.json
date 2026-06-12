@@ -1,0 +1,57 @@
+[
+  {
+    "name": "application_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unique identifier for the product application"
+  },
+  {
+    "name": "user_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Associated user identifier"
+  },
+  {
+    "name": "product_category",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Category of the product (e.g. LOAN, CARD)"
+  },
+  {
+    "name": "product_type",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Specific type of product within the category"
+  },
+  {
+    "name": "requested_amount",
+    "type": "NUMERIC",
+    "mode": "NULLABLE",
+    "description": "Requested amount for the product"
+  },
+  {
+    "name": "application_status",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Current status of the application"
+  },
+  {
+    "name": "assigned_officer_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Associated bank officer identifier"
+  },
+  {
+    "name": "started_at",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE",
+    "defaultValueExpression": "CURRENT_TIMESTAMP()",
+    "description": "Timestamp when application was started"
+  },
+  {
+    "name": "last_updated_at",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE",
+    "description": "Timestamp when application was last updated"
+  }
+]

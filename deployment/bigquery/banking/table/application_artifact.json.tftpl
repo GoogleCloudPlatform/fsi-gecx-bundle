@@ -1,0 +1,90 @@
+[
+  {
+    "name": "artifact_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unique identifier for the interaction artifact"
+  },
+  {
+    "name": "customer_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Associated customer identifier"
+  },
+  {
+    "name": "application_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Associated application identifier"
+  },
+  {
+    "name": "claimed_artifact_type",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Document classification hinted by the user during upload"
+  },
+  {
+    "name": "actual_artifact_type",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Out-of-band AI visual classification result"
+  },
+  {
+    "name": "classification_confidence",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "AI confidence interval score for the visual artifact classification"
+  },
+  {
+    "name": "status",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Workflow state: PENDING_CLASSIFICATION, MISMATCH, PROCESSED, SUPERSEDED"
+  },
+  {
+    "name": "file_path_gcs",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "GCS URI mapping to the source file"
+  },
+  {
+    "name": "extraction_payload",
+    "type": "JSON",
+    "mode": "NULLABLE",
+    "description": "Extracted data payload wrapped with confidence and snippets",
+    "policyTags": {
+      "names": ["${policy_tag_id}"]
+    }
+  },
+  {
+    "name": "audit_metadata",
+    "type": "JSON",
+    "mode": "NULLABLE",
+    "description": "Immutable compliance logging data (prompt version, model version, trace ID)"
+  },
+  {
+    "name": "uploaded_at",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE",
+    "defaultValueExpression": "CURRENT_TIMESTAMP()",
+    "description": "Timestamp indicating when the artifact was uploaded"
+  },
+  {
+    "name": "verification_tier",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Regulatory compliance categories: TIER_1_MANUAL, TIER_2_SPOT_CHECK, TIER_3_API"
+  },
+  {
+    "name": "verification_audit",
+    "type": "JSON",
+    "mode": "NULLABLE",
+    "description": "Audit logging payload (SHA-256 document hash, approving user claims, interactive checkbox logs)"
+  },
+  {
+    "name": "version_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Unique UUID updated on every write to enforce Optimistic Concurrency Control (OCC)"
+  }
+]

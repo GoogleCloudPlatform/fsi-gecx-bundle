@@ -1,0 +1,31 @@
+name: Lint Shell Scripts
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'deployment/scripts/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'deployment/scripts/**'
+
+jobs:
+  shellcheck:
+    name: Run ShellCheck
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: 'deployment/scripts'

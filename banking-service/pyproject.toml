@@ -1,0 +1,46 @@
+[project]
+name = "banking-service"
+version = "0.1.0"
+description = "Banking Service FastAPI backend"
+authors = [{ name = "Mark Servidio", email = "mservidio@google.com" }]
+license = "Apache License 2.0"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi==0.136.0",
+    "uvicorn==0.44.0",
+    "google-cloud-storage==3.10.1",
+    "python-multipart==0.0.27",
+    "google-cloud-bigquery==3.41.0",
+    "httpx==0.28.1",
+    "python-dotenv==1.2.2",
+    "google-adk==1.31.1",
+    "joserfc==1.6.4",
+    "google-cloud-secret-manager==2.27.0",
+    "fastmcp==3.2.4",
+    "cachetools==7.0.6",
+    "greenlet>=3.0.0",
+    "secretstorage>=3.2",
+    "jeepney>=0.4.2",
+    "firebase-admin==7.4.0",
+    "google-cloud-documentai>=3.13.0",
+    "google-cloud-pubsub>=2.27.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.0.3",
+    "pytest-asyncio==1.3.0",
+    "ruff>=0.15.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "auto"
+log_cli = true
+log_cli_level = "INFO"
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true

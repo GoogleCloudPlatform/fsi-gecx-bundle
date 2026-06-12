@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+.card-slate-900 {
+  background-color: var(--card-bg-color, #0f172a);
+  @apply border border-slate-800 rounded-2xl p-6;
+}
+
+.card-themeable {
+  @apply bg-sky-50 dark:bg-slate-950/50 border border-sky-200 dark:border-slate-800/50 rounded-2xl p-8;
+}
+
+.text-theme-main {
+  @apply text-slate-900 dark:text-white;
+}
+
+.text-theme-muted {
+  @apply text-slate-600 dark:text-slate-400;
+}
+
+#ccaas-widget {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+  --launcher-background-color: #0f172a;
+    --launcher-border-color: #10b981;
+    --launcher-color: #d61ac0;
+    --text-color: #000000;
+    --text-font: 'Outfit', sans-serif;
+}

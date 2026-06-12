@@ -1,0 +1,63 @@
+[
+  {
+    "name": "user_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unique identifier for the user"
+  },
+  {
+    "name": "first_name",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "First name of the user"
+  },
+  {
+    "name": "last_name",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Last name of the user"
+  },
+  {
+    "name": "email",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Email address of the user"
+  },
+  {
+    "name": "phone_number",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Contact phone number"
+  },
+  {
+    "name": "date_of_birth",
+    "type": "DATE",
+    "mode": "NULLABLE",
+    "description": "User date of birth"
+  },
+  {
+    "name": "tax_id_masked",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Masked Tax ID / SSN"
+  },
+  {
+    "name": "kyc_status",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Current KYC status"
+  },
+  {
+    "name": "created_at",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE",
+    "defaultValueExpression": "CURRENT_TIMESTAMP()",
+    "description": "Timestamp when the record was created"
+  },
+  {
+    "name": "metadata",
+    "type": "JSON",
+    "mode": "NULLABLE",
+    "description": "Additional unstructured user metadata"
+  }
+]

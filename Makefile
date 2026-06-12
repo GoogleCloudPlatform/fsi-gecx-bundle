@@ -1,0 +1,305 @@
+# FSI GECX Bundle Top-Level Makefile
+# Integrates banking-service, banking-ui, adk-agent, and Terraform deployment workflows.
+
+PROJECT_ID ?= $(shell gcloud config get-value project 2>/dev/null || echo "YOUR_PROJECT_ID")
+PROJECT_NUMBER ?= $(shell gcloud projects describe $(PROJECT_ID) --format="value(projectNumber)" 2>/dev/null || echo "YOUR_PROJECT_NUMBER")
+REGION ?= us-central1
+DOCKER ?= podman
+TF_VARS ?= ./terraform.tfvars
+CUSTOM_DOMAIN ?= $(shell grep -E '^[[:space:]]*custom_domain[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]' || echo "banking.erikvoit.demo.altostrat.com")
+DATA_STORE_ID ?= $(shell grep -E '^[[:space:]]*data_store_id[[:space:]]*=[[:space:]]*' deployment/terraform/discovery_engine.tf 2>/dev/null | cut -d'"' -f2 || echo "banking-site_1778875783412")
+
+
+.PHONY: help
+help: ## Display available commands and their descriptions
+	@echo "======================================================================"
+	@echo "                      FSI GECX Bundle Makefile                        "
+	@echo "======================================================================"
+	@echo "Available commands:"
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+
+.PHONY: install
+install: ## Bootstrap dependencies for backend, frontend, and ADK agent
+	@echo "Installing banking-service dependencies..."
+	cd banking-service && uv sync
+	@echo "Installing banking-ui dependencies..."
+	cd banking-ui && npm install
+	@echo "Installing back-office-agent dependencies..."
+	cd adk-agent/back-office-agent && uv sync
+
+.PHONY: compile-deps
+compile-deps: ## Lock banking-service dependencies using uv
+	@echo "Locking banking-service dependencies..."
+	cd banking-service && uv lock
+
+.PHONY: setup
+setup: install ## Alias for make install
+
+.PHONY: build
+build: ## Build the banking-ui production bundle
+	@echo "Building banking-ui production bundle..."
+	cd banking-ui && npm run build
+
+.PHONY: test
+test: ## Run backend unit tests via pytest
+	@echo "Running banking-service tests..."
+	cd banking-service && uv run pytest
+
+.PHONY: test-integration
+test-integration: ## Execute live GCP sandbox Document AI integration tests (manually triggered)
+	@echo "Executing live cloud sandbox integration test suite..."
+	cd banking-service && RUN_INTEGRATION_TESTS=true .venv/bin/pytest tests/test_integration_docai.py -v -s
+
+.PHONY: test-agent
+test-agent: ## Run ADK back-office-agent local unit tests
+	@echo "Running back-office-agent tests..."
+	cd adk-agent/back-office-agent && uv run python tests/test_agent.py
+
+.PHONY: run-backend
+run-backend: ## Run the FastAPI banking service locally
+	@echo "Starting banking-service..."
+	cd banking-service && uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
+
+.PHONY: run-frontend
+run-frontend: ## Run the React/Vite frontend dev server locally
+	@echo "Starting banking-ui dev server..."
+	cd banking-ui && npm run dev
+
+.PHONY: run
+run: ## Concurrently run both backend and frontend servers locally
+	@echo "Starting backend and frontend concurrently... Press Ctrl+C to stop."
+	@trap 'kill 0' SIGINT; \
+	$(MAKE) run-backend & \
+	$(MAKE) run-frontend & \
+	wait
+
+.PHONY: tf-init
+tf-init: ## Initialize Terraform (accepts optional arguments, e.g., make tf-init ARGS="--reconfigure")
+	cd deployment/terraform && \
+	terraform init -backend-config=./environment/${PROJECT_ID}-tf-state.tfbackend $(ARGS)
+
+.PHONY: tf-plan
+tf-plan: ## Compute and display the incremental Terraform deployment diff
+	@echo "Planning Terraform deployment diff..."
+	cd deployment/terraform && \
+	terraform plan -var-file $(TF_VARS) -out=tfplan
+
+.PHONY: tf-fmt
+tf-fmt: ## Format Terraform configuration files
+	@echo "Formatting Terraform configuration files..."
+	cd deployment/terraform && \
+	terraform fmt
+
+.PHONY: deploy
+deploy: ## Safely apply the incremental Terraform deployment changes
+	@echo "Applying incremental Terraform deployment..."
+	cd deployment/terraform && \
+	terraform apply tfplan
+
+.PHONY: deploy-agent
+deploy-agent: ## Submit Cloud Build job to deploy ADK back-office-agent to GCP Agent Engine
+	@echo "Submitting Cloud Build job for back-office-agent deployment..."
+	gcloud builds submit --config adk-agent/back-office-agent/cloudbuild-deploy.yaml
+
+.PHONY: deploy-target
+deploy-target: ## Deploy an isolated Terraform resource/module (usage: make deploy-target TARGET=module.foo)
+	@if [ -z "$(TARGET)" ]; then echo "Error: TARGET is required. Usage: make deploy-target TARGET=module.foo"; exit 1; fi
+	@echo "Applying targeted deployment for $(TARGET)..."
+	cd deployment/terraform && \
+	terraform apply -var-file ./terraform.tfvars -target=$(TARGET)
+
+.PHONY: publish-images
+publish-images: ## Build and push local container images to Artifact Registry
+	@echo "Building and pushing banking-service image..."
+	cd banking-service && docker build -t "$(REGION)-docker.pkg.dev/$(PROJECT_ID)/fsi-gecx-bundle/banking-service:latest" .
+	docker push "$(REGION)-docker.pkg.dev/$(PROJECT_ID)/fsi-gecx-bundle/banking-service:latest"
+	@echo "Building and pushing banking-ui image..."
+	cd banking-ui && docker build -t "$(REGION)-docker.pkg.dev/$(PROJECT_ID)/fsi-gecx-bundle/banking-ui:latest" .
+	docker push "$(REGION)-docker.pkg.dev/$(PROJECT_ID)/fsi-gecx-bundle/banking-ui:latest"
+
+.PHONY: publish-images-cloud
+publish-images-cloud: ## Submit Cloud Build jobs using official publish/deploy YAMLs
+	@echo "Submitting banking-service Cloud Build job..."
+	gcloud builds submit --config banking-service/cloudbuild-publish-deploy.yaml --substitutions=_TRIGGER_DEPLOY=false
+	@echo "Submitting banking-ui Cloud Build job..."
+	gcloud builds submit --config banking-ui/cloudbuild-publish-deploy.yaml --substitutions=_TRIGGER_DEPLOY=false
+
+.PHONY: upload-gecx
+upload-gecx: ## Execute the official REST API script to package and import the GECx agent directly into Customer Experience Studio (CES)
+	@echo "Executing official CES agent import REST API script for project $(PROJECT_ID)..."
+	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) bash import_cxas_agent.sh
+
+.PHONY: create-gecx
+create-gecx: upload-gecx ## Alias for upload-gecx to automate full CES agent provisioning
+
+.PHONY: update-gecx
+update-gecx: ## Execute the overwrite CES agent script to package and overwrite an existing agent in Customer Experience Studio (CES)
+ifndef APP_ID
+	$(error APP_ID is not defined. Run as: make update-gecx APP_ID=<your-app-id>)
+endif
+	@echo "Executing overwrite CES agent script for project $(PROJECT_ID) and App ID $(APP_ID)..."
+	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) APP_ID=$(APP_ID) bash overwrite_cxas_agent.sh
+
+
+.PHONY: patch-convo-profile
+patch-convo-profile: ## Patch Dialogflow conversational profile to point to a new agent deployment (usage: make patch-convo-profile CONVERSATIONAL_PROFILE_ID=<profile-id> DEPLOYMENT_ID=<deployment-id>)
+ifndef CONVERSATIONAL_PROFILE_ID
+	$(error CONVERSATIONAL_PROFILE_ID is not defined. Run as: make patch-convo-profile CONVERSATIONAL_PROFILE_ID=<profile-id> DEPLOYMENT_ID=<deployment-id>)
+endif
+ifndef DEPLOYMENT_ID
+	$(error DEPLOYMENT_ID is not defined. Run as: make patch-convo-profile CONVERSATIONAL_PROFILE_ID=<profile-id> DEPLOYMENT_ID=<deployment-id>)
+endif
+	@echo "Patching conversational profile $(CONVERSATIONAL_PROFILE_ID) with deployment $(DEPLOYMENT_ID)..."
+	cd scripts/cxas && bash patch_conversational_profile.sh -p $(PROJECT_ID) -c $(CONVERSATIONAL_PROFILE_ID) -d $(DEPLOYMENT_ID)
+
+
+.PHONY: tf-apply
+tf-apply: ## Apply all Terraform stages (infrastructure, services, audiences)
+	@echo "Running full Terraform deployment (all stages)..."
+	cd deployment/terraform && \
+		terraform apply -var-file="$(TF_VARS)"
+
+.PHONY: tf-apply-auto-approve
+tf-apply-auto-approve: ## Apply all Terraform stages with auto-approve
+	@echo "Running full Terraform deployment (all stages, auto-approve)..."
+	cd deployment/terraform && \
+		terraform apply -auto-approve -var-file="$(TF_VARS)"
+
+.PHONY: tf-apply-initial
+tf-apply-initial: ## Argolis Stage 1: Deploy Infrastructure & Cloud Build Triggers (Cloud Run disabled)
+	@echo "Applying Argolis Stage 1 (Infrastructure & Triggers)..."
+	cd deployment/terraform && \
+		terraform apply -auto-approve \
+			-var-file="$(TF_VARS)" \
+			-var="deploy_cloud_build_triggers=true" \
+			-var="deploy_cloud_run_services=false" \
+			-var="set_cloud_run_audiences=false" && \
+		REGION=$$(terraform output -raw region) && \
+		$(MAKE) -C ../.. run-triggers REGION=$$REGION BRANCH=main && \
+		echo "Applying Argolis Stage 2 (Deploy Cloud Run services and load balancer for IAP enabled authentication)..." && \
+		terraform apply -auto-approve \
+			-var-file="$(TF_VARS)" \
+			-var="deploy_cloud_build_triggers=true" \
+			-var="deploy_cloud_run_services=true" \
+			-var="set_cloud_run_audiences=false" && \
+		echo "Applying Argolis Stage 3 (Enable Cloud Run audience for IAP enabled authentication on banking service)..." && \
+		terraform apply -auto-approve \
+			-var-file="$(TF_VARS)" \
+			-var="deploy_cloud_build_triggers=true" \
+			-var="deploy_cloud_run_services=true" \
+			-var="set_cloud_run_audiences=true"
+
+.PHONY: run-triggers
+run-triggers: ## Run Cloud Build triggers for a specific branch (usage: make run-triggers BRANCH=feature/foo)
+	@if [ -z "$(BRANCH)" ]; then echo "Error: BRANCH is required. Usage: make run-triggers BRANCH=feature/foo"; exit 1; fi
+	@echo "Running Cloud Build triggers for branch $(BRANCH)..."
+	BUILD_ID=$$(gcloud builds triggers run banking-service-deployment \
+		--region=$(REGION) \
+		--branch=$(BRANCH) \
+		--substitutions=_TRIGGER_DEPLOY=false \
+		--format="value(metadata.build.id)") && \
+	gcloud builds log $$BUILD_ID --region=$(REGION) --stream
+
+	# Create banking UI artifact
+	BUILD_ID=$$(gcloud builds triggers run banking-ui-deployment \
+		--region=$(REGION) \
+		--branch=$(BRANCH) \
+		--substitutions=_TRIGGER_DEPLOY=false \
+		--format="value(metadata.build.id)") && \
+	gcloud builds log $$BUILD_ID --region=$(REGION) --stream
+
+.PHONY: trigger-site-crawl
+trigger-site-crawl:
+	@if [ -z "$(BRANCH)" ]; then echo "Error: BRANCH is required. Usage: make run-triggers BRANCH=feature/foo"; exit 1; fi
+	@echo "Running Cloud Build trigger for branch $(BRANCH)..."
+	BUILD_ID=$$(gcloud builds triggers run banking-ui-crawl \
+		--region=$(REGION) \
+		--branch=$(BRANCH) \
+		--format="value(metadata.build.id)") && \
+	gcloud builds log $$BUILD_ID --region=$(REGION) --stream
+
+.PHONY: run-crawl
+run-crawl: ## Manually trigger the Playwright web crawler using dynamic CLI substitutions
+	@echo "Submitting manual Playwright web crawler job for project $(PROJECT_ID) (domain=$(CUSTOM_DOMAIN))..."
+	gcloud builds submit --config scripts/crawl_and_upload/cloudbuild-crawl.yaml \
+		--project=$(PROJECT_ID) \
+		--service-account="projects/$(PROJECT_ID)/serviceAccounts/cloudbuild-crawler-sa@$(PROJECT_ID).iam.gserviceaccount.com" \
+		--substitutions=\
+_GCS_BUCKET_NAME=$(PROJECT_ID)-site-crawled-content,\
+_USE_GCP_AUTH=true,\
+_GCP_AUTH_AUDIENCE=https://banking-ui-$(PROJECT_NUMBER).$(REGION).run.app,\
+_SITEMAP_URL=https://banking-ui-$(PROJECT_NUMBER).$(REGION).run.app/sitemap.xml,\
+_SITE_BASE_URL=https://$(CUSTOM_DOMAIN),\
+_DATA_STORE_ID=$(DATA_STORE_ID)
+.PHONY: clean
+clean: ## Clean up cached artifacts, dist folders, local dependency directories, and generated zip archives
+	@echo "Cleaning cached files, local dependency directories, and top-level archives..."
+	rm -rf banking-service/.venv banking-service/__pycache__ banking-service/.pytest_cache
+	rm -rf banking-ui/node_modules banking-ui/dist
+	rm -rf adk-agent/back-office-agent/.venv adk-agent/back-office-agent/.adk
+	rm -f Mortgage_Preapproval.zip
+	@echo "Clean complete."
+
+.PHONY: docker-run-banking-ui
+docker-run-banking-ui: ## Run the banking-ui container locally
+	@echo "Running banking-ui container locally..."
+	cd banking-ui && $(DOCKER) build -t banking-ui-test .
+	@FIREBASE_API_KEY=$$(grep apiKey banking-ui/public/fbConfig.js 2>/dev/null | cut -d'"' -f2); \
+	FIREBASE_AUTH_DOMAIN=$$(grep authDomain banking-ui/public/fbConfig.js 2>/dev/null | cut -d'"' -f2); \
+	FIREBASE_STORAGE_BUCKET=$$(grep storageBucket banking-ui/public/fbConfig.js 2>/dev/null | cut -d'"' -f2); \
+	FIREBASE_MEASUREMENT_ID=$$(grep measurementId banking-ui/public/fbConfig.js 2>/dev/null | cut -d'"' -f2); \
+	FIREBASE_APP_ID=$$(grep appId banking-ui/public/fbConfig.js 2>/dev/null | cut -d'"' -f2); \
+	BANKING_API_URL=$$(grep BANKING_API_URL banking-ui/public/config.js 2>/dev/null | cut -d'"' -f2); \
+	CCAI_COMPANY_ID=$$(grep CCAI_COMPANY_ID banking-ui/public/config.js 2>/dev/null | cut -d'"' -f2); \
+	CCAI_HOST=$$(grep CCAI_HOST banking-ui/public/config.js 2>/dev/null | cut -d'"' -f2); \
+	CX_AGENT_STUDIO_DEPLOYMENT_NAME=$$(grep CX_AGENT_STUDIO_DEPLOYMENT_NAME banking-ui/public/config.js 2>/dev/null | cut -d'"' -f2); \
+	CX_AGENT_STUDIO_UPLOAD_TOOL_NAME=$$(grep CX_AGENT_STUDIO_UPLOAD_TOOL_NAME banking-ui/public/config.js 2>/dev/null | cut -d'"' -f2); \
+	CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME=$$(grep CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME banking-ui/public/config.js 2>/dev/null | cut -d'"' -f2); \
+	$(DOCKER) run -ti \
+	-e GOOGLE_CLOUD_PROJECT=$(PROJECT_ID) \
+	-e BASE_URL="http://localhost:5174" \
+	-e FIREBASE_PROJECT_ID=$(PROJECT_ID) \
+	-e FIREBASE_API_KEY="$$FIREBASE_API_KEY" \
+	-e FIREBASE_AUTH_DOMAIN="$$FIREBASE_AUTH_DOMAIN" \
+	-e FIREBASE_STORAGE_BUCKET="$$FIREBASE_STORAGE_BUCKET" \
+	-e FIREBASE_MESSAGING_SENDER_ID="$(PROJECT_NUMBER)" \
+	-e FIREBASE_APP_ID="$$FIREBASE_APP_ID" \
+	-e FIREBASE_MEASUREMENT_ID="$$FIREBASE_MEASUREMENT_ID" \
+	-e VITE_BANKING_API_URL="$$BANKING_API_URL" \
+	-e VITE_CCAI_COMPANY_ID="$$CCAI_COMPANY_ID" \
+	-e VITE_CCAI_HOST="$$CCAI_HOST" \
+	-e VITE_CX_AGENT_STUDIO_DEPLOYMENT_NAME="$$CX_AGENT_STUDIO_DEPLOYMENT_NAME" \
+	-e VITE_CX_AGENT_STUDIO_UPLOAD_TOOL_NAME="$$CX_AGENT_STUDIO_UPLOAD_TOOL_NAME" \
+	-e VITE_CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME="$$CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME" \
+	-p 5174:8080 \
+	banking-ui-test
+
+.PHONY: docker-run-banking-service
+docker-run-banking-service: ## Run the banking-service container locally
+	@echo "Running banking-service container locally..."
+	cd banking-service && $(DOCKER) build -t banking-service-test .
+	$(DOCKER) run -ti \
+	-v "$(HOME)/.config/gcloud/application_default_credentials.json":/gcp/creds.json \
+	-e GOOGLE_APPLICATION_CREDENTIALS=/gcp/creds.json \
+	-e GOOGLE_CLOUD_PROJECT=$(PROJECT_ID) \
+	-e DISCOVERY_ENGINE_ID="banking-site_1778875783412" \
+	-p 8080:8080 \
+	banking-service-test
+
+.PHONY: docker-run-iap-login-ui
+docker-run-iap-login-ui: ## Run the iap-login-ui container locally
+	@echo "Running iap-login-ui container locally..."
+	cd iap-login-ui && $(DOCKER) build -t iap-login-ui-test .
+	@FIREBASE_API_KEY=$$(grep apiKey iap-login-ui/config.js 2>/dev/null | cut -d'"' -f2); \
+	FIREBASE_AUTH_DOMAIN=$$(grep authDomain iap-login-ui/config.js 2>/dev/null | cut -d'"' -f2); \
+	$(DOCKER) run -ti \
+	-v "$(HOME)/.config/gcloud/application_default_credentials.json":/gcp/creds.json \
+	-e GOOGLE_APPLICATION_CREDENTIALS=/gcp/creds.json \
+	-e GOOGLE_CLOUD_PROJECT=$(PROJECT_ID) \
+	-e FIREBASE_PROJECT_ID=$(PROJECT_ID) \
+	-e FIREBASE_API_KEY="$$FIREBASE_API_KEY" \
+	-e FIREBASE_AUTH_DOMAIN="$$FIREBASE_AUTH_DOMAIN" \
+	-e FIREBASE_PROJECT_NUMBER="$(PROJECT_NUMBER)" \
+	-e BASE_PATH="/" \
+	-p 8080:8080 \
+	iap-login-ui-test

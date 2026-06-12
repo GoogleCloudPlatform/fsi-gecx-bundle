@@ -1,0 +1,40 @@
+name: Lint Banking UI
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'banking-ui/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'banking-ui/**'
+
+jobs:
+  lint:
+    name: Run ESLint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          cache: 'npm'
+          cache-dependency-path: 'banking-ui/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: banking-ui
+
+      - name: Run ESLint
+        run: npm run lint
+        working-directory: banking-ui

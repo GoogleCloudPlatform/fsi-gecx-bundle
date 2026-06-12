@@ -1,0 +1,35 @@
+{
+  "name": "c42cbf30-fc88-4416-8084-aedd59129500",
+  "displayName": "employment_status_selection",
+  "widgetTool": {
+    "name": "employment_status_selection",
+    "description": "Ask the user to select their current employment status.",
+    "widgetType": "QUICK_ACTIONS",
+    "parameters": {
+      "type": "OBJECT",
+      "properties": {
+        "actions": {
+          "type": "ARRAY",
+          "description": "Required. An ordered list of individual actions to be displayed.",
+          "items": {
+            "type": "OBJECT",
+            "properties": {
+              "content": {
+                "type": "STRING",
+                "description": "Required. The visible text content displayed on the action item (e.g., \"Explore AI tools in Google Workspace\", \"View Order\")."
+              },
+              "description": {
+                "type": "STRING",
+                "description": "A brief explanation of what the action performs, providing additional context to the user."
+              },
+              "utterance": {
+                "type": "STRING",
+                "description": "The exact text string sent to the agent as a user message when the action is selected."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

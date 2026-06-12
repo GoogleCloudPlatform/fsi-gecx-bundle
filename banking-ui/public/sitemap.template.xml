@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- Home Page -->
+  <url>
+    <loc>$SITEMAP_BASE_URL/</loc>
+    <lastmod>2026-05-14</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <!-- Checking Accounts -->
+  <url>
+    <loc>$SITEMAP_BASE_URL/checking-accounts</loc>
+    <lastmod>2026-05-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <!-- Savings Accounts -->
+  <url>
+    <loc>$SITEMAP_BASE_URL/savings-accounts</loc>
+    <lastmod>2026-05-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <!-- Certificate Accounts -->
+  <url>
+    <loc>$SITEMAP_BASE_URL/certificate-accounts</loc>
+    <lastmod>2026-05-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <!-- Credit Cards -->
+  <url>
+    <loc>$SITEMAP_BASE_URL/credit-cards</loc>
+    <lastmod>2026-05-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <!-- Mortgages -->
+  <url>
+    <loc>$SITEMAP_BASE_URL/mortgages</loc>
+    <lastmod>2026-05-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <!-- Mortgage Rates -->
+  <url>
+    <loc>$SITEMAP_BASE_URL/mortgage-rates</loc>
+    <lastmod>2026-05-14</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <!-- Help Center -->
+  <url>
+    <loc>$SITEMAP_BASE_URL/help-center</loc>
+    <lastmod>2026-05-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <!-- Fee Schedule -->
+  <url>
+    <loc>$SITEMAP_BASE_URL/fee-schedule</loc>
+    <lastmod>2026-05-14</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <!-- Disclosures -->
+  <url>
+    <loc>$SITEMAP_BASE_URL/disclosures</loc>
+    <lastmod>2026-05-14</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+</urlset>

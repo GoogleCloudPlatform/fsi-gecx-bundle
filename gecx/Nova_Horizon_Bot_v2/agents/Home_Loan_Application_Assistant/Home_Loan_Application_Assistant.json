@@ -1,0 +1,10 @@
+{
+  "name": "e13cbb00-8e30-4c17-910b-7b16777a168b",
+  "displayName": "Home Loan Application Assistant",
+  "instruction": "agents/Home_Loan_Application_Assistant/instruction.txt",
+  "tools": ["end_session", "escalate_to_agent", "file_type_picker", "generate_signed_url", "get_base_64_encoded_content", "transfer_to_loan_officer", "trigger_file_upload"],
+  "toolsets": [{
+    "toolset": "banking_service",
+    "toolIds": ["chat_auth_token_chat_auth_token_post", "create_application_applications_post", "create_profile_profile_post", "extract_artifacts_artifact_id_extractions_post", "generate_upload_url_artifacts_signed_url_post", "get_profile_profile_get", "get_user_user_get", "health_check_health_get", "mint_token_auth_token_post", "update_application_applications__application_id__patch", "upload_and_validate_artifacts_upload_and_validate_post", "upload_artifact_artifacts_post", "validate_token_auth_token_validate_post"]
+  }]
+}

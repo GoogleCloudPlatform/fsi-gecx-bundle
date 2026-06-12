@@ -1,0 +1,64 @@
+[
+  {
+    "name": "message_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unique identifier for the secure message"
+  },
+  {
+    "name": "user_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Associated user identifier"
+  },
+  {
+    "name": "thread_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Thread UUID for grouping messages"
+  },
+  {
+    "name": "sender",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Sender identifier (e.g. 'user' or 'bank')"
+  },
+  {
+    "name": "category",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Category of the secure message"
+  },
+  {
+    "name": "message",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Body content of the message"
+  },
+  {
+    "name": "created_at",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Message creation timestamp"
+  },
+  {
+    "name": "deleted",
+    "type": "BOOLEAN",
+    "mode": "REQUIRED",
+    "description": "Soft deletion state (true if deleted)"
+  },
+  {
+    "name": "is_user_read",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE",
+    "description": "Indicates if the message has been read by the user",
+    "defaultValueExpression": "false"
+  },
+  {
+    "name": "is_agent_read",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE",
+    "description": "Indicates if the message has been read by the support agent",
+    "defaultValueExpression": "false"
+  }
+]

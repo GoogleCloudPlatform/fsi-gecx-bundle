@@ -1,0 +1,12 @@
+[project]
+name = "site-crawler"
+version = "0.1.0"
+description = "Sitemap crawl and GCS uploader script"
+requires-python = ">=3.11,<3.13"
+
+dependencies = [
+    "requests>=2.31.0",
+    "google-cloud-storage>=2.14.0",
+    "google-auth>=2.25.0",
+    "playwright>=1.40.0",
+]

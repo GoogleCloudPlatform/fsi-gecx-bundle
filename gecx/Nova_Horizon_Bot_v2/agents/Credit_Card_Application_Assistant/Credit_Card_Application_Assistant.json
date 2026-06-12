@@ -1,0 +1,6 @@
+{
+  "name": "1912ecc4-6a4b-41ab-b4e9-dc2013ef1e34",
+  "displayName": "Credit Card Application Assistant",
+  "instruction": "agents/Credit_Card_Application_Assistant/instruction.txt",
+  "tools": ["employment_status_selection", "end_session", "populate_form_content", "product_comparison", "site_content"]
+}

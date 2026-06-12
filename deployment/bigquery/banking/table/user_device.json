@@ -1,0 +1,14 @@
+[
+  {
+    "name": "user_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Associated user identifier"
+  },
+  {
+    "name": "device_token",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Associated application identifier"
+  }
+]

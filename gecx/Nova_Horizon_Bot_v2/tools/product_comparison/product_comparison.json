@@ -1,0 +1,112 @@
+{
+  "name": "dc44f63a-6802-4ebb-b487-5e4125f7eb04",
+  "displayName": "product_comparison",
+  "widgetTool": {
+    "name": "product_comparison",
+    "description": "Shows a product comparison of the different credit card options. Do not show the checkout or quantity / add buttons, or add to card buttons.",
+    "widgetType": "PRODUCT_COMPARISON",
+    "parameters": {
+      "type": "OBJECT",
+      "properties": {
+        "features": {
+          "type": "ARRAY",
+          "description": "A list of objects, where each object contains the core details of one feature being compared",
+          "items": {
+            "type": "OBJECT",
+            "properties": {
+              "label": {
+                "type": "STRING",
+                "description": "The name of the feature being compared in this row (e.g., \"Camera\", \"Weight\")."
+              },
+              "productSpecs": {
+                "type": "ARRAY",
+                "description": "A list of specifications, one for each product being compared, detailing how it performs on this specific feature. The order in this list should correspond to the order of products in the productDetails list.Crucially, all ProductFeatureSpec objects within this list should consistently use only one method to describe the feature (either text, image, or anchor) across all products for this particular comparison row.",
+                "items": {
+                  "type": "OBJECT",
+                  "properties": {
+                    "anchor": {
+                      "type": "OBJECT",
+                      "properties": {
+                        "displayText": {
+                          "type": "STRING",
+                          "description": "The text to display for the hyperlink. For example, \"More about this feature\". Use this field when the feature requires a link to more detailed information, and ensure all other productSpecs for this feature also use an anchor."
+                        },
+                        "target": {
+                          "type": "STRING",
+                          "description": "The direct URL to the page containing more information about this feature. Use this field when the feature is best represented visually, and ensure all other productSpecs for this feature also use an image."
+                        }
+                      },
+                      "description": "A hyperlink for users to get more information about this feature. Use this field when the feature can be best described with a short text string."
+                    },
+                    "image": {
+                      "type": "OBJECT",
+                      "properties": {
+                        "altText": {
+                          "type": "STRING",
+                          "description": "A descriptive text for the image, used for screen readers and accessibility."
+                        },
+                        "rawUrl": {
+                          "type": "STRING",
+                          "description": "The direct URL to the image."
+                        }
+                      },
+                      "description": "An image that illustrates this specific feature spec."
+                    },
+                    "text": {
+                      "type": "STRING",
+                      "description": "The text describing the feature specification of a specific product. For example, \"Up to 30 hours\" or \"Google Tensor G3\"."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "productDetails": {
+          "type": "ARRAY",
+          "description": "A list of objects, where each object contains the core details of one product being compared",
+          "items": {
+            "type": "OBJECT",
+            "properties": {
+              "imageUris": {
+                "type": "ARRAY",
+                "description": "A list of direct URLs to images displaying the product.",
+                "items": {
+                  "type": "STRING"
+                }
+              },
+              "price": {
+                "type": "STRING",
+                "description": "The current selling price of the product."
+              },
+              "productId": {
+                "type": "STRING",
+                "description": "The unique identifier for this specific product."
+              },
+              "rating": {
+                "type": "NUMBER",
+                "description": "The average aggregate user rating for the product, typically on a scale of 1.0 to 5.0. Leave null if no ratings exist."
+              },
+              "subtitle": {
+                "type": "STRING",
+                "description": "A longer, secondary line of text for additional context or description of the product."
+              },
+              "title": {
+                "type": "STRING",
+                "description": "The primary name of the product as listed (e.g., \"Men\u0027s Running Shoes\")."
+              },
+              "uri": {
+                "type": "STRING",
+                "description": "The URL directing users to the full product detail page."
+              }
+            }
+          }
+        },
+        "title": {
+          "type": "STRING",
+          "description": "The main headline for the entire comparison card. For example, \"Compare Google Pixel Phones\"."
+        }
+      }
+    }
+  }
+}

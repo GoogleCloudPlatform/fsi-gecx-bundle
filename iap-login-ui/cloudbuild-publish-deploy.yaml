@@ -1,0 +1,44 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build-image"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        docker build \
+          -t "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/iap-login-ui:$${COMMIT_SHA:-local}" \
+          -t "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/iap-login-ui:latest" \
+          .
+    dir: "iap-login-ui"
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-image"
+    args:
+      [
+        "push",
+        "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/iap-login-ui",
+        "--all-tags",
+      ]
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        if [ "${_TRIGGER_DEPLOY}" = "true" ]; then
+          gcloud run deploy iap-login-ui \
+            --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/iap-login-ui:$${COMMIT_SHA:-local}" \
+            --region "${_REGION}"
+        fi
+
+images:
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/iap-login-ui:latest"
+
+options:
+  pool:
+    name: "projects/${PROJECT_ID}/locations/${_REGION}/workerPools/build-pool"
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _REGION: "us-central1"
+  _TRIGGER_DEPLOY: "false"

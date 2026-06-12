@@ -1,0 +1,716 @@
+openapi: 3.0.0
+info:
+  title: Banking Service API
+  description: Banking Service API for managing interactions.
+  version: 0.0.1
+servers:
+- url: $env_var
+paths:
+  /applications:
+    post:
+      tags:
+      - application
+      summary: Create Application
+      operationId: create_application_applications_post
+      security:
+      - HTTPBearer: []
+      - HTTPForwardedBearer: []
+      parameters:
+      - name: x-goog-iap-jwt-assertion
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Goog-Iap-Jwt-Assertion
+      - name: x-forwarded-user-context
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Forwarded-User-Context
+        x-ces-session-context: $context.variables.access_token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationCreateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /applications/{application_id}:
+    patch:
+      tags:
+      - application
+      summary: Update Application
+      operationId: update_application_applications__application_id__patch
+      security:
+      - HTTPBearer: []
+      - HTTPForwardedBearer: []
+      parameters:
+      - name: application_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Application Id
+      - name: x-goog-iap-jwt-assertion
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Goog-Iap-Jwt-Assertion
+      - name: x-forwarded-user-context
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Forwarded-User-Context
+        x-ces-session-context: $context.variables.access_token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationUpdateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /chat/auth/token:
+    post:
+      tags:
+      - chat
+      summary: Chat Auth Token
+      operationId: chat_auth_token_chat_auth_token_post
+      security:
+      - HTTPBearer: []
+      - HTTPForwardedBearer: []
+      parameters:
+      - name: x-goog-iap-jwt-assertion
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Goog-Iap-Jwt-Assertion
+      - name: x-forwarded-user-context
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Forwarded-User-Context
+        x-ces-session-context: $context.variables.access_token
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /artifacts:
+    post:
+      tags:
+      - artifacts
+      summary: Upload Artifact
+      operationId: upload_artifact_artifacts_post
+      security:
+      - HTTPBearer: []
+      - HTTPForwardedBearer: []
+      parameters:
+      - name: x-goog-iap-jwt-assertion
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Goog-Iap-Jwt-Assertion
+      - name: x-forwarded-user-context
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Forwarded-User-Context
+        x-ces-session-context: $context.variables.access_token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtifactUploadRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /artifacts/upload-and-validate:
+    post:
+      tags:
+      - artifacts
+      summary: Upload And Validate
+      operationId: upload_and_validate_artifacts_upload_and_validate_post
+      security:
+      - HTTPBearer: []
+      - HTTPForwardedBearer: []
+      parameters:
+      - name: x-goog-iap-jwt-assertion
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Goog-Iap-Jwt-Assertion
+      - name: x-forwarded-user-context
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Forwarded-User-Context
+        x-ces-session-context: $context.variables.access_token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtifactUploadRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /artifacts/{artifact_id}/extractions:
+    post:
+      tags:
+      - artifacts
+      summary: Extract
+      operationId: extract_artifacts__artifact_id__extractions_post
+      security:
+      - HTTPBearer: []
+      - HTTPForwardedBearer: []
+      parameters:
+      - name: artifact_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Artifact Id
+      - name: x-goog-iap-jwt-assertion
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Goog-Iap-Jwt-Assertion
+      - name: x-forwarded-user-context
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Forwarded-User-Context
+        x-ces-session-context: $context.variables.access_token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+              title: Fields
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /artifacts/signed-url:
+    post:
+      tags:
+      - artifacts
+      summary: Generate Upload Url
+      operationId: generate_upload_url_artifacts_signed_url_post
+      security:
+      - HTTPBearer: []
+      - HTTPForwardedBearer: []
+      parameters:
+      - name: x-goog-iap-jwt-assertion
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Goog-Iap-Jwt-Assertion
+      - name: x-forwarded-user-context
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Forwarded-User-Context
+        x-ces-session-context: $context.variables.access_token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignedUrlRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /profile:
+    get:
+      tags:
+      - profile
+      summary: Get Profile
+      operationId: get_profile_profile_get
+      security:
+      - HTTPBearer: []
+      - HTTPForwardedBearer: []
+      parameters:
+      - name: x-goog-iap-jwt-assertion
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Goog-Iap-Jwt-Assertion
+      - name: x-forwarded-user-context
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Forwarded-User-Context
+        x-ces-session-context: $context.variables.access_token
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerProfile'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - profile
+      summary: Create Profile
+      operationId: create_profile_profile_post
+      security:
+      - HTTPBearer: []
+      - HTTPForwardedBearer: []
+      parameters:
+      - name: x-goog-iap-jwt-assertion
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Goog-Iap-Jwt-Assertion
+      - name: x-forwarded-user-context
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Forwarded-User-Context
+        x-ces-session-context: $context.variables.access_token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerProfileCreateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Create Profile Profile Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /auth/token:
+    post:
+      tags:
+      - authentication
+      summary: Mint Token
+      operationId: mint_token_auth_token_post
+      security:
+      - HTTPBearer: []
+      - HTTPForwardedBearer: []
+      parameters:
+      - name: x-goog-iap-jwt-assertion
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Goog-Iap-Jwt-Assertion
+      - name: x-forwarded-user-context
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Forwarded-User-Context
+        x-ces-session-context: $context.variables.access_token
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /auth/token/validate:
+    post:
+      tags:
+      - authentication
+      summary: Validate Token
+      operationId: validate_token_auth_token_validate_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenValidateRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidatedToken'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /health:
+    get:
+      tags:
+      - system
+      summary: Health check
+      description: Health check.
+      operationId: health_check_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+  /user:
+    get:
+      tags:
+      - user
+      summary: Get current user
+      description: Get current user from IAP.
+      operationId: get_user_user_get
+      security:
+      - HTTPBearer: []
+      - HTTPForwardedBearer: []
+      parameters:
+      - name: x-goog-iap-jwt-assertion
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Goog-Iap-Jwt-Assertion
+      - name: x-forwarded-user-context
+        in: header
+        required: false
+        schema:
+          type: string
+          nullable: true
+          title: X-Forwarded-User-Context
+        x-ces-session-context: $context.variables.access_token
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    ApplicationCreateRequest:
+      type: object
+      required:
+      - product_category
+      - product_type
+      - requested_amount
+      properties:
+        product_category:
+          $ref: '#/components/schemas/ProductCategory'
+        product_type:
+          $ref: '#/components/schemas/ProductType'
+        requested_amount:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          title: Requested Amount
+      title: ApplicationCreateRequest
+    ApplicationUpdateRequest:
+      type: object
+      properties:
+        requested_amount:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          title: Requested Amount
+          nullable: true
+        application_status:
+          type: string
+          title: Application Status
+          nullable: true
+      title: ApplicationUpdateRequest
+
+    ArtifactUploadRequest:
+      type: object
+      required:
+      - application_id
+      - artifact_type
+      - base64_content
+      - content_type
+      properties:
+        application_id:
+          type: string
+          title: Application Id
+        artifact_type:
+          $ref: '#/components/schemas/DocumentType'
+        base64_content:
+          type: string
+          title: Base64 Content
+        content_type:
+          type: string
+          title: Content Type
+      title: ArtifactUploadRequest
+    CustomerProfile:
+      type: object
+      required:
+      - customer_id
+      properties:
+        customer_id:
+          type: string
+          title: Customer Id
+        first_name:
+          type: string
+          nullable: true
+          title: First Name
+        last_name:
+          type: string
+          nullable: true
+          title: Last Name
+        email:
+          type: string
+          nullable: true
+          title: Email
+        phone_number:
+          type: string
+          nullable: true
+          title: Phone Number
+        kyc_status:
+          type: string
+          nullable: true
+          title: Kyc Status
+      title: CustomerProfile
+    CustomerProfileCreateRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+          nullable: true
+          title: First Name
+        last_name:
+          type: string
+          nullable: true
+          title: Last Name
+      title: CustomerProfileCreateRequest
+    DocumentType:
+      type: string
+      enum:
+      - W2
+      - PAY_STUB
+      title: DocumentType
+    HTTPValidationError:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          title: Detail
+      title: HTTPValidationError
+    ProductCategory:
+      type: string
+      enum:
+      - LOAN
+      title: ProductCategory
+    ProductType:
+      type: string
+      enum:
+      - RESIDENTIAL_MORTGAGE
+      title: ProductType
+    SignedUrlRequest:
+      type: object
+      required:
+      - application_id
+      properties:
+        application_id:
+          type: string
+          title: Application Id
+        artifact_type:
+          allOf:
+          - $ref: '#/components/schemas/DocumentType'
+          nullable: true
+        content_type:
+          type: string
+          title: Content Type
+          default: application/pdf
+      title: SignedUrlRequest
+    TokenValidateRequest:
+      type: object
+      required:
+      - token
+      properties:
+        token:
+          type: string
+          title: Token
+      title: TokenValidateRequest
+    ValidatedToken:
+      type: object
+      required:
+      - claims
+      properties:
+        valid:
+          type: boolean
+          title: Valid
+          default: true
+        claims:
+          type: object
+          additionalProperties: true
+          title: Claims
+      title: ValidatedToken
+    ValidationError:
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      properties:
+        loc:
+          type: array
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        ctx:
+          type: object
+          title: Context
+      title: ValidationError
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer
+    HTTPForwardedBearer:
+      type: apiKey
+      in: header
+      name: X-Forwarded-User-Context

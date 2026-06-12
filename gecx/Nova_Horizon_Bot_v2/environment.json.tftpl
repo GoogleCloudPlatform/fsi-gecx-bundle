@@ -1,0 +1,22 @@
+{
+  "tools": {
+    "site_content": {
+      "dataStoreTool": {
+        "engineSource": {
+          "dataStoreSources": [{
+            "dataStore": {
+              "name": "${gcs_site_data_store_id}"
+            }
+          }]
+        }
+      }
+    }
+  },
+  "toolsets": {
+    "banking_service": {
+      "openApiToolset": {
+        "url": "${banking_service_url}"
+      }
+    }
+  }
+}

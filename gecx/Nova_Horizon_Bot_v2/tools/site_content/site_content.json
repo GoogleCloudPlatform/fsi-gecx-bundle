@@ -1,0 +1,17 @@
+{
+  "name": "145501af-04d7-4500-b553-8e2e19b93f73",
+  "dataStoreTool": {
+    "name": "site_content",
+    "engineSource": {
+      "dataStoreSources": [{
+        "dataStore": {
+          "name": "$env_var",
+          "engineType": "SEARCH_ENGINE"
+        }
+      }]
+    },
+    "filterParameterBehavior": "NEVER_INCLUDE"
+  },
+  "executionType": "SYNCHRONOUS",
+  "displayName": "site_content"
+}

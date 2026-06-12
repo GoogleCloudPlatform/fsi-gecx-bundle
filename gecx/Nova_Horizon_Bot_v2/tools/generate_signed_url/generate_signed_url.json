@@ -1,0 +1,9 @@
+{
+  "name": "0b0c6a52-2889-4a66-83d8-83b238d9d61d",
+  "pythonFunction": {
+    "name": "generate_signed_url",
+    "pythonCode": "tools/generate_signed_url/python_function/python_code.py"
+  },
+  "executionType": "SYNCHRONOUS",
+  "displayName": "generate_signed_url"
+}

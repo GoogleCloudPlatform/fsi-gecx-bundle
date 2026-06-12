@@ -1,0 +1,149 @@
+{
+  "name": "e0b952c1-280d-41d0-8da5-46db4b0e6ad9",
+  "displayName": "Nova Horizon Bot v2",
+  "rootAgent": "root_agent",
+  "loggingSettings": {
+    "conversationLoggingSettings": {
+      "retentionWindow": "31536000s"
+    }
+  },
+  "guardrails": ["Safety Guardrail 1776869509726", "Prompt Guardrail 1776869509726"],
+  "variableDeclarations": [{
+    "name": "TELEPHONY_PAYLOAD",
+    "schema": {
+      "type": "OBJECT",
+      "properties": {
+        "ujet": {
+          "type": "OBJECT",
+          "properties": {
+            "action": {
+              "type": "STRING"
+            },
+            "escalation_reason": {
+              "type": "STRING"
+            },
+            "type": {
+              "type": "STRING"
+            }
+          }
+        }
+      },
+      "default": {
+        "ujet": {
+          "action": "escalation",
+          "escalation_reason": "by_virtual_agent",
+          "type": "action"
+        }
+      }
+    }
+  }, {
+    "name": "access_token",
+    "description": "X-Forwarded-User-Context",
+    "schema": {
+      "type": "STRING",
+      "default": null
+    }
+  }, {
+    "name": "annual_gross_income",
+    "schema": {
+      "type": "NUMBER",
+      "default": null
+    }
+  }, {
+    "name": "application",
+    "description": "The application from the CCaaS queue",
+    "schema": {
+      "type": "STRING",
+      "default": null
+    }
+  }, {
+    "name": "application_id",
+    "schema": {
+      "type": "STRING",
+      "default": null
+    }
+  }, {
+    "name": "chat_id",
+    "description": "The chat_id from the CCaaS queue",
+    "schema": {
+      "type": "STRING",
+      "default": null
+    }
+  }, {
+    "name": "customer_name",
+    "schema": {
+      "type": "STRING",
+      "default": null
+    }
+  }, {
+    "name": "email",
+    "schema": {
+      "type": "STRING",
+      "default": null
+    }
+  }, {
+    "name": "employment_status",
+    "description": "List should have: Employed, Self-Employed, Retired, Student, Unemployed",
+    "schema": {
+      "type": "ARRAY",
+      "items": {
+        "type": "STRING"
+      },
+      "default": null
+    }
+  }, {
+    "name": "first_name",
+    "schema": {
+      "type": "STRING",
+      "default": null
+    }
+  }, {
+    "name": "is_ujet_sdk",
+    "schema": {
+      "type": "BOOLEAN",
+      "default": false
+    }
+  }, {
+    "name": "last_name",
+    "schema": {
+      "type": "STRING",
+      "default": null
+    }
+  }, {
+    "name": "last_transfer_details",
+    "description": "Variable \"last_transfer_details\".",
+    "schema": {
+      "type": "STRING",
+      "default": null
+    }
+  }, {
+    "name": "monthly_housing_payment",
+    "schema": {
+      "type": "NUMBER",
+      "default": null
+    }
+  }, {
+    "name": "phone_number",
+    "schema": {
+      "type": "STRING",
+      "default": null
+    }
+  }, {
+    "name": "product",
+    "schema": {
+      "type": "STRING",
+      "default": null
+    }
+  }, {
+    "name": "user_id",
+    "schema": {
+      "type": "STRING",
+      "default": null
+    }
+  }],
+  "dataStoreSettings": {
+  },
+  "timeZoneSettings": {
+    "timeZone": "America/Los_Angeles"
+  }
+}

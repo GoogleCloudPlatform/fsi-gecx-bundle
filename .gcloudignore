@@ -1,0 +1,11 @@
+.gcloudignore
+.git
+.gitignore
+node_modules/
+.venv/
+.terraform/
+.pytest_cache/
+**/node_modules/
+**/.venv/
+**/.terraform/
+**/.pytest_cache/

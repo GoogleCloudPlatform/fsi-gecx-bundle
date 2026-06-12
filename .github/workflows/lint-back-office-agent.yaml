@@ -1,0 +1,31 @@
+name: Lint Back Office Agent
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'adk-agent/back-office-agent/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'adk-agent/back-office-agent/**'
+
+jobs:
+  lint:
+    name: Run Ruff Linter
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Run Ruff
+        uses: astral-sh/ruff-action@v3
+        with:
+          src: './adk-agent/back-office-agent'

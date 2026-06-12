@@ -1,0 +1,35 @@
+server {
+    listen       ${PORT};
+    server_name  localhost;
+
+    client_header_buffer_size 16k;
+    large_client_header_buffers 4 64k;
+
+    # Enable Gzip Compression
+    gzip on;
+    gzip_min_length 1024;
+    gzip_comp_level 5;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_disable "msie6";
+    gzip_types
+        text/plain
+        text/css
+        text/javascript
+        application/javascript
+        application/x-javascript
+        application/json
+        application/xml
+        application/xml+rss
+        image/svg+xml;
+
+    location / {
+        root   /usr/share/nginx/html;
+        index  index.html index.htm;
+        try_files $uri /index.html;
+    }
+
+    location /__/auth/ {
+        proxy_pass https://${FIREBASE_PROJECT_ID}.firebaseapp.com/__/auth/;
+    }
+}

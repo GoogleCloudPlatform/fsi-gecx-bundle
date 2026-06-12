@@ -1,0 +1,77 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+steps:
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    id: "purge-datastore"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        echo "Purging Discovery Engine data store: ${_DATA_STORE_ID}..."
+        curl -X POST \
+          -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+          -H "Content-Type: application/json" \
+          -d '{"filter": "*", "force": true}' \
+          "https://discoveryengine.googleapis.com/v1/projects/${PROJECT_ID}/locations/global/collections/default_collection/dataStores/${_DATA_STORE_ID}/branches/0/documents:purge"
+    env:
+      - "PROJECT_ID=${PROJECT_ID}"
+
+  - name: "ghcr.io/astral-sh/uv:python3.11-bookworm-slim"
+    id: "crawl-and-upload"
+    entrypoint: "bash"
+    dir: "scripts/crawl_and_upload"
+    args:
+      - "-c"
+      - |
+        uv sync --frozen --default-index https://pypi.org/simple
+        uv run playwright install --with-deps chromium
+        uv run python crawl_and_upload.py
+    env:
+      - "SITEMAP_URL=${_SITEMAP_URL}"
+      - "GCS_BUCKET_NAME=${_GCS_BUCKET_NAME}"
+      - "USE_GCP_AUTH=${_USE_GCP_AUTH}"
+      - "BEARER_TOKEN=${_BEARER_TOKEN}"
+      - "GCP_AUTH_AUDIENCE=${_GCP_AUTH_AUDIENCE}"
+      - "SITE_BASE_URL=${_SITE_BASE_URL}"
+      - "BASE_URL_OVERRIDE=${_BASE_URL_OVERRIDE}"
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    id: "import-datastore"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        echo "Importing crawled content into Discovery Engine data store: ${_DATA_STORE_ID}..."
+        curl -X POST \
+          -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+          -H "Content-Type: application/json" \
+          -d "{\"gcsSource\": {\"inputUris\": [\"gs://${_GCS_BUCKET_NAME}/documents.ndjson\"]}, \"reconciliationMode\": \"FULL\"}" \
+          "https://discoveryengine.googleapis.com/v1/projects/${PROJECT_ID}/locations/global/collections/default_collection/dataStores/${_DATA_STORE_ID}/branches/0/documents:import"
+    env:
+      - "PROJECT_ID=${PROJECT_ID}"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _SITEMAP_URL: "https://banking-ui-YOUR_PROJECT_NUMBER.YOUR_REGION.run.app/sitemap.xml"
+  _GCS_BUCKET_NAME: "YOUR_PROJECT_ID-site-crawled-content"
+  _USE_GCP_AUTH: "true"
+  _BEARER_TOKEN: ""
+  _GCP_AUTH_AUDIENCE: "https://banking-ui-YOUR_PROJECT_NUMBER.YOUR_REGION.run.app"
+  _SITE_BASE_URL: "https://banking.YOUR_CUSTOM_DOMAIN"
+  _BASE_URL_OVERRIDE: ""
+  _DATA_STORE_ID: "YOUR_DATA_STORE_ID"
+

@@ -1,0 +1,7 @@
+{
+  "name": "9f4ba854-f8d7-4ac2-99db-3820f8ce2331",
+  "displayName": "root_agent",
+  "instruction": "agents/root_agent/instruction.txt",
+  "tools": ["end_session"],
+  "childAgents": ["Credit Card Application Assistant", "Home Loan Application Assistant"]
+}

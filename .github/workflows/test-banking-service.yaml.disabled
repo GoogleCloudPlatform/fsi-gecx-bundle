@@ -1,0 +1,41 @@
+name: Test Banking Service
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'banking-service/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'banking-service/**'
+
+jobs:
+  test:
+    name: Run Pytest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: |
+          cd banking-service
+          uv sync --default-index https://pypi.org/simple
+
+      - name: Run Pytest
+        run: |
+          cd banking-service
+          uv run pytest

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In | Nova Horizon Credit Union</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="/__VITE_BASE_PATH__/config.js"></script>
+  <style>
+    :root {
+      --brand-from: #047857;
+      --brand-to: #06b6d4;
+    }
+    body {
+      margin: 0;
+      font-family: 'Outfit', sans-serif;
+      background-color: #020617;
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .glow {
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(4,120,87,0.15) 0%, rgba(6,182,212,0.05) 50%, rgba(0,0,0,0) 100%);
+      top: -100px;
+      left: -100px;
+      z-index: 0;
+    }
+    .glow-2 {
+      position: absolute;
+      width: 500px;
+      height: 500px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(6,182,212,0.15) 0%, rgba(4,120,87,0.05) 50%, rgba(0,0,0,0) 100%);
+      bottom: -100px;
+      right: -100px;
+      z-index: 0;
+    }
+    .card {
+      position: relative;
+      z-index: 10;
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      padding: 40px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+      text-align: center;
+    }
+    .logo-container {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--brand-from), var(--brand-to));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px auto;
+      box-shadow: 0 10px 15px -3px rgba(4, 120, 87, 0.4);
+    }
+    .logo-container svg {
+      width: 24px;
+      height: 24px;
+      color: #020617;
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 8px 0;
+      background: linear-gradient(to right, #ffffff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    p.subtitle {
+      font-size: 14px;
+      color: #94a3b8;
+      margin: 0 0 32px 0;
+    }
+    #firebaseui-auth-container {
+      margin-top: 16px;
+    }
+    .firebaseui-container {
+      background-color: transparent !important;
+      box-shadow: none !important;
+      font-family: 'Outfit', sans-serif !important;
+    }
+    .firebaseui-card-content {
+      padding: 0 !important;
+    }
+    .firebaseui-idp-button {
+      border-radius: 12px !important;
+      font-weight: 600 !important;
+      height: 48px !important;
+      margin-bottom: 12px !important;
+      box-shadow: none !important;
+      transition: all 0.2s ease-in-out !important;
+    }
+    .firebaseui-idp-button:hover {
+      transform: translateY(-2px) !important;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
+    }
+    .firebaseui-idp-google {
+      background-color: #f8fafc !important;
+      color: #0f172a !important;
+    }
+    .firebaseui-idp-password {
+      background-color: #1e293b !important;
+      color: #f8fafc !important;
+      border: 1px solid rgba(255,255,255,0.1) !important;
+    }
+    .firebaseui-textfield.mdl-textfield .mdl-textfield__input {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+      color: #f8fafc !important;
+    }
+    .firebaseui-textfield.mdl-textfield .mdl-textfield__input:focus {
+      border-color: #10b981 !important;
+    }
+    .firebaseui-label {
+      color: #94a3b8 !important;
+    }
+    .firebaseui-button {
+      border-radius: 12px !important;
+      height: 44px !important;
+      background-color: #059669 !important;
+    }
+    .firebaseui-button:hover {
+      background-color: #047857 !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="glow-2"></div>
+  <div class="card">
+    <div class="logo-container">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+    </div>
+    <h1>Nova Horizon</h1>
+    <p class="subtitle">Secure IAP Authentication Portal</p>
+    <div id="firebaseui-auth-container"></div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

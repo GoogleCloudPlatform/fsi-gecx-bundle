@@ -1,0 +1,16 @@
+User-agent: *
+Allow: /
+Allow: /checking-accounts
+Allow: /credit-cards
+Allow: /mortgages
+Allow: /mortgage-rates
+Allow: /help-center
+Allow: /fee-schedule
+Allow: /disclosures
+
+# Disallow indexing of private configuration and user-specific edit screens
+Disallow: /settings
+Disallow: /edit-profile
+
+# Sitemap reference
+Sitemap: http://localhost:5173/sitemap.xml

@@ -1,0 +1,9 @@
+{
+  "document_type": "W2",
+  "expected_fields": [
+    "WagesTipsOtherCompensation",
+    "FederalIncomeTaxWithheld",
+    "SocialSecurityTaxWithheld",
+    "SSN"
+  ]
+}

@@ -1,0 +1,38 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+
+sessions.db
+session.db
+
+.adk/
+
+# adk deploy temp files
+agent_tmp**
+
+# UV lock files
+uv.lock
+
+# Virtual Environments
+.venv
+venv/
+env/
+
+# Local Secrets & Environment Variables
+.env
+.env.*
+*.secret
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build & Package Artifacts
+build/
+dist/
+*.egg-info/
+
+# IDE & OS Files
+.vscode/
+.idea/
+.DS_Store

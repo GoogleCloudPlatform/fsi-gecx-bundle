@@ -1,0 +1,54 @@
+{
+  "name": "8e42a29a-d20e-4aba-8ea9-beecb68c6a60",
+  "clientFunction": {
+    "name": "populate_form_content",
+    "description": "Updates the credit card form content",
+    "parameters": {
+      "type": "OBJECT",
+      "properties": {
+        "annual_gross_income": {
+          "type": "STRING",
+          "description": "The annual gross income of the applicant"
+        },
+        "email": {
+          "type": "STRING",
+          "description": "The email for the applicant"
+        },
+        "employment_status": {
+          "type": "STRING",
+          "description": "The employment status of the applicant"
+        },
+        "first_name": {
+          "type": "STRING",
+          "description": "The first name of the applicant."
+        },
+        "last_name": {
+          "type": "STRING",
+          "description": "The last name of the applicant"
+        },
+        "monthly_housing_payment": {
+          "type": "STRING",
+          "description": "The monthly housing payment of the applicant"
+        },
+        "phone": {
+          "type": "STRING",
+          "description": "The phone number for the applicant"
+        },
+        "product": {
+          "type": "STRING",
+          "description": "The product for which the applicant wants to apply"
+        }
+      }
+    },
+    "response": {
+      "type": "OBJECT",
+      "properties": {
+        "status": {
+          "type": "STRING",
+          "description": "The status of the interaction."
+        }
+      }
+    }
+  },
+  "displayName": "populate_form_content"
+}
