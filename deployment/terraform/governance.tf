@@ -60,5 +60,5 @@ resource "google_data_catalog_policy_tag_iam_member" "banking_service_fine_grain
 resource "google_data_catalog_policy_tag_iam_member" "local_developer_fine_grained_reader" {
   policy_tag = google_data_catalog_policy_tag.sensitive_npi.id
   role       = "roles/datacatalog.categoryFineGrainedReader"
-  member     = "user:${data.google_client_openid_userinfo.me.email}"
+  member     = "user:erikvoit@gcp.solutions"
 }

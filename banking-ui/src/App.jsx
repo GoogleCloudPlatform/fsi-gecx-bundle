@@ -192,7 +192,8 @@ function AppContent() {
       '/settings': `Settings | ${bankName}`,
       '/edit-profile': `Edit Profile | ${bankName}`,
       '/apply/credit-card': `Apply for Credit Card | ${bankName}`,
-      '/search': `Search Site | ${bankName}`
+      '/search': `Search Site | ${bankName}`,
+      '/support/voice': `Voice Support Consultation | ${bankName}`
     };
 
     const title = pageTitles[location.pathname] || `${bankName} | Premium Digital Banking`;
@@ -511,7 +512,6 @@ function AppContent() {
             }
 
             let custDict = {
-              is_ujet_sdk: false,
               email: customerEmail,
               user_id: userId,
               first_name: firstName,
@@ -790,10 +790,6 @@ function AppContent() {
         menuKey: "mortgage_bot",
         accent: "green",
         customData: {
-          is_ujet_sdk: {
-            label: "Is UJET SDK",
-            value: true
-          },
           email: {
             label: "Email",
             value: customerEmail
@@ -924,6 +920,10 @@ function AppContent() {
                   <Link to="/credit-cards" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
                     <span>Credit Cards</span>
                     {location.pathname === '/credit-cards' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                  </Link>
+                  <Link to="/support/voice" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
+                    <span>Voice Support</span>
+                    {location.pathname === '/support/voice' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                   </Link>
 
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">Home Financing</div>
@@ -1388,6 +1388,14 @@ function AppContent() {
                 >
                   <span>Credit Cards</span>
                   {location.pathname === '/credit-cards' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                </Link>
+                <Link 
+                  to="/support/voice"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/support/voice' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                >
+                  <span>Voice Support</span>
+                  {location.pathname === '/support/voice' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                 </Link>
 
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Home Financing</div>

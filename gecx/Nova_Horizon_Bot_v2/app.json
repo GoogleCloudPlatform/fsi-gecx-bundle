@@ -40,46 +40,39 @@
     "name": "access_token",
     "description": "X-Forwarded-User-Context",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "annual_gross_income",
     "schema": {
-      "type": "NUMBER",
-      "default": null
+      "type": "NUMBER"
     }
   }, {
     "name": "application",
     "description": "The application from the CCaaS queue",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "application_id",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "chat_id",
     "description": "The chat_id from the CCaaS queue",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "customer_name",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "email",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "employment_status",
@@ -88,57 +81,43 @@
       "type": "ARRAY",
       "items": {
         "type": "STRING"
-      },
-      "default": null
+      }
     }
   }, {
     "name": "first_name",
     "schema": {
-      "type": "STRING",
-      "default": null
-    }
-  }, {
-    "name": "is_ujet_sdk",
-    "schema": {
-      "type": "BOOLEAN",
-      "default": false
+      "type": "STRING"
     }
   }, {
     "name": "last_name",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "last_transfer_details",
     "description": "Variable \"last_transfer_details\".",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "monthly_housing_payment",
     "schema": {
-      "type": "NUMBER",
-      "default": null
+      "type": "NUMBER"
     }
   }, {
     "name": "phone_number",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "product",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "user_id",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }],
   "dataStoreSettings": {

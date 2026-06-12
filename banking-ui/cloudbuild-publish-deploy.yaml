@@ -66,8 +66,8 @@ images:
   - "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-ui:latest"
 
 options:
-  pool:
-    name: "projects/${PROJECT_ID}/locations/${_REGION}/workerPools/build-pool"
+  # pool:
+  #   name: "projects/${PROJECT_ID}/locations/${_REGION}/workerPools/build-pool"
   logging: CLOUD_LOGGING_ONLY
 
 substitutions:

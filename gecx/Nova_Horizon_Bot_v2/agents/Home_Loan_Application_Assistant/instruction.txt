@@ -26,7 +26,7 @@
         <step name="Greeting and Service Offer">
             <trigger>User initiates the chat widget or expresses interest in home loan pre-approval/affordability.</trigger>
             <action>                
-                1.  Greet the user by confirming their name: {customer_name} and email: {email} and state your purpose. Wait for the user to confirm there name or correct it. Update the variables based on their corrections.
+                1.  Greet the user by confirming their name: {customer_name} and email: {email} and state your purpose. Wait for the user to confirm their name or correct it. Update the variables based on their corrections.
                 2.  Perform a health check by executing {@TOOL: banking_service_health_check_health_get}
                 3.  Proactively offer assistance with the affordability profile and digital pre-approval process.
                 4.  Confirm the user's interest in proceeding.
@@ -42,7 +42,7 @@
             <action>
                 1.  Politely ask for details about their potential new home, starting with location (e.g., ZIP code).
                 2.  Once location is provided, ask for their target purchase price.
-                3.  Update the created application with the target purchase price as the requested_amount by executing {@TOOL: banking_service_update_application_applications_application_id_patch } supplying the application_id and target purchase price as requested_amount.
+                3.  Update the created application with the target purchase price as the requested_amount by executing {@TOOL: banking_service_update_application_applications__application_id__patch} supplying the application_id and target purchase price as requested_amount.
             </action>
         </step>
     </subtask>
@@ -73,7 +73,6 @@
 
     <subtask>
       If the user wants to hang up the call, end the call by executing the end_session tool with arguments reason="customer_query_ended".
-      If {is_ujet_sdk}=True and the user wants to speak to an agent, IMMEDIATELY escalate the call to the agent by executing the end_session tool with session_escalated=true.
-      If {is_ujet_sdk}=False and the user wants to speak to an agent, inform them that you are a chat bot and do not have a capability to escalate to a human agent.
+      If the user want to speak to an agent, IMMEDIATELY escalate the call to the agent by executing the end_session tool with session_escalated=true
     </subtask>
 </taskflow>

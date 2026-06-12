@@ -1,0 +1,9 @@
+{
+  "name": "4342f5fb-7371-48ae-8063-9ac05b83663f",
+  "pythonFunction": {
+    "name": "transfer_to_loan_officer",
+    "pythonCode": "tools/transfer_to_loan_officer/python_function/python_code.py",
+    "description": "Transfers the current chat session, along with relevant collected data, to a licensed human Loan Officer.\n\nArgs:\n    loan_officer_name (str): The name of the Loan Officer to transfer to.\n    loan_officer_id (str): The NLMS ID or internal ID of the Loan Officer.\n    chat_summary (str): A brief summary of the conversation history and user\u0027s intent.\n    verified_data (Dict[str, Any]): A dictionary containing key pieces of verified information\n                                    (e.g., ZIP code, target price, employer name).\n\nReturns:\n    dict[str, Any]: A dictionary indicating the status of the transfer.\n          Example: {\"status\": \"success\", \"message\": \"Transfer initiated successfully.\"}\n          Example: {\"status\": \"failed\", \"message\": \"Loan Officer not available.\"}"
+  },
+  "displayName": "transfer_to_loan_officer"
+}

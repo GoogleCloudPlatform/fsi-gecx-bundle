@@ -39,6 +39,20 @@ bearer_scheme = HTTPBearer(auto_error=False)
 forwarded_bearer_scheme = HTTPForwardedBearer(auto_error=False)
 
 SERVICE_NAME = "banking-service"
+SUPPORT_DOMAINS = os.getenv("SUPPORT_EMAIL_DOMAINS", "google.com,novahorizon.com").split(",")
+
+def is_support_staff(token: ValidatedToken) -> bool:
+    if not token or not hasattr(token, "claims"):
+        return False
+    email = token.claims.get("email")
+    if not email:
+        return False
+    
+    # Check domain suffix or specific mock profiles
+    domain = email.split("@")[-1]
+    if domain in SUPPORT_DOMAINS or email == "underwriter@nova.horizon":
+        return True
+    return False
 
 
 def mint_cxas_token(user_data: ValidatedToken) -> dict:
@@ -298,7 +312,18 @@ async def get_current_user(
 
     # 2. Check for standard Authorization: Bearer <Token>
     if auth and auth.credentials:
-        return validate_token_by_issuer(auth.credentials)
+        try:
+            return validate_token_by_issuer(auth.credentials)
+        except HTTPException as auth_err:
+            if is_running_locally():
+                logger.info(f"Local environment: ignoring invalid token '{auth.credentials}' and falling back to mock user token")
+                return ValidatedToken.get_mock_token()
+            raise auth_err
+
+    # 3. Local Development Bypass: fallback to mock user token when running locally without auth header
+    if is_running_locally():
+        logger.info("Local environment: falling back to mock user token")
+        return ValidatedToken.get_mock_token()
 
     raise HTTPException(status_code=401, detail="Unauthorized")
 

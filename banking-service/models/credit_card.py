@@ -1,0 +1,162 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import uuid
+import datetime
+from sqlalchemy import (
+    Column, String, Boolean, BigInteger, Integer, 
+    DateTime, Numeric, ForeignKey, Index
+)
+from sqlalchemy.orm import relationship
+from utils.database import Base
+
+def generate_uuid_str():
+    return str(uuid.uuid4())
+
+class FinancialAccount(Base):
+    """
+    Models the core credit account line, storing credit limits, cleared balances (debts), 
+    and dynamic available credit in cents.
+    """
+    __tablename__ = "financial_account"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid_str)
+    customer_id = Column(String(36), nullable=False)
+    status = Column(String(20), nullable=False, default="ACTIVE") # 'ACTIVE', 'FROZEN', 'DELINQUENT', 'CLOSED'
+    
+    # Values represented in cents (BIGINT) to guarantee ledger precision
+    credit_limit_cents = Column(BigInteger, nullable=False)
+    cleared_balance_cents = Column(BigInteger, nullable=False, default=0)
+    available_credit_cents = Column(BigInteger, nullable=False)
+    
+    # Billing Cycle details (Credit Accounting)
+    payment_due_date = Column(DateTime, nullable=True)
+    statement_close_date = Column(DateTime, nullable=True)
+    last_payment_date = Column(DateTime, nullable=True)
+    last_payment_amount_cents = Column(BigInteger, nullable=False, default=0)
+    
+    currency = Column(String(3), default="USD")
+    opened_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # Relationships
+    cards = relationship("IssuedCard", back_populates="account", cascade="all, delete-orphan")
+    authorizations = relationship("TransactionAuthorization", back_populates="account")
+    ledger_entries = relationship("AccountLedger", back_populates="account")
+
+
+class IssuedCard(Base):
+    """
+    Models the issued card instruments (virtual/physical) associated with a financial account.
+    """
+    __tablename__ = "issued_card"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid_str)
+    account_id = Column(String(36), ForeignKey("financial_account.id", ondelete="RESTRICT"), nullable=False)
+    cardholder_name = Column(String(150), nullable=False)
+    
+    # PCI-DSS Token reference representing the PAN
+    card_token = Column(String(255), nullable=False, unique=True)
+    last_four = Column(String(4), nullable=False)
+    encrypted_pin_block = Column(String(255), nullable=True)
+    
+    # Security lockouts
+    pin_fail_count = Column(Integer, nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=False)
+    
+    exp_month = Column(Integer, nullable=False)
+    exp_year = Column(Integer, nullable=False)
+    status = Column(String(20), nullable=False, default="ACTIVE") # 'ACTIVE', 'BLOCKED', 'REPORTED_STOLEN', 'EXPIRED'
+    is_virtual = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # Relationships
+    account = relationship("FinancialAccount", back_populates="cards")
+    authorizations = relationship("TransactionAuthorization", back_populates="card")
+
+    # Index for sub-millisecond card authorization validations
+    __table_args__ = (
+        Index("idx_issued_card_token", "card_token", unique=True),
+    )
+
+
+class TransactionAuthorization(Base):
+    """
+    Models active authorization holds / pending transactions passed from network switches.
+    """
+    __tablename__ = "transaction_authorization"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid_str)
+    card_id = Column(String(36), ForeignKey("issued_card.id", ondelete="RESTRICT"), nullable=False)
+    account_id = Column(String(36), ForeignKey("financial_account.id", ondelete="RESTRICT"), nullable=False)
+    
+    # ISO-8583 Multi-currency and FX tracking
+    transaction_amount_cents = Column(BigInteger, nullable=False)
+    transaction_currency = Column(String(3), nullable=False, default="USD")
+    billing_amount_cents = Column(BigInteger, nullable=False)
+    billing_currency = Column(String(3), nullable=False, default="USD")
+    exchange_rate = Column(Numeric(18, 9), nullable=False, default=1.000000000)
+    
+    status = Column(String(20), nullable=False, default="PENDING") # 'PENDING', 'APPROVED', 'DECLINED', 'REVERSED'
+    decline_reason = Column(String(50), nullable=False, default="NONE") # 'INSUFFICIENT_FUNDS', 'SUSPECTED_FRAUD', 'NONE'
+    
+    # Settlement keys
+    auth_code = Column(String(6), nullable=False)
+    retrieval_reference_number = Column(String(12), nullable=False)
+    
+    card_network = Column(String(30), nullable=False) # 'VISA', 'MASTERCARD'
+    merchant_category_code = Column(String(4), nullable=False) # MCC
+    merchant_name = Column(String(255), nullable=True)
+    fraud_risk_score = Column(Integer, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+
+    # Relationships
+    card = relationship("IssuedCard", back_populates="authorizations")
+    account = relationship("FinancialAccount", back_populates="authorizations")
+    ledger_entries = relationship("AccountLedger", back_populates="authorization")
+
+    # Index for fast pending holds/balances computation
+    __table_args__ = (
+        Index("idx_auth_account_status", "account_id", "status"),
+    )
+
+
+class AccountLedger(Base):
+    """
+    Models the final, immutable system of record for cleared transactions and customer statement lines.
+    """
+    __tablename__ = "account_ledger"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid_str)
+    account_id = Column(String(36), ForeignKey("financial_account.id", ondelete="RESTRICT"), nullable=False)
+    authorization_id = Column(String(36), ForeignKey("transaction_authorization.id", ondelete="SET NULL"), nullable=True)
+    
+    # Settlement keys
+    auth_code = Column(String(6), nullable=True)
+    retrieval_reference_number = Column(String(12), nullable=True)
+    
+    amount_cents = Column(BigInteger, nullable=False) # positive for payments/credits, negative for charges/fees
+    description = Column(String(255), nullable=False)
+    posted_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # Relationships
+    account = relationship("FinancialAccount", back_populates="ledger_entries")
+    authorization = relationship("TransactionAuthorization", back_populates="ledger_entries")
+
+    # Index for statement and ledger query pagination
+    __table_args__ = (
+        Index("idx_ledger_account", "account_id"),
+        Index("idx_ledger_account_posted", "account_id", "posted_at"),
+    )

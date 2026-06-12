@@ -27,3 +27,5 @@ cx_agent_studio_upload_tool_name = "[YOUR_CX_AGENT_STUDIO_UPLOAD_TOOL_NAME]"
 use_external_identities          = false
 enable_blocking_functions        = false
 github_branch                    = "^main$"
+voice_agent_video_model          = "publishers/google/models/gemini-3.1-flash-live"
+voice_agent_audio_model          = "publishers/google/models/gemini-live-2.5-flash-native-audio"

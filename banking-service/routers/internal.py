@@ -54,6 +54,36 @@ async def process_document(
         raise HTTPException(status_code=400, detail="Unsupported event type.")
     
     filename = payload.name
+    
+    # 1. Isolate test/CI sandbox uploads to prevent leakage into production BigQuery tables
+    if filename.startswith("ci-temp/") or filename.startswith("test/"):
+        logger.info(f"Ignoring test/CI artifact finalized trigger: {filename}")
+        return {"message": "Skipped: test artifact.", "filename": filename}
+
+    from services.document_ai import SUPPORTED_MIME_TYPES
+
+    # 2. Robust MIME type resolution: fetch GCS blob content_type metadata, falling back to extension guess
+    mime_type = None
+    try:
+        from google.cloud import storage
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(payload.bucket)
+        blob = bucket.get_blob(filename)
+        if blob:
+            mime_type = blob.content_type
+            logger.info(f"Resolved MIME type for {filename} from GCS metadata: {mime_type}")
+    except Exception as gcs_err:
+        logger.warning(f"Failed to fetch GCS blob metadata for {filename}: {gcs_err}")
+
+    if not mime_type:
+        import mimetypes
+        mime_type, _ = mimetypes.guess_type(filename)
+        logger.info(f"Guessed MIME type for {filename} from filename: {mime_type}")
+
+    if not mime_type or mime_type not in SUPPORTED_MIME_TYPES:
+        logger.info(f"Skipping processing for non-supported GCS finalized object: {filename} (resolved MIME: {mime_type})")
+        return {"message": "Skipped: object is not a supported document file.", "filename": filename}
+
     dataset_id = os.getenv("DATASET_ID", "banking")
     sql_query = get_check_status_sql().format(dataset_id=dataset_id)
     
@@ -92,4 +122,35 @@ async def process_document(
     except Exception as pipeline_ex:
         logger.error(f"Pipeline execution failed for {filename}: {pipeline_ex}")
         raise HTTPException(status_code=500, detail=f"Document processing pipeline failed: {str(pipeline_ex)}")
+
+@router.post("/debug/reset-db")
+def reset_database():
+    """
+    Deletes all rows in the database and re-seeds it with baseline cardholder data.
+    """
+    logger.info("Internal Debug request: Resetting database...")
+    from utils.database import SessionLocal
+    from models.credit_card import FinancialAccount, IssuedCard, TransactionAuthorization, AccountLedger
+    from models.support import Escalation
+    from services.credit_card import initialize_db_and_seed
+    
+    db = SessionLocal()
+    try:
+        db.query(TransactionAuthorization).delete()
+        db.query(AccountLedger).delete()
+        db.query(IssuedCard).delete()
+        db.query(Escalation).delete()
+        db.query(FinancialAccount).delete()
+        db.commit()
+        logger.info("Database tables cleared.")
+        
+        initialize_db_and_seed(db)
+        logger.info("Database re-seeded.")
+        return {"status": "SUCCESS", "message": "Database reset and re-seeded successfully."}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to reset database: {e}")
+        raise HTTPException(status_code=500, detail=f"Database reset failed: {e}")
+    finally:
+        db.close()
 

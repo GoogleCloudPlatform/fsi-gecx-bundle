@@ -30,3 +30,41 @@ resource "google_secret_manager_secret_version" "postgres_banking_password_versi
   secret      = google_secret_manager_secret.postgres_banking_password.id
   secret_data = random_password.banking_password.result
 }
+
+resource "google_secret_manager_secret" "livekit_api_key" {
+  secret_id = "livekit-api-key"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret" "livekit_api_secret" {
+  secret_id = "livekit-api-secret"
+  replication {
+    auto {}
+  }
+}
+
+# Generate secure random API credentials at deployment time
+resource "random_password" "livekit_api_key" {
+  length  = 16
+  special = false
+}
+
+resource "random_password" "livekit_api_secret" {
+  length  = 32
+  special = false
+}
+
+resource "google_secret_manager_secret_version" "livekit_api_key_version" {
+  secret      = google_secret_manager_secret.livekit_api_key.id
+  secret_data = random_password.livekit_api_key.result
+}
+
+resource "google_secret_manager_secret_version" "livekit_api_secret_version" {
+  secret      = google_secret_manager_secret.livekit_api_secret.id
+  secret_data = random_password.livekit_api_secret.result
+}
+
+
+

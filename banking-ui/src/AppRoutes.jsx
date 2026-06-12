@@ -34,6 +34,8 @@ import AdminMessagingView from './components/AdminMessagingView.jsx';
 import ApplyCreditCardView from './components/ApplyCreditCardView.jsx';
 import AdminUnderwritingView from './components/AdminUnderwritingView.jsx';
 import AdminDashboardView from './components/AdminDashboardView.jsx';
+import VoiceSupportView from './components/VoiceSupportView.jsx';
+import AgentSupportDashboard from './components/AgentSupportDashboard.jsx';
 
 /**
  * Reusable wrapper to protect authenticated routes
@@ -158,6 +160,16 @@ export default function AppRoutes({
       <Route path="/search" element={
         <ProtectedRoute isReady={isReady} fbUser={fbUser}>
           <SearchView />
+        </ProtectedRoute>
+      } />
+      <Route path="/support/voice" element={
+        <ProtectedRoute isReady={isReady} fbUser={fbUser}>
+          <VoiceSupportView />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/support" element={
+        <ProtectedRoute isReady={isReady} fbUser={fbUser}>
+          <AgentSupportDashboard />
         </ProtectedRoute>
       } />
     </Routes>

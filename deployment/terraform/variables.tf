@@ -173,3 +173,13 @@ variable "gecx_agent_folder" {
   type    = string
   default = "Nova_Horizon_Bot_v2"
 }
+
+variable "voice_agent_video_model" {
+  type        = string
+  description = "The Gemini Live model to use for video mode"
+}
+
+variable "voice_agent_audio_model" {
+  type        = string
+  description = "The Gemini Live model to use for audio mode"
+}

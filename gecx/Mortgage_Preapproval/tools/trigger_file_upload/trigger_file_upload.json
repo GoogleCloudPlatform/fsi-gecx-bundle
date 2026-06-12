@@ -1,0 +1,46 @@
+{
+  "name": "7d1d2879-9909-42a5-a39b-4ac6370980d3",
+  "clientFunction": {
+    "name": "trigger_file_upload",
+    "description": "Opens the file explorer. Input mime_type to restrict selection (e.g., \u0027application/pdf\u0027, \u0027image/png\u0027, \u0027image/jpeg\u0027, \u0027image/jpg\u0027). Also provided the signed_url argument.",
+    "parameters": {
+      "type": "OBJECT",
+      "properties": {
+        "application_id": {
+          "type": "STRING",
+          "description": "The application id"
+        },
+        "mime_type": {
+          "type": "STRING",
+          "description": "The allowed file type, e.g., \u0027application/pdf\u0027 or \u0027audio/*\u0027"
+        },
+        "signed_url": {
+          "type": "STRING",
+          "description": "The GCS signed URL which the file should be uploaded to"
+        }
+      }
+    },
+    "response": {
+      "type": "OBJECT",
+      "properties": {
+        "artifact_id": {
+          "type": "STRING",
+          "description": "The artifact id."
+        },
+        "extraction_result": {
+          "type": "STRING",
+          "description": "The result of the document extraction."
+        },
+        "gcs_uri": {
+          "type": "STRING",
+          "description": "The GCS URI to the file."
+        },
+        "message": {
+          "type": "STRING",
+          "description": "The result of the file upload"
+        }
+      }
+    }
+  },
+  "displayName": "trigger_file_upload"
+}

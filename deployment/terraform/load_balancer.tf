@@ -166,6 +166,11 @@ resource "google_compute_url_map" "lb_url_map" {
       }
     }
 
+    path_rule {
+      paths   = ["/rtc", "/rtc/*"]
+      service = google_compute_backend_service.livekit_backend[0].id
+    }
+
     dynamic "path_rule" {
       for_each = var.use_external_identities ? [1] : []
       content {
@@ -237,4 +242,97 @@ resource "google_iap_settings" "service_backend_iap" {
     }
   }
 }
+
+# LiveKit GCE Network Endpoint Group (NEG) for Port 7880 signaling
+resource "google_compute_network_endpoint_group" "livekit_neg" {
+  count                 = var.deploy_cloud_run_services ? 1 : 0
+  name                  = "livekit-neg"
+  network               = google_compute_network.fsi_gecx_vpc.id
+  subnetwork            = google_compute_subnetwork.livekit_subnet.id
+  default_port          = 7880
+  network_endpoint_type = "GCE_VM_IP_PORT"
+  zone                  = "us-central1-c"
+}
+
+# Bind GCE VM network endpoint to the NEG
+resource "google_compute_network_endpoint" "livekit_endpoint" {
+  count                  = var.deploy_cloud_run_services ? 1 : 0
+  network_endpoint_group = google_compute_network_endpoint_group.livekit_neg[0].name
+  instance               = google_compute_instance.livekit_server.name
+  port                   = 7880
+  ip_address             = google_compute_instance.livekit_server.network_interface[0].network_ip
+  zone                   = "us-central1-c"
+}
+
+# Health Check for LiveKit Server HTTP status response
+resource "google_compute_health_check" "livekit_hc" {
+  count = var.deploy_cloud_run_services ? 1 : 0
+  name  = "livekit-health-check"
+  http_health_check {
+    port         = 7880
+    request_path = "/"
+  }
+}
+
+# Cloud Armor Standard Security Policy with rate limiting to protect signaling from flood attacks
+resource "google_compute_security_policy" "cloud_armor_policy" {
+  count       = var.deploy_cloud_run_services ? 1 : 0
+  name        = "livekit-cloud-armor-policy"
+  description = "Cloud Armor security policy for LiveKit signaling server"
+
+  rule {
+    action   = "allow"
+    priority = "2147483647"
+    match {
+      versioned_expr = "SRC_IPS_V1"
+      config {
+        src_ip_ranges = ["*"]
+      }
+    }
+    description = "Default allow rule"
+  }
+
+  rule {
+    action   = "throttle"
+    priority = "1000"
+    match {
+      versioned_expr = "SRC_IPS_V1"
+      config {
+        src_ip_ranges = ["*"]
+      }
+    }
+    rate_limit_options {
+      conform_action = "allow"
+      exceed_action  = "deny(429)"
+      
+      rate_limit_threshold {
+        count        = 120
+        interval_sec = 60
+      }
+      
+      enforce_on_key = "IP"
+    }
+    description = "Rate limit rule to throttle signaling flood attacks"
+  }
+}
+
+# Load Balancer Backend Service routing traffic to GCE NEG with Cloud Armor protection policy
+resource "google_compute_backend_service" "livekit_backend" {
+  count                 = var.deploy_cloud_run_services ? 1 : 0
+  name                  = "livekit-backend"
+  protocol              = "HTTP"
+  port_name             = "http"
+  timeout_sec           = 300
+  security_policy       = google_compute_security_policy.cloud_armor_policy[0].id
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  
+  backend {
+    group                 = google_compute_network_endpoint_group.livekit_neg[0].id
+    balancing_mode        = "RATE"
+    max_rate_per_endpoint = 100
+  }
+  
+  health_checks = [google_compute_health_check.livekit_hc[0].id]
+}
+
 

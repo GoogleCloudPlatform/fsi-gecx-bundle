@@ -52,8 +52,6 @@ def log_artifact_to_bigquery(
     dataset_id = "banking"
     table_id = "application_artifact"
     table_ref = f"{PROJECT_ID}.{dataset_id}.{table_id}"
-
-
     from datetime import datetime, timezone
     current_timestamp = datetime.now(timezone.utc).isoformat()
     version_id = str(uuid.uuid4())
@@ -89,7 +87,6 @@ def create_customer_in_bigquery(user_id: str, first_name: str | None, last_name:
     table_id = "user"
     table_ref = f"{PROJECT_ID}.{dataset_id}.{table_id}"
 
-
     query = _load_sql("create_customer.sql").format(table_ref=table_ref)
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
@@ -97,7 +94,7 @@ def create_customer_in_bigquery(user_id: str, first_name: str | None, last_name:
             bigquery.ScalarQueryParameter("first_name", "STRING", first_name),
             bigquery.ScalarQueryParameter("last_name", "STRING", last_name),
             bigquery.ScalarQueryParameter("email", "STRING", email),
-            bigquery.ScalarQueryParameter("phone_number", "STRING", phone_number),
+            bigquery.ScalarQueryParameter("phone_number", "STRING", phone_number or "+1-555-019-9999"),
         ]
     )
     client = _get_client()

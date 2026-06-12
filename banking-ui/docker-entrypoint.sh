@@ -18,7 +18,7 @@
 export PORT=${PORT:-8080}
 
 # Replace environment variables in config template
-envsubst "\$VITE_BANKING_API_URL \$VITE_CCAI_COMPANY_ID \$VITE_CCAI_HOST \$VITE_CX_AGENT_STUDIO_DEPLOYMENT_NAME \$VITE_CX_AGENT_STUDIO_UPLOAD_TOOL_NAME \$VITE_CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME" < /usr/share/nginx/html/config.template.js > /usr/share/nginx/html/config.js
+envsubst "\$VITE_BANKING_API_URL \$VITE_CCAI_COMPANY_ID \$VITE_CCAI_HOST \$VITE_CX_AGENT_STUDIO_DEPLOYMENT_NAME \$VITE_CX_AGENT_STUDIO_UPLOAD_TOOL_NAME \$VITE_CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME \$LIVEKIT_URL" < /usr/share/nginx/html/config.template.js > /usr/share/nginx/html/config.js
 
 # Replace environment variables in Firebase config template
 envsubst "\$FIREBASE_API_KEY \$FIREBASE_AUTH_DOMAIN \$FIREBASE_PROJECT_ID \$FIREBASE_STORAGE_BUCKET \$FIREBASE_MESSAGING_SENDER_ID \$FIREBASE_APP_ID \$FIREBASE_MEASUREMENT_ID" < /usr/share/nginx/html/fbConfig.template.js > /usr/share/nginx/html/fbConfig.js

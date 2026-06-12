@@ -26,6 +26,14 @@ resource "google_compute_subnetwork" "fsi_gecx_subnet" {
   private_ip_google_access = true
 }
 
+resource "google_compute_subnetwork" "livekit_subnet" {
+  name                     = "livekit-subnet"
+  ip_cidr_range            = "10.1.0.0/24"
+  region                   = var.region
+  network                  = google_compute_network.fsi_gecx_vpc.self_link
+  private_ip_google_access = true
+}
+
 resource "google_compute_router" "router" {
   name    = "fsi-gecx-router"
   region  = var.region
@@ -56,3 +64,81 @@ resource "google_service_networking_connection" "private_vpc_connection" {
   ]
   depends_on = [google_project_service.servicenetworking_googleapis_com]
 }
+
+# Firewall rule allowing Google Load Balancer proxy subnets to access LiveKit signaling
+resource "google_compute_firewall" "allow_lb_to_livekit" {
+  name          = "allow-lb-to-livekit"
+  network       = google_compute_network.fsi_gecx_vpc.id
+  source_ranges = ["130.211.0.0/22", "35.191.0.0/16"]
+  allow {
+    protocol = "tcp"
+    ports    = ["7880", "7881"]
+  }
+  target_tags = ["livekit-server"]
+}
+
+# Firewall rule allowing public WebRTC UDP traffic for media packet routing
+resource "google_compute_firewall" "allow_webrtc_udp" {
+  name          = "allow-webrtc-udp"
+  network       = google_compute_network.fsi_gecx_vpc.id
+  source_ranges = ["0.0.0.0/0"]
+  allow {
+    protocol = "udp"
+    ports    = ["50000-60000"]
+  }
+  target_tags = ["livekit-server"]
+}
+
+# Firewall rule allowing public WebRTC TCP fallback traffic for media packet routing
+resource "google_compute_firewall" "allow_webrtc_tcp" {
+  name          = "allow-webrtc-tcp"
+  network       = google_compute_network.fsi_gecx_vpc.id
+  source_ranges = ["0.0.0.0/0"]
+  allow {
+    protocol = "tcp"
+    ports    = ["7881"]
+  }
+  target_tags = ["livekit-server"]
+}
+
+
+# Firewall rule enforcing secure administrative SSH access via Identity-Aware Proxy (IAP) only
+resource "google_compute_firewall" "allow_iap_ssh" {
+  name          = "allow-iap-ssh-livekit"
+  network       = google_compute_network.fsi_gecx_vpc.id
+  source_ranges = ["35.235.240.0/20"] # Google's IAP netblock
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+  target_tags = ["livekit-server"]
+}
+
+# Firewall rule allowing internal VPC resources (like Cloud Run) to reach LiveKit server
+resource "google_compute_firewall" "allow_internal_to_livekit" {
+  name          = "allow-internal-to-livekit"
+  network       = google_compute_network.fsi_gecx_vpc.id
+  source_ranges = [google_compute_subnetwork.fsi_gecx_subnet.ip_cidr_range]
+  allow {
+    protocol = "tcp"
+    ports    = ["7880", "7881"]
+  }
+  target_tags = ["livekit-server"]
+}
+
+# Firewall rule blocking the LiveKit VM GCE instance from scanning or connecting laterally to the database/cache subnet
+resource "google_compute_firewall" "deny_livekit_to_internal" {
+  name               = "deny-livekit-to-internal"
+  network            = google_compute_network.fsi_gecx_vpc.id
+  direction          = "EGRESS"
+  destination_ranges = [google_compute_subnetwork.fsi_gecx_subnet.ip_cidr_range]
+  
+  deny {
+    protocol = "all"
+  }
+  
+  target_tags = ["livekit-server"]
+}
+
+
+

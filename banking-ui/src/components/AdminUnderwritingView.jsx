@@ -133,6 +133,7 @@ function AdminUnderwritingView({ fbUser }) {
           <div className="text-[10px] font-semibold text-slate-400">
             {exc.verification_tier === 'TIER_2_SPOT_CHECK' ? 'Spot Check' : `Claimed: ${exc.claimed_artifact_type}`}
           </div>
+
           <div className="inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase font-bold">
             {exc.status}
           </div>
@@ -588,8 +589,9 @@ function AdminUnderwritingView({ fbUser }) {
                           <input 
                             type="text" 
                             value={data.value || ''}
+                            disabled={selectedArtifact.verification_tier === 'TIER_2_SPOT_CHECK'}
                             onChange={(e) => handleFieldChange(key, e.target.value)}
-                            className={`w-full px-3.5 py-2 text-xs rounded-xl bg-white dark:bg-slate-900 border transition-all focus:outline-none focus:ring-2 ${getConfidenceStyle(key, data)}`}
+                            className={`w-full px-3.5 py-2 text-xs rounded-xl bg-white dark:bg-slate-900 border transition-all focus:outline-none focus:ring-2 ${selectedArtifact.verification_tier === 'TIER_2_SPOT_CHECK' ? 'opacity-70 cursor-not-allowed bg-slate-50/50' : ''} ${getConfidenceStyle(key, data)}`}
                           />
                         </div>
                       ))}
@@ -606,9 +608,10 @@ function AdminUnderwritingView({ fbUser }) {
                       type="number"
                       step="0.01"
                       value={grossMonthlyIncome}
+                      disabled={selectedArtifact.verification_tier === 'TIER_2_SPOT_CHECK'}
                       onChange={(e) => setGrossMonthlyIncome(e.target.value)}
                       placeholder="e.g. 4000.00"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-bold"
+                      className={`w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-bold ${selectedArtifact.verification_tier === 'TIER_2_SPOT_CHECK' ? 'opacity-70 cursor-not-allowed bg-slate-50/50' : ''}`}
                       required
                       min="0"
                     />
@@ -622,8 +625,9 @@ function AdminUnderwritingView({ fbUser }) {
                     <select 
                       id="override_decision"
                       value={decision}
+                      disabled={selectedArtifact.verification_tier === 'TIER_2_SPOT_CHECK'}
                       onChange={(e) => setDecision(e.target.value)}
-                      className="w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-semibold"
+                      className={`w-full px-4 py-2.5 text-sm rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-semibold ${selectedArtifact.verification_tier === 'TIER_2_SPOT_CHECK' ? 'opacity-70 cursor-not-allowed bg-slate-50/50' : ''}`}
                     >
                       <option value="APPROVE">Approve Ingestion</option>
                       <option value="REJECT_DATA_MISMATCH">Reject: Data Mismatch</option>
@@ -641,9 +645,10 @@ function AdminUnderwritingView({ fbUser }) {
                       id="underwriter_notes"
                       rows={3}
                       value={underwriterNotes}
+                      disabled={selectedArtifact.verification_tier === 'TIER_2_SPOT_CHECK'}
                       onChange={(e) => setUnderwriterNotes(e.target.value)}
                       placeholder="Please provide detailed rationale for these adjustments to ensure audit compliance..."
-                      className="w-full px-4 py-3 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all leading-relaxed"
+                      className={`w-full px-4 py-3 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all leading-relaxed ${selectedArtifact.verification_tier === 'TIER_2_SPOT_CHECK' ? 'opacity-70 cursor-not-allowed bg-slate-50/50' : ''}`}
                       required
                     />
                     <span className="block text-[10px] text-slate-400 mt-0.5">

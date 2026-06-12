@@ -1,0 +1,12 @@
+{
+  "name": "f60eb644-77f6-4d74-b452-b5dff7a1c9b3",
+  "displayName": "banking_service",
+  "openApiToolset": {
+    "openApiSchema": "toolsets/banking_service/open_api_toolset/open_api_schema.yaml",
+    "apiAuthentication": {
+      "serviceAgentIdTokenAuthConfig": {
+      }
+    }
+  },
+  "description": "Get\u0027s the user information"
+}
