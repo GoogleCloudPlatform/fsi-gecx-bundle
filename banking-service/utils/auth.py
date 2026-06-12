@@ -48,6 +48,10 @@ def is_support_staff(token: ValidatedToken) -> bool:
     if not email:
         return False
     
+    # Check if voice agent service account
+    if email == f"voice-agent-sa@{PROJECT_ID}.iam.gserviceaccount.com":
+        return True
+
     # Check domain suffix or specific mock profiles
     domain = email.split("@")[-1]
     if domain in SUPPORT_DOMAINS or email == "underwriter@nova.horizon":
@@ -230,12 +234,10 @@ def validate_google_id_token(jwt_token: str) -> ValidatedToken:
             # audience=expected_audiences, # Audience will be different for each endpoint
         )
 
-        # Validate the issuer (optional but recommended)
-        if decoded_jwt.get('iss') != 'https://accounts.google.com':
-            raise ValueError('Invalid issuer')
-
-        if not decoded_jwt.get('email').endswith('@gcp-sa-ces.iam.gserviceaccount.com'):
-            raise ValueError('Invalid email domain')
+        email = decoded_jwt.get('email', '')
+        allowed_sa = f"voice-agent-sa@{PROJECT_ID}.iam.gserviceaccount.com"
+        if not (email.endswith('@gcp-sa-ces.iam.gserviceaccount.com') or email == allowed_sa):
+            raise ValueError('Invalid email domain or unauthorized service account')
 
         return ValidatedToken(claims=decoded_jwt)
     except Exception as e:

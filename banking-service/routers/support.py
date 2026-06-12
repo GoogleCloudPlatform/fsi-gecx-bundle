@@ -9,6 +9,7 @@ from utils.database import get_db
 from utils.auth import get_current_user
 from models.authentication import ValidatedToken
 from models.support import Escalation
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -113,4 +114,71 @@ def complete_escalation(
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to complete escalation: {e}")
+        raise HTTPException(status_code=500, detail="Database write error.")
+
+
+class EscalationPayload(BaseModel):
+    room_name: str
+    customer_id: str
+    reason: str
+    transcript: list = Field(default_factory=list)
+    escalation_id: int | None = None
+
+
+@router.post("/escalate")
+def escalate_session(
+    payload: EscalationPayload,
+    db: Session = Depends(get_db)
+):
+    """Creates a new support escalation or updates the transcript of an existing one."""
+    logger.info(f"Escalation request: {payload}")
+    try:
+        if payload.escalation_id is not None:
+            existing = db.query(Escalation).filter_by(id=payload.escalation_id).first()
+            if existing:
+                existing.transcript = payload.transcript
+                db.commit()
+                logger.info(f"Updated transcript on existing escalation: {payload.escalation_id}")
+                return {"status": "SUCCESS", "escalation_id": existing.id}
+            else:
+                raise HTTPException(status_code=404, detail="Escalation ID not found to update.")
+        else:
+            escalation = Escalation(
+                room_name=payload.room_name,
+                customer_id=payload.customer_id,
+                reason=payload.reason,
+                status="PENDING",
+                transcript=payload.transcript
+            )
+            db.add(escalation)
+            db.commit()
+            logger.info(f"Created new support escalation: {escalation.id}")
+            return {"status": "SUCCESS", "escalation_id": escalation.id}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        db.rollback()
+        logger.error(f"Failed to handle escalation request: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/escalations/{escalation_id}/abandon")
+def abandon_escalation(
+    escalation_id: int,
+    db: Session = Depends(get_db)
+):
+    """Marks an active/pending support escalation as ABANDONED (e.g. user disconnected)."""
+    logger.info(f"Abandoning escalation: {escalation_id}")
+    escalation = db.query(Escalation).filter_by(id=escalation_id).first()
+    if not escalation:
+        raise HTTPException(status_code=404, detail="Escalation not found.")
+    
+    try:
+        escalation.status = "ABANDONED"
+        db.commit()
+        logger.info(f"Escalation {escalation_id} marked as ABANDONED.")
+        return {"status": "SUCCESS", "escalation_id": escalation_id}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to abandon escalation: {e}")
         raise HTTPException(status_code=500, detail="Database write error.")

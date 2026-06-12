@@ -6,16 +6,14 @@ import numpy as np
 import torch
 from silero_vad import load_silero_vad
 from livekit import rtc
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 import uvicorn
 
-# Prepend the parent and banking-service directories to sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "banking-service")))
+# Prepend the directory to sys.path
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 from agent import root_agent, register_event_callback
 from agent.events import DataChannelEvent
-from utils.database import SessionLocal
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.agents.run_config import RunConfig, StreamingMode
@@ -158,34 +156,38 @@ async def run_stt_worker(client, audio_queue: asyncio.Queue, sample_rate: int, a
 async def run_voice_agent_session(room_name: str, customer_id: str, session_id: str, mode: str = "audio"):
     logger.info(f"Initializing voice agent session for room: {room_name} (customer: {customer_id}, mode: {mode})")
 
-    # Load active configurations from database
-    db = SessionLocal()
+    # Load active configurations from banking-service
     mock_avatar_enabled = False
     avatar_name = "Ben" # default fallback
     max_duration = 300
     warning_duration = 240
     hard_timeout_enabled = False
-    
+
     try:
-        from models.settings import SystemSetting
-        settings = {s.key: s.value for s in db.query(SystemSetting).all()}
-        mock_avatar_enabled = settings.get("voice_agent_mock_avatar_enabled") == "true"
-        max_duration = int(settings.get("voice_agent_max_duration", 300))
-        warning_duration = int(settings.get("voice_agent_warning_duration", 240))
-        hard_timeout_enabled = settings.get("voice_agent_hard_timeout_enabled") == "true"
-        
-        avatar_mode = settings.get("voice_agent_avatar_selection", "random")
-        if avatar_mode == "random":
-            import random
-            avatar_name = random.choice(["Ingrid", "Paul", "Sam"])
-        else:
-            avatar_name = avatar_mode
-            
-        logger.info(f"Loaded voice agent settings: mock={mock_avatar_enabled}, avatar={avatar_name}, max_duration={max_duration}, warning={warning_duration}, hard={hard_timeout_enabled}")
+        import httpx
+        import agent.agent as agent_module
+        headers = agent_module.get_auth_headers()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            settings_url = f"{agent_module.BANKING_SERVICE_URL}/settings"
+            resp = await client.get(settings_url, headers=headers)
+            if resp.status_code == 200:
+                settings = resp.json()
+                mock_avatar_enabled = settings.get("voice_agent_mock_avatar_enabled") == "true"
+                max_duration = int(settings.get("voice_agent_max_duration", 300))
+                warning_duration = int(settings.get("voice_agent_warning_duration", 240))
+                hard_timeout_enabled = settings.get("voice_agent_hard_timeout_enabled") == "true"
+                
+                avatar_mode = settings.get("voice_agent_avatar_selection", "random")
+                if avatar_mode == "random":
+                    import random
+                    avatar_name = random.choice(["Ingrid", "Paul", "Sam"])
+                else:
+                    avatar_name = avatar_mode
+                logger.info(f"Loaded voice agent settings via API: mock={mock_avatar_enabled}, avatar={avatar_name}, max_duration={max_duration}, warning={warning_duration}, hard={hard_timeout_enabled}")
+            else:
+                logger.error(f"Failed to fetch system settings from API: {resp.text}")
     except Exception as e:
-        logger.error(f"Failed to query system settings from DB: {e}")
-    finally:
-        db.close()
+        logger.error(f"Failed to query system settings from API: {e}")
 
     # Set active customer ID for database tools dynamically
     import agent.agent as agent_module
@@ -254,33 +256,29 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         # Capture human handoff trigger and save to DB
         elif event_dict.get("type") == DataChannelEvent.HANDOFF_PENDING.value:
             nonlocal active_escalation_id
-            db = SessionLocal()
             try:
-                from models.support import Escalation
-                if active_escalation_id is not None:
-                    # Update transcript on the existing active escalation
-                    existing = db.query(Escalation).filter_by(id=active_escalation_id).first()
-                    if existing:
-                        existing.transcript = conversation_transcript
-                        db.commit()
-                        logger.info(f"Updated transcript on existing escalation: {active_escalation_id}")
-                else:
-                    # Create a new escalation row in the database
-                    escalation = Escalation(
-                        room_name=room_name,
-                        customer_id=agent_module.ACTIVE_CUSTOMER_ID,
-                        reason=event_dict.get("reason", "User requested supervisor"),
-                        status="PENDING",
-                        transcript=conversation_transcript
-                    )
-                    db.add(escalation)
-                    db.commit()
-                    active_escalation_id = escalation.id
-                    logger.info(f"Successfully created support escalation in DB: {escalation.id}")
+                import httpx
+                headers = agent_module.get_auth_headers()
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    escalate_url = f"{agent_module.BANKING_SERVICE_URL}/support/escalate"
+                    payload = {
+                        "room_name": room_name,
+                        "customer_id": agent_module.ACTIVE_CUSTOMER_ID,
+                        "reason": event_dict.get("reason", "User requested supervisor"),
+                        "transcript": conversation_transcript
+                    }
+                    if active_escalation_id is not None:
+                        payload["escalation_id"] = active_escalation_id
+                    
+                    resp = await client.post(escalate_url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        res_data = resp.json()
+                        active_escalation_id = res_data.get("escalation_id")
+                        logger.info(f"Successfully synced support escalation via API: {active_escalation_id}")
+                    else:
+                        logger.error(f"Failed to sync support escalation via API: {resp.text}")
             except Exception as ex:
-                logger.error(f"Failed to persist/update support escalation to DB: {ex}", exc_info=True)
-            finally:
-                db.close()
+                logger.error(f"Failed to call support escalation API: {ex}", exc_info=True)
 
     register_event_callback(on_agent_event)
 
@@ -874,20 +872,21 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             except Exception as ex:
                 logger.error(f"Error terminating FFmpeg reader process: {ex}")
         # If the room disconnected before the supervisor took over, mark the escalation as ABANDONED
-        if active_escalation_id:
-            db = SessionLocal()
+        # If the room disconnected before the supervisor took over, mark the escalation as ABANDONED
+        if active_escalation_id is not None:
             try:
-                from models.support import Escalation
-                esc_row = db.query(Escalation).filter_by(id=active_escalation_id, status="PENDING").first()
-                if esc_row:
-                    esc_row.status = "ABANDONED"
-                    db.commit()
-                    logger.info(f"Active escalation {active_escalation_id} marked as ABANDONED due to customer disconnect.")
-                    active_escalation_id = None
+                import httpx
+                headers = agent_module.get_auth_headers()
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    abandon_url = f"{agent_module.BANKING_SERVICE_URL}/support/escalations/{active_escalation_id}/abandon"
+                    resp = await client.post(abandon_url, headers=headers)
+                    if resp.status_code == 200:
+                        logger.info(f"Active escalation {active_escalation_id} marked as ABANDONED via API due to customer disconnect.")
+                        active_escalation_id = None
+                    else:
+                        logger.error(f"Failed to mark escalation as ABANDONED via API: {resp.text}")
             except Exception as ex:
-                logger.error(f"Failed to mark escalation as ABANDONED on disconnect: {ex}")
-            finally:
-                db.close()
+                logger.error(f"Failed to call abandon escalation API: {ex}")
 
         if audio_server:
             audio_server.close()
@@ -912,8 +911,16 @@ def health_check():
     return {"status": "healthy", "active_sessions": len(active_sessions)}
 
 @app.post("/internal/comms/voice/start")
-async def start_session(room_name: str, customer_id: str, session_id: str, mode: str = "audio"):
+async def start_session(room_name: str, customer_id: str, session_id: str, request: Request, mode: str = "audio"):
     logger.info(f"Request to start voice agent session for room: {room_name} (mode: {mode})")
+    
+    # Dynamically resolve BANKING_SERVICE_URL from request URL if not explicitly set in env
+    import agent.agent as agent_module
+    if not os.getenv("BANKING_SERVICE_URL"):
+        own_url = str(request.base_url).rstrip("/")
+        if "credit-support-agent" in own_url:
+            agent_module.BANKING_SERVICE_URL = own_url.replace("credit-support-agent", "banking-service")
+            logger.info(f"Dynamically resolved BANKING_SERVICE_URL: {agent_module.BANKING_SERVICE_URL}")
     
     if len(active_sessions) >= MAX_CONCURRENT_SESSIONS:
         logger.warning(f"Rejecting start request for {room_name}: max capacity reached ({MAX_CONCURRENT_SESSIONS})")

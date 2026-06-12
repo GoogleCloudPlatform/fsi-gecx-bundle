@@ -18,9 +18,6 @@ FROM python:3.13-slim
 RUN groupadd -g 10001 appgroup && \
     useradd -r -u 10001 -g appgroup appuser
 
-# Copy banking-service to keep same relative structure
-COPY banking-service/ /app/banking-service/
-
 # Copy voice agent package
 COPY adk-agent/credit-support-agent/ /app/adk-agent/credit-support-agent/
 
