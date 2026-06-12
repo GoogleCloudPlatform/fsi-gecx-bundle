@@ -12,13 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-locals {
-  active_governance_project = var.governance_project_id != null ? var.governance_project_id : var.project_id
-}
-
 resource "google_data_catalog_taxonomy" "banking_privacy_taxonomy" {
-  project                = local.active_governance_project
-  display_name           = "Banking Privacy Taxonomy V3"
+  project                = var.project_id
+  display_name           = "Banking Privacy Taxonomy V3 - ${var.project_id}"
   description            = "Taxonomy for securing financial PII and NPI"
   region                 = "us"
   activated_policy_types = ["FINE_GRAINED_ACCESS_CONTROL"]
@@ -37,7 +33,7 @@ resource "google_data_catalog_policy_tag" "sensitive_npi" {
 }
 
 resource "google_bigquery_datapolicy_data_policy" "masking_policy" {
-  project          = local.active_governance_project
+  project          = var.project_id
   location         = "us"
   data_policy_id   = "mask_sensitive_npi"
   policy_tag       = google_data_catalog_policy_tag.sensitive_npi.name
