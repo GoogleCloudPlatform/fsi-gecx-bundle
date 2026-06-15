@@ -15,7 +15,7 @@
 from enum import Enum
 import logging
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from utils.bq import find_nearest_locations, search_locations_by_text
@@ -66,9 +66,9 @@ def _format_location_item(row: dict, include_distance: bool = True) -> LocationI
 
 @router.get("", response_model=LocatorResponse)
 async def get_locations(
-    lat: Optional[float] = None,
-    lng: Optional[float] = None,
-    address: Optional[str] = None,
+    lat: Optional[float] = Query(None, ge=-90.0, le=90.0),
+    lng: Optional[float] = Query(None, ge=-180.0, le=180.0),
+    address: Optional[str] = Query(None, max_length=200),
     type: LocationType = LocationType.ALL
 ):
     try:

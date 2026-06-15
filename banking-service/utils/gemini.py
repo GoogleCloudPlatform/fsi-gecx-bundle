@@ -145,11 +145,11 @@ class GeocodingCoords(BaseModel):
 async def geocode_address(address: str) -> tuple[float, float] | None:
     try:
         client = genai.Client()
-        prompt = f"Geocode the following address/location to latitude and longitude: {address}"
         response = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=prompt,
+            contents=address,
             config=types.GenerateContentConfig(
+                system_instruction="Geocode the provided address/location to latitude and longitude.",
                 response_mime_type="application/json",
                 response_schema=GeocodingCoords,
             )
