@@ -941,7 +941,7 @@ function AppContent() {
 
               {/* Help Center Menu with Mouseover Dropdown */}
               <div className="relative group py-2">
-                <Link to="/help-center" state={{ category: 'All' }} className={`hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${['/help-center', '/fee-schedule', '/disclosures'].includes(location.pathname) ? 'text-emerald-600 dark:text-emerald-400 font-bold' : ''}`}>
+                <Link to="/help-center" state={{ category: 'All' }} className={`hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${['/help-center', '/fee-schedule', '/disclosures', '/locator'].includes(location.pathname) ? 'text-emerald-600 dark:text-emerald-400 font-bold' : ''}`}>
                   <span>Help Center</span>
                   <ChevronDown className="w-3.5 h-3.5 transition-transform duration-300 group-hover:rotate-180" />
                 </Link>
@@ -971,6 +971,11 @@ function AppContent() {
                     <span>Disclosures</span>
                     {location.pathname === '/disclosures' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                   </Link>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">Customer Service</div>
+                  <Link to="/locator" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
+                    <span>Find Branch/ATM</span>
+                    {location.pathname === '/locator' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                  </Link>
                   {fbUser && (
                     <>
                       <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">Secure Support</div>
@@ -996,8 +1001,6 @@ function AppContent() {
                   )}
                 </div>
               </div>
-
-              <Link to="/locator" className={`hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer ${location.pathname === '/locator' ? 'text-slate-900 dark:text-white font-bold' : ''}`}>Locations</Link>
             </div>
           </div>
 
@@ -1448,7 +1451,7 @@ function AppContent() {
                   onClick={() => setIsMobileMenuOpen(false)}
                   className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/locator' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
                 >
-                  <span>Branch/ATM Locator</span>
+                  <span>Find Branch/ATM</span>
                   {location.pathname === '/locator' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                 </Link>
                 {fbUser && (
