@@ -133,3 +133,32 @@ def parse_json_response(response_str: str):
         logger.error(f"🚨 Failed to parse JSON: {e}")
         logger.error(f"Original content was:\n{json_content}")
         return None
+
+
+async def geocode_address(address: str) -> tuple[float, float] | None:
+    try:
+        from google import genai
+        from google.genai import types
+        import json
+
+        client = genai.Client()
+        prompt = f"""
+        Geocode the following address/location to latitude and longitude.
+        Return a JSON object with keys 'latitude' (float) and 'longitude' (float).
+        Do not return any other text or markdown formatting. E.g. {{"latitude": 37.7749, "longitude": -122.4194}}
+
+        Address: {address}
+        """
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+            )
+        )
+        data = json.loads(response.text)
+        return float(data["latitude"]), float(data["longitude"])
+    except Exception as e:
+        logger.error(f"Geocoding address '{address}' failed: {e}")
+        return None
+

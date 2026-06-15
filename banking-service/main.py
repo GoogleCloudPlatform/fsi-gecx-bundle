@@ -34,6 +34,7 @@ from routers.secure_messaging import router as secure_messaging_router
 from routers.underwriting import router as underwriting_router
 from models.authentication import ValidatedToken
 from utils.auth import get_current_user
+from routers.locator import router as locator_router
 
 # Import and register FastMCP tools and ASGI app from the isolated mcp router module
 from routers.mcp import mcp_app
@@ -96,6 +97,7 @@ app.include_router(search_router)
 app.include_router(secure_messaging_router)
 app.include_router(underwriting_router)
 app.include_router(internal_router)
+app.include_router(locator_router)
 
 
 def custom_openapi():
