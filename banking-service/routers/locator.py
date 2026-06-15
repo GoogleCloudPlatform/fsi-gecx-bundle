@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from enum import Enum
 import logging
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException
@@ -24,9 +25,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/locator", tags=["locator"])
 
+
+class LocationType(str, Enum):
+    ALL = "ALL"
+    BRANCH = "BRANCH"
+    ATM = "ATM"
+
+
 class LocationItem(BaseModel):
     id: str
-    type: str
+    type: LocationType
     name: str
     address: str
     latitude: float
@@ -35,70 +43,54 @@ class LocationItem(BaseModel):
     phone_number: Optional[str] = None
     distance_miles: Optional[float] = None
 
+
 class LocatorResponse(BaseModel):
     results: List[LocationItem]
+
+
+def _format_location_item(row: dict, include_distance: bool = True) -> LocationItem:
+    dist_meters = row.get("distance_meters") if include_distance else None
+    dist_miles = round(dist_meters * 0.000621371, 2) if dist_meters is not None else None
+    return LocationItem(
+        id=row["id"],
+        type=row["type"],
+        name=row["name"],
+        address=row["address"],
+        latitude=row["latitude"],
+        longitude=row["longitude"],
+        hours=row["hours"],
+        phone_number=row["phone_number"],
+        distance_miles=dist_miles
+    )
+
 
 @router.get("", response_model=LocatorResponse)
 async def get_locations(
     lat: Optional[float] = None,
     lng: Optional[float] = None,
     address: Optional[str] = None,
-    type: str = "ALL"
+    type: LocationType = LocationType.ALL
 ):
     try:
         results = []
         if lat is not None and lng is not None:
             # Query by proximity
-            rows = find_nearest_locations(lat, lng, type)
+            rows = find_nearest_locations(lat, lng, type.value)
             for r in rows:
-                dist_meters = r.get("distance_meters")
-                dist_miles = round(dist_meters * 0.000621371, 2) if dist_meters is not None else None
-                results.append(LocationItem(
-                    id=r["id"],
-                    type=r["type"],
-                    name=r["name"],
-                    address=r["address"],
-                    latitude=r["latitude"],
-                    longitude=r["longitude"],
-                    hours=r["hours"],
-                    phone_number=r["phone_number"],
-                    distance_miles=dist_miles
-                ))
+                results.append(_format_location_item(r, include_distance=True))
         elif address:
             # Try geocoding address
             coords = await geocode_address(address)
             if coords:
                 alat, alng = coords
-                rows = find_nearest_locations(alat, alng, type)
+                rows = find_nearest_locations(alat, alng, type.value)
                 for r in rows:
-                    dist_meters = r.get("distance_meters")
-                    dist_miles = round(dist_meters * 0.000621371, 2) if dist_meters is not None else None
-                    results.append(LocationItem(
-                        id=r["id"],
-                        type=r["type"],
-                        name=r["name"],
-                        address=r["address"],
-                        latitude=r["latitude"],
-                        longitude=r["longitude"],
-                        hours=r["hours"],
-                        phone_number=r["phone_number"],
-                        distance_miles=dist_miles
-                    ))
+                    results.append(_format_location_item(r, include_distance=True))
             else:
                 # Fallback to text search
-                rows = search_locations_by_text(address, type)
+                rows = search_locations_by_text(address, type.value)
                 for r in rows:
-                    results.append(LocationItem(
-                        id=r["id"],
-                        type=r["type"],
-                        name=r["name"],
-                        address=r["address"],
-                        latitude=r["latitude"],
-                        longitude=r["longitude"],
-                        hours=r["hours"],
-                        phone_number=r["phone_number"],
-                        distance_miles=None
-                    ))
+                    results.append(_format_location_item(r, include_distance=False))
         else:
             # No parameters, return an empty list
             pass
