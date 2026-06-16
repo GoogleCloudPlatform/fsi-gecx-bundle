@@ -71,6 +71,10 @@ resource "google_cloud_run_v2_service" "banking_service" {
         name  = "DISCOVERY_ENGINE_ID"
         value = google_discovery_engine_search_engine.nova_horizon_site.engine_id
       }
+      env {
+        name  = "GOOGLE_GENAI_USE_VERTEXAI"
+        value = "true"
+      }
 
       dynamic "env" {
         for_each = var.set_cloud_run_audiences ? [1] : []
