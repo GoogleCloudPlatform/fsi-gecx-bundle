@@ -272,8 +272,6 @@ def is_route_allowed(method: str, path: str, context_type: str | None) -> bool:
 
 async def get_current_user(
         request: Request,
-        # x_goog_iap_jwt_assertion: Annotated[str | None, Header()] = None,
-        # x_forwarded_user_context: Annotated[str | None, Header()] = None,
         auth: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
         forwarded_auth: Annotated[HTTPAuthorizationCredentials | None, Depends(forwarded_bearer_scheme)] = None,
 ) -> ValidatedToken:
