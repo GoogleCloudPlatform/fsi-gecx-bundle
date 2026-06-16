@@ -89,6 +89,7 @@ export default function LocatorView() {
     } else if (address.trim()) {
       handleSearchSubmit();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [typeFilter]);
 
   return (
