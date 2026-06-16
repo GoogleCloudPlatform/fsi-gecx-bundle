@@ -1,0 +1,14 @@
+[project]
+name = "locations-seeder"
+version = "0.1.0"
+description = "Retail locations seeder script"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "google-cloud-bigquery==3.41.0",
+    "google-auth==2.38.0",
+]
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true

@@ -85,6 +85,17 @@ resource "google_bigquery_table" "user_secure_message" {
   deletion_protection = false
 }
 
+resource "google_bigquery_table" "retail_location" {
+  dataset_id = google_bigquery_dataset.banking.dataset_id
+  table_id   = "retail_location"
+
+  clustering = ["type"]
+
+  schema = file("${path.module}/../bigquery/banking/table/retail_location.json")
+
+  deletion_protection = false
+}
+
 resource "google_bigquery_connection" "banking_data_store_connection" {
   connection_id = "banking-data-connection"
   friendly_name = "banking-data-connection"

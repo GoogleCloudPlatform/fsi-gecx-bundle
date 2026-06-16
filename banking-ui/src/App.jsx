@@ -192,6 +192,7 @@ function AppContent() {
       '/settings': `Settings | ${bankName}`,
       '/edit-profile': `Edit Profile | ${bankName}`,
       '/apply/credit-card': `Apply for Credit Card | ${bankName}`,
+      '/locator': `Find Branch/ATM | ${bankName}`,
       '/search': `Search Site | ${bankName}`
     };
 
@@ -940,7 +941,7 @@ function AppContent() {
 
               {/* Help Center Menu with Mouseover Dropdown */}
               <div className="relative group py-2">
-                <Link to="/help-center" state={{ category: 'All' }} className={`hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${['/help-center', '/fee-schedule', '/disclosures'].includes(location.pathname) ? 'text-emerald-600 dark:text-emerald-400 font-bold' : ''}`}>
+                <Link to="/help-center" state={{ category: 'All' }} className={`hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${['/help-center', '/fee-schedule', '/disclosures', '/locator'].includes(location.pathname) ? 'text-emerald-600 dark:text-emerald-400 font-bold' : ''}`}>
                   <span>Help Center</span>
                   <ChevronDown className="w-3.5 h-3.5 transition-transform duration-300 group-hover:rotate-180" />
                 </Link>
@@ -969,6 +970,11 @@ function AppContent() {
                   <Link to="/disclosures" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
                     <span>Disclosures</span>
                     {location.pathname === '/disclosures' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                  </Link>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">Customer Service</div>
+                  <Link to="/locator" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
+                    <span>Find Branch/ATM</span>
+                    {location.pathname === '/locator' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                   </Link>
                   {fbUser && (
                     <>
@@ -1440,6 +1446,14 @@ function AppContent() {
                 >
                   <span>Disclosures</span>
                 </Link>
+                <Link 
+                  to="/locator"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/locator' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                >
+                  <span>Find Branch/ATM</span>
+                  {location.pathname === '/locator' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                </Link>
                 {fbUser && (
                   <>
                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Admin</div>
@@ -1560,6 +1574,7 @@ function AppContent() {
             <ul className="space-y-2 text-sm text-slate-500">
               <li><Link to="/help-center" className={getFooterLinkClass('/help-center')}>Help Center</Link></li>
               <li><Link to="/fee-schedule" className={getFooterLinkClass('/fee-schedule')}>Fee Schedule</Link></li>
+              <li><Link to="/locator" className={getFooterLinkClass('/locator')}>Find Branch/ATM</Link></li>
               {fbUser && (
                 <li><Link to="/secure-messaging" className={getFooterLinkClass('/secure-messaging')}>Secure Messages</Link></li>
               )}

@@ -34,6 +34,7 @@ import AdminMessagingView from './components/AdminMessagingView.jsx';
 import ApplyCreditCardView from './components/ApplyCreditCardView.jsx';
 import AdminUnderwritingView from './components/AdminUnderwritingView.jsx';
 import AdminDashboardView from './components/AdminDashboardView.jsx';
+import LocatorView from './components/LocatorView.jsx';
 
 /**
  * Reusable wrapper to protect authenticated routes
@@ -100,6 +101,9 @@ export default function AppRoutes({
       } />
       <Route path="/settings" element={
         <SettingsView />
+      } />
+      <Route path="/locator" element={
+        <LocatorView />
       } />
 
       {/* Protected routes gated by fbUser session */}

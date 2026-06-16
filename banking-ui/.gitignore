@@ -13,6 +13,7 @@ dist-ssr
 *.local
 
 # Local configuration variables
+public/config.js
 public/fbConfig.js
 
 # Editor directories and files
