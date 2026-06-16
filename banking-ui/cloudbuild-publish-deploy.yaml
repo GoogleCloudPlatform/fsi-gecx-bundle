@@ -57,7 +57,7 @@ steps:
           echo "Sleeping for 60 seconds to allow the deployment to settle..."
           sleep 60
           echo "Triggering banking-ui-crawl trigger..."
-          gcloud builds triggers run banking-ui-crawl --region="${_REGION}" --branch="$${BRANCH_NAME:-main}"
+          gcloud builds triggers run banking-ui-crawl --region="${_REGION}" --branch="${BRANCH_NAME:-main}"
         else
           echo "Skipping trigger-crawl because _TRIGGER_DEPLOY is not true"
         fi
