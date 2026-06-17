@@ -482,6 +482,43 @@ function AppContent() {
           );
         }
 
+        const locationToolName = window.env?.CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME;
+        const locationToolId = locationToolName?.split('/').pop();
+
+        console.log("Registered get user location tool: ", locationToolName);
+
+        if (locationToolName && locationToolId) {
+          node.registerClientSideFunction(
+            locationToolName,
+            locationToolId,
+            (args) => {
+              console.log('executing get user location function with arguments', { args });
+
+              return new Promise((resolve) => {
+                if (!navigator.geolocation) {
+                  console.warn("Geolocation is not supported by this browser.");
+                  resolve(null);
+                  return;
+                }
+
+                navigator.geolocation.getCurrentPosition(
+                  (position) => {
+                    console.log("Current position retrieved:", position.coords.latitude, position.coords.longitude);
+                    resolve({
+                      latitude: position.coords.latitude,
+                      longitude: position.coords.longitude
+                    });
+                  },
+                  (error) => {
+                    console.warn("Error getting user location or permission denied:", error);
+                    resolve(null);
+                  }
+                );
+              });
+            }
+          );
+        }
+
         const injectDataAndGreet = async () => {
           console.log("injectDataAndGreet called");
           if (typeof node.setVariables === 'function') {

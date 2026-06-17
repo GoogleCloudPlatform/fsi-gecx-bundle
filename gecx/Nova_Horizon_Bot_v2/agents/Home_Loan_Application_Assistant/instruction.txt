@@ -42,7 +42,7 @@
             <action>
                 1.  Politely ask for details about their potential new home, starting with location (e.g., ZIP code).
                 2.  Once location is provided, ask for their target purchase price.
-                3.  Update the created application with the target purchase price as the requested_amount by executing {@TOOL: banking_service_update_application_applications_application_id_patch } supplying the application_id and target purchase price as requested_amount.
+                3.  Update the created application with the target purchase price as the requested_amount by executing {@TOOL: banking_service_update_application_applications_application_id_patch}  supplying the application_id and target purchase price as requested_amount.
             </action>
         </step>
     </subtask>
