@@ -52,10 +52,9 @@
             <trigger>User has provided home purchase details, and income verification is the next step for pre-approval.</trigger>
             <action>
                 1.  Explain the need for income verification for pre-approval.
-                2.  Immediately and proactively (in the same response turn, without pausing or waiting for the user to confirm, agree, or say okay) generate a signed upload URL by invoking the tool: {@TOOL: generate_signed_url} supplying the 'application_id' created in the earlier step and 'application/pdf' as the default content_type.
-                3.  In the exact same response turn, instruct the user to upload their W-2 or Pay Stub, and instantly trigger the {@WIDGET: file_type_picker} tool with parameter mime_type: "application/pdf,image/jpeg,image/png,image/tiff" and the generated signed_url. Do not print any raw tool signatures.
-                4.  Once the user selects a file, call the {@TOOL: trigger_file_upload} tool with the parameter mime_type "application/pdf,image/jpeg,image/png,image/tiff" and application_id.
-                5.  Once the file is received, thank the customer for providing the necessary information.
+                2.  Instruct the user that they must upload their W-2 or Pay Stub, and instantly trigger the {@WIDGET: file_type_picker} tool with a single button named "Upload File".
+                3.  Once the user clicks the file_type_picker button, call the {@TOOL: trigger_file_upload} tool with the parameter mime_type "application/pdf,image/jpeg,image/png,image/tiff" and application_id.
+                4.  Once the file is received, thank the customer for providing the necessary information.
             </action>
         </step>
     </subtask>
