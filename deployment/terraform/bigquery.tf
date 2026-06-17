@@ -96,7 +96,7 @@ resource "google_bigquery_table" "retail_location" {
   deletion_protection = false
 }
 
-resource "google_bigquery_connection" "banking_data_store_connection" {
+resource "google_bigquery_connection" "banking_data_postgres_connection" {
   connection_id = "banking-data-connection"
   friendly_name = "banking-data-connection"
   description   = "Banking Data connection with BigQuery"
@@ -109,5 +109,15 @@ resource "google_bigquery_connection" "banking_data_store_connection" {
       username = google_sql_user.banking_user.name
       password = random_password.banking_password.result
     }
+  }
+}
+
+resource "google_bigquery_connection" "banking_data_spanner_connection" {
+  connection_id = "banking-spanner-connection"
+  friendly_name = "banking-spanner-connection"
+  description   = "Banking Data connection with Spanner"
+  location      = "US"
+  cloud_spanner {
+    database = "projects/${var.project_id}/instances/${google_spanner_instance.banking_data.name}/databases/${google_spanner_database.banking.name}"
   }
 }

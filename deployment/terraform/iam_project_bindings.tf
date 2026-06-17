@@ -134,7 +134,7 @@ resource "google_project_iam_member" "gcs_pubsub_publisher" {
 resource "google_project_iam_member" "bq_connection_cloudsql_client" {
   project = var.project_id
   role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_bigquery_connection.banking_data_store_connection.cloud_sql[0].service_account_id}"
+  member  = "serviceAccount:${google_bigquery_connection.banking_data_postgres_connection.cloud_sql[0].service_account_id}"
 }
 
 resource "google_project_iam_member" "jump_instance_log_writer" {
