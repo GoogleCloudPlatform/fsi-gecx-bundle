@@ -154,6 +154,24 @@ except Exception as e:
 
 echo "Populate form content tool name: $POPULATE_FORM_CONTENT_TOOL_NAME"
 
+GET_USER_LOCATION_TOOL_NAME=$(echo "$TOOLS_RESPONSE" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    tools = data.get('tools', [])
+    for tool in tools:
+        if tool.get('clientFunction', {}).get('name') == 'get_user_location':
+            # print(json.dumps(tool, indent=2))
+            print(tool.get('name'))
+            sys.exit(0)
+    print('Tool with clientFunction.name = \'get_user_location\' not found.')
+except Exception as e:
+    print(f'Error parsing tools response: {e}')
+")
+
+echo "Get user location tool name: $GET_USER_LOCATION_TOOL_NAME"
+
+
 # 8. Create a new agent version
 echo "Creating a new agent version..."
 VERSION_TIMESTAMP=$(date +"%-m/%-d/%Y, %-I:%M:%S %p")
@@ -302,4 +320,5 @@ Copy into terraform.tfvars file:
 cx_agent_studio_deployment_name  = "${WEB_WIDGET_DEPLOYMENT_ID}"
 cx_agent_studio_upload_tool_name = "${TRIGGER_FILE_UPLOAD_TOOL_NAME}"
 cx_agent_studio_populate_content_tool_name = "${POPULATE_FORM_CONTENT_TOOL_NAME}"
+cx_agent_studio_get_user_location_tool_name = "${GET_USER_LOCATION_TOOL_NAME}"
 EOF

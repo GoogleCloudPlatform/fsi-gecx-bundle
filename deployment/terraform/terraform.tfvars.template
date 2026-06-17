@@ -24,6 +24,7 @@ github_oauth_token_secret_name   = "[YOUR_GITHUB_OAUTH_TOKEN_SECRET_NAME]"
 manage_github_connection         = false
 cx_agent_studio_deployment_name  = "[YOUR_CX_AGENT_STUDIO_DEPLOYMENT_NAME]"
 cx_agent_studio_upload_tool_name = "[YOUR_CX_AGENT_STUDIO_UPLOAD_TOOL_NAME]"
+cx_agent_studio_get_user_location_tool_name = "[YOUR_CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME]"
 use_external_identities          = false
 enable_blocking_functions        = false
 github_branch                    = "^main$"

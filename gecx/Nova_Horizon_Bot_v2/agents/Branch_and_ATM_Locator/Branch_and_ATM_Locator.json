@@ -1,0 +1,11 @@
+{
+  "name": "84447e69-b935-4bcb-82a6-1e998104b8f9",
+  "displayName": "Branch and ATM Locator",
+  "description": "Helps search for branch and ATM locations",
+  "instruction": "agents/Branch_and_ATM_Locator/instruction.txt",
+  "tools": ["end_session", "get_user_location"],
+  "toolsets": [{
+    "toolset": "banking_service",
+    "toolIds": ["get_locations_locator_get"]
+  }]
+}

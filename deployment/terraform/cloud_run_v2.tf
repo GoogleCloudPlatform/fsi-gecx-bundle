@@ -231,6 +231,13 @@ resource "google_cloud_run_v2_service" "banking_ui" {
           value = var.cx_agent_studio_populate_content_tool_name
         }
       }
+      dynamic "env" {
+        for_each = var.cx_agent_studio_get_user_location_tool_name != null ? [1] : []
+        content {
+          name  = "VITE_CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME"
+          value = var.cx_agent_studio_get_user_location_tool_name
+        }
+      }
     }
   }
 
