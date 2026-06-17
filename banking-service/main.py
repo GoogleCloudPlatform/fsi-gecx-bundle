@@ -90,14 +90,14 @@ app.include_router(application_router)
 app.include_router(artifact_router)
 app.include_router(ccai_auth_router)
 app.include_router(cxas_auth_router)
+app.include_router(internal_router)
+app.include_router(locator_router)
 app.include_router(notification_router)
 app.include_router(profile_router)
 app.include_router(health_router)
 app.include_router(search_router)
 app.include_router(secure_messaging_router)
 app.include_router(underwriting_router)
-app.include_router(internal_router)
-app.include_router(locator_router)
 
 
 def custom_openapi():
