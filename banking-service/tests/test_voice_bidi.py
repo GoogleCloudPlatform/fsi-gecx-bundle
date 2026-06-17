@@ -41,12 +41,8 @@ def test_gecx_voice_stream_success(mock_ws_connect, mock_get_token, mock_validat
     # Mock the GECX response: Yield a single transcript json frame, then exit loop
     mock_gecx_ws.__aiter__.return_value = [
         json.dumps({
-            "serverContent": {
-                "modelTurn": {
-                    "parts": [
-                        {"text": "Welcome to Horizon Financial support."}
-                    ]
-                }
+            "sessionOutput": {
+                "text": "Welcome to Horizon Financial support."
             }
         })
     ]
@@ -71,7 +67,15 @@ def test_gecx_voice_stream_success(mock_ws_connect, mock_get_token, mock_validat
         # D. Verify backend handshake call payload parameters
         mock_gecx_ws.send.assert_any_call(json.dumps({
             "config": {
-                "session": "projects/evo-genai-workspace/locations/us/apps/42345105-29cb-492d-8a60-07171bb72190/sessions/session-borrower-123"
+                "session": "projects/evo-genai-workspace/locations/us/apps/42345105-29cb-492d-8a60-07171bb72190/sessions/session-borrower-123",
+                "inputAudioConfig": {
+                    "audioEncoding": "LINEAR16",
+                    "sampleRateHertz": 16000
+                },
+                "outputAudioConfig": {
+                    "audioEncoding": "LINEAR16",
+                    "sampleRateHertz": 16000
+                }
             }
         }))
 

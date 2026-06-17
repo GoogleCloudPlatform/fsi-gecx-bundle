@@ -129,7 +129,15 @@ async def gecx_voice_stream(websocket: WebSocket):
             # Send GECX config header payload
             config_msg = {
                 "config": {
-                    "session": session_name
+                    "session": session_name,
+                    "inputAudioConfig": {
+                        "audioEncoding": "LINEAR16",
+                        "sampleRateHertz": 16000
+                    },
+                    "outputAudioConfig": {
+                        "audioEncoding": "LINEAR16",
+                        "sampleRateHertz": 16000
+                    }
                 }
             }
             await gecx_ws.send(json.dumps(config_msg))
@@ -183,12 +191,7 @@ async def gecx_voice_stream(websocket: WebSocket):
                         b64_audio = base64.b64encode(chunk).decode("utf-8")
                         realtime_input = {
                             "realtimeInput": {
-                                "mediaChunks": [
-                                    {
-                                        "data": b64_audio,
-                                        "mimeType": "audio/pcm;rate=16000"
-                                    }
-                                ]
+                                "audio": b64_audio
                             }
                         }
                         await gecx_ws.send(json.dumps(realtime_input))
@@ -204,28 +207,34 @@ async def gecx_voice_stream(websocket: WebSocket):
                         response = json.loads(message)
                         logger.info(f"Received frame from GECX: {list(response.keys())}")
                         
-                        # Check for speech audio outputs in parts
-                        server_content = response.get("serverContent", {})
-                        model_turn = server_content.get("modelTurn", {})
-                        parts = model_turn.get("parts", [])
-                        
-                        for part in parts:
-                            inline_data = part.get("inlineData", {})
-                            if inline_data and "audio" in inline_data.get("mimeType", ""):
-                                b64_audio = inline_data.get("data", "")
-                                if b64_audio:
-                                    raw_pcm = base64.b64decode(b64_audio)
-                                    logger.info(f"Received {len(raw_pcm)} bytes of response audio from GECX.")
-                                    await gecx_to_client_queue.put({"type": "AUDIO", "data": raw_pcm})
-                                    
-                            # Check for text transcriptions (Agent speaking)
-                            text = part.get("text")
+                        # GECx SessionOutput (audio and text transcript)
+                        session_output = response.get("sessionOutput", {})
+                        if session_output:
+                            b64_audio = session_output.get("audio", "")
+                            if b64_audio:
+                                raw_pcm = base64.b64decode(b64_audio)
+                                logger.info(f"Received {len(raw_pcm)} bytes of response audio from GECX.")
+                                await gecx_to_client_queue.put({"type": "AUDIO", "data": raw_pcm})
+                                
+                            text = session_output.get("text", "")
                             if text:
                                 logger.info(f"Received text transcript from GECX: {len(text)} chars")
                                 await gecx_to_client_queue.put({
                                     "type": "TRANSCRIPT",
                                     "text": text,
                                     "author": "agent"
+                                })
+                                
+                        # GECx User Speech Recognition result (for UI transcript display)
+                        recognition_result = response.get("recognitionResult", {})
+                        if recognition_result:
+                            user_transcript = recognition_result.get("transcript", "")
+                            if user_transcript:
+                                logger.info(f"Received user speech transcript recognition from GECX: {user_transcript}")
+                                await gecx_to_client_queue.put({
+                                    "type": "TRANSCRIPT",
+                                    "text": user_transcript,
+                                    "author": "user"
                                 })
                 except Exception as ex:
                     logger.error(f"Error in read_from_gecx: {ex}")
