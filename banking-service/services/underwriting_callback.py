@@ -20,6 +20,8 @@ from google.auth.transport.requests import Request
 from google.cloud import bigquery
 from cachetools import TTLCache
 from utils.gcp import get_project_id
+from routers.secure_messaging import create_message
+from models.secure_messaging import SecureMessageCreateRequest, SENDER_TYPE_BANK
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,7 @@ def _get_cached_access_token() -> str:
     except Exception as auth_err:
         logger.error(f"Failed to retrieve Google credentials token for Dialogflow callback: {auth_err}")
         raise RuntimeError("OAuth2 credentials refresh failed.")
+
 
 async def propagate_underwriting_to_session(
     session_id: str,
@@ -119,21 +122,17 @@ async def propagate_underwriting_to_session(
     except Exception as post_err:
         logger.error(f"Failed to dispatch async HTTP Webhook to Dialogflow CX: {post_err}")
         return False
-def _create_automated_underwriting_message(
+
+
+async def _create_automated_underwriting_message(
     user_id: str,
     artifact_type: str,
     approved: bool,
     gross_income: float
 ):
     import uuid
-    from datetime import datetime, timezone
-    from utils.bq import create_message_in_bigquery, get_device_tokens_for_customer
-    from firebase_admin import messaging
 
-    message_id = str(uuid.uuid4())
     thread_id = str(uuid.uuid4())
-    created_at = datetime.now(timezone.utc)
-    
     category = "Loans"
     
     if approved:
@@ -141,51 +140,25 @@ def _create_automated_underwriting_message(
             f"Your submitted {artifact_type} document has been reviewed and approved by our underwriting team. "
             f"Verified Gross Monthly Income: ${gross_income:,.2f}. Your home loan preapproval process is moving forward!"
         )
-        notification_title = f"Document Approved: {artifact_type}"
     else:
         message_text = (
             f"Your submitted {artifact_type} document could not be verified by our underwriting team. "
             f"Please contact support or re-upload a clear, high-resolution copy of the document."
         )
-        notification_title = f"Document Verification Issue: {artifact_type}"
 
     try:
         logger.info(f"Creating automated secure message for customer {user_id} (Artifact: {artifact_type}, Approved: {approved})")
-        create_message_in_bigquery(
-            message_id=message_id,
-            user_id=user_id,
-            sender="bank",
+        request = SecureMessageCreateRequest(
             category=category,
             message=message_text,
-            created_at=created_at,
-            thread_id=thread_id
+            thread_id=thread_id,
+            user_id=user_id,
+            sender=SENDER_TYPE_BANK
         )
-        
-        # Dispatch push notification via Firebase
-        try:
-            tokens = get_device_tokens_for_customer(user_id)
-            if tokens:
-                msg_body = message_text
-                if len(msg_body) > 100:
-                    msg_body = msg_body[:97] + "..."
-                
-                push_message = messaging.MulticastMessage(
-                    data={
-                        "title": notification_title,
-                        "body": msg_body,
-                        "thread_id": str(thread_id),
-                        "type": "support_message",
-                        "category": category,
-                        "user_id": str(user_id)
-                    },
-                    tokens=tokens,
-                )
-                messaging.send_multicast(push_message)
-                logger.info(f"FCM push notification dispatched successfully to {len(tokens)} devices.")
-        except Exception as fcm_err:
-            logger.warning(f"FCM push notification dispatch skipped or failed: {fcm_err}")
+        await create_message(request=request, token=None)
     except Exception as e:
         logger.error(f"Failed to generate automated secure message: {e}")
+
 
 async def trigger_session_propagation_flow(
     table_ref: str,
@@ -230,7 +203,7 @@ async def trigger_session_propagation_flow(
         
         # Generate secure support message and push notification for the customer
         if customer_id:
-            _create_automated_underwriting_message(
+            await _create_automated_underwriting_message(
                 user_id=customer_id,
                 artifact_type=claimed_artifact_type,
                 approved=wages_verified,
