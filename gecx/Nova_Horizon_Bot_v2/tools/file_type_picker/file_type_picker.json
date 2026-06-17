@@ -3,7 +3,7 @@
   "displayName": "file_type_picker",
   "widgetTool": {
     "name": "file_type_picker",
-    "description": "Used to upload files to GCS bucket",
+    "description": "Used to upload files to GCS bucket. Once a user clicks this \u0027Upload File\u0027 button, the trigger_file_upload tool will then be invoked.",
     "widgetType": "QUICK_ACTIONS",
     "parameters": {
       "type": "OBJECT",
