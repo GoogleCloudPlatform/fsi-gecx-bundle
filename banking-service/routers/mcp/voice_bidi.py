@@ -117,7 +117,7 @@ async def gecx_voice_stream(websocket: WebSocket):
         }
         
         logger.info(f"Opening GECX Bidi Session at {gecx_uri} (Session: {session_name})...")
-        async with websockets.connect(gecx_uri, extra_headers=headers) as gecx_ws:
+        async with websockets.connect(gecx_uri, additional_headers=headers) as gecx_ws:
             logger.info("Connected to GECX. Performing handshake...")
             
             # Send GECX config header payload
