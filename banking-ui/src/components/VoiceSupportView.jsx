@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Room, RoomEvent } from 'livekit-client';
 import { 
   Phone, 
@@ -47,9 +47,41 @@ export default function VoiceSupportView() {
   const [avatarName, setAvatarName] = useState('Sam');
   const [agentMode, setAgentMode] = useState(null);
 
+  // New engine-specific configuration states
+  const [engine, setEngine] = useState('livekit'); // 'livekit' | 'gecx'
+  const [volume, setVolume] = useState(0.8);
+  const [latency, setLatency] = useState(0);
+
   const roomRef = useRef(null);
   const chatContainerRef = useRef(null);
   const disconnectTimerRef = useRef(null);
+  
+  // GECX connection hooks & streaming timing refs
+  const wsRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const micStreamRef = useRef(null);
+  const workletNodeRef = useRef(null);
+  const activeSourcesRef = useRef([]);
+  const nextPlayoutTimeRef = useRef(0);
+  const volumeRef = useRef(0.8);
+  const micEnabledRef = useRef(true);
+  const pingIntervalRef = useRef(null);
+
+  // Sync state values to references to avoid stale closures inside event listeners
+  useEffect(() => {
+    volumeRef.current = volume;
+  }, [volume]);
+
+  useEffect(() => {
+    micEnabledRef.current = micEnabled;
+  }, [micEnabled]);
+
+  // Force voice/audio mode when using GECX engine (video avatars not supported)
+  useEffect(() => {
+    if (engine === 'gecx') {
+      setMode('audio');
+    }
+  }, [engine]);
 
   // Load account data and transactions on mount
   useEffect(() => {
@@ -81,12 +113,13 @@ export default function VoiceSupportView() {
     }
   }, [transcripts]);
 
-  // Cleanup LiveKit room on unmount
+  // Cleanup LiveKit room and GECX WebSocket on unmount
   useEffect(() => {
     return () => {
       if (roomRef.current) {
         roomRef.current.disconnect();
       }
+      cleanupGecxSession();
     };
   }, []);
 
@@ -147,7 +180,282 @@ export default function VoiceSupportView() {
     };
   }, [agentVideoTrack, isConnected, avatarName]);
 
+  const getWebSocketUrl = () => {
+    const url = window.env?.BANKING_API_URL || import.meta.env.VITE_BANKING_API_URL || "http://localhost:8080";
+    return url.replace(/^http/, 'ws') + '/voice/gecx-stream';
+  };
+
+  const cleanupGecxSession = () => {
+    stopPlayoutQueue();
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
+    }
+    if (wsRef.current) {
+      try {
+        wsRef.current.close();
+      } catch (e) {}
+      wsRef.current = null;
+    }
+    if (workletNodeRef.current) {
+      try {
+        workletNodeRef.current.disconnect();
+      } catch (e) {}
+      workletNodeRef.current = null;
+    }
+    if (micStreamRef.current) {
+      try {
+        micStreamRef.current.getTracks().forEach(track => track.stop());
+      } catch (e) {}
+      micStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close();
+      } catch (e) {}
+      audioContextRef.current = null;
+    }
+    setIsConnected(false);
+    setLatency(0);
+  };
+
+  const stopPlayoutQueue = () => {
+    activeSourcesRef.current.forEach(source => {
+      try {
+        source.stop();
+      } catch (e) {}
+    });
+    activeSourcesRef.current = [];
+    
+    const audioCtx = audioContextRef.current;
+    if (audioCtx) {
+      nextPlayoutTimeRef.current = audioCtx.currentTime + 0.05;
+    }
+  };
+
+  const handleGecxAudioChunk = (arrayBuffer) => {
+    const audioCtx = audioContextRef.current;
+    if (!audioCtx || audioCtx.state === 'closed') return;
+
+    const int16Array = new Int16Array(arrayBuffer);
+    const float32Array = new Float32Array(int16Array.length);
+    for (let i = 0; i < int16Array.length; i++) {
+      float32Array[i] = int16Array[i] / (int16Array[i] < 0 ? 0x8000 : 0x7FFF);
+    }
+
+    const audioBuffer = audioCtx.createBuffer(1, float32Array.length, 16000);
+    audioBuffer.copyToChannel(float32Array, 0);
+
+    const now = audioCtx.currentTime;
+    let playTime = nextPlayoutTimeRef.current;
+    if (playTime < now) {
+      playTime = now + 0.05; // 50ms playout lookahead to prevent jitter
+    }
+
+    const sourceNode = audioCtx.createBufferSource();
+    sourceNode.buffer = audioBuffer;
+
+    const gainNode = audioCtx.createGain();
+    gainNode.gain.setValueAtTime(volumeRef.current, audioCtx.currentTime);
+
+    sourceNode.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    activeSourcesRef.current.push(sourceNode);
+    sourceNode.onended = () => {
+      activeSourcesRef.current = activeSourcesRef.current.filter(src => src !== sourceNode);
+    };
+
+    sourceNode.start(playTime);
+    nextPlayoutTimeRef.current = playTime + audioBuffer.duration;
+  };
+
+  const handleGecxControlMessage = (payload) => {
+    if (payload.type === 'TRANSCRIPT') {
+      setTranscripts(prev => [...prev, { author: payload.author, text: payload.text }]);
+      if (payload.author === 'agent') {
+        const text = payload.text.toLowerCase();
+        if (text.includes("goodbye") || text.includes("bye") || (text.includes("have a") && text.includes("good") && text.includes("day"))) {
+          startDisconnectCountdown();
+        }
+      }
+    } else if (payload.type === 'PONG') {
+      const rtt = Date.now() - payload.timestamp;
+      setLatency(rtt);
+    } else if (payload.type === 'CARD_STATUS') {
+      setCardStatus(payload.status);
+      setTranscripts(prev => [...prev, { author: 'system', text: `SECURITY ALERT: Card status updated to ${payload.status}.` }]);
+    } else if (payload.type === 'LIMIT_UPDATED') {
+      setCreditLimit(payload.credit_limit_cents / 100);
+      setAvailableCredit(payload.available_credit_cents / 100);
+      setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to $${(payload.credit_limit_cents / 100).toLocaleString()}.` }]);
+    } else if (payload.type === 'FEE_REVERSED') {
+      setClearedBalance(payload.cleared_balance_cents / 100);
+      setAvailableCredit(payload.available_credit_cents / 100);
+      setTranscripts(prev => [...prev, { author: 'system', text: `LEDGER UPDATE: Late fee reversed. Available credit adjusted.` }]);
+      getCreditCardTransactions().then(setTransactions).catch(console.error);
+    } else if (payload.type === 'HIGHLIGHT_TRANSACTION') {
+      const txId = payload.id;
+      if (typeof txId === 'string' && /^[a-zA-Z0-9\-_]{8,64}$/.test(txId)) {
+        setHighlightedTxId(txId);
+        setTranscripts(prev => [...prev, { author: 'system', text: 'Representative highlighted a transaction.' }]);
+        setTimeout(() => {
+          setHighlightedTxId(null);
+        }, 4000);
+      }
+    } else if (payload.type === 'INTERRUPT') {
+      console.log("Barge-in: Interrupting agent speech playback.");
+      stopPlayoutQueue();
+    } else if (payload.type === 'ERROR') {
+      setErrorMessage(payload.message);
+    }
+  };
+
+  const startGecxConsultation = async () => {
+    if (isConnecting || isConnected) return;
+    setIsConnecting(true);
+    setErrorMessage('');
+    setTranscripts([{ author: 'system', text: 'Connecting to GECX voice stream...' }]);
+
+    try {
+      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = micStream;
+
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      audioContextRef.current = audioCtx;
+      nextPlayoutTimeRef.current = 0;
+
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+
+      let fbToken = "";
+      if (window.firebaseAuth && typeof window.firebaseAuth.getCurrentUser === 'function') {
+        const user = window.firebaseAuth.getCurrentUser();
+        if (user) {
+          fbToken = await user.getIdToken();
+        }
+      }
+
+      const wsUrl = getWebSocketUrl();
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+      ws.binaryType = 'arraybuffer';
+
+      ws.onopen = () => {
+        console.log("GECX WebSocket opened. Transmitting Auth frame...");
+        setTranscripts(prev => [...prev, { author: 'system', text: 'Securing streaming session...' }]);
+        ws.send(JSON.stringify({
+          type: "AUTH",
+          token: fbToken
+        }));
+        
+        // Start latency diagnostics ping loop
+        pingIntervalRef.current = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: "PING",
+              timestamp: Date.now()
+            }));
+          }
+        }, 3000);
+      };
+
+      ws.onmessage = async (event) => {
+        if (typeof event.data === 'string') {
+          handleGecxControlMessage(JSON.parse(event.data));
+        } else {
+          handleGecxAudioChunk(event.data);
+        }
+      };
+
+      ws.onclose = (e) => {
+        console.log(`GECX WebSocket closed: ${e.code} | ${e.reason}`);
+        cleanupGecxSession();
+        if (e.code === 4001) {
+          setErrorMessage("Access Denied: Session authentication failed.");
+        } else {
+          setTranscripts(prev => [...prev, { author: 'system', text: 'Session ended.' }]);
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.error("GECX WebSocket error:", err);
+        setErrorMessage("Failed to establish voice session connection.");
+      };
+
+      // Inline AudioWorklet Processor Blob to prevent asset loaders compiling issues in Vite
+      const workletCode = `
+        class PCMProcessor extends AudioWorkletProcessor {
+          constructor() {
+            super();
+            this.buffer = new Float32Array(0);
+          }
+          process(inputs, outputs, parameters) {
+            const input = inputs[0];
+            if (!input || !input[0]) return true;
+            
+            const samples = input[0];
+            const combined = new Float32Array(this.buffer.length + samples.length);
+            combined.set(this.buffer);
+            combined.set(samples, this.buffer.length);
+            this.buffer = combined;
+            
+            const sendChunkSize = 2048; // packet size of ~128ms
+            while (this.buffer.length >= sendChunkSize) {
+              const chunk = this.buffer.slice(0, sendChunkSize);
+              this.buffer = this.buffer.slice(sendChunkSize);
+              
+              const int16Buffer = new Int16Array(chunk.length);
+              for (let i = 0; i < chunk.length; i++) {
+                const s = Math.max(-1, Math.min(1, chunk[i]));
+                int16Buffer[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+              }
+              
+              this.port.postMessage(int16Buffer.buffer, [int16Buffer.buffer]);
+            }
+            return true;
+          }
+        }
+        registerProcessor('pcm-processor', PCMProcessor);
+      `;
+      
+      const blob = new Blob([workletCode], { type: 'application/javascript' });
+      const workletUrl = URL.createObjectURL(blob);
+      await audioCtx.audioWorklet.addModule(workletUrl);
+      URL.revokeObjectURL(workletUrl);
+
+      const sourceNode = audioCtx.createMediaStreamSource(micStream);
+      const workletNode = new AudioWorkletNode(audioCtx, 'pcm-processor');
+      workletNodeRef.current = workletNode;
+
+      workletNode.port.onmessage = (e) => {
+        const rawBuffer = e.data;
+        if (micEnabledRef.current && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(rawBuffer);
+        }
+      };
+
+      sourceNode.connect(workletNode);
+      setIsConnected(true);
+      setTranscripts([]);
+    } catch (err) {
+      console.error("Failed to initialize GECX call:", err);
+      setErrorMessage(
+        err.name === 'NotAllowedError' 
+          ? 'Microphone permission denied. Enable microphone access in browser settings.' 
+          : 'Failed to access microphone or establish call connection.'
+      );
+      cleanupGecxSession();
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
   const startConsultation = async () => {
+    if (engine === 'gecx') {
+      return startGecxConsultation();
+    }
     if (isConnecting || isConnected) return;
     setIsConnecting(true);
     setErrorMessage('');
@@ -302,6 +610,9 @@ export default function VoiceSupportView() {
   };
 
   const endConsultation = () => {
+    if (engine === 'gecx') {
+      return cleanupGecxSession();
+    }
     if (disconnectTimerRef.current) {
       clearTimeout(disconnectTimerRef.current);
       disconnectTimerRef.current = null;
@@ -328,23 +639,54 @@ export default function VoiceSupportView() {
   };
 
   const toggleMute = async () => {
-    if (!roomRef.current) return;
     const enabled = !micEnabled;
-    await roomRef.current.localParticipant.setMicrophoneEnabled(enabled);
-    setMicEnabled(enabled);
+    if (engine === 'gecx') {
+      setMicEnabled(enabled);
+    } else {
+      if (roomRef.current) {
+        await roomRef.current.localParticipant.setMicrophoneEnabled(enabled);
+      }
+      setMicEnabled(enabled);
+    }
   };
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 text-slate-100 min-h-[80vh] flex flex-col justify-between">
       
       {/* Header section */}
-      <div className="text-center mb-6">
+      <div className="text-center mb-6 flex flex-col items-center">
         <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
           Nova Horizon Voice Support Copilot
         </h1>
         <p className="text-slate-400 mt-2 text-lg">
           Talk to our real-time AI assistant for instant credit card operations.
         </p>
+
+        {/* Engine Selection Toggle */}
+        {!isConnected && !isConnecting && (
+          <div className="flex items-center gap-1.5 p-1 bg-slate-950/60 rounded-full border border-slate-800/80 mt-4">
+            <button
+              onClick={() => setEngine('livekit')}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                engine === 'livekit' 
+                  ? 'bg-blue-600/20 border border-blue-500/30 text-blue-400' 
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              LiveKit WebRTC
+            </button>
+            <button
+              onClick={() => setEngine('gecx')}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                engine === 'gecx' 
+                  ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-400' 
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              GECX Direct WS
+            </button>
+          </div>
+        )}
       </div>
 
       {errorMessage && (
@@ -566,8 +908,43 @@ export default function VoiceSupportView() {
           </div>
         )}
 
+        {/* Diagnostics & Volume Control Panel (Only when connected) */}
+        {isConnected && (
+          <div className="w-full max-w-md bg-slate-950/40 border border-slate-800/80 rounded-2xl p-4 flex flex-col gap-3 text-xs mb-2">
+            <div className="flex justify-between items-center text-slate-400">
+              <span className="font-semibold uppercase tracking-wider text-[10px]">Diagnostics</span>
+              <span className="font-mono text-emerald-400">Active</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-300 font-mono">
+              <div>Engine: <span className="text-blue-400 font-bold">{engine === 'gecx' ? 'GECX Direct WS' : 'LiveKit WebRTC'}</span></div>
+              <div>Codec: <span className="text-indigo-400">{engine === 'gecx' ? 'PCM (16kHz 16-bit)' : 'Opus (48kHz)'}</span></div>
+              {engine === 'gecx' && (
+                <>
+                  <div>RTT Latency: <span className="text-yellow-400">{latency} ms</span></div>
+                  <div>Transport: <span className="text-slate-400">Stateless Proxy</span></div>
+                </>
+              )}
+            </div>
+            
+            {/* Volume Playout slider control */}
+            <div className="flex items-center gap-3 border-t border-slate-800/80 pt-3 mt-1">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Volume:</span>
+              <input 
+                type="range" 
+                min="0" 
+                max="1.0" 
+                step="0.05"
+                value={volume}
+                onChange={(e) => setVolume(parseFloat(e.target.value))}
+                className="flex-grow h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+              />
+              <span className="text-[10px] text-slate-300 font-mono w-8 text-right">{Math.round(volume * 100)}%</span>
+            </div>
+          </div>
+        )}
+
         {/* Mode Selection Toggle */}
-        {!isConnected && !isConnecting && (
+        {!isConnected && !isConnecting && engine === 'livekit' && (
           <div className="flex items-center gap-1.5 p-1 bg-slate-950/60 rounded-full border border-slate-800/80 mb-2">
             <button
               onClick={() => setMode('audio')}

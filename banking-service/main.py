@@ -40,6 +40,7 @@ from utils.auth import get_current_user
 
 # Import and register FastMCP tools and ASGI app from the isolated mcp router module
 from routers.mcp import mcp_app
+from routers.mcp.voice_bidi import router as voice_bidi_router
 
 import firebase_admin
 
@@ -102,6 +103,7 @@ app.include_router(credit_card_router)
 app.include_router(support_router)
 app.include_router(internal_router)
 app.include_router(settings_router)
+app.include_router(voice_bidi_router)
 
 
 def custom_openapi():
