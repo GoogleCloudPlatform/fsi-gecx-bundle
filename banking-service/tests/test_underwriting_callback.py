@@ -14,7 +14,11 @@
 
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
-from services.underwriting_callback import trigger_session_propagation_flow, propagate_underwriting_to_session
+from services.underwriting_callback import (
+    trigger_session_propagation_flow,
+    propagate_underwriting_to_session,
+    _create_automated_underwriting_message
+)
 
 @pytest.fixture
 def mock_bq_client():
@@ -122,3 +126,55 @@ async def test_trigger_session_propagation_flow_success(mock_propagate, mock_cre
     
     # Verify propagation arguments
     mock_propagate.assert_called_once_with("session-resolved-from-bq-101", True, 8500.00)
+
+
+@pytest.mark.asyncio
+@patch("services.underwriting_callback.create_message")
+async def test_create_automated_underwriting_message_approved(mock_create_message):
+    """Verify correct SecureMessageCreateRequest content when document is approved."""
+    mock_create_message.return_value = AsyncMock()
+    
+    await _create_automated_underwriting_message(
+        user_id="cust-456",
+        artifact_type="W-2",
+        approved=True,
+        gross_income=5000.0
+    )
+    
+    mock_create_message.assert_called_once()
+    args, kwargs = mock_create_message.call_args
+    request = kwargs["request"]
+    token = kwargs["token"]
+    
+    assert request.category == "Loans"
+    assert "approved by our underwriting team" in request.message
+    assert "Verified Gross Monthly Income: $5,000.00" in request.message
+    assert request.user_id == "cust-456"
+    assert request.sender == "bank"
+    assert token is None
+
+
+@pytest.mark.asyncio
+@patch("services.underwriting_callback.create_message")
+async def test_create_automated_underwriting_message_rejected(mock_create_message):
+    """Verify correct SecureMessageCreateRequest content when document is rejected."""
+    mock_create_message.return_value = AsyncMock()
+    
+    await _create_automated_underwriting_message(
+        user_id="cust-789",
+        artifact_type="Paystub",
+        approved=False,
+        gross_income=0.0
+    )
+    
+    mock_create_message.assert_called_once()
+    args, kwargs = mock_create_message.call_args
+    request = kwargs["request"]
+    token = kwargs["token"]
+    
+    assert request.category == "Loans"
+    assert "could not be verified by our underwriting team" in request.message
+    assert "Please contact support" in request.message
+    assert request.user_id == "cust-789"
+    assert request.sender == "bank"
+    assert token is None
