@@ -229,6 +229,7 @@ Open up your `terraform.tfvars` file and copy in these variables (the output fro
 - `cx_agent_studio_deployment_name` - 'Web widget deployment id'
 - `cx_agent_studio_upload_tool_name` - 'Trigger file upload tool name'
 - `cx_agent_studio_populate_form_content_tool_name` - 'Trigger populate form content tool name'
+- `cx_agent_studio_get_user_location_tool_name` - 'Trigger get user location tool name'
 
 ```bash
 make tf-apply
