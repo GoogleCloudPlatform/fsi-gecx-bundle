@@ -20,7 +20,7 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
 from models.authentication import ValidatedToken, ForwardedUserContextType
-from utils.auth import get_current_user, PROJECT_ID
+from utils.auth import get_current_user, PROJECT_ID, is_route_allowed
 
 
 class MockURL:
@@ -180,3 +180,13 @@ async def test_get_current_user_cxas_forwarded_header_invalid_type(monkeypatch):
         )
     assert exc_info.value.status_code == 403
     assert "Forbidden" in exc_info.value.detail
+
+
+def test_is_route_allowed_patch_application():
+    """Verify that is_route_allowed permits PATCH to /applications/2 under CXAS_AGENT context."""
+    assert is_route_allowed(
+        method="PATCH",
+        path="/applications/2",
+        context_type=ForwardedUserContextType.CXAS_AGENT.value
+    ) is True
+

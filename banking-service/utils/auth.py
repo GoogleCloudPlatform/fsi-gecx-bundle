@@ -265,7 +265,7 @@ def is_route_allowed(method: str, path: str, context_type: str | None) -> bool:
     for route in allowed_routes:
         route_path = route["path"].rstrip("/")
         if route["method"] == method:
-            if path == route_path or path.endswith(route_path):
+            if path == route_path or path.endswith(route_path) or f"{route_path}/" in path:
                 return True
     return False
 
