@@ -695,29 +695,35 @@ function AppContent() {
 
   useEffect(() => {
     // Load Dialogflow CX Messenger dynamically
+    const initializeChat = () => {
+      if (window.chatSdk && window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME) {
+        if (window.chatContextRegistered) {
+          console.log("Dialogflow CX Messenger context already registered, skipping duplicate registration.");
+          setIsChatSdkReady(true);
+          return;
+        }
+        window.chatSdk.registerContext(
+          window.chatSdk.prebuilts.ces.createContext({
+            deploymentName: window.env.CX_AGENT_STUDIO_DEPLOYMENT_NAME,
+            tokenBroker: {
+              enableTokenBroker: true,
+              enableRecaptcha: false
+            },
+            enableWelcomeEvent: false
+          })
+        );
+        window.chatContextRegistered = true;
+        console.log("Dialogflow CX Messenger initialized dynamically.");
+        setIsChatSdkReady(true);
+      }
+    };
+
     const scriptId = 'dialogflow-messenger-script';
     if (!document.getElementById(scriptId)) {
       const script = document.createElement('script');
       script.id = scriptId;
       script.src = "https://www.gstatic.com/chat-messenger/sdk/prod/v1.16/chat-messenger.js";
       script.async = true;
-
-      const initializeChat = () => {
-        if (window.chatSdk && window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME) {
-          window.chatSdk.registerContext(
-            window.chatSdk.prebuilts.ces.createContext({
-              deploymentName: window.env.CX_AGENT_STUDIO_DEPLOYMENT_NAME,
-              tokenBroker: {
-                enableTokenBroker: true,
-                enableRecaptcha: false
-              },
-              enableWelcomeEvent: false
-            })
-          );
-          console.log("Dialogflow CX Messenger initialized dynamically.");
-          setIsChatSdkReady(true);
-        }
-      };
 
       script.onload = () => {
         initializeChat();
@@ -731,11 +737,11 @@ function AppContent() {
       };
     } else {
       if (window.chatSdk) {
-        setIsChatSdkReady(true);
+        initializeChat();
       } else {
         const checkChatSdkLoaded = () => {
           if (window.chatSdk) {
-            setIsChatSdkReady(true);
+            initializeChat();
             window.removeEventListener("chat-messenger-loaded", checkChatSdkLoaded);
           }
         };
