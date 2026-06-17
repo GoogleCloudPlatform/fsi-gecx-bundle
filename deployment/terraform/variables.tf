@@ -178,3 +178,9 @@ variable "voice_agent_audio_model" {
   type        = string
   description = "The Gemini Live model to use for audio mode"
 }
+
+variable "gecx_voice_agent_id" {
+  type        = string
+  description = "The target GECX Application ID for voice consultation"
+  default     = "42345105-29cb-492d-8a60-07171bb72190"
+}

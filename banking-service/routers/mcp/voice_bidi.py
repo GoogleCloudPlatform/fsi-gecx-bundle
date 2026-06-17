@@ -23,6 +23,7 @@ from typing import Dict
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from utils.auth import validate_firebase_token
+from utils.env import is_running_locally
 from utils.gcp import get_project_id
 import google.auth
 import google.auth.transport.requests
@@ -52,7 +53,7 @@ class GCPTokenManager:
         logger.info("Refreshing Google OAuth2 Access Token for GECX stream...")
         credentials, _ = await asyncio.to_thread(
             google.auth.default,
-            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            scopes=["https://www.googleapis.com/auth/ces", "https://www.googleapis.com/auth/cloud-platform"]
         )
         auth_req = google.auth.transport.requests.Request()
         await asyncio.to_thread(credentials.refresh, auth_req)
@@ -89,9 +90,14 @@ async def gecx_voice_stream(websocket: WebSocket):
             if auth_frame.get("type") != "AUTH" or not auth_frame.get("token"):
                 raise ValueError("Missing type 'AUTH' or 'token' in first-frame.")
                 
-            validated_token = validate_firebase_token(auth_frame["token"])
-            user_id = validated_token.claims.get("sub")
-            session_id = f"session-{user_id}"
+            if is_running_locally() and auth_frame.get("token") == "mock-local-token":
+                user_id = "mock_user_id"
+                session_id = "mock_session_id"
+            else:
+                validated_token = validate_firebase_token(auth_frame["token"])
+                user_id = validated_token.claims.get("sub")
+                session_id = f"session-{user_id}"
+                
             logger.info(f"First-frame authentication succeeded. Session: {session_id} (User: {user_id})")
         except asyncio.TimeoutError:
             logger.warning("Auth timeout: First-frame auth token not received within 5 seconds.")

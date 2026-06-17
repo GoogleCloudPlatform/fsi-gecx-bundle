@@ -110,6 +110,11 @@ resource "google_cloud_run_v2_service" "banking_service" {
         value = var.deploy_cloud_run_services ? google_cloud_run_v2_service.credit_support_agent[0].uri : "http://localhost:8081"
       }
 
+      env {
+        name  = "GECX_APP_ID"
+        value = var.gecx_voice_agent_id
+      }
+
       dynamic "env" {
         for_each = var.set_cloud_run_audiences ? [1] : []
         content {
