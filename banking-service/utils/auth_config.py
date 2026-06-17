@@ -21,6 +21,7 @@ ALLOWED_FORWARDED_AUTH_ROUTES = {
         {"method": "GET", "path": "/profile"},
         {"method": "POST", "path": "/profile"},
         {"method": "POST", "path": "/applications"},
+        {"method": "PATCH", "path": "/applications"},
         {"method": "POST", "path": "/artifacts/signed-url"},
     ]
 }
