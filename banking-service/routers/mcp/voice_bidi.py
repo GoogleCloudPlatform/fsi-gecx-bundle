@@ -153,6 +153,7 @@ async def gecx_voice_stream(websocket: WebSocket):
                             if len(message) > 65536:
                                 logger.error("Security warning: Client sent binary frame exceeding 64KB limit.")
                                 break
+                            logger.info(f"Received binary frame from browser client: {len(message)} bytes")
                             await client_to_gecx_queue.put(message)
                         elif "text" in data:
                             payload = json.loads(data["text"])
@@ -191,6 +192,7 @@ async def gecx_voice_stream(websocket: WebSocket):
                             }
                         }
                         await gecx_ws.send(json.dumps(realtime_input))
+                        logger.info(f"Forwarded {len(chunk)} bytes of audio to GECX.")
                         client_to_gecx_queue.task_done()
                 except Exception as ex:
                     logger.error(f"Error in send_to_gecx: {ex}")
@@ -200,6 +202,7 @@ async def gecx_voice_stream(websocket: WebSocket):
                 try:
                     async for message in gecx_ws:
                         response = json.loads(message)
+                        logger.info(f"Received frame from GECX: {list(response.keys())}")
                         
                         # Check for speech audio outputs in parts
                         server_content = response.get("serverContent", {})
@@ -212,11 +215,13 @@ async def gecx_voice_stream(websocket: WebSocket):
                                 b64_audio = inline_data.get("data", "")
                                 if b64_audio:
                                     raw_pcm = base64.b64decode(b64_audio)
+                                    logger.info(f"Received {len(raw_pcm)} bytes of response audio from GECX.")
                                     await gecx_to_client_queue.put({"type": "AUDIO", "data": raw_pcm})
                                     
                             # Check for text transcriptions (Agent speaking)
                             text = part.get("text")
                             if text:
+                                logger.info(f"Received text transcript from GECX: {len(text)} chars")
                                 await gecx_to_client_queue.put({
                                     "type": "TRANSCRIPT",
                                     "text": text,
