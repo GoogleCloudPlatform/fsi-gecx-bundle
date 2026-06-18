@@ -1,4 +1,6 @@
-CREATE VIEW account_balances AS
+CREATE VIEW account_balances
+SQL SECURITY INVOKER
+AS
 SELECT
   a.account_id,
   COALESCE(SUM(
