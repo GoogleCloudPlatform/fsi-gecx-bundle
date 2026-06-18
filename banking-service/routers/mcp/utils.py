@@ -119,6 +119,8 @@ def requires_user_assertion(func):
         headers = {}
         if ctx and ctx.request_context and ctx.request_context.request:
             headers = {k.lower().strip(): v.strip() for k, v in ctx.request_context.request.headers.items()}
+        
+        logger.info(f"FastMCP call headers: {headers}")
             
         assertion_token = headers.get("x-forwarded-user-context") or kwargs.get("assertion_token")
         if not assertion_token:
