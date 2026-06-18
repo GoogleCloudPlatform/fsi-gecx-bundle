@@ -94,7 +94,7 @@ def create_customer_in_bigquery(user_id: str, first_name: str | None, last_name:
             bigquery.ScalarQueryParameter("first_name", "STRING", first_name),
             bigquery.ScalarQueryParameter("last_name", "STRING", last_name),
             bigquery.ScalarQueryParameter("email", "STRING", email),
-            bigquery.ScalarQueryParameter("phone_number", "STRING", phone_number or "+1-555-019-9999"),
+            bigquery.ScalarQueryParameter("phone_number", "STRING", phone_number),
         ]
     )
     client = _get_client()
