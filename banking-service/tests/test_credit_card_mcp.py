@@ -13,17 +13,14 @@
 # limitations under the License.
 
 import pytest
-import os
-import datetime
 from unittest.mock import MagicMock, patch
-from fastmcp import Context
 
 from routers.mcp.credit_card import (
     report_lost_stolen_card,
     reverse_overdraft_fee,
     request_credit_limit_increase
 )
-from models.credit_card import Base, FinancialAccount, IssuedCard, AccountLedger
+from models.credit_card import Base, FinancialAccount, IssuedCard
 
 @pytest.fixture(autouse=True)
 def run_locally_env(monkeypatch):

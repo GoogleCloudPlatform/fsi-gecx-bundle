@@ -74,7 +74,7 @@ async def report_lost_stolen_card(
         logger.info(f"Anti-Fraud check: Address quarantine check passed for customer {verified_customer_id}")
 
         # Execute freeze service
-        res = freeze_card(db, card_token=card.card_token, reason="CUSTOMER_REPORTED_LOST_STOLEN")
+        freeze_card(db, card_token=card.card_token, reason="CUSTOMER_REPORTED_LOST_STOLEN")
         
         # Out-of-band push to client WebSocket to sync UI
         session_id = f"session-{verified_customer_id}"

@@ -169,7 +169,7 @@ export default function AgentSupportDashboard() {
       roomRef.current = room;
 
       // 3. Setup track subscription listeners to route customer audio
-      room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      room.on(RoomEvent.TrackSubscribed, (track) => {
         if (track.kind === 'audio') {
           console.log('Subscribed to customer audio track');
           const element = track.attach();

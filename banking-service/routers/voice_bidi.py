@@ -83,4 +83,4 @@ async def gecx_voice_stream(websocket: WebSocket):
     except Exception as e:
         logger.error(f"Session failure for session {session_id}: {e}")
     finally:
-        logger.info(f"WebSocket session clean-up completed.")
+        logger.info("WebSocket session clean-up completed.")

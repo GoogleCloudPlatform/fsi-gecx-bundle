@@ -304,12 +304,12 @@ resource "google_compute_security_policy" "cloud_armor_policy" {
     rate_limit_options {
       conform_action = "allow"
       exceed_action  = "deny(429)"
-      
+
       rate_limit_threshold {
         count        = 120
         interval_sec = 60
       }
-      
+
       enforce_on_key = "IP"
     }
     description = "Rate limit rule to throttle signaling flood attacks"
@@ -325,13 +325,13 @@ resource "google_compute_backend_service" "livekit_backend" {
   timeout_sec           = 300
   security_policy       = google_compute_security_policy.cloud_armor_policy[0].id
   load_balancing_scheme = "EXTERNAL_MANAGED"
-  
+
   backend {
     group                 = google_compute_network_endpoint_group.livekit_neg[0].id
     balancing_mode        = "RATE"
     max_rate_per_endpoint = 100
   }
-  
+
   health_checks = [google_compute_health_check.livekit_hc[0].id]
 }
 

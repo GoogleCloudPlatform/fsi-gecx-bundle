@@ -41,7 +41,7 @@ export default function VoiceSupportView() {
   
   const [mode, setMode] = useState('audio');
   const [warningMessage, setWarningMessage] = useState('');
-  const [timeRemaining, setTimeRemaining] = useState(0);
+
   const [agentVideoTrack, setAgentVideoTrack] = useState(null);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [avatarName, setAvatarName] = useState('Sam');
@@ -66,6 +66,100 @@ export default function VoiceSupportView() {
   const volumeRef = useRef(0.8);
   const micEnabledRef = useRef(true);
   const pingIntervalRef = useRef(null);
+
+  const stopPlayoutQueue = useCallback(() => {
+    activeSourcesRef.current.forEach(source => {
+      try {
+        source.stop();
+      } catch {
+        // Ignore error
+      }
+    });
+    activeSourcesRef.current = [];
+    
+    const audioCtx = audioContextRef.current;
+    if (audioCtx) {
+      nextPlayoutTimeRef.current = audioCtx.currentTime + 0.05;
+    }
+  }, []);
+
+  const cleanupGecxSession = useCallback(() => {
+    stopPlayoutQueue();
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
+    }
+    if (wsRef.current) {
+      try {
+        wsRef.current.close();
+      } catch {
+        // Ignore error
+      }
+      wsRef.current = null;
+    }
+    if (workletNodeRef.current) {
+      try {
+        workletNodeRef.current.disconnect();
+      } catch {
+        // Ignore error
+      }
+      workletNodeRef.current = null;
+    }
+    if (micStreamRef.current) {
+      try {
+        micStreamRef.current.getTracks().forEach(track => track.stop());
+      } catch {
+        // Ignore error
+      }
+      micStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close();
+      } catch {
+        // Ignore error
+      }
+      audioContextRef.current = null;
+    }
+    setIsConnected(false);
+    setLatency(0);
+  }, [stopPlayoutQueue]);
+
+  const endConsultation = useCallback(() => {
+    if (engine === 'gecx') {
+      return cleanupGecxSession();
+    }
+    if (disconnectTimerRef.current) {
+      clearTimeout(disconnectTimerRef.current);
+      disconnectTimerRef.current = null;
+    }
+    if (roomRef.current) {
+      try {
+        roomRef.current.disconnect();
+      } catch (err) {
+        console.error("Error disconnecting room:", err);
+      }
+      roomRef.current = null;
+    }
+    const container = document.getElementById("avatar-video-container");
+    if (container) {
+      container.innerHTML = "";
+    }
+    setIsConnected(false);
+    setIsHumanAgentActive(false);
+    setWarningMessage('');
+    setAgentVideoTrack(null);
+    setVideoLoaded(false);
+    setAgentMode(null);
+  }, [engine, cleanupGecxSession]);
+
+  const startDisconnectCountdown = useCallback(() => {
+    if (disconnectTimerRef.current) return; // already scheduled
+    setTranscripts(prev => [...prev, { author: 'system', text: 'Consultation complete. Disconnecting in 5 seconds...' }]);
+    disconnectTimerRef.current = setTimeout(() => {
+      endConsultation();
+    }, 5000);
+  }, [endConsultation]);
 
   // Sync state values to references to avoid stale closures inside event listeners
   useEffect(() => {
@@ -121,7 +215,7 @@ export default function VoiceSupportView() {
       }
       cleanupGecxSession();
     };
-  }, []);
+  }, [cleanupGecxSession]);
 
   // Handle dynamically attaching/detaching the subscribed video track when the DOM element is mounted
   useEffect(() => {
@@ -185,53 +279,7 @@ export default function VoiceSupportView() {
     return url.replace(/^http/, 'ws') + '/voice/gecx-stream';
   };
 
-  const cleanupGecxSession = () => {
-    stopPlayoutQueue();
-    if (pingIntervalRef.current) {
-      clearInterval(pingIntervalRef.current);
-      pingIntervalRef.current = null;
-    }
-    if (wsRef.current) {
-      try {
-        wsRef.current.close();
-      } catch (e) {}
-      wsRef.current = null;
-    }
-    if (workletNodeRef.current) {
-      try {
-        workletNodeRef.current.disconnect();
-      } catch (e) {}
-      workletNodeRef.current = null;
-    }
-    if (micStreamRef.current) {
-      try {
-        micStreamRef.current.getTracks().forEach(track => track.stop());
-      } catch (e) {}
-      micStreamRef.current = null;
-    }
-    if (audioContextRef.current) {
-      try {
-        audioContextRef.current.close();
-      } catch (e) {}
-      audioContextRef.current = null;
-    }
-    setIsConnected(false);
-    setLatency(0);
-  };
 
-  const stopPlayoutQueue = () => {
-    activeSourcesRef.current.forEach(source => {
-      try {
-        source.stop();
-      } catch (e) {}
-    });
-    activeSourcesRef.current = [];
-    
-    const audioCtx = audioContextRef.current;
-    if (audioCtx) {
-      nextPlayoutTimeRef.current = audioCtx.currentTime + 0.05;
-    }
-  };
 
   const handleGecxAudioChunk = (arrayBuffer) => {
     const audioCtx = audioContextRef.current;
@@ -270,7 +318,7 @@ export default function VoiceSupportView() {
     nextPlayoutTimeRef.current = playTime + audioBuffer.duration;
   };
 
-  const handleGecxControlMessage = (payload) => {
+  const handleGecxControlMessage = useCallback((payload) => {
     if (payload.type === 'TRANSCRIPT') {
       setTranscripts(prev => [...prev, { author: payload.author, text: payload.text }]);
       if (payload.author === 'agent') {
@@ -309,7 +357,7 @@ export default function VoiceSupportView() {
     } else if (payload.type === 'ERROR') {
       setErrorMessage(payload.message);
     }
-  };
+  }, [startDisconnectCountdown, stopPlayoutQueue]);
 
   const startGecxConsultation = async () => {
     if (isConnecting || isConnected) return;
@@ -472,10 +520,9 @@ export default function VoiceSupportView() {
         dynacast: true,
       });
       roomRef.current = room;
-      window.room = room;
 
       // 3. Setup event listeners
-      room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      room.on(RoomEvent.TrackSubscribed, (track) => {
         if (track.kind === 'audio') {
           console.log('Subscribed to audio track');
           const element = track.attach();
@@ -510,7 +557,7 @@ export default function VoiceSupportView() {
         }
       });
 
-      room.on(RoomEvent.DataReceived, (payload, participant) => {
+      room.on(RoomEvent.DataReceived, (payload) => {
         try {
           const decoder = new TextDecoder();
           const event = JSON.parse(decoder.decode(payload));
@@ -531,7 +578,6 @@ export default function VoiceSupportView() {
             setAvailableCredit(event.available_credit_cents / 100);
             setTranscripts(prev => [...prev, { author: 'system', text: `LEDGER UPDATE: Late fee reversed. Available credit adjusted.` }]);
             
-            // Reload transaction history to show reversal credits
             getCreditCardTransactions().then(setTransactions).catch(console.error);
           } else if (event.type === DataChannelEvent.HIGHLIGHT_TRANSACTION) {
             const txId = event.id;
@@ -540,7 +586,6 @@ export default function VoiceSupportView() {
               setHighlightedTxId(txId);
               setTranscripts(prev => [...prev, { author: 'system', text: 'Representative highlighted a transaction.' }]);
               
-              // Auto clear highlight after 4 seconds
               setTimeout(() => {
                 setHighlightedTxId(null);
               }, 4000);
@@ -564,7 +609,6 @@ export default function VoiceSupportView() {
           } else if (event.type === 'WATCHDOG_WARNING') {
             const remaining = Math.round(event.time_remaining_seconds);
             setWarningMessage(`WARNING: Session will end in ${remaining} seconds due to compliance limits.`);
-            setTimeRemaining(remaining);
           }
         } catch (e) {
           console.error('Error parsing data channel packet:', e);
@@ -575,7 +619,6 @@ export default function VoiceSupportView() {
         setIsConnected(false);
         setIsHumanAgentActive(false);
         setWarningMessage('');
-        setTimeRemaining(0);
         setAgentVideoTrack(null);
         setVideoLoaded(false);
         setAgentMode(null);
@@ -601,42 +644,7 @@ export default function VoiceSupportView() {
     }
   };
 
-  const startDisconnectCountdown = () => {
-    if (disconnectTimerRef.current) return; // already scheduled
-    setTranscripts(prev => [...prev, { author: 'system', text: 'Consultation complete. Disconnecting in 5 seconds...' }]);
-    disconnectTimerRef.current = setTimeout(() => {
-      endConsultation();
-    }, 5000);
-  };
 
-  const endConsultation = () => {
-    if (engine === 'gecx') {
-      return cleanupGecxSession();
-    }
-    if (disconnectTimerRef.current) {
-      clearTimeout(disconnectTimerRef.current);
-      disconnectTimerRef.current = null;
-    }
-    if (roomRef.current) {
-      try {
-        roomRef.current.disconnect();
-      } catch (err) {
-        console.error("Error disconnecting room:", err);
-      }
-      roomRef.current = null;
-    }
-    const container = document.getElementById("avatar-video-container");
-    if (container) {
-      container.innerHTML = "";
-    }
-    setIsConnected(false);
-    setIsHumanAgentActive(false);
-    setWarningMessage('');
-    setTimeRemaining(0);
-    setAgentVideoTrack(null);
-    setVideoLoaded(false);
-    setAgentMode(null);
-  };
 
   const toggleMute = async () => {
     const enabled = !micEnabled;

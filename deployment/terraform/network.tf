@@ -132,11 +132,11 @@ resource "google_compute_firewall" "deny_livekit_to_internal" {
   network            = google_compute_network.fsi_gecx_vpc.id
   direction          = "EGRESS"
   destination_ranges = [google_compute_subnetwork.fsi_gecx_subnet.ip_cidr_range]
-  
+
   deny {
     protocol = "all"
   }
-  
+
   target_tags = ["livekit-server"]
 }
 

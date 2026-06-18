@@ -1,6 +1,5 @@
 import os
 import logging
-from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from livekit import api as lk_api

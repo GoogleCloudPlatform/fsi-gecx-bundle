@@ -21,9 +21,18 @@ mcp = FastMCP("Banking Service MCP")
 mcp_app = mcp.http_app(path="/mcp/")
 
 # Import sub-routers so their tool decorators register with the mcp instance
-from . import loan
-from . import credit_card
+from . import loan as loan  # noqa: E402
+from . import credit_card as credit_card  # noqa: E402
 
 # Re-export tools and utility helpers for backward compatibility with existing tests and imports
-from .loan import get_loan_application_documents, generate_upload_session_url, bq_client, storage
-from .utils import _extract_customer_identity, _mask_ssn, _mask_ein
+from .loan import (  # noqa: E402
+    get_loan_application_documents as get_loan_application_documents,
+    generate_upload_session_url as generate_upload_session_url,
+    bq_client as bq_client,
+    storage as storage,
+)
+from .utils import (  # noqa: E402
+    _extract_customer_identity as _extract_customer_identity,
+    _mask_ssn as _mask_ssn,
+    _mask_ein as _mask_ein,
+)

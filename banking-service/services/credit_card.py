@@ -15,8 +15,7 @@
 import logging
 import datetime
 from sqlalchemy.orm import Session
-from models.credit_card import FinancialAccount, IssuedCard, TransactionAuthorization, AccountLedger
-from models.support import Escalation
+from models.credit_card import FinancialAccount, IssuedCard, AccountLedger
 from models.settings import SystemSetting
 from utils.database import Base, engine
 
@@ -203,7 +202,7 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
     
     prior_reversal = db.query(AccountLedger).filter(
         AccountLedger.account_id == account_id,
-        AccountLedger.authorization_id == None,
+        AccountLedger.authorization_id.is_(None),
         AccountLedger.description.in_([reversal_description_old, reversal_description_new])
     ).first()
     if prior_reversal:
