@@ -209,7 +209,7 @@ def validate_firebase_token(jwt_token: str) -> ValidatedToken:
         }
         return ValidatedToken(claims=claims)
     except Exception as e:
-        logger.warning(f"Firebase ID token validation failed: {e}")
+        logger.warning(f"Firebase ID token validation failed: {e}. Token len: {len(jwt_token) if jwt_token else 0}. Start: {jwt_token[:15] if jwt_token else ''}, End: {jwt_token[-15:] if jwt_token else ''}")
         raise HTTPException(status_code=401, detail="Invalid or expired authentication credentials.")
 
 
