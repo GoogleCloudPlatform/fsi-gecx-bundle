@@ -12,13 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
+import json
 import os
 import random
 import uuid
 from decimal import Decimal
 from datetime import datetime, timedelta
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from google.cloud import spanner, bigquery
 from faker import Faker
@@ -71,8 +73,35 @@ def health():
     return {"status": "ok"}
 
 @app.post("/generate")
-def generate_synthetic_data(req: SeedRequest):
+async def generate_synthetic_data(request: Request):
     try:
+        try:
+            body = await request.json()
+        except Exception as parse_err:
+            raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+        if "message" in body and isinstance(body["message"], dict) and "data" in body["message"]:
+            try:
+                pubsub_data = body["message"]["data"]
+                decoded_bytes = base64.b64decode(pubsub_data)
+                decoded_str = decoded_bytes.decode("utf-8")
+                payload = json.loads(decoded_str)
+            except Exception as decode_err:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to decode Pub/Sub message payload: {str(decode_err)}"
+                )
+        else:
+            payload = body
+
+        try:
+            req = SeedRequest(**payload)
+        except Exception as val_err:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid seed request payload: {str(val_err)}"
+            )
+
         # 1. Fetch valid transaction types from Spanner
         transaction_types = []
         def read_transaction_types(transaction):
