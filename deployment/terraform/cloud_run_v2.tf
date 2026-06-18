@@ -420,8 +420,8 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
         cpu_idle          = false
         startup_cpu_boost = true
         limits = {
-          cpu    = "2000m" # 2 CPUs
-          memory = "2Gi"   # 2GiB Memory
+          cpu    = "4"
+          memory = "4Gi"
         }
       }
 

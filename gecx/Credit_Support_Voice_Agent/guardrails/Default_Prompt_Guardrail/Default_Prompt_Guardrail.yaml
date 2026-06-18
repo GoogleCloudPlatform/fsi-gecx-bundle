@@ -1,0 +1,6 @@
+name: 7b20a2f7-0bda-42fc-a4fb-7a54bcdf99e0
+displayName: Default Prompt Guardrail
+action:
+  generativeAnswer: {}
+llmPromptSecurity:
+  defaultSettings: {}

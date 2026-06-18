@@ -1,0 +1,11 @@
+name: 80f02b21-5b77-4907-94a3-bd67534bff66
+displayName: Credit Card Support Agent
+instruction: agents/Credit_Card_Support_Agent/instruction.txt
+tools:
+- end_session
+toolsets:
+- toolset: banking_service_mcp_toolset
+  toolIds:
+  - report_lost_stolen_card
+  - request_credit_limit_increase
+  - reverse_overdraft_fee

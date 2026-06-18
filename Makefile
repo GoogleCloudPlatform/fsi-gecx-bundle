@@ -130,16 +130,33 @@ publish-images-cloud: ## Submit Cloud Build jobs using official publish/deploy Y
 	@echo "Submitting banking-ui Cloud Build job..."
 	gcloud builds submit --config banking-ui/cloudbuild-publish-deploy.yaml --substitutions=_TRIGGER_DEPLOY=false
 
-.PHONY: zip-gecx
-zip-gecx: ## Package the GECx Mortgage_Preapproval bundle into a ready-to-upload zip archive at the repository top level
-	@echo "Packaging GECx agent bundle for CX Agent Studio..."
+.PHONY: zip-mortgage-agent
+zip-mortgage-agent: ## Package the GECx Mortgage_Preapproval bundle into a ready-to-upload zip archive
+	@echo "Packaging Mortgage Preapproval agent bundle..."
 	cd gecx/Mortgage_Preapproval && zip -r ../../Mortgage_Preapproval.zip .
-	@echo "Success: Created Mortgage_Preapproval.zip at the repository top level ready for upload!"
+	@echo "Success: Created Mortgage_Preapproval.zip!"
+
+.PHONY: zip-credit-agent
+zip-credit-agent: ## Package the GECx Credit_Support_Voice_Agent bundle into a ready-to-upload zip archive
+	@echo "Packaging Credit Support Voice Agent bundle..."
+	cd gecx/Credit_Support_Voice_Agent && zip -r ../../Credit_Support_Voice_Agent.zip .
+	@echo "Success: Created Credit_Support_Voice_Agent.zip!"
+
+.PHONY: zip-gecx
+zip-gecx: zip-mortgage-agent ## Deprecated: Alias for zip-mortgage-agent
+
+.PHONY: upload-mortgage-agent
+upload-mortgage-agent: ## Execute the REST API script to package and import the Mortgage Preapproval agent directly into CES
+	@echo "Uploading Mortgage Preapproval Agent to GECx..."
+	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) AGENT_FOLDER=Mortgage_Preapproval bash import_cxas_agent.sh
+
+.PHONY: upload-credit-agent
+upload-credit-agent: ## Execute the REST API script to package and import the Credit Support Voice Agent directly into CES
+	@echo "Uploading Credit Support Voice Agent to GECx..."
+	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) AGENT_FOLDER=Credit_Support_Voice_Agent bash import_cxas_agent.sh
 
 .PHONY: upload-gecx
-upload-gecx: ## Execute the official REST API script to package and import the GECx agent directly into Customer Experience Studio (CES)
-	@echo "Executing official CES agent import REST API script for project $(PROJECT_ID)..."
-	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) bash import_cxas_agent.sh
+upload-gecx: upload-mortgage-agent ## Deprecated: Alias for upload-mortgage-agent
 
 .PHONY: create-gecx
 create-gecx: upload-gecx ## Alias for upload-gecx to automate full CES agent provisioning
