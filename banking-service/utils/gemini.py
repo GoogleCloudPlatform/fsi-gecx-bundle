@@ -23,8 +23,10 @@ from google.adk.agents import Agent
 from google.adk.planners import BuiltInPlanner
 from google.adk.sessions import InMemorySessionService
 from google.cloud import storage
+from google import genai
 from google.genai import types
 from google.genai.types import ThinkingConfig
+from pydantic import BaseModel
 
 from utils.env import is_env_flag_enabled
 
@@ -133,3 +135,28 @@ def parse_json_response(response_str: str):
         logger.error(f"🚨 Failed to parse JSON: {e}")
         logger.error(f"Original content was:\n{json_content}")
         return None
+
+
+class GeocodingCoords(BaseModel):
+    latitude: float
+    longitude: float
+
+
+async def geocode_address(address: str) -> tuple[float, float] | None:
+    try:
+        client = genai.Client()
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=address,
+            config=types.GenerateContentConfig(
+                system_instruction="Geocode the provided address/location to latitude and longitude.",
+                response_mime_type="application/json",
+                response_schema=GeocodingCoords,
+            )
+        )
+        data = GeocodingCoords.model_validate_json(response.text)
+        return data.latitude, data.longitude
+    except Exception as e:
+        logger.error(f"Geocoding address '{address}' failed: {e}")
+        return None
+

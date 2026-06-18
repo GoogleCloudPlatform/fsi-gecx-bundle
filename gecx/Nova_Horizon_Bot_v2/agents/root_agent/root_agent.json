@@ -3,5 +3,5 @@
   "displayName": "root_agent",
   "instruction": "agents/root_agent/instruction.txt",
   "tools": ["end_session"],
-  "childAgents": ["Credit Card Application Assistant", "Home Loan Application Assistant"]
+  "childAgents": ["Branch and ATM Locator", "Credit Card Application Assistant", "Home Loan Application Assistant"]
 }

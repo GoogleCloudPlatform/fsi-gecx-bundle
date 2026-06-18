@@ -250,5 +250,15 @@ export async function updateSystemSettings(payload) {
   return res.data;
 }
 
+export async function getLocations({ lat, lng, address, type }) {
+  const params = {};
+  if (lat !== undefined && lat !== null) params.lat = lat;
+  if (lng !== undefined && lng !== null) params.lng = lng;
+  if (address) params.address = address;
+  if (type) params.type = type;
+  const res = await api.get('/locator', { params });
+  return res.data;
+}
+
 export default api;
 

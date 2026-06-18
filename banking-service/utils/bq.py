@@ -520,3 +520,75 @@ def get_all_customers_from_bigquery() -> list[dict]:
         logger.error(f"BigQuery fetch all users failed: {e}")
         raise e
 
+
+def find_nearest_locations(lat: float, lng: float, location_type: str = "ALL") -> list[dict]:
+    dataset_id = "banking"
+    table_id = "retail_location"
+    table_ref = f"{PROJECT_ID}.{dataset_id}.{table_id}"
+
+    query = _load_sql("find_nearest_locations.sql").format(table_ref=table_ref)
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("lat", "FLOAT64", lat),
+            bigquery.ScalarQueryParameter("lng", "FLOAT64", lng),
+            bigquery.ScalarQueryParameter("type", "STRING", location_type.upper()),
+        ]
+    )
+    client = _get_client()
+    try:
+        query_job = client.query(query, job_config=job_config)
+        results = list(query_job.result())
+        return [
+            {
+                "id": row.id,
+                "type": row.type,
+                "name": row.name,
+                "address": row.address,
+                "latitude": row.latitude,
+                "longitude": row.longitude,
+                "hours": row.hours,
+                "phone_number": row.phone_number,
+                "distance_meters": row.distance_meters,
+            }
+            for row in results
+        ]
+    except Exception as e:
+        logger.error(f"BigQuery find_nearest_locations failed: {e}")
+        raise e
+
+
+def search_locations_by_text(search_text: str, location_type: str = "ALL") -> list[dict]:
+    dataset_id = "banking"
+    table_id = "retail_location"
+    table_ref = f"{PROJECT_ID}.{dataset_id}.{table_id}"
+
+    query = _load_sql("search_locations_by_text.sql").format(table_ref=table_ref)
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("search_text", "STRING", search_text),
+            bigquery.ScalarQueryParameter("type", "STRING", location_type.upper()),
+        ]
+    )
+    client = _get_client()
+    try:
+        query_job = client.query(query, job_config=job_config)
+        results = list(query_job.result())
+        return [
+            {
+                "id": row.id,
+                "type": row.type,
+                "name": row.name,
+                "address": row.address,
+                "latitude": row.latitude,
+                "longitude": row.longitude,
+                "hours": row.hours,
+                "phone_number": row.phone_number,
+                "distance_meters": row.distance_meters,
+            }
+            for row in results
+        ]
+    except Exception as e:
+        logger.error(f"BigQuery search_locations_by_text failed: {e}")
+        raise e
+
+

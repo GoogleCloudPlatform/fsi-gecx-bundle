@@ -84,6 +84,10 @@ resource "google_cloud_run_v2_service" "banking_service" {
         name  = "DISCOVERY_ENGINE_ID"
         value = google_discovery_engine_search_engine.nova_horizon_site.engine_id
       }
+      env {
+        name  = "GOOGLE_GENAI_USE_VERTEXAI"
+        value = "true"
+      }
 
       env {
         name = "LIVEKIT_API_KEY"
@@ -277,6 +281,13 @@ resource "google_cloud_run_v2_service" "banking_ui" {
         content {
           name  = "VITE_CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME"
           value = var.cx_agent_studio_populate_content_tool_name
+        }
+      }
+      dynamic "env" {
+        for_each = var.cx_agent_studio_get_user_location_tool_name != null ? [1] : []
+        content {
+          name  = "VITE_CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME"
+          value = var.cx_agent_studio_get_user_location_tool_name
         }
       }
     }

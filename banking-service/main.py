@@ -37,6 +37,7 @@ from routers.support import router as support_router
 from routers.settings import router as settings_router
 from models.authentication import ValidatedToken
 from utils.auth import get_current_user
+from routers.locator import router as locator_router
 
 # Import and register FastMCP tools and ASGI app from the isolated mcp router module
 from routers.mcp import mcp_app
@@ -93,6 +94,8 @@ app.include_router(application_router)
 app.include_router(artifact_router)
 app.include_router(ccai_auth_router)
 app.include_router(cxas_auth_router)
+app.include_router(internal_router)
+app.include_router(locator_router)
 app.include_router(notification_router)
 app.include_router(profile_router)
 app.include_router(health_router)
@@ -101,7 +104,6 @@ app.include_router(secure_messaging_router)
 app.include_router(underwriting_router)
 app.include_router(credit_card_router)
 app.include_router(support_router)
-app.include_router(internal_router)
 app.include_router(settings_router)
 app.include_router(voice_bidi_router)
 
@@ -117,24 +119,43 @@ def custom_openapi():
     )
     for path in openapi_schema.get("paths", {}).values():
         for operation in path.values():
-            if isinstance(operation, dict) and "parameters" in operation:
-                for param in operation["parameters"]:
-                    if (
-                            isinstance(param, dict) and
-                            isinstance(param.get("name"), str) and
-                            param.get("name").lower() == "x-forwarded-user-context" and
-                            param.get("in") == "header"
-                    ):
-                        param["x-ces-session-context"] = "$context.variables.access_token"
+            if isinstance(operation, dict):
+                # Check if this operation has HTTPForwardedBearer security requirement
+                has_forwarded_auth = False
+                for sec_req in operation.get("security", []):
+                    if "HTTPForwardedBearer" in sec_req:
+                        has_forwarded_auth = True
+                        break
 
-    for param in openapi_schema.get("components", {}).get("parameters", {}).values():
-        if (
-                isinstance(param, dict) and
-                isinstance(param.get("name"), str) and
-                param.get("name").lower() == "x-forwarded-user-context" and
-                param.get("in") == "header"
-        ):
-            param["x-ces-session-context"] = "$context.variables.access_token"
+                if has_forwarded_auth:
+                    if "parameters" not in operation:
+                        operation["parameters"] = []
+
+                    # See if x-forwarded-user-context already exists
+                    has_param = False
+                    for param in operation["parameters"]:
+                        if (
+                                isinstance(param, dict) and
+                                isinstance(param.get("name"), str) and
+                                param.get("name").lower() == "x-forwarded-user-context" and
+                                param.get("in") == "header"
+                        ):
+                            param["x-ces-session-context"] = "$context.variables.access_token"
+                            has_param = True
+                            break
+
+                    if not has_param:
+                        operation["parameters"].append({
+                            "name": "X-Forwarded-User-Context",
+                            "in": "header",
+                            "required": False,
+                            "schema": {
+                                "type": "string",
+                                "nullable": True,
+                                "title": "X-Forwarded-User-Context"
+                            },
+                            "x-ces-session-context": "$context.variables.access_token"
+                        })
 
     openapi_schema["servers"] = app.servers
 

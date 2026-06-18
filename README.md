@@ -48,6 +48,8 @@ This repository is a collection of resources for the Financial Services Industry
 | `manage_github_connection` | Whether to manage the GitHub connection. | Yes | `false` |
 | `cx_agent_studio_deployment_name` | CX Agent Studio Web Widget deployment name. | Yes | `null` |
 | `cx_agent_studio_upload_tool_name` | CX Agent Studio File Upload Tool deployment name. | Yes | `null` |
+| `cx_agent_studio_populate_content_tool_name` | CX Agent Studio Populate Form Content Tool deployment name. | Yes | `null` |
+| `cx_agent_studio_get_user_location_tool_name` | CX Agent Studio Get User Location Tool deployment name. | Yes | `null` |
 | `use_external_identities` | Whether to enable the blocking functions in the agent. This cannot be enabled in Argolis as they require unauthenticated invocations as per https://www.npmjs.com/package/gcip-cloud-functions. | Yes | `false` |
 | `enable_blocking_functions` | Whether to enable the blocking functions in the agent. | Yes | `false` |
 
@@ -230,6 +232,7 @@ Open up your `terraform.tfvars` file and copy in these variables (the output fro
 - `cx_agent_studio_deployment_name` - 'Web widget deployment id'
 - `cx_agent_studio_upload_tool_name` - 'Trigger file upload tool name'
 - `cx_agent_studio_populate_form_content_tool_name` - 'Trigger populate form content tool name'
+- `cx_agent_studio_get_user_location_tool_name` - 'Trigger get user location tool name'
 
 ```bash
 make tf-apply

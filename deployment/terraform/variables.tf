@@ -136,6 +136,16 @@ variable "cx_agent_studio_populate_content_tool_name" {
   default = null
 }
 
+variable "cx_agent_studio_get_user_location_tool_name" {
+  type    = string
+  default = null
+}
+
+variable "governance_project_id" {
+  type        = string
+  description = "Project ID for centralized Data Catalog Taxonomies and Policy Tags. If omitted, defaults to var.project_id."
+  default     = null
+}
 
 variable "use_external_identities" {
   type        = bool

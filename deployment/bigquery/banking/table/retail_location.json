@@ -1,0 +1,56 @@
+[
+  {
+    "name": "id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unique identifier for the location"
+  },
+  {
+    "name": "type",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Location type: BRANCH or ATM"
+  },
+  {
+    "name": "name",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Name of the location"
+  },
+  {
+    "name": "address",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Full street address"
+  },
+  {
+    "name": "latitude",
+    "type": "FLOAT",
+    "mode": "REQUIRED",
+    "description": "Latitude coordinate"
+  },
+  {
+    "name": "longitude",
+    "type": "FLOAT",
+    "mode": "REQUIRED",
+    "description": "Longitude coordinate"
+  },
+  {
+    "name": "hours",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Operating hours (e.g. Mon-Fri 9-5)"
+  },
+  {
+    "name": "phone_number",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Phone number"
+  },
+  {
+    "name": "metadata",
+    "type": "JSON",
+    "mode": "NULLABLE",
+    "description": "Additional unstructured metadata (services, status, etc)"
+  }
+]

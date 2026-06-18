@@ -193,7 +193,8 @@ function AppContent() {
       '/edit-profile': `Edit Profile | ${bankName}`,
       '/apply/credit-card': `Apply for Credit Card | ${bankName}`,
       '/search': `Search Site | ${bankName}`,
-      '/support/voice': `Voice Support Consultation | ${bankName}`
+      '/support/voice': `Voice Support Consultation | ${bankName}`,
+      '/locator': `Find Branch/ATM | ${bankName}`,
     };
 
     const title = pageTitles[location.pathname] || `${bankName} | Premium Digital Banking`;
@@ -482,6 +483,43 @@ function AppContent() {
           );
         }
 
+        const locationToolName = window.env?.CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME;
+        const locationToolId = locationToolName?.split('/').pop();
+
+        console.log("Registered get user location tool: ", locationToolName);
+
+        if (locationToolName && locationToolId) {
+          node.registerClientSideFunction(
+            locationToolName,
+            locationToolId,
+            (args) => {
+              console.log('executing get user location function with arguments', { args });
+
+              return new Promise((resolve) => {
+                if (!navigator.geolocation) {
+                  console.warn("Geolocation is not supported by this browser.");
+                  resolve(null);
+                  return;
+                }
+
+                navigator.geolocation.getCurrentPosition(
+                  (position) => {
+                    console.log("Current position retrieved:", position.coords.latitude, position.coords.longitude);
+                    resolve({
+                      latitude: position.coords.latitude,
+                      longitude: position.coords.longitude
+                    });
+                  },
+                  (error) => {
+                    console.warn("Error getting user location or permission denied:", error);
+                    resolve(null);
+                  }
+                );
+              });
+            }
+          );
+        }
+
         const injectDataAndGreet = async () => {
           console.log("injectDataAndGreet called");
           if (typeof node.setVariables === 'function') {
@@ -657,29 +695,35 @@ function AppContent() {
 
   useEffect(() => {
     // Load Dialogflow CX Messenger dynamically
+    const initializeChat = () => {
+      if (window.chatSdk && window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME) {
+        if (window.chatContextRegistered) {
+          console.log("Dialogflow CX Messenger context already registered, skipping duplicate registration.");
+          setIsChatSdkReady(true);
+          return;
+        }
+        window.chatSdk.registerContext(
+          window.chatSdk.prebuilts.ces.createContext({
+            deploymentName: window.env.CX_AGENT_STUDIO_DEPLOYMENT_NAME,
+            tokenBroker: {
+              enableTokenBroker: true,
+              enableRecaptcha: false
+            },
+            enableWelcomeEvent: false
+          })
+        );
+        window.chatContextRegistered = true;
+        console.log("Dialogflow CX Messenger initialized dynamically.");
+        setIsChatSdkReady(true);
+      }
+    };
+
     const scriptId = 'dialogflow-messenger-script';
     if (!document.getElementById(scriptId)) {
       const script = document.createElement('script');
       script.id = scriptId;
       script.src = "https://www.gstatic.com/chat-messenger/sdk/prod/v1.16/chat-messenger.js";
       script.async = true;
-
-      const initializeChat = () => {
-        if (window.chatSdk && window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME) {
-          window.chatSdk.registerContext(
-            window.chatSdk.prebuilts.ces.createContext({
-              deploymentName: window.env.CX_AGENT_STUDIO_DEPLOYMENT_NAME,
-              tokenBroker: {
-                enableTokenBroker: true,
-                enableRecaptcha: false
-              },
-              enableWelcomeEvent: false
-            })
-          );
-          console.log("Dialogflow CX Messenger initialized dynamically.");
-          setIsChatSdkReady(true);
-        }
-      };
 
       script.onload = () => {
         initializeChat();
@@ -693,11 +737,11 @@ function AppContent() {
       };
     } else {
       if (window.chatSdk) {
-        setIsChatSdkReady(true);
+        initializeChat();
       } else {
         const checkChatSdkLoaded = () => {
           if (window.chatSdk) {
-            setIsChatSdkReady(true);
+            initializeChat();
             window.removeEventListener("chat-messenger-loaded", checkChatSdkLoaded);
           }
         };
@@ -940,7 +984,7 @@ function AppContent() {
 
               {/* Help Center Menu with Mouseover Dropdown */}
               <div className="relative group py-2">
-                <Link to="/help-center" state={{ category: 'All' }} className={`hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${['/help-center', '/fee-schedule', '/disclosures'].includes(location.pathname) ? 'text-emerald-600 dark:text-emerald-400 font-bold' : ''}`}>
+                <Link to="/help-center" state={{ category: 'All' }} className={`hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${['/help-center', '/fee-schedule', '/disclosures', '/locator'].includes(location.pathname) ? 'text-emerald-600 dark:text-emerald-400 font-bold' : ''}`}>
                   <span>Help Center</span>
                   <ChevronDown className="w-3.5 h-3.5 transition-transform duration-300 group-hover:rotate-180" />
                 </Link>
@@ -969,6 +1013,11 @@ function AppContent() {
                   <Link to="/disclosures" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
                     <span>Disclosures</span>
                     {location.pathname === '/disclosures' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                  </Link>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">Customer Service</div>
+                  <Link to="/locator" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
+                    <span>Find Branch/ATM</span>
+                    {location.pathname === '/locator' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                   </Link>
                   {fbUser && (
                     <>
@@ -1448,6 +1497,14 @@ function AppContent() {
                 >
                   <span>Disclosures</span>
                 </Link>
+                <Link 
+                  to="/locator"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/locator' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                >
+                  <span>Find Branch/ATM</span>
+                  {location.pathname === '/locator' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                </Link>
                 {fbUser && (
                   <>
                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Admin</div>
@@ -1568,6 +1625,7 @@ function AppContent() {
             <ul className="space-y-2 text-sm text-slate-500">
               <li><Link to="/help-center" className={getFooterLinkClass('/help-center')}>Help Center</Link></li>
               <li><Link to="/fee-schedule" className={getFooterLinkClass('/fee-schedule')}>Fee Schedule</Link></li>
+              <li><Link to="/locator" className={getFooterLinkClass('/locator')}>Find Branch/ATM</Link></li>
               {fbUser && (
                 <li><Link to="/secure-messaging" className={getFooterLinkClass('/secure-messaging')}>Secure Messages</Link></li>
               )}
