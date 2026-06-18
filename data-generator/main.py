@@ -52,14 +52,7 @@ if os.path.exists(csv_path):
                 "rank": int(row["Rank"])
             })
 else:
-    merchants_list = [
-        {"merchant": "Walmart", "category": "Shopping", "rank": 1},
-        {"merchant": "Starbucks", "category": "Food", "rank": 1},
-        {"merchant": "Netflix", "category": "Entertainment", "rank": 2},
-        {"merchant": "Comcast", "category": "Utilities", "rank": 2},
-        {"merchant": "Landlord Inc", "category": "Rent", "rank": 1},
-        {"merchant": "GCP Payroll", "category": "Salary", "rank": 1},
-    ]
+    raise FileNotFoundError(f"Required merchants lookup CSV file not found at: {csv_path}")
 
 fake = Faker()
 
