@@ -444,7 +444,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 
                     # Send resampled 16kHz PCM audio chunk to Gemini Live API
                     pcm_bytes = int16_data.tobytes()
-                    logger.info(f"Sending audio blob: size={len(pcm_bytes)} bytes, sample_rate={res_frame.sample_rate}, channels={res_frame.num_channels}")
+                    logger.debug(f"Sending audio blob: size={len(pcm_bytes)} bytes, sample_rate={res_frame.sample_rate}, channels={res_frame.num_channels}")
                     audio_blob = types.Blob(mime_type="audio/pcm;rate=16000", data=pcm_bytes)
                     live_queue.send_realtime(audio_blob)
                     
