@@ -132,15 +132,23 @@ class VoiceBidiSession:
             await gecx_ws.send(json.dumps(config_msg))
             logger.info("Handshake configurations transmitted.")
 
+            # Send initial session variables to populate context before triggering agent
+            variables_msg = {
+                "realtimeInput": {
+                    "variables": {
+                        "user_token": self.fb_token,
+                        "access_token": self.fb_token
+                    }
+                }
+            }
+            await gecx_ws.send(json.dumps(variables_msg))
+            logger.info("Session context variables transmitted.")
+
             # Send initial trigger event to prompt the agent's welcome greeting immediately
             welcome_msg = {
                 "realtimeInput": {
                     "event": {
                         "event": "sys.welcome"
-                    },
-                    "variables": {
-                        "user_token": self.fb_token,
-                        "access_token": self.fb_token
                     }
                 }
             }
