@@ -26,15 +26,17 @@ def mock_firebase_app():
     with patch("firebase_admin.initialize_app") as mock_init:
         yield mock_init
 
-@patch("routers.mcp.voice_bidi.validate_firebase_token")
-@patch("routers.mcp.voice_bidi.token_manager.get_token")
+@patch("routers.voice_bidi.validate_firebase_token")
+@patch("services.voice_bidi.token_manager.get_token")
+@patch("services.voice_bidi.time.time")
 @patch("websockets.connect")
-def test_gecx_voice_stream_success(mock_ws_connect, mock_get_token, mock_validate_token, mock_firebase_app):
+def test_gecx_voice_stream_success(mock_ws_connect, mock_time, mock_get_token, mock_validate_token, mock_firebase_app):
     """Verify GECX WebSocket proxy successfully authenticates first-frame and forwards messages."""
     
     # 1. Setup Mock user validation claims
     mock_validate_token.return_value = MagicMock(claims={"sub": "borrower-123"})
     mock_get_token.return_value = "mock-gcp-bearer-token"
+    mock_time.return_value = 1234567890
     
     # 2. Setup GECX Mock server WebSocket connection instance
     mock_gecx_ws = AsyncMock()
@@ -67,7 +69,12 @@ def test_gecx_voice_stream_success(mock_ws_connect, mock_get_token, mock_validat
         # D. Verify backend handshake call payload parameters
         mock_gecx_ws.send.assert_any_call(json.dumps({
             "config": {
-                "session": "projects/evo-genai-workspace/locations/us/apps/42345105-29cb-492d-8a60-07171bb72190/sessions/session-borrower-123",
+                "session": "projects/evo-genai-workspace/locations/us/apps/42345105-29cb-492d-8a60-07171bb72190/sessions/session-borrower-123-1234567890",
+                "queryParams": {
+                    "parameters": {
+                        "user_token": "valid-firebase-session-token"
+                    }
+                },
                 "inputAudioConfig": {
                     "audioEncoding": "LINEAR16",
                     "sampleRateHertz": 16000

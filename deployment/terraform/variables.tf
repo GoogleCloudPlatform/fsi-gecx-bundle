@@ -184,3 +184,9 @@ variable "gecx_voice_agent_id" {
   description = "The target GECX Application ID for voice consultation"
   default     = "42345105-29cb-492d-8a60-07171bb72190"
 }
+
+variable "gecx_location" {
+  type        = string
+  description = "The location for GECX API endpoints (e.g. 'us' or 'eu')"
+  default     = "us"
+}

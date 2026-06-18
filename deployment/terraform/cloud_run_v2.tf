@@ -115,6 +115,11 @@ resource "google_cloud_run_v2_service" "banking_service" {
         value = var.gecx_voice_agent_id
       }
 
+      env {
+        name  = "GECX_LOCATION"
+        value = var.gecx_location
+      }
+
       dynamic "env" {
         for_each = var.set_cloud_run_audiences ? [1] : []
         content {

@@ -12,30 +12,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import time
-import json
 import base64
-import asyncio
+import json
 import logging
+import time
+import asyncio
 import websockets
 from typing import Dict
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import WebSocket, WebSocketDisconnect
 
-from utils.auth import validate_firebase_token
-from utils.env import is_running_locally
 from utils.gcp import get_project_id
 import google.auth
 import google.auth.transport.requests
 
-router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # Registry of active session queues for out-of-band updates (e.g. card locking sync)
+# Keyed by user_id
 active_sessions: Dict[str, asyncio.Queue] = {}
 
+async def send_session_event(session_key: str, event_payload: dict):
+    """Pushes out-of-band events (like tool-driven card lock) directly into the WebSocket playout loop."""
+    user_id = session_key.replace("session-", "")
+    queue = active_sessions.get(user_id)
+    if queue:
+        await queue.put(event_payload)
+        logger.info(f"OOB event queued for user {user_id}: {event_payload}")
+    else:
+        logger.debug(f"OOB event discarded, user {user_id} is offline.")
+
+
 class GCPTokenManager:
-    """Thread-safe cached OAuth2 access token manager for GECX API connectivity."""
+    """Cached OAuth2 access token manager for GECX API connectivity."""
     def __init__(self):
         self._token = None
         self._expiry = 0.0
@@ -44,7 +52,6 @@ class GCPTokenManager:
     async def get_token(self) -> str:
         async with self._lock:
             now = time.time()
-            # Refresh if token is close to expiry (within 5 minutes) or missing
             if not self._token or (self._expiry - now) < 300.0:
                 await self._refresh_token()
             return self._token
@@ -60,66 +67,44 @@ class GCPTokenManager:
         self._token = credentials.token
         self._expiry = credentials.expiry.timestamp() if credentials.expiry else (time.time() + 3600.0)
 
+
 token_manager = GCPTokenManager()
 
-async def send_session_event(session_key: str, event_payload: dict):
-    """Pushes out-of-band events (like tool-driven card lock) directly into the WebSocket playout loop."""
-    user_id = session_key.replace("session-", "")
-    queue = active_sessions.get(user_id)
-    if queue:
-        await queue.put(event_payload)
-        logger.info(f"OOB event queued for user {user_id}: {event_payload}")
-    else:
-        logger.debug(f"OOB event discarded, user {user_id} is offline.")
 
-@router.websocket("/voice/gecx-stream")
-async def gecx_voice_stream(websocket: WebSocket):
-    await websocket.accept()
-    logger.info("WebSocket proxy connection accepted. Awaiting first-frame authorization...")
+class VoiceBidiSession:
+    """Manages a single bi-directional voice streaming session with Google GECx."""
+    def __init__(
+        self,
+        user_id: str,
+        session_id: str,
+        fb_token: str,
+        websocket: WebSocket,
+        gecx_app_id: str,
+        location: str
+    ):
+        self.user_id = user_id
+        self.session_id = session_id
+        self.fb_token = fb_token
+        self.client_ws = websocket
+        self.gecx_app_id = gecx_app_id
+        self.location = location
+        self.client_to_gecx_queue = asyncio.Queue(maxsize=100)
+        self.gecx_to_client_queue = asyncio.Queue(maxsize=100)
 
-    user_id = None
-    session_id = None
-    gecx_ws = None
-    
-    try:
-        # 1. First-Frame Authentication Gate (enforces JWT token context)
-        try:
-            # Enforce strict 5-second timeout for authentication frame
-            auth_frame_str = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
-            auth_frame = json.loads(auth_frame_str)
-            
-            if auth_frame.get("type") != "AUTH" or not auth_frame.get("token"):
-                raise ValueError("Missing type 'AUTH' or 'token' in first-frame.")
-                
-            if is_running_locally() and auth_frame.get("token") == "mock-local-token":
-                user_id = "mock_user_id"
-                session_id = "mock_session_id"
-                fb_token = "mock-local-token"
-            else:
-                validated_token = validate_firebase_token(auth_frame["token"])
-                user_id = validated_token.claims.get("sub")
-                fb_token = auth_frame["token"]
-                # Append a timestamp to GECx session ID to force a fresh session context on every connect
-                session_id = f"session-{user_id}-{int(time.time())}"
-                
-            logger.info(f"First-frame authentication succeeded. Session: {session_id} (User: {user_id})")
-        except asyncio.TimeoutError:
-            logger.warning("Auth timeout: First-frame auth token not received within 5 seconds.")
-            await websocket.close(code=4001, reason="Authentication timeout.")
-            return
-        except Exception as auth_err:
-            logger.warning(f"Auth failed: Invalid Firebase token details. {auth_err}")
-            await websocket.close(code=4001, reason="Authentication failed.")
-            return
-
-        # 2. Establish connection to Google GECx API
-        project_id = get_project_id()
-        gecx_app_id = os.getenv("GECX_APP_ID", "42345105-29cb-492d-8a60-07171bb72190")
-        session_name = f"projects/{project_id}/locations/us/apps/{gecx_app_id}/sessions/{session_id}"
+    async def start(self):
+        """Starts the active session streaming loops."""
+        # Register queue for out-of-band updates
+        active_sessions[self.user_id] = self.gecx_to_client_queue
         
-        # Determine target region endpoint
-        location = os.getenv("GECX_LOCATION", "us")
-        gecx_uri = f"wss://ces.googleapis.com/ws/google.cloud.ces.v1.SessionService/BidiRunSession/locations/{location}"
+        try:
+            await self._run_pipeline()
+        finally:
+            active_sessions.pop(self.user_id, None)
+
+    async def _run_pipeline(self):
+        project_id = get_project_id()
+        session_name = f"projects/{project_id}/locations/us/apps/{self.gecx_app_id}/sessions/{self.session_id}"
+        gecx_uri = f"wss://ces.googleapis.com/ws/google.cloud.ces.v1.SessionService/BidiRunSession/locations/{self.location}"
         
         gcp_token = await token_manager.get_token()
         headers = {
@@ -136,7 +121,7 @@ async def gecx_voice_stream(websocket: WebSocket):
                     "session": session_name,
                     "queryParams": {
                         "parameters": {
-                            "user_token": fb_token
+                            "user_token": self.fb_token
                         }
                     },
                     "inputAudioConfig": {
@@ -162,31 +147,22 @@ async def gecx_voice_stream(websocket: WebSocket):
             }
             await gecx_ws.send(json.dumps(welcome_msg))
             logger.info("Initial greeting trigger query transmitted.")
-            
-            # Initialize queues with strict backpressure sizes
-            client_to_gecx_queue = asyncio.Queue(maxsize=100)
-            gecx_to_client_queue = asyncio.Queue(maxsize=100)
-            
-            # Register queue for out-of-band tool events keyed by user_id
-            active_sessions[user_id] = gecx_to_client_queue
-            
+
             # Task A: Read frames from browser WebSocket client
             async def read_client():
                 try:
                     while True:
-                        data = await websocket.receive()
+                        data = await self.client_ws.receive()
                         if "bytes" in data:
                             message = data["bytes"]
-                            # DoS protection: limit frame size to 64KB
                             if len(message) > 65536:
                                 logger.error("Security warning: Client sent binary frame exceeding 64KB limit.")
                                 break
-                            logger.debug(f"Received binary frame from browser client: {len(message)} bytes")
-                            await client_to_gecx_queue.put(message)
+                            await self.client_to_gecx_queue.put(message)
                         elif "text" in data:
                             payload = json.loads(data["text"])
                             if payload.get("type") == "PING":
-                                await websocket.send_json({
+                                await self.client_ws.send_json({
                                     "type": "PONG",
                                     "timestamp": payload.get("timestamp")
                                 })
@@ -198,13 +174,13 @@ async def gecx_voice_stream(websocket: WebSocket):
                 except Exception as ex:
                     logger.error(f"Error in WebSocket read_client: {ex}")
                 finally:
-                    await client_to_gecx_queue.put(None)
+                    await self.client_to_gecx_queue.put(None)
 
             # Task B: Base64-encode and forward audio frames to GECx WebSocket
             async def send_to_gecx():
                 try:
                     while True:
-                        chunk = await client_to_gecx_queue.get()
+                        chunk = await self.client_to_gecx_queue.get()
                         if chunk is None:
                             break
                         
@@ -215,8 +191,7 @@ async def gecx_voice_stream(websocket: WebSocket):
                             }
                         }
                         await gecx_ws.send(json.dumps(realtime_input))
-                        logger.debug(f"Forwarded {len(chunk)} bytes of audio to GECX.")
-                        client_to_gecx_queue.task_done()
+                        self.client_to_gecx_queue.task_done()
                 except Exception as ex:
                     logger.error(f"Error in send_to_gecx: {ex}")
 
@@ -225,33 +200,26 @@ async def gecx_voice_stream(websocket: WebSocket):
                 try:
                     async for message in gecx_ws:
                         response = json.loads(message)
-                        logger.debug(f"Received frame from GECX: {list(response.keys())}")
-                        
-                        # GECx SessionOutput (audio and text transcript)
                         session_output = response.get("sessionOutput", {})
                         if session_output:
                             b64_audio = session_output.get("audio", "")
                             if b64_audio:
                                 raw_pcm = base64.b64decode(b64_audio)
-                                logger.debug(f"Received {len(raw_pcm)} bytes of response audio from GECX.")
-                                await gecx_to_client_queue.put({"type": "AUDIO", "data": raw_pcm})
+                                await self.gecx_to_client_queue.put({"type": "AUDIO", "data": raw_pcm})
                                 
                             text = session_output.get("text", "")
                             if text:
-                                logger.info(f"Received text transcript from GECX: {len(text)} chars")
-                                await gecx_to_client_queue.put({
+                                await self.gecx_to_client_queue.put({
                                     "type": "TRANSCRIPT",
                                     "text": text,
                                     "author": "agent"
                                 })
                                 
-                        # GECx User Speech Recognition result (for UI transcript display)
                         recognition_result = response.get("recognitionResult", {})
                         if recognition_result:
                             user_transcript = recognition_result.get("transcript", "")
                             if user_transcript:
-                                logger.info(f"Received user speech transcript recognition from GECX: {user_transcript}")
-                                await gecx_to_client_queue.put({
+                                await self.gecx_to_client_queue.put({
                                     "type": "TRANSCRIPT",
                                     "text": user_transcript,
                                     "author": "user"
@@ -259,38 +227,37 @@ async def gecx_voice_stream(websocket: WebSocket):
                 except Exception as ex:
                     logger.error(f"Error in read_from_gecx: {ex}")
                 finally:
-                    await gecx_to_client_queue.put(None)
+                    await self.gecx_to_client_queue.put(None)
 
             # Task D: Forward payloads back to client browser WebSocket
             async def send_to_client():
                 try:
                     while True:
-                        payload = await gecx_to_client_queue.get()
+                        payload = await self.gecx_to_client_queue.get()
                         if payload is None:
                             break
                             
                         if isinstance(payload, dict) and payload.get("type") != "AUDIO":
-                            await websocket.send_json(payload)
+                            await self.client_ws.send_json(payload)
                         elif isinstance(payload, dict) and payload.get("type") == "AUDIO":
-                            await websocket.send_bytes(payload["data"])
+                            await self.client_ws.send_bytes(payload["data"])
                         else:
-                            # Direct binary frame fallback
-                            await websocket.send_bytes(payload)
+                            await self.client_ws.send_bytes(payload)
                             
-                        gecx_to_client_queue.task_done()
+                        self.gecx_to_client_queue.task_done()
                 except Exception as ex:
                     logger.error(f"Error in send_to_client: {ex}")
 
-            # Task E: Send keep-alive heartbeats to client to prevent load-balancer dropouts
+            # Task E: Send keep-alive heartbeats to client
             async def send_pings():
                 try:
                     while True:
                         await asyncio.sleep(20)
-                        await websocket.send_json({"type": "PING"})
+                        await self.client_ws.send_json({"type": "PING"})
                 except Exception:
                     pass
 
-            # Gather all running loops and enforce 10-minute timeout limit
+            # Gather all loops with a 10-minute timeout
             try:
                 await asyncio.wait_for(
                     asyncio.gather(
@@ -303,20 +270,8 @@ async def gecx_voice_stream(websocket: WebSocket):
                     timeout=600.0
                 )
             except asyncio.TimeoutError:
-                logger.warning(f"Session {session_id} timed out after 10 minutes.")
-                await websocket.send_json({
+                logger.warning(f"Session {self.session_id} timed out after 10 minutes.")
+                await self.client_ws.send_json({
                     "type": "ERROR",
                     "message": "Maximum session duration (10 minutes) exceeded."
                 })
-                
-    except Exception as e:
-        logger.error(f"Session failure for session {session_id}: {e}")
-    finally:
-        logger.info(f"WebSocket session clean-up initiated for {session_id}...")
-        # Deregister session queue
-        if user_id:
-            active_sessions.pop(user_id, None)
-        try:
-            await websocket.close()
-        except Exception:
-            pass

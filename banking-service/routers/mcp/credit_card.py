@@ -23,7 +23,7 @@ from routers.mcp.utils import requires_user_assertion
 from utils.database import SessionLocal
 from models.credit_card import FinancialAccount, IssuedCard, AccountLedger
 from services.credit_card import freeze_card, apply_limit_increase, reverse_posted_fee
-from routers.mcp.voice_bidi import send_session_event
+from services.voice_bidi import send_session_event
 
 logger = logging.getLogger(__name__)
 
