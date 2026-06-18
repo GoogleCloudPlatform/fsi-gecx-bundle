@@ -148,8 +148,8 @@ async def gecx_voice_stream(websocket: WebSocket):
             # Send initial trigger query to prompt the agent's welcome greeting immediately
             welcome_msg = {
                 "queryInput": {
-                    "text": {
-                        "text": "hello"
+                    "event": {
+                        "event": "sys.welcome"
                     }
                 }
             }
