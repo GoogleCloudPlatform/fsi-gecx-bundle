@@ -71,12 +71,10 @@ def test_gecx_voice_stream_success(mock_ws_connect, mock_time, mock_get_token, m
         config_msg = next((msg for msg in sent_messages if "config" in msg), None)
         assert config_msg is not None
         assert config_msg["config"]["session"] == "projects/evo-genai-workspace/locations/us/apps/42345105-29cb-492d-8a60-07171bb72190/sessions/session-borrower-123-1234567890"
-        assert config_msg["config"]["queryParams"]["parameters"]["user_token"] == "valid-firebase-session-token"
-        assert config_msg["config"]["query_params"]["parameters"]["user_token"] == "valid-firebase-session-token"
         welcome_msg = next((msg for msg in sent_messages if "realtimeInput" in msg), None)
         assert welcome_msg is not None
-        assert welcome_msg["queryParams"]["parameters"]["user_token"] == "valid-firebase-session-token"
-        assert welcome_msg["query_params"]["parameters"]["user_token"] == "valid-firebase-session-token"
+        assert welcome_msg["realtimeInput"]["variables"]["user_token"] == "valid-firebase-session-token"
+        assert welcome_msg["realtimeInput"]["variables"]["access_token"] == "valid-firebase-session-token"
 
 def test_gecx_voice_stream_auth_missing(mock_firebase_app):
     """Verify that client is rejected with code 4001 if authentication fails or is malformed."""

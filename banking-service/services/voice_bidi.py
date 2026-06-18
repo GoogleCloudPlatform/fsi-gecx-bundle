@@ -119,18 +119,6 @@ class VoiceBidiSession:
             config_msg = {
                 "config": {
                     "session": session_name,
-                    "queryParams": {
-                        "parameters": {
-                            "user_token": self.fb_token,
-                            "access_token": self.fb_token
-                        }
-                    },
-                    "query_params": {
-                        "parameters": {
-                            "user_token": self.fb_token,
-                            "access_token": self.fb_token
-                        }
-                    },
                     "inputAudioConfig": {
                         "audioEncoding": "LINEAR16",
                         "sampleRateHertz": 16000
@@ -149,16 +137,8 @@ class VoiceBidiSession:
                 "realtimeInput": {
                     "event": {
                         "event": "sys.welcome"
-                    }
-                },
-                "queryParams": {
-                    "parameters": {
-                        "user_token": self.fb_token,
-                        "access_token": self.fb_token
-                    }
-                },
-                "query_params": {
-                    "parameters": {
+                    },
+                    "variables": {
                         "user_token": self.fb_token,
                         "access_token": self.fb_token
                     }
