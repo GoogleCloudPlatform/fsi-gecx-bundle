@@ -94,9 +94,11 @@ async def gecx_voice_stream(websocket: WebSocket):
             if is_running_locally() and auth_frame.get("token") == "mock-local-token":
                 user_id = "mock_user_id"
                 session_id = "mock_session_id"
+                fb_token = "mock-local-token"
             else:
                 validated_token = validate_firebase_token(auth_frame["token"])
                 user_id = validated_token.claims.get("sub")
+                fb_token = auth_frame["token"]
                 # Append a timestamp to GECx session ID to force a fresh session context on every connect
                 session_id = f"session-{user_id}-{int(time.time())}"
                 
@@ -132,6 +134,11 @@ async def gecx_voice_stream(websocket: WebSocket):
             config_msg = {
                 "config": {
                     "session": session_name,
+                    "queryParams": {
+                        "parameters": {
+                            "user_token": fb_token
+                        }
+                    },
                     "inputAudioConfig": {
                         "audioEncoding": "LINEAR16",
                         "sampleRateHertz": 16000
