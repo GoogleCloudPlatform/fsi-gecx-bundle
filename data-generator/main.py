@@ -35,7 +35,6 @@ spanner_client = spanner.Client()
 instance = spanner_client.instance(SPANNER_INSTANCE)
 database = instance.database(SPANNER_DATABASE)
 
-import csv
 
 bq_client = bigquery.Client()
 PROJECT_ID = bq_client.project
