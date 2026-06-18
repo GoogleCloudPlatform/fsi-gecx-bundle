@@ -165,8 +165,3 @@ resource "google_project_service" "spanner_googleapis_com" {
   service            = "spanner.googleapis.com"
   disable_on_destroy = false
 }
-
-# resource "google_project_service" "looker_googleapis_com" {
-#   service            = "looker.googleapis.com"
-#   disable_on_destroy = false
-# }
