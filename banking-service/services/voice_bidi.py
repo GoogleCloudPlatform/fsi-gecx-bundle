@@ -121,7 +121,14 @@ class VoiceBidiSession:
                     "session": session_name,
                     "queryParams": {
                         "parameters": {
-                            "user_token": self.fb_token
+                            "user_token": self.fb_token,
+                            "access_token": self.fb_token
+                        }
+                    },
+                    "query_params": {
+                        "parameters": {
+                            "user_token": self.fb_token,
+                            "access_token": self.fb_token
                         }
                     },
                     "inputAudioConfig": {
