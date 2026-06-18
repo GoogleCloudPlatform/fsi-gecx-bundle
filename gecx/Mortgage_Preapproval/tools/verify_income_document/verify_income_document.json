@@ -1,9 +1,0 @@
-{
-  "name": "7bb040aa-9476-4bf5-96ea-11fe04f6ee81",
-  "pythonFunction": {
-    "name": "verify_income_document",
-    "pythonCode": "tools/verify_income_document/python_function/python_code.py",
-    "description": "Verifies income information from an uploaded document (e.g., W-2, Pay Stub).\n\nArgs:\n    document_content (str): A string representing the content or type of the uploaded document.\n                            In a real scenario, this would be a reference to an actual document.\n\nReturns:\n    dict[str, Any]: A dictionary indicating the verification status and extracted employer name.\n          Example: {\"status\": \"verified\", \"employer_name\": \"Acme Corp\"}\n          Example: {\"status\": \"unverified\", \"message\": \"Document format not recognized.\"}\n          Example: {\"error\": True, \"message\": \"Failed to process document.\"}"
-  },
-  "displayName": "verify_income_document"
-}

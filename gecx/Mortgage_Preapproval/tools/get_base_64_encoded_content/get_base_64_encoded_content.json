@@ -1,9 +1,0 @@
-{
-  "name": "7f1343ac-d332-4fd1-832d-cd5c7ec71760",
-  "pythonFunction": {
-    "name": "get_base_64_encoded_content",
-    "pythonCode": "tools/get_base_64_encoded_content/python_function/python_code.py"
-  },
-  "executionType": "SYNCHRONOUS",
-  "displayName": "get_base_64_encoded_content"
-}
