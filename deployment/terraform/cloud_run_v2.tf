@@ -431,6 +431,11 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
       }
 
       env {
+        name  = "BANKING_SERVICE_URL"
+        value = google_cloud_run_v2_service.banking_service[0].uri
+      }
+
+      env {
         name  = "LIVEKIT_URL"
         value = "ws://${google_compute_instance.livekit_server.network_interface[0].network_ip}:7880"
       }

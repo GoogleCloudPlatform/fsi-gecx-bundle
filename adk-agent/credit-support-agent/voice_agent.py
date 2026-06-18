@@ -1,4 +1,6 @@
 import os
+os.environ["NNPACK_DISABLED"] = "1"
+os.environ["TORCH_CPP_LOG_LEVEL"] = "ERROR"
 import sys
 import asyncio
 import logging
@@ -24,7 +26,7 @@ class HandoffException(Exception):
     pass
 
 # Configure logging to stdout
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("voice_agent")
 
 LIVEKIT_URL = os.getenv("LIVEKIT_URL", "ws://localhost:7880")
