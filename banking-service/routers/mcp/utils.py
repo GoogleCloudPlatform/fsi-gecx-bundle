@@ -113,6 +113,9 @@ def requires_user_assertion(func):
                     raise PermissionError("Access Denied: GECx caller token verification failed.")
 
         # 2. Extract and validate Firebase ID Token Assertion
+        logger.info(f"FastMCP call kwargs: {kwargs}")
+        logger.info(f"FastMCP call ctx: {ctx.__dict__ if ctx else None}")
+        
         assertion_token = kwargs.get("assertion_token")
         if not assertion_token:
             raise ValueError("Missing parameter 'assertion_token'.")
