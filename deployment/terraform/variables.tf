@@ -178,3 +178,13 @@ variable "gecx_agent_folder" {
   type    = string
   default = "Nova_Horizon_Bot_v2"
 }
+
+variable "looker_oauth_client_id" {
+  type    = string
+  default = null
+}
+
+variable "looker_oauth_client_secret" {
+  type    = string
+  default = null
+}
