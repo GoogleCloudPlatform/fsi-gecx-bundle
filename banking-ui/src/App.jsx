@@ -550,6 +550,7 @@ function AppContent() {
             }
 
             let custDict = {
+              is_ujet_sdk: false,
               email: customerEmail,
               user_id: userId,
               first_name: firstName,
@@ -834,6 +835,10 @@ function AppContent() {
         menuKey: "mortgage_bot",
         accent: "green",
         customData: {
+          is_ujet_sdk: {
+            label: "Is UJET SDK",
+            value: true
+          },
           email: {
             label: "Email",
             value: customerEmail
