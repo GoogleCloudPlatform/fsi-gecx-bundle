@@ -218,10 +218,12 @@ async def generate_synthetic_data(request: Request):
                         ))
 
                     tx_time = start_date
-                    for _ in range(req.transactions_per_account):
+                    num_txs = random.randint(0, req.transactions_per_account)
+                    time_interval = max(1, req.transactions_per_account)
+                    for _ in range(num_txs):
                         tx_id = str(uuid.uuid4())
                         ttype = random.choice(transaction_types)
-                        tx_time += timedelta(minutes=random.randint(1, 90 * 24 * 60 // req.transactions_per_account))
+                        tx_time += timedelta(minutes=random.randint(1, 90 * 24 * 60 // time_interval))
 
                         if ttype in ["DEBIT", "TRANSFER"]:
                             amount_val = Decimal(f"{random.uniform(5.0, 500.0):.2f}")
