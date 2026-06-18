@@ -62,14 +62,15 @@ class GCPTokenManager:
 
 token_manager = GCPTokenManager()
 
-async def send_session_event(session_id: str, event_payload: dict):
+async def send_session_event(session_key: str, event_payload: dict):
     """Pushes out-of-band events (like tool-driven card lock) directly into the WebSocket playout loop."""
-    queue = active_sessions.get(session_id)
+    user_id = session_key.replace("session-", "")
+    queue = active_sessions.get(user_id)
     if queue:
         await queue.put(event_payload)
-        logger.info(f"OOB event queued for GECX session {session_id}: {event_payload}")
+        logger.info(f"OOB event queued for user {user_id}: {event_payload}")
     else:
-        logger.debug(f"OOB event discarded, GECX session {session_id} is inactive.")
+        logger.debug(f"OOB event discarded, user {user_id} is offline.")
 
 @router.websocket("/voice/gecx-stream")
 async def gecx_voice_stream(websocket: WebSocket):
@@ -96,7 +97,8 @@ async def gecx_voice_stream(websocket: WebSocket):
             else:
                 validated_token = validate_firebase_token(auth_frame["token"])
                 user_id = validated_token.claims.get("sub")
-                session_id = f"session-{user_id}"
+                # Append a timestamp to GECx session ID to force a fresh session context on every connect
+                session_id = f"session-{user_id}-{int(time.time())}"
                 
             logger.info(f"First-frame authentication succeeded. Session: {session_id} (User: {user_id})")
         except asyncio.TimeoutError:
@@ -147,8 +149,8 @@ async def gecx_voice_stream(websocket: WebSocket):
             client_to_gecx_queue = asyncio.Queue(maxsize=100)
             gecx_to_client_queue = asyncio.Queue(maxsize=100)
             
-            # Register queue for out-of-band tool events
-            active_sessions[session_id] = gecx_to_client_queue
+            # Register queue for out-of-band tool events keyed by user_id
+            active_sessions[user_id] = gecx_to_client_queue
             
             # Task A: Read frames from browser WebSocket client
             async def read_client():
@@ -294,8 +296,8 @@ async def gecx_voice_stream(websocket: WebSocket):
     finally:
         logger.info(f"WebSocket session clean-up initiated for {session_id}...")
         # Deregister session queue
-        if session_id:
-            active_sessions.pop(session_id, None)
+        if user_id:
+            active_sessions.pop(user_id, None)
         try:
             await websocket.close()
         except Exception:

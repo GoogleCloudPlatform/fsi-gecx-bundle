@@ -209,3 +209,22 @@ async def test_request_credit_limit_increase_denied(mock_validate_token, db_sess
     
     assert result["success"] is False
     assert "Request denied due to credit history" in result["message"]
+
+
+@pytest.mark.asyncio
+@patch("routers.mcp.utils.validate_firebase_token")
+@patch("routers.mcp.credit_card.send_session_event")
+async def test_report_lost_stolen_card_optional_account_id(mock_send_event, mock_validate_token, db_session):
+    """Verify that card replacement successfully resolves the default account when account_id is omitted."""
+    mock_validate_token.return_value = MagicMock(claims={"sub": "cust-123", "email": "customer@example.com"})
+    
+    mock_ctx = MagicMock()
+    result = await report_lost_stolen_card(
+        account_id=None,
+        assertion_token="valid-token",
+        ctx=mock_ctx
+    )
+    
+    assert result["success"] is True
+    assert "Card reported as lost" in result["message"]
+    assert "LST-" in result["confirmation_number"]

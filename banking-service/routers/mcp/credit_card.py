@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 @mcp.tool()
 @requires_user_assertion
 async def report_lost_stolen_card(
-    account_id: str,
-    assertion_token: str,
+    account_id: str = None,
+    assertion_token: str = None,
     ctx: Context = None,
     verified_customer_id: str = None
 ) -> dict:
@@ -39,16 +39,22 @@ async def report_lost_stolen_card(
     Reports a credit card as lost or stolen, blocks the card, and initiates a reissue.
     
     Args:
-        account_id: The unique identifier for the credit card account.
+        account_id: Optional unique identifier for the credit card account.
         assertion_token: Cryptographically signed Firebase ID token of the active user.
     """
     logger.info(f"FastMCP report_lost_stolen_card invoked for account: {account_id} (Customer: {verified_customer_id})")
     
-    if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", account_id):
-        return {"success": False, "message": "Access Denied: Invalid account ID format."}
-        
     db = SessionLocal()
     try:
+        if not account_id:
+            account = db.query(FinancialAccount).filter_by(customer_id=verified_customer_id).first()
+            if not account:
+                return {"success": False, "message": "No credit card account found for the user."}
+            account_id = account.id
+
+        if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", account_id):
+            return {"success": False, "message": "Access Denied: Invalid account ID format."}
+            
         # Enforce BOLA/IDOR check: verify account belongs to verified_customer_id
         account = db.query(FinancialAccount).filter_by(id=account_id, customer_id=verified_customer_id).first()
         if not account:
@@ -94,8 +100,8 @@ async def report_lost_stolen_card(
 @mcp.tool()
 @requires_user_assertion
 async def reverse_overdraft_fee(
-    account_id: str,
-    assertion_token: str,
+    account_id: str = None,
+    assertion_token: str = None,
     fee_date: str = None,
     ctx: Context = None,
     verified_customer_id: str = None
@@ -104,17 +110,23 @@ async def reverse_overdraft_fee(
     Reverses an overdraft or late fee for a credit card account.
     
     Args:
-        account_id: The unique identifier for the credit card account.
+        account_id: Optional unique identifier for the credit card account.
         assertion_token: Cryptographically signed Firebase ID token of the active user.
         fee_date: Optional date of the fee to reverse.
     """
     logger.info(f"FastMCP reverse_overdraft_fee invoked for account: {account_id} (Customer: {verified_customer_id})")
     
-    if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", account_id):
-        return {"success": False, "message": "Access Denied: Invalid account ID format."}
-
     db = SessionLocal()
     try:
+        if not account_id:
+            account = db.query(FinancialAccount).filter_by(customer_id=verified_customer_id).first()
+            if not account:
+                return {"success": False, "message": "No credit card account found for the user."}
+            account_id = account.id
+
+        if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", account_id):
+            return {"success": False, "message": "Access Denied: Invalid account ID format."}
+
         # Enforce BOLA check
         account = db.query(FinancialAccount).filter_by(id=account_id, customer_id=verified_customer_id).first()
         if not account:
@@ -174,8 +186,8 @@ async def reverse_overdraft_fee(
 @mcp.tool()
 @requires_user_assertion
 async def request_credit_limit_increase(
-    account_id: str,
-    assertion_token: str,
+    account_id: str = None,
+    assertion_token: str = None,
     requested_limit: float = None,
     ctx: Context = None,
     verified_customer_id: str = None
@@ -184,17 +196,23 @@ async def request_credit_limit_increase(
     Submits a credit limit increase request for a credit card account.
     
     Args:
-        account_id: The unique identifier for the credit card account.
+        account_id: Optional unique identifier for the credit card account.
         assertion_token: Cryptographically signed Firebase ID token of the active user.
         requested_limit: Optional desired new credit limit amount (in dollars).
     """
     logger.info(f"FastMCP request_credit_limit_increase invoked for account: {account_id} (Customer: {verified_customer_id})")
     
-    if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", account_id):
-        return {"success": False, "message": "Access Denied: Invalid account ID format."}
-
     db = SessionLocal()
     try:
+        if not account_id:
+            account = db.query(FinancialAccount).filter_by(customer_id=verified_customer_id).first()
+            if not account:
+                return {"success": False, "message": "No credit card account found for the user."}
+            account_id = account.id
+
+        if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", account_id):
+            return {"success": False, "message": "Access Denied: Invalid account ID format."}
+
         # Enforce BOLA check
         account = db.query(FinancialAccount).filter_by(id=account_id, customer_id=verified_customer_id).first()
         if not account:
