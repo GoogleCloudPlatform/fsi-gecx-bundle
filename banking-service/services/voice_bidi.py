@@ -207,6 +207,7 @@ class VoiceBidiSession:
                 try:
                     async for message in gecx_ws:
                         response = json.loads(message)
+                        logger.info(f"GECX response frame: {response}")
                         session_output = response.get("sessionOutput", {})
                         if session_output:
                             b64_audio = session_output.get("audio", "")
