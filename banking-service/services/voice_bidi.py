@@ -96,10 +96,29 @@ class VoiceBidiSession:
         # Register queue for out-of-band updates
         active_sessions[self.user_id] = self.gecx_to_client_queue
         
+        # Also register under customer ID to route tool-triggered UI update pushes
+        from utils.database import SessionLocal
+        from models.credit_card import FinancialAccount
+        db = SessionLocal()
+        customer_id = "cust-123"
+        try:
+            account = db.query(FinancialAccount).filter_by(customer_id=self.user_id).first()
+            if account:
+                customer_id = self.user_id
+        except Exception as e:
+            logger.warning(f"Error resolving customer ID for active sessions: {e}")
+        finally:
+            db.close()
+            
+        self.customer_id = customer_id
+        active_sessions[self.customer_id] = self.gecx_to_client_queue
+        logger.info(f"Registered active session for user {self.user_id} (Customer ID: {self.customer_id})")
+        
         try:
             await self._run_pipeline()
         finally:
             active_sessions.pop(self.user_id, None)
+            active_sessions.pop(self.customer_id, None)
 
     async def _run_pipeline(self):
         project_id = get_project_id()
