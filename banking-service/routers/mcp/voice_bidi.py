@@ -152,9 +152,9 @@ async def gecx_voice_stream(websocket: WebSocket):
             await gecx_ws.send(json.dumps(config_msg))
             logger.info("Handshake configurations transmitted.")
 
-            # Send initial trigger query to prompt the agent's welcome greeting immediately
+            # Send initial trigger event to prompt the agent's welcome greeting immediately
             welcome_msg = {
-                "queryInput": {
+                "realtimeInput": {
                     "event": {
                         "event": "sys.welcome"
                     }
