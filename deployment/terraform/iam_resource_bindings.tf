@@ -92,7 +92,7 @@ resource "google_cloud_run_service_iam_member" "iap_login_ui_public_invoker" {
 
 locals {
   cloud_run_iap_members = concat([
-    "user:erikvoit@gcp.solutions"
+    "user:${data.google_client_openid_userinfo.me.email}"
   ], var.additional_cloud_run_iap_members)
 }
 
