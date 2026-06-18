@@ -1,0 +1,14 @@
+CREATE TABLE transactions (
+  account_id STRING(64) NOT NULL,
+  transaction_id STRING(64) NOT NULL,
+  amount NUMERIC NOT NULL,
+  transaction_type_id STRING(64) NOT NULL,
+  description STRING(256),
+  counterparty_name STRING(128),
+  category STRING(32),
+  status STRING(32) NOT NULL,
+  reference_number STRING(64),
+  timestamp TIMESTAMP NOT NULL,
+  CONSTRAINT fk_transaction_type FOREIGN KEY (transaction_type_id) REFERENCES transaction_types (transaction_type_id),
+) PRIMARY KEY (account_id, transaction_id),
+  INTERLEAVE IN PARENT accounts ON DELETE CASCADE
