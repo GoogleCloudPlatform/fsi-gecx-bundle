@@ -195,6 +195,8 @@ def validate_firebase_token(jwt_token: str) -> ValidatedToken:
     Verifies the Firebase ID token passed from the frontend.
     """
     try:
+        if jwt_token:
+            jwt_token = jwt_token.strip().strip('"').strip("'")
         decoded_token = firebase_auth.verify_id_token(jwt_token)
         claims = {
             'iss': 'https://securetoken.google.com/' + decoded_token.get('aud', ''),
