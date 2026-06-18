@@ -95,9 +95,8 @@ def requires_user_assertion(func):
             logger.warning("No FastMCP Context passed to decorator, bypassing caller validation.")
         else:
             headers = {}
-            if ctx.request_context and ctx.request_context.headers:
-                for k, v in ctx.request_context.headers:
-                    headers[k.decode("utf-8").lower().strip()] = v.decode("utf-8").strip()
+            if ctx.request_context and ctx.request_context.request:
+                headers = {k.lower().strip(): v.strip() for k, v in ctx.request_context.request.headers.items()}
             
             if not is_running_locally():
                 auth_header = headers.get("authorization", "")

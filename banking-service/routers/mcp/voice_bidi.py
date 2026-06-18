@@ -144,6 +144,17 @@ async def gecx_voice_stream(websocket: WebSocket):
             }
             await gecx_ws.send(json.dumps(config_msg))
             logger.info("Handshake configurations transmitted.")
+
+            # Send initial trigger query to prompt the agent's welcome greeting immediately
+            welcome_msg = {
+                "queryInput": {
+                    "text": {
+                        "text": "hello"
+                    }
+                }
+            }
+            await gecx_ws.send(json.dumps(welcome_msg))
+            logger.info("Initial greeting trigger query transmitted.")
             
             # Initialize queues with strict backpressure sizes
             client_to_gecx_queue = asyncio.Queue(maxsize=100)
