@@ -165,7 +165,7 @@ async def reverse_overdraft_fee(
         # Out-of-band push to client WebSocket to sync UI
         session_id = f"session-{verified_customer_id}"
         await send_session_event(session_id, {
-            "type": "BALANCE_UPDATE",
+            "type": "FEE_REVERSED",
             "cleared_balance_cents": res["cleared_balance_cents"],
             "available_credit_cents": res["available_credit_cents"]
         })
@@ -240,7 +240,7 @@ async def request_credit_limit_increase(
         # Out-of-band push to client WebSocket to sync UI
         session_id = f"session-{verified_customer_id}"
         await send_session_event(session_id, {
-            "type": "CREDIT_LIMIT_UPDATE",
+            "type": "LIMIT_UPDATED",
             "credit_limit_cents": res["new_limit_cents"],
             "available_credit_cents": res["available_credit_cents"]
         })
