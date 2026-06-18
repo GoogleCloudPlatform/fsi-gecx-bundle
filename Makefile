@@ -152,11 +152,8 @@ upload-credit-agent: ## Execute the REST API script to package and import the Cr
 	@echo "Uploading Credit Support Voice Agent to GECx..."
 	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) AGENT_FOLDER=Credit_Support_Voice_Agent bash import_cxas_agent.sh
 
-.PHONY: upload-gecx
-upload-gecx: upload-mortgage-agent ## Deprecated: Alias for upload-mortgage-agent
-
 .PHONY: create-gecx
-create-gecx: upload-gecx ## Alias for upload-gecx to automate full CES agent provisioning
+create-gecx: upload-mortgage-agent upload-credit-agent ## Automate full CES agent provisioning for both Mortgage and Credit agents
 
 .PHONY: update-gecx
 update-gecx: ## Execute the overwrite CES agent script to package and overwrite an existing agent in Customer Experience Studio (CES)

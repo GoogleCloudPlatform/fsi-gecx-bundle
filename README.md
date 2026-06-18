@@ -225,7 +225,7 @@ make tf-apply-initial
 1. After creating the "Web widget" deployment channel for your agent in CX Agent Studio, you will get a Deployment ID. Copy this value and update the `cx_agent_studio_deployment_name` variable in the `terraform.tfvars` file of the deployment/terraform directory and run `terraform apply`. Additionally update the `cx_agent_studio_upload_tool_name` and `cx_agent_studio_populate_form_content_tool_name` variables in the `terraform.tfvars` file with the file upload and populate form content tool deployment ids respectively.
 
 ```bash
-make upload-gecx
+make create-gecx
 ```
 
 Open up your `terraform.tfvars` file and copy in these variables (the output from the `make upload-gecx` will give you the values for these):
