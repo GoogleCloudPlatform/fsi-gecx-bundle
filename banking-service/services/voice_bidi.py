@@ -150,6 +150,18 @@ class VoiceBidiSession:
                     "event": {
                         "event": "sys.welcome"
                     }
+                },
+                "queryParams": {
+                    "parameters": {
+                        "user_token": self.fb_token,
+                        "access_token": self.fb_token
+                    }
+                },
+                "query_params": {
+                    "parameters": {
+                        "user_token": self.fb_token,
+                        "access_token": self.fb_token
+                    }
                 }
             }
             await gecx_ws.send(json.dumps(welcome_msg))
