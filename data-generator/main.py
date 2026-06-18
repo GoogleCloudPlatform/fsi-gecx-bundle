@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import base64
+import csv
 import json
 import os
 import random
