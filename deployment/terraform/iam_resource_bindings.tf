@@ -147,6 +147,13 @@ resource "google_bigquery_dataset_iam_member" "banking_service_account_bq_data_e
   member     = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
+resource "google_bigquery_dataset_iam_member" "datagen_sa_bq_data_viewer" {
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.banking.dataset_id
+  role       = "roles/bigquery.dataViewer"
+  member     = "serviceAccount:${google_service_account.data_generator_service_account.email}"
+}
+
 data "google_storage_project_service_account" "gcs_sa" {}
 
 data "google_bigquery_default_service_account" "bq_sa" {}

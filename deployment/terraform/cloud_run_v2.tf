@@ -13,9 +13,10 @@
 # limitations under the License.
 
 locals {
-  banking_service_url    = var.banking_service_image_url != null ? var.banking_service_image_url : "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/banking-service:latest"
-  banking_ui_image_url   = var.banking_ui_image_url != null ? var.banking_ui_image_url : "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/banking-ui:latest"
-  iap_login_ui_image_url = var.iap_login_ui_image_url != null ? var.iap_login_ui_image_url : "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/iap-login-ui:latest"
+  banking_service_url      = var.banking_service_image_url != null ? var.banking_service_image_url : "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/banking-service:latest"
+  banking_ui_image_url     = var.banking_ui_image_url != null ? var.banking_ui_image_url : "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/banking-ui:latest"
+  iap_login_ui_image_url   = var.iap_login_ui_image_url != null ? var.iap_login_ui_image_url : "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/iap-login-ui:latest"
+  data_generator_image_url = "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/data-generator:latest"
 }
 
 resource "google_cloud_run_v2_service" "banking_service" {
@@ -304,3 +305,43 @@ resource "google_cloud_run_v2_service" "iap_login_ui" {
 
   depends_on = [google_project_service.run_googleapis_com]
 }
+
+resource "google_cloud_run_v2_service" "data_generator" {
+  count               = var.deploy_cloud_run_services ? 1 : 0
+  name                = "data-generator"
+  location            = var.region
+  deletion_protection = false
+
+  scaling {
+    min_instance_count = 0
+    max_instance_count = 5
+  }
+
+  template {
+    service_account = google_service_account.data_generator_service_account.email
+
+    containers {
+      image = local.data_generator_image_url
+
+      env {
+        name  = "SPANNER_INSTANCE"
+        value = google_spanner_instance.banking_data.name
+      }
+      env {
+        name  = "SPANNER_DATABASE"
+        value = google_spanner_database.banking.name
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].containers[0].image,
+      client,
+      client_version
+    ]
+  }
+
+  depends_on = [google_project_service.run_googleapis_com]
+}
+

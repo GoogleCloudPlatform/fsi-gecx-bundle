@@ -130,3 +130,15 @@ resource "google_project_service_identity" "discoveryengine_sa" {
 
 data "google_compute_default_service_account" "default" {
 }
+
+resource "google_service_account" "data_generator_service_account" {
+  account_id   = "datagen-service-sa"
+  display_name = "Data Generator Service Account"
+
+  lifecycle {
+    ignore_changes = [
+      description,
+      display_name
+    ]
+  }
+}

@@ -65,6 +65,11 @@ run-frontend: ## Run the React/Vite frontend dev server locally
 	@echo "Starting banking-ui dev server..."
 	cd banking-ui && npm run dev
 
+.PHONY: run-data-generator
+run-data-generator: ## Run the FastAPI synthetic data generator locally
+	@echo "Starting data-generator..."
+	cd data-generator && PROJECT_ID=$(PROJECT_ID) ./run.sh
+
 .PHONY: run
 run: ## Concurrently run both backend and frontend servers locally
 	@echo "Starting backend and frontend concurrently... Press Ctrl+C to stop."
@@ -116,6 +121,9 @@ publish-images: ## Build and push local container images to Artifact Registry
 	@echo "Building and pushing banking-ui image..."
 	cd banking-ui && docker build -t "$(REGION)-docker.pkg.dev/$(PROJECT_ID)/fsi-gecx-bundle/banking-ui:latest" .
 	docker push "$(REGION)-docker.pkg.dev/$(PROJECT_ID)/fsi-gecx-bundle/banking-ui:latest"
+	@echo "Building and pushing data-generator image..."
+	cd data-generator && docker build -t "$(REGION)-docker.pkg.dev/$(PROJECT_ID)/fsi-gecx-bundle/data-generator:latest" .
+	docker push "$(REGION)-docker.pkg.dev/$(PROJECT_ID)/fsi-gecx-bundle/data-generator:latest"
 
 .PHONY: publish-images-cloud
 publish-images-cloud: ## Submit Cloud Build jobs using official publish/deploy YAMLs
@@ -123,6 +131,8 @@ publish-images-cloud: ## Submit Cloud Build jobs using official publish/deploy Y
 	gcloud builds submit --config banking-service/cloudbuild-publish-deploy.yaml --substitutions=_TRIGGER_DEPLOY=false
 	@echo "Submitting banking-ui Cloud Build job..."
 	gcloud builds submit --config banking-ui/cloudbuild-publish-deploy.yaml --substitutions=_TRIGGER_DEPLOY=false
+	@echo "Submitting data-generator Cloud Build job..."
+	gcloud builds submit --config data-generator/cloudbuild-publish-deploy.yaml --substitutions=_TRIGGER_DEPLOY=false
 
 .PHONY: upload-gecx
 upload-gecx: ## Execute the official REST API script to package and import the GECx agent directly into Customer Experience Studio (CES)
