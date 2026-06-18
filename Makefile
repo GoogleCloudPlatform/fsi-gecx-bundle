@@ -161,6 +161,25 @@ upload-gecx: upload-mortgage-agent ## Deprecated: Alias for upload-mortgage-agen
 .PHONY: create-gecx
 create-gecx: upload-gecx ## Alias for upload-gecx to automate full CES agent provisioning
 
+.PHONY: update-gecx
+update-gecx: ## Execute the overwrite CES agent script to package and overwrite an existing agent in Customer Experience Studio (CES)
+ifndef APP_ID
+	$(error APP_ID is not defined. Run as: make update-gecx APP_ID=<your-app-id>)
+endif
+	@echo "Executing overwrite CES agent script for project $(PROJECT_ID) and App ID $(APP_ID)..."
+	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) APP_ID=$(APP_ID) bash overwrite_cxas_agent.sh
+
+.PHONY: patch-convo-profile
+patch-convo-profile: ## Patch Dialogflow conversational profile to point to a new agent deployment (usage: make patch-convo-profile CONVERSATIONAL_PROFILE_ID=<profile-id> DEPLOYMENT_ID=<deployment-id>)
+ifndef CONVERSATIONAL_PROFILE_ID
+	$(error CONVERSATIONAL_PROFILE_ID is not defined. Run as: make patch-convo-profile CONVERSATIONAL_PROFILE_ID=<profile-id> DEPLOYMENT_ID=<deployment-id>)
+endif
+ifndef DEPLOYMENT_ID
+	$(error DEPLOYMENT_ID is not defined. Run as: make patch-convo-profile CONVERSATIONAL_PROFILE_ID=<profile-id> DEPLOYMENT_ID=<deployment-id>)
+endif
+	@echo "Patching conversational profile $(CONVERSATIONAL_PROFILE_ID) with deployment $(DEPLOYMENT_ID)..."
+	cd scripts/cxas && bash patch_conversational_profile.sh -p $(PROJECT_ID) -c $(CONVERSATIONAL_PROFILE_ID) -d $(DEPLOYMENT_ID)
+
 .PHONY: tf-apply
 tf-apply: ## Apply all Terraform stages (infrastructure, services, audiences)
 	@echo "Running full Terraform deployment (all stages)..."
