@@ -122,146 +122,234 @@ async def generate_synthetic_data(request: Request):
                 detail="No transaction types found in the database. Please seed transaction_types table first."
             )
 
-        user_ids = req.user_ids
-        if not user_ids:
-            try:
-                query = f"SELECT user_id FROM `{PROJECT_ID}.banking.user` LIMIT 100"
-                query_job = bq_client.query(query)
-                user_ids = [row.user_id for row in query_job]
-            except Exception as bq_err:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to query BigQuery user table: {str(bq_err)}"
-                )
-
-        if not user_ids:
-            raise HTTPException(
-                status_code=400,
-                detail="No user_ids provided in request, and none found in BigQuery table 'banking.user'."
-            )
+        sample_size = max(1, int(len(user_ids) * 0.25))
+        target_users = random.sample(user_ids, sample_size)
 
         def write_data(transaction):
             accounts_data = []
             account_owners_data = []
             transactions_data = []
 
-            for i in range(req.num_accounts):
-                account_id = str(uuid.uuid4())
-                user_id = random.choice(user_ids)
-                account_type = random.choice(["checking", "savings"])
-                if account_type == "checking":
-                    display_name = random.choice(["Everyday Checking", "Preferred Checking", "Direct Deposit Checking"])
-                else:
-                    display_name = random.choice(["High Yield Savings", "Statement Savings", "Emergency Fund"])
+            for user_id in target_users:
+                # 1. Fetch existing accounts from Spanner
+                results = transaction.execute_sql(
+                    """
+                    SELECT a.account_id, a.account_type, COALESCE(b.balance, 0)
+                    FROM account_owners ao
+                    JOIN accounts a ON ao.account_id = a.account_id
+                    LEFT JOIN account_balances b ON a.account_id = b.account_id
+                    WHERE ao.user_id = @user_id
+                    """,
+                    params={"user_id": user_id},
+                    param_types={"user_id": spanner.param_types.STRING}
+                )
 
-                accounts_data.append((account_id, user_id, account_type, display_name))
-                account_owners_data.append((account_id, user_id, "PRIMARY"))
+                existing_accounts = []
+                for row in results:
+                    existing_accounts.append({
+                        "account_id": row[0],
+                        "account_type": row[1],
+                        "balance": row[2]
+                    })
 
-                start_date = datetime.now() - timedelta(days=90)
+                has_checking = any(a["account_type"] == "checking" for a in existing_accounts)
+                has_savings = any(a["account_type"] == "savings" for a in existing_accounts)
 
-                for _ in range(req.transactions_per_account):
-                    transaction_id = str(uuid.uuid4())
-                    ttype = random.choice(transaction_types)
+                accounts_to_create = []
+                if not has_checking:
+                    accounts_to_create.append("checking")
+                if not has_savings:
+                    accounts_to_create.append("savings")
 
-                    if ttype in ["DEBIT", "TRANSFER"]:
-                        amount_val = Decimal(f"{random.uniform(5.0, 500.0):.2f}")
+                # 1/1000 chance to create an extra account beyond checking & savings (if within limit)
+                total_count = len(existing_accounts) + len(accounts_to_create)
+                if total_count >= 2 and total_count < req.num_accounts:
+                    if random.random() < 0.001:
+                        accounts_to_create.append(random.choice(["checking", "savings"]))
+
+                new_accounts_info = []
+                for atype in accounts_to_create:
+                    new_id = str(uuid.uuid4())
+                    if atype == "checking":
+                        display_name = random.choice(["Everyday Checking", "Preferred Checking", "Direct Deposit Checking"])
                     else:
-                        amount_val = Decimal(f"{random.uniform(50.0, 2000.0):.2f}")
+                        display_name = random.choice(["High Yield Savings", "Statement Savings", "Emergency Fund"])
 
-                    description = fake.sentence(nb_words=5)
-                    if ttype == "TRANSFER":
-                        counterparty = "Self Transfer"
-                        category = "Transfer"
-                        direction = "DEBIT"
-                    elif ttype == "DEBIT":
-                        debit_merchants = [m for m in merchants_list if m["category"] not in ["Salary", "Interest", "Transfer"]]
-                        merchant_info = random.choice(debit_merchants)
-                        counterparty = merchant_info["merchant"]
-                        category = merchant_info["category"]
-                        direction = "DEBIT"
-                    elif ttype == "ACH":
-                        is_deposit = random.choice([True, False])
-                        if is_deposit:
-                            ach_merchants = [m for m in merchants_list if m["category"] in ["Salary"]]
-                            direction = "CREDIT"
-                        else:
-                            ach_merchants = [m for m in merchants_list if m["category"] in ["Utilities", "Rent"]]
+                    accounts_data.append((new_id, user_id, atype, display_name))
+                    account_owners_data.append((new_id, user_id, "PRIMARY"))
+
+                    new_accounts_info.append({
+                        "account_id": new_id,
+                        "balance": Decimal("0.00"),
+                        "is_new": True
+                    })
+
+                active_accounts = []
+                for acc in existing_accounts:
+                    active_accounts.append({
+                        "account_id": acc["account_id"],
+                        "balance": Decimal(str(acc["balance"])),
+                        "is_new": False
+                    })
+                active_accounts.extend(new_accounts_info)
+
+                for acc in active_accounts:
+                    acc_id = acc["account_id"]
+                    running_balance = acc["balance"]
+                    start_date = datetime.now() - timedelta(days=90)
+
+                    # Initial deposit if new
+                    if acc["is_new"]:
+                        deposit_id = str(uuid.uuid4())
+                        deposit_amount = Decimal(f"{random.uniform(200.0, 250000.0):.2f}")
+                        running_balance += deposit_amount
+                        transactions_data.append((
+                            acc_id,
+                            deposit_id,
+                            deposit_amount,
+                            "CREDIT",
+                            "CREDIT",
+                            "Initial Account Deposit",
+                            "Branch Deposit",
+                            "Transfer",
+                            "POSTED",
+                            str(random.randint(100000000000, 999999999999)),
+                            start_date
+                        ))
+
+                    tx_time = start_date
+                    for _ in range(req.transactions_per_account):
+                        tx_id = str(uuid.uuid4())
+                        ttype = random.choice(transaction_types)
+                        tx_time += timedelta(minutes=random.randint(1, 90 * 24 * 60 // req.transactions_per_account))
+
+                        if ttype in ["DEBIT", "TRANSFER"]:
+                            amount_val = Decimal(f"{random.uniform(5.0, 500.0):.2f}")
                             direction = "DEBIT"
-                        
-                        if ach_merchants:
-                            merchant_info = random.choice(ach_merchants)
+                        else:
+                            amount_val = Decimal(f"{random.uniform(50.0, 2000.0):.2f}")
+                            direction = "CREDIT"
+
+                        description = fake.sentence(nb_words=5)
+                        if ttype == "TRANSFER":
+                            counterparty = "Self Transfer"
+                            category = "Transfer"
+                        elif ttype == "DEBIT":
+                            debit_merchants = [m for m in merchants_list if m["category"] not in ["Salary", "Interest", "Transfer"]]
+                            merchant_info = random.choice(debit_merchants)
                             counterparty = merchant_info["merchant"]
                             category = merchant_info["category"]
+                        elif ttype == "ACH":
+                            is_deposit = random.choice([True, False])
+                            if is_deposit:
+                                ach_merchants = [m for m in merchants_list if m["category"] in ["Salary"]]
+                                direction = "CREDIT"
+                            else:
+                                ach_merchants = [m for m in merchants_list if m["category"] in ["Utilities", "Rent"]]
+                                direction = "DEBIT"
+
+                            if ach_merchants:
+                                merchant_info = random.choice(ach_merchants)
+                                counterparty = merchant_info["merchant"]
+                                category = merchant_info["category"]
+                            else:
+                                counterparty = "ACH Payment"
+                                category = "Utilities"
+                        else: # CREDIT
+                            credit_merchants = [m for m in merchants_list if m["category"] in ["Salary", "Interest"]]
+                            direction = "CREDIT"
+                            if credit_merchants:
+                                merchant_info = random.choice(credit_merchants)
+                                counterparty = merchant_info["merchant"]
+                                category = merchant_info["category"]
+                            else:
+                                counterparty = "Misc Deposit"
+                                category = "Interest"
+
+                        if direction == "CREDIT":
+                            running_balance += amount_val
                         else:
-                            counterparty = "ACH Payment"
-                            category = "Utilities"
-                    else: # CREDIT
-                        credit_merchants = [m for m in merchants_list if m["category"] in ["Salary", "Interest"]]
-                        direction = "CREDIT"
-                        if credit_merchants:
-                            merchant_info = random.choice(credit_merchants)
-                            counterparty = merchant_info["merchant"]
-                            category = merchant_info["category"]
-                        else:
-                            counterparty = "Misc Deposit"
-                            category = "Interest"
-                    status = random.choice(["POSTED", "POSTED", "POSTED", "PENDING"])
-                    ref_number = str(random.randint(100000000000, 999999999999))
-                    timestamp = start_date + timedelta(minutes=random.randint(1, 90 * 24 * 60))
+                            running_balance -= amount_val
 
-                    transactions_data.append((
-                        account_id,
-                        transaction_id,
-                        amount_val,
-                        ttype,
-                        direction,
-                        description,
-                        counterparty,
-                        category,
-                        status,
-                        ref_number,
-                        timestamp
-                    ))
+                        status = random.choice(["POSTED", "POSTED", "POSTED", "PENDING"])
+                        ref_number = str(random.randint(100000000000, 999999999999))
 
-            # Insert accounts
-            transaction.insert(
-                table="accounts",
-                columns=["account_id", "user_id", "account_type", "display_name"],
-                values=accounts_data
-            )
+                        transactions_data.append((
+                            acc_id,
+                            tx_id,
+                            amount_val,
+                            ttype,
+                            direction,
+                            description,
+                            counterparty,
+                            category,
+                            status,
+                            ref_number,
+                            tx_time
+                        ))
 
-            # Insert account owners
-            transaction.insert(
-                table="account_owners",
-                columns=["account_id", "user_id", "owner_type"],
-                values=account_owners_data
-            )
+                        # Overdraft Protection Deposit if balance drops below 0
+                        if running_balance < 0:
+                            if random.random() < 0.90:
+                                overdraft_id = str(uuid.uuid4())
+                                overdraft_amount = Decimal(f"{random.uniform(5.0, 2000.0):.2f}")
+                                running_balance += overdraft_amount
+                                tx_time += timedelta(seconds=1)
 
-            # Insert transactions
-            transaction.insert(
-                table="transactions",
-                columns=[
-                    "account_id",
-                    "transaction_id",
-                    "amount",
-                    "transaction_type_id",
-                    "direction",
-                    "description",
-                    "counterparty_name",
-                    "category",
-                    "status",
-                    "reference_number",
-                    "timestamp"
-                ],
-                values=transactions_data
-            )
+                                transactions_data.append((
+                                    acc_id,
+                                    overdraft_id,
+                                    overdraft_amount,
+                                    "CREDIT",
+                                    "CREDIT",
+                                    "Overdraft Protection Deposit",
+                                    "Overdraft Protection",
+                                    "Transfer",
+                                    "POSTED",
+                                    str(random.randint(100000000000, 999999999999)),
+                                    tx_time
+                                ))
+
+            if accounts_data:
+                transaction.insert(
+                    table="accounts",
+                    columns=["account_id", "user_id", "account_type", "display_name"],
+                    values=accounts_data
+                )
+
+            if account_owners_data:
+                transaction.insert(
+                    table="account_owners",
+                    columns=["account_id", "user_id", "owner_type"],
+                    values=account_owners_data
+                )
+
+            if transactions_data:
+                transaction.insert(
+                    table="transactions",
+                    columns=[
+                        "account_id",
+                        "transaction_id",
+                        "amount",
+                        "transaction_type_id",
+                        "direction",
+                        "description",
+                        "counterparty_name",
+                        "category",
+                        "status",
+                        "reference_number",
+                        "timestamp"
+                    ],
+                    values=transactions_data
+                )
 
         database.run_in_transaction(write_data)
 
         return {
             "message": "Successfully generated synthetic data",
-            "accounts_created": req.num_accounts,
-            "transactions_created": req.num_accounts * req.transactions_per_account
+            "users_processed": len(target_users),
+            "accounts_created": len(accounts_data),
+            "transactions_created": len(transactions_data)
         }
 
     except Exception as e:
