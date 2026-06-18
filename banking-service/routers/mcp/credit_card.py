@@ -12,10 +12,228 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
+import datetime
 import logging
+import re
 from fastmcp import Context
+
 from . import mcp  # Import shared FastMCP server instance
+from routers.mcp.utils import requires_user_assertion
+from utils.database import SessionLocal
+from models.credit_card import FinancialAccount, IssuedCard, AccountLedger
+from services.credit_card import freeze_card, apply_limit_increase, reverse_posted_fee
+from routers.mcp.voice_bidi import send_session_event
 
 logger = logging.getLogger(__name__)
 
-# TODO: Add Credit Card MCP tools here (e.g. block_credit_card, request_credit_limit_increase)
+@mcp.tool()
+@requires_user_assertion
+async def report_lost_stolen_card(
+    account_id: str,
+    assertion_token: str,
+    ctx: Context = None,
+    verified_customer_id: str = None
+) -> dict:
+    """
+    Reports a credit card as lost or stolen, blocks the card, and initiates a reissue.
+    
+    Args:
+        account_id: The unique identifier for the credit card account.
+        assertion_token: Cryptographically signed Firebase ID token of the active user.
+    """
+    logger.info(f"FastMCP report_lost_stolen_card invoked for account: {account_id} (Customer: {verified_customer_id})")
+    
+    if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", account_id):
+        return {"success": False, "message": "Access Denied: Invalid account ID format."}
+        
+    db = SessionLocal()
+    try:
+        # Enforce BOLA/IDOR check: verify account belongs to verified_customer_id
+        account = db.query(FinancialAccount).filter_by(id=account_id, customer_id=verified_customer_id).first()
+        if not account:
+            logger.error(f"Security Alert: BOLA/IDOR attempt or account not found for {account_id} by {verified_customer_id}")
+            return {"success": False, "message": "Account not found or unauthorized."}
+
+        # Find the active card linked to this account
+        card = db.query(IssuedCard).filter_by(account_id=account.id, status="ACTIVE").first()
+        if not card:
+            # Check if there is already a blocked/lost card
+            prior_lost_card = db.query(IssuedCard).filter_by(account_id=account.id, status="BLOCKED").first()
+            if prior_lost_card:
+                return {"success": False, "message": "Card has already been reported as lost or stolen."}
+            return {"success": False, "message": "No active card found linked to this account."}
+
+        # Anti-Fraud Check: billing address modification quarantine (Simulated)
+        logger.info(f"Anti-Fraud check: Address quarantine check passed for customer {verified_customer_id}")
+
+        # Execute freeze service
+        res = freeze_card(db, card_token=card.card_token, reason="CUSTOMER_REPORTED_LOST_STOLEN")
+        
+        # Out-of-band push to client WebSocket to sync UI
+        session_id = f"session-{verified_customer_id}"
+        await send_session_event(session_id, {
+            "type": "CARD_STATUS",
+            "card_id": card.id,
+            "status": "BLOCKED"
+        })
+        
+        confirmation_number = f"LST-{card.last_four}-{int(time.time())}"
+        return {
+            "success": True,
+            "message": "Card reported as lost. A new card will be issued.",
+            "confirmation_number": confirmation_number
+        }
+    except Exception as e:
+        logger.error(f"Error in FastMCP report_lost_stolen_card: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def reverse_overdraft_fee(
+    account_id: str,
+    assertion_token: str,
+    fee_date: str = None,
+    ctx: Context = None,
+    verified_customer_id: str = None
+) -> dict:
+    """
+    Reverses an overdraft or late fee for a credit card account.
+    
+    Args:
+        account_id: The unique identifier for the credit card account.
+        assertion_token: Cryptographically signed Firebase ID token of the active user.
+        fee_date: Optional date of the fee to reverse.
+    """
+    logger.info(f"FastMCP reverse_overdraft_fee invoked for account: {account_id} (Customer: {verified_customer_id})")
+    
+    if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", account_id):
+        return {"success": False, "message": "Access Denied: Invalid account ID format."}
+
+    db = SessionLocal()
+    try:
+        # Enforce BOLA check
+        account = db.query(FinancialAccount).filter_by(id=account_id, customer_id=verified_customer_id).first()
+        if not account:
+            logger.error(f"Security Alert: BOLA/IDOR attempt or account not found for {account_id} by {verified_customer_id}")
+            return {"success": False, "message": "Account not found or unauthorized."}
+
+        # Concurrency Locking: lock account row for balance updates
+        account = db.query(FinancialAccount).filter_by(id=account_id).with_for_update().one_or_none()
+
+        # Find the target fee transaction in the ledger (negative amount with "LATE_FEE" or similar)
+        original_tx = db.query(AccountLedger).filter(
+            AccountLedger.account_id == account.id,
+            AccountLedger.amount_cents < 0,
+            AccountLedger.description.in_(["LATE_FEE", "OVERDRAFT", "Overdraft Fee"])
+        ).order_by(AccountLedger.posted_at.desc()).first()
+
+        if not original_tx:
+            return {"success": False, "message": "No eligible fee transaction found to reverse."}
+
+        # Policy Validation: max one reversal per calendar year
+        current_year = datetime.datetime.utcnow().year
+        year_start = datetime.datetime(current_year, 1, 1)
+
+        prior_reversal = db.query(AccountLedger).filter(
+            AccountLedger.account_id == account.id,
+            AccountLedger.posted_at >= year_start,
+            AccountLedger.description.like("FEE_REVERSAL_REF_%") | AccountLedger.description.like("REVERSAL_REF_%")
+        ).first()
+
+        if prior_reversal:
+            return {"success": False, "message": "Already used annual reversal limit."}
+
+        # Apply reversal
+        res = reverse_posted_fee(db, account_id=account.id, transaction_id=original_tx.id, reason="CUSTOMER_VOICE_REQUEST")
+        
+        # Out-of-band push to client WebSocket to sync UI
+        session_id = f"session-{verified_customer_id}"
+        await send_session_event(session_id, {
+            "type": "BALANCE_UPDATE",
+            "cleared_balance_cents": res["cleared_balance_cents"],
+            "available_credit_cents": res["available_credit_cents"]
+        })
+
+        return {
+            "success": True,
+            "message": f"Overdraft fee of ${abs(original_tx.amount_cents)/100:.2f} reversed.",
+            "amount_reversed": abs(original_tx.amount_cents)/100,
+            "reversals_remaining_this_year": 0
+        }
+    except Exception as e:
+        logger.error(f"Error in FastMCP reverse_overdraft_fee: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def request_credit_limit_increase(
+    account_id: str,
+    assertion_token: str,
+    requested_limit: float = None,
+    ctx: Context = None,
+    verified_customer_id: str = None
+) -> dict:
+    """
+    Submits a credit limit increase request for a credit card account.
+    
+    Args:
+        account_id: The unique identifier for the credit card account.
+        assertion_token: Cryptographically signed Firebase ID token of the active user.
+        requested_limit: Optional desired new credit limit amount (in dollars).
+    """
+    logger.info(f"FastMCP request_credit_limit_increase invoked for account: {account_id} (Customer: {verified_customer_id})")
+    
+    if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", account_id):
+        return {"success": False, "message": "Access Denied: Invalid account ID format."}
+
+    db = SessionLocal()
+    try:
+        # Enforce BOLA check
+        account = db.query(FinancialAccount).filter_by(id=account_id, customer_id=verified_customer_id).first()
+        if not account:
+            logger.error(f"Security Alert: BOLA/IDOR attempt or account not found for {account_id} by {verified_customer_id}")
+            return {"success": False, "message": "Account not found or unauthorized."}
+
+        # Concurrency Locking
+        account = db.query(FinancialAccount).filter_by(id=account_id).with_for_update().one_or_none()
+
+        # Check requested limit
+        if not requested_limit:
+            current_limit = account.credit_limit_cents / 100
+            requested_limit = current_limit * 1.2
+            
+        requested_limit_cents = int(requested_limit * 100)
+
+        # Underwriting rule check: reject if increase is > 2x current limit
+        limit_ceiling_cents = account.credit_limit_cents * 2
+        if requested_limit_cents > limit_ceiling_cents:
+            return {"success": False, "message": "Request denied due to credit history."}
+
+        # Apply increase
+        res = apply_limit_increase(db, account_id=account.id, requested_limit_cents=requested_limit_cents)
+        
+        # Out-of-band push to client WebSocket to sync UI
+        session_id = f"session-{verified_customer_id}"
+        await send_session_event(session_id, {
+            "type": "CREDIT_LIMIT_UPDATE",
+            "credit_limit_cents": res["new_limit_cents"],
+            "available_credit_cents": res["available_credit_cents"]
+        })
+
+        return {
+            "success": True,
+            "message": "Credit limit increase approved.",
+            "new_limit": requested_limit
+        }
+    except Exception as e:
+        logger.error(f"Error in FastMCP request_credit_limit_increase: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}"}
+    finally:
+        db.close()

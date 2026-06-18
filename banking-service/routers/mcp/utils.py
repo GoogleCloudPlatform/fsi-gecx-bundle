@@ -14,8 +14,15 @@
 
 import os
 import logging
+import asyncio
+import functools
 from pathlib import Path
 from fastmcp import Context
+
+from utils.auth import validate_firebase_token
+from utils.env import is_running_locally
+from utils.database import SessionLocal
+from models.credit_card import FinancialAccount
 
 logger = logging.getLogger(__name__)
 
@@ -77,3 +84,71 @@ def _mask_ein(ein_value: str) -> str:
     if len(sanitized) >= 4:
         return f"**-***{sanitized[-4:]}"
     return "**-***-****"
+
+
+def requires_user_assertion(func):
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        # 1. Verify Caller Identity (Google OIDC ID Token)
+        ctx = kwargs.get("ctx") or (args[-1] if args and isinstance(args[-1], Context) else None)
+        if not ctx:
+            logger.warning("No FastMCP Context passed to decorator, bypassing caller validation.")
+        else:
+            headers = {}
+            if ctx.request_context and ctx.request_context.headers:
+                for k, v in ctx.request_context.headers:
+                    headers[k.decode("utf-8").lower().strip()] = v.decode("utf-8").strip()
+            
+            if not is_running_locally():
+                auth_header = headers.get("authorization", "")
+                if not auth_header or not auth_header.startswith("Bearer "):
+                    logger.error("Missing or invalid Authorization header in FastMCP invocation.")
+                    raise PermissionError("Access Denied: Missing or invalid Authorization header.")
+                
+                token = auth_header.split("Bearer ")[1].strip()
+                try:
+                    from utils.auth import validate_google_id_token
+                    validate_google_id_token(token)
+                except Exception as e:
+                    logger.error(f"GECx caller token verification failed: {e}")
+                    raise PermissionError("Access Denied: GECx caller token verification failed.")
+
+        # 2. Extract and validate Firebase ID Token Assertion
+        assertion_token = kwargs.get("assertion_token")
+        if not assertion_token:
+            raise ValueError("Missing parameter 'assertion_token'.")
+
+        user_id = None
+        if is_running_locally() and assertion_token == "mock-local-token":
+            user_id = "mock_user_id"
+        else:
+            try:
+                validated = validate_firebase_token(assertion_token)
+                user_id = validated.claims.get("sub")
+            except Exception as e:
+                logger.error(f"Firebase token validation failed in FastMCP: {e}")
+                raise PermissionError(f"Access Denied: Invalid assertion token. Details: {e}")
+
+        # 3. Resolve customer ID with Demo Fallback support
+        db = SessionLocal()
+        try:
+            effective_id = user_id
+            account = db.query(FinancialAccount).filter_by(customer_id=user_id).first()
+            if not account:
+                enable_fallback = os.getenv("ENABLE_DEMO_FALLBACK", "true").lower() == "true"
+                if enable_fallback:
+                    logger.warning(f"Customer profile '{user_id}' not seeded. Falling back to 'cust-123' for demo purposes.")
+                    effective_id = "cust-123"
+                else:
+                    raise ValueError(f"No financial account found for customer ID '{user_id}'.")
+            
+            kwargs["verified_customer_id"] = effective_id
+        finally:
+            db.close()
+
+        if asyncio.iscoroutinefunction(func):
+            return await func(*args, **kwargs)
+        else:
+            return func(*args, **kwargs)
+            
+    return wrapper
