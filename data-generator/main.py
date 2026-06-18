@@ -25,6 +25,7 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from google.cloud import spanner, bigquery
 from faker import Faker
+from utils.gcp import get_project_id
 
 app = FastAPI(title="Synthetic Transaction Data Generator")
 
@@ -36,8 +37,7 @@ instance = spanner_client.instance(SPANNER_INSTANCE)
 database = instance.database(SPANNER_DATABASE)
 
 
-bq_client = bigquery.Client()
-PROJECT_ID = bq_client.project
+PROJECT_ID = get_project_id()
 
 # Load merchants from CSV
 merchants_list = []
@@ -118,6 +118,7 @@ async def generate_synthetic_data(request: Request):
         user_ids = req.user_ids
         if not user_ids:
             try:
+                bq_client = bigquery.Client()
                 query = f"SELECT user_id FROM `{PROJECT_ID}.banking.user` LIMIT 100"
                 query_job = bq_client.query(query)
                 user_ids = [row.user_id for row in query_job]
