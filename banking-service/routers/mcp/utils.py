@@ -116,9 +116,13 @@ def requires_user_assertion(func):
         logger.info(f"FastMCP call kwargs: {kwargs}")
         logger.info(f"FastMCP call ctx: {ctx.__dict__ if ctx else None}")
         
-        assertion_token = kwargs.get("assertion_token")
+        headers = {}
+        if ctx and ctx.request_context and ctx.request_context.request:
+            headers = {k.lower().strip(): v.strip() for k, v in ctx.request_context.request.headers.items()}
+            
+        assertion_token = headers.get("x-forwarded-user-context") or kwargs.get("assertion_token")
         if not assertion_token:
-            raise ValueError("Missing parameter 'assertion_token'.")
+            raise ValueError("Missing Firebase user assertion token (must be passed in 'x-forwarded-user-context' header or 'assertion_token' argument).")
 
         user_id = None
         if is_running_locally() and assertion_token == "mock-local-token":
