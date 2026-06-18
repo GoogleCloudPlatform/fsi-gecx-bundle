@@ -70,7 +70,7 @@ async def generate_synthetic_data(request: Request):
     try:
         try:
             body = await request.json()
-        except Exception as parse_err:
+        except Exception:
             raise HTTPException(status_code=400, detail="Invalid JSON body")
 
         if "message" in body and isinstance(body["message"], dict) and "data" in body["message"]:
