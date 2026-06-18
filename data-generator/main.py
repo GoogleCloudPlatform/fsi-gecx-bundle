@@ -122,14 +122,32 @@ async def generate_synthetic_data(request: Request):
                 detail="No transaction types found in the database. Please seed transaction_types table first."
             )
 
+        user_ids = req.user_ids
+        if not user_ids:
+            try:
+                query = f"SELECT user_id FROM `{PROJECT_ID}.banking.user` LIMIT 100"
+                query_job = bq_client.query(query)
+                user_ids = [row.user_id for row in query_job]
+            except Exception as bq_err:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to query BigQuery user table: {str(bq_err)}"
+                )
+
+        if not user_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="No user_ids provided in request, and none found in BigQuery table 'banking.user'."
+            )
+
         sample_size = max(1, int(len(user_ids) * 0.25))
         target_users = random.sample(user_ids, sample_size)
 
-        def write_data(transaction):
-            accounts_data = []
-            account_owners_data = []
-            transactions_data = []
+        accounts_data = []
+        account_owners_data = []
+        transactions_data = []
 
+        def write_data(transaction):
             for user_id in target_users:
                 # 1. Fetch existing accounts from Spanner
                 results = transaction.execute_sql(
