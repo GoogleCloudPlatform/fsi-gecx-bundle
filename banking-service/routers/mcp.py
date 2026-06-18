@@ -29,8 +29,8 @@ SQL_DIR = Path(__file__).resolve().parent.parent / "resources" / "sql"
 # 1. Instantiate the Model Context Protocol (MCP) FastMCP Server directly
 mcp = FastMCP("Banking Service MCP")
 
-# 2. Create the MCP's ASGI app mounted under /mcp
-mcp_app = mcp.http_app(path="/mcp")
+# 2. Create the MCP's ASGI app mounted under /mcp/
+mcp_app = mcp.http_app(path="/mcp/")
 
 def _load_sql(filename: str) -> str:
     """Loads a clean SQL query template from the resources directory."""
