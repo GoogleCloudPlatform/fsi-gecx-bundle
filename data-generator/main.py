@@ -172,17 +172,21 @@ async def generate_synthetic_data(request: Request):
                     if ttype == "TRANSFER":
                         counterparty = "Self Transfer"
                         category = "Transfer"
+                        direction = "DEBIT"
                     elif ttype == "DEBIT":
                         debit_merchants = [m for m in merchants_list if m["category"] not in ["Salary", "Interest", "Transfer"]]
                         merchant_info = random.choice(debit_merchants)
                         counterparty = merchant_info["merchant"]
                         category = merchant_info["category"]
+                        direction = "DEBIT"
                     elif ttype == "ACH":
                         is_deposit = random.choice([True, False])
                         if is_deposit:
                             ach_merchants = [m for m in merchants_list if m["category"] in ["Salary"]]
+                            direction = "CREDIT"
                         else:
                             ach_merchants = [m for m in merchants_list if m["category"] in ["Utilities", "Rent"]]
+                            direction = "DEBIT"
                         
                         if ach_merchants:
                             merchant_info = random.choice(ach_merchants)
@@ -193,6 +197,7 @@ async def generate_synthetic_data(request: Request):
                             category = "Utilities"
                     else: # CREDIT
                         credit_merchants = [m for m in merchants_list if m["category"] in ["Salary", "Interest"]]
+                        direction = "CREDIT"
                         if credit_merchants:
                             merchant_info = random.choice(credit_merchants)
                             counterparty = merchant_info["merchant"]
@@ -209,6 +214,7 @@ async def generate_synthetic_data(request: Request):
                         transaction_id,
                         amount_val,
                         ttype,
+                        direction,
                         description,
                         counterparty,
                         category,
@@ -239,6 +245,7 @@ async def generate_synthetic_data(request: Request):
                     "transaction_id",
                     "amount",
                     "transaction_type_id",
+                    "direction",
                     "description",
                     "counterparty_name",
                     "category",

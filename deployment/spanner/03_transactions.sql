@@ -3,6 +3,7 @@ CREATE TABLE transactions (
   transaction_id STRING(64) NOT NULL,
   amount NUMERIC NOT NULL,
   transaction_type_id STRING(64) NOT NULL,
+  direction STRING(8) NOT NULL,
   description STRING(256),
   counterparty_name STRING(128),
   category STRING(32),
