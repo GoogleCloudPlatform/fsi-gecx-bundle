@@ -212,7 +212,9 @@ async def generate_synthetic_data(request: Request):
                     # Initial deposit if new
                     if acc["is_new"]:
                         deposit_id = str(uuid.uuid4())
-                        deposit_amount = Decimal(f"{random.uniform(200.0, 250000.0):.2f}")
+                        skew_factor = random.random() ** 4
+                        deposit_val = 200.0 + (skew_factor * (250000.0 - 200.0))
+                        deposit_amount = Decimal(f"{deposit_val:.2f}")
                         running_balance += deposit_amount
                         transactions_data.append((
                             acc_id,
