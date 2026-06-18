@@ -250,6 +250,13 @@ class VoiceBidiSession:
                                     "text": user_transcript,
                                     "author": "user"
                                 })
+                                
+                        interruption_signal = response.get("interruptionSignal") or response.get("interruption_signal")
+                        if interruption_signal:
+                            logger.info(f"Barge-in interruption signal received from GECX: {interruption_signal}")
+                            await self.gecx_to_client_queue.put({
+                                "type": "INTERRUPT"
+                            })
                 except Exception as ex:
                     logger.error(f"Error in read_from_gecx: {ex}")
                 finally:

@@ -46,6 +46,11 @@ def test_gecx_voice_stream_success(mock_ws_connect, mock_time, mock_get_token, m
             "sessionOutput": {
                 "text": "Welcome to Horizon Financial support."
             }
+        }),
+        json.dumps({
+            "interruptionSignal": {
+                "bargeIn": True
+            }
         })
     ]
     mock_ws_connect.return_value.__aenter__.return_value = mock_gecx_ws
@@ -65,6 +70,10 @@ def test_gecx_voice_stream_success(mock_ws_connect, mock_time, mock_get_token, m
         assert response["type"] == "TRANSCRIPT"
         assert response["text"] == "Welcome to Horizon Financial support."
         assert response["author"] == "agent"
+
+        # C2. Await second response, which should be the INTERRUPT event
+        interrupt_response = websocket.receive_json()
+        assert interrupt_response["type"] == "INTERRUPT"
         
         # D. Verify backend handshake call payload parameters
         sent_messages = [json.loads(c[0][0]) for c in mock_gecx_ws.send.call_args_list]
