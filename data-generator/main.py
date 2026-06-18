@@ -191,6 +191,7 @@ async def generate_synthetic_data(request: Request):
 
                     new_accounts_info.append({
                         "account_id": new_id,
+                        "account_type": atype,
                         "balance": Decimal("0.00"),
                         "is_new": True
                     })
@@ -199,6 +200,7 @@ async def generate_synthetic_data(request: Request):
                 for acc in existing_accounts:
                     active_accounts.append({
                         "account_id": acc["account_id"],
+                        "account_type": acc["account_type"],
                         "balance": Decimal(str(acc["balance"])),
                         "is_new": False
                     })
@@ -246,9 +248,75 @@ async def generate_synthetic_data(request: Request):
                             direction = "CREDIT"
 
                         description = fake.sentence(nb_words=5)
+                        status = random.choice(["POSTED", "POSTED", "POSTED", "PENDING"])
+                        ref_number = str(random.randint(100000000000, 999999999999))
+
                         if ttype == "TRANSFER":
-                            counterparty = "Self Transfer"
-                            category = "Transfer"
+                            other_own_accounts = [o for o in active_accounts if o["account_id"] != acc_id]
+                            
+                            # 70% chance to transfer to own other account (if exists)
+                            if other_own_accounts and random.random() < 0.70:
+                                dest_acc = random.choice(other_own_accounts)
+                                dest_acc_id = dest_acc["account_id"]
+                                dest_type = dest_acc["account_type"]
+                                
+                                counterparty = f"Transfer to {dest_type}"
+                                direction = "DEBIT"
+                                category = "Transfer"
+                                
+                                # Find dest account in local list and credit it
+                                for o in active_accounts:
+                                    if o["account_id"] == dest_acc_id:
+                                        o["balance"] += amount_val
+                                        transactions_data.append((
+                                            dest_acc_id,
+                                            str(uuid.uuid4()),
+                                            amount_val,
+                                            "TRANSFER",
+                                            "CREDIT",
+                                            description,
+                                            f"Transfer from {acc['account_type']}",
+                                            "Transfer",
+                                            status,
+                                            ref_number,
+                                            tx_time
+                                        ))
+                                        break
+                            else:
+                                # Peer-to-peer transfer: query a random destination account not owned by this user
+                                dest_results = transaction.execute_sql(
+                                    "SELECT account_id, account_type FROM accounts WHERE account_id != @current_id LIMIT 10",
+                                    params={"current_id": acc_id},
+                                    param_types={"current_id": spanner.param_types.STRING}
+                                )
+                                dest_rows = [row for row in dest_results]
+                                
+                                if dest_rows:
+                                    dest_row = random.choice(dest_rows)
+                                    dest_acc_id = dest_row[0]
+                                    
+                                    counterparty = f"Transfer to Acc ...{dest_acc_id[-4:]}"
+                                    direction = "DEBIT"
+                                    category = "Transfer"
+                                    
+                                    # Insert matching CREDIT transaction
+                                    transactions_data.append((
+                                        dest_acc_id,
+                                        str(uuid.uuid4()),
+                                        amount_val,
+                                        "TRANSFER",
+                                        "CREDIT",
+                                        description,
+                                        f"Transfer from Acc ...{acc_id[-4:]}",
+                                        "Transfer",
+                                        status,
+                                        ref_number,
+                                        tx_time
+                                    ))
+                                else:
+                                    counterparty = "External Transfer"
+                                    direction = "DEBIT"
+                                    category = "Transfer"
                         elif ttype == "DEBIT":
                             debit_merchants = [m for m in merchants_list if m["category"] not in ["Salary", "Interest", "Transfer"]]
                             merchant_info = random.choice(debit_merchants)
@@ -286,8 +354,6 @@ async def generate_synthetic_data(request: Request):
                         else:
                             running_balance -= amount_val
 
-                        status = random.choice(["POSTED", "POSTED", "POSTED", "PENDING"])
-                        ref_number = str(random.randint(100000000000, 999999999999))
 
                         transactions_data.append((
                             acc_id,
