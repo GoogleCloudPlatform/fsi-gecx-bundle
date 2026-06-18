@@ -142,9 +142,6 @@ zip-credit-agent: ## Package the GECx Credit_Support_Voice_Agent bundle into a r
 	cd gecx/Credit_Support_Voice_Agent && zip -r ../../Credit_Support_Voice_Agent.zip .
 	@echo "Success: Created Credit_Support_Voice_Agent.zip!"
 
-.PHONY: zip-gecx
-zip-gecx: zip-mortgage-agent ## Deprecated: Alias for zip-mortgage-agent
-
 .PHONY: upload-mortgage-agent
 upload-mortgage-agent: ## Execute the REST API script to package and import the Mortgage Preapproval agent directly into CES
 	@echo "Uploading Mortgage Preapproval Agent to GECx..."
