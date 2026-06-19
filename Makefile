@@ -122,6 +122,9 @@ publish-images: ## Build and push local container images to Artifact Registry
 	@echo "Building and pushing banking-ui image..."
 	cd banking-ui && docker build -t "$(REGION)-docker.pkg.dev/$(PROJECT_ID)/fsi-gecx-bundle/banking-ui:latest" .
 	docker push "$(REGION)-docker.pkg.dev/$(PROJECT_ID)/fsi-gecx-bundle/banking-ui:latest"
+	@echo "Building and pushing credit-support-agent image..."
+	docker build -f adk-agent/credit-support-agent/Dockerfile -t "$(REGION)-docker.pkg.dev/$(PROJECT_ID)/fsi-gecx-bundle/credit-support-agent:latest" .
+	docker push "$(REGION)-docker.pkg.dev/$(PROJECT_ID)/fsi-gecx-bundle/credit-support-agent:latest"
 
 .PHONY: publish-images-cloud
 publish-images-cloud: ## Submit Cloud Build jobs using official publish/deploy YAMLs
@@ -129,6 +132,8 @@ publish-images-cloud: ## Submit Cloud Build jobs using official publish/deploy Y
 	gcloud builds submit --config banking-service/cloudbuild-publish-deploy.yaml --substitutions=_TRIGGER_DEPLOY=false
 	@echo "Submitting banking-ui Cloud Build job..."
 	gcloud builds submit --config banking-ui/cloudbuild-publish-deploy.yaml --substitutions=_TRIGGER_DEPLOY=false
+	@echo "Submitting credit-support-agent Cloud Build job..."
+	gcloud builds submit --config adk-agent/credit-support-agent/cloudbuild-deploy.yaml --substitutions=_TRIGGER_DEPLOY=false
 
 .PHONY: zip-mortgage-agent
 zip-mortgage-agent: ## Package the GECx Mortgage_Preapproval bundle into a ready-to-upload zip archive
