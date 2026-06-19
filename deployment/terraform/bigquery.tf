@@ -97,8 +97,8 @@ resource "google_bigquery_table" "retail_location" {
 }
 
 resource "google_bigquery_connection" "banking_data_postgres_connection" {
-  connection_id = "banking-data-connection"
-  friendly_name = "banking-data-connection"
+  connection_id = "banking-postgres-connection"
+  friendly_name = "banking-postgres-connection"
   description   = "Banking Data connection with BigQuery"
   location      = "US"
   cloud_sql {
