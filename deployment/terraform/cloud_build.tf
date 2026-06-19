@@ -126,31 +126,6 @@ resource "google_cloudbuild_trigger" "iap_login_ui_deploy_trigger" {
   }
 }
 
-
-resource "google_cloudbuild_trigger" "back_office_agent_deploy_trigger" {
-  name     = "back-office-agent-deployment"
-  location = var.region
-  tags     = ["back-office-agent", "deploy"]
-
-  repository_event_config {
-    repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
-    push {
-      branch = var.github_branch
-    }
-  }
-
-  service_account    = google_service_account.cloudbuild_service_account.id
-  included_files     = ["adk-agent/back-office-agent/**"]
-  filename           = "adk-agent/back-office-agent/cloudbuild-deploy.yaml"
-  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
-
-  substitutions = {
-    _REGION          = var.region
-    _DISPLAY_NAME    = "back-office-agent"
-    _TRIGGER_CLEANUP = "true"
-  }
-}
-
 resource "google_cloudbuild_trigger" "banking_ui_crawl_trigger" {
   count    = var.deploy_cloud_build_triggers && var.deploy_cloud_run_services ? 1 : 0
   name     = "banking-ui-crawl"

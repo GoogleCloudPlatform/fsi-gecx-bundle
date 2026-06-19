@@ -19,13 +19,11 @@ help: ## Display available commands and their descriptions
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: install
-install: ## Bootstrap dependencies for backend, frontend, and ADK agent
+install: ## Bootstrap dependencies for backend and frontend
 	@echo "Installing banking-service dependencies..."
 	cd banking-service && uv sync
 	@echo "Installing banking-ui dependencies..."
 	cd banking-ui && npm install
-	@echo "Installing back-office-agent dependencies..."
-	cd adk-agent/back-office-agent && uv sync
 
 .PHONY: compile-deps
 compile-deps: ## Lock banking-service dependencies using uv
@@ -49,11 +47,6 @@ test: ## Run backend unit tests via pytest
 test-integration: ## Execute live GCP sandbox Document AI integration tests (manually triggered)
 	@echo "Executing live cloud sandbox integration test suite..."
 	cd banking-service && RUN_INTEGRATION_TESTS=true .venv/bin/pytest tests/test_integration_docai.py -v -s
-
-.PHONY: test-agent
-test-agent: ## Run ADK back-office-agent local unit tests
-	@echo "Running back-office-agent tests..."
-	cd adk-agent/back-office-agent && uv run python tests/test_agent.py
 
 .PHONY: run-backend
 run-backend: ## Run the FastAPI banking service locally
@@ -100,11 +93,6 @@ deploy: ## Safely apply the incremental Terraform deployment changes
 	@echo "Applying incremental Terraform deployment..."
 	cd deployment/terraform && \
 	terraform apply tfplan
-
-.PHONY: deploy-agent
-deploy-agent: ## Submit Cloud Build job to deploy ADK back-office-agent to GCP Agent Engine
-	@echo "Submitting Cloud Build job for back-office-agent deployment..."
-	gcloud builds submit --config adk-agent/back-office-agent/cloudbuild-deploy.yaml
 
 .PHONY: deploy-voice-agent
 deploy-voice-agent: ## Submit Cloud Build job to deploy ADK credit-support-agent (voice agent) to Cloud Run
@@ -272,7 +260,6 @@ clean: ## Clean up cached artifacts, dist folders, local dependency directories,
 	@echo "Cleaning cached files, local dependency directories, and top-level archives..."
 	rm -rf banking-service/.venv banking-service/__pycache__ banking-service/.pytest_cache
 	rm -rf banking-ui/node_modules banking-ui/dist
-	rm -rf adk-agent/back-office-agent/.venv adk-agent/back-office-agent/.adk
 	rm -f Mortgage_Preapproval.zip
 	@echo "Clean complete."
 
