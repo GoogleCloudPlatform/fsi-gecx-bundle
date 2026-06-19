@@ -17,7 +17,7 @@ resource "google_cloudbuild_worker_pool" "pool" {
   location = var.region
   worker_config {
     disk_size_gb   = 100
-    machine_type   = "n2d-standard-2"
+    machine_type   = "n2d-standard-4"
     no_external_ip = false
   }
   network_config {
@@ -202,4 +202,3 @@ resource "google_cloudbuild_trigger" "credit_support_agent_deploy_trigger" {
     _TRIGGER_DEPLOY = "true"
   }
 }
-
