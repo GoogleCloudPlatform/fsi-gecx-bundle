@@ -169,6 +169,87 @@ export async function performSearch({ query }) {
   return res.data;
 }
 
+export async function getCreditCardAccount(targetCustomerId = null) {
+  const params = targetCustomerId ? { target_customer_id: targetCustomerId } : {};
+  const res = await api.get('/credit-card/account', { params });
+  return res.data;
+}
+
+export async function getCreditCardTransactions(targetCustomerId = null) {
+  const params = targetCustomerId ? { target_customer_id: targetCustomerId } : {};
+  const res = await api.get('/credit-card/transactions', { params });
+  return res.data;
+}
+
+export async function getCreditCardVoiceToken(mode = 'audio') {
+  const res = await api.get('/credit-card/voice/token', { params: { mode } });
+  return res.data;
+}
+
+// Support Handoff Escalations
+export async function getPendingEscalations() {
+  const res = await api.get('/support/escalations');
+  return res.data;
+}
+
+export async function getAgentVoiceToken(roomName) {
+  const res = await api.post(`/support/token?room_name=${encodeURIComponent(roomName)}`);
+  return res.data;
+}
+
+export async function completeEscalation(escalationId) {
+  const res = await api.post(`/support/escalations/${escalationId}/complete`);
+  return res.data;
+}
+
+export async function reverseCreditCardFee(transactionId, targetCustomerId = null) {
+  const params = targetCustomerId ? { target_customer_id: targetCustomerId } : {};
+  const res = await api.post('/credit-card/fee/reverse', null, {
+    params: {
+      transaction_id: transactionId,
+      ...params
+    }
+  });
+  return res.data;
+}
+
+export async function updateCreditCardLimit(requestedLimitCents, targetCustomerId = null) {
+  const params = targetCustomerId ? { target_customer_id: targetCustomerId } : {};
+  const res = await api.post('/credit-card/limit', null, {
+    params: {
+      requested_limit_cents: requestedLimitCents,
+      ...params
+    }
+  });
+  return res.data;
+}
+
+export async function blockCreditCard(cardToken, targetCustomerId = null) {
+  const params = targetCustomerId ? { target_customer_id: targetCustomerId } : {};
+  const res = await api.post('/credit-card/block', null, {
+    params: {
+      card_token: cardToken,
+      ...params
+    }
+  });
+  return res.data;
+}
+
+export async function resetDatabase() {
+  const res = await api.post('/internal/debug/reset-db');
+  return res.data;
+}
+
+export async function getSystemSettings() {
+  const res = await api.get('/settings');
+  return res.data;
+}
+
+export async function updateSystemSettings(payload) {
+  const res = await api.post('/settings', payload);
+  return res.data;
+}
+
 export async function getLocations({ lat, lng, address, type }) {
   const params = {};
   if (lat !== undefined && lat !== null) params.lat = lat;

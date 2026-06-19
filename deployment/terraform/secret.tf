@@ -40,3 +40,38 @@ data "google_secret_manager_secret_version_access" "iap_client_secret" {
   secret  = "iap-client-secret"
   version = "latest"
 }
+
+resource "google_secret_manager_secret" "livekit_api_key" {
+  secret_id = "livekit-api-key"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret" "livekit_api_secret" {
+  secret_id = "livekit-api-secret"
+  replication {
+    auto {}
+  }
+}
+
+# Generate secure random API credentials at deployment time
+resource "random_password" "livekit_api_key" {
+  length  = 16
+  special = false
+}
+
+resource "random_password" "livekit_api_secret" {
+  length  = 32
+  special = false
+}
+
+resource "google_secret_manager_secret_version" "livekit_api_key_version" {
+  secret      = google_secret_manager_secret.livekit_api_key.id
+  secret_data = random_password.livekit_api_key.result
+}
+
+resource "google_secret_manager_secret_version" "livekit_api_secret_version" {
+  secret      = google_secret_manager_secret.livekit_api_secret.id
+  secret_data = random_password.livekit_api_secret.result
+}

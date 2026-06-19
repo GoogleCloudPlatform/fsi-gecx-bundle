@@ -25,8 +25,7 @@ from models.secure_messaging import SecureMessageCreateRequest, SENDER_TYPE_BANK
 
 logger = logging.getLogger(__name__)
 
-# Externalize Dialogflow config to satisfy 12-Factor App environment principles
-DIALOGFLOW_AGENT_ID = os.getenv("DIALOGFLOW_AGENT_ID", "091ad616-f42f-422e-864d-94523ee36a34")
+DIALOGFLOW_AGENT_ID = os.getenv("DIALOGFLOW_AGENT_ID", "e0b952c1-280d-41d0-8da5-46db4b0e6ad9")
 DIALOGFLOW_LOCATION = os.getenv("DIALOGFLOW_LOCATION", "us-central1")
 
 # Cache OAuth2 access token for 50 minutes (3000 seconds) to minimize GCloud API latency

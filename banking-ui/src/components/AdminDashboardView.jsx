@@ -12,12 +12,81 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard } from 'lucide-react';
+import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings, Bell } from 'lucide-react';
+import { resetDatabase, getSystemSettings, updateSystemSettings } from '../utils/api.js';
 
 function AdminDashboardView() {
   const navigate = useNavigate();
+  const [isResetting, setIsResetting] = useState(false);
+  const [notice, setNotice] = useState({ type: '', text: '' });
+
+  // Settings States
+  const [hardTimeoutEnabled, setHardTimeoutEnabled] = useState(false);
+  const [maxDuration, setMaxDuration] = useState(300);
+  const [warningDuration, setWarningDuration] = useState(240);
+  const [avatarSelection, setAvatarSelection] = useState('random');
+  const [mockAvatarEnabled, setMockAvatarEnabled] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+
+  // Load Settings on Mount
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const settings = await getSystemSettings();
+        if (settings) {
+          setHardTimeoutEnabled(settings.voice_agent_hard_timeout_enabled === 'true');
+          setMaxDuration(parseInt(settings.voice_agent_max_duration) || 300);
+          setWarningDuration(parseInt(settings.voice_agent_warning_duration) || 240);
+          setAvatarSelection(settings.voice_agent_avatar_selection || 'random');
+          setMockAvatarEnabled(settings.voice_agent_mock_avatar_enabled === 'true');
+        }
+      } catch (err) {
+        console.error("Failed to load voice agent settings:", err);
+      }
+    }
+    loadSettings();
+  }, []);
+
+  const handleSaveSettings = async (e) => {
+    e.preventDefault();
+    setIsSavingSettings(true);
+    setNotice({ type: '', text: '' });
+    try {
+      await updateSystemSettings({
+        voice_agent_hard_timeout_enabled: String(hardTimeoutEnabled),
+        voice_agent_max_duration: String(maxDuration),
+        voice_agent_warning_duration: String(warningDuration),
+        voice_agent_avatar_selection: avatarSelection,
+        voice_agent_mock_avatar_enabled: String(mockAvatarEnabled)
+      });
+      setNotice({ type: 'success', text: 'Voice agent settings updated successfully!' });
+      setTimeout(() => setNotice({ type: '', text: '' }), 4000);
+    } catch (err) {
+      setNotice({ type: 'error', text: err.response?.data?.detail || 'Failed to update settings.' });
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  const handleResetDatabase = async () => {
+    if (!window.confirm("Are you sure you want to reset the database? This will clear all transactions, escalations, card block overrides, and restore the baseline configuration.")) {
+      return;
+    }
+    setIsResetting(true);
+    setNotice({ type: '', text: '' });
+    try {
+      await resetDatabase();
+      setNotice({ type: 'success', text: 'Database successfully reset and re-seeded!' });
+      // Automatically clear success toast after 4 seconds
+      setTimeout(() => setNotice({ type: '', text: '' }), 4000);
+    } catch (err) {
+      setNotice({ type: 'error', text: err.response?.data?.detail || 'Failed to reset database.' });
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const adminModules = [
     {
@@ -33,6 +102,20 @@ function AdminDashboardView() {
       path: "/admin/messaging",
       icon: MessageSquare,
       color: "from-blue-500 to-indigo-600"
+    },
+    {
+      title: "Supervisor Voice Takeover",
+      description: "Monitor active credit card voice support sessions, review customer transcripts, and accept WebRTC supervisor takeovers.",
+      path: "/admin/support",
+      icon: Volume2,
+      color: "from-amber-500 to-orange-600"
+    },
+    {
+      title: "FCM Messaging Debug",
+      description: "Trigger simulated Firebase Cloud Messaging notifications, override thread IDs, and dispatch mock agent alerts.",
+      path: "/debug",
+      icon: Bell,
+      color: "from-purple-500 to-pink-600"
     }
   ];
 
@@ -58,7 +141,7 @@ function AdminDashboardView() {
       </div>
 
       {/* Module Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {adminModules.map((mod) => {
           const IconComponent = mod.icon;
           return (
@@ -95,6 +178,132 @@ function AdminDashboardView() {
             </div>
           );
         })}
+      </div>
+
+      {/* Notice Banner */}
+      {notice.text && (
+        <div className={`mt-8 p-4 rounded-2xl border flex items-center gap-3 text-xs font-semibold animate-fade-in ${
+          notice.type === 'success'
+            ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/30 text-emerald-700 dark:text-emerald-400'
+            : 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/30 text-rose-700 dark:text-rose-400'
+        }`}>
+          {notice.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+          <span>{notice.text}</span>
+        </div>
+      )}
+
+      {/* Voice & Live Avatar Settings Panel */}
+      <form onSubmit={handleSaveSettings} className="mt-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 space-y-6">
+        <div className="flex items-center gap-2 pb-4 border-b border-slate-100 dark:border-slate-800/80">
+          <Settings className="w-5 h-5 text-emerald-500" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Voice & Live Avatar Settings</h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Avatar Selection Override */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+              Active Avatar Selection
+            </label>
+            <select
+              value={avatarSelection}
+              onChange={(e) => setAvatarSelection(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500"
+            >
+              <option value="random">Randomize (Ingrid, Paul, Sam)</option>
+              <option value="Ingrid">Force Ingrid</option>
+              <option value="Paul">Force Paul</option>
+              <option value="Sam">Force Sam</option>
+              <option value="Jay">Force Jay</option>
+              <option value="Vera">Force Vera</option>
+            </select>
+            <p className="text-[10px] text-slate-400">Controls which built-in virtual face representative joins the WebRTC session.</p>
+          </div>
+
+          {/* Call Timeout Configurations */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                Enforce Hard Timeout (Watchdog)
+              </label>
+              <input
+                type="checkbox"
+                checked={hardTimeoutEnabled}
+                onChange={(e) => setHardTimeoutEnabled(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-semibold text-slate-400 block">Max Duration (s)</label>
+                <input
+                  type="number"
+                  value={maxDuration}
+                  onChange={(e) => setMaxDuration(parseInt(e.target.value) || 0)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 text-xs font-semibold text-slate-800 dark:text-slate-200"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-semibold text-slate-400 block">Warning Delay (s)</label>
+                <input
+                  type="number"
+                  value={warningDuration}
+                  onChange={(e) => setWarningDuration(parseInt(e.target.value) || 0)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 text-xs font-semibold text-slate-800 dark:text-slate-200"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Mock Sandbox Toggle */}
+        <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800/80">
+          <div>
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Enable Mock Avatar Sandbox</span>
+            <p className="text-[10px] text-slate-400 mt-0.5">Bypasses Google Vertex APIs and loops a local video file from disk to save token billing costs during testing.</p>
+          </div>
+          <input
+            type="checkbox"
+            checked={mockAvatarEnabled}
+            onChange={(e) => setMockAvatarEnabled(e.target.checked)}
+            className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+          />
+        </div>
+
+        {/* Action Button */}
+        <div className="flex justify-end pt-2">
+          <button
+            type="submit"
+            disabled={isSavingSettings}
+            className={`px-5 py-2.5 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
+              isSavingSettings
+                ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                : 'border-emerald-200 dark:border-emerald-900/30 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100/50 dark:hover:bg-emerald-950/40'
+            }`}
+          >
+            {isSavingSettings ? 'Saving Settings...' : 'Save Configuration'}
+          </button>
+        </div>
+      </form>
+
+      {/* System Debug Tools Panel */}
+      <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">System Debug Tools</h4>
+          <p className="text-xs text-slate-500 mt-0.5">Wipe the transactional database and re-seed all test accounts with baseline configurations in one click.</p>
+        </div>
+        <button
+          onClick={handleResetDatabase}
+          disabled={isResetting}
+          className={`px-5 py-2.5 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap self-start sm:self-auto ${
+            isResetting
+              ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+              : 'border-rose-200 dark:border-rose-900/30 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100/50 dark:hover:bg-rose-950/40'
+          }`}
+        >
+          {isResetting ? 'Resetting Database...' : 'Reset Database'}
+        </button>
       </div>
 
     </section>

@@ -57,6 +57,22 @@ resource "google_cloud_run_service_iam_member" "banking_ui_iap_invoker_role" {
   member   = local.iap_service_account
 }
 
+resource "google_cloud_run_service_iam_member" "banking_service_invokes_voice_agent" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  service  = google_cloud_run_v2_service.credit_support_agent[0].name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
+resource "google_cloud_run_service_iam_member" "voice_agent_invokes_banking_service" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  service  = google_cloud_run_v2_service.banking_service[0].name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.voice_agent_sa.email}"
+}
+
 resource "google_cloud_run_service_iam_member" "banking_ui_cloudbuild_crawler_invoker_role" {
   count    = var.deploy_cloud_run_services ? 1 : 0
   service  = google_cloud_run_v2_service.banking_ui[0].name

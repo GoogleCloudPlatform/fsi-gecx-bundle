@@ -61,7 +61,7 @@ async def test_propagate_underwriting_to_session_success(mock_http_client, mock_
     args, kwargs = mock_http_client.post.call_args
     
     url = args[0]
-    expected_url = "https://us-central1-dialogflow.googleapis.com/v3/projects/test-project-123/locations/us-central1/agents/091ad616-f42f-422e-864d-94523ee36a34/sessions/session-xyz-789:detectIntent"
+    expected_url = "https://us-central1-dialogflow.googleapis.com/v3/projects/test-project-123/locations/us-central1/agents/e0b952c1-280d-41d0-8da5-46db4b0e6ad9/sessions/session-xyz-789:detectIntent"
     assert url == expected_url
     
     headers = kwargs["headers"]
@@ -123,7 +123,6 @@ async def test_trigger_session_propagation_flow_success(mock_propagate, mock_cre
         approved=True,
         gross_income=8500.00
     )
-    
     # Verify propagation arguments
     mock_propagate.assert_called_once_with("session-resolved-from-bq-101", True, 8500.00)
 

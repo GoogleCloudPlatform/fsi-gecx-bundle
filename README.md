@@ -59,6 +59,9 @@ This repository is a collection of resources for the Financial Services Industry
 | `ccai-company-secret` | The CCAI Company secret. | No | |
 | `iap-client-id` | The IAP Client ID. | No | |
 | `iap-client-secret` | The IAP Client Secret. | No | |
+| `livekit-api-key` | LiveKit API Key for Gemini Live Voice Agent authentication. | Yes | `"devkey"` (managed by Terraform) |
+| `livekit-api-secret` | LiveKit API Secret for Gemini Live Voice Agent authentication. | Yes | `"secret"` (managed by Terraform) |
+
 
 ## Deployment
 If you're deploying the solution, fork it, and then change the `github_repo_remote_uri` variable to point to your fork. This is required for Cloud Build Triggers to work.
@@ -222,7 +225,7 @@ make tf-apply-initial
 1. After creating the "Web widget" deployment channel for your agent in CX Agent Studio, you will get a Deployment ID. Copy this value and update the `cx_agent_studio_deployment_name` variable in the `terraform.tfvars` file of the deployment/terraform directory and run `terraform apply`. Additionally update the `cx_agent_studio_upload_tool_name` and `cx_agent_studio_populate_form_content_tool_name` variables in the `terraform.tfvars` file with the file upload and populate form content tool deployment ids respectively.
 
 ```bash
-make upload-gecx
+make create-gecx
 ```
 
 Open up your `terraform.tfvars` file and copy in these variables (the output from the `make upload-gecx` will give you the values for these):
@@ -287,4 +290,17 @@ Launch both the FastAPI backend API server (port 8080) and the React Vite fronte
 ```bash
 make run
 ```
+
+### 4. Running LiveKit Voice Support Sandbox (Local Testing)
+To test the voice support assistant locally in your developer workspace:
+1. Spin up the local LiveKit server container:
+   ```bash
+   docker compose -f deployment/local/docker-compose.livekit.yaml up -d
+   ```
+2. Start the Voice Agent process:
+   ```bash
+   python adk-agent/credit-support-agent/voice_agent.py
+   ```
+   *(Note: The agent automatically connects to the local LiveKit server using default development keys. Ensure you have activated your python environment and installed dependencies).*
+
 Navigate to `http://localhost:5173/` in your browser to access your local FSI banking workspace.

@@ -17,7 +17,7 @@ resource "google_cloudbuild_worker_pool" "pool" {
   location = var.region
   worker_config {
     disk_size_gb   = 100
-    machine_type   = "n2d-standard-2"
+    machine_type   = "n2d-standard-4"
     no_external_ip = false
   }
   network_config {
@@ -179,6 +179,30 @@ resource "google_cloudbuild_trigger" "banking_ui_crawl_trigger" {
   }
 }
 
+resource "google_cloudbuild_trigger" "credit_support_agent_deploy_trigger" {
+  count    = var.deploy_cloud_build_triggers ? 1 : 0
+  name     = "credit-support-agent-deployment"
+  location = var.region
+  tags     = ["credit-support-agent", "deploy"]
+
+  repository_event_config {
+    repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
+    push {
+      branch = var.github_branch
+    }
+  }
+
+  service_account    = google_service_account.cloudbuild_service_account.id
+  included_files     = ["adk-agent/credit-support-agent/**"]
+  filename           = "adk-agent/credit-support-agent/cloudbuild-deploy.yaml"
+  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
+
+  substitutions = {
+    _REGION         = var.region
+    _TRIGGER_DEPLOY = "true"
+  }
+}
+
 resource "google_cloudbuild_trigger" "data_generator_deploy_trigger" {
   count    = var.deploy_cloud_build_triggers ? 1 : 0
   name     = "data-generator-deployment"
@@ -202,4 +226,3 @@ resource "google_cloudbuild_trigger" "data_generator_deploy_trigger" {
     _TRIGGER_DEPLOY = "true"
   }
 }
-

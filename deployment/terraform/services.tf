@@ -170,3 +170,8 @@ resource "google_project_service" "cloudscheduler_googleapis_com" {
   service            = "cloudscheduler.googleapis.com"
   disable_on_destroy = false
 }
+
+resource "google_project_service" "speech_googleapis_com" {
+  service            = "speech.googleapis.com"
+  disable_on_destroy = false
+}

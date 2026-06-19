@@ -20,3 +20,15 @@ export const HELP_CATEGORIES = [
   'Vehicle Purchasing',
   'Credit Mastery'
 ];
+
+/**
+ * Shared constants for LiveKit Data Channel event communication
+ */
+export const DataChannelEvent = {
+  CARD_STATUS_LOCK: 'CARD_STATUS_LOCK',
+  LIMIT_UPDATED: 'LIMIT_UPDATED',
+  FEE_REVERSED: 'FEE_REVERSED',
+  HIGHLIGHT_TRANSACTION: 'HIGHLIGHT_TRANSACTION',
+  SESSION_END: 'SESSION_END',
+  TRANSCRIPT: 'TRANSCRIPT'
+};

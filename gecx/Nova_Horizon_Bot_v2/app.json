@@ -97,7 +97,8 @@
       "type": "STRING",
       "default": null
     }
-  }, {
+  },
+  {
     "name": "is_ujet_sdk",
     "schema": {
       "type": "BOOLEAN",

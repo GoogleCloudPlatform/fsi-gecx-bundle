@@ -29,8 +29,8 @@ SQL_DIR = Path(__file__).resolve().parent.parent / "resources" / "sql"
 # 1. Instantiate the Model Context Protocol (MCP) FastMCP Server directly
 mcp = FastMCP("Banking Service MCP")
 
-# 2. Create the MCP's ASGI app mounted under /mcp
-mcp_app = mcp.http_app(path="/mcp")
+# 2. Create the MCP's ASGI app mounted under /mcp/
+mcp_app = mcp.http_app(path="/mcp/")
 
 def _load_sql(filename: str) -> str:
     """Loads a clean SQL query template from the resources directory."""
@@ -203,6 +203,21 @@ async def generate_upload_session_url(
         dataset_id = os.getenv("DATASET_ID", "banking")
         table_ref = f"{project_id}.{dataset_id}.application_artifact"
 
+        # Direct storage signed URL variables setup
+        bucket_name = os.getenv("INTERACTION_ARTIFACTS_BUCKET", f"{project_id}_banking-interaction-artifacts")
+        service_account_email = f"banking-service-sa@{project_id}.iam.gserviceaccount.com"
+        
+        # Construct target GCS path dynamically to map in the placeholder row!
+        ext = "pdf"
+        if "jpeg" in ct_lower or "jpg" in ct_lower:
+            ext = "jpg"
+        elif "png" in ct_lower:
+            ext = "png"
+        elif "tiff" in ct_lower:
+            ext = "tiff"
+
+        gcs_blob_name = f"incoming/{application_id}/{type_upper.lower()}.{ext}"
+        gcs_uri = f"gs://{bucket_name}/{gcs_blob_name}"
         
         # Direct storage signed URL variables setup
         bucket_name = os.getenv("INTERACTION_ARTIFACTS_BUCKET", f"{project_id}_banking-interaction-artifacts")

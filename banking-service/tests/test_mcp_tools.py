@@ -25,7 +25,7 @@ from routers.mcp import (
 @pytest.fixture
 def mock_bq_client():
     """Mock BigQuery Client fixture."""
-    with patch("routers.mcp.bq_client") as mock_bq:
+    with patch("routers.mcp.loan.bq_client") as mock_bq:
         yield mock_bq
 
 def test_mcp_extract_customer_identity_iap_header():
@@ -68,7 +68,7 @@ def test_mcp_ssn_ein_obfuscation_algorithms():
     assert _mask_ein(None) == "N/A"
 
 @pytest.mark.asyncio
-@patch("routers.mcp._extract_customer_identity")
+@patch("routers.mcp.loan._extract_customer_identity")
 async def test_get_application_documents_mcp_tool_success(mock_identity, mock_bq_client):
     """Verify W-2 document audit summary fetches, parsing, and context mapping success."""
     mock_identity.return_value = "borrower@argolis.solutions"
@@ -105,7 +105,7 @@ async def test_get_application_documents_mcp_tool_success(mock_identity, mock_bq
     assert "Employer Tax ID (EIN): **-***4321" in result
 
 @pytest.mark.asyncio
-@patch("routers.mcp._extract_customer_identity")
+@patch("routers.mcp.loan._extract_customer_identity")
 async def test_get_application_documents_mcp_tool_empty(mock_identity, mock_bq_client):
     """Verify that if no documents are found or tenant checks fail, the tool returns empty."""
     mock_identity.return_value = "borrower@argolis.solutions"
@@ -134,8 +134,8 @@ async def test_get_application_documents_mcp_tool_input_validation_failed():
 
 
 @pytest.mark.asyncio
-@patch("routers.mcp._extract_customer_identity")
-@patch("routers.mcp.storage.Client")
+@patch("routers.mcp.loan._extract_customer_identity")
+@patch("routers.mcp.loan.storage.Client")
 async def test_generate_upload_session_url_success(mock_storage, mock_identity, mock_bq_client):
     """Verify successful temporary signed PUT upload URL generation with exact security bounds."""
     mock_identity.return_value = "borrower@argolis.solutions"
@@ -201,8 +201,8 @@ async def test_generate_upload_session_url_input_validation_failed():
     )
     assert "is unsupported." in result
 @pytest.mark.asyncio
-@patch("routers.mcp._extract_customer_identity")
-@patch("routers.mcp.storage.Client")
+@patch("routers.mcp.loan._extract_customer_identity")
+@patch("routers.mcp.loan.storage.Client")
 async def test_generate_upload_session_url_image_success(mock_storage, mock_identity, mock_bq_client):
     """Verify successful dynamic GCS path resolution and cryptographic signed URL for image uploads."""
     mock_identity.return_value = "borrower@argolis.solutions"

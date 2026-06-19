@@ -26,7 +26,7 @@
         <step name="Greeting and Service Offer">
             <trigger>User initiates the chat widget or expresses interest in home loan pre-approval/affordability.</trigger>
             <action>                
-                1.  Greet the user by confirming their name: {customer_name} and email: {email} and state your purpose. Wait for the user to confirm there name or correct it. Update the variables based on their corrections.
+                1.  Greet the user by confirming their name: {customer_name} and email: {email} and state your purpose. Wait for the user to confirm their name or correct it. Update the variables based on their corrections.
                 2.  Perform a health check by executing {@TOOL: banking_service_health_check_health_get}
                 3.  Proactively offer assistance with the affordability profile and digital pre-approval process.
                 4.  Confirm the user's interest in proceeding.

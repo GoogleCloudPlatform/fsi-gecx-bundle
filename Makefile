@@ -106,6 +106,12 @@ deploy-agent: ## Submit Cloud Build job to deploy ADK back-office-agent to GCP A
 	@echo "Submitting Cloud Build job for back-office-agent deployment..."
 	gcloud builds submit --config adk-agent/back-office-agent/cloudbuild-deploy.yaml
 
+.PHONY: deploy-voice-agent
+deploy-voice-agent: ## Submit Cloud Build job to deploy ADK credit-support-agent (voice agent) to Cloud Run
+	@echo "Submitting Cloud Build job for credit-support-agent deployment..."
+	gcloud builds submit --config adk-agent/credit-support-agent/cloudbuild-deploy.yaml --substitutions=_TRIGGER_DEPLOY=true
+
+
 .PHONY: deploy-target
 deploy-target: ## Deploy an isolated Terraform resource/module (usage: make deploy-target TARGET=module.foo)
 	@if [ -z "$(TARGET)" ]; then echo "Error: TARGET is required. Usage: make deploy-target TARGET=module.foo"; exit 1; fi
@@ -124,6 +130,9 @@ publish-images: ## Build and push local container images to Artifact Registry
 	@echo "Building and pushing data-generator image..."
 	cd data-generator && docker build -t "$(REGION)-docker.pkg.dev/$(PROJECT_ID)/fsi-gecx-bundle/data-generator:latest" .
 	docker push "$(REGION)-docker.pkg.dev/$(PROJECT_ID)/fsi-gecx-bundle/data-generator:latest"
+	@echo "Building and pushing credit-support-agent image..."
+	docker build -f adk-agent/credit-support-agent/Dockerfile -t "$(REGION)-docker.pkg.dev/$(PROJECT_ID)/fsi-gecx-bundle/credit-support-agent:latest" .
+	docker push "$(REGION)-docker.pkg.dev/$(PROJECT_ID)/fsi-gecx-bundle/credit-support-agent:latest"
 
 .PHONY: publish-images-cloud
 publish-images-cloud: ## Submit Cloud Build jobs using official publish/deploy YAMLs
@@ -133,14 +142,33 @@ publish-images-cloud: ## Submit Cloud Build jobs using official publish/deploy Y
 	gcloud builds submit --config banking-ui/cloudbuild-publish-deploy.yaml --substitutions=_TRIGGER_DEPLOY=false
 	@echo "Submitting data-generator Cloud Build job..."
 	gcloud builds submit --config data-generator/cloudbuild-publish-deploy.yaml --substitutions=_TRIGGER_DEPLOY=false
+	@echo "Submitting credit-support-agent Cloud Build job..."
+	gcloud builds submit --config adk-agent/credit-support-agent/cloudbuild-deploy.yaml --substitutions=_TRIGGER_DEPLOY=false
 
-.PHONY: upload-gecx
-upload-gecx: ## Execute the official REST API script to package and import the GECx agent directly into Customer Experience Studio (CES)
-	@echo "Executing official CES agent import REST API script for project $(PROJECT_ID)..."
-	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) bash import_cxas_agent.sh
+.PHONY: zip-mortgage-agent
+zip-mortgage-agent: ## Package the GECx Mortgage_Preapproval bundle into a ready-to-upload zip archive
+	@echo "Packaging Mortgage Preapproval agent bundle..."
+	cd gecx/Mortgage_Preapproval && zip -r ../../Mortgage_Preapproval.zip .
+	@echo "Success: Created Mortgage_Preapproval.zip!"
+
+.PHONY: zip-credit-agent
+zip-credit-agent: ## Package the GECx Credit_Support_Voice_Agent bundle into a ready-to-upload zip archive
+	@echo "Packaging Credit Support Voice Agent bundle..."
+	cd gecx/Credit_Support_Voice_Agent && zip -r ../../Credit_Support_Voice_Agent.zip .
+	@echo "Success: Created Credit_Support_Voice_Agent.zip!"
+
+.PHONY: upload-mortgage-agent
+upload-mortgage-agent: ## Execute the REST API script to package and import the Mortgage Preapproval agent directly into CES
+	@echo "Uploading Mortgage Preapproval Agent to GECx..."
+	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) AGENT_FOLDER=Mortgage_Preapproval bash import_cxas_agent.sh
+
+.PHONY: upload-credit-agent
+upload-credit-agent: ## Execute the REST API script to package and import the Credit Support Voice Agent directly into CES
+	@echo "Uploading Credit Support Voice Agent to GECx..."
+	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) AGENT_FOLDER=Credit_Support_Voice_Agent bash import_cxas_agent.sh
 
 .PHONY: create-gecx
-create-gecx: upload-gecx ## Alias for upload-gecx to automate full CES agent provisioning
+create-gecx: upload-mortgage-agent upload-credit-agent ## Automate full CES agent provisioning for both Mortgage and Credit agents
 
 .PHONY: update-gecx
 update-gecx: ## Execute the overwrite CES agent script to package and overwrite an existing agent in Customer Experience Studio (CES)
@@ -149,7 +177,6 @@ ifndef APP_ID
 endif
 	@echo "Executing overwrite CES agent script for project $(PROJECT_ID) and App ID $(APP_ID)..."
 	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) APP_ID=$(APP_ID) bash overwrite_cxas_agent.sh
-
 
 .PHONY: patch-convo-profile
 patch-convo-profile: ## Patch Dialogflow conversational profile to point to a new agent deployment (usage: make patch-convo-profile CONVERSATIONAL_PROFILE_ID=<profile-id> DEPLOYMENT_ID=<deployment-id>)
@@ -161,7 +188,6 @@ ifndef DEPLOYMENT_ID
 endif
 	@echo "Patching conversational profile $(CONVERSATIONAL_PROFILE_ID) with deployment $(DEPLOYMENT_ID)..."
 	cd scripts/cxas && bash patch_conversational_profile.sh -p $(PROJECT_ID) -c $(CONVERSATIONAL_PROFILE_ID) -d $(DEPLOYMENT_ID)
-
 
 .PHONY: tf-apply
 tf-apply: ## Apply all Terraform stages (infrastructure, services, audiences)

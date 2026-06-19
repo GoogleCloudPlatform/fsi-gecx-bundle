@@ -43,7 +43,7 @@ async def get_profile(
             # Extract names and email from claims
             email = token.claims.get("email") or ""
             name = token.claims.get("name") or ""
-            phone_number = token.claims.get("phone_number") or "+1-555-019-9999"
+            phone_number = token.claims.get("phone_number")
 
             # Split display name into first and last name
             name_parts = name.strip().split(" ", 1)
@@ -95,7 +95,7 @@ async def create_profile(
             request.first_name,
             request.last_name,
             token.email,
-            request.phone_number or "+1-555-019-9999"
+            request.phone_number
         )
         return {
             "message": "Customer profile created successfully",

@@ -84,7 +84,8 @@ resource "google_sql_database_instance" "banking_data" {
 
   depends_on = [
     google_project_service.sqladmin_googleapis_com,
-    google_project_service.servicenetworking_googleapis_com
+    google_project_service.servicenetworking_googleapis_com,
+    google_service_networking_connection.private_vpc_connection
   ]
 }
 
