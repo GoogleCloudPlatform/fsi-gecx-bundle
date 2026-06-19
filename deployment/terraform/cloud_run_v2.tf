@@ -40,7 +40,7 @@ resource "google_cloud_run_v2_service" "banking_service" {
         network    = google_compute_network.fsi_gecx_vpc.name
         subnetwork = google_compute_subnetwork.fsi_gecx_subnet.name
       }
-      egress = "ALL_TRAFFIC"
+      egress = "PRIVATE_RANGES_ONLY"
     }
 
     containers {
@@ -421,7 +421,7 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
         network    = google_compute_network.fsi_gecx_vpc.name
         subnetwork = google_compute_subnetwork.fsi_gecx_subnet.name
       }
-      egress = "ALL_TRAFFIC"
+      egress = "PRIVATE_RANGES_ONLY"
     }
 
     containers {
