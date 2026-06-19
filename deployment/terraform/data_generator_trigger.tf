@@ -17,24 +17,6 @@ resource "google_pubsub_topic" "data_generator_trigger" {
   depends_on = [google_project_service.pubsub_googleapis_com]
 }
 
-resource "google_cloud_scheduler_job" "data_generator_cron" {
-  name             = "data-generator-cron"
-  description      = "Trigger synthetic data generation every 1 minute"
-  schedule         = "*/1 * * * *"
-  time_zone        = "Etc/UTC"
-  attempt_deadline = "320s"
-  region           = var.region
-
-  pubsub_target {
-    topic_name = google_pubsub_topic.data_generator_trigger.id
-    data       = base64encode("{\"num_accounts\": 2, \"transactions_per_account\": 5}")
-  }
-
-  depends_on = [
-    google_project_service.cloudscheduler_googleapis_com
-  ]
-}
-
 resource "google_cloud_run_service_iam_member" "eventarc_data_generator_invoker" {
   count    = var.deploy_cloud_run_services ? 1 : 0
   service  = google_cloud_run_v2_service.data_generator[0].name
