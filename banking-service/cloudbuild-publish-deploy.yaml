@@ -14,12 +14,22 @@
 
 steps:
   - name: "gcr.io/cloud-builders/docker"
+    id: "pull-image"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        docker pull "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:latest" || true
+
+  - name: "gcr.io/cloud-builders/docker"
     id: "build-image"
     entrypoint: "bash"
     args:
       - "-c"
       - |
-        docker build \
+        DOCKER_BUILDKIT=1 docker build \
+          --cache-from "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:latest" \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
           -t "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
           -t "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:latest" \
           .

@@ -23,3 +23,14 @@ resource "local_file" "gecx_environment" {
     }
   )
 }
+
+resource "local_file" "gecx_credit_support_toolset" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  filename = "${path.module}/../../gecx/Credit_Support_Voice_Agent/toolsets/banking_service_mcp_toolset/banking_service_mcp_toolset.yaml"
+  content = templatefile(
+    "${path.module}/../../gecx/Credit_Support_Voice_Agent/toolsets/banking_service_mcp_toolset/banking_service_mcp_toolset.yaml.tftpl",
+    {
+      banking_service_url = google_cloud_run_v2_service.banking_service[0].uri
+    }
+  )
+}

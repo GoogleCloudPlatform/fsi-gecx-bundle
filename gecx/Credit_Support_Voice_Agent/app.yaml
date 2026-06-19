@@ -1,0 +1,20 @@
+name: 42345105-29cb-492d-8a60-07171bb72190
+displayName: Credit_Support_Voice_Agent
+rootAgent: Credit Card Support Agent
+loggingSettings:
+  conversationLoggingSettings:
+    retentionWindow: 31536000s
+guardrails:
+- Default Safety Guardrail
+- Default Prompt Guardrail
+variableDeclarations:
+- name: user_id
+  description: Variable "user_id".
+  schema:
+    type: STRING
+- name: user_token
+  description: Variable "user_token" containing Firebase ID token.
+  schema:
+    type: STRING
+timeZoneSettings:
+  timeZone: America/Los_Angeles

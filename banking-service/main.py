@@ -32,12 +32,16 @@ from routers.health import router as health_router
 from routers.search import router as search_router
 from routers.secure_messaging import router as secure_messaging_router
 from routers.underwriting import router as underwriting_router
+from routers.credit_card import router as credit_card_router
+from routers.support import router as support_router
+from routers.settings import router as settings_router
 from models.authentication import ValidatedToken
 from utils.auth import get_current_user
 from routers.locator import router as locator_router
 
 # Import and register FastMCP tools and ASGI app from the isolated mcp router module
 from routers.mcp import mcp_app
+from routers.voice_bidi import router as voice_bidi_router
 
 import firebase_admin
 
@@ -98,6 +102,10 @@ app.include_router(health_router)
 app.include_router(search_router)
 app.include_router(secure_messaging_router)
 app.include_router(underwriting_router)
+app.include_router(credit_card_router)
+app.include_router(support_router)
+app.include_router(settings_router)
+app.include_router(voice_bidi_router)
 
 
 def custom_openapi():

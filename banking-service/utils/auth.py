@@ -39,6 +39,24 @@ bearer_scheme = HTTPBearer(auto_error=False)
 forwarded_bearer_scheme = HTTPForwardedBearer(auto_error=False)
 
 SERVICE_NAME = "banking-service"
+SUPPORT_DOMAINS = os.getenv("SUPPORT_EMAIL_DOMAINS", "google.com,novahorizon.com").split(",")
+
+def is_support_staff(token: ValidatedToken) -> bool:
+    if not token or not hasattr(token, "claims"):
+        return False
+    email = token.claims.get("email")
+    if not email:
+        return False
+    
+    # Check if voice agent service account
+    if email == f"voice-agent-sa@{PROJECT_ID}.iam.gserviceaccount.com":
+        return True
+
+    # Check domain suffix or specific mock profiles
+    domain = email.split("@")[-1]
+    if domain in SUPPORT_DOMAINS or email == "underwriter@nova.horizon":
+        return True
+    return False
 
 
 def mint_cxas_token(user_data: ValidatedToken) -> dict:
@@ -177,6 +195,8 @@ def validate_firebase_token(jwt_token: str) -> ValidatedToken:
     Verifies the Firebase ID token passed from the frontend.
     """
     try:
+        if jwt_token:
+            jwt_token = jwt_token.strip().strip('"').strip("'")
         decoded_token = firebase_auth.verify_id_token(jwt_token)
         claims = {
             'iss': 'https://securetoken.google.com/' + decoded_token.get('aud', ''),
@@ -189,7 +209,7 @@ def validate_firebase_token(jwt_token: str) -> ValidatedToken:
         }
         return ValidatedToken(claims=claims)
     except Exception as e:
-        logger.warning(f"Firebase ID token validation failed: {e}")
+        logger.warning(f"Firebase ID token validation failed: {e}. Token len: {len(jwt_token) if jwt_token else 0}. Start: {jwt_token[:15] if jwt_token else ''}, End: {jwt_token[-15:] if jwt_token else ''}")
         raise HTTPException(status_code=401, detail="Invalid or expired authentication credentials.")
 
 
@@ -216,12 +236,10 @@ def validate_google_id_token(jwt_token: str) -> ValidatedToken:
             # audience=expected_audiences, # Audience will be different for each endpoint
         )
 
-        # Validate the issuer (optional but recommended)
-        if decoded_jwt.get('iss') != 'https://accounts.google.com':
-            raise ValueError('Invalid issuer')
-
-        if not decoded_jwt.get('email').endswith('@gcp-sa-ces.iam.gserviceaccount.com'):
-            raise ValueError('Invalid email domain')
+        email = decoded_jwt.get('email', '')
+        allowed_sa = f"voice-agent-sa@{PROJECT_ID}.iam.gserviceaccount.com"
+        if not (email.endswith('@gcp-sa-ces.iam.gserviceaccount.com') or email == allowed_sa):
+            raise ValueError('Invalid email domain or unauthorized service account')
 
         return ValidatedToken(claims=decoded_jwt)
     except Exception as e:
@@ -296,7 +314,18 @@ async def get_current_user(
 
     # 2. Check for standard Authorization: Bearer <Token>
     if auth and auth.credentials:
-        return validate_token_by_issuer(auth.credentials)
+        try:
+            return validate_token_by_issuer(auth.credentials)
+        except HTTPException as auth_err:
+            if is_running_locally():
+                logger.info(f"Local environment: ignoring invalid token '{auth.credentials}' and falling back to mock user token")
+                return ValidatedToken.get_mock_token()
+            raise auth_err
+
+    # 3. Local Development Bypass: fallback to mock user token when running locally without auth header
+    if is_running_locally():
+        logger.info("Local environment: falling back to mock user token")
+        return ValidatedToken.get_mock_token()
 
     raise HTTPException(status_code=401, detail="Unauthorized")
 

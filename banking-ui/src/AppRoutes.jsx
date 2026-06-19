@@ -29,11 +29,13 @@ import DisclosuresView from './components/DisclosuresView.jsx';
 import EditProfileView from './components/EditProfileView.jsx';
 import SearchView from './components/SearchView.jsx';
 import SecureMessagingView from './components/SecureMessagingView.jsx';
-import DebugView from './components/DebugView.jsx';
+import MessagingDebug from './components/MessagingDebug.jsx';
 import AdminMessagingView from './components/AdminMessagingView.jsx';
 import ApplyCreditCardView from './components/ApplyCreditCardView.jsx';
 import AdminUnderwritingView from './components/AdminUnderwritingView.jsx';
 import AdminDashboardView from './components/AdminDashboardView.jsx';
+import VoiceSupportView from './components/VoiceSupportView.jsx';
+import AgentSupportDashboard from './components/AgentSupportDashboard.jsx';
 import LocatorView from './components/LocatorView.jsx';
 
 /**
@@ -134,7 +136,7 @@ export default function AppRoutes({
       } />
       <Route path="/debug" element={
         <ProtectedRoute isReady={isReady} fbUser={fbUser}>
-          <DebugView
+          <MessagingDebug
             customerProfile={customerProfile}
             fbUser={fbUser}
           />
@@ -162,6 +164,16 @@ export default function AppRoutes({
       <Route path="/search" element={
         <ProtectedRoute isReady={isReady} fbUser={fbUser}>
           <SearchView />
+        </ProtectedRoute>
+      } />
+      <Route path="/support/voice" element={
+        <ProtectedRoute isReady={isReady} fbUser={fbUser}>
+          <VoiceSupportView />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/support" element={
+        <ProtectedRoute isReady={isReady} fbUser={fbUser}>
+          <AgentSupportDashboard />
         </ProtectedRoute>
       } />
     </Routes>

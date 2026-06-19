@@ -1,0 +1,9 @@
+name: banking-service-mcp
+displayName: banking_service_mcp_toolset
+mcpToolset:
+  serverAddress: ${banking_service_url}/mcp/
+  apiAuthentication:
+    serviceAgentIdTokenAuthConfig: {}
+  customHeaders:
+    x-forwarded-user-context: $context.variables.user_token
+executionType: SYNCHRONOUS

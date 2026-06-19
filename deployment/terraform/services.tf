@@ -160,3 +160,8 @@ resource "google_project_service" "redis_googleapis_com" {
   service            = "redis.googleapis.com"
   disable_on_destroy = false
 }
+
+resource "google_project_service" "speech_googleapis_com" {
+  service            = "speech.googleapis.com"
+  disable_on_destroy = false
+}

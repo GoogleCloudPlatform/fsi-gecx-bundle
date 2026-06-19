@@ -6,12 +6,12 @@ import { getCustomersList, sendNotification } from '../utils/api.js';
 
 
 
-function DebugView({ fbUser, customerProfile }) {
+function MessagingDebug({ fbUser, customerProfile }) {
   const { brandColorFrom, brandColorTo } = useSettings();
 
   // Form Fields
   const [title, setTitle] = useState('New Support Message (Loans)');
-  const [body, setBody] = useState('This is a simulated message sent via the real FCM backend.');
+  const [body, setBody] = useState('This is a message sent via the real FCM backend.');
   const [targetType, setTargetType] = useState('customer'); // customer | topic
   const [topic, setTopic] = useState('all');
   const [notificationType, setNotificationType] = useState('support_message');
@@ -152,7 +152,7 @@ function DebugView({ fbUser, customerProfile }) {
           <div className="flex items-center space-x-3 text-left">
             <div>
               <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
-                Debug Portal
+                FCM Messaging Debug
               </h1>
               <p className="text-xs text-slate-400 mt-0.5">Test real Firebase Cloud Messages from the backend API.</p>
             </div>
@@ -394,4 +394,4 @@ function DebugView({ fbUser, customerProfile }) {
   );
 }
 
-export default DebugView;
+export default MessagingDebug;

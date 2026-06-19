@@ -1,0 +1,12 @@
+version: '3.9'
+
+services:
+  livekit:
+    image: livekit/livekit-server:v1.5.0
+    container_name: livekit-server-dev
+    command: --dev --keys "devkey: secret" --node-ip 127.0.0.1
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+    restart: unless-stopped

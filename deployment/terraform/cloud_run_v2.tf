@@ -35,6 +35,14 @@ resource "google_cloud_run_v2_service" "banking_service" {
   template {
     service_account = google_service_account.banking_service_account.email
 
+    vpc_access {
+      network_interfaces {
+        network    = google_compute_network.fsi_gecx_vpc.name
+        subnetwork = google_compute_subnetwork.fsi_gecx_subnet.name
+      }
+      egress = "PRIVATE_RANGES_ONLY"
+    }
+
     containers {
       image = local.banking_service_url
 
@@ -49,6 +57,11 @@ resource "google_cloud_run_v2_service" "banking_service" {
       env {
         name  = "ROOT_PATH"
         value = "/api"
+      }
+
+      env {
+        name  = "DATABASE_URL"
+        value = "postgresql+psycopg2://${google_sql_user.banking_user.name}:${random_password.banking_password.result}@${google_sql_database_instance.banking_data.private_ip_address}/${google_sql_database.banking.name}"
       }
 
       env {
@@ -74,6 +87,41 @@ resource "google_cloud_run_v2_service" "banking_service" {
       env {
         name  = "GOOGLE_GENAI_USE_VERTEXAI"
         value = "true"
+      }
+
+      env {
+        name = "LIVEKIT_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.livekit_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name = "LIVEKIT_API_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.livekit_api_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name  = "VOICE_AGENT_SERVICE_URL"
+        value = var.deploy_cloud_run_services ? google_cloud_run_v2_service.credit_support_agent[0].uri : "http://localhost:8081"
+      }
+
+      env {
+        name  = "GECX_APP_ID"
+        value = var.gecx_voice_agent_id
+      }
+
+      env {
+        name  = "GECX_LOCATION"
+        value = var.gecx_location
       }
 
       dynamic "env" {
@@ -174,6 +222,10 @@ resource "google_cloud_run_v2_service" "banking_ui" {
       env {
         name  = "VITE_CCAI_HOST"
         value = var.ccai_host
+      }
+      env {
+        name  = "LIVEKIT_URL"
+        value = "wss://${var.custom_domain}"
       }
       dynamic "env" {
         for_each = local.banking_ui_base_url_secondary != "" ? [1] : []
@@ -304,3 +356,145 @@ resource "google_cloud_run_v2_service" "iap_login_ui" {
 
   depends_on = [google_project_service.run_googleapis_com]
 }
+
+resource "google_service_account" "voice_agent_sa" {
+  account_id   = "voice-agent-sa"
+  display_name = "Cloud Run Credit Card Voice Agent Service Account"
+}
+
+# IAM permissions to access specific secrets
+resource "google_secret_manager_secret_iam_member" "voice_agent_key_accessor" {
+  secret_id = google_secret_manager_secret.livekit_api_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.voice_agent_sa.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "voice_agent_secret_accessor" {
+  secret_id = google_secret_manager_secret.livekit_api_secret.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.voice_agent_sa.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "banking_service_livekit_key_accessor" {
+  secret_id = google_secret_manager_secret.livekit_api_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "banking_service_livekit_secret_accessor" {
+  secret_id = google_secret_manager_secret.livekit_api_secret.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
+# Grant Vertex AI permission to call Gemini Live
+resource "google_project_iam_member" "voice_agent_vertex_user" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.voice_agent_sa.email}"
+}
+
+# Grant Speech Client permission to access Cloud Speech-to-Text API
+resource "google_project_iam_member" "voice_agent_speech_client" {
+  project = var.project_id
+  role    = "roles/speech.client"
+  member  = "serviceAccount:${google_service_account.voice_agent_sa.email}"
+}
+
+resource "google_cloud_run_v2_service" "credit_support_agent" {
+  count               = var.deploy_cloud_run_services ? 1 : 0
+  name                = "credit-support-agent"
+  location            = var.region
+  deletion_protection = false
+
+  # CPU/instance scaling configurations to avoid drops
+  scaling {
+    min_instance_count = 1
+    max_instance_count = 5
+  }
+
+  template {
+    service_account = google_service_account.voice_agent_sa.email
+
+    vpc_access {
+      network_interfaces {
+        network    = google_compute_network.fsi_gecx_vpc.name
+        subnetwork = google_compute_subnetwork.fsi_gecx_subnet.name
+      }
+      egress = "PRIVATE_RANGES_ONLY"
+    }
+
+    containers {
+      image = "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/credit-support-agent:latest"
+
+      resources {
+        cpu_idle          = false
+        startup_cpu_boost = true
+        limits = {
+          cpu    = "4"
+          memory = "4Gi"
+        }
+      }
+
+      env {
+        name  = "DATABASE_URL"
+        value = "postgresql+psycopg2://${google_sql_user.banking_user.name}:${random_password.banking_password.result}@${google_sql_database_instance.banking_data.private_ip_address}/${google_sql_database.banking.name}"
+      }
+
+      env {
+        name  = "BANKING_SERVICE_URL"
+        value = "https://banking-service-${data.google_project.project.number}.${var.region}.run.app"
+      }
+
+      env {
+        name  = "LIVEKIT_URL"
+        value = "ws://${google_compute_instance.livekit_server.network_interface[0].network_ip}:7880"
+      }
+
+      env {
+        name = "LIVEKIT_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.livekit_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name = "LIVEKIT_API_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.livekit_api_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name  = "VOICE_AGENT_VIDEO_MODEL"
+        value = var.voice_agent_video_model
+      }
+
+      env {
+        name  = "VOICE_AGENT_AUDIO_MODEL"
+        value = var.voice_agent_audio_model
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].containers[0].image,
+      client,
+      client_version
+    ]
+  }
+
+  depends_on = [
+    google_project_service.run_googleapis_com,
+    google_secret_manager_secret_iam_member.voice_agent_key_accessor,
+    google_secret_manager_secret_iam_member.voice_agent_secret_accessor
+  ]
+}
+

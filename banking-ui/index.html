@@ -21,87 +21,137 @@
       import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
       import { isSupported, getMessaging, onMessage, getToken } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-messaging.js";
 
-      // Initialize Firebase using loaded configuration
-      const app = initializeApp(self.firebaseConfig);
-      const analytics = getAnalytics(app);
+      // Detect if Firebase configuration is missing or contains placeholder templates
+      const useMockAuth = !self.firebaseConfig || !self.firebaseConfig.apiKey || self.firebaseConfig.apiKey.startsWith("${");
 
-      // Initialize Auth
-      const auth = getAuth(app);
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({
-        prompt: 'select_account'
-      });
-
-      window.firebaseAuth = {
-        signInWithGoogle: () => {
-          if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            console.log("Localhost: using signInWithPopup");
-            return signInWithPopup(auth, provider);
-          } else {
-            console.log("Deployed: using signInWithRedirect");
-            return signInWithRedirect(auth, provider);
-          }
-        },
-        signOut: () => auth.signOut(),
-        onAuthStateChanged: (callback) => onAuthStateChanged(auth, callback),
-        getRedirectResult: () => getRedirectResult(auth),
-        getCurrentUser: () => auth.currentUser
-      };
-      window.dispatchEvent(new CustomEvent('firebase-auth-ready'));
-
-      let messaging = null;
-
-      // Request permissions and log Token
-      async function setupNotifications() {
-        if (!messaging) {
-          console.log("FCM Messaging is not initialized or unsupported.");
-          return;
-        }
+      if (useMockAuth) {
+        console.warn("⚠️ Firebase configuration missing or unconfigured. Activating Local Mock Authentication.");
+        
+        let currentUser = {
+          uid: "cust-123",
+          email: "mockuser@example.com",
+          displayName: "Jane Doe",
+          getIdToken: async () => "mock_firebase_id_token"
+        };
+        
+        let authCallbacks = [];
+        
+        window.firebaseAuth = {
+          signInWithGoogle: async () => {
+            currentUser = {
+              uid: "cust-123",
+              email: "mockuser@example.com",
+              displayName: "Jane Doe",
+              getIdToken: async () => "mock_firebase_id_token"
+            };
+            authCallbacks.forEach(cb => cb(currentUser));
+            return { user: currentUser };
+          },
+          signOut: async () => {
+            currentUser = null;
+            authCallbacks.forEach(cb => cb(null));
+          },
+          onAuthStateChanged: (callback) => {
+            authCallbacks.push(callback);
+            // Trigger immediately to auto-login mock user locally
+            callback(currentUser);
+            return () => {
+              authCallbacks = authCallbacks.filter(cb => cb !== callback);
+            };
+          },
+          getRedirectResult: async () => null,
+          getCurrentUser: () => currentUser
+        };
+        
+        // Dispatch authentication ready event
+        window.dispatchEvent(new CustomEvent('firebase-auth-ready'));
+      } else {
         try {
-          if (!('Notification' in window)) {
-            console.log('This browser does not support desktop notifications.');
-            return;
-          }
-          const permission = await Notification.requestPermission();
-          if (permission === 'granted') {
-            console.log('Notification permission granted.');
-            const vapidKey = window.env?.FIREBASE_VAPID_KEY;
-            const token = await getToken(messaging, vapidKey ? { vapidKey } : undefined);
-            if (token) {
-              const event = new CustomEvent('firebase-token-retrieved', { detail: token });
-              window.dispatchEvent(event);
-            } else {
-              console.log('No registration token available. Request permission to generate one.');
-            }
-          } else {
-            console.log('Unable to get permission to notify.');
-          }
-        } catch (err) {
-          console.warn('An error occurred while retrieving token:', err);
-        }
-      }
+          // Initialize Firebase using loaded configuration
+          const app = initializeApp(self.firebaseConfig);
+          const analytics = getAnalytics(app);
 
-      // Initialize Firebase Messaging only if supported by the browser
-      isSupported().then((supported) => {
-        if (supported) {
-          console.log("FCM Messaging is supported.");
-          messaging = getMessaging(app);
-
-          // Listen to foreground notifications and dispatch a custom event
-          onMessage(messaging, (payload) => {
-            console.log('Message received in foreground: ', payload);
-            const event = new CustomEvent('firebase-push-notification', { detail: payload });
-            window.dispatchEvent(event);
+          // Initialize Auth
+          const auth = getAuth(app);
+          const provider = new GoogleAuthProvider();
+          provider.setCustomParameters({
+            prompt: 'select_account'
           });
 
-          // Delay setup slightly to not block initial page rendering
-          setTimeout(setupNotifications, 2000);
-        } else {
-          console.warn("FCM Messaging is not supported in this browser.");
+          window.firebaseAuth = {
+            signInWithGoogle: () => {
+              if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                console.log("Localhost: using signInWithPopup");
+                return signInWithPopup(auth, provider);
+              } else {
+                console.log("Deployed: using signInWithRedirect");
+                return signInWithRedirect(auth, provider);
+              }
+            },
+            signOut: () => auth.signOut(),
+            onAuthStateChanged: (callback) => onAuthStateChanged(auth, callback),
+            getRedirectResult: () => getRedirectResult(auth),
+            getCurrentUser: () => auth.currentUser
+          };
+          window.dispatchEvent(new CustomEvent('firebase-auth-ready'));
+
+          let messaging = null;
+
+          // Request permissions and log Token
+          async function setupNotifications() {
+            if (!messaging) {
+              console.log("FCM Messaging is not initialized or unsupported.");
+              return;
+            }
+            try {
+              if (!('Notification' in window)) {
+                console.log('This browser does not support desktop notifications.');
+                return;
+              }
+              const permission = await Notification.requestPermission();
+              if (permission === 'granted') {
+                console.log('Notification permission granted.');
+                const vapidKey = window.env?.FIREBASE_VAPID_KEY;
+                const token = await getToken(messaging, vapidKey ? { vapidKey } : undefined);
+                if (token) {
+                  const event = new CustomEvent('firebase-token-retrieved', { detail: token });
+                  window.dispatchEvent(event);
+                } else {
+                  console.log('No registration token available. Request permission to generate one.');
+                }
+              } else {
+                console.log('Unable to get permission to notify.');
+              }
+            } catch (err) {
+              console.warn('An error occurred while retrieving token:', err);
+            }
+          }
+
+          // Initialize Firebase Messaging only if supported by the browser
+          isSupported().then((supported) => {
+            if (supported) {
+              console.log("FCM Messaging is supported.");
+              messaging = getMessaging(app);
+
+              // Listen to foreground notifications and dispatch a custom event
+              onMessage(messaging, (payload) => {
+                console.log('Message received in foreground: ', payload);
+                const event = new CustomEvent('firebase-push-notification', { detail: payload });
+                window.dispatchEvent(event);
+              });
+
+              // Delay setup slightly to not block initial page rendering
+              setTimeout(setupNotifications, 2000);
+            } else {
+              console.warn("FCM Messaging is not supported in this browser.");
+            }
+          }).catch((err) => {
+            console.error("Error checking FCM support:", err);
+          });
+        } catch (e) {
+          console.error("Failed to initialize Firebase SDK:", e);
         }
-      }).catch((err) => {
-        console.error("Error checking FCM support:", err);
-      });
+      }
 
     </script>
   </head>
