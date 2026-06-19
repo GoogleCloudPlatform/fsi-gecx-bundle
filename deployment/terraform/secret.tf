@@ -31,6 +31,16 @@ resource "google_secret_manager_secret_version" "postgres_banking_password_versi
   secret_data = random_password.banking_password.result
 }
 
+data "google_secret_manager_secret_version_access" "iap_client_id" {
+  secret  = "iap-client-id"
+  version = "latest"
+}
+
+data "google_secret_manager_secret_version_access" "iap_client_secret" {
+  secret  = "iap-client-secret"
+  version = "latest"
+}
+
 resource "google_secret_manager_secret" "livekit_api_key" {
   secret_id = "livekit-api-key"
   replication {
@@ -65,6 +75,3 @@ resource "google_secret_manager_secret_version" "livekit_api_secret_version" {
   secret      = google_secret_manager_secret.livekit_api_secret.id
   secret_data = random_password.livekit_api_secret.result
 }
-
-
-

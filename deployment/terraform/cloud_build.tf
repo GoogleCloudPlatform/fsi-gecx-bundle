@@ -202,3 +202,27 @@ resource "google_cloudbuild_trigger" "credit_support_agent_deploy_trigger" {
     _TRIGGER_DEPLOY = "true"
   }
 }
+
+resource "google_cloudbuild_trigger" "data_generator_deploy_trigger" {
+  count    = var.deploy_cloud_build_triggers ? 1 : 0
+  name     = "data-generator-deployment"
+  location = var.region
+  tags     = ["data-generator", "deploy"]
+
+  repository_event_config {
+    repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
+    push {
+      branch = "^feature-add-spanner-tf-resources$" # var.github_branch
+    }
+  }
+
+  service_account    = google_service_account.cloudbuild_service_account.id
+  included_files     = ["data-generator/**"]
+  filename           = "data-generator/cloudbuild-publish-deploy.yaml"
+  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
+
+  substitutions = {
+    _REGION         = var.region
+    _TRIGGER_DEPLOY = "true"
+  }
+}

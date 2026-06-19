@@ -1,0 +1,51 @@
+Merchant,Category,Rank
+Amazon,E-Commerce & Retail,1
+Walmart,Groceries & Retail,2
+Target,Retail & Department Stores,3
+Costco,Wholesale Clubs,4
+Home Depot,Home Improvement,5
+Lowe's,Home Improvement,6
+CVS Pharmacy,Pharmacies & Health,7
+Walgreens,Pharmacies & Health,8
+McDonald's,Fast Food & Dining,9
+Starbucks,Coffee Shops & Dining,10
+Uber,Rideshare & Transport,11
+Lyft,Rideshare & Transport,12
+Delta Air Lines,Airlines & Travel,13
+American Airlines,Airlines & Travel,14
+United Airlines,Airlines & Travel,15
+Marriott,Hotels & Lodging,16
+Hilton,Hotels & Lodging,17
+Apple,Electronics & Software,18
+Best Buy,Electronics,19
+Netflix,Streaming & Entertainment,20
+Spotify,Streaming & Entertainment,21
+Shell,Gas Stations,22
+ExxonMobil,Gas Stations,23
+Chevron,Gas Stations,24
+Kroger,Groceries,25
+Whole Foods,Groceries,26
+Trader Joe's,Groceries,27
+Chipotle,Dining & Fast Casual,28
+Dunkin',Coffee Shops & Dining,29
+Subway,Fast Food & Dining,30
+Dominos,Fast Food & Dining,31
+T-Mobile,Utilities & Telecom,32
+Verizon,Utilities & Telecom,33
+AT&T,Utilities & Telecom,34
+Comcast/Xfinity,Utilities & Telecom,35
+Geico,Insurance,36
+Progressive,Insurance,37
+State Farm,Insurance,38
+Steam,Gaming & Entertainment,39
+PlayStation Network,Gaming & Entertainment,40
+Xbox/Microsoft,Gaming & Entertainment,41
+FedEx,Shipping & Courier,42
+UPS,Shipping & Courier,43
+USPS,Postage & Shipping,44
+Airbnb,Hotels & Lodging,45
+Expedia,Travel Agencies,46
+Booking.com,Travel Agencies,47
+Hertz,Car Rentals,48
+Enterprise Rent-A-Car,Car Rentals,49
+Ticketmaster,Entertainment & Events,50

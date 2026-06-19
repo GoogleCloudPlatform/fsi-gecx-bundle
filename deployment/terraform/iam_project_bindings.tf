@@ -146,7 +146,7 @@ resource "google_project_iam_member" "gcs_pubsub_publisher" {
 resource "google_project_iam_member" "bq_connection_cloudsql_client" {
   project = var.project_id
   role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_bigquery_connection.banking_data_store_connection.cloud_sql[0].service_account_id}"
+  member  = "serviceAccount:${google_bigquery_connection.banking_data_postgres_connection.cloud_sql[0].service_account_id}"
 }
 
 resource "google_project_iam_member" "jump_instance_log_writer" {
@@ -161,3 +161,20 @@ resource "google_project_iam_member" "jump_instance_metric_writer" {
   member  = "serviceAccount:${google_service_account.jump_instance_service_account.email}"
 }
 
+resource "google_project_iam_member" "banking_service_sa_spanner_user" {
+  project = data.google_project.project.project_id
+  role    = "roles/spanner.databaseUser"
+  member  = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
+resource "google_project_iam_member" "datagen_sa_spanner_user" {
+  project = data.google_project.project.project_id
+  role    = "roles/spanner.databaseUser"
+  member  = "serviceAccount:${google_service_account.data_generator_service_account.email}"
+}
+
+resource "google_project_iam_member" "datagen_sa_bq_job_user" {
+  project = data.google_project.project.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${google_service_account.data_generator_service_account.email}"
+}

@@ -12,16 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Data sources for IAP credentials from Secret Manager
-data "google_secret_manager_secret_version_access" "iap_client_id" {
-  secret  = "iap-client-id"
-  version = "latest"
-}
-
-data "google_secret_manager_secret_version_access" "iap_client_secret" {
-  secret  = "iap-client-secret"
-  version = "latest"
-}
 
 # Static IP for the Load Balancer
 resource "google_compute_global_address" "lb_ip" {
