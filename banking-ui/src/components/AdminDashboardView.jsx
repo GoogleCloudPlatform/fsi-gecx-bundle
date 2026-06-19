@@ -14,7 +14,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings } from 'lucide-react';
+import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings, Bell } from 'lucide-react';
 import { resetDatabase, getSystemSettings, updateSystemSettings } from '../utils/api.js';
 
 function AdminDashboardView() {
@@ -109,6 +109,13 @@ function AdminDashboardView() {
       path: "/admin/support",
       icon: Volume2,
       color: "from-amber-500 to-orange-600"
+    },
+    {
+      title: "FCM Messaging Debug",
+      description: "Trigger simulated Firebase Cloud Messaging notifications, override thread IDs, and dispatch mock agent alerts.",
+      path: "/debug",
+      icon: Bell,
+      color: "from-purple-500 to-pink-600"
     }
   ];
 

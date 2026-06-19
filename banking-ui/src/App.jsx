@@ -1033,17 +1033,9 @@ function AppContent() {
                       </Link>
 
                       <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">Admin</div>
-                      <Link to="/debug" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
-                        <span>Debug Portal</span>
-                        {location.pathname === '/debug' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                      </Link>
-                      <Link to="/admin/messaging" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
-                        <span>Send Customer Message</span>
-                        {location.pathname === '/admin/messaging' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                      </Link>
-                      <Link to="/admin/underwriting" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
-                        <span>HITL Underwriting</span>
-                        {location.pathname === '/admin/underwriting' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                      <Link to="/admin" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
+                        <span>Admin Portal</span>
+                        {location.pathname === '/admin' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                       </Link>
                     </>
                   )}
@@ -1514,28 +1506,12 @@ function AppContent() {
                   <>
                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Admin</div>
                     <Link
-                      to="/debug"
+                      to="/admin"
                       onClick={() => setIsMobileMenuOpen(false)}
-                      className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/debug' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-600 dark:text-slate-400'}`}
+                      className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/admin' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-600 dark:text-slate-400'}`}
                     >
-                      <span>Debug Portal</span>
-                      {location.pathname === '/debug' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                    </Link>
-                    <Link
-                      to="/admin/messaging"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/admin/messaging' ? 'bg-slate-100 dark:bg-slate-850 text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-600 dark:text-slate-400'}`}
-                    >
-                      <span>Send Customer Message</span>
-                      {location.pathname === '/admin/messaging' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                    </Link>
-                    <Link
-                      to="/admin/underwriting"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/admin/underwriting' ? 'bg-slate-100 dark:bg-slate-850 text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-600 dark:text-slate-400'}`}
-                    >
-                      <span>HITL Underwriting</span>
-                      {location.pathname === '/admin/underwriting' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                      <span>Admin Portal</span>
+                      {location.pathname === '/admin' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                     </Link>
                   </>
                 )}

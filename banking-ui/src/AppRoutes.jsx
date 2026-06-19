@@ -29,7 +29,7 @@ import DisclosuresView from './components/DisclosuresView.jsx';
 import EditProfileView from './components/EditProfileView.jsx';
 import SearchView from './components/SearchView.jsx';
 import SecureMessagingView from './components/SecureMessagingView.jsx';
-import DebugView from './components/DebugView.jsx';
+import MessagingDebug from './components/MessagingDebug.jsx';
 import AdminMessagingView from './components/AdminMessagingView.jsx';
 import ApplyCreditCardView from './components/ApplyCreditCardView.jsx';
 import AdminUnderwritingView from './components/AdminUnderwritingView.jsx';
@@ -136,7 +136,7 @@ export default function AppRoutes({
       } />
       <Route path="/debug" element={
         <ProtectedRoute isReady={isReady} fbUser={fbUser}>
-          <DebugView
+          <MessagingDebug
             customerProfile={customerProfile}
             fbUser={fbUser}
           />
