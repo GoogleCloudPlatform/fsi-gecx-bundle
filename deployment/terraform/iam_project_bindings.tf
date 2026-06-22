@@ -68,11 +68,11 @@ resource "google_project_iam_member" "banking_service_sa_ces_client" {
   member  = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
-# resource "google_service_account_iam_member" "banking_service_local_token_creator" {
-#   service_account_id = google_service_account.banking_service_account.name
-#   role               = "roles/iam.serviceAccountTokenCreator"
-#   member             = "user:${data.google_client_openid_userinfo.me.email}"
-# }
+resource "google_service_account_iam_member" "banking_service_local_token_creator" {
+  service_account_id = google_service_account.banking_service_account.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "user:${data.google_client_openid_userinfo.me.email}"
+}
 
 # Required to signBlob
 resource "google_service_account_iam_member" "banking_service_sa_token_creator_self" {
