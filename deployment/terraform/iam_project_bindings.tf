@@ -190,4 +190,3 @@ resource "google_project_iam_member" "developer_cloudsql_instance_user" {
   role    = "roles/cloudsql.instanceUser"
   member  = "user:${data.google_client_openid_userinfo.me.email}"
 }
-
