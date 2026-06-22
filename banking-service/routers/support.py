@@ -8,6 +8,7 @@ from utils.database import get_db
 from utils.auth import get_current_user
 from models.authentication import ValidatedToken
 from models.support import Escalation
+from repositories.support import SupportRepository
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -17,13 +18,19 @@ router = APIRouter(prefix="/support", tags=["Support Escalations"], dependencies
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "devkey")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "secret")
 
+
+def get_support_repo(db: Session = Depends(get_db)) -> SupportRepository:
+    """Dependency provider resolving the SupportRepository."""
+    return SupportRepository(db)
+
+
 @router.get("/escalations")
 def list_pending_escalations(
-    db: Session = Depends(get_db)
+    repo: SupportRepository = Depends(get_support_repo)
 ):
     """Retrieves all pending support escalations that require human presenter takeover."""
     logger.info("Retrieving pending escalations queue...")
-    escalations = db.query(Escalation).filter_by(status="PENDING").order_by(Escalation.created_at.desc()).all()
+    escalations = repo.list_pending()
     
     return [
         {
@@ -41,6 +48,7 @@ def list_pending_escalations(
 def get_human_agent_token(
     room_name: str,
     db: Session = Depends(get_db),
+    repo: SupportRepository = Depends(get_support_repo),
     user_data: ValidatedToken = Depends(get_current_user)
 ):
     """
@@ -62,7 +70,7 @@ def get_human_agent_token(
     logger.info(f"Generating LiveKit human token for agent {agent_email} on room {room_name}")
     
     # 1. Verification of the escalation row in DB
-    escalation = db.query(Escalation).filter_by(room_name=room_name, status="PENDING").first()
+    escalation = repo.get_pending_by_room(room_name)
     if not escalation:
         logger.warning(f"No pending escalation found for room {room_name}")
         raise HTTPException(status_code=404, detail="No active or pending escalation found for this room.")
@@ -71,6 +79,7 @@ def get_human_agent_token(
         # 2. Update state to ACCEPTED
         escalation.status = "ACCEPTED"
         escalation.assigned_to = agent_email
+        repo.save(escalation)
         db.commit()
         
         # 3. Generate LiveKit token with specific grants
@@ -96,17 +105,19 @@ def get_human_agent_token(
 
 @router.post("/escalations/{escalation_id}/complete")
 def complete_escalation(
-    escalation_id: str,
-    db: Session = Depends(get_db)
+    escalation_id: int,
+    db: Session = Depends(get_db),
+    repo: SupportRepository = Depends(get_support_repo)
 ):
     """Marks an active/accepted support escalation as successfully COMPLETED."""
     logger.info(f"Completing escalation session: {escalation_id}")
-    escalation = db.query(Escalation).filter_by(id=escalation_id).first()
+    escalation = repo.get_by_id(escalation_id)
     if not escalation:
         raise HTTPException(status_code=404, detail="Escalation not found.")
     
     try:
         escalation.status = "COMPLETED"
+        repo.save(escalation)
         db.commit()
         logger.info(f"Escalation {escalation_id} successfully marked as COMPLETED.")
         return {"status": "SUCCESS", "escalation_id": escalation_id}
@@ -127,15 +138,17 @@ class EscalationPayload(BaseModel):
 @router.post("/escalate")
 def escalate_session(
     payload: EscalationPayload,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    repo: SupportRepository = Depends(get_support_repo)
 ):
     """Creates a new support escalation or updates the transcript of an existing one."""
     logger.info(f"Escalation request: {payload}")
     try:
         if payload.escalation_id is not None:
-            existing = db.query(Escalation).filter_by(id=payload.escalation_id).first()
+            existing = repo.get_by_id(payload.escalation_id)
             if existing:
                 existing.transcript = payload.transcript
+                repo.save(existing)
                 db.commit()
                 logger.info(f"Updated transcript on existing escalation: {payload.escalation_id}")
                 return {"status": "SUCCESS", "escalation_id": existing.id}
@@ -149,7 +162,7 @@ def escalate_session(
                 status="PENDING",
                 transcript=payload.transcript
             )
-            db.add(escalation)
+            repo.save(escalation)
             db.commit()
             logger.info(f"Created new support escalation: {escalation.id}")
             return {"status": "SUCCESS", "escalation_id": escalation.id}
@@ -164,16 +177,18 @@ def escalate_session(
 @router.post("/escalations/{escalation_id}/abandon")
 def abandon_escalation(
     escalation_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    repo: SupportRepository = Depends(get_support_repo)
 ):
     """Marks an active/pending support escalation as ABANDONED (e.g. user disconnected)."""
     logger.info(f"Abandoning escalation: {escalation_id}")
-    escalation = db.query(Escalation).filter_by(id=escalation_id).first()
+    escalation = repo.get_by_id(escalation_id)
     if not escalation:
         raise HTTPException(status_code=404, detail="Escalation not found.")
     
     try:
         escalation.status = "ABANDONED"
+        repo.save(escalation)
         db.commit()
         logger.info(f"Escalation {escalation_id} marked as ABANDONED.")
         return {"status": "SUCCESS", "escalation_id": escalation_id}

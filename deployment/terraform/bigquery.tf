@@ -106,8 +106,8 @@ resource "google_bigquery_connection" "banking_data_postgres_connection" {
     database    = google_sql_database.banking.name
     type        = "POSTGRES"
     credential {
-      username = google_sql_user.banking_user.name
-      password = random_password.banking_password.result
+      username = google_sql_user.db_runtime_user.name
+      password = random_password.db_runtime_password.result
     }
   }
 }

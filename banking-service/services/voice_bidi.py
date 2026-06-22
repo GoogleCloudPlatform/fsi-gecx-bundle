@@ -98,11 +98,12 @@ class VoiceBidiSession:
         
         # Also register under customer ID to route tool-triggered UI update pushes
         from utils.database import SessionLocal
-        from models.credit_card import FinancialAccount
+        from repositories.credit_card import CreditCardRepository
         db = SessionLocal()
+        repo = CreditCardRepository(db)
         customer_id = "cust-123"
         try:
-            account = db.query(FinancialAccount).filter_by(customer_id=self.user_id).first()
+            account = repo.get_account_by_customer(self.user_id)
             if account:
                 customer_id = self.user_id
         except Exception as e:

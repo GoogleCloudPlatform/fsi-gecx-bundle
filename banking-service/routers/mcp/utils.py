@@ -22,7 +22,6 @@ from fastmcp import Context
 from utils.auth import validate_firebase_token
 from utils.env import is_running_locally
 from utils.database import SessionLocal
-from models.credit_card import FinancialAccount
 
 logger = logging.getLogger(__name__)
 
@@ -139,9 +138,11 @@ def requires_user_assertion(func):
 
         # 3. Resolve customer ID with Demo Fallback support
         db = SessionLocal()
+        from repositories.credit_card import CreditCardRepository
+        repo = CreditCardRepository(db)
         try:
             effective_id = user_id
-            account = db.query(FinancialAccount).filter_by(customer_id=user_id).first()
+            account = repo.get_account_by_customer(user_id)
             if not account:
                 enable_fallback = os.getenv("ENABLE_DEMO_FALLBACK", "true").lower() == "true"
                 if enable_fallback:

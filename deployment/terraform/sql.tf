@@ -80,13 +80,18 @@ resource "google_sql_database_instance" "banking_data" {
   }
 
   deletion_protection = true
-  root_password       = random_password.banking_password.result
+  root_password       = random_password.postgres_root_password.result
 
   depends_on = [
     google_project_service.sqladmin_googleapis_com,
     google_project_service.servicenetworking_googleapis_com,
     google_service_networking_connection.private_vpc_connection
   ]
+}
+
+resource "random_password" "postgres_root_password" {
+  length  = 16
+  special = false
 }
 
 resource "google_sql_user" "db_migration_user" {
@@ -115,4 +120,16 @@ resource "google_sql_database" "banking" {
   name            = "banking"
   instance        = google_sql_database_instance.banking_data.name
   deletion_policy = "ABANDON"
+}
+
+# Legacy database user preserved to prevent drop role dependency errors
+resource "random_password" "banking_password" {
+  length  = 16
+  special = false
+}
+
+resource "google_sql_user" "banking_user" {
+  name     = "banking"
+  instance = google_sql_database_instance.banking_data.name
+  password = random_password.banking_password.result
 }

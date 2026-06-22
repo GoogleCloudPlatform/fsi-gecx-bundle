@@ -21,7 +21,7 @@ from fastmcp import Context
 from . import mcp  # Import shared FastMCP server instance
 from routers.mcp.utils import requires_user_assertion
 from utils.database import SessionLocal
-from models.credit_card import FinancialAccount, IssuedCard, AccountLedger
+from repositories.credit_card import CreditCardRepository
 from services.credit_card import freeze_card, apply_limit_increase, reverse_posted_fee
 from services.voice_bidi import send_session_event
 
@@ -45,9 +45,10 @@ async def report_lost_stolen_card(
     logger.info(f"FastMCP report_lost_stolen_card invoked for account: {account_id} (Customer: {verified_customer_id})")
     
     db = SessionLocal()
+    repo = CreditCardRepository(db)
     try:
         if not account_id:
-            account = db.query(FinancialAccount).filter_by(customer_id=verified_customer_id).first()
+            account = repo.get_account_by_customer(verified_customer_id)
             if not account:
                 return {"success": False, "message": "No credit card account found for the user."}
             account_id = account.id
@@ -56,16 +57,17 @@ async def report_lost_stolen_card(
             return {"success": False, "message": "Access Denied: Invalid account ID format."}
             
         # Enforce BOLA/IDOR check: verify account belongs to verified_customer_id
-        account = db.query(FinancialAccount).filter_by(id=account_id, customer_id=verified_customer_id).first()
-        if not account:
+        account = repo.get_account_by_customer(verified_customer_id)
+        if not account or account.id != account_id:
             logger.error(f"Security Alert: BOLA/IDOR attempt or account not found for {account_id} by {verified_customer_id}")
             return {"success": False, "message": "Account not found or unauthorized."}
 
         # Find the active card linked to this account
-        card = db.query(IssuedCard).filter_by(account_id=account.id, status="ACTIVE").first()
+        cards = repo.list_cards_by_account(account.id)
+        card = next((c for c in cards if c.status == "ACTIVE"), None)
         if not card:
             # Check if there is already a blocked/lost card
-            prior_lost_card = db.query(IssuedCard).filter_by(account_id=account.id, status="BLOCKED").first()
+            prior_lost_card = next((c for c in cards if c.status == "BLOCKED"), None)
             if prior_lost_card:
                 return {"success": False, "message": "Card has already been reported as lost or stolen."}
             return {"success": False, "message": "No active card found linked to this account."}
@@ -117,9 +119,10 @@ async def reverse_overdraft_fee(
     logger.info(f"FastMCP reverse_overdraft_fee invoked for account: {account_id} (Customer: {verified_customer_id})")
     
     db = SessionLocal()
+    repo = CreditCardRepository(db)
     try:
         if not account_id:
-            account = db.query(FinancialAccount).filter_by(customer_id=verified_customer_id).first()
+            account = repo.get_account_by_customer(verified_customer_id)
             if not account:
                 return {"success": False, "message": "No credit card account found for the user."}
             account_id = account.id
@@ -128,20 +131,20 @@ async def reverse_overdraft_fee(
             return {"success": False, "message": "Access Denied: Invalid account ID format."}
 
         # Enforce BOLA check
-        account = db.query(FinancialAccount).filter_by(id=account_id, customer_id=verified_customer_id).first()
-        if not account:
+        account = repo.get_account_by_customer(verified_customer_id)
+        if not account or account.id != account_id:
             logger.error(f"Security Alert: BOLA/IDOR attempt or account not found for {account_id} by {verified_customer_id}")
             return {"success": False, "message": "Account not found or unauthorized."}
 
         # Concurrency Locking: lock account row for balance updates
-        account = db.query(FinancialAccount).filter_by(id=account_id).with_for_update().one_or_none()
+        account = repo.get_account_by_id(account_id, lock=True)
 
         # Find the target fee transaction in the ledger (negative amount with "LATE_FEE" or similar)
-        original_tx = db.query(AccountLedger).filter(
-            AccountLedger.account_id == account.id,
-            AccountLedger.amount_cents < 0,
-            AccountLedger.description.in_(["LATE_FEE", "OVERDRAFT", "Overdraft Fee"])
-        ).order_by(AccountLedger.posted_at.desc()).first()
+        ledger = repo.list_ledger_entries(account.id)
+        original_tx = next((
+            entry for entry in ledger
+            if entry.amount_cents < 0 and entry.description in ["LATE_FEE", "OVERDRAFT", "Overdraft Fee"]
+        ), None)
 
         if not original_tx:
             return {"success": False, "message": "No eligible fee transaction found to reverse."}
@@ -150,11 +153,7 @@ async def reverse_overdraft_fee(
         current_year = datetime.datetime.utcnow().year
         year_start = datetime.datetime(current_year, 1, 1)
 
-        prior_reversal = db.query(AccountLedger).filter(
-            AccountLedger.account_id == account.id,
-            AccountLedger.posted_at >= year_start,
-            AccountLedger.description.like("FEE_REVERSAL_REF_%") | AccountLedger.description.like("REVERSAL_REF_%")
-        ).first()
+        prior_reversal = repo.get_annual_reversal_entry(account.id, year_start)
 
         if prior_reversal:
             return {"success": False, "message": "Already used annual reversal limit."}
@@ -203,9 +202,10 @@ async def request_credit_limit_increase(
     logger.info(f"FastMCP request_credit_limit_increase invoked for account: {account_id} (Customer: {verified_customer_id})")
     
     db = SessionLocal()
+    repo = CreditCardRepository(db)
     try:
         if not account_id:
-            account = db.query(FinancialAccount).filter_by(customer_id=verified_customer_id).first()
+            account = repo.get_account_by_customer(verified_customer_id)
             if not account:
                 return {"success": False, "message": "No credit card account found for the user."}
             account_id = account.id
@@ -214,13 +214,13 @@ async def request_credit_limit_increase(
             return {"success": False, "message": "Access Denied: Invalid account ID format."}
 
         # Enforce BOLA check
-        account = db.query(FinancialAccount).filter_by(id=account_id, customer_id=verified_customer_id).first()
-        if not account:
+        account = repo.get_account_by_customer(verified_customer_id)
+        if not account or account.id != account_id:
             logger.error(f"Security Alert: BOLA/IDOR attempt or account not found for {account_id} by {verified_customer_id}")
             return {"success": False, "message": "Account not found or unauthorized."}
 
         # Concurrency Locking
-        account = db.query(FinancialAccount).filter_by(id=account_id).with_for_update().one_or_none()
+        account = repo.get_account_by_id(account_id, lock=True)
 
         # Check requested limit
         if not requested_limit:

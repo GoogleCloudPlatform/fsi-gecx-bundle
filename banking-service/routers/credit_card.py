@@ -21,7 +21,7 @@ from livekit import api as lk_api
 from utils.database import get_db
 from utils.auth import get_current_user, is_support_staff
 from models.authentication import ValidatedToken
-from models.credit_card import FinancialAccount, IssuedCard, AccountLedger
+from repositories.credit_card import CreditCardRepository
 from services.credit_card import (
     freeze_card, apply_limit_increase, reverse_posted_fee, initialize_db_and_seed
 )
@@ -34,14 +34,19 @@ LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "devkey")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "secret")
 
 
+def get_credit_card_repo(db: Session = Depends(get_db)) -> CreditCardRepository:
+    """Dependency provider resolving the CreditCardRepository."""
+    return CreditCardRepository(db)
+
+
 def _get_active_customer_id(
     token: ValidatedToken = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    repo: CreditCardRepository = Depends(get_credit_card_repo)
 ) -> str:
     """Helper: Resolves active customer ID from validated Firebase token, falling back to seed profile if the user has no custom account."""
     if token and hasattr(token, "claims"):
         user_id = token.claims.get("user_id") or token.claims.get("identifier") or "cust-123"
-        account = db.query(FinancialAccount).filter_by(customer_id=user_id).first()
+        account = repo.get_account_by_customer(user_id)
         if account:
             return user_id
     return "cust-123"
@@ -71,14 +76,14 @@ def startup_db_init():
 @router.get("/account")
 def get_customer_account(
     target_customer_id: str | None = None,
-    db: Session = Depends(get_db),
+    repo: CreditCardRepository = Depends(get_credit_card_repo),
     token: ValidatedToken = Depends(get_current_user),
     customer_id: str = Depends(_get_active_customer_id)
 ):
     """Retrieves the customer's financial account and linked cards."""
     effective_id = resolve_effective_id(target_customer_id, customer_id, token)
     logger.info(f"Retrieving account details for customer: {effective_id}")
-    account = db.query(FinancialAccount).filter_by(customer_id=effective_id).first()
+    account = repo.get_account_by_customer(effective_id)
     if not account:
         raise HTTPException(status_code=404, detail=f"No account found for customer '{effective_id}'")
         
@@ -107,17 +112,17 @@ def get_customer_account(
 @router.get("/transactions")
 def get_transaction_history(
     target_customer_id: str | None = None,
-    db: Session = Depends(get_db),
+    repo: CreditCardRepository = Depends(get_credit_card_repo),
     token: ValidatedToken = Depends(get_current_user),
     customer_id: str = Depends(_get_active_customer_id)
 ):
     """Fetches full transaction and statement ledger lines for the customer."""
     effective_id = resolve_effective_id(target_customer_id, customer_id, token)
-    account = db.query(FinancialAccount).filter_by(customer_id=effective_id).first()
+    account = repo.get_account_by_customer(effective_id)
     if not account:
         raise HTTPException(status_code=404, detail="No account registered.")
         
-    ledger = db.query(AccountLedger).filter_by(account_id=account.id).order_by(AccountLedger.posted_at.desc()).all()
+    ledger = repo.list_ledger_entries(account.id)
     return [
         {
             "id": entry.id,
@@ -133,12 +138,13 @@ def request_limit_increase(
     requested_limit_cents: int,
     target_customer_id: str | None = None,
     db: Session = Depends(get_db),
+    repo: CreditCardRepository = Depends(get_credit_card_repo),
     token: ValidatedToken = Depends(get_current_user),
     customer_id: str = Depends(_get_active_customer_id)
 ):
     """Processes credit line adjustments."""
     effective_id = resolve_effective_id(target_customer_id, customer_id, token)
-    account = db.query(FinancialAccount).filter_by(customer_id=effective_id).first()
+    account = repo.get_account_by_customer(effective_id)
     if not account:
         raise HTTPException(status_code=404, detail="No account registered.")
         
@@ -154,12 +160,13 @@ def dispute_and_reverse_fee(
     transaction_id: str,
     target_customer_id: str | None = None,
     db: Session = Depends(get_db),
+    repo: CreditCardRepository = Depends(get_credit_card_repo),
     token: ValidatedToken = Depends(get_current_user),
     customer_id: str = Depends(_get_active_customer_id)
 ):
     """Appends offsetting reversal ledger lines and adjusts balances."""
     effective_id = resolve_effective_id(target_customer_id, customer_id, token)
-    account = db.query(FinancialAccount).filter_by(customer_id=effective_id).first()
+    account = repo.get_account_by_customer(effective_id)
     if not account:
         raise HTTPException(status_code=404, detail="No account registered.")
         
@@ -179,6 +186,7 @@ def block_card_instrument(
     card_token: str,
     target_customer_id: str | None = None,
     db: Session = Depends(get_db),
+    repo: CreditCardRepository = Depends(get_credit_card_repo),
     token: ValidatedToken = Depends(get_current_user),
     customer_id: str = Depends(_get_active_customer_id)
 ):
@@ -186,10 +194,7 @@ def block_card_instrument(
     effective_id = resolve_effective_id(target_customer_id, customer_id, token)
     
     # Security Validation: Verify the card token belongs to the effective customer's account to prevent BOLA/IDOR
-    card = db.query(IssuedCard).join(FinancialAccount).filter(
-        IssuedCard.card_token == card_token,
-        FinancialAccount.customer_id == effective_id
-    ).first()
+    card = repo.get_card_by_token_secured(card_token, effective_id)
     if not card:
         logger.error(f"Security Warning: Attempted unauthorized block for card token {card_token} by customer {effective_id}")
         raise HTTPException(status_code=404, detail="Card token not found or unauthorized.")
