@@ -42,7 +42,6 @@ class SupportRepository:
 
     def save(self, escalation: Escalation) -> Escalation:
         """Adds a new escalation instance or flushes state modifications to the session."""
-        if escalation.id is None:
-            self.db.add(escalation)
+        self.db.add(escalation)
         self.db.flush()
         return escalation

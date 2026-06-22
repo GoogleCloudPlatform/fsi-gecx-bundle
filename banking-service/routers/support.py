@@ -79,6 +79,7 @@ def get_human_agent_token(
         # 2. Update state to ACCEPTED
         escalation.status = "ACCEPTED"
         escalation.assigned_to = agent_email
+        repo.save(escalation)
         db.commit()
         
         # 3. Generate LiveKit token with specific grants
