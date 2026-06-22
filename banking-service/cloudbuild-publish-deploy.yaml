@@ -45,7 +45,7 @@ steps:
       ]
 
   # - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-  #   id: "run-migrations"
+  #   id: "run-db-migration-job"
   #   entrypoint: "bash"
   #   args:
   #     - "-c"
