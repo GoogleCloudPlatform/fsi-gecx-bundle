@@ -27,8 +27,11 @@ def initialize_db_and_seed(db: Session):
     """
     logger.info("Verifying credit card SQL schemas and tables...")
     
+    from repositories.credit_card import CreditCardRepository
+    repo = CreditCardRepository(db)
+    
     # Check if a seed account already exists
-    if db.query(FinancialAccount).first():
+    if repo.get_account_by_id("acc-8888-9999"):
         logger.info("Database already seeded. Skipping migration initializations.")
         return
 
@@ -45,7 +48,7 @@ def initialize_db_and_seed(db: Session):
             payment_due_date=datetime.datetime.utcnow() + datetime.timedelta(days=15),
             statement_close_date=datetime.datetime.utcnow() - datetime.timedelta(days=15)
         )
-        db.add(seed_account)
+        repo.save_account(seed_account)
         
         # 2. Issue a primary Credit Card linked to this account
         seed_card = IssuedCard(
@@ -59,7 +62,7 @@ def initialize_db_and_seed(db: Session):
             status="ACTIVE",
             is_active=True
         )
-        db.add(seed_card)
+        repo.save_card(seed_card)
         
         # 3. Post realistic transaction entries to the account ledger
         seed_fee = AccountLedger(
@@ -69,7 +72,7 @@ def initialize_db_and_seed(db: Session):
             description="LATE_FEE",
             posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=5)
         )
-        db.add(seed_fee)
+        repo.save_ledger(seed_fee)
 
         seed_youtube = AccountLedger(
             id="tx-youtube-001",
@@ -78,7 +81,7 @@ def initialize_db_and_seed(db: Session):
             description="YouTube Premium Subscription",
             posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=12)
         )
-        db.add(seed_youtube)
+        repo.save_ledger(seed_youtube)
 
         seed_starbucks = AccountLedger(
             id="tx-starbucks-001",
@@ -87,7 +90,7 @@ def initialize_db_and_seed(db: Session):
             description="Starbucks Coffee",
             posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=4)
         )
-        db.add(seed_starbucks)
+        repo.save_ledger(seed_starbucks)
 
         seed_grocery = AccountLedger(
             id="tx-wholefoods-001",
@@ -96,7 +99,7 @@ def initialize_db_and_seed(db: Session):
             description="Whole Foods Market",
             posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=8)
         )
-        db.add(seed_grocery)
+        repo.save_ledger(seed_grocery)
 
         seed_gas = AccountLedger(
             id="tx-shell-001",
@@ -105,7 +108,7 @@ def initialize_db_and_seed(db: Session):
             description="Shell Gasoline",
             posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=2)
         )
-        db.add(seed_gas)
+        repo.save_ledger(seed_gas)
         
         # 5. Seed system settings with baseline Voice & Live Avatar configs
         from repositories.settings import SystemSettingsRepository
@@ -135,12 +138,15 @@ def freeze_card(db: Session, card_token: str, reason: str) -> dict:
     Locates the card by token and sets its status to 'BLOCKED' to freeze auth checks.
     """
     logger.info(f"Freezing card token: {card_token} (Reason: {reason})")
-    card = db.query(IssuedCard).filter_by(card_token=card_token).one_or_none()
+    from repositories.credit_card import CreditCardRepository
+    repo = CreditCardRepository(db)
+    card = repo.get_card_by_token(card_token)
     if not card:
         logger.error(f"Card token '{card_token}' not found.")
         raise ValueError(f"Card token '{card_token}' not found.")
         
     card.status = "BLOCKED"
+    repo.save_card(card)
     db.commit()
     logger.info(f"Card token '{card_token}' successfully blocked.")
     return {"card_token": card_token, "status": "BLOCKED"}
@@ -153,7 +159,9 @@ def apply_limit_increase(db: Session, account_id: str, requested_limit_cents: in
     logger.info(f"Processing credit limit request for account: {account_id} to {requested_limit_cents} cents")
     
     # Acquire exclusive database lock on the financial account row until transaction commit
-    account = db.query(FinancialAccount).filter_by(id=account_id).with_for_update().one_or_none()
+    from repositories.credit_card import CreditCardRepository
+    repo = CreditCardRepository(db)
+    account = repo.get_account_by_id(account_id, lock=True)
     if not account:
         logger.error(f"Account '{account_id}' not found.")
         raise ValueError(f"Account '{account_id}' not found.")
@@ -165,6 +173,7 @@ def apply_limit_increase(db: Session, account_id: str, requested_limit_cents: in
     account.credit_limit_cents = requested_limit_cents
     account.available_credit_cents += limit_change
     
+    repo.save_account(account)
     db.commit()
     logger.info(f"Limit updated. New Limit: {account.credit_limit_cents} cents, Available Credit: {account.available_credit_cents} cents")
     return {
@@ -183,14 +192,16 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
     logger.info(f"Processing transaction reversal for account: {account_id}, Original Tx ID: {transaction_id}")
 
     # Acquire exclusive database lock on the financial account row to lock balances
-    account = db.query(FinancialAccount).filter_by(id=account_id).with_for_update().one_or_none()
+    from repositories.credit_card import CreditCardRepository
+    repo = CreditCardRepository(db)
+    account = repo.get_account_by_id(account_id, lock=True)
     if not account:
         logger.error(f"Account '{account_id}' not found.")
         raise ValueError(f"Account '{account_id}' not found.")
         
     # Find original transaction in ledger
-    original_tx = db.query(AccountLedger).filter_by(id=transaction_id, account_id=account_id).one_or_none()
-    if not original_tx:
+    original_tx = repo.get_ledger_entry_by_id(transaction_id)
+    if not original_tx or original_tx.account_id != account_id:
         raise ValueError(f"Original transaction '{transaction_id}' not found in ledger.")
         
     # Verify the original transaction is a debit (charge)
@@ -201,11 +212,7 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
     reversal_description_old = f"FEE_REVERSAL_REF_{transaction_id}"
     reversal_description_new = f"REVERSAL_REF_{transaction_id}"
     
-    prior_reversal = db.query(AccountLedger).filter(
-        AccountLedger.account_id == account_id,
-        AccountLedger.authorization_id.is_(None),
-        AccountLedger.description.in_([reversal_description_old, reversal_description_new])
-    ).first()
+    prior_reversal = repo.get_reversal_entry(account_id, transaction_id)
     if prior_reversal:
         raise ValueError(f"Transaction '{transaction_id}' has already been reversed in ledger (Reversal ID: {prior_reversal.id}).")
 
@@ -219,12 +226,13 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
         description=desc,
         posted_at=datetime.datetime.utcnow()
     )
-    db.add(reversal_entry)
+    repo.save_ledger(reversal_entry)
 
     # Recalculate account balances
     account.cleared_balance_cents -= reversal_amount   # Debt decreases
     account.available_credit_cents += reversal_amount  # Available credit increases
 
+    repo.save_account(account)
     db.commit()
     logger.info(f"Transaction reversed successfully. New Cleared Balance: {account.cleared_balance_cents} cents, Available Credit: {account.available_credit_cents} cents")
     return {
