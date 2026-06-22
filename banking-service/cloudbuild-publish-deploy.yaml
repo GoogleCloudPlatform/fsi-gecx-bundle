@@ -59,7 +59,6 @@ steps:
           echo "Executing pre-deployment database schema migrations..."
           gcloud run jobs execute banking-db-migrate \
             --region "${_REGION}" \
-            --show-logs \
             --wait
         else
           echo "Skipping migrations because _TRIGGER_DEPLOY is not true"
