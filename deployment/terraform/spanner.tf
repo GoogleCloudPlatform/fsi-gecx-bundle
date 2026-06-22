@@ -13,7 +13,7 @@
 # limitations under the License.
 
 locals {
-  spanner_ddl_files = [for f in fileset("${path.module}/../spanner", "*.sql") : f if f != "seed.sql"]
+  spanner_ddl_files = [for f in fileset("${path.module}/../spanner/banking", "*.sql") : f if f != "seed.sql"]
 }
 
 resource "google_spanner_instance" "banking_data" {
@@ -33,15 +33,15 @@ resource "google_spanner_database" "banking" {
   instance            = google_spanner_instance.banking_data.name
   name                = "banking"
   deletion_protection = false
-  ddl                 = [for f in local.spanner_ddl_files : file("${path.module}/../spanner/${f}")]
+  ddl                 = [for f in local.spanner_ddl_files : file("${path.module}/../spanner/banking/${f}")]
 }
 
 resource "terraform_data" "seed_spanner" {
   depends_on = [google_spanner_database.banking]
 
-  input = filesha256("${path.module}/../spanner/seed.sql")
+  input = filesha256("${path.module}/../spanner/banking/seed.sql")
 
   provisioner "local-exec" {
-    command = "gcloud spanner databases execute-sql ${google_spanner_database.banking.name} --instance=${google_spanner_instance.banking_data.name} --project=${var.project_id} --sql=\"$(cat ${path.module}/../spanner/seed.sql)\""
+    command = "gcloud spanner databases execute-sql ${google_spanner_database.banking.name} --instance=${google_spanner_instance.banking_data.name} --project=${var.project_id} --sql=\"$(cat ${path.module}/../spanner/banking/seed.sql)\""
   }
 }
