@@ -121,3 +121,15 @@ resource "google_sql_database" "banking" {
   instance        = google_sql_database_instance.banking_data.name
   deletion_policy = "ABANDON"
 }
+
+# Legacy database user preserved to prevent drop role dependency errors
+resource "random_password" "banking_password" {
+  length  = 16
+  special = false
+}
+
+resource "google_sql_user" "banking_user" {
+  name     = "banking"
+  instance = google_sql_database_instance.banking_data.name
+  password = random_password.banking_password.result
+}
