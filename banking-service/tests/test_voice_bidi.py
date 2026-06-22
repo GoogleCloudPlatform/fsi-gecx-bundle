@@ -30,10 +30,12 @@ def mock_firebase_app():
 @patch("services.voice_bidi.token_manager.get_token")
 @patch("services.voice_bidi.time.time")
 @patch("websockets.connect")
-def test_gecx_voice_stream_success(mock_ws_connect, mock_time, mock_get_token, mock_validate_token, mock_firebase_app):
+@patch("services.voice_bidi.get_project_id")
+def test_gecx_voice_stream_success(mock_get_project_id, mock_ws_connect, mock_time, mock_get_token, mock_validate_token, mock_firebase_app):
     """Verify GECX WebSocket proxy successfully authenticates first-frame and forwards messages."""
     
     # 1. Setup Mock user validation claims
+    mock_get_project_id.return_value = "evo-genai-workspace"
     mock_validate_token.return_value = MagicMock(claims={"sub": "borrower-123"})
     mock_get_token.return_value = "mock-gcp-bearer-token"
     mock_time.return_value = 1234567890

@@ -28,7 +28,7 @@ resource "google_secret_manager_secret" "postgres_banking_password" {
 
 resource "google_secret_manager_secret_version" "postgres_banking_password_version" {
   secret      = google_secret_manager_secret.postgres_banking_password.id
-  secret_data = random_password.banking_password.result
+  secret_data = random_password.db_runtime_password.result
 }
 
 data "google_secret_manager_secret_version_access" "iap_client_id" {
