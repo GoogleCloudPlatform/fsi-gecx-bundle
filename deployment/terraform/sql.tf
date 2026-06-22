@@ -94,13 +94,13 @@ resource "random_password" "postgres_root_password" {
   special = false
 }
 
-resource "google_sql_user" "db_migration_user" {
-  name     = "banking_migration"
+resource "google_sql_user" "banking_owner_user" {
+  name     = "banking_owner"
   instance = google_sql_database_instance.banking_data.name
-  password = random_password.db_migration_password.result
+  password = random_password.db_owner_password.result
 }
 
-resource "random_password" "db_migration_password" {
+resource "random_password" "db_owner_password" {
   length  = 16
   special = false
 }
