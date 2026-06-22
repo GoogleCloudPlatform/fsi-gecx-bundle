@@ -35,7 +35,11 @@ def get_iam_connection(url_str):
         ]
     )
     request = google.auth.transport.requests.Request()
+    logger.info(f"Refreshing GCP credentials of type: {type(credentials)}")
     credentials.refresh(request)
+    logger.info(f"Credentials refresh completed. Token present: {credentials.token is not None}")
+    if credentials.token:
+        logger.info(f"Token length: {len(credentials.token)}")
     
     # If host is in query (Unix socket path) or host is None, check query host
     host_val = url.host or url.query.get("host")
