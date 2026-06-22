@@ -52,7 +52,7 @@ steps:
       - |
         if [ "${_TRIGGER_DEPLOY}" = "true" ]; then
           echo "Registering latest image with Cloud Run Migration Job..."
-          gcloud run jobs deploy banking-db-migrate \
+          gcloud run jobs update banking-db-migrate \
             --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
             --region "${_REGION}"
           
