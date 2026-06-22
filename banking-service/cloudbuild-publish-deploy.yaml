@@ -44,24 +44,24 @@ steps:
         "--all-tags",
       ]
 
-  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    id: "run-db-migration-job"
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |
-        if [ "${_TRIGGER_DEPLOY}" = "true" ]; then
-          echo "Triggering database migrations trigger (banking-db-migration)..."
-          BUILD_ID=$(gcloud builds triggers run banking-db-migration \
-            --region="${_REGION}" \
-            --branch="$BRANCH_NAME" \
-            --format="value(metadata.build.id)")
+  # - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+  #   id: "run-db-migration-job"
+  #   entrypoint: "bash"
+  #   args:
+  #     - "-c"
+  #     - |
+  #       if [ "${_TRIGGER_DEPLOY}" = "true" ]; then
+  #         echo "Triggering database migrations trigger (banking-db-migration)..."
+  #         BUILD_ID=$(gcloud builds triggers run banking-db-migration \
+  #           --region="${_REGION}" \
+  #           --branch="$BRANCH_NAME" \
+  #           --format="value(metadata.build.id)")
           
-          echo "Waiting for migration build $$BUILD_ID to complete..."
-          gcloud builds log "$$BUILD_ID" --region="${_REGION}" --stream
-        else
-          echo "Skipping migrations because _TRIGGER_DEPLOY is not true"
-        fi
+  #         echo "Waiting for migration build $$BUILD_ID to complete..."
+  #         gcloud builds log "$$BUILD_ID" --region="${_REGION}" --stream
+  #       else
+  #         echo "Skipping migrations because _TRIGGER_DEPLOY is not true"
+  #       fi
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     id: "deploy-service"
