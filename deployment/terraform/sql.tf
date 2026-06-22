@@ -89,19 +89,30 @@ resource "google_sql_database_instance" "banking_data" {
   ]
 }
 
-resource "google_sql_user" "banking_user" {
-  name     = "banking"
+resource "google_sql_user" "db_migration_user" {
+  name     = "banking_migration"
   instance = google_sql_database_instance.banking_data.name
-  password = random_password.banking_password.result
+  password = random_password.db_migration_password.result
+}
+
+resource "random_password" "db_migration_password" {
+  length  = 16
+  special = false
+}
+
+resource "google_sql_user" "db_runtime_user" {
+  name     = "banking_runtime"
+  instance = google_sql_database_instance.banking_data.name
+  password = random_password.db_runtime_password.result
+}
+
+resource "random_password" "db_runtime_password" {
+  length  = 16
+  special = false
 }
 
 resource "google_sql_database" "banking" {
   name            = "banking"
   instance        = google_sql_database_instance.banking_data.name
   deletion_policy = "ABANDON"
-}
-
-resource "random_password" "banking_password" {
-  length  = 16
-  special = false
 }

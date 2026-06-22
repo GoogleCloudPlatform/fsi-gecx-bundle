@@ -15,10 +15,6 @@
 
 set -e
 
-# Run database schema migrations up to the latest revision (Head)
-echo "Executing database migrations..."
-alembic upgrade head
-
 # Start the FastAPI application via Uvicorn
 echo "Starting FastAPI combined application..."
 exec uvicorn main:combined_app --host 0.0.0.0 --port ${PORT:-8080}

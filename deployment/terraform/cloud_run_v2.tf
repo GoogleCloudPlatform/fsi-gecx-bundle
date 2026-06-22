@@ -62,7 +62,7 @@ resource "google_cloud_run_v2_service" "banking_service" {
 
       env {
         name  = "DATABASE_URL"
-        value = "postgresql+psycopg2://${google_sql_user.banking_user.name}:${random_password.banking_password.result}@${google_sql_database_instance.banking_data.private_ip_address}/${google_sql_database.banking.name}"
+        value = "postgresql+psycopg2://${google_sql_user.db_runtime_user.name}:${random_password.db_runtime_password.result}@${google_sql_database_instance.banking_data.private_ip_address}/${google_sql_database.banking.name}"
       }
 
       env {
@@ -439,7 +439,7 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
 
       env {
         name  = "DATABASE_URL"
-        value = "postgresql+psycopg2://${google_sql_user.banking_user.name}:${random_password.banking_password.result}@${google_sql_database_instance.banking_data.private_ip_address}/${google_sql_database.banking.name}"
+        value = "postgresql+psycopg2://${google_sql_user.db_runtime_user.name}:${random_password.db_runtime_password.result}@${google_sql_database_instance.banking_data.private_ip_address}/${google_sql_database.banking.name}"
       }
 
       env {
@@ -532,6 +532,42 @@ resource "google_cloud_run_v2_service" "data_generator" {
       template[0].containers[0].image,
       client,
       client_version
+    ]
+  }
+
+  depends_on = [google_project_service.run_googleapis_com]
+}
+
+# Isolated Cloud Run Job tasked with executing alembic database schema migrations
+resource "google_cloud_run_v2_job" "db_migration_job" {
+  name     = "banking-db-migrate"
+  location = var.region
+
+  template {
+    template {
+      max_retries = 1
+      timeout     = "300s"
+
+      containers {
+        image   = "us-central1-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/banking-service:latest"
+        command = ["alembic", "upgrade", "head"]
+
+        env {
+          name  = "DATABASE_URL"
+          value = "postgresql+psycopg2://${google_sql_user.db_migration_user.name}:${random_password.db_migration_password.result}@${google_sql_database_instance.banking_data.private_ip_address}/${google_sql_database.banking.name}"
+        }
+      }
+
+      vpc_access {
+        connector = google_vpc_access_connector.connector.id
+        egress    = "PRIVATE_RANGES_ONLY"
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image
     ]
   }
 
