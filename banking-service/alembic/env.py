@@ -1,7 +1,11 @@
+import os
+import sys
+import logging
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+import sqlalchemy as sa
+from sqlalchemy import engine_from_config, pool
+from sqlalchemy.engine.url import make_url
 
 from alembic import context
 
@@ -14,25 +18,14 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-import os
-import sys
-import sqlalchemy as sa
-import logging
-from sqlalchemy.engine.url import make_url
-
 # Append the parent banking-service directory to sys.path so python resolves local package imports correctly
 sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.database import Base, DATABASE_URL
+from utils.database import Base, DATABASE_URL  # noqa: E402
 # Import all database models to ensure they register on Base.metadata for autogenerate detection
-import models.credit_card
-import models.support
-import models.settings
-import models.profile
-import models.application
-import models.artifact
-import models.secure_messaging
-import models.underwriting
+import models.credit_card  # noqa: E402, F401
+import models.support  # noqa: E402, F401
+import models.settings  # noqa: E402, F401
 
 # Set target metadata for alembic schema scanning
 target_metadata = Base.metadata
@@ -103,8 +96,8 @@ def run_migrations_online() -> None:
 
         with context.begin_transaction():
             if is_postgres:
-                logger.info("Acquiring transactional advisory migration lock (ID: 1337)...")
-                connection.execute(sa.text("SELECT pg_advisory_xact_lock(1337);"))
+                logger.info("Acquiring transactional advisory migration lock (ID: 592837410)...")
+                connection.execute(sa.text("SELECT pg_advisory_xact_lock(592837410);"))
             context.run_migrations()
 
 

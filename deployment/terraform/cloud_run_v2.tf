@@ -545,8 +545,9 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
 
   template {
     template {
-      max_retries = 1
-      timeout     = "300s"
+      max_retries     = 1
+      timeout         = "300s"
+      service_account = google_service_account.banking_service_account.email
 
       containers {
         image   = "us-central1-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/banking-service:latest"

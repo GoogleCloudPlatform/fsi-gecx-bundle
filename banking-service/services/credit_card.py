@@ -17,7 +17,6 @@ import datetime
 from sqlalchemy.orm import Session
 from models.credit_card import FinancialAccount, IssuedCard, AccountLedger
 from models.settings import SystemSetting
-from utils.database import Base, engine
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,6 @@ def initialize_db_and_seed(db: Session):
     baseline cardholder profiles for development verification.
     """
     logger.info("Verifying credit card SQL schemas and tables...")
-    Base.metadata.create_all(bind=engine)
     
     # Check if a seed account already exists
     if db.query(FinancialAccount).first():

@@ -112,6 +112,13 @@ def upgrade() -> None:
     )
     op.create_index('idx_ledger_account', 'account_ledger', ['account_id'], unique=False)
     op.create_index('idx_ledger_account_posted', 'account_ledger', ['account_id', 'posted_at'], unique=False)
+    
+    # Grant DML permissions to the runtime application user only if deploying against PostgreSQL
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute("GRANT USAGE ON SCHEMA public TO banking_runtime;")
+        op.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO banking_runtime;")
+        op.execute("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO banking_runtime;")
     # ### end Alembic commands ###
 
 
