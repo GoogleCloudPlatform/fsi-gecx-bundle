@@ -108,7 +108,9 @@ def initialize_db_and_seed(db: Session):
         db.add(seed_gas)
         
         # 5. Seed system settings with baseline Voice & Live Avatar configs
-        if not db.query(SystemSetting).first():
+        from repositories.settings import SystemSettingsRepository
+        settings_repo = SystemSettingsRepository(db)
+        if not settings_repo.get_first():
             logger.info("Seeding baseline system settings configurations...")
             default_settings = [
                 SystemSetting(key="voice_agent_hard_timeout_enabled", value="false"),
@@ -118,6 +120,7 @@ def initialize_db_and_seed(db: Session):
                 SystemSetting(key="voice_agent_mock_avatar_enabled", value="false")
             ]
             db.add_all(default_settings)
+            db.flush()
 
         db.commit()
         logger.info("Database successfully seeded.")
