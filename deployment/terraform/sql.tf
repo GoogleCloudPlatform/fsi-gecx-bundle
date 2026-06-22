@@ -139,3 +139,16 @@ resource "google_sql_user" "developer_iam_user" {
   instance = google_sql_database_instance.banking_data.name
   type     = "CLOUD_IAM_USER"
 }
+
+resource "google_sql_user" "db_migration_iam_user" {
+  name     = replace(google_service_account.banking_migration_service_account.email, ".gserviceaccount.com", "")
+  instance = google_sql_database_instance.banking_data.name
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
+}
+
+resource "google_sql_user" "db_runtime_iam_user" {
+  name     = replace(google_service_account.banking_service_account.email, ".gserviceaccount.com", "")
+  instance = google_sql_database_instance.banking_data.name
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
+}
+

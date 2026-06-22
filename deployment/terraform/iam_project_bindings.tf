@@ -190,3 +190,34 @@ resource "google_project_iam_member" "developer_cloudsql_instance_user" {
   role    = "roles/cloudsql.instanceUser"
   member  = "user:${data.google_client_openid_userinfo.me.email}"
 }
+
+resource "google_project_iam_member" "banking_service_sa_cloudsql_client" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
+resource "google_project_iam_member" "banking_service_sa_cloudsql_instance_user" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
+resource "google_project_iam_member" "banking_migration_sa_cloudsql_client" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.banking_migration_service_account.email}"
+}
+
+resource "google_project_iam_member" "banking_migration_sa_cloudsql_instance_user" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = "serviceAccount:${google_service_account.banking_migration_service_account.email}"
+}
+
+resource "google_project_iam_member" "banking_migration_sa_log_writer" {
+  project = data.google_project.project.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.banking_migration_service_account.email}"
+}
+
