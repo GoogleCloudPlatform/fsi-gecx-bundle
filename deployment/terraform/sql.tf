@@ -133,3 +133,9 @@ resource "google_sql_user" "banking_user" {
   instance = google_sql_database_instance.banking_data.name
   password = random_password.banking_password.result
 }
+
+resource "google_sql_user" "developer_iam_user" {
+  name     = data.google_client_openid_userinfo.me.email
+  instance = google_sql_database_instance.banking_data.name
+  type     = "CLOUD_IAM_USER"
+}

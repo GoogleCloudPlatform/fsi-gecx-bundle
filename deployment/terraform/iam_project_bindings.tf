@@ -178,3 +178,16 @@ resource "google_project_iam_member" "datagen_sa_bq_job_user" {
   role    = "roles/bigquery.jobUser"
   member  = "serviceAccount:${google_service_account.data_generator_service_account.email}"
 }
+
+resource "google_project_iam_member" "developer_cloudsql_client" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.client"
+  member  = "user:${data.google_client_openid_userinfo.me.email}"
+}
+
+resource "google_project_iam_member" "developer_cloudsql_instance_user" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = "user:${data.google_client_openid_userinfo.me.email}"
+}
+
