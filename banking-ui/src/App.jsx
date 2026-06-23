@@ -1721,6 +1721,22 @@ function AppContent() {
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>
+            <hr className="border-slate-100 dark:border-slate-800" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Architecture Guide</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Read about the Home Loan Assistant topology, client upload triggers, and Document AI parsing.</p>
+              </div>
+              <a
+                href="https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/blob/main/docs/architecture/home_loan_preapproval_integration.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Design</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
           </div>
         </div>
       </GcpInfoModal>
