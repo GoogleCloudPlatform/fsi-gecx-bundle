@@ -155,12 +155,12 @@ zip-credit-agent: ## Package the GECx Credit_Support_Voice_Agent bundle into a r
 .PHONY: upload-mortgage-agent
 upload-mortgage-agent: ## Execute the REST API script to package and import the Mortgage Preapproval agent directly into CES
 	@echo "Uploading Mortgage Preapproval Agent to GECx..."
-	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) AGENT_FOLDER=Mortgage_Preapproval bash import_cxas_agent.sh
+	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) AGENT_FOLDER=Mortgage_Preapproval bash deploy_mortgage_agent.sh
 
 .PHONY: upload-credit-agent
 upload-credit-agent: ## Execute the REST API script to package and import the Credit Support Voice Agent directly into CES
 	@echo "Uploading Credit Support Voice Agent to GECx..."
-	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) AGENT_FOLDER=Credit_Support_Voice_Agent bash import_cxas_agent.sh
+	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) AGENT_FOLDER=Credit_Support_Voice_Agent bash deploy_voice_agent.sh
 
 .PHONY: create-gecx
 create-gecx: upload-mortgage-agent upload-credit-agent ## Automate full CES agent provisioning for both Mortgage and Credit agents
