@@ -220,4 +220,3 @@ resource "google_project_iam_member" "banking_migration_sa_log_writer" {
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.banking_migration_service_account.email}"
 }
-
