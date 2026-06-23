@@ -116,6 +116,7 @@ function AppContent() {
 
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isGcpInfoModalOpen, setIsGcpInfoModalOpen] = useState(false);
+  const [isAuthInfoModalOpen, setIsAuthInfoModalOpen] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
   const projectId = window.firebaseConfig?.projectId;
 
@@ -1108,7 +1109,14 @@ function AppContent() {
                       }`}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="flex items-center space-x-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                    <button
+                      onClick={() => setIsAuthInfoModalOpen(true)}
+                      className="absolute top-3.5 right-3.5 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm"
+                      title="Firebase & Identity Platform Integration Info"
+                    >
+                      <GoogleCloudIcon className="w-4 h-4" />
+                    </button>
+                    <div className="flex items-center space-x-3 pb-3 border-b border-slate-100 dark:border-slate-800 pr-8">
                       <div
                         className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-base text-slate-950 shrink-0"
                         style={{ backgroundImage: fbUser?.photoURL ? 'none' : `linear-gradient(to top right, ${brandColorFrom}, ${brandColorTo})` }}
@@ -1694,6 +1702,57 @@ function AppContent() {
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
               >
                 <span>View Console</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </GcpInfoModal>
+
+      <GcpInfoModal
+        isOpen={isAuthInfoModalOpen}
+        onClose={() => setIsAuthInfoModalOpen(false)}
+        title="Identity & Authentication Integration"
+      >
+        <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+          <p>
+            This user identity and authentication system uses <strong>Firebase Authentication</strong> integrated with <strong>GCP Identity Platform</strong>.
+          </p>
+          <p>
+            Firebase Auth handles the client-side user sessions and JWT tokens, while GCP Identity Platform provides enterprise-grade identity configuration and multi-tenant providers.
+          </p>
+          <p>
+            You can inspect the registered users, authentication providers, and token claims directly in the consoles using the links below:
+          </p>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Firebase Auth Users</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">View user IDs, email verification status, and creation metadata.</p>
+              </div>
+              <a
+                href={`https://console.firebase.google.com/project/${projectId}/authentication/users`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Users</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <hr className="border-slate-100 dark:border-slate-800" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">GCP Identity Platform Providers</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Manage OAuth providers, sign-in methods, and security tokens.</p>
+              </div>
+              <a
+                href={`https://console.cloud.google.com/customer-identity/providers?project=${projectId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Providers</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>
