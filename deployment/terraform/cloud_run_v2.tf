@@ -134,7 +134,7 @@ resource "google_cloud_run_v2_service" "banking_service" {
 
       env {
         name  = "GECX_APP_ID"
-        value = var.gecx_voice_agent_id
+        value = var.cx_agent_studio_voice_agent_deployment_name
       }
 
       env {
