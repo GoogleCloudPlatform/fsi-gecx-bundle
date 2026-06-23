@@ -192,7 +192,7 @@ variable "voice_agent_audio_model" {
 variable "gecx_voice_agent_id" {
   type        = string
   description = "The target GECX Application ID for voice consultation"
-  default     = "42345105-29cb-492d-8a60-07171bb72190"
+  default     = null
 }
 
 variable "gecx_location" {

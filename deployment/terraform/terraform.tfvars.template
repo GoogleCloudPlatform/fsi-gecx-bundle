@@ -30,3 +30,4 @@ enable_blocking_functions        = false
 github_branch                    = "^main$"
 voice_agent_video_model          = "publishers/google/models/gemini-3.1-flash-live"
 voice_agent_audio_model          = "publishers/google/models/gemini-live-2.5-flash-native-audio"
+gecx_voice_agent_id              = "[YOUR_CX_AGENT_STUDIO_CREDIT_SUPPORT_AGENT_DEPLOYMENT_ID]"

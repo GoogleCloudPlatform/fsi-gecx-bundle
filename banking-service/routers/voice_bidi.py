@@ -67,7 +67,7 @@ async def gecx_voice_stream(websocket: WebSocket):
             return
 
         # 2. Delegate real-time session execution to service
-        gecx_app_id = os.getenv("GECX_APP_ID", "42345105-29cb-492d-8a60-07171bb72190")
+        gecx_app_id = os.getenv("GECX_APP_ID")
         location = os.getenv("GECX_LOCATION", "us")
         
         session = VoiceBidiSession(
