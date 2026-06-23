@@ -94,24 +94,26 @@ resource "random_password" "postgres_root_password" {
   special = false
 }
 
-resource "google_sql_user" "banking_owner_user" {
-  name     = "banking_owner"
+# Support user with password
+resource "google_sql_user" "banking_support" {
+  name     = "banking_support"
   instance = google_sql_database_instance.banking_data.name
-  password = random_password.db_owner_password.result
+  password = random_password.banking_support_password.result
 }
 
-resource "random_password" "db_owner_password" {
+resource "random_password" "banking_support_password" {
   length  = 16
   special = false
 }
 
-resource "google_sql_user" "db_runtime_user" {
-  name     = "banking_runtime"
+# BigQuery Connection user with password
+resource "google_sql_user" "banking_bq_connector" {
+  name     = "banking_bq_connector"
   instance = google_sql_database_instance.banking_data.name
-  password = random_password.db_runtime_password.result
+  password = random_password.banking_bq_connector_password.result
 }
 
-resource "random_password" "db_runtime_password" {
+resource "random_password" "banking_bq_connector_password" {
   length  = 16
   special = false
 }
@@ -122,33 +124,20 @@ resource "google_sql_database" "banking" {
   deletion_policy = "ABANDON"
 }
 
-# Legacy database user preserved to prevent drop role dependency errors
-resource "random_password" "banking_password" {
-  length  = 16
-  special = false
-}
-
-resource "google_sql_user" "banking_user" {
-  name     = "banking"
-  instance = google_sql_database_instance.banking_data.name
-  password = random_password.banking_password.result
-}
-
 resource "google_sql_user" "developer_iam_user" {
   name     = data.google_client_openid_userinfo.me.email
   instance = google_sql_database_instance.banking_data.name
   type     = "CLOUD_IAM_USER"
 }
 
-resource "google_sql_user" "db_migration_iam_user" {
-  name     = replace(google_service_account.banking_migration_service_account.email, ".gserviceaccount.com", "")
+resource "google_sql_user" "banking_db_migration_iam_user" {
+  name     = replace(google_service_account.banking_db_migration_service_account.email, ".gserviceaccount.com", "")
   instance = google_sql_database_instance.banking_data.name
   type     = "CLOUD_IAM_SERVICE_ACCOUNT"
 }
 
-resource "google_sql_user" "db_runtime_iam_user" {
+resource "google_sql_user" "banking_service_sa_iam_user" {
   name     = replace(google_service_account.banking_service_account.email, ".gserviceaccount.com", "")
   instance = google_sql_database_instance.banking_data.name
   type     = "CLOUD_IAM_SERVICE_ACCOUNT"
 }
-

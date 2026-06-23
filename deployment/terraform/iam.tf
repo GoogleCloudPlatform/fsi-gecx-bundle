@@ -56,9 +56,9 @@ resource "google_service_account" "banking_service_account" {
   }
 }
 
-resource "google_service_account" "banking_migration_service_account" {
-  account_id   = "banking-migration-sa"
-  display_name = "Banking Migration Service Account"
+resource "google_service_account" "banking_db_migration_service_account" {
+  account_id   = "banking-db-migration-sa"
+  display_name = "Banking DB Migration Service Account"
 
   lifecycle {
     ignore_changes = [

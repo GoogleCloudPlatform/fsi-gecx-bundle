@@ -206,17 +206,17 @@ resource "google_project_iam_member" "banking_service_sa_cloudsql_instance_user"
 resource "google_project_iam_member" "banking_migration_sa_cloudsql_client" {
   project = data.google_project.project.project_id
   role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_service_account.banking_migration_service_account.email}"
+  member  = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
 }
 
 resource "google_project_iam_member" "banking_migration_sa_cloudsql_instance_user" {
   project = data.google_project.project.project_id
   role    = "roles/cloudsql.instanceUser"
-  member  = "serviceAccount:${google_service_account.banking_migration_service_account.email}"
+  member  = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
 }
 
 resource "google_project_iam_member" "banking_migration_sa_log_writer" {
   project = data.google_project.project.project_id
   role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.banking_migration_service_account.email}"
+  member  = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
 }
