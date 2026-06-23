@@ -127,15 +127,15 @@ def upgrade() -> None:
         except Exception:
             project_id = os.getenv("PROJECT_ID")
         runtime_user = f"banking-service-sa@{project_id}.iam"
-        migration_user = f"banking-migration-sa@{project_id}.iam"
+        # migration_user = f"banking-migration-sa@{project_id}.iam"
         
         op.execute(f'GRANT USAGE ON SCHEMA public TO "{runtime_user}";')
         op.execute(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "{runtime_user}";')
         op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{runtime_user}";')
         
-        op.execute(f'GRANT USAGE ON SCHEMA public TO "{migration_user}";')
-        op.execute(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "{migration_user}";')
-        op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{migration_user}";')
+        # op.execute(f'GRANT USAGE ON SCHEMA public TO "{migration_user}";')
+        # op.execute(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "{migration_user}";')
+        # op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{migration_user}";')
     # ### end Alembic commands ###
 
 

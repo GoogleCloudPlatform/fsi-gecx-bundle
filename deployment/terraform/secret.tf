@@ -31,6 +31,19 @@ resource "google_secret_manager_secret_version" "postgres_banking_password_versi
   secret_data = random_password.postgres_root_password.result
 }
 
+resource "google_secret_manager_secret" "postgres_support_password" {
+  secret_id = "postgres_support_password"
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "postgres_support_password_version" {
+  secret      = google_secret_manager_secret.postgres_support_password.id
+  secret_data = random_password.banking_support_password.result
+}
+
 data "google_secret_manager_secret_version_access" "iap_client_id" {
   secret  = "iap-client-id"
   version = "latest"
