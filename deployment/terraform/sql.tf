@@ -94,17 +94,7 @@ resource "random_password" "postgres_root_password" {
   special = false
 }
 
-# Support user with password
-resource "google_sql_user" "banking_support" {
-  name     = "banking_support"
-  instance = google_sql_database_instance.banking_data.name
-  password = random_password.banking_support_password.result
-}
 
-resource "random_password" "banking_support_password" {
-  length  = 16
-  special = false
-}
 
 # BigQuery Connection user with password
 resource "google_sql_user" "banking_bq_connector" {
