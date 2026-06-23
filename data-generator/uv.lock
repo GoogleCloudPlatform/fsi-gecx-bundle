@@ -183,7 +183,7 @@ requires-dist = [
     { name = "faker", specifier = "==33.3.0" },
     { name = "fastapi", specifier = "==0.136.0" },
     { name = "google-cloud-bigquery", specifier = "==3.41.0" },
-    { name = "google-cloud-spanner", specifier = "==3.66.0" },
+    { name = "google-cloud-spanner", specifier = "==3.68.0" },
     { name = "pydantic", specifier = "==2.10.6" },
     { name = "pyopenssl" },
     { name = "uvicorn", specifier = "==0.44.0" },
@@ -308,14 +308,16 @@ wheels = [
 
 [[package]]
 name = "google-cloud-spanner"
-version = "3.66.0"
+version = "3.68.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
     { name = "google-cloud-core" },
     { name = "google-cloud-monitoring" },
     { name = "grpc-google-iam-v1" },
     { name = "grpc-interceptor" },
+    { name = "grpcio" },
     { name = "mmh3" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-resourcedetector-gcp" },
@@ -325,9 +327,9 @@ dependencies = [
     { name = "protobuf" },
     { name = "sqlparse" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c3/5d/b628fb39ff6b62ed301ede5107487d48da39826597eee5b735aea2595bcb/google_cloud_spanner-3.66.0.tar.gz", hash = "sha256:a5de352c9cce75ba1b1b2e767816b14c6d147815c7450dbf42aae34773fad3f5", size = 889920, upload-time = "2026-05-07T08:04:35.788Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a4/2d/b857929745f57bb5b90f44970c02fdfbfb1184505ce4aa6e6c32550afb5f/google_cloud_spanner-3.68.0.tar.gz", hash = "sha256:90c55751cfc35bd58554c5715eab8be544095e21e40a805eb4d0c61a2bf07091", size = 904630, upload-time = "2026-06-12T18:03:27.665Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/61/4e/5111be2281faad007d7f85b1bce6e1ae68a10946e302000470835f81cf72/google_cloud_spanner-3.66.0-py3-none-any.whl", hash = "sha256:a5ec48576022fc064d7217ec5011ce1f159eb8eac669de0acd8a4497c205d872", size = 613881, upload-time = "2026-05-07T08:03:13.118Z" },
+    { url = "https://files.pythonhosted.org/packages/df/f4/02ff12ebd23bb5af763b2b165deffe0dc78f933921903eb394a6ce4e0ed3/google_cloud_spanner-3.68.0-py3-none-any.whl", hash = "sha256:ad4aaf15e718fe0c54effbf510e1d9c7259f1252194c7192107848b06d8d2af8", size = 620018, upload-time = "2026-06-12T18:03:10.159Z" },
 ]
 
 [[package]]
