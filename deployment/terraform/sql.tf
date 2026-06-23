@@ -94,8 +94,6 @@ resource "random_password" "postgres_root_password" {
   special = false
 }
 
-
-
 # BigQuery Connection user with password
 resource "google_sql_user" "banking_bq_connector" {
   name     = "banking_bq_connector"
