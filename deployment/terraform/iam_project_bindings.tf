@@ -68,13 +68,6 @@ resource "google_project_iam_member" "banking_service_sa_ces_client" {
   member  = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
-resource "google_service_account_iam_member" "banking_db_migration_sa_token_creator" {
-  for_each           = local.db_iam_support_members
-  service_account_id = google_service_account.banking_db_migration_service_account.name
-  role               = "roles/iam.serviceAccountTokenCreator"
-  member             = each.key
-}
-
 # Required to signBlob
 resource "google_service_account_iam_member" "banking_service_sa_token_creator_self" {
   service_account_id = google_service_account.banking_service_account.name
@@ -223,8 +216,15 @@ resource "google_project_iam_member" "banking_migration_sa_log_writer" {
 }
 
 resource "google_project_iam_member" "database_iam_support_instance_users" {
-  for_each = toset(var.database_iam_support_users)
+  for_each = local.db_iam_support_members
   project  = data.google_project.project.project_id
   role     = "roles/cloudsql.instanceUser"
-  member   = each.value
+  member   = each.key
+}
+
+resource "google_project_iam_member" "database_iam_support_viewers" {
+  for_each = local.db_iam_support_members
+  project  = data.google_project.project.project_id
+  role     = "roles/cloudsql.viewer"
+  member   = each.key
 }
