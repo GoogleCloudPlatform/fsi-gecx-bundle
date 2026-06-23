@@ -31,18 +31,7 @@ resource "google_secret_manager_secret_version" "postgres_banking_root_password_
   secret_data = random_password.postgres_root_password.result
 }
 
-resource "google_secret_manager_secret" "postgres_banking_support_password" {
-  secret_id = "postgres_banking_support_password"
 
-  replication {
-    auto {}
-  }
-}
-
-resource "google_secret_manager_secret_version" "postgres_support_password_version" {
-  secret      = google_secret_manager_secret.postgres_banking_support_password.id
-  secret_data = random_password.banking_support_password.result
-}
 
 resource "google_secret_manager_secret" "postgres_banking_bq_connector_password" {
   secret_id = "postgres_banking_bq_connector_password"
