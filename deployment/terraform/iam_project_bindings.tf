@@ -68,10 +68,11 @@ resource "google_project_iam_member" "banking_service_sa_ces_client" {
   member  = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
-resource "google_service_account_iam_member" "banking_service_local_token_creator" {
-  service_account_id = google_service_account.banking_service_account.name
+resource "google_service_account_iam_member" "banking_db_migration_sa_token_creator" {
+  for_each           = local.db_iam_support_members
+  service_account_id = google_service_account.banking_db_migration_service_account.name
   role               = "roles/iam.serviceAccountTokenCreator"
-  member             = "user:${data.google_client_openid_userinfo.me.email}"
+  member             = each.key
 }
 
 # Required to signBlob
