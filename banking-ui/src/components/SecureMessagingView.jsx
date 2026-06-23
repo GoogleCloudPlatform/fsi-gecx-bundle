@@ -53,7 +53,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
   const [debugBody, setDebugBody] = useState('');
   const [debugType, setDebugType] = useState('support_message');
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
-  const projectId = window.firebaseConfig?.projectId || 'fsi-gecx-2000';
+  const projectId = window.firebaseConfig?.projectId;
   
   // New Message / Thread Form State
   const [newCategory, setNewCategory] = useState('General');
@@ -377,17 +377,10 @@ function SecureMessagingView({ fbUser, customerProfile }) {
       <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] rounded-full bg-cyan-500/5 dark:bg-cyan-500/5 blur-[120px] pointer-events-none -z-10" />
 
       {/* Header Info */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 relative pr-16">
         <div>
-          <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent flex items-center gap-3">
-            <span>Secure Messages</span>
-            <button
-              onClick={() => setIsInfoModalOpen(true)}
-              className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm"
-              title="GCP & Firebase Integration Info"
-            >
-              <GoogleCloudIcon className="w-4 h-4" />
-            </button>
+          <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
+            Secure Messages
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Secure, encrypted messaging to interact directly with our banking support agents.
@@ -409,6 +402,14 @@ function SecureMessagingView({ fbUser, customerProfile }) {
             </div>
           )}
         </div>
+
+        <button
+          onClick={() => setIsInfoModalOpen(true)}
+          className="absolute right-0 top-1/2 -translate-y-1/2 p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm"
+          title="GCP & Firebase Integration Info"
+        >
+          <GoogleCloudIcon className="w-5 h-5" />
+        </button>
       </div>
 
       {/* Primary Workspace Panel */}
