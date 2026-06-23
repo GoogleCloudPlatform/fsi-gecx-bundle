@@ -74,8 +74,9 @@ resource "google_cloud_run_v2_service" "banking_service" {
 
       env {
         name  = "DATABASE_URL"
-        value = "postgresql+psycopg2://${google_sql_user.db_runtime_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+        value = "postgresql+psycopg2://${google_sql_user.banking_service_sa_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
       }
+
       env {
         name  = "DB_IAM_AUTH"
         value = "true"
@@ -441,8 +442,20 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
       egress = "PRIVATE_RANGES_ONLY"
     }
 
+    volumes {
+      name = "cloudsql"
+      cloud_sql_instance {
+        instances = [google_sql_database_instance.banking_data.connection_name]
+      }
+    }
+
     containers {
       image = "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/credit-support-agent:latest"
+
+      volume_mounts {
+        name       = "cloudsql"
+        mount_path = "/cloudsql"
+      }
 
       resources {
         cpu_idle          = false
@@ -453,9 +466,15 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
         }
       }
 
+
       env {
         name  = "DATABASE_URL"
-        value = "postgresql+psycopg2://${google_sql_user.db_runtime_user.name}:${random_password.db_runtime_password.result}@${google_sql_database_instance.banking_data.private_ip_address}/${google_sql_database.banking.name}"
+        value = "postgresql+psycopg2://${google_sql_user.banking_service_sa_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+      }
+
+      env {
+        name  = "DB_IAM_AUTH"
+        value = "true"
       }
 
       env {
@@ -563,7 +582,7 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
     template {
       max_retries     = 1
       timeout         = "300s"
-      service_account = google_service_account.banking_migration_service_account.email
+      service_account = google_service_account.banking_db_migration_service_account.email
 
       volumes {
         name = "cloudsql"
@@ -583,15 +602,12 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
 
         env {
           name  = "DATABASE_URL"
-          value = "postgresql+psycopg2://${google_sql_user.db_migration_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+          value = "postgresql+psycopg2://${google_sql_user.banking_db_migration_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
         }
+
         env {
           name  = "DB_IAM_AUTH"
           value = "true"
-        }
-        env {
-          name  = "DATABASE_RUNTIME_USER"
-          value = replace(google_service_account.banking_service_account.email, ".gserviceaccount.com", "")
         }
       }
 
