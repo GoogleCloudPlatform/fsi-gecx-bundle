@@ -6,7 +6,7 @@ This document defines the system architecture, flow mechanics, and client-side i
 
 ## 📐 1. System Topology & Flow Mechanics
 
-The application prefill integration utilizes GECx's client-side tool execution capability to dynamically route, format, and populate card applications based on live conversation context with the conversational agent.
+The application prefill integration utilizes GECX's client-side tool execution capability to dynamically route, format, and populate card applications based on live conversation context with the conversational agent.
 
 ```mermaid
 sequenceDiagram
@@ -14,7 +14,7 @@ sequenceDiagram
     actor Customer as Customer
     participant Messenger as df-messenger Widget (Browser)
     participant UI as React Host (App.jsx)
-    participant Agent as GECx Agent (Google Cloud)
+    participant Agent as GECX Agent (Google Cloud)
     participant View as ApplyCreditCardView
 
     %% Phase 1: Startup & Tool Registration
@@ -47,7 +47,7 @@ sequenceDiagram
 
 ### A. Client-Side Tool Execution Paradigm (Client Functions)
 * **Context**: The conversational agent does not have access to client-side navigation objects or local storage contexts. Direct API-based form filling requires background database writes that can lead to race conditions when the user lands on the page.
-* **Decision**: We use GECx **Client-Side Functions** to pass execution control back to the hosting browser context. By declaring `populate_form_content` as a Client-Side Tool in CX Agent Studio, the agent issues a JSON-RPC request to the browser's `df-messenger` component. The browser acts as the execution coordinator, updating the DOM and routing parameters instantly.
+* **Decision**: We use GECX **Client-Side Functions** to pass execution control back to the hosting browser context. By declaring `populate_form_content` as a Client-Side Tool in CX Agent Studio, the agent issues a JSON-RPC request to the browser's `df-messenger` component. The browser acts as the execution coordinator, updating the DOM and routing parameters instantly.
 
 ### B. Route Prefill Isolation using React Router State
 * **Context**: Passing prefilled profile metadata (e.g., employment details, annual income, phone numbers) through URL query parameters exposes sensitive personal identifiable information (PII) in browser history logs.
@@ -57,7 +57,7 @@ sequenceDiagram
 
 ## 🛠️ 3. Client & Agent Tool Schemas
 
-### A. GECx Client Tool Definition
+### A. GECX Client Tool Definition
 The `populate_form_content` tool is registered in the conversational agent's scope with the following schema:
 
 ```json

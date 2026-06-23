@@ -574,7 +574,7 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Architecture Guide</h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">Read about the GECx client-side function callbacks, React Router prefill mapping, and schemas.</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Read about the GECX client-side function callbacks, React Router prefill mapping, and schemas.</p>
               </div>
               <a
                 href="https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/blob/main/docs/architecture/credit_card_prefill_integration.md"

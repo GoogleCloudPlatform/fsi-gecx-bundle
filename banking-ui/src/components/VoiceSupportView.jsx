@@ -1038,7 +1038,7 @@ export default function VoiceSupportView() {
           {engine === 'gecx' ? (
             <>
               <p>
-                The voice support consultation in GECX mode is powered by <strong>Google Cloud Customer Experience Suite (GECx)</strong> using bidirectional audio streaming.
+                The voice support consultation in GECX mode is powered by <strong>Google Cloud Customer Experience Suite (GECX)</strong> using bidirectional audio streaming.
               </p>
               <p>
                 The frontend opens a direct WebSocket pipeline to the <code>banking-service</code> backend. The backend acts as a gateway proxy, establishing a bidirectional gRPC session (via the <code>BidiRunSession</code> RPC) to the conversational agent deployment in CX Agent Studio.

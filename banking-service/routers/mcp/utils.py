@@ -108,8 +108,8 @@ def requires_user_assertion(func):
                     from utils.auth import validate_google_id_token
                     validate_google_id_token(token)
                 except Exception as e:
-                    logger.error(f"GECx caller token verification failed: {e}")
-                    raise PermissionError("Access Denied: GECx caller token verification failed.")
+                    logger.error(f"GECX caller token verification failed: {e}")
+                    raise PermissionError("Access Denied: GECX caller token verification failed.")
 
         # 2. Extract and validate Firebase ID Token Assertion
         logger.info(f"FastMCP call kwargs: {kwargs}")

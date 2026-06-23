@@ -1,12 +1,12 @@
-# FSI Architecture Design: GECx Telephony Voice Agent & Bidi Stream Orchestration
+# FSI Architecture Design: GECX Telephony Voice Agent & Bidi Stream Orchestration
 
-This document details the system architecture, security design, and key implementation gotchas for the real-time **GECx Telephony Voice Agent** using Google Customer Engagement Suite (CES) bi-directional streaming.
+This document details the system architecture, security design, and key implementation gotchas for the real-time **GECX Telephony Voice Agent** using Google Customer Engagement Suite (CES) bi-directional streaming.
 
 ---
 
 ## 📐 1. System Topology & Media Flow
 
-The GECx Telephony Voice Agent establishes a low-latency, bidirectional audio streaming connection between the client browser and the Google CES Bidi API via the `banking-service` acting as an authenticated proxy. 
+The GECX Telephony Voice Agent establishes a low-latency, bidirectional audio streaming connection between the client browser and the Google CES Bidi API via the `banking-service` acting as an authenticated proxy. 
 
 ```mermaid
 sequenceDiagram
@@ -28,16 +28,16 @@ sequenceDiagram
     Proxy->>GECX: Send Session Variables Frame (realtimeInput.variables)
     Proxy->>GECX: Send Welcome Event Frame (realtimeInput.event: "sys.welcome")
     
-    GECX-->>Proxy: GECx welcome greeting audio stream
+    GECX-->>Proxy: GECX welcome greeting audio stream
     Proxy-->>User: Forward welcome greeting audio stream
     
     User->>Proxy: User speaks: "Increase my credit limit"
     Proxy->>GECX: Stream raw PCM audio packets
     
-    Note over GECX: GECx Agent processes intent & decides to call tool
+    Note over GECX: GECX Agent processes intent & decides to call tool
     
     GECX->>MCP: POST /mcp/ (Call Tool: request_credit_limit_increase)
-    Note over MCP: GECx injects custom header: x-forwarded-user-context = $context.variables.user_token
+    Note over MCP: GECX injects custom header: x-forwarded-user-context = $context.variables.user_token
     
     MCP->>MCP: Validate caller Google OIDC Token (Auth Header)
     MCP->>MCP: Validate Firebase user assertion token (x-forwarded-user-context)
@@ -49,7 +49,7 @@ sequenceDiagram
     Proxy-->>User: Push WebSocket EVENT (Update available credit UI in real-time)
     
     MCP-->>GECX: HTTP 200 (Success result)
-    GECX-->>Proxy: GECx audio stream response: "Your credit limit has been increased."
+    GECX-->>Proxy: GECX audio stream response: "Your credit limit has been increased."
     Proxy-->>User: Forward audio response
 ```
 
@@ -57,10 +57,10 @@ sequenceDiagram
 
 ## 🔒 2. Security Architecture & Identity Forwarding
 
-Because GECx operates as a Google-managed cloud agent orchestrator, it must securely call on-premise or custom APIs (like our FastMCP endpoints) on behalf of the active user:
+Because GECX operates as a Google-managed cloud agent orchestrator, it must securely call on-premise or custom APIs (like our FastMCP endpoints) on behalf of the active user:
 
 1. **Google OIDC ID Token Verification**: The FastMCP router ensures that invocations come exclusively from Google's CES services by verifying the Google service account OIDC token in the `Authorization: Bearer <JWT>` header.
-2. **End-User Identity Assertion (`x-forwarded-user-context`)**: The backend forwards the end-user's Firebase ID token into GECx at startup. In the GECx Toolset GUI, the custom header `x-forwarded-user-context` is mapped to `$context.variables.user_token`. During tool calls, GECx automatically injects this token, allowing the backend `requires_user_assertion` decorator to cryptographically verify the cardholder's identity.
+2. **End-User Identity Assertion (`x-forwarded-user-context`)**: The backend forwards the end-user's Firebase ID token into GECX at startup. In the GECX Toolset GUI, the custom header `x-forwarded-user-context` is mapped to `$context.variables.user_token`. During tool calls, GECX automatically injects this token, allowing the backend `requires_user_assertion` decorator to cryptographically verify the cardholder's identity.
 
 ---
 
@@ -80,7 +80,7 @@ Because GECx operates as a Google-managed cloud agent orchestrator, it must secu
   ```
   Sending session variables and triggering the welcome greeting (`sys.welcome` event) in a single consolidated WebSocket message results in an immediate connection termination with code `1007` (`oneof field 'input_type' is already set`).
 * **The Solution**: The two payloads must be sent as **two separate, sequential WebSocket frames**:
-  1. Write a `realtimeInput` frame containing only the `variables` to seed GECx's session state.
+  1. Write a `realtimeInput` frame containing only the `variables` to seed GECX's session state.
   2. Write a `realtimeInput` frame containing only the `event` to prompt the greeting.
 
 ### B. Session Registry Identity Mismatch (Firebase UID vs Database Customer ID)

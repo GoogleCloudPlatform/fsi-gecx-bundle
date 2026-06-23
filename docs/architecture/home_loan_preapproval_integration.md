@@ -14,7 +14,7 @@ sequenceDiagram
     actor Customer as Customer
     participant Messenger as df-messenger Widget (Browser)
     participant UI as React Host (App.jsx)
-    participant Agent as GECx Agent (Google Cloud)
+    participant Agent as GECX Agent (Google Cloud)
     participant API as banking-service (Cloud Run)
     participant DocAI as Document AI Processor (GCP)
     participant BQ as BigQuery Database
@@ -62,7 +62,7 @@ sequenceDiagram
 
 ### A. Client-Coordinated Document Upload Handshake
 * **Context**: The conversational agent runs in a sandboxed, Google-managed cloud environment. It cannot directly read files from the user's hard drive or directly post binary files to the API backend.
-* **Decision**: We use GECx **Client-Side Functions** to prompt the browser when a document upload is required. The browser opens a native file selection prompt, reads the file contents as a base64 string, and uploads it to the `/upload-and-validate` API endpoint. The result payload is returned to the agent session to confirm completion.
+* **Decision**: We use GECX **Client-Side Functions** to prompt the browser when a document upload is required. The browser opens a native file selection prompt, reads the file contents as a base64 string, and uploads it to the `/upload-and-validate` API endpoint. The result payload is returned to the agent session to confirm completion.
 
 ### B. Inline Structured Document Extraction with Document AI
 * **Context**: Manual verification of salary, employer name, and federal withholding from uploaded tax documents is slow and prone to errors.

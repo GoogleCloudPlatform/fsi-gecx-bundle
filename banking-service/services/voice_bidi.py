@@ -72,7 +72,7 @@ token_manager = GCPTokenManager()
 
 
 class VoiceBidiSession:
-    """Manages a single bi-directional voice streaming session with Google GECx."""
+    """Manages a single bi-directional voice streaming session with Google GECX."""
     def __init__(
         self,
         user_id: str,
@@ -215,7 +215,7 @@ class VoiceBidiSession:
                 finally:
                     await self.client_to_gecx_queue.put(None)
 
-            # Task B: Base64-encode and forward audio frames to GECx WebSocket
+            # Task B: Base64-encode and forward audio frames to GECX WebSocket
             async def send_to_gecx():
                 try:
                     while True:
