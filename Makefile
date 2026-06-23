@@ -242,16 +242,6 @@ trigger-site-crawl:
 		--format="value(metadata.build.id)") && \
 	gcloud builds log $$BUILD_ID --region=$(REGION) --stream
 
-.PHONY: trigger-db-migration
-trigger-db-migration: ## Run the Cloud Build database migration trigger (usage: make trigger-db-migration BRANCH=feature/foo)
-	@if [ -z "$(BRANCH)" ]; then echo "Error: BRANCH is required. Usage: make trigger-db-migration BRANCH=feature/foo"; exit 1; fi
-	@echo "Running Cloud Build database migration trigger..."
-	BUILD_ID=$$(gcloud builds triggers run banking-db-migration \
-		--region=$(REGION) \
-		--branch=$(BRANCH) \
-		--format="value(metadata.build.id)") && \
-	gcloud builds log $$BUILD_ID --region=$(REGION) --stream
-
 .PHONY: run-crawl
 run-crawl: ## Manually trigger the Playwright web crawler using dynamic CLI substitutions
 	@echo "Submitting manual Playwright web crawler job for project $(PROJECT_ID) (domain=$(CUSTOM_DOMAIN))..."
