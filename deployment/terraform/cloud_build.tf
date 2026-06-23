@@ -230,4 +230,3 @@ resource "google_cloudbuild_trigger" "db_migration_trigger" {
     }
   }
 }
-
