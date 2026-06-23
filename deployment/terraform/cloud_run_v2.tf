@@ -642,5 +642,8 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
     ]
   }
 
-  depends_on = [google_project_service.run_googleapis_com]
+  depends_on = [
+    google_project_service.run_googleapis_com,
+    google_secret_manager_secret_iam_member.banking_db_migration_postgres_root_password_accessor
+  ]
 }
