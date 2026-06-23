@@ -559,6 +559,10 @@ resource "google_cloud_run_v2_service" "data_generator" {
         name  = "SPANNER_DATABASE"
         value = google_spanner_database.banking.name
       }
+      env {
+        name  = "SPANNER_DISABLE_BUILTIN_METRICS"
+        value = "true"
+      }
     }
   }
 
