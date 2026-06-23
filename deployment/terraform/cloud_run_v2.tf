@@ -44,8 +44,20 @@ resource "google_cloud_run_v2_service" "banking_service" {
       egress = "PRIVATE_RANGES_ONLY"
     }
 
+    volumes {
+      name = "cloudsql"
+      cloud_sql_instance {
+        instances = [google_sql_database_instance.banking_data.connection_name]
+      }
+    }
+
     containers {
       image = local.banking_service_url
+
+      volume_mounts {
+        name       = "cloudsql"
+        mount_path = "/cloudsql"
+      }
 
       resources {
         startup_cpu_boost = true
@@ -62,7 +74,12 @@ resource "google_cloud_run_v2_service" "banking_service" {
 
       env {
         name  = "DATABASE_URL"
-        value = "postgresql+psycopg2://${google_sql_user.db_runtime_user.name}:${random_password.db_runtime_password.result}@${google_sql_database_instance.banking_data.private_ip_address}/${google_sql_database.banking.name}"
+        value = "postgresql+psycopg2://${google_sql_user.banking_service_sa_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+      }
+
+      env {
+        name  = "DB_IAM_AUTH"
+        value = "true"
       }
 
       env {
@@ -425,8 +442,20 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
       egress = "PRIVATE_RANGES_ONLY"
     }
 
+    volumes {
+      name = "cloudsql"
+      cloud_sql_instance {
+        instances = [google_sql_database_instance.banking_data.connection_name]
+      }
+    }
+
     containers {
       image = "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/credit-support-agent:latest"
+
+      volume_mounts {
+        name       = "cloudsql"
+        mount_path = "/cloudsql"
+      }
 
       resources {
         cpu_idle          = false
@@ -437,9 +466,15 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
         }
       }
 
+
       env {
         name  = "DATABASE_URL"
-        value = "postgresql+psycopg2://${google_sql_user.db_runtime_user.name}:${random_password.db_runtime_password.result}@${google_sql_database_instance.banking_data.private_ip_address}/${google_sql_database.banking.name}"
+        value = "postgresql+psycopg2://${google_sql_user.banking_service_sa_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+      }
+
+      env {
+        name  = "DB_IAM_AUTH"
+        value = "true"
       }
 
       env {
@@ -547,15 +582,47 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
     template {
       max_retries     = 1
       timeout         = "300s"
-      service_account = google_service_account.banking_service_account.email
+      service_account = google_service_account.banking_db_migration_service_account.email
+
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.banking_data.connection_name]
+        }
+      }
 
       containers {
         image   = "us-central1-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/banking-service:latest"
         command = ["alembic", "upgrade", "head"]
 
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+
         env {
           name  = "DATABASE_URL"
-          value = "postgresql+psycopg2://${google_sql_user.db_migration_user.name}:${random_password.db_migration_password.result}@${google_sql_database_instance.banking_data.private_ip_address}/${google_sql_database.banking.name}"
+          value = "postgresql+psycopg2://postgres@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+        }
+
+        env {
+          name  = "DB_IAM_AUTH"
+          value = "false"
+        }
+
+        env {
+          name = "DB_PASSWORD"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.postgres_banking_root_password.secret_id
+              version = "latest"
+            }
+          }
+        }
+
+        env {
+          name  = "IAM_DBA_USERS"
+          value = join(",", [for k, v in local.db_iam_support_members : v.name])
         }
       }
 
@@ -571,9 +638,14 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
 
   lifecycle {
     ignore_changes = [
-      template[0].template[0].containers[0].image
+      template[0].template[0].containers[0].image,
+      client,
+      client_version
     ]
   }
 
-  depends_on = [google_project_service.run_googleapis_com]
+  depends_on = [
+    google_project_service.run_googleapis_com,
+    google_secret_manager_secret_iam_member.banking_db_migration_postgres_root_password_accessor
+  ]
 }

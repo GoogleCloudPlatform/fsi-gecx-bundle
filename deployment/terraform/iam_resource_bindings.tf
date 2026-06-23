@@ -156,6 +156,12 @@ resource "google_secret_manager_secret_iam_member" "ces_secret_accessor" {
   depends_on = [google_project_service.ces_googleapis_com]
 }
 
+resource "google_secret_manager_secret_iam_member" "banking_db_migration_postgres_root_password_accessor" {
+  secret_id = google_secret_manager_secret.postgres_banking_root_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
+}
+
 resource "google_bigquery_dataset_iam_member" "banking_service_account_bq_data_editor" {
   project    = data.google_project.project.project_id
   dataset_id = google_bigquery_dataset.banking.dataset_id
@@ -191,7 +197,6 @@ resource "google_kms_crypto_key_iam_member" "docai_kms_binding" {
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   member        = "serviceAccount:${google_project_service_identity.docai_sa.email}"
 }
-
 
 resource "google_storage_bucket_iam_member" "cloudbuild_crawler_sa_site_crawled_content_writer" {
   bucket = google_storage_bucket.site_crawled_content.name

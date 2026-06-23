@@ -14,8 +14,11 @@
 
 import logging
 import os
-
 from dotenv import load_dotenv
+
+load_dotenv()
+logging.basicConfig(level=logging.INFO)
+
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -44,10 +47,6 @@ from routers.mcp import mcp_app
 from routers.voice_bidi import router as voice_bidi_router
 
 import firebase_admin
-
-load_dotenv()
-
-logging.basicConfig(level=logging.INFO)
 
 
 # Initialize Firebase Admin SDK using Application Default Credentials (ADC)

@@ -68,11 +68,12 @@ resource "google_project_iam_member" "banking_service_sa_ces_client" {
   member  = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
-# resource "google_service_account_iam_member" "banking_service_local_token_creator" {
-#   service_account_id = google_service_account.banking_service_account.name
-#   role               = "roles/iam.serviceAccountTokenCreator"
-#   member             = "user:${data.google_client_openid_userinfo.me.email}"
-# }
+resource "google_service_account_iam_member" "banking_db_migration_sa_token_creator" {
+  for_each           = local.db_iam_support_members
+  service_account_id = google_service_account.banking_db_migration_service_account.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = each.key
+}
 
 # Required to signBlob
 resource "google_service_account_iam_member" "banking_service_sa_token_creator_self" {
@@ -177,4 +178,53 @@ resource "google_project_iam_member" "datagen_sa_bq_job_user" {
   project = data.google_project.project.project_id
   role    = "roles/bigquery.jobUser"
   member  = "serviceAccount:${google_service_account.data_generator_service_account.email}"
+}
+
+resource "google_project_iam_member" "developer_cloudsql_client" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.client"
+  member  = "user:${data.google_client_openid_userinfo.me.email}"
+}
+
+resource "google_project_iam_member" "developer_cloudsql_instance_user" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = "user:${data.google_client_openid_userinfo.me.email}"
+}
+
+resource "google_project_iam_member" "banking_service_sa_cloudsql_client" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
+resource "google_project_iam_member" "banking_service_sa_cloudsql_instance_user" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
+resource "google_project_iam_member" "banking_migration_sa_cloudsql_client" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
+}
+
+resource "google_project_iam_member" "banking_migration_sa_cloudsql_instance_user" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
+}
+
+resource "google_project_iam_member" "banking_migration_sa_log_writer" {
+  project = data.google_project.project.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
+}
+
+resource "google_project_iam_member" "database_iam_support_instance_users" {
+  for_each = toset(var.database_iam_support_users)
+  project  = data.google_project.project.project_id
+  role     = "roles/cloudsql.instanceUser"
+  member   = each.value
 }

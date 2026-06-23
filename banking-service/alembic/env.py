@@ -4,7 +4,7 @@ import logging
 from logging.config import fileConfig
 
 import sqlalchemy as sa
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import pool
 from sqlalchemy.engine.url import make_url
 
 from alembic import context
@@ -80,11 +80,8 @@ def run_migrations_online() -> None:
 
     """
     logger.info(f"Running online migrations against: {masked_url}")
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    from utils.database import create_db_engine
+    connectable = create_db_engine(DATABASE_URL, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
         # Detect if we are deploying against PostgreSQL to prevent horizontal scaling lock contention

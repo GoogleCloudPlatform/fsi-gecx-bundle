@@ -16,5 +16,3 @@ ENV/
 .idea/
 .vscode/
 *.swp
-
-run.sh

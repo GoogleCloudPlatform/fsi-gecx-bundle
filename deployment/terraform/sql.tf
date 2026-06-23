@@ -94,24 +94,26 @@ resource "random_password" "postgres_root_password" {
   special = false
 }
 
-resource "google_sql_user" "db_migration_user" {
-  name     = "banking_migration"
+# Support user with password
+resource "google_sql_user" "banking_support" {
+  name     = "banking_support"
   instance = google_sql_database_instance.banking_data.name
-  password = random_password.db_migration_password.result
+  password = random_password.banking_support_password.result
 }
 
-resource "random_password" "db_migration_password" {
+resource "random_password" "banking_support_password" {
   length  = 16
   special = false
 }
 
-resource "google_sql_user" "db_runtime_user" {
-  name     = "banking_runtime"
+# BigQuery Connection user with password
+resource "google_sql_user" "banking_bq_connector" {
+  name     = "banking_bq_connector"
   instance = google_sql_database_instance.banking_data.name
-  password = random_password.db_runtime_password.result
+  password = random_password.banking_bq_connector_password.result
 }
 
-resource "random_password" "db_runtime_password" {
+resource "random_password" "banking_bq_connector_password" {
   length  = 16
   special = false
 }
@@ -122,14 +124,33 @@ resource "google_sql_database" "banking" {
   deletion_policy = "ABANDON"
 }
 
-# Legacy database user preserved to prevent drop role dependency errors
-resource "random_password" "banking_password" {
-  length  = 16
-  special = false
+resource "google_sql_user" "banking_db_migration_iam_user" {
+  name     = replace(google_service_account.banking_db_migration_service_account.email, ".gserviceaccount.com", "")
+  instance = google_sql_database_instance.banking_data.name
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
 }
 
-resource "google_sql_user" "banking_user" {
-  name     = "banking"
+resource "google_sql_user" "banking_service_sa_iam_user" {
+  name     = replace(google_service_account.banking_service_account.email, ".gserviceaccount.com", "")
   instance = google_sql_database_instance.banking_data.name
-  password = random_password.banking_password.result
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
+}
+
+locals {
+  db_iam_support_members = {
+    for member in concat(var.database_iam_support_users, ["user:${data.google_client_openid_userinfo.me.email}"]) :
+    member => {
+      name = split(":", member)[1]
+      type = split(":", member)[0] == "user" ? "CLOUD_IAM_USER" : (
+        split(":", member)[0] == "group" ? "CLOUD_IAM_GROUP" : "CLOUD_IAM_SERVICE_ACCOUNT"
+      )
+    }
+  }
+}
+
+resource "google_sql_user" "database_iam_support_users" {
+  for_each = local.db_iam_support_members
+  name     = each.value.name
+  instance = google_sql_database_instance.banking_data.name
+  type     = each.value.type
 }

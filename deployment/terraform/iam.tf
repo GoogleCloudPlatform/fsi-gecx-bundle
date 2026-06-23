@@ -56,6 +56,18 @@ resource "google_service_account" "banking_service_account" {
   }
 }
 
+resource "google_service_account" "banking_db_migration_service_account" {
+  account_id   = "banking-db-migration-sa"
+  display_name = "Banking DB Migration Service Account"
+
+  lifecycle {
+    ignore_changes = [
+      description,
+      display_name
+    ]
+  }
+}
+
 resource "google_service_account" "ccai_insights_service_account" {
   account_id   = "ccai-insights-sa"
   display_name = "CCAI Insights Service Account"

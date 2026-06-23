@@ -15,27 +15,82 @@
 import os
 import logging
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 logger = logging.getLogger(__name__)
 
-# Resolve SQL database engine URL dynamically (SQLite local file by default, PostgreSQL for GCP)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///banking.db")
+db_password = os.getenv("DB_PASSWORD")
+if db_password and "@" in DATABASE_URL:
+    parts = DATABASE_URL.split("@", 1)
+    user_part = parts[0].split("://", 1)[1]
+    if ":" not in user_part:
+        DATABASE_URL = parts[0] + ":" + db_password + "@" + parts[1]
 
-# SQLite needs 'check_same_thread=False' to allow multi-threaded asynchronous FastAPI routers
-connect_args = {}
-engine_args = {}
-if DATABASE_URL.startswith("sqlite"):
-    connect_args["check_same_thread"] = False
-elif DATABASE_URL.startswith("postgresql"):
-    # Optimize connection pool for serverless Cloud Run environment to prevent connection leaks/timeouts
-    engine_args["pool_size"] = 10
-    engine_args["max_overflow"] = 20
-    engine_args["pool_recycle"] = 900
-    engine_args["pool_pre_ping"] = True
 
-logger.info(f"Initializing database engine with connection: {DATABASE_URL.split('@')[-1]}")
-engine = create_engine(DATABASE_URL, connect_args=connect_args, **engine_args)
+def get_iam_connection(url_str):
+    import google.auth
+    import google.auth.transport.requests
+    import psycopg2
+    from sqlalchemy.engine import make_url
+
+    url = make_url(url_str)
+    credentials, project = google.auth.default(
+        scopes=[
+            "https://www.googleapis.com/auth/sqlservice.login",
+            "https://www.googleapis.com/auth/cloud-platform",
+        ]
+    )
+    request = google.auth.transport.requests.Request()
+    logger.info(f"Refreshing GCP credentials of type: {type(credentials)}")
+    credentials.refresh(request)
+    logger.info(f"Credentials refresh completed. Token present: {credentials.token is not None}")
+    if credentials.token:
+        logger.info(f"Token length: {len(credentials.token)}")
+    
+    # If host is in query (Unix socket path) or host is None, check query host
+    host_val = url.host or url.query.get("host")
+    
+    conn_params = {
+        "host": host_val,
+        "database": url.database,
+        "user": url.username,
+        "password": credentials.token,
+    }
+    
+    # Only set port and sslmode if we are using TCP/IP (i.e. host is not a unix socket path starting with /)
+    if host_val and not host_val.startswith("/"):
+        conn_params["port"] = url.port or 5432
+        if url.query.get("sslmode"):
+            conn_params["sslmode"] = url.query["sslmode"]
+        else:
+            conn_params["sslmode"] = "require"
+        
+    return psycopg2.connect(**conn_params)
+
+def create_db_engine(url_str=DATABASE_URL, **kwargs):
+    connect_args = {}
+    engine_args = kwargs.copy()
+    
+    if url_str.startswith("sqlite"):
+        connect_args["check_same_thread"] = False
+    elif url_str.startswith("postgresql"):
+        if "pool_size" not in engine_args and "poolclass" not in engine_args:
+            engine_args["pool_size"] = 10
+            engine_args["max_overflow"] = 20
+            engine_args["pool_recycle"] = 900
+            engine_args["pool_pre_ping"] = True
+            
+        if os.getenv("DB_IAM_AUTH") == "true":
+            logger.info("Using GCP IAM authentication for Cloud SQL PostgreSQL connection.")
+            engine_args["creator"] = lambda: get_iam_connection(url_str)
+            
+    sanitized_url = make_url(url_str).render_as_string(hide_password=True)
+    logger.info(f"Creating database engine for connection: {sanitized_url}")
+    return create_engine(url_str, connect_args=connect_args, **engine_args)
+
+engine = create_db_engine()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
