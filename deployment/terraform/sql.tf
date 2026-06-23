@@ -124,12 +124,6 @@ resource "google_sql_database" "banking" {
   deletion_policy = "ABANDON"
 }
 
-resource "google_sql_user" "developer_iam_user" {
-  name     = data.google_client_openid_userinfo.me.email
-  instance = google_sql_database_instance.banking_data.name
-  type     = "CLOUD_IAM_USER"
-}
-
 resource "google_sql_user" "banking_db_migration_iam_user" {
   name     = replace(google_service_account.banking_db_migration_service_account.email, ".gserviceaccount.com", "")
   instance = google_sql_database_instance.banking_data.name
@@ -144,7 +138,7 @@ resource "google_sql_user" "banking_service_sa_iam_user" {
 
 locals {
   db_iam_support_members = {
-    for member in var.database_iam_support_users :
+    for member in concat(var.database_iam_support_users, ["user:${data.google_client_openid_userinfo.me.email}"]) :
     member => {
       name = split(":", member)[1]
       type = split(":", member)[0] == "user" ? "CLOUD_IAM_USER" : (
