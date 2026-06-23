@@ -53,7 +53,7 @@ async def gecx_voice_stream(websocket: WebSocket):
                 validated_token = validate_firebase_token(auth_frame["token"])
                 user_id = validated_token.claims.get("sub")
                 fb_token = auth_frame["token"]
-                # Append a timestamp to GECx session ID to force a fresh session context on every connect
+                # Append a timestamp to GECX session ID to force a fresh session context on every connect
                 session_id = f"session-{user_id}-{int(time.time())}"
                 
             logger.info(f"First-frame authentication succeeded. Session: {session_id} (User: {user_id})")
