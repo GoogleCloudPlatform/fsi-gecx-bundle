@@ -127,6 +127,13 @@ def upgrade() -> None:
         op.execute(f'GRANT USAGE ON SCHEMA public TO "{runtime_user}";')
         op.execute(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "{runtime_user}";')
         op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{runtime_user}";')
+
+        iam_db_users_env = os.getenv("IAM_DB_USERS")
+        if iam_db_users_env:
+            for user in [u.strip() for u in iam_db_users_env.split(",") if u.strip()]:
+                op.execute(f'GRANT USAGE ON SCHEMA public TO "{user}";')
+                op.execute(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "{user}";')
+                op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{user}";')
     # ### end Alembic commands ###
 
 
