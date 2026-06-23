@@ -27,7 +27,7 @@ export default function LocatorView() {
   const [gpsUsed, setGpsUsed] = useState(false);
   const [openOnly, setOpenOnly] = useState(false);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
-  const projectId = window.firebaseConfig?.projectId || 'fsi-gecx-2000';
+  const projectId = window.firebaseConfig?.projectId;
 
   // Helper to determine if a location is open right now
   const isLocationOpen = (hours) => {
