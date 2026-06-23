@@ -75,6 +75,7 @@ resource "google_cloudbuild_trigger" "service_deploy_trigger" {
   substitutions = {
     _REGION         = var.region
     _TRIGGER_DEPLOY = "true"
+    _IAM_DBA_USERS  = join(",", [for k, v in local.db_iam_support_members : v.name])
   }
 }
 
@@ -202,31 +203,31 @@ resource "google_cloudbuild_trigger" "data_generator_deploy_trigger" {
   }
 }
 
-resource "google_cloudbuild_trigger" "db_migration_trigger" {
-  count    = var.deploy_cloud_build_triggers ? 1 : 0
-  name     = "banking-db-migration"
-  location = var.region
-  tags     = ["banking-db", "migration"]
+# resource "google_cloudbuild_trigger" "db_migration_trigger" {
+#   count    = var.deploy_cloud_build_triggers ? 1 : 0
+#   name     = "banking-db-migration"
+#   location = var.region
+#   tags     = ["banking-db", "migration"]
 
-  repository_event_config {
-    repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
-    push {
-      branch = var.github_branch
-    }
-  }
+#   repository_event_config {
+#     repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
+#     push {
+#       branch = var.github_branch
+#     }
+#   }
 
-  service_account    = google_service_account.cloudbuild_service_account.id
-  included_files     = ["banking-service/alembic/**"]
-  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
+#   service_account    = google_service_account.cloudbuild_service_account.id
+#   included_files     = ["banking-service/alembic/**"]
+#   include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
 
-  build {
-    step {
-      name       = "gcr.io/google.com/cloudsdktool/cloud-sdk"
-      entrypoint = "gcloud"
-      args       = ["run", "jobs", "execute", google_cloud_run_v2_job.db_migration_job.name, "--region", var.region, "--wait"]
-    }
-    options {
-      logging = "CLOUD_LOGGING_ONLY"
-    }
-  }
-}
+#   build {
+#     step {
+#       name       = "gcr.io/google.com/cloudsdktool/cloud-sdk"
+#       entrypoint = "gcloud"
+#       args       = ["run", "jobs", "execute", google_cloud_run_v2_job.db_migration_job.name, "--region", var.region, "--wait"]
+#     }
+#     options {
+#       logging = "CLOUD_LOGGING_ONLY"
+#     }
+#   }
+# }

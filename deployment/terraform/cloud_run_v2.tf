@@ -609,6 +609,11 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
           name  = "DB_IAM_AUTH"
           value = "true"
         }
+
+        env {
+          name  = "IAM_DBA_USERS"
+          value = join(",", [for k, v in local.db_iam_support_members : v.name])
+        }
       }
 
       vpc_access {

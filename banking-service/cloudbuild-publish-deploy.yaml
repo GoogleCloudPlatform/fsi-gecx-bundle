@@ -73,8 +73,9 @@ steps:
           echo "Registering latest image with Cloud Run Migration Job..."
           gcloud run jobs update banking-db-migrate \
             --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
+            --update-env-vars "IAM_DBA_USERS=${_IAM_DBA_USERS}" \
             --region "${_REGION}"
-            echo "Executing pre-deployment database schema migrations..."
+          echo "Executing pre-deployment database schema migrations..."
           gcloud run jobs execute banking-db-migrate \
             --region "${_REGION}" \
             --wait
@@ -108,3 +109,5 @@ options:
 substitutions:
   _REGION: "us-central1"
   _TRIGGER_DEPLOY: "false"
+  _IAM_DBA_USERS: ""
+
