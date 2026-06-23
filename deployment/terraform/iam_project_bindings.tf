@@ -220,3 +220,10 @@ resource "google_project_iam_member" "banking_migration_sa_log_writer" {
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
 }
+
+resource "google_project_iam_member" "database_iam_support_instance_users" {
+  for_each = toset(var.database_iam_support_users)
+  project  = data.google_project.project.project_id
+  role     = "roles/cloudsql.instanceUser"
+  member   = each.value
+}
