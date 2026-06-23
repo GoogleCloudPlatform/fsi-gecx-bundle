@@ -12,7 +12,8 @@ import {
   Calendar,
   AlertCircle,
   Video,
-  VideoOff
+  VideoOff,
+  ExternalLink
 } from 'lucide-react';
 import { 
   getCreditCardAccount, 
@@ -20,8 +21,12 @@ import {
   getCreditCardTransactions 
 } from '../utils/api.js';
 import { DataChannelEvent } from '../utils/constants.js';
+import GcpInfoModal from './GcpInfoModal.jsx';
+import GoogleCloudIcon from './GoogleCloudIcon.jsx';
 
 export default function VoiceSupportView() {
+  const projectId = window.firebaseConfig?.projectId;
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [account, setAccount] = useState(null);
   const [cardStatus, setCardStatus] = useState('ACTIVE');
   const [creditLimit, setCreditLimit] = useState(0);
@@ -659,16 +664,23 @@ export default function VoiceSupportView() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 text-slate-100 min-h-[80vh] flex flex-col justify-between">
+    <div className="max-w-6xl mx-auto px-4 pt-32 pb-24 md:pt-44 md:pb-32 text-slate-100 min-h-[80vh] flex flex-col justify-between">
       
       {/* Header section */}
-      <div className="text-center mb-6 flex flex-col items-center">
+      <div className="text-center mb-6 flex flex-col items-center relative w-full">
         <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
           Nova Horizon Voice Support Copilot
         </h1>
         <p className="text-slate-400 mt-2 text-lg">
           Talk to our real-time AI assistant for instant credit card operations.
         </p>
+        <button
+          onClick={() => setIsInfoModalOpen(true)}
+          className="absolute right-0 top-1/2 -translate-y-1/2 p-2.5 rounded-2xl hover:bg-slate-800/80 border border-slate-800 bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+          title="GCP App Integration Info"
+        >
+          <GoogleCloudIcon className="w-5 h-5" />
+        </button>
 
         {/* Engine Selection Toggle */}
         {!isConnected && !isConnecting && (
@@ -1016,6 +1028,100 @@ export default function VoiceSupportView() {
           )}
         </div>
       </div>
+
+      <GcpInfoModal
+        isOpen={isInfoModalOpen}
+        onClose={() => setIsInfoModalOpen(false)}
+        title={engine === 'gecx' ? 'GECX Voice Telephony Integration' : 'Gemini Live WebRTC Integration'}
+      >
+        <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+          {engine === 'gecx' ? (
+            <>
+              <p>
+                The voice support consultation in GECX mode is powered by <strong>Google Cloud Customer Experience Suite (GECx)</strong> using bidirectional audio streaming.
+              </p>
+              <p>
+                The frontend opens a direct WebSocket pipeline to the <code>banking-service</code> backend. The backend acts as a gateway proxy, establishing a bidirectional gRPC session (via the <code>BidiRunSession</code> RPC) to the conversational agent deployment in CX Agent Studio.
+              </p>
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">CX Agent Studio Console</h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">View agent deployments, versions, and flow configurations.</p>
+                  </div>
+                  <a
+                    href={`https://ces.cloud.google.com/projects/${projectId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+                  >
+                    <span>View Console</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+                <hr className="border-slate-100 dark:border-slate-800" />
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Architecture Guide</h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Learn about GECX Bidi gRPC streaming and the telephony gateway topology.</p>
+                  </div>
+                  <a
+                    href="https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/blob/main/docs/architecture/gecx_telephony_voice_agent.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+                  >
+                    <span>View Design</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <p>
+                The Gemini Live experience is powered by the <strong>Multimodal Gemini Live API</strong>, using a low-latency WebRTC connection.
+              </p>
+              <p>
+                The client initiates a connection to a self-contained LiveKit server deployment running on Cloud Run. The LiveKit server establishes a persistent media stream back and forth with Vertex AI Multimodal Live APIs, delivering sub-second voice interactions and rich real-time visual tool feedback.
+              </p>
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Vertex AI Live Console</h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Inspect Multimodal model configuration and settings.</p>
+                  </div>
+                  <a
+                    href={`https://console.cloud.google.com/vertex-ai?project=${projectId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+                  >
+                    <span>View Console</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+                <hr className="border-slate-100 dark:border-slate-800" />
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Architecture Guide</h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Learn about LiveKit, WebRTC signaling, and low-latency audio/video routing.</p>
+                  </div>
+                  <a
+                    href="https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/blob/main/docs/architecture/gemini_live_voice_agent.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+                  >
+                    <span>View Design</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </GcpInfoModal>
 
     </div>
   );
