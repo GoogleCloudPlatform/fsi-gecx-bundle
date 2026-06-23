@@ -1705,6 +1705,22 @@ function AppContent() {
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>
+            <hr className="border-slate-100 dark:border-slate-800" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Documentation</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Learn about conversational agents, platform settings, and extensions.</p>
+              </div>
+              <a
+                href="https://docs.cloud.google.com/customer-engagement-ai/conversational-agents/ps"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Docs</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
           </div>
         </div>
       </GcpInfoModal>
@@ -1753,6 +1769,38 @@ function AppContent() {
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
               >
                 <span>View Providers</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <hr className="border-slate-100 dark:border-slate-800" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Firebase Auth Docs</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Learn about Firebase Authentication, integration APIs, and security rules.</p>
+              </div>
+              <a
+                href="https://firebase.google.com/docs/auth"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Docs</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <hr className="border-slate-100 dark:border-slate-800" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Identity Platform Docs</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Explore enterprise identity configuration, multi-tenancy, and advanced security settings.</p>
+              </div>
+              <a
+                href="https://docs.cloud.google.com/identity-platform/docs"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Docs</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>
