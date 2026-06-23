@@ -44,6 +44,19 @@ resource "google_secret_manager_secret_version" "postgres_support_password_versi
   secret_data = random_password.banking_support_password.result
 }
 
+resource "google_secret_manager_secret" "postgres_bq_connector_password" {
+  secret_id = "postgres_bq_connector_password"
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "postgres_bq_connector_password_version" {
+  secret      = google_secret_manager_secret.postgres_bq_connector_password.id
+  secret_data = random_password.banking_bq_connector_password.result
+}
+
 data "google_secret_manager_secret_version_access" "iap_client_id" {
   secret  = "iap-client-id"
   version = "latest"
