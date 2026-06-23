@@ -12,11 +12,14 @@ import {
   FileText, 
   AlertCircle, 
   CheckCircle2, 
-  Loader2 
+  Loader2,
+  ExternalLink
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { createApplication } from '../utils/api.js';
 import { formatPhoneNumber } from '../utils/formatters.js';
+import GcpInfoModal from './GcpInfoModal.jsx';
+import GoogleCloudIcon from './GoogleCloudIcon.jsx';
 
 const CARDS_MAP = {
   'aura-elite-reserve': {
@@ -64,6 +67,8 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
   const location = useLocation();
   const prefill = location.state?.prefill;
   const { brandColorFrom, brandColorTo, bankName } = useSettings();
+  const projectId = window.firebaseConfig?.projectId;
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   // Get initial card parameter
   const getInitialCard = () => {
@@ -196,7 +201,16 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
               </p>
             </div>
           </div>
-          <CreditCard className="w-10 h-10 text-emerald-500 hidden sm:block" />
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={() => setIsInfoModalOpen(true)}
+              className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-850 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-850 dark:hover:text-white"
+              title="GCP App Integration Info"
+            >
+              <GoogleCloudIcon className="w-4 h-4" />
+            </button>
+            <CreditCard className="w-8 h-8 text-emerald-500 hidden sm:block" />
+          </div>
         </div>
 
         {/* Alerts */}
@@ -508,6 +522,74 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
           </form>
         )}
       </div>
+
+      <GcpInfoModal
+        isOpen={isInfoModalOpen}
+        onClose={() => setIsInfoModalOpen(false)}
+        title="Credit Card Application Prefill Integration"
+      >
+        <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+          <p>
+            To apply for a credit card, you can fill out this application form manually or leverage the <strong>Home Loan Assistant</strong> conversational agent to prefill it for you automatically.
+          </p>
+          <p>
+            When talking to the agent, asking to apply for a card (e.g., <em>"I want to apply for the Aura Elite Reserve card"</em>) triggers a client extension action. The agent gathers required information from the context, generates structured parameters, and redirects you to this page with secure pre-filled form values.
+          </p>
+          <p>
+            The agent extension configurations, dialog flows, and prompt boundaries are managed in <strong>CX Agent Studio</strong>:
+          </p>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">CX Agent Studio Console</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Inspect agent intents, parameters, and form-fill extension routes.</p>
+              </div>
+              <a
+                href={`https://ces.cloud.google.com/projects/${projectId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Console</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <hr className="border-slate-100 dark:border-slate-800" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Documentation</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Learn about conversational agents, toolsets, and extension flows.</p>
+              </div>
+              <a
+                href="https://docs.cloud.google.com/customer-engagement-ai/conversational-agents/ps"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Docs</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <hr className="border-slate-100 dark:border-slate-800" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Architecture Guide</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Read about the GECX client-side function callbacks, React Router prefill mapping, and schemas.</p>
+              </div>
+              <a
+                href="https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/blob/main/docs/architecture/credit_card_prefill_integration.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Design</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </GcpInfoModal>
+
     </section>
   );
 }

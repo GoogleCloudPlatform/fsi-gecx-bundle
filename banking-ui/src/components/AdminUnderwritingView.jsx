@@ -2,10 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   FileText, ShieldAlert, CheckCircle2, 
   XCircle, RefreshCw, User, AlertCircle, Clipboard, 
-  FileCheck, Calendar, Check, ChevronRight, Lock, Loader2
+  FileCheck, Calendar, Check, ChevronRight, Lock, Loader2,
+  ExternalLink
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
 import api from '../utils/api.js';
+import GcpInfoModal from './GcpInfoModal.jsx';
+import GoogleCloudIcon from './GoogleCloudIcon.jsx';
 
 const CONFIDENCE_THRESHOLDS = {
   ssn: 0.95,
@@ -33,6 +36,8 @@ const CANONICAL_SCHEMAS = {
 
 function AdminUnderwritingView({ fbUser }) {
   const { brandColorFrom, brandColorTo } = useSettings();
+  const projectId = window.firebaseConfig?.projectId;
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   const [exceptions, setExceptions] = useState([]);
   const [selectedArtifact, setSelectedArtifact] = useState(null);
@@ -317,9 +322,18 @@ function AdminUnderwritingView({ fbUser }) {
         <div>
           <div className="flex items-center gap-3">
             <div>
-              <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
-                Underwriting Portal
-              </h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
+                  Underwriting Portal
+                </h1>
+                <button
+                  onClick={() => setIsInfoModalOpen(true)}
+                  className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm"
+                  title="GCP App Integration Info"
+                >
+                  <GoogleCloudIcon className="w-4 h-4" />
+                </button>
+              </div>
               <p className="text-sm text-slate-500 mt-1 font-medium">
                 Interactive compliance checks for secondary market compliance.
               </p>
@@ -343,6 +357,13 @@ function AdminUnderwritingView({ fbUser }) {
             className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all flex items-center justify-center hover:rotate-180"
           >
             <RefreshCw className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setIsInfoModalOpen(true)}
+            className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all flex items-center justify-center active:scale-95 cursor-pointer"
+            title="GCP App Integration Info"
+          >
+            <GoogleCloudIcon className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -724,6 +745,73 @@ function AdminUnderwritingView({ fbUser }) {
           </div>
         </div>
       )}
+
+      <GcpInfoModal
+        isOpen={isInfoModalOpen}
+        onClose={() => setIsInfoModalOpen(false)}
+        title="Document AI Underwriting Integration"
+      >
+        <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+          <p>
+            The automated ingestion and parsing pipeline in the underwriting portal is powered by <strong>Google Cloud Document AI</strong>.
+          </p>
+          <p>
+            Uploaded loan packages are processed asynchronously. First, a master splitter classifies and divides the document into individual files (e.g. W2, Paystub, Bank Statement). Then, dedicated specialized machine learning processors extract structured fields with high-fidelity OCR, evaluating fields against compliance threshold gates.
+          </p>
+          <p>
+            You can manage document processors, inspect custom schemas, and review human-in-the-loop tasks using the links below:
+          </p>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Document AI Processors</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Configure splitters, custom extractors, and processor versions.</p>
+              </div>
+              <a
+                href={`https://console.cloud.google.com/ai/document-ai/processors?project=${projectId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Console</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <hr className="border-slate-100 dark:border-slate-800" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Documentation</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Learn about Document AI processors, OCR extraction fields, and pipelines.</p>
+              </div>
+              <a
+                href="https://docs.cloud.google.com/document-ai/docs"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Docs</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <hr className="border-slate-100 dark:border-slate-800" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Architecture Guide</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Read about the classification, splitting, and specialized extraction pipeline topology.</p>
+              </div>
+              <a
+                href="https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/blob/main/docs/architecture/doc_ai_processing_pipeline.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Design</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </GcpInfoModal>
 
     </section>
   );

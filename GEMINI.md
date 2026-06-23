@@ -1,12 +1,12 @@
 # Gemini CLI Context: FSI GECX Bundle
 
-This project is a comprehensive solution for the Financial Services Industry (FSI) demonstrating Gemini Extension Control (GECx) capabilities through a Mortgage Preapproval assistant.
+This project is a comprehensive solution for the Financial Services Industry (FSI) demonstrating Gemini Enterprise for Customer Experience (GECX) capabilities through a Mortgage Preapproval assistant.
 
 ## Project Overview
 
 The solution consists of:
 - **Banking Service (`banking-service/`)**: A FastAPI backend providing core banking functionality, artifact management (PDF processing), and identity integration. It uses Google Cloud Storage, BigQuery, and Secret Manager.
-- **Banking UI (`banking-ui/`)**: A React/Vite frontend providing a user interface for interacting with the banking services and the GECx agent.
+- **Banking UI (`banking-ui/`)**: A React/Vite frontend providing a user interface for interacting with the banking services and the GECX agent.
 - **GECX Configurations (`gecx/`)**: YAML and JSON definitions for Gemini agents, tools, and guardrails, specifically for the "Mortgage Preapproval" use case.
 - **Infrastructure (`deployment/`)**: Terraform configurations to deploy the entire stack on Google Cloud, including Cloud Run, IAP-secured Load Balancing, and BigQuery.
 
@@ -14,7 +14,7 @@ The solution consists of:
 - **Language**: Python (Backend), JavaScript/React (Frontend), HCL (Terraform)
 - **Frameworks**: FastAPI, React 19, Vite, Tailwind CSS
 - **GCP Services**: Cloud Run, Cloud Build, BigQuery, Secret Manager, IAP, Vertex AI, Dialogflow
-- **AI**: Gemini Extension Control (GECx)
+- **AI**: Gemini Enterprise for Customer Experience (GECX)
 
 ## Building and Running
 

@@ -141,26 +141,26 @@ publish-images-cloud: ## Submit Cloud Build jobs using official publish/deploy Y
 	gcloud builds submit --config adk-agent/credit-support-agent/cloudbuild-deploy.yaml --substitutions=_TRIGGER_DEPLOY=false
 
 .PHONY: zip-mortgage-agent
-zip-mortgage-agent: ## Package the GECx Mortgage_Preapproval bundle into a ready-to-upload zip archive
+zip-mortgage-agent: ## Package the GECX Mortgage_Preapproval bundle into a ready-to-upload zip archive
 	@echo "Packaging Mortgage Preapproval agent bundle..."
 	cd gecx/Mortgage_Preapproval && zip -r ../../Mortgage_Preapproval.zip .
 	@echo "Success: Created Mortgage_Preapproval.zip!"
 
 .PHONY: zip-credit-agent
-zip-credit-agent: ## Package the GECx Credit_Support_Voice_Agent bundle into a ready-to-upload zip archive
+zip-credit-agent: ## Package the GECX Credit_Support_Voice_Agent bundle into a ready-to-upload zip archive
 	@echo "Packaging Credit Support Voice Agent bundle..."
 	cd gecx/Credit_Support_Voice_Agent && zip -r ../../Credit_Support_Voice_Agent.zip .
 	@echo "Success: Created Credit_Support_Voice_Agent.zip!"
 
 .PHONY: upload-mortgage-agent
 upload-mortgage-agent: ## Execute the REST API script to package and import the Mortgage Preapproval agent directly into CES
-	@echo "Uploading Mortgage Preapproval Agent to GECx..."
-	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) AGENT_FOLDER=Mortgage_Preapproval bash import_cxas_agent.sh
+	@echo "Uploading Mortgage Preapproval Agent to GECX..."
+	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) AGENT_FOLDER=Mortgage_Preapproval bash deploy_mortgage_agent.sh
 
 .PHONY: upload-credit-agent
 upload-credit-agent: ## Execute the REST API script to package and import the Credit Support Voice Agent directly into CES
-	@echo "Uploading Credit Support Voice Agent to GECx..."
-	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) AGENT_FOLDER=Credit_Support_Voice_Agent bash import_cxas_agent.sh
+	@echo "Uploading Credit Support Voice Agent to GECX..."
+	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) AGENT_FOLDER=Credit_Support_Voice_Agent bash deploy_voice_agent.sh
 
 .PHONY: create-gecx
 create-gecx: upload-mortgage-agent upload-credit-agent ## Automate full CES agent provisioning for both Mortgage and Credit agents

@@ -117,8 +117,8 @@ def requires_user_assertion(func):
                     caller_token = validate_google_id_token(token)
                     is_support = is_support_staff(caller_token)
                 except Exception as e:
-                    logger.error(f"GECx caller caller token verification failed: {e}")
-                    raise PermissionError("Access Denied: GECx caller token verification failed.")
+                    logger.error(f"GECX caller token verification failed: {e}")
+                    raise PermissionError("Access Denied: GECX caller token verification failed.")
 
         # 2. Extract and validate Firebase ID Token Assertion or resolve target customer ID for support staff
         logger.info(f"FastMCP call kwargs: {kwargs}")

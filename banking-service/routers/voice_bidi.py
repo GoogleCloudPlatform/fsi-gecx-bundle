@@ -53,7 +53,7 @@ async def gecx_voice_stream(websocket: WebSocket):
                 validated_token = validate_firebase_token(auth_frame["token"])
                 user_id = validated_token.claims.get("sub")
                 fb_token = auth_frame["token"]
-                # Append a timestamp to GECx session ID to force a fresh session context on every connect
+                # Append a timestamp to GECX session ID to force a fresh session context on every connect
                 session_id = f"session-{user_id}-{int(time.time())}"
                 
             logger.info(f"First-frame authentication succeeded. Session: {session_id} (User: {user_id})")
@@ -67,7 +67,7 @@ async def gecx_voice_stream(websocket: WebSocket):
             return
 
         # 2. Delegate real-time session execution to service
-        gecx_app_id = os.getenv("GECX_APP_ID", "42345105-29cb-492d-8a60-07171bb72190")
+        gecx_app_id = os.getenv("GECX_APP_ID")
         location = os.getenv("GECX_LOCATION", "us")
         
         session = VoiceBidiSession(
