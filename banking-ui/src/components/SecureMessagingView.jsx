@@ -17,9 +17,11 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Send, Trash2, Plus, MessageSquare, Shield, 
   AlertCircle, Loader2, Calendar, 
-  ArrowLeft, CheckCircle2, Copy, Check, Bug, RefreshCw
+  ArrowLeft, CheckCircle2, Copy, Check, Bug, RefreshCw, ExternalLink
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
+import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GcpInfoModal from './GcpInfoModal.jsx';
 import { 
   getMessages, 
   markMessagesRead, 
@@ -50,6 +52,8 @@ function SecureMessagingView({ fbUser, customerProfile }) {
   const [debugTitle, setDebugTitle] = useState('');
   const [debugBody, setDebugBody] = useState('');
   const [debugType, setDebugType] = useState('support_message');
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const projectId = window.firebaseConfig?.projectId || 'fsi-gecx-2000';
   
   // New Message / Thread Form State
   const [newCategory, setNewCategory] = useState('General');
@@ -375,8 +379,15 @@ function SecureMessagingView({ fbUser, customerProfile }) {
       {/* Header Info */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
-            Secure Messages
+          <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent flex items-center gap-3">
+            <span>Secure Messages</span>
+            <button
+              onClick={() => setIsInfoModalOpen(true)}
+              className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm"
+              title="GCP & Firebase Integration Info"
+            >
+              <GoogleCloudIcon className="w-4 h-4" />
+            </button>
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Secure, encrypted messaging to interact directly with our banking support agents.
@@ -866,6 +877,57 @@ function SecureMessagingView({ fbUser, customerProfile }) {
           </div>
         </div>
       )}
+
+      <GcpInfoModal
+        isOpen={isInfoModalOpen}
+        onClose={() => setIsInfoModalOpen(false)}
+        title="Secure Messaging Backend Integration"
+      >
+        <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+          <p>
+            This secure messaging feature integrates both <strong>Google Cloud Platform (BigQuery)</strong> and <strong>Firebase (Cloud Messaging)</strong>.
+          </p>
+          <p>
+            When customer or support agents transmit messaging payload data, the logs and metadata records are saved to the BigQuery database in real-time. In parallel, <strong>Firebase Cloud Messaging (FCM)</strong> dispatches instantaneous device push notifications to keep the conversation responsive.
+          </p>
+          <p>
+            You can inspect the underlying data table and message delivery status directly in the consoles using the links below:
+          </p>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">BigQuery Secure Message Table</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">View message text archives, timestamps, and thread keys.</p>
+              </div>
+              <a
+                href={`https://console.cloud.google.com/bigquery?project=${projectId}&ws=!1m6!1m5!4m3!1s${projectId}!2sbanking!3suser_secure_message!23sRESOURCE_LIST`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Table</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <hr className="border-slate-100 dark:border-slate-800" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Firebase Cloud Messaging Reports</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Monitor push notification delivery rates, errors, and campaigns.</p>
+              </div>
+              <a
+                href={`https://console.firebase.google.com/project/${projectId}/messaging/reports`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Console</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </GcpInfoModal>
     </section>
   );
 }
