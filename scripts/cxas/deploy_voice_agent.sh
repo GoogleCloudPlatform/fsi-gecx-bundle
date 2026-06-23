@@ -183,5 +183,5 @@ cat << EOF
 
 Copy into terraform.tfvars file:
 
-gecx_voice_agent_id = "${DEPLOYMENT_NAME}"
+cx_agent_studio_voice_agent_deployment_name = "${DEPLOYMENT_NAME}"
 EOF
