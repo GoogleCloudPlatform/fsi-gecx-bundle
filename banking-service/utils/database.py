@@ -20,6 +20,13 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///banking.db")
+db_password = os.getenv("DB_PASSWORD")
+if db_password and "@" in DATABASE_URL:
+    parts = DATABASE_URL.split("@", 1)
+    user_part = parts[0].split("://", 1)[1]
+    if ":" not in user_part:
+        DATABASE_URL = parts[0] + ":" + db_password + "@" + parts[1]
+
 
 def get_iam_connection(url_str):
     import google.auth

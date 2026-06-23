@@ -602,12 +602,22 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
 
         env {
           name  = "DATABASE_URL"
-          value = "postgresql+psycopg2://${google_sql_user.banking_db_migration_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+          value = "postgresql+psycopg2://postgres@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
         }
 
         env {
           name  = "DB_IAM_AUTH"
-          value = "true"
+          value = "false"
+        }
+
+        env {
+          name = "DB_PASSWORD"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.postgres_banking_root_password.secret_id
+              version = "latest"
+            }
+          }
         }
 
         env {
