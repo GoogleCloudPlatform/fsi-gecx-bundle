@@ -322,18 +322,9 @@ function AdminUnderwritingView({ fbUser }) {
         <div>
           <div className="flex items-center gap-3">
             <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
-                  Underwriting Portal
-                </h1>
-                <button
-                  onClick={() => setIsInfoModalOpen(true)}
-                  className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm"
-                  title="GCP App Integration Info"
-                >
-                  <GoogleCloudIcon className="w-4 h-4" />
-                </button>
-              </div>
+              <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
+                Underwriting Portal
+              </h1>
               <p className="text-sm text-slate-500 mt-1 font-medium">
                 Interactive compliance checks for secondary market compliance.
               </p>
@@ -357,6 +348,13 @@ function AdminUnderwritingView({ fbUser }) {
             className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all flex items-center justify-center hover:rotate-180"
           >
             <RefreshCw className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setIsInfoModalOpen(true)}
+            className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all flex items-center justify-center active:scale-95 cursor-pointer"
+            title="GCP App Integration Info"
+          >
+            <GoogleCloudIcon className="w-4 h-4" />
           </button>
         </div>
       </div>
