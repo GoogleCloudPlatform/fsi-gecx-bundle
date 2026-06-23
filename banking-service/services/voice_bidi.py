@@ -123,7 +123,15 @@ class VoiceBidiSession:
 
     async def _run_pipeline(self):
         project_id = get_project_id()
-        session_name = f"projects/{project_id}/locations/us/apps/{self.gecx_app_id}/sessions/{self.session_id}"
+        
+        app_id = self.gecx_app_id
+        deployment_path = None
+        if "deployments/" in self.gecx_app_id:
+            deployment_path = self.gecx_app_id
+            parts = self.gecx_app_id.split("/")
+            app_id = parts[parts.index("apps") + 1]
+
+        session_name = f"projects/{project_id}/locations/us/apps/{app_id}/sessions/{self.session_id}"
         gecx_uri = f"wss://ces.googleapis.com/ws/google.cloud.ces.v1.SessionService/BidiRunSession/locations/{self.location}"
         
         gcp_token = await token_manager.get_token()
@@ -136,18 +144,22 @@ class VoiceBidiSession:
             logger.info("Connected to GECX. Performing handshake...")
             
             # Send GECX config header payload
-            config_msg = {
-                "config": {
-                    "session": session_name,
-                    "inputAudioConfig": {
-                        "audioEncoding": "LINEAR16",
-                        "sampleRateHertz": 16000
-                    },
-                    "outputAudioConfig": {
-                        "audioEncoding": "LINEAR16",
-                        "sampleRateHertz": 16000
-                    }
+            config = {
+                "session": session_name,
+                "inputAudioConfig": {
+                    "audioEncoding": "LINEAR16",
+                    "sampleRateHertz": 16000
+                },
+                "outputAudioConfig": {
+                    "audioEncoding": "LINEAR16",
+                    "sampleRateHertz": 16000
                 }
+            }
+            if deployment_path:
+                config["deployment"] = deployment_path
+
+            config_msg = {
+                "config": config
             }
             await gecx_ws.send(json.dumps(config_msg))
             logger.info("Handshake configurations transmitted.")
