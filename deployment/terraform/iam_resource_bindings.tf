@@ -192,7 +192,6 @@ resource "google_kms_crypto_key_iam_member" "docai_kms_binding" {
   member        = "serviceAccount:${google_project_service_identity.docai_sa.email}"
 }
 
-
 resource "google_storage_bucket_iam_member" "cloudbuild_crawler_sa_site_crawled_content_writer" {
   bucket = google_storage_bucket.site_crawled_content.name
   role   = "roles/storage.objectAdmin"
