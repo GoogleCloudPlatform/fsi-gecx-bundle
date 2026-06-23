@@ -72,7 +72,7 @@ sequenceDiagram
 * **Context**: Sending full-screen visual alert popups when the user is actively chatting with the agent inside the app feels intrusive. However, when the tab is hidden or backgrounded, standard notifications must show.
 * **Decision**:
   1. **Foreground Messages**: When the customer's browser tab is active, the app intercepts the notification and triggers a custom window event (`firebase-push-notification`). The chat UI listens to this event and silently triggers a reload of the current conversation thread, ensuring fluid, instant visual rendering of incoming text blocks.
-  2. **Background Messages**: When the browser tab is hidden, the background service worker ([firebase-messaging-sw.js](file:///Users/mservidio/GitHub/fsi-gecx-bundle/banking-ui/public/firebase-messaging-sw.js)) intercepts the message and presents a standard, OS-level visual push notification utilizing the system notification tray. Clicking on this tray banner navigates the customer directly to the corresponding chat thread.
+  2. **Background Messages**: When the browser tab is hidden, the background service worker ([firebase-messaging-sw.js](../../banking-ui/public/firebase-messaging-sw.js)) intercepts the message and presents a standard, OS-level visual push notification utilizing the system notification tray. Clicking on this tray banner navigates the customer directly to the corresponding chat thread.
 
 ---
 
@@ -121,8 +121,8 @@ Maps active user IDs to their registered Firebase Cloud Messaging tokens.
 
 ### A. FCM VAPID Key Initialization
 * **The Pitfall**: To obtain an FCM registration token inside modern web browsers, the client application must verify its identity against the Firebase server using a **Voluntary Application Server Identification (VAPID)** key. Failure to configure the VAPID key in `index.html` throws errors and blocks device registration.
-* **The Solution**: The frontend retrieves the VAPID key dynamically at startup from `window.env.FIREBASE_VAPID_KEY` (configured during deployment) and passes it in the `getToken()` options inside the [index.html](file:///Users/mservidio/GitHub/fsi-gecx-bundle/banking-ui/index.html#L114-L115) initialization script.
+* **The Solution**: The frontend retrieves the VAPID key dynamically at startup from `window.env.FIREBASE_VAPID_KEY` (configured during deployment) and passes it in the `getToken()` options inside the [index.html](../../banking-ui/index.html) initialization script.
 
 ### B. Multicast Notification Failures and Token Cleanup
 * **The Pitfall**: Customers registering multiple devices (e.g., phone, laptop) will have multiple active entries in the `user_device` table. Sending individual messages in a loop blocking on failures creates latency.
-* **The Solution**: The backend utilizes `messaging.send_each_for_multicast()` in [secure_messaging.py](file:///Users/mservidio/GitHub/fsi-gecx-bundle/banking-service/routers/secure_messaging.py#L101) to deliver push notifications to all registered tokens concurrently. The API response returns a breakdown of success/failure counts, allowing developers to clean up expired or invalid device tokens from BigQuery in subsequent batches.
+* **The Solution**: The backend utilizes `messaging.send_each_for_multicast()` in [secure_messaging.py](../../banking-service/routers/secure_messaging.py) to deliver push notifications to all registered tokens concurrently. The API response returns a breakdown of success/failure counts, allowing developers to clean up expired or invalid device tokens from BigQuery in subsequent batches.

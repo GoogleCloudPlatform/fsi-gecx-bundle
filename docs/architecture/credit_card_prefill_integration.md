@@ -104,7 +104,7 @@ node.registerClientSideFunction(
 
 ## 💾 4. Field Population and Review
 
-Once navigated to [ApplyCreditCardView.jsx](file:///Users/mservidio/GitHub/fsi-gecx-bundle/banking-ui/src/components/ApplyCreditCardView.jsx), the component checks the prefill payload during component setup:
+Once navigated to [ApplyCreditCardView.jsx](../../banking-ui/src/components/ApplyCreditCardView.jsx), the component checks the prefill payload during component setup:
 
 ```javascript
   const prefill = location.state?.prefill;
