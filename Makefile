@@ -8,6 +8,8 @@ DOCKER ?= podman
 TF_VARS ?= ./terraform.tfvars
 CUSTOM_DOMAIN ?= $(shell grep -E '^[[:space:]]*custom_domain[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]' || echo "banking.erikvoit.demo.altostrat.com")
 DATA_STORE_ID ?= $(shell grep -E '^[[:space:]]*data_store_id[[:space:]]*=[[:space:]]*' deployment/terraform/discovery_engine.tf 2>/dev/null | cut -d'"' -f2 || echo "banking-site_1778875783412")
+GCP_ACCOUNT ?= $(shell ACCOUNT=$$(gcloud config get-value account 2>/dev/null); echo "$${ACCOUNT%.gserviceaccount.com}")
+GCP_ACCOUNT_ENCODED = $(subst @,%40,$(GCP_ACCOUNT))
 
 
 .PHONY: help
@@ -48,10 +50,15 @@ test-integration: ## Execute live GCP sandbox Document AI integration tests (man
 	@echo "Executing live cloud sandbox integration test suite..."
 	cd banking-service && RUN_INTEGRATION_TESTS=true .venv/bin/pytest tests/test_integration_docai.py -v -s
 
-.PHONY: run-backend
-run-backend: ## Run the FastAPI banking service locally
+.PHONY: run-backend-local
+run-backend-local: ## Run the FastAPI banking service locally
 	@echo "Starting banking-service..."
 	cd banking-service && uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
+
+.PHONY: run-backend-iam
+run-backend-iam: ## Run the FastAPI banking service locally
+	@echo "Starting banking-service..."
+	cd banking-service && DB_IAM_AUTH=true DATABASE_URL="postgresql+psycopg2://$(GCP_ACCOUNT_ENCODED)@localhost:5432/banking?sslmode=disable" uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
 
 .PHONY: run-frontend
 run-frontend: ## Run the React/Vite frontend dev server locally
