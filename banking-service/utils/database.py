@@ -15,6 +15,7 @@
 import os
 import logging
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 logger = logging.getLogger(__name__)
@@ -85,7 +86,8 @@ def create_db_engine(url_str=DATABASE_URL, **kwargs):
             logger.info("Using GCP IAM authentication for Cloud SQL PostgreSQL connection.")
             engine_args["creator"] = lambda: get_iam_connection(url_str)
             
-    logger.info(f"Creating database engine for connection: {url_str.split('@')[-1]}")
+    sanitized_url = make_url(url_str).render_as_string(hide_password=True)
+    logger.info(f"Creating database engine for connection: {sanitized_url}")
     return create_engine(url_str, connect_args=connect_args, **engine_args)
 
 engine = create_db_engine()
