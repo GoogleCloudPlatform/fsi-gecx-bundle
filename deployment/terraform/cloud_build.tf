@@ -188,7 +188,7 @@ resource "google_cloudbuild_trigger" "data_generator_deploy_trigger" {
   repository_event_config {
     repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
     push {
-      branch = "^feature-add-spanner-tf-resources$" # var.github_branch
+      branch = var.github_branch
     }
   }
 
