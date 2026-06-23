@@ -358,6 +358,13 @@ function AdminUnderwritingView({ fbUser }) {
           >
             <RefreshCw className="w-4 h-4" />
           </button>
+          <button
+            onClick={() => setIsInfoModalOpen(true)}
+            className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all flex items-center justify-center active:scale-95 cursor-pointer"
+            title="GCP App Integration Info"
+          >
+            <GoogleCloudIcon className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
