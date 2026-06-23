@@ -14,10 +14,11 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, MessageSquare, RotateCcw, X, ExternalLink } from 'lucide-react';
+import { Search, MessageSquare, RotateCcw, ExternalLink } from 'lucide-react';
 
 import { findAnswer, performSearch } from '../utils/api.js';
 import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GcpInfoModal from './GcpInfoModal.jsx';
 
 function SearchView() {
   const location = useLocation();
@@ -260,71 +261,52 @@ function SearchView() {
         </div>
       </div>
 
-      {isInfoModalOpen && (
-        <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 max-w-lg w-full shadow-2xl animate-fade-in relative">
-            <button
-              onClick={() => setIsInfoModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2.5">
-              <GoogleCloudIcon className="w-6 h-6" />
-              <span>GCP AI Application Integration</span>
-            </h2>
-            <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-              <p>
-                This search assistant is powered by <strong>GCP Agent Platform AI Search</strong>.
-              </p>
-              <p>
-                You can inspect the underlying configuration, engines, and ingested datastores directly in the Google Cloud Console using the links below:
-              </p>
-              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">AI Application Engine</h4>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Manage search and conversational agent flow settings.</p>
-                  </div>
-                  <a
-                    href={`https://console.cloud.google.com/gen-app-builder/engines?project=${projectId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
-                  >
-                    <span>View Engine</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                </div>
-                <hr className="border-slate-100 dark:border-slate-800" />
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">AI Applications Data store</h4>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Explore structured and unstructured document sources.</p>
-                  </div>
-                  <a
-                    href={`https://console.cloud.google.com/gen-app-builder/data-stores?project=${projectId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
-                  >
-                    <span>View Datastore</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                </div>
+      <GcpInfoModal
+        isOpen={isInfoModalOpen}
+        onClose={() => setIsInfoModalOpen(false)}
+      >
+        <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+          <p>
+            This search assistant is powered by <strong>Google Cloud Platform's Generative AI App Builder</strong> (Vertex AI Search).
+          </p>
+          <p>
+            You can inspect the underlying configuration, engines, and ingested datastores directly in the Google Cloud Console using the links below:
+          </p>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">AI Application Engine</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Manage search and conversational agent flow settings.</p>
               </div>
-            </div>
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={() => setIsInfoModalOpen(false)}
-                className="px-5 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-sm transition-colors cursor-pointer"
+              <a
+                href={`https://console.cloud.google.com/gen-app-builder/engines?project=${projectId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
               >
-                Got it
-              </button>
+                <span>View Engine</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <hr className="border-slate-100 dark:border-slate-800" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Vertex AI Datastore</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Explore structured and unstructured document sources.</p>
+              </div>
+              <a
+                href={`https://console.cloud.google.com/gen-app-builder/data-stores?project=${projectId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Datastore</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
             </div>
           </div>
         </div>
-      )}
+      </GcpInfoModal>
     </div>
   );
 }
