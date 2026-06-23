@@ -64,6 +64,25 @@ steps:
   #       fi
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "run-db-migration-job"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        if [ "${_TRIGGER_DEPLOY}" = "true" ]; then
+          echo "Registering latest image with Cloud Run Migration Job..."
+          gcloud run jobs update banking-db-migrate \
+            --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
+            --region "${_REGION}"
+            echo "Executing pre-deployment database schema migrations..."
+          gcloud run jobs execute banking-db-migrate \
+            --region "${_REGION}" \
+            --wait
+        else
+          echo "Skipping migrations because _TRIGGER_DEPLOY is not true"
+        fi
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     id: "deploy-service"
     entrypoint: "bash"
     args:
