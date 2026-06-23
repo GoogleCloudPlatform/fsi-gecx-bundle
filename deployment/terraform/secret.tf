@@ -31,19 +31,6 @@ resource "google_secret_manager_secret_version" "postgres_banking_password_versi
   secret_data = random_password.postgres_root_password.result
 }
 
-resource "google_secret_manager_secret" "postgres_migration_password" {
-  secret_id = "postgres_migration_password"
-
-  replication {
-    auto {}
-  }
-}
-
-resource "google_secret_manager_secret_version" "postgres_migration_password_version" {
-  secret      = google_secret_manager_secret.postgres_migration_password.id
-  secret_data = random_password.db_owner_password.result
-}
-
 data "google_secret_manager_secret_version_access" "iap_client_id" {
   secret  = "iap-client-id"
   version = "latest"
