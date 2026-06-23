@@ -20,7 +20,7 @@ resource "google_storage_bucket" "banking_interaction_artifacts" {
 
   cors {
     origin          = ["http://localhost:5173", "https://${var.custom_domain}"]
-    method          = ["PUT", "OPTIONS"]
+    method          = ["GET", "OPTIONS", "PUT"]
     response_header = ["Content-Type", "Authorization"]
     max_age_seconds = 3600
   }
