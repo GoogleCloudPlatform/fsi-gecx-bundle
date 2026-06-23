@@ -175,13 +175,12 @@ async def get_user(user: ValidatedToken = Depends(get_current_user)):
 # 3. Combine FastAPI application routes with FastMCP routes under a unified ASGI engine
 combined_app = FastAPI(
     title="Banking API with MCP",
-    routes=[
-        *mcp_app.routes,  # FastMCP HTTP routes
-        *app.routes,      # Core FastAPI REST endpoints
-    ],
+    routes=app.routes,      # Core FastAPI REST endpoints
     lifespan=mcp_app.lifespan,
     root_path=os.getenv("ROOT_PATH", ""),
 )
+
+combined_app.mount("/mcp", mcp_app)
 
 if __name__ == "__main__":
     import uvicorn

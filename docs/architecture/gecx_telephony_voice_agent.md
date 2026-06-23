@@ -1,19 +1,19 @@
 # FSI Architecture Design: GECx Telephony Voice Agent & Bidi Stream Orchestration
 
-This document details the system architecture, security design, and key implementation gotchas for the real-time **GECx Telephony Voice Agent** using Google Customer Engagement Suite (CES) bi-directional streaming.
+This document details the system architecture, security design, and key implementation gotchas for the real-time **GECx Telephony Voice Agent** using Google Cloud Customer Experience Suite (GECx) bi-directional streaming.
 
 ---
 
 ## 📐 1. System Topology & Media Flow
 
-The GECx Telephony Voice Agent establishes a low-latency, bidirectional audio streaming connection between the client browser and the Google CES Bidi API via the `banking-service` acting as an authenticated proxy. 
+The GECx Telephony Voice Agent establishes a low-latency, bidirectional audio streaming connection between the client browser and the Google Cloud Customer Experience Suite Bidi API via the `banking-service` acting as an authenticated proxy. 
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor User as Cardholder (Browser)
     participant Proxy as banking-service Proxy (Cloud Run)
-    participant GECX as Google CES SessionService (Bidi)
+    participant GECX as Google Cloud Customer Experience Suite SessionService (Bidi)
     participant MCP as FastMCP Tool Host (banking-service)
     participant DB as SQL Database
 
@@ -59,7 +59,7 @@ sequenceDiagram
 
 Because GECx operates as a Google-managed cloud agent orchestrator, it must securely call on-premise or custom APIs (like our FastMCP endpoints) on behalf of the active user:
 
-1. **Google OIDC ID Token Verification**: The FastMCP router ensures that invocations come exclusively from Google's CES services by verifying the Google service account OIDC token in the `Authorization: Bearer <JWT>` header.
+1. **Google OIDC ID Token Verification**: The FastMCP router ensures that invocations come exclusively from Google Cloud Customer Experience Suite services by verifying the Google service account OIDC token in the `Authorization: Bearer <JWT>` header.
 2. **End-User Identity Assertion (`x-forwarded-user-context`)**: The backend forwards the end-user's Firebase ID token into GECx at startup. In the GECx Toolset GUI, the custom header `x-forwarded-user-context` is mapped to `$context.variables.user_token`. During tool calls, GECx automatically injects this token, allowing the backend `requires_user_assertion` decorator to cryptographically verify the cardholder's identity.
 
 ---
@@ -67,7 +67,7 @@ Because GECx operates as a Google-managed cloud agent orchestrator, it must secu
 ## ⚠️ 3. Key Gotchas & Solutions
 
 ### A. Session Variables & Welcoming Protocol Union Constraint (The `oneof` Gotcha)
-* **The Pitfall**: The Google CES `SessionInput` proto message represents input types inside a Protobuf `oneof input_type` union block:
+* **The Pitfall**: The Google Cloud Customer Experience Suite `SessionInput` proto message represents input types inside a Protobuf `oneof input_type` union block:
   ```protobuf
   message SessionInput {
     oneof input_type {

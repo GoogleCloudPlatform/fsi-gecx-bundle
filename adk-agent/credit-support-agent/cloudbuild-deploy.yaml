@@ -62,8 +62,6 @@ images:
   - "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:latest"
 
 options:
-  pool:
-    name: "projects/${PROJECT_ID}/locations/${_REGION}/workerPools/build-pool"
   logging: CLOUD_LOGGING_ONLY
 
 substitutions:

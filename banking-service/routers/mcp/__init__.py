@@ -18,7 +18,7 @@ from fastmcp import FastMCP
 mcp = FastMCP("Banking Service MCP")
 
 # 2. Create the MCP's ASGI app mounted under /mcp/
-mcp_app = mcp.http_app(path="/mcp/")
+mcp_app = mcp.http_app(path="/", transport="http")
 
 # Import sub-routers so their tool decorators register with the mcp instance
 from . import loan as loan  # noqa: E402

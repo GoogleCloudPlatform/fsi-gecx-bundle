@@ -85,9 +85,17 @@ def _mask_ein(ein_value: str) -> str:
     return "**-***-****"
 
 
+from contextvars import ContextVar
+import inspect
+
+verified_customer_id_var: ContextVar[str] = ContextVar("verified_customer_id", default=None)
+assertion_token_var: ContextVar[str] = ContextVar("assertion_token", default=None)
+
 def requires_user_assertion(func):
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
+        is_support = True  # Default to True locally
+
         # 1. Verify Caller Identity (Google OIDC ID Token)
         ctx = kwargs.get("ctx") or (args[-1] if args and isinstance(args[-1], Context) else None)
         if not ctx:
@@ -105,13 +113,14 @@ def requires_user_assertion(func):
                 
                 token = auth_header.split("Bearer ")[1].strip()
                 try:
-                    from utils.auth import validate_google_id_token
-                    validate_google_id_token(token)
+                    from utils.auth import validate_google_id_token, is_support_staff
+                    caller_token = validate_google_id_token(token)
+                    is_support = is_support_staff(caller_token)
                 except Exception as e:
-                    logger.error(f"GECx caller token verification failed: {e}")
+                    logger.error(f"GECx caller caller token verification failed: {e}")
                     raise PermissionError("Access Denied: GECx caller token verification failed.")
 
-        # 2. Extract and validate Firebase ID Token Assertion
+        # 2. Extract and validate Firebase ID Token Assertion or resolve target customer ID for support staff
         logger.info(f"FastMCP call kwargs: {kwargs}")
         logger.info(f"FastMCP call ctx: {ctx.__dict__ if ctx else None}")
         
@@ -120,44 +129,65 @@ def requires_user_assertion(func):
             headers = {k.lower().strip(): v.strip() for k, v in ctx.request_context.request.headers.items()}
         
         logger.info(f"FastMCP call headers: {headers}")
-            
-        assertion_token = headers.get("x-forwarded-user-context") or kwargs.get("assertion_token")
-        if not assertion_token:
-            raise ValueError("Missing Firebase user assertion token (must be passed in 'x-forwarded-user-context' header or 'assertion_token' argument).")
 
-        user_id = None
-        if is_running_locally() and assertion_token == "mock-local-token":
-            user_id = "mock_user_id"
+        target_customer_id = headers.get("x-target-customer-id")
+        effective_id = None
+        assertion_token = None
+        
+        if is_support and target_customer_id:
+            logger.info(f"Support staff caller bypass: using targeted customer ID '{target_customer_id}' directly.")
+            effective_id = target_customer_id
         else:
+            assertion_token = headers.get("x-forwarded-user-context") or kwargs.get("assertion_token")
+            if not assertion_token:
+                raise ValueError("Missing Firebase user assertion token (must be passed in 'x-forwarded-user-context' header or 'assertion_token' argument).")
+
+            user_id = None
+            if is_running_locally() and assertion_token == "mock-local-token":
+                user_id = "mock_user_id"
+            else:
+                try:
+                    validated = validate_firebase_token(assertion_token)
+                    user_id = validated.claims.get("sub")
+                except Exception as e:
+                    logger.error(f"Firebase token validation failed in FastMCP: {e}")
+                    raise PermissionError(f"Access Denied: Invalid assertion token. Details: {e}")
+
+            # 3. Resolve customer ID with Demo Fallback support
+            db = SessionLocal()
+            from repositories.credit_card import CreditCardRepository
+            repo = CreditCardRepository(db)
             try:
-                validated = validate_firebase_token(assertion_token)
-                user_id = validated.claims.get("sub")
-            except Exception as e:
-                logger.error(f"Firebase token validation failed in FastMCP: {e}")
-                raise PermissionError(f"Access Denied: Invalid assertion token. Details: {e}")
+                effective_id = user_id
+                account = repo.get_account_by_customer(user_id)
+                if not account:
+                    enable_fallback = os.getenv("ENABLE_DEMO_FALLBACK", "true").lower() == "true"
+                    if enable_fallback:
+                        logger.warning(f"Customer profile '{user_id}' not seeded. Falling back to 'cust-123' for demo purposes.")
+                        effective_id = "cust-123"
+                    else:
+                        raise ValueError(f"No financial account found for customer ID '{user_id}'.")
+            finally:
+                db.close()
 
-        # 3. Resolve customer ID with Demo Fallback support
-        db = SessionLocal()
-        from repositories.credit_card import CreditCardRepository
-        repo = CreditCardRepository(db)
+        # Set ContextVars for internal resolution
+        t_cust = verified_customer_id_var.set(effective_id)
+        t_assert = assertion_token_var.set(assertion_token)
+
         try:
-            effective_id = user_id
-            account = repo.get_account_by_customer(user_id)
-            if not account:
-                enable_fallback = os.getenv("ENABLE_DEMO_FALLBACK", "true").lower() == "true"
-                if enable_fallback:
-                    logger.warning(f"Customer profile '{user_id}' not seeded. Falling back to 'cust-123' for demo purposes.")
-                    effective_id = "cust-123"
-                else:
-                    raise ValueError(f"No financial account found for customer ID '{user_id}'.")
-            
-            kwargs["verified_customer_id"] = effective_id
-        finally:
-            db.close()
+            # Check wrapped function signature and dynamically inject kwargs if declared
+            sig = inspect.signature(func)
+            if "verified_customer_id" in sig.parameters:
+                kwargs["verified_customer_id"] = effective_id
+            if "assertion_token" in sig.parameters:
+                kwargs["assertion_token"] = assertion_token
 
-        if asyncio.iscoroutinefunction(func):
-            return await func(*args, **kwargs)
-        else:
-            return func(*args, **kwargs)
+            if asyncio.iscoroutinefunction(func):
+                return await func(*args, **kwargs)
+            else:
+                return func(*args, **kwargs)
+        finally:
+            verified_customer_id_var.reset(t_cust)
+            assertion_token_var.reset(t_assert)
             
     return wrapper

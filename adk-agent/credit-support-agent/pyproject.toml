@@ -19,6 +19,7 @@ dependencies = [
     "opencv-python-headless>=4.10.0",
     "google-cloud-speech>=2.30.0",
     "httpx>=0.28.0",
+    "mcp",
 ]
 
 [tool.poetry]

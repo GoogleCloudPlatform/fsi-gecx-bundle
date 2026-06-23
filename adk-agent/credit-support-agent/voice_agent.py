@@ -170,7 +170,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         import agent.agent as agent_module
         headers = agent_module.get_auth_headers()
         async with httpx.AsyncClient(timeout=10.0) as client:
-            settings_url = f"{agent_module.BANKING_SERVICE_URL}/settings"
+            settings_url = f"{agent_module.BANKING_SERVICE_URL}/api/settings"
             resp = await client.get(settings_url, headers=headers)
             if resp.status_code == 200:
                 settings = resp.json()
@@ -600,7 +600,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 
                 # Log any final responses or tool call events for tracking
                 if event.is_final_response():
-                    logger.info(f"Agent turn complete. Finished generation.")
+                    logger.debug(f"Agent turn complete. Finished generation.")
 
                 # Trigger clean shutdown when the model completes the session
                 if event.actions and event.actions.end_of_agent:
