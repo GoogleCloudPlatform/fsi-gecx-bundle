@@ -21,6 +21,7 @@ fi
 
 export SPANNER_INSTANCE=${SPANNER_INSTANCE:-"banking-data"}
 export SPANNER_DATABASE=${SPANNER_DATABASE:-"banking"}
+export SPANNER_DISABLE_BUILTIN_METRICS=${SPANNER_DISABLE_BUILTIN_METRICS:-"true"}
 
 echo "Syncing dependencies with uv..."
 uv sync
