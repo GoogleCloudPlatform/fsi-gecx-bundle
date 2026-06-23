@@ -18,16 +18,16 @@ data "google_secret_manager_secret_version_access" "github_token_secret_version"
   depends_on = [google_project_service.secretmanager_googleapis_com]
 }
 
-resource "google_secret_manager_secret" "postgres_banking_password" {
-  secret_id = "postgres_banking_password"
+resource "google_secret_manager_secret" "postgres_banking_root_password" {
+  secret_id = "postgres_banking_root_password"
 
   replication {
     auto {}
   }
 }
 
-resource "google_secret_manager_secret_version" "postgres_banking_password_version" {
-  secret      = google_secret_manager_secret.postgres_banking_password.id
+resource "google_secret_manager_secret_version" "postgres_banking_root_password_version" {
+  secret      = google_secret_manager_secret.postgres_banking_root_password.id
   secret_data = random_password.postgres_root_password.result
 }
 
