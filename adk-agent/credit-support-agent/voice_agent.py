@@ -31,9 +31,13 @@ class HandoffException(Exception):
 # Configure logging to stdout
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("voice_agent")
-# Enable verbose debug logs for ADK and GenAI SDK to trace tool calling WebSocket packets
-logging.getLogger("google_adk").setLevel(logging.DEBUG)
-logging.getLogger("google_genai").setLevel(logging.DEBUG)
+# Enable verbose debug logs for ADK and GenAI SDK conditionally to trace tool calling packets
+if os.getenv("VERBOSE_LOGGING") == "true":
+    logging.getLogger("google_adk").setLevel(logging.DEBUG)
+    logging.getLogger("google_genai").setLevel(logging.DEBUG)
+else:
+    logging.getLogger("google_adk").setLevel(logging.ERROR)
+    logging.getLogger("google_genai").setLevel(logging.ERROR)
 
 LIVEKIT_URL = os.getenv("LIVEKIT_URL", "ws://localhost:7880")
 def get_livekit_token(room_name: str) -> str:
