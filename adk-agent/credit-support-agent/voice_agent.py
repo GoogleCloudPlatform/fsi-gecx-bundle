@@ -349,6 +349,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         output_audio_transcription=types.AudioTranscriptionConfig()
     )
 
+    user_speaking_state = [False]
+    preroll_buffer = []
+    max_preroll_size = 8
+
     # Initialize LiveKit Room and Audio Source
     # Gemini Live outputs 24kHz, 16-bit PCM mono
     audio_source = rtc.AudioSource(sample_rate=24000, num_channels=1)
@@ -423,18 +427,20 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                     is_processing_tool = session.state.get("is_processing_tool", False) if session else False
                     if is_processing_tool:
                         logger.debug("Muting microphone audio: tool execution in progress.")
+                        preroll_buffer.clear()
                         continue
 
                     # Convert to Float32 array for VAD
-                    # LiveKit audio frames contain raw samples as Int16 or Float32
-                    # Standard Int16 needs to be scaled to Float32 in range [-1.0, 1.0]
-                    # We can use np.frombuffer on the frame data
                     int16_data = np.frombuffer(res_frame.data, dtype=np.int16)
                     float32_data = int16_data.astype(np.float32) / 32768.0
 
                     speech_started, speech_ended = vad.process_chunk(float32_data)
 
+                    pcm_bytes = int16_data.tobytes()
+                    audio_blob = types.Blob(mime_type="audio/pcm;rate=16000", data=pcm_bytes)
+
                     if speech_started:
+                        user_speaking_state[0] = True
                         # Clear agent's playout queue to immediately interrupt speaking
                         logger.info("User speaking, interrupting agent voice output...")
                         while not playout_queue.empty():
@@ -444,19 +450,29 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                                 break
                         # Send activity start signal
                         live_queue.send_activity_start()
+                        
+                        # Flush pre-roll buffer to prevent cutting off the start of user utterance
+                        logger.debug(f"Flushing STT pre-roll buffer: {len(preroll_buffer)} frames")
+                        for cached_blob in preroll_buffer:
+                            live_queue.send_realtime(cached_blob)
+                        preroll_buffer.clear()
+
+                    if user_speaking_state[0]:
+                        # Only send audio blobs while user is speaking
+                        logger.debug(f"Sending audio blob: size={len(pcm_bytes)} bytes, sample_rate={res_frame.sample_rate}, channels={res_frame.num_channels}")
+                        live_queue.send_realtime(audio_blob)
+                        if mode == "video" and user_stt_queue:
+                            await user_stt_queue.put(pcm_bytes)
+                    else:
+                        # Buffer silent frames
+                        preroll_buffer.append(audio_blob)
+                        if len(preroll_buffer) > max_preroll_size:
+                            preroll_buffer.pop(0)
 
                     if speech_ended:
+                        user_speaking_state[0] = False
                         # Send activity end signal
                         live_queue.send_activity_end()
-
-                    # Send resampled 16kHz PCM audio chunk to Gemini Live API
-                    pcm_bytes = int16_data.tobytes()
-                    logger.debug(f"Sending audio blob: size={len(pcm_bytes)} bytes, sample_rate={res_frame.sample_rate}, channels={res_frame.num_channels}")
-                    audio_blob = types.Blob(mime_type="audio/pcm;rate=16000", data=pcm_bytes)
-                    live_queue.send_realtime(audio_blob)
-                    
-                    if mode == "video" and user_stt_queue:
-                        await user_stt_queue.put(pcm_bytes)
         except Exception as err:
             logger.error(f"Error handling incoming audio: {err}", exc_info=True)
         finally:
