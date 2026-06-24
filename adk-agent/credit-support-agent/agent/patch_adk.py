@@ -1,3 +1,18 @@
+"""
+⚠️ WARNING: ADK LIBRARY MONKEYPATCH
+This module monkeypatches the internal `GeminiLlmConnection.receive` method of the `google-adk` package.
+
+PURPOSE:
+By default, the ADK Gemini Live connection waits for a model turn completion before returning tool call
+invocations. In voice-only sessions, this wait causes the agent to hang indefinitely when executing tools.
+This patch intercepts incoming WebSocket events and yields tool calls immediately as they are received.
+
+FRAGILITY NOTICE:
+This patch utilizes name-mangled private methods of the ADK library (e.g. `_GeminiLlmConnection__build_full_text_response`).
+Upgrading `google-adk` package versions may change these internal interfaces, causing imports or calls to fail.
+Any package version updates should be accompanied by a validation check of this monkeypatch.
+"""
+
 import logging
 from typing import AsyncGenerator
 from google.adk.models.gemini_llm_connection import GeminiLlmConnection, LlmResponse
