@@ -14,13 +14,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings, Bell } from 'lucide-react';
+import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings, Bell, ExternalLink } from 'lucide-react';
 import { resetDatabase, getSystemSettings, updateSystemSettings } from '../utils/api.js';
+import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GcpInfoModal from './GcpInfoModal.jsx';
 
 function AdminDashboardView() {
   const navigate = useNavigate();
   const [isResetting, setIsResetting] = useState(false);
   const [notice, setNotice] = useState({ type: '', text: '' });
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   // Settings States
   const [hardTimeoutEnabled, setHardTimeoutEnabled] = useState(false);
@@ -126,18 +129,27 @@ function AdminDashboardView() {
       <div className="absolute top-1/4 left-1/3 w-[400px] h-[400px] rounded-full bg-emerald-500/5 blur-[100px] pointer-events-none -z-10" />
 
       {/* Portal Header */}
-      <div className="mb-12 pb-6 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
-        <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shadow-sm">
-          <LayoutDashboard className="w-6 h-6" />
+      <div className="mb-12 pb-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center relative w-full">
+        <div className="flex items-center gap-3">
+          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shadow-sm">
+            <LayoutDashboard className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
+              Nova Horizon Admin Portal
+            </h1>
+            <p className="text-sm text-slate-500 mt-1">
+              Secure, role-gated management dashboard for employee operations, underwriting, and support audits.
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
-            Nova Horizon Admin Portal
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Secure, role-gated management dashboard for employee operations, underwriting, and support audits.
-          </p>
-        </div>
+        <button
+          onClick={() => setIsInfoModalOpen(true)}
+          className="p-2.5 rounded-2xl hover:bg-slate-805/80 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+          title="GCP Admin Integration Info"
+        >
+          <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
+        </button>
       </div>
 
       {/* Module Cards Grid */}
@@ -305,6 +317,54 @@ function AdminDashboardView() {
           {isResetting ? 'Resetting Database...' : 'Reset Database'}
         </button>
       </div>
+
+      <GcpInfoModal
+        isOpen={isInfoModalOpen}
+        onClose={() => setIsInfoModalOpen(false)}
+        title="Google Cloud System Integration"
+      >
+        <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+          <p>
+            The <strong>Nova Horizon Admin Portal</strong> serves as the central control plane, orchestrating banking operations and AI settings powered by Google Cloud services.
+          </p>
+          <p>
+            System configurations (such as session timeouts and avatar selections) are stored dynamically in the ledger database and fetched in real-time by the Voice Agent container during bootstrap.
+          </p>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Secret Manager Console</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Manage database keys, LiveKit credentials, and Google API secrets securely.</p>
+              </div>
+              <a
+                href="https://console.cloud.google.com/security/secret-manager"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Secrets</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <hr className="border-slate-100 dark:border-slate-800" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Cloud Run Console</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Monitor computing resources, container revisions, and backend traffic scaling.</p>
+              </div>
+              <a
+                href="https://console.cloud.google.com/run"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Services</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </GcpInfoModal>
 
     </section>
   );
