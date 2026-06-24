@@ -117,41 +117,54 @@ async def run_stt_worker(client, audio_queue: asyncio.Queue, sample_rate: int, a
             interim_results=False
         )
         
-        # Generator yielding requests
-        async def request_generator():
-            yield speech.StreamingRecognizeRequest(streaming_config=streaming_config)
-            while True:
-                try:
-                    chunk = await audio_queue.get()
-                    if chunk is None:
-                        logger.info(f"STT worker for {author} received poison pill. Exiting generator.")
+        def create_request_generator():
+            async def generator():
+                yield speech.StreamingRecognizeRequest(streaming_config=streaming_config)
+                while True:
+                    try:
+                        chunk = await audio_queue.get()
+                        if chunk is None:
+                            logger.info(f"STT worker for {author} received poison pill. Exiting generator.")
+                            audio_queue.task_done()
+                            break
+                        yield speech.StreamingRecognizeRequest(audio_content=chunk)
                         audio_queue.task_done()
+                    except asyncio.CancelledError:
                         break
-                    yield speech.StreamingRecognizeRequest(audio_content=chunk)
-                    audio_queue.task_done()
-                except asyncio.CancelledError:
-                    break
-                except Exception as e:
-                    logger.error(f"Error in STT generator for {author}: {e}")
-                    break
+                    except Exception as e:
+                        logger.error(f"Error in STT generator for {author}: {e}")
+                        break
+            return generator()
 
-        responses = await client.streaming_recognize(requests=request_generator())
-        async for response in responses:
-            for result in response.results:
-                if result.is_final:
-                    transcript = result.alternatives[0].transcript.strip()
-                    if transcript:
-                        logger.info(f"[{author.upper()} TRANSCRIPT] {transcript}")
-                        # Broadcast the transcript to the client room
-                        on_agent_event_fn({
-                            "type": "TRANSCRIPT",
-                            "author": author,
-                            "text": transcript
-                        })
+        # Reconnect loop to handle gRPC / Audio timeouts on silence
+        while True:
+            try:
+                logger.info(f"Connecting to Google Cloud Speech-to-Text for {author}...")
+                generator = create_request_generator()
+                responses = await client.streaming_recognize(requests=generator)
+                async for response in responses:
+                    for result in response.results:
+                        if result.is_final:
+                            transcript = result.alternatives[0].transcript.strip()
+                            if transcript:
+                                logger.info(f"[{author.upper()} TRANSCRIPT] {transcript}")
+                                # Broadcast the transcript to the client room
+                                on_agent_event_fn({
+                                    "type": "TRANSCRIPT",
+                                    "author": author,
+                                    "text": transcript
+                                })
+            except asyncio.CancelledError:
+                logger.info(f"STT worker for {author} was cancelled.")
+                break
+            except Exception as ex:
+                # Catch timeout or other gRPC connection closures and attempt recovery
+                logger.warning(f"Speech-to-Text stream for {author} closed: {ex}. Reconnecting...")
+                await asyncio.sleep(0.5)
     except asyncio.CancelledError:
         logger.info(f"STT worker for {author} was cancelled.")
     except Exception as e:
-        logger.error(f"Exception in STT worker for {author}: {e}", exc_info=True)
+        logger.error(f"Fatal exception in STT worker loop for {author}: {e}", exc_info=True)
     finally:
         logger.info(f"Finished STT worker for {author}.")
 
@@ -439,6 +452,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                     pcm_bytes = int16_data.tobytes()
                     audio_blob = types.Blob(mime_type="audio/pcm;rate=16000", data=pcm_bytes)
 
+                    # Feed user Speech-to-Text worker continuously to keep the gRPC stream alive
+                    if mode == "video" and user_stt_queue:
+                        await user_stt_queue.put(pcm_bytes)
+
                     if speech_started:
                         user_speaking_state[0] = True
                         # Clear agent's playout queue to immediately interrupt speaking
@@ -461,8 +478,6 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         # Only send audio blobs while user is speaking
                         logger.debug(f"Sending audio blob: size={len(pcm_bytes)} bytes, sample_rate={res_frame.sample_rate}, channels={res_frame.num_channels}")
                         live_queue.send_realtime(audio_blob)
-                        if mode == "video" and user_stt_queue:
-                            await user_stt_queue.put(pcm_bytes)
                     else:
                         # Buffer silent frames
                         preroll_buffer.append(audio_blob)
@@ -800,7 +815,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                             
                         frame_count += 1
                         if frame_count % 30 == 0 or frame_count <= 5: # log first 5 frames, then every 30th
-                            logger.info(f"Decoded video frame #{frame_count} from FFmpeg stdout (size={len(raw_frame)} bytes)")
+                            logger.debug(f"Decoded video frame #{frame_count} from FFmpeg stdout (size={len(raw_frame)} bytes)")
                             
                         from livekit.rtc._proto import video_frame_pb2 as proto_video
                         lk_frame = rtc.VideoFrame(
@@ -813,7 +828,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         if video_source:
                             video_source.capture_frame(lk_frame, timestamp_us=pts_us)
                             if frame_count % 30 == 0 or frame_count <= 5:
-                                logger.info(f"Captured video frame #{frame_count} to LiveKit VideoSource")
+                                logger.debug(f"Captured video frame #{frame_count} to LiveKit VideoSource")
                 except asyncio.CancelledError:
                     logger.info("FFmpeg frame reader task cancelled.")
                 except Exception as ex:
