@@ -116,11 +116,28 @@ def get_auth_headers() -> dict:
         "x-target-customer-id": ACTIVE_CUSTOMER_ID
     }
 
+async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
+    tool_name = getattr(tool, "name", str(tool))
+    import logging
+    logger = logging.getLogger("voice_agent")
+    logger.info(f"[CALLBACK] before_tool_callback triggered: tool_name={tool_name}, args={args}")
+    tool_context.state["is_processing_tool"] = True
+    return None
+
+async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> None:
+    tool_name = getattr(tool, "name", str(tool))
+    import logging
+    logger = logging.getLogger("voice_agent")
+    logger.info(f"[CALLBACK] on_tool_error_callback triggered: tool_name={tool_name}, error={error}")
+    tool_context.state["is_processing_tool"] = False
+    return None
+
 async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs) -> dict | None:
     tool_name = getattr(tool, "name", str(tool))
     import logging
     logger = logging.getLogger("voice_agent")
     logger.info(f"[CALLBACK] after_tool_callback triggered: tool_name={tool_name}, result={tool_response}")
+    tool_context.state["is_processing_tool"] = False
     # Check if the tool succeeded
     structured = tool_response.get("structuredContent") if isinstance(tool_response, dict) else None
     if structured and isinstance(structured, dict) and structured.get("success") is True:
@@ -162,7 +179,9 @@ root_agent = Agent(
     model=os.getenv("VOICE_AGENT_AUDIO_MODEL"),
     instruction=INSTRUCTION_TEXT,
     tools=[mcp_tools, end_consultation, transfer_to_human],
+    before_tool_callback=before_tool_callback,
     after_tool_callback=after_tool_callback,
+    on_tool_error_callback=on_tool_error_callback,
     planner=BuiltInPlanner(
         thinking_config=ThinkingConfig(include_thoughts=False)
     )
