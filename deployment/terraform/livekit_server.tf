@@ -48,7 +48,7 @@ resource "google_compute_address" "livekit_static_ip" {
 # Provision GCE Instance running Container-Optimized OS
 resource "google_compute_instance" "livekit_server" {
   name                      = "livekit-server-instance"
-  machine_type              = "e2-medium"
+  machine_type              = "e2-standard-2"
   zone                      = "${var.region}-c"
   allow_stopping_for_update = true
 
