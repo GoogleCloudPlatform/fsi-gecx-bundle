@@ -577,13 +577,19 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         # Extract audio output from the model
                         if part.inline_data:
                             if part.inline_data.mime_type.startswith("audio/pcm"):
+                                # If we were processing a tool, reset the flag now that agent speech has started
+                                session = await session_service.get_session(app_name="credit-support-agent", user_id=user_id, session_id=session_id)
+                                if session and session.state.get("is_processing_tool", False):
+                                    session.state["is_processing_tool"] = False
+                                    logger.info("Agent began speaking. Resetting tool mute state.")
+
                                 audio_bytes = part.inline_data.data
                                 # Queue it for playout
                                 await playout_queue.put(audio_bytes)
                                 if mode == "video" and agent_stt_queue:
                                     await agent_stt_queue.put(audio_bytes)
                             else:
-                                logger.info(f"Received video chunk: size={len(part.inline_data.data)} bytes, mime={part.inline_data.mime_type}")
+                                logger.debug(f"Received video chunk: size={len(part.inline_data.data)} bytes, mime={part.inline_data.mime_type}")
                                 # Send video frame/chunk to FFmpeg decoder process stdin
                                 if ffmpeg_proc and ffmpeg_proc.stdin:
                                     ffmpeg_proc.stdin.write(part.inline_data.data)
@@ -754,7 +760,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         line = await ffmpeg_proc.stderr.readline()
                         if not line:
                             break
-                        logger.info(f"[FFmpeg] {line.decode('utf-8', errors='ignore').strip()}")
+                        logger.debug(f"[FFmpeg] {line.decode('utf-8', errors='ignore').strip()}")
                 except Exception as ex:
                     logger.error(f"Error reading FFmpeg stderr: {ex}")
             
