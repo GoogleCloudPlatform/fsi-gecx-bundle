@@ -22,6 +22,9 @@ from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.agents.live_request_queue import LiveRequestQueue
 from google.genai import types
 
+from agent.patch_adk import apply_patch
+apply_patch()
+
 class HandoffException(Exception):
     pass
 
