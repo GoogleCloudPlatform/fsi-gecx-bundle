@@ -216,8 +216,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 
     # Set active customer ID for database tools dynamically
     import agent.agent as agent_module
-    agent_module.ACTIVE_CUSTOMER_ID = customer_id
-    logger.info(f"Set active customer ID for database tools: {agent_module.ACTIVE_CUSTOMER_ID}")
+    agent_module.active_customer_id_var.set(customer_id)
+    logger.info(f"Set active customer ID for database tools: {agent_module.active_customer_id_var.get()}")
 
     active_escalation_id = None
     audio_server = None
@@ -291,7 +291,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         escalate_url = f"{agent_module.BANKING_SERVICE_URL}/support/escalate"
                         payload = {
                             "room_name": room_name,
-                            "customer_id": agent_module.ACTIVE_CUSTOMER_ID,
+                            "customer_id": agent_module.active_customer_id_var.get(),
                             "reason": event_dict.get("reason", "User requested supervisor"),
                             "transcript": conversation_transcript
                         }

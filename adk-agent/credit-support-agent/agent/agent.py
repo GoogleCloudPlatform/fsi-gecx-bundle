@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import contextvars
 import google
 import httpx
 from google.adk.agents import Agent
@@ -30,16 +31,15 @@ os.environ.setdefault("GOOGLE_CLOUD_LOCATION", LOCATION)
 os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")
 
 BANKING_SERVICE_URL = os.getenv("BANKING_SERVICE_URL", "http://localhost:8080").rstrip("/")
-ACTIVE_CUSTOMER_ID = "cust-123"
-
-# Event broker for publishing tool execution status updates to LiveKit data channel
-EVENT_CALLBACKS = []
+active_customer_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("active_customer_id", default="cust-123")
+session_event_callback_var: contextvars.ContextVar = contextvars.ContextVar("session_event_callback", default=None)
 
 def register_event_callback(cb):
-    EVENT_CALLBACKS.append(cb)
+    session_event_callback_var.set(cb)
 
 def notify_event(event_dict):
-    for cb in EVENT_CALLBACKS:
+    cb = session_event_callback_var.get()
+    if cb:
         try:
             cb(event_dict)
         except Exception:
@@ -50,7 +50,7 @@ class DynamicGoogleAuth(httpx.Auth):
     async def async_auth_flow(self, request: httpx.Request):
         token = get_auth_token_for_audience(BANKING_SERVICE_URL)
         request.headers["Authorization"] = f"Bearer {token}"
-        request.headers["x-target-customer-id"] = ACTIVE_CUSTOMER_ID
+        request.headers["x-target-customer-id"] = active_customer_id_var.get()
         yield request
 
 def get_auth_token_for_audience(audience: str) -> str:
@@ -92,15 +92,15 @@ def transfer_to_human(reason: str) -> dict:
     notify_event({"type": DataChannelEvent.HANDOFF_PENDING.value, "reason": reason})
     return {"status": "SUCCESS", "message": "Escalation sequence initiated."}
 
-def fetch_updated_account_details() -> dict:
+async def fetch_updated_account_details() -> dict:
     headers = {}
     token = get_auth_token_for_audience(BANKING_SERVICE_URL)
     headers["Authorization"] = f"Bearer {token}"
-    headers["x-target-customer-id"] = ACTIVE_CUSTOMER_ID
+    headers["x-target-customer-id"] = active_customer_id_var.get()
     
-    with httpx.Client(timeout=5.0) as client:
+    async with httpx.AsyncClient(timeout=5.0) as client:
         try:
-            resp = client.get(f"{BANKING_SERVICE_URL}/api/credit-card/account", headers=headers)
+            resp = await client.get(f"{BANKING_SERVICE_URL}/api/credit-card/account", headers=headers)
             if resp.status_code == 200:
                 return resp.json()
         except Exception:
@@ -111,7 +111,7 @@ def get_auth_headers() -> dict:
     token = get_auth_token_for_audience(BANKING_SERVICE_URL)
     return {
         "Authorization": f"Bearer {token}",
-        "x-target-customer-id": ACTIVE_CUSTOMER_ID
+        "x-target-customer-id": active_customer_id_var.get()
     }
 
 async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
@@ -139,7 +139,7 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
     # Check if the tool succeeded
     structured = tool_response.get("structuredContent") if isinstance(tool_response, dict) else None
     if structured and isinstance(structured, dict) and structured.get("success") is True:
-        account_data = fetch_updated_account_details()
+        account_data = await fetch_updated_account_details()
         logger.info(f"[CALLBACK] fetch_updated_account_details returned: {account_data}")
         if account_data:
             if tool_name == "request_credit_limit_increase" or tool_name == "request_limit_increase":

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import GoogleCloudIcon from './GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
+import { showInfoModals } from '../utils/constants.js';
 import { 
   getPendingEscalations, 
   getAgentVoiceToken,
@@ -296,13 +297,15 @@ export default function AgentSupportDashboard() {
               Live Voice Room: {activeRoomName}
             </div>
           )}
-          <button
-            onClick={() => setIsInfoModalOpen(true)}
-            className="p-2.5 rounded-2xl hover:bg-slate-800/80 border border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
-            title="GCP Co-Browse Integration Info"
-          >
-            <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
-          </button>
+          {showInfoModals() && (
+            <button
+              onClick={() => setIsInfoModalOpen(true)}
+              className="p-2.5 rounded-2xl hover:bg-slate-800/80 border border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+              title="GCP Co-Browse Integration Info"
+            >
+              <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
+            </button>
+          )}
         </div>
       </div>
 

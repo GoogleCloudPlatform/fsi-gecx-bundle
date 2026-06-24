@@ -32,3 +32,8 @@ export const DataChannelEvent = {
   SESSION_END: 'SESSION_END',
   TRANSCRIPT: 'TRANSCRIPT'
 };
+
+export function showInfoModals() {
+  const envVal = window.env?.SHOW_INFO_MODALS !== undefined ? window.env.SHOW_INFO_MODALS : import.meta.env.VITE_SHOW_INFO_MODALS;
+  return envVal !== 'false' && envVal !== false;
+}

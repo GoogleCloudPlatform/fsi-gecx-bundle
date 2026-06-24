@@ -18,6 +18,7 @@ import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume
 import { resetDatabase, getSystemSettings, updateSystemSettings } from '../utils/api.js';
 import GoogleCloudIcon from './GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
+import { showInfoModals } from '../utils/constants.js';
 
 function AdminDashboardView() {
   const navigate = useNavigate();
@@ -143,13 +144,15 @@ function AdminDashboardView() {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => setIsInfoModalOpen(true)}
-          className="p-2.5 rounded-2xl hover:bg-slate-805/80 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
-          title="GCP Admin Integration Info"
-        >
-          <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
-        </button>
+        {showInfoModals() && (
+          <button
+            onClick={() => setIsInfoModalOpen(true)}
+            className="p-2.5 rounded-2xl hover:bg-slate-805/80 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+            title="GCP Admin Integration Info"
+          >
+            <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
+          </button>
+        )}
       </div>
 
       {/* Module Cards Grid */}
