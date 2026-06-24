@@ -137,6 +137,7 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
     import logging
     logger = logging.getLogger("voice_agent")
     logger.info(f"[CALLBACK] after_tool_callback triggered: tool_name={tool_name}, result={tool_response}")
+    tool_context.state["is_processing_tool"] = False
     # Check if the tool succeeded
     structured = tool_response.get("structuredContent") if isinstance(tool_response, dict) else None
     if structured and isinstance(structured, dict) and structured.get("success") is True:

@@ -179,8 +179,13 @@ def requires_user_assertion(func):
             sig = inspect.signature(func)
             if "verified_customer_id" in sig.parameters:
                 kwargs["verified_customer_id"] = effective_id
+            else:
+                kwargs.pop("verified_customer_id", None)
+
             if "assertion_token" in sig.parameters:
                 kwargs["assertion_token"] = assertion_token
+            else:
+                kwargs.pop("assertion_token", None)
 
             if asyncio.iscoroutinefunction(func):
                 return await func(*args, **kwargs)

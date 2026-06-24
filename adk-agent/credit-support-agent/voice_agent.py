@@ -588,12 +588,6 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         # Extract audio output from the model
                         if part.inline_data:
                             if part.inline_data.mime_type.startswith("audio/pcm"):
-                                # If we were processing a tool, reset the flag now that agent speech has started
-                                session = await session_service.get_session(app_name="credit-support-agent", user_id=user_id, session_id=session_id)
-                                if session and session.state.get("is_processing_tool", False):
-                                    session.state["is_processing_tool"] = False
-                                    logger.info("Agent began speaking. Resetting tool mute state.")
-
                                 audio_bytes = part.inline_data.data
                                 # Queue it for playout
                                 await playout_queue.put(audio_bytes)
