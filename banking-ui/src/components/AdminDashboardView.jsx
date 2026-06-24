@@ -32,6 +32,7 @@ function AdminDashboardView() {
   const [warningDuration, setWarningDuration] = useState(240);
   const [avatarSelection, setAvatarSelection] = useState('random');
   const [mockAvatarEnabled, setMockAvatarEnabled] = useState(false);
+  const [showInfoModalsState, setShowInfoModalsState] = useState(true);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   // Load Settings on Mount
@@ -45,6 +46,10 @@ function AdminDashboardView() {
           setWarningDuration(parseInt(settings.voice_agent_warning_duration) || 240);
           setAvatarSelection(settings.voice_agent_avatar_selection || 'random');
           setMockAvatarEnabled(settings.voice_agent_mock_avatar_enabled === 'true');
+          
+          const showInfo = settings.show_info_modals !== undefined ? settings.show_info_modals : String(import.meta.env.VITE_SHOW_INFO_MODALS !== 'false');
+          setShowInfoModalsState(showInfo === 'true');
+          localStorage.setItem('show_info_modals', showInfo);
         }
       } catch (err) {
         console.error("Failed to load voice agent settings:", err);
@@ -63,8 +68,10 @@ function AdminDashboardView() {
         voice_agent_max_duration: String(maxDuration),
         voice_agent_warning_duration: String(warningDuration),
         voice_agent_avatar_selection: avatarSelection,
-        voice_agent_mock_avatar_enabled: String(mockAvatarEnabled)
+        voice_agent_mock_avatar_enabled: String(mockAvatarEnabled),
+        show_info_modals: String(showInfoModalsState)
       });
+      localStorage.setItem('show_info_modals', String(showInfoModalsState));
       setNotice({ type: 'success', text: 'Voice agent settings updated successfully!' });
       setTimeout(() => setNotice({ type: '', text: '' }), 4000);
     } catch (err) {
@@ -282,6 +289,20 @@ function AdminDashboardView() {
             type="checkbox"
             checked={mockAvatarEnabled}
             onChange={(e) => setMockAvatarEnabled(e.target.checked)}
+            className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+          />
+        </div>
+
+        {/* Architecture Info Modals Toggle */}
+        <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800/80">
+          <div>
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Enable Developer Architecture tooltips</span>
+            <p className="text-[10px] text-slate-400 mt-0.5">Displays blue Google Cloud icons and informative architecture diagrams to help developers learn how this application is built.</p>
+          </div>
+          <input
+            type="checkbox"
+            checked={showInfoModalsState}
+            onChange={(e) => setShowInfoModalsState(e.target.checked)}
             className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
           />
         </div>
