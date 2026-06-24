@@ -14,7 +14,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings, Bell, ExternalLink } from 'lucide-react';
+import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings, Bell, ExternalLink, Sparkles } from 'lucide-react';
 import { resetDatabase, getSystemSettings, updateSystemSettings } from '../utils/api.js';
 import GoogleCloudIcon from './GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
@@ -214,97 +214,107 @@ function AdminDashboardView() {
         </div>
       )}
 
-      {/* Voice & Live Avatar Settings Panel */}
+      {/* Settings Form */}
       <form onSubmit={handleSaveSettings} className="mt-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 space-y-6">
-        <div className="flex items-center gap-2 pb-4 border-b border-slate-100 dark:border-slate-800/80">
-          <Settings className="w-5 h-5 text-emerald-500" />
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Voice & Live Avatar Settings</h3>
+        {/* Section 1: Demo & Website Settings */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800/80">
+            <Sparkles className="w-5 h-5 text-indigo-400" />
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Demo & Presentation Settings</h3>
+          </div>
+          
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Enable Developer Architecture Tooltips</span>
+              <p className="text-[10px] text-slate-400 mt-0.5">Displays blue Google Cloud architecture shortcuts and visual flow diagrams across page views to help walkthroughs.</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={showInfoModalsState}
+              onChange={(e) => setShowInfoModalsState(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+            />
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Avatar Selection Override */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-              Active Avatar Selection
-            </label>
-            <select
-              value={avatarSelection}
-              onChange={(e) => setAvatarSelection(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500"
-            >
-              <option value="random">Randomize (Ingrid, Paul, Sam)</option>
-              <option value="Ingrid">Force Ingrid</option>
-              <option value="Paul">Force Paul</option>
-              <option value="Sam">Force Sam</option>
-              <option value="Jay">Force Jay</option>
-              <option value="Vera">Force Vera</option>
-            </select>
-            <p className="text-[10px] text-slate-400">Controls which built-in virtual face representative joins the WebRTC session.</p>
+        {/* Section 2: Voice & Live Avatar Settings */}
+        <div className="space-y-6 pt-6 border-t border-slate-100 dark:border-slate-800/80">
+          <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800/80">
+            <Settings className="w-5 h-5 text-emerald-500" />
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Voice & Live Avatar Settings</h3>
           </div>
 
-          {/* Call Timeout Configurations */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Avatar Selection Override */}
+            <div className="space-y-2">
               <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                Enforce Hard Timeout (Watchdog)
+                Active Avatar Selection
               </label>
-              <input
-                type="checkbox"
-                checked={hardTimeoutEnabled}
-                onChange={(e) => setHardTimeoutEnabled(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
-              />
+              <select
+                value={avatarSelection}
+                onChange={(e) => setAvatarSelection(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500"
+              >
+                <option value="random">Randomize (Ingrid, Paul, Sam)</option>
+                <option value="Ingrid">Force Ingrid</option>
+                <option value="Paul">Force Paul</option>
+                <option value="Sam">Force Sam</option>
+                <option value="Jay">Force Jay</option>
+                <option value="Vera">Force Vera</option>
+              </select>
+              <p className="text-[10px] text-slate-400">Controls which built-in virtual face representative joins the WebRTC session.</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-400 block">Max Duration (s)</label>
+            {/* Call Timeout Configurations */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                  Enforce Hard Timeout (Watchdog)
+                </label>
                 <input
-                  type="number"
-                  value={maxDuration}
-                  onChange={(e) => setMaxDuration(parseInt(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 text-xs font-semibold text-slate-800 dark:text-slate-200"
+                  type="checkbox"
+                  checked={hardTimeoutEnabled}
+                  onChange={(e) => setHardTimeoutEnabled(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-400 block">Warning Delay (s)</label>
-                <input
-                  type="number"
-                  value={warningDuration}
-                  onChange={(e) => setWarningDuration(parseInt(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 text-xs font-semibold text-slate-800 dark:text-slate-200"
-                />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold text-slate-400 block">Max Duration (s)</label>
+                  <input
+                    type="number"
+                    value={maxDuration}
+                    onChange={(e) => setMaxDuration(parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 text-xs font-semibold text-slate-800 dark:text-slate-200"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold text-slate-400 block">Warning Delay (s)</label>
+                  <input
+                    type="number"
+                    value={warningDuration}
+                    onChange={(e) => setWarningDuration(parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 text-xs font-semibold text-slate-800 dark:text-slate-200"
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Mock Sandbox Toggle */}
-        <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800/80">
-          <div>
-            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Enable Mock Avatar Sandbox</span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Bypasses Google Vertex APIs and loops a local video file from disk to save token billing costs during testing.</p>
+          {/* Mock Sandbox Toggle */}
+          <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800/80">
+            <div>
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Enable Mock Avatar Sandbox</span>
+              <p className="text-[10px] text-slate-400 mt-0.5">Bypasses Google Vertex APIs and loops a local video file from disk to save token billing costs during testing.</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={mockAvatarEnabled}
+              onChange={(e) => setMockAvatarEnabled(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+            />
           </div>
-          <input
-            type="checkbox"
-            checked={mockAvatarEnabled}
-            onChange={(e) => setMockAvatarEnabled(e.target.checked)}
-            className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
-          />
-        </div>
-
-        {/* Architecture Info Modals Toggle */}
-        <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800/80">
-          <div>
-            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Enable Developer Architecture tooltips</span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Displays blue Google Cloud icons and informative architecture diagrams to help developers learn how this application is built.</p>
-          </div>
-          <input
-            type="checkbox"
-            checked={showInfoModalsState}
-            onChange={(e) => setShowInfoModalsState(e.target.checked)}
-            className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
-          />
         </div>
 
         {/* Action Button */}

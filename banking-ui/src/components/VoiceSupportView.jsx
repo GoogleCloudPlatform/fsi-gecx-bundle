@@ -669,7 +669,7 @@ export default function VoiceSupportView() {
       {/* Header section */}
       <div className="text-center mb-6 flex flex-col items-center relative w-full">
         <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
-          Nova Horizon Voice Support Copilot
+          Nova Horizon Voice Support
         </h1>
         <p className="text-slate-400 mt-2 text-lg">
           Talk to our real-time AI assistant for instant credit card operations.
