@@ -19,7 +19,7 @@ import re
 from fastmcp import Context
 
 from . import mcp  # Import shared FastMCP server instance
-from routers.mcp.utils import requires_user_assertion, verified_customer_id_var, assertion_token_var
+from routers.mcp.utils import requires_user_assertion, verified_customer_id_var
 from utils.database import SessionLocal
 from repositories.credit_card import CreditCardRepository
 from services.credit_card import freeze_card, apply_limit_increase, reverse_posted_fee
@@ -40,7 +40,6 @@ async def report_lost_stolen_card(
         account_id: Optional unique identifier for the credit card account.
     """
     verified_customer_id = verified_customer_id_var.get()
-    assertion_token = assertion_token_var.get()
     logger.info(f"FastMCP report_lost_stolen_card invoked for account: {account_id} (Customer: {verified_customer_id})")
     
     db = SessionLocal()
@@ -113,7 +112,6 @@ async def reverse_overdraft_fee(
         fee_date: Optional date of the fee to reverse.
     """
     verified_customer_id = verified_customer_id_var.get()
-    assertion_token = assertion_token_var.get()
     logger.info(f"FastMCP reverse_overdraft_fee invoked for account: {account_id} (Customer: {verified_customer_id})")
     
     db = SessionLocal()
@@ -195,7 +193,6 @@ async def request_credit_limit_increase(
         requested_limit: Optional desired new credit limit amount (in dollars).
     """
     verified_customer_id = verified_customer_id_var.get()
-    assertion_token = assertion_token_var.get()
     logger.info(f"FastMCP request_credit_limit_increase invoked for account: {account_id} (Customer: {verified_customer_id})")
     
     db = SessionLocal()
@@ -263,7 +260,6 @@ async def get_transaction_history(
     Retrieves the transaction ledger history for the verified user's credit card account.
     """
     verified_customer_id = verified_customer_id_var.get()
-    assertion_token = assertion_token_var.get()
     logger.info(f"FastMCP get_transaction_history invoked for Customer: {verified_customer_id}")
     
     db = SessionLocal()

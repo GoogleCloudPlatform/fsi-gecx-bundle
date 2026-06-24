@@ -16,6 +16,8 @@ import os
 import logging
 import asyncio
 import functools
+import inspect
+from contextvars import ContextVar
 from pathlib import Path
 from fastmcp import Context
 
@@ -85,8 +87,6 @@ def _mask_ein(ein_value: str) -> str:
     return "**-***-****"
 
 
-from contextvars import ContextVar
-import inspect
 
 verified_customer_id_var: ContextVar[str] = ContextVar("verified_customer_id", default=None)
 assertion_token_var: ContextVar[str] = ContextVar("assertion_token", default=None)
