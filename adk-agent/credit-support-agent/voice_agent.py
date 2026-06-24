@@ -465,8 +465,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                                 playout_queue.get_nowait()
                             except asyncio.QueueEmpty:
                                 break
-                        # Send activity start signal
-                        live_queue.send_activity_start()
+                        # Rely on audio stream presence; do not send manual activity start signal
+                        # live_queue.send_activity_start()
                         
                         # Flush pre-roll buffer to prevent cutting off the start of user utterance
                         logger.debug(f"Flushing STT pre-roll buffer: {len(preroll_buffer)} frames")
@@ -486,8 +486,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 
                     if speech_ended:
                         user_speaking_state[0] = False
-                        # Send activity end signal
-                        live_queue.send_activity_end()
+                        # Rely on audio stream absence; do not send manual activity end signal
+                        # live_queue.send_activity_end()
         except Exception as err:
             logger.error(f"Error handling incoming audio: {err}", exc_info=True)
         finally:
