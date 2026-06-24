@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from silero_vad import load_silero_vad
 from livekit import rtc
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 import uvicorn
 
 # Prepend the directory to sys.path
@@ -508,13 +508,19 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 vh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 240
                 cap.release()
             else:
-                # Google 1P Live Avatar native resolution
-                vw = 704
-                vh = 1280
+                # Google 1P Live Avatar native resolution (scaled for performance and smoothness)
+                vw = 352
+                vh = 640
             
             video_source = rtc.VideoSource(vw, vh)
             local_video_track = rtc.LocalVideoTrack.create_video_track("agent-video", video_source)
-            video_publish_options = rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_CAMERA)
+            video_publish_options = rtc.TrackPublishOptions(
+                source=rtc.TrackSource.SOURCE_CAMERA,
+                video_encoding=rtc.VideoEncoding(
+                    max_bitrate=1_500_000,
+                    max_framerate=30
+                )
+            )
             await room.local_participant.publish_track(local_video_track, video_publish_options)
             logger.info(f"Published agent video track ({vw}x{vh}) to room")
         # Broadcast avatar configuration to client UI
@@ -622,7 +628,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 
                 # Log any final responses or tool call events for tracking
                 if event.is_final_response():
-                    logger.debug(f"Agent turn complete. Finished generation.")
+                    logger.debug("Agent turn complete. Finished generation.")
 
                 # Trigger clean shutdown when the model completes the session
                 if event.actions and event.actions.end_of_agent:
@@ -756,6 +762,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 '-threads', '1',        # restrict to single thread for resource-constrained containers
                 '-f', 'mp4',
                 '-i', 'pipe:0',
+                '-vf', 'scale=352:640',
                 '-map', '0:v', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-',
                 '-map', '0:a', '-f', 's16le', '-ar', '24000', '-ac', '1', f'tcp://127.0.0.1:{audio_port}',
                 stdin=asyncio.subprocess.PIPE,
@@ -776,7 +783,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             asyncio.create_task(log_ffmpeg_stderr())
             
             async def read_ffmpeg_frames_loop():
-                vw, vh = 704, 1280
+                vw, vh = 352, 640
                 frame_size = vw * vh * 4
                 pts_us = 0
                 frame_delay = 1.0 / 30.0

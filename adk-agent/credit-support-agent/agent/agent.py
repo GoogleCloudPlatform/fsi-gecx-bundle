@@ -13,11 +13,9 @@
 # limitations under the License.
 
 import os
-import asyncio
 import google
 import httpx
 from google.adk.agents import Agent
-from google.adk.agents.callback_context import CallbackContext
 from google.adk.planners import BuiltInPlanner
 from google.genai.types import ThinkingConfig
 from google.adk.tools.mcp_tool import McpToolset
@@ -44,7 +42,7 @@ def notify_event(event_dict):
     for cb in EVENT_CALLBACKS:
         try:
             cb(event_dict)
-        except Exception as e:
+        except Exception:
             pass
 
 # Custom dynamic auth class for OIDC token refreshing
