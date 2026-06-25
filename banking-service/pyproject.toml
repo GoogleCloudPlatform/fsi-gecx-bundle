@@ -14,7 +14,7 @@ dependencies = [
     "google-cloud-bigquery==3.41.0",
     "httpx==0.28.1",
     "python-dotenv==1.2.2",
-    "google-adk==1.31.1",
+    "google-adk==2.3.0",
     "joserfc==1.6.4",
     "google-cloud-secret-manager==2.27.0",
     "fastmcp==3.2.4",
@@ -30,6 +30,7 @@ dependencies = [
     "livekit-api==1.1.0",
     "psycopg2-binary==2.9.10",
     "alembic>=1.18.4",
+    "google-cloud-discoveryengine>=0.13.12",
 ]
 
 [dependency-groups]
