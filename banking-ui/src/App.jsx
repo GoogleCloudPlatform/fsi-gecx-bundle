@@ -1634,6 +1634,7 @@ function AppContent() {
               <li><Link to="/help-center" className={getFooterLinkClass('/help-center')}>Help Center</Link></li>
               <li><Link to="/fee-schedule" className={getFooterLinkClass('/fee-schedule')}>Fee Schedule</Link></li>
               <li><Link to="/locator" className={getFooterLinkClass('/locator')}>Find Branch/ATM</Link></li>
+              <li><Link to="/support/voice" className={getFooterLinkClass('/support/voice')}>Credit Card Support</Link></li>
               {fbUser && (
                 <li><Link to="/secure-messaging" className={getFooterLinkClass('/secure-messaging')}>Secure Messages</Link></li>
               )}
