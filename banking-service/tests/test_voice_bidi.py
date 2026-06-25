@@ -31,8 +31,9 @@ def mock_firebase_app():
 @patch("services.voice_bidi.time.time")
 @patch("websockets.connect")
 @patch("services.voice_bidi.get_project_id")
-def test_gecx_voice_stream_success(mock_get_project_id, mock_ws_connect, mock_time, mock_get_token, mock_validate_token, mock_firebase_app):
+def test_gecx_voice_stream_success(mock_get_project_id, mock_ws_connect, mock_time, mock_get_token, mock_validate_token, mock_firebase_app, monkeypatch):
     """Verify GECX WebSocket proxy successfully authenticates first-frame and forwards messages."""
+    monkeypatch.setenv("GECX_APP_ID", "42345105-29cb-492d-8a60-07171bb72190")
     
     # 1. Setup Mock user validation claims
     mock_get_project_id.return_value = "evo-genai-workspace"

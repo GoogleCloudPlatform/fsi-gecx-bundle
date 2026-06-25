@@ -19,7 +19,7 @@ import re
 from fastmcp import Context
 
 from . import mcp  # Import shared FastMCP server instance
-from routers.mcp.utils import requires_user_assertion
+from routers.mcp.utils import requires_user_assertion, verified_customer_id_var
 from utils.database import SessionLocal
 from repositories.credit_card import CreditCardRepository
 from services.credit_card import freeze_card, apply_limit_increase, reverse_posted_fee
@@ -31,17 +31,15 @@ logger = logging.getLogger(__name__)
 @requires_user_assertion
 async def report_lost_stolen_card(
     account_id: str = None,
-    assertion_token: str = None,
     ctx: Context = None,
-    verified_customer_id: str = None
 ) -> dict:
     """
     Reports a credit card as lost or stolen, blocks the card, and initiates a reissue.
     
     Args:
         account_id: Optional unique identifier for the credit card account.
-        assertion_token: Cryptographically signed Firebase ID token of the active user.
     """
+    verified_customer_id = verified_customer_id_var.get()
     logger.info(f"FastMCP report_lost_stolen_card invoked for account: {account_id} (Customer: {verified_customer_id})")
     
     db = SessionLocal()
@@ -103,19 +101,17 @@ async def report_lost_stolen_card(
 @requires_user_assertion
 async def reverse_overdraft_fee(
     account_id: str = None,
-    assertion_token: str = None,
     fee_date: str = None,
     ctx: Context = None,
-    verified_customer_id: str = None
 ) -> dict:
     """
     Reverses an overdraft or late fee for a credit card account.
     
     Args:
         account_id: Optional unique identifier for the credit card account.
-        assertion_token: Cryptographically signed Firebase ID token of the active user.
         fee_date: Optional date of the fee to reverse.
     """
+    verified_customer_id = verified_customer_id_var.get()
     logger.info(f"FastMCP reverse_overdraft_fee invoked for account: {account_id} (Customer: {verified_customer_id})")
     
     db = SessionLocal()
@@ -186,19 +182,17 @@ async def reverse_overdraft_fee(
 @requires_user_assertion
 async def request_credit_limit_increase(
     account_id: str = None,
-    assertion_token: str = None,
     requested_limit: float = None,
     ctx: Context = None,
-    verified_customer_id: str = None
 ) -> dict:
     """
     Submits a credit limit increase request for a credit card account.
     
     Args:
         account_id: Optional unique identifier for the credit card account.
-        assertion_token: Cryptographically signed Firebase ID token of the active user.
         requested_limit: Optional desired new credit limit amount (in dollars).
     """
+    verified_customer_id = verified_customer_id_var.get()
     logger.info(f"FastMCP request_credit_limit_increase invoked for account: {account_id} (Customer: {verified_customer_id})")
     
     db = SessionLocal()
@@ -252,6 +246,40 @@ async def request_credit_limit_increase(
         }
     except Exception as e:
         logger.error(f"Error in FastMCP request_credit_limit_increase: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def get_transaction_history(
+    ctx: Context = None,
+) -> dict:
+    """
+    Retrieves the transaction ledger history for the verified user's credit card account.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    logger.info(f"FastMCP get_transaction_history invoked for Customer: {verified_customer_id}")
+    
+    db = SessionLocal()
+    repo = CreditCardRepository(db)
+    try:
+        account = repo.get_account_by_customer(verified_customer_id)
+        if not account:
+            return {"success": False, "message": "No credit card account found for the user."}
+            
+        ledger = repo.list_ledger_entries(account.id)
+        data = [{
+            "transaction_id": entry.id,
+            "amount_cents": entry.amount_cents,
+            "description": entry.description,
+            "timestamp": entry.posted_at.isoformat() if entry.posted_at else None
+        } for entry in ledger]
+        
+        return {"success": True, "data": data}
+    except Exception as e:
+        logger.error(f"Error in FastMCP get_transaction_history: {e}")
         return {"success": False, "message": f"Internal error: {str(e)}"}
     finally:
         db.close()

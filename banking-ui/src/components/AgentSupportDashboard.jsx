@@ -9,8 +9,12 @@ import {
   CheckCircle2, 
   Volume2, 
   Sparkles, 
-  MousePointerClick 
+  MousePointerClick,
+  ExternalLink
 } from 'lucide-react';
+import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GcpInfoModal from './GcpInfoModal.jsx';
+import { showInfoModals } from '../utils/constants.js';
 import { 
   getPendingEscalations, 
   getAgentVoiceToken,
@@ -26,6 +30,7 @@ import { DataChannelEvent } from '../utils/constants.js';
 export default function AgentSupportDashboard() {
   const [escalations, setEscalations] = useState([]);
   const [selectedEscalation, setSelectedEscalation] = useState(null);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -96,6 +101,17 @@ export default function AgentSupportDashboard() {
       setTransactions(txs);
       const acc = await getCreditCardAccount(targetId);
       setCustomerAccount(acc);
+      
+      // Broadcast real-time update to customer via LiveKit data channel
+      if (roomRef.current) {
+        const encoder = new TextEncoder();
+        const payload = encoder.encode(JSON.stringify({
+          type: DataChannelEvent.FEE_REVERSED,
+          cleared_balance_cents: acc.cleared_balance_cents,
+          available_credit_cents: acc.available_credit_cents
+        }));
+        await roomRef.current.localParticipant.publishData(payload);
+      }
     } catch (err) {
       setErrorMessage(err.response?.data?.detail || 'Failed to reverse fee.');
     } finally {
@@ -115,6 +131,16 @@ export default function AgentSupportDashboard() {
       setSuccessMessage('Card blocked successfully.');
       const acc = await getCreditCardAccount(targetId);
       setCustomerAccount(acc);
+      
+      // Broadcast real-time update to customer via LiveKit data channel
+      if (roomRef.current) {
+        const encoder = new TextEncoder();
+        const payload = encoder.encode(JSON.stringify({
+          type: DataChannelEvent.CARD_STATUS_LOCK,
+          status: 'BLOCKED'
+        }));
+        await roomRef.current.localParticipant.publishData(payload);
+      }
     } catch (err) {
       setErrorMessage(err.response?.data?.detail || 'Failed to block card.');
     } finally {
@@ -135,6 +161,17 @@ export default function AgentSupportDashboard() {
       setLimitInput('');
       const acc = await getCreditCardAccount(targetId);
       setCustomerAccount(acc);
+      
+      // Broadcast real-time update to customer via LiveKit data channel
+      if (roomRef.current) {
+        const encoder = new TextEncoder();
+        const payload = encoder.encode(JSON.stringify({
+          type: DataChannelEvent.LIMIT_UPDATED,
+          credit_limit_cents: acc.credit_limit_cents,
+          available_credit_cents: acc.available_credit_cents
+        }));
+        await roomRef.current.localParticipant.publishData(payload);
+      }
     } catch (err) {
       setErrorMessage(err.response?.data?.detail || 'Failed to update credit limit.');
     } finally {
@@ -243,7 +280,7 @@ export default function AgentSupportDashboard() {
     <div className="max-w-7xl mx-auto px-4 py-8 text-slate-800 dark:text-slate-100 min-h-[85vh] flex flex-col justify-between">
       
       {/* Header section */}
-      <div className="mb-6 flex justify-between items-center border-b border-slate-200 dark:border-slate-805 pb-4">
+      <div className="mb-6 flex justify-between items-center border-b border-slate-200 dark:border-slate-805 pb-4 w-full">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 via-slate-705 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
             Supervisor Takeover Dashboard
@@ -253,12 +290,23 @@ export default function AgentSupportDashboard() {
           </p>
         </div>
         
-        {isConnected && (
-          <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/50 rounded-full px-4 py-1.5 text-xs text-emerald-600 dark:text-emerald-300 font-bold flex items-center gap-2 animate-pulse">
-            <Volume2 size={14} className="text-emerald-505 dark:text-emerald-400" />
-            Live Voice Room: {activeRoomName}
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {isConnected && (
+            <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/50 rounded-full px-4 py-1.5 text-xs text-emerald-600 dark:text-emerald-300 font-bold flex items-center gap-2 animate-pulse">
+              <Volume2 size={14} className="text-emerald-505 dark:text-emerald-400" />
+              Live Voice Room: {activeRoomName}
+            </div>
+          )}
+          {showInfoModals() && (
+            <button
+              onClick={() => setIsInfoModalOpen(true)}
+              className="p-2.5 rounded-2xl hover:bg-slate-800/80 border border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+              title="GCP Co-Browse Integration Info"
+            >
+              <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
+            </button>
+          )}
+        </div>
       </div>
 
       {errorMessage && (
@@ -513,6 +561,41 @@ export default function AgentSupportDashboard() {
         </div>
 
       </div>
+
+      <GcpInfoModal
+        isOpen={isInfoModalOpen}
+        onClose={() => setIsInfoModalOpen(false)}
+        title="WebRTC Handoff & Co-Browsing"
+      >
+        <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+          <p>
+            The <strong>Supervisor Takeover Console</strong> facilitates live WebRTC presenter handoff and co-browsing synchronization.
+          </p>
+          <p>
+            When a customer requests escalation, the AI voice agent submits an escalation request to the database. The supervisor's browser polls the backend, claims the session, and requests a secure WebRTC token to join the customer's LiveKit room.
+          </p>
+          <p>
+            Co-browsing features (such as highlighting transactions) are transmitted as sub-second JSON payloads directly over the WebRTC data channel, updating the customer's viewport immediately.
+          </p>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">LiveKit Console</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">View real-time room sessions, active participants, and track distribution logs.</p>
+              </div>
+              <a
+                href={`https://console.livekit.io`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Dashboard</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </GcpInfoModal>
 
     </div>
   );

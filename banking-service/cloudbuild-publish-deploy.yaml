@@ -54,6 +54,8 @@ steps:
           echo "Registering latest image with Cloud Run Migration Job..."
           gcloud run jobs update banking-db-migrate \
             --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
+            --command "alembic" \
+            --args "upgrade,head" \
             --update-env-vars "^|^IAM_DBA_USERS=${_IAM_DBA_USERS}" \
             --region "${_REGION}"
           echo "Executing pre-deployment database schema migrations..."
@@ -83,8 +85,6 @@ images:
   - "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:latest"
 
 options:
-  pool:
-    name: "projects/${PROJECT_ID}/locations/${_REGION}/workerPools/build-pool"
   logging: CLOUD_LOGGING_ONLY
 
 substitutions:

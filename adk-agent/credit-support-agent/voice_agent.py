@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from silero_vad import load_silero_vad
 from livekit import rtc
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 import uvicorn
 
 # Prepend the directory to sys.path
@@ -22,12 +22,22 @@ from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.agents.live_request_queue import LiveRequestQueue
 from google.genai import types
 
+from agent.patch_adk import apply_patch
+apply_patch()
+
 class HandoffException(Exception):
     pass
 
 # Configure logging to stdout
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("voice_agent")
+# Enable verbose debug logs for ADK and GenAI SDK conditionally to trace tool calling packets
+if os.getenv("VERBOSE_LOGGING") == "true":
+    logging.getLogger("google_adk").setLevel(logging.DEBUG)
+    logging.getLogger("google_genai").setLevel(logging.DEBUG)
+else:
+    logging.getLogger("google_adk").setLevel(logging.ERROR)
+    logging.getLogger("google_genai").setLevel(logging.ERROR)
 
 LIVEKIT_URL = os.getenv("LIVEKIT_URL", "ws://localhost:7880")
 def get_livekit_token(room_name: str) -> str:
@@ -117,41 +127,54 @@ async def run_stt_worker(client, audio_queue: asyncio.Queue, sample_rate: int, a
             interim_results=False
         )
         
-        # Generator yielding requests
-        async def request_generator():
-            yield speech.StreamingRecognizeRequest(streaming_config=streaming_config)
-            while True:
-                try:
-                    chunk = await audio_queue.get()
-                    if chunk is None:
-                        logger.info(f"STT worker for {author} received poison pill. Exiting generator.")
+        def create_request_generator():
+            async def generator():
+                yield speech.StreamingRecognizeRequest(streaming_config=streaming_config)
+                while True:
+                    try:
+                        chunk = await audio_queue.get()
+                        if chunk is None:
+                            logger.info(f"STT worker for {author} received poison pill. Exiting generator.")
+                            audio_queue.task_done()
+                            break
+                        yield speech.StreamingRecognizeRequest(audio_content=chunk)
                         audio_queue.task_done()
+                    except asyncio.CancelledError:
                         break
-                    yield speech.StreamingRecognizeRequest(audio_content=chunk)
-                    audio_queue.task_done()
-                except asyncio.CancelledError:
-                    break
-                except Exception as e:
-                    logger.error(f"Error in STT generator for {author}: {e}")
-                    break
+                    except Exception as e:
+                        logger.error(f"Error in STT generator for {author}: {e}")
+                        break
+            return generator()
 
-        responses = await client.streaming_recognize(requests=request_generator())
-        async for response in responses:
-            for result in response.results:
-                if result.is_final:
-                    transcript = result.alternatives[0].transcript.strip()
-                    if transcript:
-                        logger.info(f"[{author.upper()} TRANSCRIPT] {transcript}")
-                        # Broadcast the transcript to the client room
-                        on_agent_event_fn({
-                            "type": "TRANSCRIPT",
-                            "author": author,
-                            "text": transcript
-                        })
+        # Reconnect loop to handle gRPC / Audio timeouts on silence
+        while True:
+            try:
+                logger.info(f"Connecting to Google Cloud Speech-to-Text for {author}...")
+                generator = create_request_generator()
+                responses = await client.streaming_recognize(requests=generator)
+                async for response in responses:
+                    for result in response.results:
+                        if result.is_final:
+                            transcript = result.alternatives[0].transcript.strip()
+                            if transcript:
+                                logger.info(f"[{author.upper()} TRANSCRIPT] {transcript}")
+                                # Broadcast the transcript to the client room
+                                on_agent_event_fn({
+                                    "type": "TRANSCRIPT",
+                                    "author": author,
+                                    "text": transcript
+                                })
+            except asyncio.CancelledError:
+                logger.info(f"STT worker for {author} was cancelled.")
+                break
+            except Exception as ex:
+                # Catch timeout or other gRPC connection closures and attempt recovery
+                logger.warning(f"Speech-to-Text stream for {author} closed: {ex}. Reconnecting...")
+                await asyncio.sleep(0.5)
     except asyncio.CancelledError:
         logger.info(f"STT worker for {author} was cancelled.")
     except Exception as e:
-        logger.error(f"Exception in STT worker for {author}: {e}", exc_info=True)
+        logger.error(f"Fatal exception in STT worker loop for {author}: {e}", exc_info=True)
     finally:
         logger.info(f"Finished STT worker for {author}.")
 
@@ -170,7 +193,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         import agent.agent as agent_module
         headers = agent_module.get_auth_headers()
         async with httpx.AsyncClient(timeout=10.0) as client:
-            settings_url = f"{agent_module.BANKING_SERVICE_URL}/settings"
+            settings_url = f"{agent_module.BANKING_SERVICE_URL}/api/settings"
             resp = await client.get(settings_url, headers=headers)
             if resp.status_code == 200:
                 settings = resp.json()
@@ -193,8 +216,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 
     # Set active customer ID for database tools dynamically
     import agent.agent as agent_module
-    agent_module.ACTIVE_CUSTOMER_ID = customer_id
-    logger.info(f"Set active customer ID for database tools: {agent_module.ACTIVE_CUSTOMER_ID}")
+    agent_module.active_customer_id_var.set(customer_id)
+    logger.info(f"Set active customer ID for database tools: {agent_module.active_customer_id_var.get()}")
 
     active_escalation_id = None
     audio_server = None
@@ -268,7 +291,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         escalate_url = f"{agent_module.BANKING_SERVICE_URL}/support/escalate"
                         payload = {
                             "room_name": room_name,
-                            "customer_id": agent_module.ACTIVE_CUSTOMER_ID,
+                            "customer_id": agent_module.active_customer_id_var.get(),
                             "reason": event_dict.get("reason", "User requested supervisor"),
                             "transcript": conversation_transcript
                         }
@@ -418,14 +441,25 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 # Resample the incoming frame
                 resampled_frames = resampler.push(frame)
                 for res_frame in resampled_frames:
+                    # Check if the agent is currently processing a tool call to drop user mic buffers
+                    session = await session_service.get_session(app_name="credit-support-agent", user_id=user_id, session_id=session_id)
+                    is_processing_tool = session.state.get("is_processing_tool", False) if session else False
+                    if is_processing_tool:
+                        logger.debug("Muting microphone audio: tool execution in progress.")
+                        continue
+
                     # Convert to Float32 array for VAD
-                    # LiveKit audio frames contain raw samples as Int16 or Float32
-                    # Standard Int16 needs to be scaled to Float32 in range [-1.0, 1.0]
-                    # We can use np.frombuffer on the frame data
                     int16_data = np.frombuffer(res_frame.data, dtype=np.int16)
                     float32_data = int16_data.astype(np.float32) / 32768.0
 
                     speech_started, speech_ended = vad.process_chunk(float32_data)
+
+                    pcm_bytes = int16_data.tobytes()
+                    audio_blob = types.Blob(mime_type="audio/pcm;rate=16000", data=pcm_bytes)
+
+                    # Feed user Speech-to-Text worker continuously to keep the gRPC stream alive
+                    if mode == "video" and user_stt_queue:
+                        await user_stt_queue.put(pcm_bytes)
 
                     if speech_started:
                         # Clear agent's playout queue to immediately interrupt speaking
@@ -435,21 +469,9 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                                 playout_queue.get_nowait()
                             except asyncio.QueueEmpty:
                                 break
-                        # Send activity start signal
-                        live_queue.send_activity_start()
 
-                    if speech_ended:
-                        # Send activity end signal
-                        live_queue.send_activity_end()
-
-                    # Send resampled 16kHz PCM audio chunk to Gemini Live API
-                    pcm_bytes = int16_data.tobytes()
-                    logger.debug(f"Sending audio blob: size={len(pcm_bytes)} bytes, sample_rate={res_frame.sample_rate}, channels={res_frame.num_channels}")
-                    audio_blob = types.Blob(mime_type="audio/pcm;rate=16000", data=pcm_bytes)
+                    # Always send the audio blob to the model to allow server-side silence detection
                     live_queue.send_realtime(audio_blob)
-                    
-                    if mode == "video" and user_stt_queue:
-                        await user_stt_queue.put(pcm_bytes)
         except Exception as err:
             logger.error(f"Error handling incoming audio: {err}", exc_info=True)
         finally:
@@ -486,13 +508,19 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 vh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 240
                 cap.release()
             else:
-                # Google 1P Live Avatar native resolution
-                vw = 704
-                vh = 1280
+                # Google 1P Live Avatar native resolution (scaled for performance and smoothness)
+                vw = 352
+                vh = 640
             
             video_source = rtc.VideoSource(vw, vh)
             local_video_track = rtc.LocalVideoTrack.create_video_track("agent-video", video_source)
-            video_publish_options = rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_CAMERA)
+            video_publish_options = rtc.TrackPublishOptions(
+                source=rtc.TrackSource.SOURCE_CAMERA,
+                video_encoding=rtc.VideoEncoding(
+                    max_bitrate=1_500_000,
+                    max_framerate=30
+                )
+            )
             await room.local_participant.publish_track(local_video_track, video_publish_options)
             logger.info(f"Published agent video track ({vw}x{vh}) to room")
         # Broadcast avatar configuration to client UI
@@ -576,7 +604,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                                 if mode == "video" and agent_stt_queue:
                                     await agent_stt_queue.put(audio_bytes)
                             else:
-                                logger.info(f"Received video chunk: size={len(part.inline_data.data)} bytes, mime={part.inline_data.mime_type}")
+                                logger.debug(f"Received video chunk: size={len(part.inline_data.data)} bytes, mime={part.inline_data.mime_type}")
                                 # Send video frame/chunk to FFmpeg decoder process stdin
                                 if ffmpeg_proc and ffmpeg_proc.stdin:
                                     ffmpeg_proc.stdin.write(part.inline_data.data)
@@ -600,7 +628,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 
                 # Log any final responses or tool call events for tracking
                 if event.is_final_response():
-                    logger.info(f"Agent turn complete. Finished generation.")
+                    logger.debug("Agent turn complete. Finished generation.")
 
                 # Trigger clean shutdown when the model completes the session
                 if event.actions and event.actions.end_of_agent:
@@ -734,6 +762,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 '-threads', '1',        # restrict to single thread for resource-constrained containers
                 '-f', 'mp4',
                 '-i', 'pipe:0',
+                '-vf', 'scale=352:640',
                 '-map', '0:v', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-',
                 '-map', '0:a', '-f', 's16le', '-ar', '24000', '-ac', '1', f'tcp://127.0.0.1:{audio_port}',
                 stdin=asyncio.subprocess.PIPE,
@@ -747,14 +776,14 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         line = await ffmpeg_proc.stderr.readline()
                         if not line:
                             break
-                        logger.info(f"[FFmpeg] {line.decode('utf-8', errors='ignore').strip()}")
+                        logger.debug(f"[FFmpeg] {line.decode('utf-8', errors='ignore').strip()}")
                 except Exception as ex:
                     logger.error(f"Error reading FFmpeg stderr: {ex}")
             
             asyncio.create_task(log_ffmpeg_stderr())
             
             async def read_ffmpeg_frames_loop():
-                vw, vh = 704, 1280
+                vw, vh = 352, 640
                 frame_size = vw * vh * 4
                 pts_us = 0
                 frame_delay = 1.0 / 30.0
@@ -771,7 +800,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                             
                         frame_count += 1
                         if frame_count % 30 == 0 or frame_count <= 5: # log first 5 frames, then every 30th
-                            logger.info(f"Decoded video frame #{frame_count} from FFmpeg stdout (size={len(raw_frame)} bytes)")
+                            logger.debug(f"Decoded video frame #{frame_count} from FFmpeg stdout (size={len(raw_frame)} bytes)")
                             
                         from livekit.rtc._proto import video_frame_pb2 as proto_video
                         lk_frame = rtc.VideoFrame(
@@ -784,7 +813,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         if video_source:
                             video_source.capture_frame(lk_frame, timestamp_us=pts_us)
                             if frame_count % 30 == 0 or frame_count <= 5:
-                                logger.info(f"Captured video frame #{frame_count} to LiveKit VideoSource")
+                                logger.debug(f"Captured video frame #{frame_count} to LiveKit VideoSource")
                 except asyncio.CancelledError:
                     logger.info("FFmpeg frame reader task cancelled.")
                 except Exception as ex:

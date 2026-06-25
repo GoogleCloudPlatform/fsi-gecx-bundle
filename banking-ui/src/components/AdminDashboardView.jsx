@@ -14,13 +14,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings, Bell } from 'lucide-react';
+import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings, Bell, ExternalLink, Sparkles } from 'lucide-react';
 import { resetDatabase, getSystemSettings, updateSystemSettings } from '../utils/api.js';
+import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GcpInfoModal from './GcpInfoModal.jsx';
+import { showInfoModals } from '../utils/constants.js';
 
 function AdminDashboardView() {
   const navigate = useNavigate();
   const [isResetting, setIsResetting] = useState(false);
   const [notice, setNotice] = useState({ type: '', text: '' });
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   // Settings States
   const [hardTimeoutEnabled, setHardTimeoutEnabled] = useState(false);
@@ -28,6 +32,7 @@ function AdminDashboardView() {
   const [warningDuration, setWarningDuration] = useState(240);
   const [avatarSelection, setAvatarSelection] = useState('random');
   const [mockAvatarEnabled, setMockAvatarEnabled] = useState(false);
+  const [showInfoModalsState, setShowInfoModalsState] = useState(true);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   // Load Settings on Mount
@@ -41,6 +46,10 @@ function AdminDashboardView() {
           setWarningDuration(parseInt(settings.voice_agent_warning_duration) || 240);
           setAvatarSelection(settings.voice_agent_avatar_selection || 'random');
           setMockAvatarEnabled(settings.voice_agent_mock_avatar_enabled === 'true');
+          
+          const showInfo = settings.show_info_modals !== undefined ? settings.show_info_modals : String(import.meta.env.VITE_SHOW_INFO_MODALS !== 'false');
+          setShowInfoModalsState(showInfo === 'true');
+          localStorage.setItem('show_info_modals', showInfo);
         }
       } catch (err) {
         console.error("Failed to load voice agent settings:", err);
@@ -59,8 +68,10 @@ function AdminDashboardView() {
         voice_agent_max_duration: String(maxDuration),
         voice_agent_warning_duration: String(warningDuration),
         voice_agent_avatar_selection: avatarSelection,
-        voice_agent_mock_avatar_enabled: String(mockAvatarEnabled)
+        voice_agent_mock_avatar_enabled: String(mockAvatarEnabled),
+        show_info_modals: String(showInfoModalsState)
       });
+      localStorage.setItem('show_info_modals', String(showInfoModalsState));
       setNotice({ type: 'success', text: 'Voice agent settings updated successfully!' });
       setTimeout(() => setNotice({ type: '', text: '' }), 4000);
     } catch (err) {
@@ -126,18 +137,29 @@ function AdminDashboardView() {
       <div className="absolute top-1/4 left-1/3 w-[400px] h-[400px] rounded-full bg-emerald-500/5 blur-[100px] pointer-events-none -z-10" />
 
       {/* Portal Header */}
-      <div className="mb-12 pb-6 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
-        <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shadow-sm">
-          <LayoutDashboard className="w-6 h-6" />
+      <div className="mb-12 pb-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center relative w-full">
+        <div className="flex items-center gap-3">
+          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shadow-sm">
+            <LayoutDashboard className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
+              Nova Horizon Admin Portal
+            </h1>
+            <p className="text-sm text-slate-500 mt-1">
+              Secure, role-gated management dashboard for employee operations, underwriting, and support audits.
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
-            Nova Horizon Admin Portal
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Secure, role-gated management dashboard for employee operations, underwriting, and support audits.
-          </p>
-        </div>
+        {showInfoModals() && (
+          <button
+            onClick={() => setIsInfoModalOpen(true)}
+            className="p-2.5 rounded-2xl hover:bg-slate-805/80 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+            title="GCP Admin Integration Info"
+          >
+            <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
+          </button>
+        )}
       </div>
 
       {/* Module Cards Grid */}
@@ -192,83 +214,107 @@ function AdminDashboardView() {
         </div>
       )}
 
-      {/* Voice & Live Avatar Settings Panel */}
+      {/* Settings Form */}
       <form onSubmit={handleSaveSettings} className="mt-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 space-y-6">
-        <div className="flex items-center gap-2 pb-4 border-b border-slate-100 dark:border-slate-800/80">
-          <Settings className="w-5 h-5 text-emerald-500" />
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Voice & Live Avatar Settings</h3>
+        {/* Section 1: Demo & Website Settings */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800/80">
+            <Sparkles className="w-5 h-5 text-indigo-400" />
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Demo & Presentation Settings</h3>
+          </div>
+          
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Enable Developer Architecture Tooltips</span>
+              <p className="text-[10px] text-slate-400 mt-0.5">Displays blue Google Cloud architecture shortcuts and visual flow diagrams across page views to help walkthroughs.</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={showInfoModalsState}
+              onChange={(e) => setShowInfoModalsState(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+            />
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Avatar Selection Override */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-              Active Avatar Selection
-            </label>
-            <select
-              value={avatarSelection}
-              onChange={(e) => setAvatarSelection(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500"
-            >
-              <option value="random">Randomize (Ingrid, Paul, Sam)</option>
-              <option value="Ingrid">Force Ingrid</option>
-              <option value="Paul">Force Paul</option>
-              <option value="Sam">Force Sam</option>
-              <option value="Jay">Force Jay</option>
-              <option value="Vera">Force Vera</option>
-            </select>
-            <p className="text-[10px] text-slate-400">Controls which built-in virtual face representative joins the WebRTC session.</p>
+        {/* Section 2: Voice & Live Avatar Settings */}
+        <div className="space-y-6 pt-6 border-t border-slate-100 dark:border-slate-800/80">
+          <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800/80">
+            <Settings className="w-5 h-5 text-emerald-500" />
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Voice & Live Avatar Settings</h3>
           </div>
 
-          {/* Call Timeout Configurations */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Avatar Selection Override */}
+            <div className="space-y-2">
               <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                Enforce Hard Timeout (Watchdog)
+                Active Avatar Selection
               </label>
-              <input
-                type="checkbox"
-                checked={hardTimeoutEnabled}
-                onChange={(e) => setHardTimeoutEnabled(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
-              />
+              <select
+                value={avatarSelection}
+                onChange={(e) => setAvatarSelection(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500"
+              >
+                <option value="random">Randomize (Ingrid, Paul, Sam)</option>
+                <option value="Ingrid">Force Ingrid</option>
+                <option value="Paul">Force Paul</option>
+                <option value="Sam">Force Sam</option>
+                <option value="Jay">Force Jay</option>
+                <option value="Vera">Force Vera</option>
+              </select>
+              <p className="text-[10px] text-slate-400">Controls which built-in virtual face representative joins the WebRTC session.</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-400 block">Max Duration (s)</label>
+            {/* Call Timeout Configurations */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                  Enforce Hard Timeout (Watchdog)
+                </label>
                 <input
-                  type="number"
-                  value={maxDuration}
-                  onChange={(e) => setMaxDuration(parseInt(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 text-xs font-semibold text-slate-800 dark:text-slate-200"
+                  type="checkbox"
+                  checked={hardTimeoutEnabled}
+                  onChange={(e) => setHardTimeoutEnabled(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-400 block">Warning Delay (s)</label>
-                <input
-                  type="number"
-                  value={warningDuration}
-                  onChange={(e) => setWarningDuration(parseInt(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 text-xs font-semibold text-slate-800 dark:text-slate-200"
-                />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold text-slate-400 block">Max Duration (s)</label>
+                  <input
+                    type="number"
+                    value={maxDuration}
+                    onChange={(e) => setMaxDuration(parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 text-xs font-semibold text-slate-800 dark:text-slate-200"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold text-slate-400 block">Warning Delay (s)</label>
+                  <input
+                    type="number"
+                    value={warningDuration}
+                    onChange={(e) => setWarningDuration(parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 text-xs font-semibold text-slate-800 dark:text-slate-200"
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Mock Sandbox Toggle */}
-        <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800/80">
-          <div>
-            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Enable Mock Avatar Sandbox</span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Bypasses Google Vertex APIs and loops a local video file from disk to save token billing costs during testing.</p>
+          {/* Mock Sandbox Toggle */}
+          <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800/80">
+            <div>
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Enable Mock Avatar Sandbox</span>
+              <p className="text-[10px] text-slate-400 mt-0.5">Bypasses Google Vertex APIs and loops a local video file from disk to save token billing costs during testing.</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={mockAvatarEnabled}
+              onChange={(e) => setMockAvatarEnabled(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+            />
           </div>
-          <input
-            type="checkbox"
-            checked={mockAvatarEnabled}
-            onChange={(e) => setMockAvatarEnabled(e.target.checked)}
-            className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
-          />
         </div>
 
         {/* Action Button */}
@@ -305,6 +351,54 @@ function AdminDashboardView() {
           {isResetting ? 'Resetting Database...' : 'Reset Database'}
         </button>
       </div>
+
+      <GcpInfoModal
+        isOpen={isInfoModalOpen}
+        onClose={() => setIsInfoModalOpen(false)}
+        title="Google Cloud System Integration"
+      >
+        <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+          <p>
+            The <strong>Nova Horizon Admin Portal</strong> serves as the central control plane, orchestrating banking operations and AI settings powered by Google Cloud services.
+          </p>
+          <p>
+            System configurations (such as session timeouts and avatar selections) are stored dynamically in the ledger database and fetched in real-time by the Voice Agent container during bootstrap.
+          </p>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Secret Manager Console</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Manage database keys, LiveKit credentials, and Google API secrets securely.</p>
+              </div>
+              <a
+                href="https://console.cloud.google.com/security/secret-manager"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Secrets</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <hr className="border-slate-100 dark:border-slate-800" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Cloud Run Console</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Monitor computing resources, container revisions, and backend traffic scaling.</p>
+              </div>
+              <a
+                href="https://console.cloud.google.com/run"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Services</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </GcpInfoModal>
 
     </section>
   );

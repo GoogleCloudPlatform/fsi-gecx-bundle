@@ -12,7 +12,7 @@ The document processing pipeline uses a fully asynchronous, event-driven archite
 graph TD
     User[Borrower] -->|1. Request Signed URL| API[banking-service]
     API -->|2. Generate Signed PUT URL| User
-    User -->|3. Upload PDF (encrypted with CMEK)| GCS[(GCS: Ingestion Bucket)]
+    User -->|3. Upload PDF - encrypted with CMEK| GCS[(GCS: Ingestion Bucket)]
     
     GCS -->|4. Object Finalized Event| Eventarc[Eventarc Router]
     Eventarc -->|5. HTTP POST /internal/process-document| Worker[banking-service internal worker]
@@ -21,10 +21,10 @@ graph TD
     Worker -->|6. Send PDF| Splitter[Document AI Master Splitter]
     Splitter -->|7. Split Manifest & Page Slices| Worker
     
-    Worker -->|8a. Page 1-2 (W2)| W2Proc[Document AI W2 Extractor]
-    Worker -->|8b. Page 3-5 (Paystub)| PaystubProc[Document AI Paystub Extractor]
+    Worker -->|8a. Page 1-2 - W2| W2Proc[Document AI W2 Extractor]
+    Worker -->|8b. Page 3-5 - Paystub| PaystubProc[Document AI Paystub Extractor]
     
-    W2Proc -->|9a. Extraction JSON| Evaluation{Confidence Gate > 85%?}
+    W2Proc -->|9a. Extraction JSON| Evaluation{"Confidence Gate > 85%?"}
     PaystubProc -->|9b. Extraction JSON| Evaluation
     
     %% Output Gate
