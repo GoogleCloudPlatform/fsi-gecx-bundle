@@ -432,9 +432,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 resampled_frames = resampler.push(frame)
                 for res_frame in resampled_frames:
                     # Check if the agent is currently processing a tool call to drop user mic buffers
-                    session = await session_service.get_session(app_name="credit-support-agent", user_id=user_id, session_id=session_id)
-                    is_processing_tool = session.state.get("is_processing_tool", False) if session else False
-                    if is_processing_tool:
+                    if agent_module.is_processing_tool:
                         logger.debug("Muting microphone audio: tool execution in progress.")
                         continue
 
