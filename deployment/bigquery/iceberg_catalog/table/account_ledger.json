@@ -1,0 +1,50 @@
+[
+  {
+    "name": "id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unique identifier for the ledger entry"
+  },
+  {
+    "name": "account_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Associated account identifier"
+  },
+  {
+    "name": "authorization_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Associated transaction authorization identifier"
+  },
+  {
+    "name": "auth_code",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Authorization code"
+  },
+  {
+    "name": "retrieval_reference_number",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Retrieval reference number"
+  },
+  {
+    "name": "amount_cents",
+    "type": "INTEGER",
+    "mode": "REQUIRED",
+    "description": "Amount in cents"
+  },
+  {
+    "name": "description",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Description of the ledger transaction"
+  },
+  {
+    "name": "posted_at",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE",
+    "description": "Timestamp when the transaction was posted"
+  }
+]

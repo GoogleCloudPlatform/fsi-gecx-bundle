@@ -154,3 +154,15 @@ resource "google_service_account" "data_generator_service_account" {
     ]
   }
 }
+
+resource "google_service_account" "reporting_service_account" {
+  account_id   = "reporting-sa"
+  display_name = "Reporting Service Account"
+
+  lifecycle {
+    ignore_changes = [
+      description,
+      display_name
+    ]
+  }
+}

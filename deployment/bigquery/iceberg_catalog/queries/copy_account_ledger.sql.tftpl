@@ -1,0 +1,27 @@
+BEGIN
+  DECLARE max_watermark TIMESTAMP;
+
+  -- 1. Get the current max posted_at
+  SET max_watermark = (
+    SELECT COALESCE(MAX(posted_at), TIMESTAMP('1970-01-01 00:00:00'))
+    FROM `iceberg_catalog.account_ledger`
+  );
+
+  -- 2. Construct and run the query dynamically
+  EXECUTE IMMEDIATE FORMAT("""
+    INSERT INTO `iceberg_catalog.account_ledger`
+    SELECT 
+      id, 
+      account_id, 
+      authorization_id, 
+      auth_code, 
+      retrieval_reference_number, 
+      amount_cents, 
+      description, 
+      CAST(posted_at AS TIMESTAMP) AS posted_at
+    FROM EXTERNAL_QUERY("${project_id}.us.banking-postgres",
+      "SELECT id, account_id, authorization_id, auth_code, retrieval_reference_number, amount_cents, description, posted_at FROM public.account_ledger WHERE posted_at > '%s'");
+  """, FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%E6S', max_watermark));
+
+END;
+

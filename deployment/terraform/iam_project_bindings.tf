@@ -228,3 +228,9 @@ resource "google_project_iam_member" "database_iam_support_viewers" {
   role     = "roles/cloudsql.viewer"
   member   = each.key
 }
+
+resource "google_project_iam_member" "reporting_bigquery_job_user" {
+  project = var.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${google_service_account.reporting_service_account.email}"
+}

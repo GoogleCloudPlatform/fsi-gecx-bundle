@@ -123,11 +123,21 @@ def upgrade() -> None:
         except Exception:
             project_id = os.getenv("PROJECT_ID")
         runtime_user = f"banking-service-sa@{project_id}.iam"
+        bq_connector_user = "banking_bq_connector"
         
-        op.execute(f'GRANT USAGE ON SCHEMA public TO "{runtime_user}";')
+        # Schema usage
+        for user in [runtime_user, bq_connector_user]:
+            op.execute(f'GRANT USAGE ON SCHEMA public TO "{user}";')
+        
+        # Banking Service DML permissions
         op.execute(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "{runtime_user}";')
         op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{runtime_user}";')
 
+        # Banking BQ Connector SELECT-only permissions
+        op.execute(f'GRANT SELECT ON ALL TABLES IN SCHEMA public TO "{bq_connector_user}";')
+        op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO "{bq_connector_user}";')
+
+        # IAM DBA Users
         iam_dba_users_env = os.getenv("IAM_DBA_USERS")
         if iam_dba_users_env:
             for user in [u.strip() for u in iam_dba_users_env.split(",") if u.strip()]:

@@ -97,8 +97,8 @@ resource "google_bigquery_table" "retail_location" {
 }
 
 resource "google_bigquery_connection" "banking_data_postgres_connection" {
-  connection_id = "banking-postgres-connection"
-  friendly_name = "banking-postgres-connection"
+  connection_id = "banking-postgres"
+  friendly_name = "banking-postgres"
   description   = "Banking Data connection with BigQuery"
   location      = "US"
   cloud_sql {
@@ -113,11 +113,64 @@ resource "google_bigquery_connection" "banking_data_postgres_connection" {
 }
 
 resource "google_bigquery_connection" "banking_data_spanner_connection" {
-  connection_id = "banking-spanner-connection"
-  friendly_name = "banking-spanner-connection"
+  connection_id = "banking-spanner"
+  friendly_name = "banking-spanner"
   description   = "Banking Data connection with Spanner"
   location      = "US"
   cloud_spanner {
     database = "projects/${var.project_id}/instances/${google_spanner_instance.banking_data.name}/databases/${google_spanner_database.banking.name}"
   }
+}
+
+resource "google_bigquery_connection" "iceberg" {
+  connection_id = "iceberg-warehouse"
+  location      = "US"
+  friendly_name = "Iceberg Connection"
+  cloud_resource {}
+
+  depends_on = [google_project_service.bigqueryconnection_googleapis_com]
+}
+
+resource "google_bigquery_dataset" "iceberg_catalog" {
+  dataset_id    = "iceberg_catalog"
+  friendly_name = "Iceberg Catalog Dataset"
+  location      = "US"
+
+  # WARNING: This allows Terraform to delete all tables inside this dataset
+  # to facilitate the location change.
+  delete_contents_on_destroy = true
+
+  depends_on = [google_project_service.bigquery_googleapis_com]
+}
+
+resource "google_bigquery_table" "account_ledger" {
+  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
+  table_id            = "account_ledger"
+  deletion_protection = false
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/account_ledger/"
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+  }
+
+  schema = file("../bigquery/iceberg_catalog/table/account_ledger.json")
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
+}
+
+resource "google_bigquery_data_transfer_config" "scheduled_account_ledger" {
+  display_name   = "account-ledger"
+  location       = google_bigquery_dataset.iceberg_catalog.location
+  data_source_id = "scheduled_query"
+  schedule       = "every 5 minutes"
+
+  params = {
+    query = templatefile("../bigquery/iceberg_catalog/queries/copy_account_ledger.sql.tftpl", {
+      project_id = var.project_id,
+    })
+  }
+
+  service_account_name = google_service_account.reporting_service_account.email
 }

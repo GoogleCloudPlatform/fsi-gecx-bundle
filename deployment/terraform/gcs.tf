@@ -48,3 +48,10 @@ resource "google_storage_bucket" "site_crawled_content" {
   uniform_bucket_level_access = true
   force_destroy               = true
 }
+
+resource "google_storage_bucket" "iceberg_warehouse" {
+  name                        = "${var.project_id}_iceberg-warehouse"
+  location                    = "US"
+  uniform_bucket_level_access = true
+  force_destroy               = true
+}
