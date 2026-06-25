@@ -80,7 +80,7 @@ mcp_tools = McpToolset(
 def end_consultation() -> dict:
     """Terminates the current voice consultation session. Call this when the customer confirms they are finished or want to end the call.
     """
-    notify_event({"type": DataChannelEvent.SESSION_END.value})
+    # notify_event({"type": DataChannelEvent.SESSION_END.value})
     return {"status": "SUCCESS", "message": "Session end signal sent."}
 
 def transfer_to_human(reason: str) -> dict:
