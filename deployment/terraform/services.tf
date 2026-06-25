@@ -175,3 +175,8 @@ resource "google_project_service" "speech_googleapis_com" {
   service            = "speech.googleapis.com"
   disable_on_destroy = false
 }
+
+resource "google_project_service" "geminidataanalytics_googleapis_com" {
+  service            = "geminidataanalytics.googleapis.com"
+  disable_on_destroy = false
+}
