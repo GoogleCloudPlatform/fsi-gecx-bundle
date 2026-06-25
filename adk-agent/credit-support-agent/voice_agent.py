@@ -312,20 +312,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 
     register_event_callback(on_agent_event)
 
-    user_stt_queue = asyncio.Queue()
-    agent_stt_queue = asyncio.Queue()
+    user_stt_queue = None
+    agent_stt_queue = None
     user_stt_task = None
     agent_stt_task = None
-    
-    if mode == "video":
-        from google.cloud import speech
-        stt_client = speech.SpeechAsyncClient()
-        user_stt_task = asyncio.create_task(
-            run_stt_worker(stt_client, user_stt_queue, 16000, "user", on_agent_event)
-        )
-        agent_stt_task = asyncio.create_task(
-            run_stt_worker(stt_client, agent_stt_queue, 24000, "agent", on_agent_event)
-        )
 
     # Configure ADK streaming for native audio
     # Configure ADK streaming modalities dynamically
