@@ -431,9 +431,9 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 # Resample the incoming frame
                 resampled_frames = resampler.push(frame)
                 for res_frame in resampled_frames:
-                    # Check if the agent is currently processing a tool call to drop user mic buffers
-                    if agent_module.is_processing_tool:
-                        logger.debug("Muting microphone audio: tool execution in progress.")
+                    # Check if the agent is currently processing a tool call or shutting down to drop user mic buffers
+                    if agent_module.is_processing_tool or agent_module.session_should_end:
+                        logger.debug("Muting microphone audio: tool execution or session shutdown in progress.")
                         continue
 
                     # Convert to Float32 array for VAD
