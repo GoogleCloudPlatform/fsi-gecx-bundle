@@ -615,6 +615,16 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         "author": "agent",
                         "text": event.output_transcription.text
                     })
+                    if agent_module.session_should_end:
+                        logger.info("Session end requested via end_consultation tool. Initiating shutdown after farewell.")
+                        agent_module.session_should_end = False  # Reset flag
+                        on_agent_event({
+                            "type": "SESSION_END"
+                        })
+                        async def delayed_disconnect():
+                            await asyncio.sleep(5.0)  # Give time for speech output and UI transition
+                            disconnect_event.set()
+                        asyncio.create_task(delayed_disconnect())
 
                 # Log any final responses or tool call events for tracking
                 if event.is_final_response():
