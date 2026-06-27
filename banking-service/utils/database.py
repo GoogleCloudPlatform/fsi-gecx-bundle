@@ -156,7 +156,18 @@ Base = declarative_base()
 
 @event.listens_for(Engine, "before_cursor_execute")
 def enforce_least_privilege_rbac(conn, cursor, statement, parameters, context, executemany):
-    if getattr(conn.engine, "_rbac_role", None) == "ledger_service_role":
+    role = getattr(conn.engine, "_rbac_role", None)
+    if role in ("ledger_service_role", "kyc_service_role"):
+        stmt_upper = statement.strip().upper()
+        if any(stmt_upper.startswith(cmd) for cmd in ("UPDATE", "DELETE", "TRUNCATE")):
+            if "ACCOUNT_LEDGER" in stmt_upper or "LEDGER.ACCOUNT_LEDGER" in stmt_upper:
+                import sqlalchemy.exc
+                raise sqlalchemy.exc.ProgrammingError(
+                    "permission denied for table account_ledger (SQLSTATE 42501): account_ledger is immutable append-only",
+                    params=parameters,
+                    orig=Exception("SQLSTATE 42501")
+                )
+    if role == "ledger_service_role":
         stmt_upper = statement.strip().upper()
         if any(stmt_upper.startswith(cmd) for cmd in ("SELECT", "INSERT", "UPDATE", "DELETE", "WITH")):
             if "KYC_RECORDS" in stmt_upper or "KYC." in stmt_upper:

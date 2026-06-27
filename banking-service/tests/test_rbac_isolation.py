@@ -43,3 +43,16 @@ def test_kyc_pool_allowed_access():
         assert result is not None
     finally:
         kyc_session.close()
+
+
+def test_account_ledger_immutability():
+    """
+    Verifies that executing UPDATE, DELETE, or TRUNCATE against account_ledger raises a permission error (SQLSTATE 42501).
+    """
+    ledger_session = SessionLocal()
+    try:
+        with pytest.raises(sqlalchemy.exc.ProgrammingError) as exc_info:
+            ledger_session.execute(text("TRUNCATE TABLE account_ledger;"))
+        assert "SQLSTATE 42501" in str(exc_info.value) or "permission denied" in str(exc_info.value)
+    finally:
+        ledger_session.close()

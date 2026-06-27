@@ -14,7 +14,7 @@
 
 import uuid
 import datetime
-from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Integer, Index
+from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Integer, Index, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from utils.database import Base
@@ -138,6 +138,7 @@ class Transaction(Base):
     __table_args__ = (
         Index("idx_transactions_idempotency_key", "idempotency_key"),
         Index("idx_transactions_user_id", "user_id"),
+        Index("idx_transactions_user_idemp", "user_id", "idempotency_key", unique=True),
         {'schema': 'ledger'},
     )
 
@@ -146,6 +147,9 @@ class Transaction(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="RESTRICT"), nullable=True)
     status = Column(String(20), nullable=False, default="PENDING")
     description = Column(String(255), nullable=False)
+    request_hash = Column(String(64), nullable=True)
+    response_payload = Column(Text, nullable=True)
+    response_status = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     ledger_splits = relationship("AccountLedgerEntry", back_populates="transaction")
