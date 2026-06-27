@@ -26,6 +26,8 @@ from utils.database import Base, DATABASE_URL  # noqa: E402
 import models.credit_card  # noqa: E402, F401
 import models.support  # noqa: E402, F401
 import models.settings  # noqa: E402, F401
+import models.identity  # noqa: E402, F401
+import models.origination  # noqa: E402, F401
 
 # Set target metadata for alembic schema scanning
 target_metadata = Base.metadata
@@ -66,9 +68,14 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_schemas=True,
     )
 
     with context.begin_transaction():
+        if url and url.startswith("postgresql"):
+            context.execute("CREATE SCHEMA IF NOT EXISTS identity;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS kyc;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS ledger;")
         context.run_migrations()
 
 
@@ -87,8 +94,16 @@ def run_migrations_online() -> None:
         # Detect if we are deploying against PostgreSQL to prevent horizontal scaling lock contention
         is_postgres = connection.dialect.name == "postgresql"
 
+        if is_postgres:
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS identity;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS kyc;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS ledger;"))
+            connection.commit()
+
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            include_schemas=True,
         )
 
         with context.begin_transaction():

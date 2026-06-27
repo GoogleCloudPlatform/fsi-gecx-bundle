@@ -14,7 +14,7 @@
 
 import os
 import logging
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -88,7 +88,18 @@ def create_db_engine(url_str=DATABASE_URL, **kwargs):
             
     sanitized_url = make_url(url_str).render_as_string(hide_password=True)
     logger.info(f"Creating database engine for connection: {sanitized_url}")
-    return create_engine(url_str, connect_args=connect_args, **engine_args)
+    new_engine = create_engine(url_str, connect_args=connect_args, **engine_args)
+    
+    if url_str.startswith("sqlite"):
+        @event.listens_for(new_engine, "connect")
+        def attach_sqlite_schemas(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("ATTACH DATABASE 'identity.db' AS identity;")
+            cursor.execute("ATTACH DATABASE 'kyc.db' AS kyc;")
+            cursor.execute("ATTACH DATABASE 'ledger.db' AS ledger;")
+            cursor.close()
+            
+    return new_engine
 
 engine = create_db_engine()
 
