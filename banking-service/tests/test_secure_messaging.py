@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import uuid
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 
 import pytest
 from httpx import AsyncClient, ASGITransport
@@ -26,7 +26,8 @@ from models.secure_messaging import (
     SENDER_TYPE_USER,
     SENDER_TYPE_BANK
 )
-from routers.artifact import bq_client
+from utils.database import SessionLocal
+from models.identity import User, UserSecureMessage
 from utils.gcp import get_project_id
 
 
@@ -78,17 +79,13 @@ async def test_secure_messaging_flow(async_client):
     assert msg_reply["is_agent_read"] is False
     message_id_2 = msg_reply["message_id"]
 
-    # Verify directly in BigQuery that 2 rows exist
-    project_id = get_project_id()
-    query = f"""
-        SELECT *
-        FROM `{project_id}.banking.user_secure_message`
-
-        WHERE user_id = '{unique_user_id}' AND deleted = FALSE
-    """
-    query_job = bq_client.query(query)
-    results = list(query_job.result())
-    assert len(results) == 2
+    # Verify in SQLAlchemy database that 2 rows exist
+    db = SessionLocal()
+    user = db.query(User).filter(User.auth_provider_uid == unique_user_id).first()
+    assert user is not None
+    msgs = db.query(UserSecureMessage).filter(UserSecureMessage.user_id == user.id, UserSecureMessage.deleted == False).all()
+    assert len(msgs) == 2
+    db.close()
 
     # 3. Get all messages for the customer
     response_get = await async_client.get("/secure-messaging", headers=headers)
@@ -148,20 +145,17 @@ async def test_secure_messaging_flow(async_client):
     assert messages_list_after[0]["message_id"] == message_id_2
     assert messages_list_after[1]["message_id"] == message_id_bank
 
-    # Verify in BQ directly that deleted = True for first, False for second and third
-    query_bq_del = f"""
-        SELECT message_id, deleted
-        FROM `{project_id}.banking.user_secure_message`
-
-        WHERE user_id = '{unique_user_id}'
-    """
-    results_del = list(bq_client.query(query_bq_del).result())
+    # Verify in SQLAlchemy database that deleted = True for first, False for second and third
+    db = SessionLocal()
+    user = db.query(User).filter(User.auth_provider_uid == unique_user_id).first()
+    results_del = db.query(UserSecureMessage).filter(UserSecureMessage.user_id == user.id).all()
     assert len(results_del) == 3
     for r in results_del:
         if r.message_id == message_id_1:
             assert r.deleted is True
         else:
             assert r.deleted is False
+    db.close()
 
     # 5. Soft delete the entire thread
     response_del_thread = await async_client.delete(f"/secure-messaging/threads/{thread_id}", headers=headers)
@@ -173,10 +167,13 @@ async def test_secure_messaging_flow(async_client):
     assert response_get_thread_after.status_code == 200
     assert len(response_get_thread_after.json()) == 0
 
-    # Verify in BQ directly that all messages are deleted
-    results_thread_del = list(bq_client.query(query_bq_del).result())
+    # Verify in SQLAlchemy database that all messages are deleted
+    db = SessionLocal()
+    user = db.query(User).filter(User.auth_provider_uid == unique_user_id).first()
+    results_thread_del = db.query(UserSecureMessage).filter(UserSecureMessage.user_id == user.id).all()
     for r in results_thread_del:
         assert r.deleted is True
+    db.close()
 
 
 @pytest.mark.asyncio
@@ -197,7 +194,7 @@ async def test_secure_messaging_unauthorized(async_client):
 
 
 @pytest.mark.asyncio
-@patch("routers.secure_messaging.get_device_tokens_for_customer")
+@patch("routers.secure_messaging.identity_repo.get_device_tokens_for_customer")
 @patch("routers.secure_messaging.messaging.send_each_for_multicast")
 @patch("routers.secure_messaging.messaging.send")
 async def test_secure_messaging_push_notification(mock_send, mock_send_multicast, mock_get_tokens, async_client):
@@ -248,7 +245,7 @@ async def test_secure_messaging_push_notification(mock_send, mock_send_multicast
     response_bank = await async_client.post("/secure-messaging", json=payload_bank, headers=headers)
     assert response_bank.status_code == 200
 
-    mock_get_tokens.assert_called_once_with(user_id)
+    mock_get_tokens.assert_called_once_with(ANY, user_id)
     mock_send_multicast.assert_called_once()
 
     mock_send.assert_called_once()

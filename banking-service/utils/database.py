@@ -15,10 +15,11 @@
 import os
 import logging
 from sqlalchemy import create_engine, event
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import make_url, Engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 logger = logging.getLogger(__name__)
+
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///banking.db")
 db_password = os.getenv("DB_PASSWORD")
@@ -65,7 +66,7 @@ def get_iam_connection(url_str):
         if url.query.get("sslmode"):
             conn_params["sslmode"] = url.query["sslmode"]
         else:
-            conn_params["sslmode"] = "require"
+            conn_params["sslmode"] = "verify-full"
         
     return psycopg2.connect(**conn_params)
 
@@ -89,17 +90,53 @@ def create_db_engine(url_str=DATABASE_URL, **kwargs):
     sanitized_url = make_url(url_str).render_as_string(hide_password=True)
     logger.info(f"Creating database engine for connection: {sanitized_url}")
     new_engine = create_engine(url_str, connect_args=connect_args, **engine_args)
-    
-    if url_str.startswith("sqlite"):
-        @event.listens_for(new_engine, "connect")
-        def attach_sqlite_schemas(dbapi_connection, connection_record):
-            cursor = dbapi_connection.cursor()
-            cursor.execute("ATTACH DATABASE 'identity.db' AS identity;")
-            cursor.execute("ATTACH DATABASE 'kyc.db' AS kyc;")
-            cursor.execute("ATTACH DATABASE 'ledger.db' AS ledger;")
-            cursor.close()
-            
+
     return new_engine
+
+
+@event.listens_for(Engine, "connect")
+def attach_sqlite_schemas(dbapi_connection, connection_record):
+    if hasattr(dbapi_connection, "cursor"):
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("SELECT 1 FROM identity.sqlite_master LIMIT 1;")
+            cursor.close()
+            return
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("PRAGMA database_list;")
+            rows = cursor.fetchall()
+            main_file = ""
+            for row in rows:
+                if row[1] == "main":
+                    main_file = row[2] if len(row) > 2 and row[2] else ""
+                    break
+
+            if not main_file:
+                stmts = [
+                    "ATTACH DATABASE 'file:identity_mem?mode=memory&cache=shared' AS identity;",
+                    "ATTACH DATABASE 'file:kyc_mem?mode=memory&cache=shared' AS kyc;",
+                    "ATTACH DATABASE 'file:ledger_mem?mode=memory&cache=shared' AS ledger;",
+                ]
+            else:
+                stmts = [
+                    "ATTACH DATABASE 'identity.db' AS identity;",
+                    "ATTACH DATABASE 'kyc.db' AS kyc;",
+                    "ATTACH DATABASE 'ledger.db' AS ledger;",
+                ]
+
+            for stmt in stmts:
+                try:
+                    cursor.execute(stmt)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        finally:
+            cursor.close()
+
 
 engine = create_db_engine()
 
@@ -113,3 +150,19 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def init_db():
+    import models.identity
+    import models.origination
+    import models.audit
+    import models.credit_card
+    import models.support
+    import models.settings
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        logger.warning(f"Could not auto-initialize tables: {e}")
+
+
+init_db()

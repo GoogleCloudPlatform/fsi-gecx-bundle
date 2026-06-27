@@ -28,6 +28,7 @@ import models.support  # noqa: E402, F401
 import models.settings  # noqa: E402, F401
 import models.identity  # noqa: E402, F401
 import models.origination  # noqa: E402, F401
+import models.audit  # noqa: E402, F401
 
 # Set target metadata for alembic schema scanning
 target_metadata = Base.metadata
@@ -47,6 +48,37 @@ except Exception:
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
+
+
+def compare_type(context, inspected_column, metadata_column, inspected_type, metadata_type):
+    if context.dialect.name == "sqlite":
+        return False
+    return None
+
+
+def process_revision_directives(context, revision, directives):
+    if context.dialect.name == "sqlite":
+        script = directives[0]
+        if hasattr(script, "upgrade_ops") and hasattr(script.upgrade_ops, "ops"):
+            new_ops = []
+            for op in script.upgrade_ops.ops:
+                if op.__class__.__name__ == "ModifyTableOps":
+                    op.ops = [sub for sub in op.ops if sub.__class__.__name__ != "CreateForeignKeyOp"]
+                    if op.ops:
+                        new_ops.append(op)
+                elif op.__class__.__name__ != "CreateForeignKeyOp":
+                    new_ops.append(op)
+            script.upgrade_ops.ops = new_ops
+        if hasattr(script, "downgrade_ops") and hasattr(script.downgrade_ops, "ops"):
+            new_ops = []
+            for op in script.downgrade_ops.ops:
+                if op.__class__.__name__ == "ModifyTableOps":
+                    op.ops = [sub for sub in op.ops if sub.__class__.__name__ != "DropConstraintOp"]
+                    if op.ops:
+                        new_ops.append(op)
+                elif op.__class__.__name__ != "DropConstraintOp":
+                    new_ops.append(op)
+            script.downgrade_ops.ops = new_ops
 
 
 def run_migrations_offline() -> None:
@@ -69,6 +101,9 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         include_schemas=True,
+        compare_type=compare_type,
+        compare_foreign_keys=False,
+        process_revision_directives=process_revision_directives,
     )
 
     with context.begin_transaction():
@@ -104,6 +139,9 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             include_schemas=True,
+            compare_type=compare_type,
+            compare_foreign_keys=False,
+            process_revision_directives=process_revision_directives,
         )
 
         with context.begin_transaction():

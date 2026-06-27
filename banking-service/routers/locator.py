@@ -15,15 +15,20 @@
 from enum import Enum
 import logging
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
-from utils.bq import find_nearest_locations, search_locations_by_text
-from utils.gemini import geocode_address
+from utils.database import get_db
+from services.locator import LocatorService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/locator", tags=["locator"])
+
+
+def get_locator_service(db: Session = Depends(get_db)) -> LocatorService:
+    return LocatorService(db)
 
 
 class LocationType(str, Enum):
@@ -48,52 +53,16 @@ class LocatorResponse(BaseModel):
     results: List[LocationItem]
 
 
-def _format_location_item(row: dict, include_distance: bool = True) -> LocationItem:
-    dist_meters = row.get("distance_meters") if include_distance else None
-    dist_miles = round(dist_meters * 0.000621371, 2) if dist_meters is not None else None
-    return LocationItem(
-        id=row["id"],
-        type=row["type"],
-        name=row["name"],
-        address=row["address"],
-        latitude=row["latitude"],
-        longitude=row["longitude"],
-        hours=row["hours"],
-        phone_number=row["phone_number"],
-        distance_miles=dist_miles
-    )
-
-
 @router.get("", response_model=LocatorResponse)
 async def get_locations(
     lat: Optional[float] = Query(None, ge=-90.0, le=90.0),
     lng: Optional[float] = Query(None, ge=-180.0, le=180.0),
     address: Optional[str] = Query(None, max_length=200),
-    type: LocationType = LocationType.ALL
+    type: LocationType = LocationType.ALL,
+    service: LocatorService = Depends(get_locator_service)
 ):
     try:
-        results = []
-        if lat is not None and lng is not None:
-            # Query by proximity
-            rows = find_nearest_locations(lat, lng, type.value)
-            for r in rows:
-                results.append(_format_location_item(r, include_distance=True))
-        elif address:
-            # Try geocoding address
-            coords = await geocode_address(address)
-            if coords:
-                alat, alng = coords
-                rows = find_nearest_locations(alat, alng, type.value)
-                for r in rows:
-                    results.append(_format_location_item(r, include_distance=True))
-            else:
-                # Fallback to text search
-                rows = search_locations_by_text(address, type.value)
-                for r in rows:
-                    results.append(_format_location_item(r, include_distance=False))
-        else:
-            # No parameters, return an empty list
-            pass
+        results = await service.get_locations(lat=lat, lng=lng, address=address, loc_type=type.value)
         return LocatorResponse(results=results)
     except Exception as e:
         logger.error(f"Error in locator endpoint: {e}")

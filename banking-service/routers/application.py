@@ -13,60 +13,45 @@
 # limitations under the License.
 
 import logging
-
 from fastapi import APIRouter, Depends
-
+from sqlalchemy.orm import Session
 from models.application import ApplicationCreateRequest, ApplicationUpdateRequest
 from models.authentication import ValidatedToken
 from utils.auth import get_current_user
-from utils.bq import log_application_to_bigquery, update_application_in_bigquery
+from utils.database import get_db
+from services.origination import OriginationService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/applications", tags=["application"], dependencies=[Depends(get_current_user)])
 
 
+def get_origination_service(db: Session = Depends(get_db)) -> OriginationService:
+    return OriginationService(db)
+
+
 @router.post("")
 async def create_application(
         request: ApplicationCreateRequest,
-        user_data: ValidatedToken = Depends(get_current_user)
+        user_data: ValidatedToken = Depends(get_current_user),
+        service: OriginationService = Depends(get_origination_service)
 ):
     try:
-        application_id = log_application_to_bigquery(
-            user_data.user_id,
-            request.product_category,
-            request.product_type,
-            request.requested_amount
-        )
+        return service.create_application(request, user_data)
     except Exception as e:
         logger.error(f"Error in create_application: {e}")
         raise e
-
-    return {
-        "message": "Application created successfully",
-        "application_id": application_id
-    }
 
 
 @router.patch("/{application_id}")
 async def update_application(
         application_id: str,
         request: ApplicationUpdateRequest,
-        user_data: ValidatedToken = Depends(get_current_user)
+        user_data: ValidatedToken = Depends(get_current_user),
+        service: OriginationService = Depends(get_origination_service)
 ):
     try:
-        update_application_in_bigquery(
-            application_id=application_id,
-            user_id=user_data.user_id,
-            requested_amount=request.requested_amount,
-            application_status=request.application_status
-        )
+        return service.update_application(application_id, request, user_data)
     except Exception as e:
         logger.error(f"Error in update_application: {e}")
         raise e
-
-    return {
-        "message": "Application updated successfully",
-        "application_id": application_id
-    }
-

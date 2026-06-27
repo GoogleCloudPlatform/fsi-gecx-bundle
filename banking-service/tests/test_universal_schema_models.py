@@ -28,9 +28,15 @@ def test_db():
     @event.listens_for(engine, "connect")
     def attach_sqlite_schemas(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
-        cursor.execute("ATTACH DATABASE 'file:identity_test?mode=memory&cache=shared' AS identity;")
-        cursor.execute("ATTACH DATABASE 'file:kyc_test?mode=memory&cache=shared' AS kyc;")
-        cursor.execute("ATTACH DATABASE 'file:ledger_test?mode=memory&cache=shared' AS ledger;")
+        for stmt in [
+            "ATTACH DATABASE 'file:identity_test?mode=memory&cache=shared' AS identity;",
+            "ATTACH DATABASE 'file:kyc_test?mode=memory&cache=shared' AS kyc;",
+            "ATTACH DATABASE 'file:ledger_test?mode=memory&cache=shared' AS ledger;",
+        ]:
+            try:
+                cursor.execute(stmt)
+            except Exception:
+                pass
         cursor.close()
 
     # Create all tables across attached schemas

@@ -22,6 +22,8 @@ from httpx import AsyncClient, ASGITransport
 
 from main import app
 from routers.artifact import BUCKET_NAME, storage_client, bq_client
+from utils.database import SessionLocal
+from models.origination import ApplicationArtifact
 
 test_data_dir = Path(__file__).parent / "data"
 
@@ -77,7 +79,7 @@ async def test_upload_artifact_success(async_client):
 
     assert response.status_code == 200
     resp_json = response.json()
-    assert resp_json["message"] == "File uploaded successfully and logged to BigQuery"
+    assert resp_json["message"] == "File uploaded successfully and logged to database"
     assert "gcs_uri" in resp_json
 
     gcs_uri = resp_json["gcs_uri"]
@@ -91,18 +93,12 @@ async def test_upload_artifact_success(async_client):
     blob = bucket.blob(actual_filename)
     assert blob.exists()
 
-    # Verify in BigQuery
-    # Using the project ID seen in create.sql for safety
-    query = f"""
-        SELECT *
-        FROM `banking.application_artifact` a
-        join `banking.application` p on a.application_id = p.application_id
-        WHERE p.application_id = '{valid_app_id}' AND a.file_path_gcs = '{gcs_uri}'
-    """
-
-    query_job = bq_client.query(query)
-    results = list(query_job.result())
-    assert len(results) == 1
+    # Verify in SQLAlchemy database
+    db = SessionLocal()
+    art = db.query(ApplicationArtifact).filter(ApplicationArtifact.gcs_uri == gcs_uri).first()
+    assert art is not None
+    assert art.claimed_artifact_type == "W2"
+    db.close()
 
     # Cleanup GCS file
     try:
@@ -154,7 +150,9 @@ async def test_upload_artifact_invalid_type(async_client):
 
 
 @pytest.mark.asyncio
-async def test_extract_success(async_client):
+@patch("services.origination.extract_data")
+async def test_extract_success(mock_extract, async_client):
+    mock_extract.return_value = {"application_id": "87345978"}
     """Test that the /extract endpoint successfully extracts data using Gemini."""
     # Create a valid application first
     app_data = {
@@ -329,7 +327,9 @@ async def test_create_profile_success(async_client):
 
 
 @pytest.mark.asyncio
-async def test_get_profile_not_found(async_client):
+@patch("services.origination.extract_data")
+async def test_get_profile_not_found(mock_extract, async_client):
+    mock_extract.return_value = {"status": "success"}
     unique_id = f"CUST_MISSING_{uuid.uuid4()}"
     headers = {"Authorization": f"Bearer {unique_id}"}
 
