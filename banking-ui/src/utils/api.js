@@ -260,5 +260,15 @@ export async function getLocations({ lat, lng, address, type }) {
   return res.data;
 }
 
+export async function createDepositAccount(depositData) {
+  const idempotencyKey = 'IDEMP-UI-' + Math.random().toString(36).substring(2, 15) + '-' + Date.now();
+  const res = await api.post('/api/v1/accounts/deposit', depositData, {
+    headers: {
+      'X-Idempotency-Key': idempotencyKey
+    }
+  });
+  return res.data;
+}
+
 export default api;
 

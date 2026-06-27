@@ -22,6 +22,7 @@ import {
   PiggyBank
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
+import AccountOpeningModal from './AccountOpeningModal.jsx';
 
 function CheckingAccountsView({ activeBot, setActiveBot }) {
   const { 
@@ -32,9 +33,6 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
 
   const [selectedAccountIndex, setSelectedAccountIndex] = useState(0);
   const [openingAccount, setOpeningAccount] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submissionSuccess, setSubmissionSuccess] = useState(false);
-  const [memberType, setMemberType] = useState('current');
 
   const accounts = [
     {
@@ -132,19 +130,6 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
   ];
 
   const selectedAccount = accounts[selectedAccountIndex];
-
-  const handleOpenSubmit = (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setSubmissionSuccess(true);
-      setTimeout(() => {
-        setSubmissionSuccess(false);
-        setOpeningAccount(null);
-      }, 3000);
-    }, 1500);
-  };
 
   return (
     <div className="pb-24">
@@ -441,107 +426,14 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
         </div>
       </section>
 
-      {/* Simulated Core Opening Integration Context Modal */}
-      {openingAccount && (
-        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl">
-            
-            {/* Header Line */}
-            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950/50">
-              <div>
-                <div className="text-xs text-teal-500 font-semibold uppercase tracking-wider">Secure Primary Deposit Context</div>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white mt-0.5">{openingAccount.name}</h3>
-              </div>
-              <button 
-                onClick={() => setOpeningAccount(null)}
-                className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Flow Body */}
-            <div className="p-6 space-y-6">
-              {submissionSuccess ? (
-                <div className="text-center py-8 space-y-4">
-                  <div className="w-16 h-16 rounded-full bg-teal-500/10 text-teal-500 flex items-center justify-center mx-auto">
-                    <CheckCircle2 className="w-10 h-10 animate-bounce" />
-                  </div>
-                  <h4 className="text-xl font-bold text-slate-900 dark:text-white">Deposit Core Provisioned!</h4>
-                  <p className="text-sm text-slate-600 dark:text-slate-400 max-w-sm mx-auto">
-                    Your checking context signature line is prepared. Initial automated routing metadata parameters and personalized member checkbook options are accessible via your direct dashboard portal.
-                  </p>
-                </div>
-              ) : (
-                <form onSubmit={handleOpenSubmit} className="space-y-6">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-                      Core Ownership Layer Status
-                    </label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setMemberType('current')}
-                        className={`p-3 rounded-xl border text-center text-sm font-bold transition-all ${
-                          memberType === 'current'
-                            ? 'bg-teal-500/10 border-teal-500 text-teal-600 dark:text-teal-400'
-                            : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-                        }`}
-                      >
-                        Existing Depositor
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setMemberType('new')}
-                        className={`p-3 rounded-xl border text-center text-sm font-bold transition-all ${
-                          memberType === 'new'
-                            ? 'bg-teal-500/10 border-teal-500 text-teal-600 dark:text-teal-400'
-                            : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-                        }`}
-                      >
-                        New Primary Member
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50 dark:bg-slate-950/60 rounded-xl p-4 border border-slate-200 dark:border-slate-800/60 text-xs space-y-2 text-slate-600 dark:text-slate-400 leading-relaxed">
-                    <div className="font-semibold text-slate-900 dark:text-slate-300">Mandatory Core Disclosures:</div>
-                    <p>
-                      Pursuant to standard verification checkpoints, opening a primary digital liquid line seamlessly anchors your account to our multi-region cloud identity protocol. Immediate digital disclosures will be dispatched.
-                    </p>
-                  </div>
-
-                  <div className="space-y-3 pt-2">
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="w-full py-4 rounded-xl text-slate-950 font-bold text-sm shadow-lg hover:scale-[1.02] transition-all duration-300 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:pointer-events-none"
-                      style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>Allocating Liquid Line...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Validate & Provision Account</span>
-                          <ArrowRight className="w-4 h-4" />
-                        </>
-                      )}
-                    </button>
-                    
-                    <p className="text-[11px] text-center text-slate-500">
-                      All shared deposit structures adhere continuously to national risk frameworks.
-                    </p>
-                  </div>
-                </form>
-              )}
-            </div>
-
-          </div>
-        </div>
-      )}
+      {/* Shared Account Opening Integration Modal */}
+      <AccountOpeningModal
+        openingAccount={openingAccount}
+        onClose={() => setOpeningAccount(null)}
+        accountType="CHECKING"
+        brandColorFrom={brandColorFrom}
+        brandColorTo={brandColorTo}
+      />
 
     </div>
   );
