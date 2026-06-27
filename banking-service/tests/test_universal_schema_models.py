@@ -19,6 +19,7 @@ from sqlalchemy.orm import sessionmaker
 from utils.database import Base
 import models.identity as identity_models
 import models.origination as orig_models
+import models.kyc as kyc_models
 
 
 @pytest.fixture(scope="function")
@@ -149,3 +150,28 @@ def test_origination_and_ledger_models(test_db):
 
     assert len(tx.ledger_splits) == 1
     assert tx.ledger_splits[0].amount_cents == 50000
+
+
+def test_kyc_record_model(test_db):
+    user = identity_models.User(
+        auth_provider_uid="kyc_user_789",
+        first_name="Alice",
+        last_name="Wonder",
+    )
+    test_db.add(user)
+    test_db.commit()
+
+    record = kyc_models.KYCRecord(
+        user_id=user.id,
+        encrypted_pii=b"fake_encrypted_pii",
+        wrapped_dek=b"fake_wrapped_dek",
+        encryption_iv=b"123456789012",
+        auth_tag=b"1234567890123456"
+    )
+    test_db.add(record)
+    test_db.commit()
+    test_db.refresh(record)
+
+    assert record.id is not None
+    assert record.user_id == user.id
+    assert record.encrypted_pii == b"fake_encrypted_pii"

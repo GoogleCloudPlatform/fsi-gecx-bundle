@@ -29,6 +29,7 @@ import models.settings  # noqa: E402, F401
 import models.identity  # noqa: E402, F401
 import models.origination  # noqa: E402, F401
 import models.audit  # noqa: E402, F401
+import models.kyc  # noqa: E402, F401
 
 # Set target metadata for alembic schema scanning
 target_metadata = Base.metadata

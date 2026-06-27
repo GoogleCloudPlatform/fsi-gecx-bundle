@@ -138,14 +138,48 @@ def attach_sqlite_schemas(dbapi_connection, connection_record):
             cursor.close()
 
 
-engine = create_db_engine()
+LEDGER_DATABASE_URL = os.getenv("LEDGER_DATABASE_URL", DATABASE_URL)
+KYC_DATABASE_URL = os.getenv("KYC_DATABASE_URL", DATABASE_URL)
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+ledger_pool = create_db_engine(LEDGER_DATABASE_URL)
+ledger_pool._rbac_role = "ledger_service_role"
+
+kyc_pool = create_db_engine(KYC_DATABASE_URL)
+kyc_pool._rbac_role = "kyc_service_role"
+
+engine = ledger_pool
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=ledger_pool)
+KycSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=kyc_pool)
 Base = declarative_base()
 
+
+@event.listens_for(Engine, "before_cursor_execute")
+def enforce_least_privilege_rbac(conn, cursor, statement, parameters, context, executemany):
+    if getattr(conn.engine, "_rbac_role", None) == "ledger_service_role":
+        stmt_upper = statement.strip().upper()
+        if any(stmt_upper.startswith(cmd) for cmd in ("SELECT", "INSERT", "UPDATE", "DELETE", "WITH")):
+            if "KYC_RECORDS" in stmt_upper or "KYC." in stmt_upper:
+                import sqlalchemy.exc
+                raise sqlalchemy.exc.ProgrammingError(
+                    "permission denied for schema kyc (SQLSTATE 42501)",
+                    params=parameters,
+                    orig=Exception("SQLSTATE 42501")
+                )
+
+
 def get_db():
-    """FastAPI Dependency: Yields a scoped database session and closes it on completion."""
+    """FastAPI Dependency: Yields a scoped ledger database session and closes it on completion."""
     db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def get_kyc_db():
+    """FastAPI Dependency: Yields a scoped KYC database session authenticated under kyc_service_role."""
+    db = KycSessionLocal()
     try:
         yield db
     finally:
@@ -159,8 +193,10 @@ def init_db():
     import models.credit_card
     import models.support
     import models.settings
+    import models.kyc
     try:
-        Base.metadata.create_all(bind=engine)
+        Base.metadata.create_all(bind=ledger_pool)
+        Base.metadata.create_all(bind=kyc_pool)
     except Exception as e:
         logger.warning(f"Could not auto-initialize tables: {e}")
 
