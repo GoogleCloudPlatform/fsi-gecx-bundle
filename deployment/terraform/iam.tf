@@ -68,6 +68,16 @@ resource "google_service_account" "banking_db_migration_service_account" {
   }
 }
 
+resource "google_service_account" "ledger_service_account" {
+  account_id   = "ledger-service-sa"
+  display_name = "Least Privilege Ledger Schema Service Account"
+}
+
+resource "google_service_account" "kyc_service_account" {
+  account_id   = "kyc-service-sa"
+  display_name = "Least Privilege KYC Schema Service Account"
+}
+
 resource "google_service_account" "ccai_insights_service_account" {
   account_id   = "ccai-insights-sa"
   display_name = "CCAI Insights Service Account"

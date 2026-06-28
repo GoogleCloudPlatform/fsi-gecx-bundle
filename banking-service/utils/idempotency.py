@@ -14,11 +14,15 @@
 
 import json
 import hashlib
+import datetime
+import logging
 from typing import Optional, Any, Dict
 from fastapi import Header, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from utils.database import get_db
 from models.origination import Transaction
+
+logger = logging.getLogger(__name__)
 
 
 async def check_idempotency_header(
@@ -58,3 +62,27 @@ async def check_idempotency_header(
         return json.loads(existing_tx.response_payload)
 
     return None
+
+
+def archive_stale_transactions(db: Session, retention_days: int = 30) -> int:
+    """
+    Sweeps completed transactions older than retention_days and purges large JSON response payloads
+    to preserve operational OLTP database storage.
+    Returns count of archived transaction payloads.
+    """
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=retention_days)
+    stale_txs = db.query(Transaction).filter(
+        Transaction.created_at < cutoff,
+        Transaction.response_payload.isnot(None)
+    ).all()
+
+    count = 0
+    for tx in stale_txs:
+        tx.response_payload = None
+        tx.request_hash = "ARCHIVED_EXPIRED"
+        count += 1
+
+    if count > 0:
+        db.commit()
+        logger.info(f"Archived and purged {count} stale idempotency transaction payloads.")
+    return count

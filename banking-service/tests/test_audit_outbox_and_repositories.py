@@ -96,5 +96,5 @@ def test_outbox_dlq_failure_handling(test_db, monkeypatch):
         publish_pending_audit_events(test_db)
 
     failed_entry = test_db.query(AuditOutbox).filter(AuditOutbox.event_id == entry.event_id).first()
-    assert failed_entry.status == "FAILED"
+    assert failed_entry.status in ("FAILED", "DLQ")
     assert failed_entry.retry_count == 5

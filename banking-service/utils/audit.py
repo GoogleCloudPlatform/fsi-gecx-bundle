@@ -92,8 +92,21 @@ def publish_pending_audit_events(db: Session, batch_size: int = 50) -> int:
             record.retry_count += 1
             logger.error(f"Failed to publish audit event {record.event_id} (attempt {record.retry_count}): {e}")
             if record.retry_count >= MAX_RETRIES:
-                record.status = "FAILED"  # Marked FAILED for DLQ alerting / manual inspection
-                logger.critical(f"Audit event {record.event_id} exceeded max retries and moved to FAILED DLQ state.")
+                record.status = "DLQ"  # Routed to DLQ for dead-letter alerting & manual intervention
+                logger.critical(f"Audit event {record.event_id} exceeded max retries ({MAX_RETRIES}) and moved to DLQ state.")
 
     db.commit()
     return published_count
+
+
+def process_dlq_audit_events(db: Session, batch_size: int = 50) -> list[str]:
+    """
+    Sweeps dead-letter queue (DLQ/FAILED) outbox records, emits alert monitoring metrics,
+    and returns a list of dead-lettered event IDs requiring intervention.
+    """
+    dlq_records = db.query(AuditOutbox).filter(AuditOutbox.status.in_(["DLQ", "FAILED"])).limit(batch_size).all()
+    event_ids = []
+    for rec in dlq_records:
+        logger.warning(f"DLQ Monitoring Alert: Event ID {rec.event_id} ({rec.event_type}) in state {rec.status} with {rec.retry_count} retries.")
+        event_ids.append(rec.event_id)
+    return event_ids

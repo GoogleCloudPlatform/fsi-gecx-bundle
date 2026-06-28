@@ -121,10 +121,15 @@ def attach_sqlite_schemas(dbapi_connection, connection_record):
                     "ATTACH DATABASE 'file:ledger_mem?mode=memory&cache=shared' AS ledger;",
                 ]
             else:
+                base_prefix = main_file.rsplit(".", 1)[0] if "." in main_file else main_file
+                if base_prefix.endswith("banking"):
+                    base_prefix = ""
+                else:
+                    base_prefix = base_prefix + "_"
                 stmts = [
-                    "ATTACH DATABASE 'identity.db' AS identity;",
-                    "ATTACH DATABASE 'kyc.db' AS kyc;",
-                    "ATTACH DATABASE 'ledger.db' AS ledger;",
+                    f"ATTACH DATABASE '{base_prefix}identity.db' AS identity;",
+                    f"ATTACH DATABASE '{base_prefix}kyc.db' AS kyc;",
+                    f"ATTACH DATABASE '{base_prefix}ledger.db' AS ledger;",
                 ]
 
             for stmt in stmts:
@@ -212,4 +217,6 @@ def init_db():
         logger.warning(f"Could not auto-initialize tables: {e}")
 
 
-init_db()
+import sys
+if not any("alembic" in arg for arg in sys.argv) and os.getenv("DISABLE_INIT_DB") != "true":
+    init_db()

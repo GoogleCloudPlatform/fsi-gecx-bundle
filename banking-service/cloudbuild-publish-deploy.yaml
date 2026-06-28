@@ -36,6 +36,16 @@ steps:
     dir: "banking-service"
 
   - name: "gcr.io/cloud-builders/docker"
+    id: "validate-ephemeral-migrations"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        echo "Executing ephemeral migration and downgrade verification against container..."
+        docker run --rm "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
+          bash -c "DATABASE_URL=sqlite:///ephemeral_test.db alembic upgrade head && DATABASE_URL=sqlite:///ephemeral_test.db alembic downgrade base && DATABASE_URL=sqlite:///ephemeral_test.db alembic upgrade head && rm -f ephemeral_test.db*"
+
+  - name: "gcr.io/cloud-builders/docker"
     id: "push-image"
     args:
       [
