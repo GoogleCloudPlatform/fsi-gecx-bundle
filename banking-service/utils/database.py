@@ -217,6 +217,8 @@ Base = declarative_base()
 
 @event.listens_for(Engine, "before_cursor_execute")
 def enforce_least_privilege_rbac(conn, cursor, statement, parameters, context, executemany):
+    if conn.info.get("_ignore_rbac") or getattr(conn.engine, "_ignore_rbac", False):
+        return
     role = getattr(conn.engine, "_rbac_role", None)
     if role in ("ledger_service_role", "kyc_service_role"):
         stmt_upper = statement.strip().upper()

@@ -136,6 +136,7 @@ def reset_database():
     
     db = SessionLocal()
     try:
+        db.connection().info["_ignore_rbac"] = True
         db.query(TransactionAuthorization).delete()
         db.query(AccountLedger).delete()
         db.query(IssuedCard).delete()

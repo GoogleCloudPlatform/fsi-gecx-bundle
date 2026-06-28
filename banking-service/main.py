@@ -193,11 +193,29 @@ async def get_user(user: ValidatedToken = Depends(get_current_user)):
 
 # (mcp and mcp_app are imported directly from routers.mcp at top to avoid circular initialization)
 
+@asynccontextmanager
+async def combined_lifespan(app_inst: FastAPI):
+    logging.info("Executing combined lifespan startup: verifying and seeding database...")
+    try:
+        from utils.database import SessionLocal
+        from services.credit_card import initialize_db_and_seed
+        db = SessionLocal()
+        try:
+            initialize_db_and_seed(db)
+        finally:
+            db.close()
+    except Exception as e:
+        logging.error(f"Error during startup database seeding: {e}")
+    
+    async with mcp_app.lifespan(app_inst):
+        yield
+
+
 # 3. Combine FastAPI application routes with FastMCP routes under a unified ASGI engine
 combined_app = FastAPI(
     title="Banking API with MCP",
     routes=app.routes,      # Core FastAPI REST endpoints
-    lifespan=mcp_app.lifespan,
+    lifespan=combined_lifespan,
     root_path=os.getenv("ROOT_PATH", ""),
 )
 
