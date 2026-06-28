@@ -452,6 +452,7 @@ function SavingsAccountsView() {
             )}
 
           </div>
+        </div>
       </section>
 
       {/* Shared Account Opening Integration Modal */}
