@@ -61,7 +61,7 @@ def fixture_db_session():
             account_id=account.id,
             amount_cents=-3500,               # -$35 charge (debit)
             description="LATE_FEE",
-            posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=2)
+            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)
         )
         db.add(fee_charge)
         

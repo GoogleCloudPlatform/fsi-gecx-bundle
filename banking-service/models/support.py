@@ -5,6 +5,7 @@ from utils.database import Base
 
 class Escalation(Base):
     __tablename__ = "support_escalations"
+    __table_args__ = {'schema': 'operations'}
     
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     room_name = Column(String, nullable=False)

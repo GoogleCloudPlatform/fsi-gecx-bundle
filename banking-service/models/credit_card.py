@@ -30,6 +30,7 @@ class FinancialAccount(Base):
     and dynamic available credit in cents.
     """
     __tablename__ = "financial_account"
+    __table_args__ = {'schema': 'cards'}
 
     id = Column(String(36), primary_key=True, default=generate_uuid_str)
     customer_id = Column(String(36), nullable=False)
@@ -47,7 +48,7 @@ class FinancialAccount(Base):
     last_payment_amount_cents = Column(BigInteger, nullable=False, default=0)
     
     currency = Column(String(3), default="USD")
-    opened_at = Column(DateTime, default=datetime.datetime.utcnow)
+    opened_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     # Relationships
     cards = relationship("IssuedCard", back_populates="account", cascade="all, delete-orphan")
@@ -62,7 +63,7 @@ class IssuedCard(Base):
     __tablename__ = "issued_card"
 
     id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    account_id = Column(String(36), ForeignKey("financial_account.id", ondelete="RESTRICT"), nullable=False)
+    account_id = Column(String(36), ForeignKey("cards.financial_account.id", ondelete="RESTRICT"), nullable=False)
     cardholder_name = Column(String(150), nullable=False)
     
     # PCI-DSS Token reference representing the PAN
@@ -78,7 +79,7 @@ class IssuedCard(Base):
     exp_year = Column(Integer, nullable=False)
     status = Column(String(20), nullable=False, default="ACTIVE") # 'ACTIVE', 'BLOCKED', 'REPORTED_STOLEN', 'EXPIRED'
     is_virtual = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     # Relationships
     account = relationship("FinancialAccount", back_populates="cards")
@@ -87,6 +88,7 @@ class IssuedCard(Base):
     # Index for sub-millisecond card authorization validations
     __table_args__ = (
         Index("idx_issued_card_token", "card_token", unique=True),
+        {'schema': 'cards'},
     )
 
 
@@ -97,8 +99,8 @@ class TransactionAuthorization(Base):
     __tablename__ = "transaction_authorization"
 
     id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    card_id = Column(String(36), ForeignKey("issued_card.id", ondelete="RESTRICT"), nullable=False)
-    account_id = Column(String(36), ForeignKey("financial_account.id", ondelete="RESTRICT"), nullable=False)
+    card_id = Column(String(36), ForeignKey("cards.issued_card.id", ondelete="RESTRICT"), nullable=False)
+    account_id = Column(String(36), ForeignKey("cards.financial_account.id", ondelete="RESTRICT"), nullable=False)
     
     # ISO-8583 Multi-currency and FX tracking
     transaction_amount_cents = Column(BigInteger, nullable=False)
@@ -119,7 +121,7 @@ class TransactionAuthorization(Base):
     merchant_name = Column(String(255), nullable=True)
     fraud_risk_score = Column(Integer, nullable=True)
     
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     expires_at = Column(DateTime, nullable=False)
 
     # Relationships
@@ -130,6 +132,7 @@ class TransactionAuthorization(Base):
     # Index for fast pending holds/balances computation
     __table_args__ = (
         Index("idx_auth_account_status", "account_id", "status"),
+        {'schema': 'cards'},
     )
 
 
@@ -140,8 +143,8 @@ class AccountLedger(Base):
     __tablename__ = "account_ledger"
 
     id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    account_id = Column(String(36), ForeignKey("financial_account.id", ondelete="RESTRICT"), nullable=False)
-    authorization_id = Column(String(36), ForeignKey("transaction_authorization.id", ondelete="SET NULL"), nullable=True)
+    account_id = Column(String(36), ForeignKey("cards.financial_account.id", ondelete="RESTRICT"), nullable=False)
+    authorization_id = Column(String(36), ForeignKey("cards.transaction_authorization.id", ondelete="SET NULL"), nullable=True)
     
     # Settlement keys
     auth_code = Column(String(6), nullable=True)
@@ -149,7 +152,7 @@ class AccountLedger(Base):
     
     amount_cents = Column(BigInteger, nullable=False) # positive for payments/credits, negative for charges/fees
     description = Column(String(255), nullable=False)
-    posted_at = Column(DateTime, default=datetime.datetime.utcnow)
+    posted_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     # Relationships
     account = relationship("FinancialAccount", back_populates="ledger_entries")
@@ -159,4 +162,5 @@ class AccountLedger(Base):
     __table_args__ = (
         Index("idx_ledger_account", "account_id"),
         Index("idx_ledger_account_posted", "account_id", "posted_at"),
+        {'schema': 'cards'},
     )

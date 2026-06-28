@@ -69,7 +69,7 @@ def test_batch_rotate_kyc_deks_success(kyc_db):
     assert rotated == 1
 
     # Verify decrypt with new key succeeds
-    updated_rec = kyc_db.query(KYCRecord).get(uuid.UUID(rec_id))
+    updated_rec = kyc_db.get(KYCRecord, uuid.UUID(rec_id))
     decrypted = decrypt_pii(
         updated_rec.encrypted_pii,
         updated_rec.wrapped_dek,

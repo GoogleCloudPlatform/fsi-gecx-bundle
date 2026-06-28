@@ -34,7 +34,7 @@ class User(Base):
     last_name = Column(String(100), nullable=True)
     email = Column(String(255), nullable=True, index=True)
     phone_number = Column(String(50), nullable=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     # Relationships
     devices = relationship("UserDevice", back_populates="user", cascade="all, delete-orphan")
@@ -54,7 +54,7 @@ class UserDevice(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="CASCADE"), nullable=False)
     device_token = Column(String(255), nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     # Relationships
     user = relationship("User", back_populates="devices")
@@ -81,7 +81,7 @@ class UserSecureMessage(Base):
     is_user_read = Column(Boolean, default=True)
     is_agent_read = Column(Boolean, default=False)
     deleted = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     # Relationships
     user = relationship("User", back_populates="secure_messages")

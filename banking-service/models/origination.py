@@ -39,7 +39,7 @@ class Account(Base):
     cleared_balance_cents = Column(BigInteger, nullable=False, default=0)
     available_credit_cents = Column(BigInteger, nullable=False, default=0)
     currency = Column(String(3), default="USD")
-    opened_at = Column(DateTime, default=datetime.datetime.utcnow)
+    opened_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     # Relationships
     ledger_entries = relationship("AccountLedgerEntry", back_populates="account")
@@ -60,8 +60,8 @@ class Application(Base):
     product_category = Column(String(50), nullable=False)  # 'MORTGAGE', 'CREDIT_CARD', 'DEPOSIT'
     status = Column(String(50), nullable=False, default="STARTED")
     requested_amount_cents = Column(BigInteger, nullable=True)
-    started_at = Column(DateTime, default=datetime.datetime.utcnow)
-    last_updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    started_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    last_updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     # Relationships
     user = relationship("User", backref="applications")
@@ -126,7 +126,7 @@ class ApplicationArtifact(Base):
     gcs_uri = Column(String(500), nullable=False)
     status = Column(String(50), default="PENDING_CLASSIFICATION")
     version_id = Column(String(128), nullable=True)
-    uploaded_at = Column(DateTime, default=datetime.datetime.utcnow)
+    uploaded_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     application = relationship("Application", back_populates="artifacts")
     customer = relationship("User")
@@ -150,7 +150,7 @@ class Transaction(Base):
     request_hash = Column(String(64), nullable=True)
     response_payload = Column(Text, nullable=True)
     response_status = Column(Integer, nullable=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     ledger_splits = relationship("AccountLedgerEntry", back_populates="transaction")
 
@@ -169,7 +169,7 @@ class AccountLedgerEntry(Base):
     account_id = Column(UUID(as_uuid=True), ForeignKey("ledger.accounts.id", ondelete="RESTRICT"), nullable=False)
     amount_cents = Column(BigInteger, nullable=False)
     entry_type = Column(String(10), nullable=False)  # 'DEBIT', 'CREDIT'
-    posted_at = Column(DateTime, default=datetime.datetime.utcnow)
+    posted_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     transaction = relationship("Transaction", back_populates="ledger_splits")
     account = relationship("Account", back_populates="ledger_entries")

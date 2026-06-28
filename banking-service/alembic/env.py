@@ -112,6 +112,8 @@ def run_migrations_offline() -> None:
             context.execute("CREATE SCHEMA IF NOT EXISTS identity;")
             context.execute("CREATE SCHEMA IF NOT EXISTS kyc;")
             context.execute("CREATE SCHEMA IF NOT EXISTS ledger;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS cards;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS operations;")
         context.run_migrations()
 
 
@@ -134,6 +136,8 @@ def run_migrations_online() -> None:
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS identity;"))
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS kyc;"))
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS ledger;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS cards;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS operations;"))
             connection.commit()
 
         context.configure(

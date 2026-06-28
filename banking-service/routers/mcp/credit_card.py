@@ -146,8 +146,8 @@ async def reverse_overdraft_fee(
             return {"success": False, "message": "No eligible fee transaction found to reverse."}
 
         # Policy Validation: max one reversal per calendar year
-        current_year = datetime.datetime.utcnow().year
-        year_start = datetime.datetime(current_year, 1, 1)
+        current_year = datetime.datetime.now(datetime.timezone.utc).year
+        year_start = datetime.datetime(current_year, 1, 1, tzinfo=datetime.timezone.utc)
 
         prior_reversal = repo.get_annual_reversal_entry(account.id, year_start)
 

@@ -37,5 +37,5 @@ class AuditOutbox(Base):
     payload = Column(Text, nullable=False)
     status = Column(String(20), nullable=False, default="PENDING")  # 'PENDING', 'PUBLISHED', 'FAILED'
     retry_count = Column(Integer, nullable=False, default=0)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     published_at = Column(DateTime, nullable=True)

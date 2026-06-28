@@ -119,6 +119,8 @@ def attach_sqlite_schemas(dbapi_connection, connection_record):
                     "ATTACH DATABASE 'file:identity_mem?mode=memory&cache=shared' AS identity;",
                     "ATTACH DATABASE 'file:kyc_mem?mode=memory&cache=shared' AS kyc;",
                     "ATTACH DATABASE 'file:ledger_mem?mode=memory&cache=shared' AS ledger;",
+                    "ATTACH DATABASE 'file:cards_mem?mode=memory&cache=shared' AS cards;",
+                    "ATTACH DATABASE 'file:operations_mem?mode=memory&cache=shared' AS operations;",
                 ]
             else:
                 base_prefix = main_file.rsplit(".", 1)[0] if "." in main_file else main_file
@@ -130,6 +132,8 @@ def attach_sqlite_schemas(dbapi_connection, connection_record):
                     f"ATTACH DATABASE '{base_prefix}identity.db' AS identity;",
                     f"ATTACH DATABASE '{base_prefix}kyc.db' AS kyc;",
                     f"ATTACH DATABASE '{base_prefix}ledger.db' AS ledger;",
+                    f"ATTACH DATABASE '{base_prefix}cards.db' AS cards;",
+                    f"ATTACH DATABASE '{base_prefix}operations.db' AS operations;",
                 ]
 
             for stmt in stmts:

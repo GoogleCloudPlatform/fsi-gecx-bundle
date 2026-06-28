@@ -33,6 +33,8 @@ def test_db():
             "ATTACH DATABASE 'file:identity_test?mode=memory&cache=shared' AS identity;",
             "ATTACH DATABASE 'file:kyc_test?mode=memory&cache=shared' AS kyc;",
             "ATTACH DATABASE 'file:ledger_test?mode=memory&cache=shared' AS ledger;",
+            "ATTACH DATABASE 'file:cards_test?mode=memory&cache=shared' AS cards;",
+            "ATTACH DATABASE 'file:operations_test?mode=memory&cache=shared' AS operations;",
         ]:
             try:
                 cursor.execute(stmt)

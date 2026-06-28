@@ -45,8 +45,8 @@ def initialize_db_and_seed(db: Session):
             credit_limit_cents=1000000,       # $10,000 credit limit
             cleared_balance_cents=18044,      # Total debt: $180.44 (Late Fee + Starbucks + YouTube + Whole Foods + Shell)
             available_credit_cents=981956,    # $9,819.56 available credit
-            payment_due_date=datetime.datetime.utcnow() + datetime.timedelta(days=15),
-            statement_close_date=datetime.datetime.utcnow() - datetime.timedelta(days=15)
+            payment_due_date=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=15),
+            statement_close_date=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=15)
         )
         repo.save_account(seed_account)
         
@@ -70,7 +70,7 @@ def initialize_db_and_seed(db: Session):
             account_id=seed_account.id,
             amount_cents=-3500,               # -$35 late fee charge
             description="LATE_FEE",
-            posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=5)
+            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=5)
         )
         repo.save_ledger(seed_fee)
 
@@ -79,7 +79,7 @@ def initialize_db_and_seed(db: Session):
             account_id=seed_account.id,
             amount_cents=-1399,               # -$13.99 subscription
             description="YouTube Premium Subscription",
-            posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=12)
+            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=12)
         )
         repo.save_ledger(seed_youtube)
 
@@ -88,7 +88,7 @@ def initialize_db_and_seed(db: Session):
             account_id=seed_account.id,
             amount_cents=-475,                 # -$4.75 coffee purchase
             description="Starbucks Coffee",
-            posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=4)
+            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=4)
         )
         repo.save_ledger(seed_starbucks)
 
@@ -97,7 +97,7 @@ def initialize_db_and_seed(db: Session):
             account_id=seed_account.id,
             amount_cents=-8420,               # -$84.20 groceries
             description="Whole Foods Market",
-            posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=8)
+            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=8)
         )
         repo.save_ledger(seed_grocery)
 
@@ -106,7 +106,7 @@ def initialize_db_and_seed(db: Session):
             account_id=seed_account.id,
             amount_cents=-4250,               # -$42.50 gas station purchase
             description="Shell Gasoline",
-            posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=2)
+            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)
         )
         repo.save_ledger(seed_gas)
         
@@ -224,7 +224,7 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
         account_id=account_id,
         amount_cents=reversal_amount,
         description=desc,
-        posted_at=datetime.datetime.utcnow()
+        posted_at=datetime.datetime.now(datetime.timezone.utc)
     )
     repo.save_ledger(reversal_entry)
 
