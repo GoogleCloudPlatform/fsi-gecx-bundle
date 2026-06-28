@@ -15,7 +15,7 @@
 import uuid
 import datetime
 from sqlalchemy import Column, String, Text, DateTime, Integer, Index
-from sqlalchemy.dialects.postgresql import UUID
+from utils.database import UniversalUUID as UUID, generate_uuid
 from utils.database import Base
 
 
@@ -31,7 +31,7 @@ class AuditOutbox(Base):
         {'schema': 'ledger'},
     )
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     event_id = Column(String(128), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     event_type = Column(String(100), nullable=False)
     payload = Column(Text, nullable=False)

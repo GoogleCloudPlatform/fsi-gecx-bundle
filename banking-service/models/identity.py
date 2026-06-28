@@ -15,7 +15,7 @@
 import uuid
 import datetime
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Float, Index
-from sqlalchemy.dialects.postgresql import UUID
+from utils.database import UniversalUUID as UUID, generate_uuid
 from sqlalchemy.orm import relationship
 from utils.database import Base
 
@@ -28,7 +28,7 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = {'schema': 'identity'}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     auth_provider_uid = Column(String(128), unique=True, nullable=False, index=True)
     first_name = Column(String(100), nullable=True)
     last_name = Column(String(100), nullable=True)
@@ -51,7 +51,7 @@ class UserDevice(Base):
         {'schema': 'identity'},
     )
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     user_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="CASCADE"), nullable=False)
     device_token = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
@@ -71,7 +71,7 @@ class UserSecureMessage(Base):
         {'schema': 'identity'},
     )
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     message_id = Column(String(128), unique=True, nullable=False, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="CASCADE"), nullable=False)
     sender = Column(String(50), nullable=False)  # 'user' or 'agent'
@@ -94,7 +94,7 @@ class RetailLocation(Base):
     __tablename__ = "retail_locations"
     __table_args__ = {'schema': 'identity'}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     name = Column(String(255), nullable=False)
     type = Column(String(50), nullable=False)  # 'BRANCH' or 'ATM'
     address = Column(String(255), nullable=False)

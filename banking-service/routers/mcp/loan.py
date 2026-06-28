@@ -39,7 +39,7 @@ async def get_loan_application_documents(application_id: str, ctx: Context) -> s
     logger.info(f"FastMCP get_loan_application_documents invoked for Application ID: {application_id}")
     
     # Strict alphanumeric and length regex validation (Prevents Path Traversal & Command Injections)
-    if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", application_id):
+    if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", str(application_id)):
         logger.error(f"Security Alert: Malformed application ID input detected: {application_id}")
         return "Access Denied: Invalid Application ID format."
 
@@ -117,7 +117,7 @@ async def generate_upload_session_url(
     logger.info(f"FastMCP generate_upload_session_url invoked for App ID: {application_id} (Type: {claimed_artifact_type}, MIME: {content_type})")
     
     # 1. Input sanitization gates
-    if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", application_id):
+    if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", str(application_id)):
         logger.error(f"Security Alert: Malformed application ID input: {application_id}")
         return "Access Denied: Invalid Application ID format."
         

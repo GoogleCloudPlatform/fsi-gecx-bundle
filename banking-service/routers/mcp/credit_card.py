@@ -49,9 +49,9 @@ async def report_lost_stolen_card(
             account = repo.get_account_by_customer(verified_customer_id)
             if not account:
                 return {"success": False, "message": "No credit card account found for the user."}
-            account_id = account.id
+            account_id = str(account.id)
 
-        if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", account_id):
+        if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", str(account_id)):
             return {"success": False, "message": "Access Denied: Invalid account ID format."}
             
         # Enforce BOLA/IDOR check: verify account belongs to verified_customer_id
@@ -121,9 +121,9 @@ async def reverse_overdraft_fee(
             account = repo.get_account_by_customer(verified_customer_id)
             if not account:
                 return {"success": False, "message": "No credit card account found for the user."}
-            account_id = account.id
+            account_id = str(account.id)
 
-        if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", account_id):
+        if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", str(account_id)):
             return {"success": False, "message": "Access Denied: Invalid account ID format."}
 
         # Enforce BOLA check
@@ -202,9 +202,9 @@ async def request_credit_limit_increase(
             account = repo.get_account_by_customer(verified_customer_id)
             if not account:
                 return {"success": False, "message": "No credit card account found for the user."}
-            account_id = account.id
+            account_id = str(account.id)
 
-        if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", account_id):
+        if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", str(account_id)):
             return {"success": False, "message": "Access Denied: Invalid account ID format."}
 
         # Enforce BOLA check

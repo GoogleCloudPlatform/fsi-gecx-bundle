@@ -18,11 +18,9 @@ from sqlalchemy import (
     Column, String, Boolean, BigInteger, Integer, 
     DateTime, Numeric, ForeignKey, Index
 )
+from utils.database import UniversalUUID as UUID, generate_uuid
 from sqlalchemy.orm import relationship
 from utils.database import Base
-
-def generate_uuid_str():
-    return str(uuid.uuid4())
 
 class FinancialAccount(Base):
     """
@@ -32,7 +30,7 @@ class FinancialAccount(Base):
     __tablename__ = "financial_account"
     __table_args__ = {'schema': 'cards'}
 
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     customer_id = Column(String(36), nullable=False)
     status = Column(String(20), nullable=False, default="ACTIVE") # 'ACTIVE', 'FROZEN', 'DELINQUENT', 'CLOSED'
     
@@ -62,8 +60,8 @@ class IssuedCard(Base):
     """
     __tablename__ = "issued_card"
 
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    account_id = Column(String(36), ForeignKey("cards.financial_account.id", ondelete="RESTRICT"), nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    account_id = Column(UUID(as_uuid=True), ForeignKey("cards.financial_account.id", ondelete="RESTRICT"), nullable=False)
     cardholder_name = Column(String(150), nullable=False)
     
     # PCI-DSS Token reference representing the PAN
@@ -98,9 +96,9 @@ class TransactionAuthorization(Base):
     """
     __tablename__ = "transaction_authorization"
 
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    card_id = Column(String(36), ForeignKey("cards.issued_card.id", ondelete="RESTRICT"), nullable=False)
-    account_id = Column(String(36), ForeignKey("cards.financial_account.id", ondelete="RESTRICT"), nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    card_id = Column(UUID(as_uuid=True), ForeignKey("cards.issued_card.id", ondelete="RESTRICT"), nullable=False)
+    account_id = Column(UUID(as_uuid=True), ForeignKey("cards.financial_account.id", ondelete="RESTRICT"), nullable=False)
     
     # ISO-8583 Multi-currency and FX tracking
     transaction_amount_cents = Column(BigInteger, nullable=False)
@@ -142,9 +140,9 @@ class AccountLedger(Base):
     """
     __tablename__ = "account_ledger"
 
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    account_id = Column(String(36), ForeignKey("cards.financial_account.id", ondelete="RESTRICT"), nullable=False)
-    authorization_id = Column(String(36), ForeignKey("cards.transaction_authorization.id", ondelete="SET NULL"), nullable=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    account_id = Column(UUID(as_uuid=True), ForeignKey("cards.financial_account.id", ondelete="RESTRICT"), nullable=False)
+    authorization_id = Column(UUID(as_uuid=True), ForeignKey("cards.transaction_authorization.id", ondelete="SET NULL"), nullable=True)
     
     # Settlement keys
     auth_code = Column(String(6), nullable=True)

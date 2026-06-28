@@ -21,7 +21,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     op.create_table('financial_account',
-    sa.Column('id', sa.String(length=36), nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('customer_id', sa.String(length=36), nullable=False),
     sa.Column('status', sa.String(length=20), nullable=False),
     sa.Column('credit_limit_cents', sa.BigInteger(), nullable=False),
@@ -37,8 +37,8 @@ def upgrade() -> None:
     schema='cards'
     )
     op.create_table('issued_card',
-    sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('account_id', sa.String(length=36), nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('account_id', sa.UUID(), nullable=False),
     sa.Column('cardholder_name', sa.String(length=150), nullable=False),
     sa.Column('card_token', sa.String(length=255), nullable=False),
     sa.Column('last_four', sa.String(length=4), nullable=False),
@@ -57,9 +57,9 @@ def upgrade() -> None:
     )
     op.create_index(op.f('idx_issued_card_token'), 'issued_card', ['card_token'], unique=1, schema='cards')
     op.create_table('transaction_authorization',
-    sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('card_id', sa.String(length=36), nullable=False),
-    sa.Column('account_id', sa.String(length=36), nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('card_id', sa.UUID(), nullable=False),
+    sa.Column('account_id', sa.UUID(), nullable=False),
     sa.Column('transaction_amount_cents', sa.BigInteger(), nullable=False),
     sa.Column('transaction_currency', sa.String(length=3), nullable=False),
     sa.Column('billing_amount_cents', sa.BigInteger(), nullable=False),
@@ -82,9 +82,9 @@ def upgrade() -> None:
     )
     op.create_index(op.f('idx_auth_account_status'), 'transaction_authorization', ['account_id', 'status'], unique=False, schema='cards')
     op.create_table('account_ledger',
-    sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('account_id', sa.String(length=36), nullable=False),
-    sa.Column('authorization_id', sa.String(length=36), nullable=True),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('account_id', sa.UUID(), nullable=False),
+    sa.Column('authorization_id', sa.UUID(), nullable=True),
     sa.Column('auth_code', sa.String(length=6), nullable=True),
     sa.Column('retrieval_reference_number', sa.String(length=12), nullable=True),
     sa.Column('amount_cents', sa.BigInteger(), nullable=False),
@@ -105,7 +105,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_system_settings_key'), 'system_settings', ['key'], unique=False, schema='operations')
     op.create_table('support_escalations',
-    sa.Column('id', sa.String(), nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('room_name', sa.String(), nullable=False),
     sa.Column('customer_id', sa.String(), nullable=False),
     sa.Column('reason', sa.String(), nullable=True),
@@ -130,7 +130,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     op.create_table('financial_account',
-    sa.Column('id', sa.String(length=36), nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('customer_id', sa.String(length=36), nullable=False),
     sa.Column('status', sa.String(length=20), nullable=False),
     sa.Column('credit_limit_cents', sa.BigInteger(), nullable=False),
@@ -145,8 +145,8 @@ def downgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('issued_card',
-    sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('account_id', sa.String(length=36), nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('account_id', sa.UUID(), nullable=False),
     sa.Column('cardholder_name', sa.String(length=150), nullable=False),
     sa.Column('card_token', sa.String(length=255), nullable=False),
     sa.Column('last_four', sa.String(length=4), nullable=False),
@@ -164,9 +164,9 @@ def downgrade() -> None:
     )
     op.create_index(op.f('idx_issued_card_token'), 'issued_card', ['card_token'], unique=1)
     op.create_table('transaction_authorization',
-    sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('card_id', sa.String(length=36), nullable=False),
-    sa.Column('account_id', sa.String(length=36), nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('card_id', sa.UUID(), nullable=False),
+    sa.Column('account_id', sa.UUID(), nullable=False),
     sa.Column('transaction_amount_cents', sa.BigInteger(), nullable=False),
     sa.Column('transaction_currency', sa.String(length=3), nullable=False),
     sa.Column('billing_amount_cents', sa.BigInteger(), nullable=False),
@@ -188,9 +188,9 @@ def downgrade() -> None:
     )
     op.create_index(op.f('idx_auth_account_status'), 'transaction_authorization', ['account_id', 'status'], unique=False)
     op.create_table('account_ledger',
-    sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('account_id', sa.String(length=36), nullable=False),
-    sa.Column('authorization_id', sa.String(length=36), nullable=True),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('account_id', sa.UUID(), nullable=False),
+    sa.Column('authorization_id', sa.UUID(), nullable=True),
     sa.Column('auth_code', sa.String(length=6), nullable=True),
     sa.Column('retrieval_reference_number', sa.String(length=12), nullable=True),
     sa.Column('amount_cents', sa.BigInteger(), nullable=False),
@@ -209,7 +209,7 @@ def downgrade() -> None:
     )
     op.create_index(op.f('ix_system_settings_key'), 'system_settings', ['key'], unique=False)
     op.create_table('support_escalations',
-    sa.Column('id', sa.String(), nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('room_name', sa.String(), nullable=False),
     sa.Column('customer_id', sa.String(), nullable=False),
     sa.Column('reason', sa.String(), nullable=True),

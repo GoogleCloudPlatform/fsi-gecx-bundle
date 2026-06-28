@@ -15,7 +15,7 @@
 import uuid
 import datetime
 from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Integer, Index, Text
-from sqlalchemy.dialects.postgresql import UUID
+from utils.database import UniversalUUID as UUID, generate_uuid
 from sqlalchemy.orm import relationship
 from utils.database import Base
 
@@ -29,7 +29,7 @@ class Account(Base):
         {'schema': 'ledger'},
     )
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     user_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="RESTRICT"), nullable=True)  # Nullable for SYSTEM accounts
     account_number = Column(String(50), unique=True, nullable=False)
     account_type = Column(String(30), nullable=False)  # 'CREDIT_CARD', 'CHECKING', 'SAVINGS', 'SYSTEM'
@@ -54,7 +54,7 @@ class Application(Base):
         {'schema': 'ledger'},
     )
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     application_id = Column(String(128), unique=True, nullable=False)  # External reference UUID string
     user_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="RESTRICT"), nullable=False)
     product_category = Column(String(50), nullable=False)  # 'MORTGAGE', 'CREDIT_CARD', 'DEPOSIT'
@@ -118,7 +118,7 @@ class ApplicationArtifact(Base):
         {'schema': 'ledger'},
     )
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     artifact_id = Column(String(128), unique=True, nullable=False)
     application_id = Column(UUID(as_uuid=True), ForeignKey("ledger.applications.id", ondelete="CASCADE"), nullable=False)
     customer_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="RESTRICT"), nullable=False)
@@ -142,7 +142,7 @@ class Transaction(Base):
         {'schema': 'ledger'},
     )
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     idempotency_key = Column(String(128), unique=True, nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="RESTRICT"), nullable=True)
     status = Column(String(20), nullable=False, default="PENDING")
@@ -164,7 +164,7 @@ class AccountLedgerEntry(Base):
         {'schema': 'ledger'},
     )
 
-    entry_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    entry_id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     transaction_id = Column(UUID(as_uuid=True), ForeignKey("ledger.transactions.id", ondelete="RESTRICT"), nullable=False)
     account_id = Column(UUID(as_uuid=True), ForeignKey("ledger.accounts.id", ondelete="RESTRICT"), nullable=False)
     amount_cents = Column(BigInteger, nullable=False)

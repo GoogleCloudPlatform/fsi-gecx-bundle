@@ -15,7 +15,7 @@
 import uuid
 import datetime
 from sqlalchemy import Column, DateTime, LargeBinary, Index
-from sqlalchemy.dialects.postgresql import UUID
+from utils.database import UniversalUUID as UUID, generate_uuid
 from utils.database import Base
 
 
@@ -30,7 +30,7 @@ class KYCRecord(Base):
         {'schema': 'kyc'},
     )
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     user_id = Column(UUID(as_uuid=True), nullable=False)
     encrypted_pii = Column(LargeBinary, nullable=False)
     wrapped_dek = Column(LargeBinary, nullable=False)

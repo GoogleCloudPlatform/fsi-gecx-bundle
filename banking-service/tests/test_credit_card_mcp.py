@@ -60,7 +60,7 @@ async def test_report_lost_stolen_card_success(mock_send_event, mock_validate_to
     
     mock_ctx = MagicMock()
     result = await report_lost_stolen_card(
-        account_id="acc-8888-9999",
+        account_id="88888888-8888-4888-8888-999999999999",
         assertion_token="valid-token",
         ctx=mock_ctx
     )
@@ -70,7 +70,7 @@ async def test_report_lost_stolen_card_success(mock_send_event, mock_validate_to
     assert "LST-" in result["confirmation_number"]
     
     # Verify DB status update
-    card = db_session.query(IssuedCard).filter_by(id="card-1111-2222").first()
+    card = db_session.query(IssuedCard).filter_by(id="11111111-1111-4111-8111-222222222222").first()
     assert card.status == "BLOCKED"
     
     # Verify WebSocket OOB sync event was dispatched
@@ -89,7 +89,7 @@ async def test_report_lost_stolen_card_unauthorized(mock_validate_token):
     mock_ctx = MagicMock()
     with pytest.raises(PermissionError, match="Invalid assertion token"):
         await report_lost_stolen_card(
-            account_id="acc-8888-9999",
+            account_id="88888888-8888-4888-8888-999999999999",
             assertion_token="bad-token",
             ctx=mock_ctx
         )
@@ -99,13 +99,13 @@ async def test_report_lost_stolen_card_unauthorized(mock_validate_token):
 async def test_report_lost_stolen_card_bola_prevention(mock_validate_token, monkeypatch, db_session):
     """Verify BOLA prevention blocks replacement when account belongs to customer B."""
     monkeypatch.setenv("ENABLE_DEMO_FALLBACK", "false")
-    # Token matches customer-B, but target account acc-8888-9999 is owned by cust-123
+    # Token matches customer-B, but target account 88888888-8888-4888-8888-999999999999 is owned by cust-123
     mock_validate_token.return_value = MagicMock(claims={"sub": "customer-B", "email": "customerB@example.com"})
     
     mock_ctx = MagicMock()
     with pytest.raises(ValueError, match="No financial account found"):
         await report_lost_stolen_card(
-            account_id="acc-8888-9999",
+            account_id="88888888-8888-4888-8888-999999999999",
             assertion_token="token-customerB",
             ctx=mock_ctx
         )
@@ -118,12 +118,12 @@ async def test_reverse_overdraft_fee_success(mock_send_event, mock_validate_toke
     mock_validate_token.return_value = MagicMock(claims={"sub": "cust-123", "email": "customer@example.com"})
     
     # Fetch pre-reversal cleared balance ($180.44 -> 18044 cents)
-    account = db_session.query(FinancialAccount).filter_by(id="acc-8888-9999").first()
+    account = db_session.query(FinancialAccount).filter_by(id="88888888-8888-4888-8888-999999999999").first()
     original_balance = account.cleared_balance_cents
     
     mock_ctx = MagicMock()
     result = await reverse_overdraft_fee(
-        account_id="acc-8888-9999",
+        account_id="88888888-8888-4888-8888-999999999999",
         assertion_token="valid-token",
         ctx=mock_ctx
     )
@@ -151,7 +151,7 @@ async def test_reverse_overdraft_fee_annual_limit_violation(mock_validate_token,
     
     # Apply first reversal
     result1 = await reverse_overdraft_fee(
-        account_id="acc-8888-9999",
+        account_id="88888888-8888-4888-8888-999999999999",
         assertion_token="valid-token",
         ctx=mock_ctx
     )
@@ -159,7 +159,7 @@ async def test_reverse_overdraft_fee_annual_limit_violation(mock_validate_token,
     
     # Apply second reversal (should trigger annual policy cap)
     result2 = await reverse_overdraft_fee(
-        account_id="acc-8888-9999",
+        account_id="88888888-8888-4888-8888-999999999999",
         assertion_token="valid-token",
         ctx=mock_ctx
     )
@@ -176,7 +176,7 @@ async def test_request_credit_limit_increase_success(mock_send_event, mock_valid
     
     mock_ctx = MagicMock()
     result = await request_credit_limit_increase(
-        account_id="acc-8888-9999",
+        account_id="88888888-8888-4888-8888-999999999999",
         assertion_token="valid-token",
         requested_limit=15000.0,  # $15,000 (current limit is $10,000, which is < 2x increase)
         ctx=mock_ctx
@@ -187,7 +187,7 @@ async def test_request_credit_limit_increase_success(mock_send_event, mock_valid
     assert result["new_limit"] == 15000.0
     
     # Verify db updated
-    account = db_session.query(FinancialAccount).filter_by(id="acc-8888-9999").first()
+    account = db_session.query(FinancialAccount).filter_by(id="88888888-8888-4888-8888-999999999999").first()
     assert account.credit_limit_cents == 1500000
 
     # Assert OOB WebSocket sync dispatched
@@ -204,7 +204,7 @@ async def test_request_credit_limit_increase_denied(mock_validate_token, db_sess
     
     mock_ctx = MagicMock()
     result = await request_credit_limit_increase(
-        account_id="acc-8888-9999",
+        account_id="88888888-8888-4888-8888-999999999999",
         assertion_token="valid-token",
         requested_limit=25000.0,  # $25,000 (current limit is $10,000, 25k is > 2x current limit)
         ctx=mock_ctx

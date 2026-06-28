@@ -31,7 +31,7 @@ def initialize_db_and_seed(db: Session):
     repo = CreditCardRepository(db)
     
     # Check if a seed account already exists
-    if repo.get_account_by_id("acc-8888-9999"):
+    if repo.get_account_by_id("88888888-8888-4888-8888-999999999999"):
         logger.info("Database already seeded. Skipping migration initializations.")
         return
 
@@ -39,7 +39,7 @@ def initialize_db_and_seed(db: Session):
     try:
         # 1. Create a core Financial Account
         seed_account = FinancialAccount(
-            id="acc-8888-9999",
+            id="88888888-8888-4888-8888-999999999999",
             customer_id="cust-123",
             status="ACTIVE",
             credit_limit_cents=1000000,       # $10,000 credit limit
@@ -52,7 +52,7 @@ def initialize_db_and_seed(db: Session):
         
         # 2. Issue a primary Credit Card linked to this account
         seed_card = IssuedCard(
-            id="card-1111-2222",
+            id="11111111-1111-4111-8111-222222222222",
             account_id=seed_account.id,
             cardholder_name="Jane Doe",
             card_token="tok_visa_jane_doe",
@@ -66,7 +66,7 @@ def initialize_db_and_seed(db: Session):
         
         # 3. Post realistic transaction entries to the account ledger
         seed_fee = AccountLedger(
-            id="tx-fee-001",
+            id="00000000-0000-4000-8000-000000000001",
             account_id=seed_account.id,
             amount_cents=-3500,               # -$35 late fee charge
             description="LATE_FEE",
@@ -75,7 +75,7 @@ def initialize_db_and_seed(db: Session):
         repo.save_ledger(seed_fee)
 
         seed_youtube = AccountLedger(
-            id="tx-youtube-001",
+            id="00000000-0000-4000-8000-000000000002",
             account_id=seed_account.id,
             amount_cents=-1399,               # -$13.99 subscription
             description="YouTube Premium Subscription",
@@ -84,7 +84,7 @@ def initialize_db_and_seed(db: Session):
         repo.save_ledger(seed_youtube)
 
         seed_starbucks = AccountLedger(
-            id="tx-starbucks-001",
+            id="00000000-0000-4000-8000-000000000003",
             account_id=seed_account.id,
             amount_cents=-475,                 # -$4.75 coffee purchase
             description="Starbucks Coffee",
@@ -93,7 +93,7 @@ def initialize_db_and_seed(db: Session):
         repo.save_ledger(seed_starbucks)
 
         seed_grocery = AccountLedger(
-            id="tx-wholefoods-001",
+            id="00000000-0000-4000-8000-000000000004",
             account_id=seed_account.id,
             amount_cents=-8420,               # -$84.20 groceries
             description="Whole Foods Market",
@@ -102,7 +102,7 @@ def initialize_db_and_seed(db: Session):
         repo.save_ledger(seed_grocery)
 
         seed_gas = AccountLedger(
-            id="tx-shell-001",
+            id="00000000-0000-4000-8000-000000000005",
             account_id=seed_account.id,
             amount_cents=-4250,               # -$42.50 gas station purchase
             description="Shell Gasoline",

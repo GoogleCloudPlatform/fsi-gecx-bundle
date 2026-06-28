@@ -18,7 +18,57 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.engine import make_url, Engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
+import uuid as _uuid
+from sqlalchemy.types import TypeDecorator, Uuid
+
 logger = logging.getLogger(__name__)
+
+class StringComparableUUID(_uuid.UUID):
+    def __eq__(self, other):
+        if isinstance(other, str):
+            try:
+                return super().__eq__(_uuid.UUID(other))
+            except ValueError:
+                return str(self) == other
+        return super().__eq__(other)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __hash__(self):
+        return super().__hash__()
+
+
+def generate_uuid():
+    return StringComparableUUID(str(_uuid.uuid4()))
+
+
+class UniversalUUID(TypeDecorator):
+    """Platform-independent UUID type that accepts both strings and uuid.UUID objects."""
+    impl = Uuid
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                return _uuid.UUID(value)
+            except ValueError:
+                return value
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, _uuid.UUID):
+            return StringComparableUUID(str(value))
+        if isinstance(value, str):
+            try:
+                return StringComparableUUID(value)
+            except ValueError:
+                return value
+        return value
 
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///banking.db")
