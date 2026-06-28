@@ -48,7 +48,7 @@ from routers.mcp import mcp_app
 from routers.voice_bidi import router as voice_bidi_router
 
 import firebase_admin
-
+from contextlib import asynccontextmanager
 
 # Initialize Firebase Admin SDK using Application Default Credentials (ADC)
 try:
@@ -60,7 +60,25 @@ except ValueError:
 except Exception as e:
     logging.error(f"Failed to initialize Firebase Admin SDK: {e}")
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logging.info("Executing lifespan startup: verifying and seeding database...")
+    try:
+        from utils.database import SessionLocal
+        from services.credit_card import initialize_db_and_seed
+        db = SessionLocal()
+        try:
+            initialize_db_and_seed(db)
+        finally:
+            db.close()
+    except Exception as e:
+        logging.error(f"Error during startup database seeding: {e}")
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Banking Service API",
     description=(
         "Banking Service API for managing interactions."

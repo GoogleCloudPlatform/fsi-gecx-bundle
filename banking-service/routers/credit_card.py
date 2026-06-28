@@ -62,15 +62,7 @@ def resolve_effective_id(target_id: str | None, current_id: str, token: Validate
     return current_id
 
 
-@router.on_event("startup")
-def startup_db_init():
-    """Initializes tables and populates seed cardholders on application startup."""
-    from utils.database import SessionLocal
-    db = SessionLocal()
-    try:
-        initialize_db_and_seed(db)
-    finally:
-        db.close()
+
 
 
 @router.get("/account")
