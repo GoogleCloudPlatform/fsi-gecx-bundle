@@ -96,6 +96,8 @@ def create_db_engine(url_str=DATABASE_URL, **kwargs):
 
 @event.listens_for(Engine, "connect")
 def attach_sqlite_schemas(dbapi_connection, connection_record):
+    if "sqlite" not in type(dbapi_connection).__module__.lower():
+        return
     if hasattr(dbapi_connection, "cursor"):
         cursor = dbapi_connection.cursor()
         try:
