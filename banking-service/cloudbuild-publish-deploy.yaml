@@ -41,9 +41,16 @@ steps:
     args:
       - "-c"
       - |
-        echo "Executing ephemeral migration and downgrade verification against container..."
-        docker run --rm "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
-          bash -c "DATABASE_URL=sqlite:///ephemeral_test.db alembic upgrade head && DATABASE_URL=sqlite:///ephemeral_test.db alembic downgrade base && DATABASE_URL=sqlite:///ephemeral_test.db alembic upgrade head && rm -f ephemeral_test.db*"
+        echo "Starting ephemeral PostgreSQL container for migration validation..."
+        docker rm -f pg-validate || true
+        docker run --name pg-validate -e POSTGRES_PASSWORD=secret -e POSTGRES_DB=banking -d postgres:16-alpine
+        trap "docker rm -f pg-validate || true" EXIT
+        echo "Waiting for PostgreSQL container to accept connections..."
+        until docker exec pg-validate pg_isready -U postgres; do sleep 1; done
+        echo "Executing Alembic upgrade head, downgrade base, and upgrade head against PostgreSQL..."
+        docker run --rm --network container:pg-validate -e DATABASE_URL="postgresql://postgres:secret@127.0.0.1:5432/banking" \
+          "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
+          bash -c "alembic upgrade head && alembic downgrade base && alembic upgrade head"
 
   - name: "gcr.io/cloud-builders/docker"
     id: "push-image"
