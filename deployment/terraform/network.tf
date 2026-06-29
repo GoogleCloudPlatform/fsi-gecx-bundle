@@ -65,6 +65,13 @@ resource "google_service_networking_connection" "private_vpc_connection" {
   depends_on = [google_project_service.servicenetworking_googleapis_com]
 }
 
+resource "google_compute_network_peering_routes_config" "peering_routes" {
+  peering              = google_service_networking_connection.private_vpc_connection.peering
+  network              = google_compute_network.fsi_gecx_vpc.name
+  import_custom_routes = true
+  export_custom_routes = true
+}
+
 # Firewall rule allowing Google Load Balancer proxy subnets to access LiveKit signaling
 resource "google_compute_firewall" "allow_lb_to_livekit" {
   name          = "allow-lb-to-livekit"
