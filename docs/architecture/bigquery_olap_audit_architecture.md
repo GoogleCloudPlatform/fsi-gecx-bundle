@@ -46,16 +46,55 @@ graph TD
 
 ---
 
-## ⚙️ 3. DBA Best Practices & Guardrails
+## ⚙️ 3. Transactional Outbox Pipeline & Ingestion Architecture
 
-### A. Mandatory Time Partitioning & `require_partition_filter`
-Every analytical table enforces strict time partitioning. To prevent automated BI tools or ad-hoc queries from executing accidental multi-year full-table scans that consume massive GCP query budgets, all audit tables configure `require_partition_filter = true`.
+To guarantee zero loss of compliance audit events without introducing network latency or locks into real-time customer banking workflows, we implement the **Transactional Outbox Pattern** across a 3-phase lifecycle:
 
-### B. High-Throughput Ingestion via Direct Pub/Sub Event Streaming
-To eliminate DML quota bottlenecks and query planning overhead, outbox event streaming in our application (`utils/audit.py`) publishes pending transaction outbox records directly to Google Cloud Pub/Sub (`PUBSUB_TOPIC_AUDIT`). Pub/Sub Direct BigQuery Subscriptions then stream the events into our domain-segmented compliance tables for sub-second, exact-once ingestion.
+```mermaid
+sequenceDiagram
+    participant App as Banking Service (OLTP)
+    participant PG as Cloud SQL (PostgreSQL)
+    participant Endpoint as POST /internal/process-outbox
+    participant PubSub as Pub/Sub (audit-events)
+    participant BQ as BigQuery (compliance_audit)
 
-### C. Native `JSON` Search Indexes
-Unstructured OCR payloads (`extraction_payload`) and audit traces (`audit_metadata`) utilize native BigQuery `JSON` column typing paired with search indexes (`CREATE SEARCH INDEX`). This allows instant text search across nested W-2 and paystub fields during fraud investigations.
+    Note over App,PG: Phase 1: ACID Transaction Boundary
+    App->>PG: BEGIN TRANSACTION
+    App->>PG: Execute Domain Mutation (e.g. Application / Override)
+    App->>PG: INSERT audit.audit_outbox (status = 'PENDING')
+    App->>PG: COMMIT TRANSACTION
 
-### D. Universal CMEK & Policy Tags
-All audit tables enforce Customer-Managed Encryption Keys (CMEK) and Google Cloud Data Catalog Policy Tags (`PII_HIGH`, `PII_STANDARD`), guaranteeing automatic column masking for unauthorized readers.
+    Note over Endpoint,PubSub: Phase 2: Outbox Draining Worker
+    Endpoint->>PG: SELECT * FROM audit.audit_outbox WHERE status = 'PENDING'
+    Endpoint->>PubSub: Publish JSON Message structured for BigQuery Schema
+    PubSub-->>Endpoint: ACK (Message ID)
+    Endpoint->>PG: UPDATE audit.audit_outbox SET status = 'PUBLISHED'
+
+    Note over PubSub,BQ: Phase 3: Serverless OLAP Streaming
+    PubSub->>BQ: Direct Subscription streams JSON via Storage Write API
+```
+
+### A. Phase 1: ACID Transaction Boundary (`record_audit_event`)
+When a state mutation occurs, the backend application writes the event into the PostgreSQL `audit.audit_outbox` table with `status = 'PENDING'` inside the exact same database transaction. This guarantees atomicity: if the transaction rolls back, the outbox record rolls back as well. No external network API calls are made during this synchronous phase.
+
+### B. Phase 2: Outbox Draining Worker (`POST /internal/process-outbox`)
+An asynchronous poller or scheduled trigger periodically invokes the draining endpoint. The worker queries pending records, formats each payload dictionary into top-level keys matching the regulatory schema (`event_id`, `event_type`, `created_at`, `payload`, `application_id`, `underwriter_id`), and publishes them in batches to the Google Cloud Pub/Sub topic `audit-events`. Upon receiving Pub/Sub acknowledgment, records are updated to `status = 'PUBLISHED'`. Failed deliveries automatically retry and eventually transition to `DLQ` state after exceeding maximum retry attempts.
+
+### C. Phase 3: Serverless OLAP Streaming (`audit-events-bq-sub`)
+Google Cloud’s native **Pub/Sub BigQuery Subscription** ingests messages from `audit-events` directly into BigQuery (`compliance_audit.origination_audit_log`) via the high-throughput BigQuery Storage Write API. Configured with `--use-table-schema = true`, serverless GCP infrastructure maps JSON message attributes directly to BigQuery columns, consuming zero container CPU cycles.
+
+---
+
+## 🛡️ 4. Defense-in-Depth PII Protection & Guardrails
+
+### A. Application-Layer Payload Filtering
+Audit outbox logging utilities strictly serialize structural metadata, status deltas, and UUID references. Plaintext PII strings (such as plain SSNs, raw tax form strings, or unmasked account numbers) are stripped at the application layer prior to outbox serialization.
+
+### B. Cryptographic Schema Isolation & KMS Envelope Encryption
+Sensitive customer KYC records reside in an isolated PostgreSQL schema (`kyc.kyc_records`). PII is encrypted at rest using AES-256-GCM envelope encryption with Data Encryption Keys wrapped by Google Cloud KMS (`docai_cmek_key`). Encryption operations bind `user_id + kyc_record_id` as Additional Authenticated Data (AAD) to prevent ciphertext transplant attacks.
+
+### C. BigQuery Data Catalog Policy Tags & Dynamic Masking
+In OLAP tables, sensitive NPI columns enforce Google Cloud Data Catalog Policy Tags (`sensitive_npi`, `PII_HIGH`). Unauthorized analysts querying BigQuery automatically receive masked outputs (e.g. `XXX-XX-1234`) dynamically evaluated by GCP IAM without requiring custom database views.
+
+### D. Mandatory Time Partitioning & CMEK at Rest
+Every analytical table enforces strict time partitioning (`require_partition_filter = true`) to prevent accidental full-table scans. All database tiers enforce Customer-Managed Encryption Keys (CMEK) at rest.

@@ -46,6 +46,13 @@ PostgreSQL serves as the exclusive system of record for real-time customer opera
 ### B. Google Cloud BigQuery — Online Analytical Processing (OLAP)
 BigQuery serves as the enterprise immutable analytics warehouse. It ingests asynchronous audit outbox events into the domain-segmented `compliance_audit` dataset and archives raw Document AI parsed JSON payloads (`application_artifact`) for multi-year regulatory retention and fraud analytics.
 
+To guarantee zero transaction overhead or event loss, compliance ingestion operates via a **3-Phase Transactional Outbox Pattern**:
+1. **ACID Recording**: Domain mutations record pending events into PostgreSQL `audit.audit_outbox` inside the primary transaction boundary.
+2. **Outbox Draining**: The asynchronous `POST /internal/process-outbox` poller batches pending records and publishes structured JSON payloads to Pub/Sub topic `audit-events`.
+3. **Direct Serverless Streaming**: Google Cloud Pub/Sub BigQuery Subscriptions (`audit-events-bq-sub`) stream events directly into `compliance_audit.origination_audit_log` via the BigQuery Storage Write API (`--use-table-schema=true`).
+
+All layers enforce defense-in-depth PII protection: application-layer string stripping, KMS envelope encryption for KYC records, and Data Catalog Policy Tags (`sensitive_npi`) for dynamic column masking in analytical queries. For full specifications, see [BigQuery OLAP Audit Architecture](file:///docs/architecture/bigquery_olap_audit_architecture.md).
+
 ---
 
 ## 🏛️ 2. Domain Bounded Contexts (PostgreSQL Schemas)
