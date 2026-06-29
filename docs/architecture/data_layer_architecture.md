@@ -75,6 +75,15 @@ Within the `origination` schema, onboarding workflows avoid monolithic null-heav
 * **Parent Table (`applications`)**: Serves as the universal root workflow container holding common metadata (`id`, `user_id`, `product_category`, `status`, timestamps). `user_id` strictly links to `identity.users.id` via foreign key.
 * **Child Extension Tables**: Domain-specific financial figures and attributes are strictly isolated into 1-to-1 extension tables (`mortgage_applications`, `credit_card_applications`, `deposit_applications`). Each extension table defines its own surrogate UUID primary key (`id`), a unique foreign key back to the root application (`application_id`), and product-isolated requested amounts (`requested_loan_cents`, `requested_limit_cents`, `initial_deposit_cents`). This allows clean schema evolution for domain expansion (e.g. adding multi-property appraisal records referencing `mortgage_applications.id`).
 
+### B. Open Banking FDX v6 API Gateway Mapping & Merchant Taxonomy Cache
+To maintain database kernel purity and avoid schema coupling to external compliance standards, our PostgreSQL storage tier (`cards` schema) strictly stores integer monetary values (`amount_cents: BigInteger`) and lean relational properties (`credit_accounts`, `issued_cards`, `posted_transactions`).
+
+Instead of polluting database tables with external specification columns, the platform implements **Approach A (API Gateway Mapping)**:
+* **Stateless Pydantic Transformations**: External Financial Data Exchange (FDX v6) decimal balance formatting (`amount / 100.0`), live credit calculation ($\text{Limit} - \text{ClearedBalance} - \sum \text{PendingHolds}$), and PAN truncation (`last_four`) execute dynamically in `services/credit_card.py` and `models/fdx.py`.
+* **Decoupled Merchant Taxonomy Domain**: Merchant Category Codes (MCC) resolve to standardized Open Banking taxonomies (`PersonalFinanceCategory`) via an in-memory thread-safe `TTLCache` in `services/taxonomy_service.py`. Enforcing Domain-Driven Design (DDD) boundaries, taxonomy endpoints are decoupled:
+  * **External Aggregators (`routers/fdx.py`)**: `GET /api/fdx/v6/taxonomies` and `/taxonomies/{mcc}` (guarded by OAuth `accounts:read` scope).
+  * **Internal Analytics & Back-Office Ops (`routers/credit_card.py`)**: `GET /credit-card/taxonomies` and `/taxonomies/{mcc}` (authenticated via native identity `get_current_user`), enabling BigQuery ETL joins and internal UI debugging without OAuth compliance overhead.
+
 ---
 
 ## ⚙️ 3. Automated Deployment Governance (`alembic/env.py`)
