@@ -24,6 +24,9 @@ def test_rbac_least_privilege_isolation():
     immediately raises a permission denied error (SQLSTATE 42501).
     """
     ledger_session = SessionLocal()
+    if ledger_session.bind and ledger_session.bind.dialect.name == "sqlite":
+        ledger_session.close()
+        pytest.skip("RBAC isolation tests require live PostgreSQL engine")
     try:
         with pytest.raises(sqlalchemy.exc.ProgrammingError) as exc_info:
             ledger_session.execute(text("SELECT * FROM kyc.kyc_records;"))
@@ -50,6 +53,9 @@ def test_account_ledger_immutability():
     Verifies that executing UPDATE, DELETE, or TRUNCATE against account_ledger raises a permission error (SQLSTATE 42501).
     """
     ledger_session = SessionLocal()
+    if ledger_session.bind and ledger_session.bind.dialect.name == "sqlite":
+        ledger_session.close()
+        pytest.skip("RBAC immutability tests require live PostgreSQL engine")
     try:
         with pytest.raises(sqlalchemy.exc.ProgrammingError) as exc_info:
             ledger_session.execute(text("TRUNCATE TABLE account_ledger;"))

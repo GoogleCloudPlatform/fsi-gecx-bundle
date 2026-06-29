@@ -18,6 +18,11 @@ from sqlalchemy.orm import Session
 from models.credit_card import FinancialAccount, IssuedCard, AccountLedger
 from models.settings import SystemSetting
 from utils.audit import record_audit_event
+from models.fdx import (
+    RealTimeBalanceResponse, PaginatedTransactionsResult, FDXTransaction,
+    PaymentMeta, PaymentNetwork, PaginatedPaymentNetworksResult, FDXAccount
+)
+from services.taxonomy_service import TaxonomyService
 
 logger = logging.getLogger(__name__)
 
@@ -249,3 +254,128 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
         "cleared_balance_cents": account.cleared_balance_cents,
         "available_credit_cents": account.available_credit_cents
     }
+
+
+def get_fdx_account(db: Session, account_id: str, customer_id: str) -> FDXAccount:
+    from repositories.credit_card import CreditCardRepository
+    repo = CreditCardRepository(db)
+    account = repo.get_account_by_id(account_id)
+    if not account or str(account.customer_id) != str(customer_id):
+        raise ValueError("Account not found or access denied.")
+    
+    cards = repo.list_cards_by_account(account_id)
+    mask = "3333"
+    if cards and cards[0].last_four:
+        mask = cards[0].last_four
+        
+    return FDXAccount(
+        account_id=str(account.id),
+        account_number_display=mask,
+        product_name="Nova Horizon Elite Credit Card",
+        status=account.status,
+        account_type="CREDIT_CARD",
+        current_balance=round(account.cleared_balance_cents / 100.0, 2),
+        available_credit=round(account.available_credit_cents / 100.0, 2),
+        credit_line=round(account.credit_limit_cents / 100.0, 2),
+        iso_currency_code="USD"
+    )
+
+
+def get_realtime_balance(db: Session, account_id: str, customer_id: str) -> RealTimeBalanceResponse:
+    from repositories.credit_card import CreditCardRepository
+    repo = CreditCardRepository(db)
+    account = repo.get_account_by_id(account_id)
+    if not account or str(account.customer_id) != str(customer_id):
+        raise ValueError("Account not found or access denied.")
+        
+    pending_auths = repo.list_pending_authorizations(account_id)
+    pending_amount_cents = sum(auth.transaction_amount_cents for auth in pending_auths)
+    realtime_available_cents = account.credit_limit_cents - account.cleared_balance_cents - pending_amount_cents
+    
+    return RealTimeBalanceResponse(
+        account_id=str(account.id),
+        credit_limit=round(account.credit_limit_cents / 100.0, 2),
+        cleared_balance=round(account.cleared_balance_cents / 100.0, 2),
+        pending_authorizations_amount=round(pending_amount_cents / 100.0, 2),
+        realtime_available_credit=round(realtime_available_cents / 100.0, 2),
+        iso_currency_code="USD"
+    )
+
+
+def get_unified_transactions(db: Session, account_id: str, customer_id: str, offset: int = 0, limit: int = 50) -> PaginatedTransactionsResult:
+    from repositories.credit_card import CreditCardRepository
+    repo = CreditCardRepository(db)
+    account = repo.get_account_by_id(account_id)
+    if not account or str(account.customer_id) != str(customer_id):
+        raise ValueError("Account not found or access denied.")
+        
+    pending_auths = repo.list_pending_authorizations(account_id)
+    posted_txs = repo.list_ledger_entries(account_id)
+    
+    unified: list[FDXTransaction] = []
+    for auth in pending_auths:
+        cat = TaxonomyService.get_category(auth.merchant_category_code)
+        meta = PaymentMeta(reference_number=auth.retrieval_reference_number, auth_code=auth.auth_code, payment_method=auth.card_network)
+        unified.append(FDXTransaction(
+            account_id=str(account_id),
+            transaction_id=str(auth.id),
+            pending_transaction_id=str(auth.id),
+            pending=True,
+            amount=round(auth.transaction_amount_cents / 100.0, 2),
+            iso_currency_code=auth.transaction_currency or "USD",
+            description=auth.merchant_name or "Pending Charge",
+            transaction_type="CREDITCARD",
+            posted_timestamp=None,
+            transaction_timestamp=auth.created_at.isoformat() if auth.created_at else "",
+            personal_finance_category=cat,
+            payment_meta=meta
+        ))
+        
+    for tx in posted_txs:
+        tx_type = "DIRECTDEPOSIT" if tx.amount_cents > 0 else "CREDITCARD"
+        if "FEE" in (tx.description or "").upper() or "REVERSAL" in (tx.description or "").upper():
+            tx_type = "ADJUSTMENT"
+            
+        pending_id = str(tx.authorization_id) if tx.authorization_id else None
+        meta = PaymentMeta(reference_number=tx.retrieval_reference_number, auth_code=tx.auth_code)
+        
+        mcc = "5411"
+        if tx.authorization and tx.authorization.merchant_category_code:
+            mcc = tx.authorization.merchant_category_code
+        cat = TaxonomyService.get_category(mcc)
+        
+        unified.append(FDXTransaction(
+            account_id=str(account_id),
+            transaction_id=str(tx.id),
+            pending_transaction_id=pending_id,
+            pending=False,
+            amount=round(abs(tx.amount_cents) / 100.0, 2),
+            iso_currency_code="USD",
+            description=tx.description or "Posted Transaction",
+            transaction_type=tx_type,
+            posted_timestamp=tx.posted_at.isoformat() if tx.posted_at else "",
+            transaction_timestamp=tx.posted_at.isoformat() if tx.posted_at else "",
+            personal_finance_category=cat,
+            payment_meta=meta
+        ))
+        
+    unified.sort(key=lambda x: x.transaction_timestamp or "", reverse=True)
+    paginated = unified[offset:offset + limit]
+    return PaginatedTransactionsResult(transactions=paginated, total=len(unified))
+
+
+def get_payment_networks(db: Session, account_id: str, customer_id: str) -> PaginatedPaymentNetworksResult:
+    from repositories.credit_card import CreditCardRepository
+    repo = CreditCardRepository(db)
+    account = repo.get_account_by_id(account_id)
+    if not account or str(account.customer_id) != str(customer_id):
+        raise ValueError("Account not found or access denied.")
+        
+    net = PaymentNetwork(
+        bank_id="010088889",
+        identifier="1111222233335820",
+        type="US_ACH",
+        transfer_in=True,
+        transfer_out=True
+    )
+    return PaginatedPaymentNetworksResult(payment_networks=[net], total=1)
