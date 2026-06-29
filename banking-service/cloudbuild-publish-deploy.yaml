@@ -41,12 +41,6 @@ steps:
     args:
       - "-c"
       - |
-        if command -v git >/dev/null 2>&1 && git rev-parse HEAD~1 >/dev/null 2>&1; then
-          if ! git diff --name-only HEAD~1 HEAD | grep -E "alembic/|models/"; then
-            echo "No database schema migrations or models modified in this commit. Skipping containerized migration validation!"
-            exit 0
-          fi
-        fi
         echo "Starting ephemeral PostgreSQL container for migration validation..."
         docker rm -f pg-validate || true
         docker run --name pg-validate -e POSTGRES_PASSWORD=secret -e POSTGRES_DB=banking -d mirror.gcr.io/library/postgres:16-alpine
@@ -54,7 +48,7 @@ steps:
         echo "Waiting for PostgreSQL container to accept connections..."
         until docker exec pg-validate pg_isready -U postgres; do sleep 1; done
         echo "Executing Alembic upgrade head, downgrade base, and upgrade head against PostgreSQL..."
-        docker run --rm --network container:pg-validate -e DATABASE_URL="postgresql://postgres:secret@127.0.0.1:5432/banking" \
+        docker run --rm --network container:pg-validate -e SKIP_IAM_GRANTS=true -e DATABASE_URL="postgresql://postgres:secret@127.0.0.1:5432/banking" \
           "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
           bash -c "alembic upgrade head && alembic downgrade base && alembic upgrade head"
 
