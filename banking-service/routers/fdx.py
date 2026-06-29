@@ -42,8 +42,7 @@ def require_scope(required_scope: str):
         else:
             scope_list = []
             
-        # In test environments or when no scope is strictly passed in mock JWTs, permit access
-        if scope_list and required_scope not in scope_list and "all" not in scope_list:
+        if required_scope not in scope_list and "all" not in scope_list:
             raise HTTPException(status_code=403, detail="Insufficient scope for this operation")
         return token
     return dependency

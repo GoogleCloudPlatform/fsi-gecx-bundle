@@ -27,7 +27,6 @@ class Account(Base):
     __tablename__ = "accounts"
     __table_args__ = (
         Index("idx_accounts_user_id", "user_id"),
-        Index("idx_accounts_number", "account_number"),
         {'schema': 'ledger'},
     )
 
@@ -52,7 +51,6 @@ class Application(Base):
     __tablename__ = "applications"
     __table_args__ = (
         Index("idx_applications_user_id", "user_id"),
-        Index("idx_applications_app_id", "application_id"),
         {'schema': 'origination'},
     )
 
@@ -199,9 +197,7 @@ class Transaction(Base):
     """Parent financial transaction header supporting idempotency tracking."""
     __tablename__ = "transactions"
     __table_args__ = (
-        Index("idx_transactions_idempotency_key", "idempotency_key"),
         Index("idx_transactions_user_id", "user_id"),
-        Index("idx_transactions_user_idemp", "user_id", "idempotency_key", unique=True),
         {'schema': 'ledger'},
     )
 

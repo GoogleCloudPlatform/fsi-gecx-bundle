@@ -186,8 +186,17 @@ def run_migrations_online() -> None:
                     except Exception as role_err:
                         logger.debug(f"Notice: Could not bootstrap role {role}: {role_err}")
 
-                for s in schemas:
-                    for role in roles:
+                for role in roles:
+                    if role.startswith("kyc-service-sa"):
+                        allowed_schemas = ["kyc", "identity"]
+                    elif role.startswith("ledger-service-sa"):
+                        allowed_schemas = ["ledger", "audit"]
+                    elif role.startswith("banking-service-sa"):
+                        allowed_schemas = ["identity", "cards", "operations", "origination", "audit", "admin"]
+                    else:
+                        allowed_schemas = schemas
+
+                    for s in allowed_schemas:
                         try:
                             with connection.begin_nested():
                                 connection.execute(sa.text(f'GRANT USAGE ON SCHEMA {s} TO "{role}";'))
@@ -195,6 +204,19 @@ def run_migrations_online() -> None:
                                 connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{role}";'))
                         except Exception as grant_err:
                             logger.debug(f"Notice: Could not grant permissions on {s} to {role}: {grant_err}")
+
+                    if "ledger" in allowed_schemas:
+                        try:
+                            with connection.begin_nested():
+                                connection.execute(sa.text(f'REVOKE UPDATE, DELETE ON TABLE ledger.account_ledger FROM "{role}";'))
+                        except Exception as rev_err:
+                            logger.debug(f"Notice: Could not revoke immutable ledger permissions from {role}: {rev_err}")
+
+                try:
+                    with connection.begin_nested():
+                        connection.execute(sa.text('REVOKE UPDATE, DELETE ON TABLE ledger.account_ledger FROM PUBLIC;'))
+                except Exception as rev_err:
+                    logger.debug(f"Notice: Could not revoke immutable ledger permissions from PUBLIC: {rev_err}")
 
 
 if context.is_offline_mode():

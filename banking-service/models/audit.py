@@ -26,8 +26,7 @@ class AuditOutbox(Base):
     """
     __tablename__ = "audit_outbox"
     __table_args__ = (
-        Index("idx_audit_outbox_status", "status"),
-        Index("idx_audit_outbox_event_id", "event_id"),
+        Index("idx_audit_outbox_pending", "status", postgresql_where=(Column("status") == "PENDING")),
         {'schema': 'audit'},
     )
 

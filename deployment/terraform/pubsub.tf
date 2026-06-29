@@ -25,6 +25,12 @@ resource "google_kms_crypto_key_iam_member" "pubsub_kms_binding" {
   member        = "serviceAccount:${google_project_service_identity.pubsub_sa.email}"
 }
 
+resource "google_kms_crypto_key_iam_member" "pubsub_audit_kms_binding" {
+  crypto_key_id = google_kms_crypto_key.audit_cmek_key.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:${google_project_service_identity.pubsub_sa.email}"
+}
+
 # 2. Manual Underwriting Exception Queue: Pub/Sub DLQ Topic & Subscription
 resource "google_pubsub_topic" "manual_underwriting_review_dlq" {
   name         = "manual-underwriting-review-dlq"
@@ -89,8 +95,8 @@ resource "google_pubsub_topic_iam_member" "banking_service_sa_publisher" {
 resource "google_pubsub_topic" "audit_events" {
   name         = "audit-events"
   project      = var.project_id
-  kms_key_name = google_kms_crypto_key.docai_cmek_key.id
-  depends_on   = [google_kms_crypto_key_iam_member.pubsub_kms_binding]
+  kms_key_name = google_kms_crypto_key.audit_cmek_key.id
+  depends_on   = [google_kms_crypto_key_iam_member.pubsub_audit_kms_binding]
 }
 
 resource "google_pubsub_subscription" "audit_events_bq_sub" {

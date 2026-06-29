@@ -71,9 +71,10 @@ def publish_pending_audit_events(db: Session, batch_size: int = 50) -> int:
         topic_path = publisher.topic_path(project_id, topic_name)
 
     published_count = 0
+    futures = []
     for record in pending_records:
-        try:
-            if topic_path:
+        if topic_path:
+            try:
                 raw_p = json.loads(record.payload) if isinstance(record.payload, str) else record.payload
                 message_dict = {
                     "event_id": str(record.event_id),
@@ -92,18 +93,30 @@ def publish_pending_audit_events(db: Session, batch_size: int = 50) -> int:
                     event_id=record.event_id,
                     event_type=record.event_type,
                 )
-                future.result(timeout=5.0)
-            else:
-                logger.debug(f"Simulating publish for audit event {record.event_id} (Pub/Sub topic unconfigured).")
+                futures.append((record, future))
+            except Exception as e:
+                record.retry_count += 1
+                logger.error(f"Failed to initiate publish for audit event {record.event_id} (attempt {record.retry_count}): {e}")
+                if record.retry_count >= MAX_RETRIES:
+                    record.status = "DLQ"
+                    logger.critical(f"Audit event {record.event_id} exceeded max retries ({MAX_RETRIES}) and moved to DLQ state.")
+        else:
+            logger.debug(f"Simulating publish for audit event {record.event_id} (Pub/Sub topic unconfigured).")
+            record.status = "PUBLISHED"
+            record.published_at = datetime.datetime.now(datetime.timezone.utc)
+            published_count += 1
 
+    for record, future in futures:
+        try:
+            future.result(timeout=5.0)
             record.status = "PUBLISHED"
             record.published_at = datetime.datetime.now(datetime.timezone.utc)
             published_count += 1
         except Exception as e:
             record.retry_count += 1
-            logger.error(f"Failed to publish audit event {record.event_id} (attempt {record.retry_count}): {e}")
+            logger.error(f"Failed to complete publish for audit event {record.event_id} (attempt {record.retry_count}): {e}")
             if record.retry_count >= MAX_RETRIES:
-                record.status = "DLQ"  # Routed to DLQ for dead-letter alerting & manual intervention
+                record.status = "DLQ"
                 logger.critical(f"Audit event {record.event_id} exceeded max retries ({MAX_RETRIES}) and moved to DLQ state.")
 
     db.commit()

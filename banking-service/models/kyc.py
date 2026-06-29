@@ -14,7 +14,7 @@
 
 import uuid
 import datetime
-from sqlalchemy import Column, DateTime, LargeBinary, Index
+from sqlalchemy import Column, DateTime, LargeBinary, Index, ForeignKey
 from utils.database import UniversalUUID as UUID, generate_uuid
 from utils.database import Base
 
@@ -31,7 +31,7 @@ class KYCRecord(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    user_id = Column(UUID(as_uuid=True), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="RESTRICT"), nullable=False)
     encrypted_pii = Column(LargeBinary, nullable=False)
     wrapped_dek = Column(LargeBinary, nullable=False)
     encryption_iv = Column(LargeBinary, nullable=False)
