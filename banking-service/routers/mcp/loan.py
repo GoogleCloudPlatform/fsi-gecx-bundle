@@ -47,6 +47,41 @@ async def get_loan_application_documents(application_id: str, ctx: Context) -> s
         # Resolve customer identity dynamically from OIDC headers
         customer_id = _extract_customer_identity(ctx)
         
+        try:
+            from utils.database import SessionLocal
+            from models.origination import ApplicationArtifact, Application
+            from models.identity import User
+            from .utils import verified_customer_id_var
+            db = SessionLocal()
+            auth_uid = verified_customer_id_var.get() or customer_id
+            pg_results = db.query(ApplicationArtifact).join(Application).join(User, ApplicationArtifact.customer_id == User.id).filter(
+                Application.application_id == application_id,
+                (User.auth_provider_uid == auth_uid) | (User.email == auth_uid) | (User.auth_provider_uid == customer_id)
+            ).all()
+            if pg_results:
+                summary_lines = [f"=== Verified Loan Documents Audit for Application ID: {application_id} ==="]
+                for idx, art in enumerate(pg_results, 1):
+                    claimed = art.claimed_artifact_type or "UNKNOWN"
+                    actual = art.actual_artifact_type or "PENDING_OCR"
+                    status = art.status
+                    summary_lines.append(f"\n[Document #{idx}]: Claimed: {claimed} | Visual Classification: {actual} | Ingestion Status: {status}")
+                    payload = json.loads(art.extraction_payload) if art.extraction_payload else {}
+                    w2_data = payload.get("W2") or payload.get("w2")
+                    if w2_data:
+                        wages = w2_data.get("WagesTipsOtherCompensation", {}).get("value", "N/A")
+                        raw_ssn = w2_data.get("SSN", {}).get("value", "")
+                        raw_ein = w2_data.get("EIN", {}).get("value", "")
+                        summary_lines.append(f"  - Verified Gross Wages: ${wages}")
+                        summary_lines.append(f"  - Employee SSN: {_mask_ssn(raw_ssn)}")
+                        summary_lines.append(f"  - Employer EIN: {_mask_ein(raw_ein)}")
+                    else:
+                        summary_lines.append("  - OCR Extraction: Pending or Non-W2 format.")
+                db.close()
+                return "\n".join(summary_lines)
+            db.close()
+        except Exception as pg_ex:
+            logger.warning(f"PostgreSQL document lookup failed in FastMCP, falling back to BigQuery: {pg_ex}")
+
         project_id = get_project_id()
         dataset_id = os.getenv("DATASET_ID", "banking")
         table_ref = f"{project_id}.{dataset_id}.application_artifact"
@@ -226,6 +261,25 @@ async def generate_upload_session_url(
                 ]
             )
             bq_client.query(insert_query, job_config=insert_config).result()
+
+        try:
+            from utils.database import SessionLocal
+            from repositories.origination import log_artifact
+            from .utils import verified_customer_id_var
+            db = SessionLocal()
+            auth_uid = verified_customer_id_var.get() or customer_id
+            log_artifact(
+                db,
+                application_id=application_id,
+                artifact_type=type_upper,
+                gcs_uri=gcs_uri,
+                auth_provider_uid=auth_uid,
+                artifact_id=gcs_blob_name
+            )
+            db.close()
+            logger.info(f"PostgreSQL placeholder artifact logged for {gcs_blob_name}")
+        except Exception as pg_ex:
+            logger.warning(f"Failed to log placeholder artifact to PostgreSQL in FastMCP: {pg_ex}")
         
         # Retrieve GCP Credentials using default credential chains
         import google.auth

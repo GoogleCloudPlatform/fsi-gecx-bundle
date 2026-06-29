@@ -14,7 +14,7 @@
 
 import uuid
 import datetime
-from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Integer, Index, Text
+from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Integer, Index, Text, Float
 from utils.database import UniversalUUID as UUID, generate_uuid
 from sqlalchemy.orm import relationship
 from utils.database import Base
@@ -123,6 +123,11 @@ class ApplicationArtifact(Base):
     application_id = Column(UUID(as_uuid=True), ForeignKey("origination.applications.id", ondelete="CASCADE"), nullable=False)
     customer_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="RESTRICT"), nullable=False)
     claimed_artifact_type = Column(String(100), nullable=True)
+    actual_artifact_type = Column(String(100), nullable=True)
+    classification_confidence = Column(Float, nullable=True)
+    extraction_payload = Column(Text, nullable=True)
+    audit_metadata = Column(Text, nullable=True)
+    verification_tier = Column(String(50), nullable=True)
     gcs_uri = Column(String(500), nullable=False)
     status = Column(String(50), default="PENDING_CLASSIFICATION")
     version_id = Column(String(128), nullable=True)

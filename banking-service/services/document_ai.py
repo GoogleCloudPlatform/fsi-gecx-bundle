@@ -444,8 +444,22 @@ def process_document_pipeline(bucket_name: str, blob_name: str) -> dict:
 
         from utils.database import SessionLocal
         from utils.audit import record_audit_event
+        from models.origination import ApplicationArtifact as PGArtifact
         db = SessionLocal()
         try:
+            pg_art = db.query(PGArtifact).filter(
+                (PGArtifact.artifact_id == blob_name) | (PGArtifact.gcs_uri == gcs_uri) | (PGArtifact.artifact_id == artifact_id)
+            ).first()
+            if pg_art:
+                pg_art.status = final_status.value
+                pg_art.actual_artifact_type = classified_type.value
+                pg_art.classification_confidence = confidence_score
+                pg_art.extraction_payload = payload_json
+                pg_art.audit_metadata = audit_json
+                pg_art.verification_tier = verification_tier
+                pg_art.version_id = version_id
+                logger.info(f"PostgreSQL ApplicationArtifact successfully updated to {final_status.value}")
+
             record_audit_event(
                 db,
                 "DOCUMENT_EXTRACTION_COMPLETED",
@@ -459,7 +473,7 @@ def process_document_pipeline(bucket_name: str, blob_name: str) -> dict:
             )
             db.commit()
         except Exception as aud_ex:
-            logger.warning(f"Failed to record audit event for document AI extraction: {aud_ex}")
+            logger.warning(f"Failed to update PostgreSQL artifact or record audit event: {aud_ex}")
         finally:
             db.close()
     except Exception as bq_ex:
