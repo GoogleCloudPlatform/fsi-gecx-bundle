@@ -1,28 +1,28 @@
 # 🏛️ BigQuery OLAP Audit & Compliance Architecture Blueprint
 
-This document specifies the Enterprise OLAP Data Warehousing and Compliance Auditing architecture for the Nova Horizon Banking Platform. It defines our domain-segmented BigQuery auditing strategy, mandatory partitioning guardrails, and FSI regulatory compliance rules.
+This document specifies the Enterprise OLAP Data Warehousing and Compliance Auditing architecture for the Nova Horizon Banking Platform. It defines our domain-segmented BigQuery auditing strategy, mandatory partitioning guardrails, native JSON search indexing, and FSI regulatory compliance rules.
 
 ---
 
 ## 🌐 1. Executive Summary & OLAP Topology
 
-To achieve FSI regulatory compliance across equal credit opportunity, anti-money laundering, and data privacy laws, our platform separates live transactional OLTP processing (Cloud SQL PostgreSQL) from immutable analytical warehousing (Google Cloud BigQuery).
+To achieve FSI regulatory compliance across Equal Credit Opportunity (ECOA), Anti-Money Laundering (AML), and Data Privacy (GDPR/CCPA) laws, our platform separates live transactional OLTP processing (Cloud SQL PostgreSQL) from immutable analytical warehousing (Google Cloud BigQuery).
 
 Rather than dumping disparate system events into a single monolithic audit table, we establish a dedicated **`compliance_audit`** dataset in BigQuery segmented by Bounded Context workflows:
 
 ```mermaid
 graph TD
-    subgraph OLTP - Cloud SQL PostgreSQL
-        Outbox[audit.audit_outbox]
+    subgraph OLTP ["OLTP - Cloud SQL PostgreSQL"]
+        Outbox["audit.audit_outbox"]
     end
 
-    subgraph OLAP - BigQuery compliance_audit Dataset
-        ORIG[origination_audit_log<br/>Partitioned: DAY | Clustered: application_id, event_type<br/>Retention: 10 Years ECOA]
-        FIN[financial_ledger_audit_log<br/>Partitioned: MONTH | Clustered: account_id, event_type<br/>Retention: 7 Years SOX/AML Immutable]
-        ID[identity_access_audit_log<br/>Partitioned: DAY | Clustered: user_id, event_type<br/>Retention: 3 Years GDPR/CCPA]
+    subgraph OLAP ["OLAP - BigQuery compliance_audit Dataset"]
+        ORIG["origination_audit_log (Partitioned: DAY | Clustered: application_id, event_type | Retain: 10 Years ECOA)"]
+        FIN["financial_ledger_audit_log (Partitioned: MONTH | Clustered: account_id, event_type | Retain: 7 Years SOX/AML Immutable)"]
+        ID["identity_access_audit_log (Partitioned: DAY | Clustered: user_id, event_type | Retain: 3 Years GDPR/CCPA)"]
     end
 
-    Outbox -->|PubSub / Storage Write API| ORIG & FIN & ID
+    Outbox -->|"PubSub / Storage Write API"| ORIG & FIN & ID
 ```
 
 ---
@@ -46,13 +46,13 @@ graph TD
 
 ---
 
-## ⚙️ 3. Staff DBA Best Practices & Guardrails
+## ⚙️ 3. DBA Best Practices & Guardrails
 
 ### A. Mandatory Time Partitioning & `require_partition_filter`
-Every analytical table enforce strict time partitioning. To prevent automated BI tools or ad-hoc queries from executing accidental multi-year full-table scans that consume massive GCP query budgets, all audit tables configure `require_partition_filter = true`.
+Every analytical table enforces strict time partitioning. To prevent automated BI tools or ad-hoc queries from executing accidental multi-year full-table scans that consume massive GCP query budgets, all audit tables configure `require_partition_filter = true`.
 
-### B. High-Throughput Ingestion via BigQuery Storage Write API
-To eliminate DML quota bottlenecks and query planning overhead, outbox event streaming utilizes the **BigQuery Storage Write API (gRPC)** or direct Pub/Sub subscriptions for sub-second, exact-once ingestion.
+### B. High-Throughput Ingestion via Direct Pub/Sub Event Streaming
+To eliminate DML quota bottlenecks and query planning overhead, outbox event streaming in our application (`utils/audit.py`) publishes pending transaction outbox records directly to Google Cloud Pub/Sub (`PUBSUB_TOPIC_AUDIT`). Pub/Sub Direct BigQuery Subscriptions then stream the events into our domain-segmented compliance tables for sub-second, exact-once ingestion.
 
 ### C. Native `JSON` Search Indexes
 Unstructured OCR payloads (`extraction_payload`) and audit traces (`audit_metadata`) utilize native BigQuery `JSON` column typing paired with search indexes (`CREATE SEARCH INDEX`). This allows instant text search across nested W-2 and paystub fields during fraud investigations.

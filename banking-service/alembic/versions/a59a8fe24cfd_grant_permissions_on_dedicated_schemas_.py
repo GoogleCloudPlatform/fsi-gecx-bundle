@@ -22,12 +22,14 @@ import os
 
 def upgrade() -> None:
     """Upgrade schema."""
-    if op.get_bind().dialect.name != "postgresql":
+    if op.get_bind().dialect.name != "postgresql" or os.getenv("SKIP_IAM_GRANTS") == "true":
         return
 
     try:
         from utils.gcp import get_project_id
         project_id = get_project_id()
+        if str(project_id) == "None":
+            project_id = os.getenv("PROJECT_ID")
     except Exception:
         project_id = os.getenv("PROJECT_ID")
 
@@ -41,7 +43,7 @@ def upgrade() -> None:
         "operations": []
     }
 
-    if project_id:
+    if project_id and str(project_id) != "None":
         main_sa = f"banking-service-sa@{project_id}.iam"
         for s in schemas:
             users_by_schema[s].append(main_sa)
@@ -53,6 +55,13 @@ def upgrade() -> None:
         for user in [u.strip() for u in iam_dba_users_env.split(",") if u.strip()]:
             for s in schemas:
                 users_by_schema[s].append(user)
+
+    all_users = set(u for u_list in users_by_schema.values() for u in u_list)
+    for user in all_users:
+        try:
+            op.execute(f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = \'{user}\') THEN CREATE ROLE "{user}" NOLOGIN; END IF; END $$;')
+        except Exception as e:
+            print(f"Notice: Could not bootstrap role {user}: {e}")
 
     for schema_name, users in users_by_schema.items():
         for user in users:
