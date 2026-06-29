@@ -25,7 +25,7 @@ def mock_gcp_clients(monkeypatch):
     monkeypatch.setenv("DOCAI_SPLITTER_PROCESSOR_ID", "projects/test-project/locations/us/processors/mock-splitter")
 
     with patch("services.document_ai.storage_client") as mock_storage, \
-         patch("services.document_ai.bq_client") as mock_bq, \
+         patch("utils.database.SessionLocal") as mock_session_local, \
          patch("services.document_ai._get_docai_client") as mock_get_docai:
          
         # Mock GCS Blob metadata to pass cost-abuse pre-validation gates
@@ -34,7 +34,7 @@ def mock_gcp_clients(monkeypatch):
         mock_blob.content_type = "application/pdf"
         mock_storage.bucket().get_blob.return_value = mock_blob
 
-        # Mock BigQuery select metadata row response
+        # Mock PostgreSQL ORM record response
         mock_record = MagicMock()
         mock_record.artifact_id = "mock-artifact-test"
         mock_record.customer_id = "customer-123"
@@ -42,13 +42,14 @@ def mock_gcp_clients(monkeypatch):
         mock_record.application_id = "app-456"
         mock_record.status = "PENDING_CLASSIFICATION"
         
-        mock_query_job = MagicMock()
-        mock_query_job.result.return_value = [mock_record]
-        mock_bq.query.return_value = mock_query_job
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_record
+        mock_session_local.return_value = mock_db
 
         yield {
             "storage": mock_storage,
-            "bq": mock_bq,
+            "db": mock_db,
+            "record": mock_record,
             "get_docai": mock_get_docai
         }
 
@@ -136,14 +137,14 @@ def test_pipeline_master_splitter_routing(mock_pubsub_publisher, mock_gcp_client
     Verify that if no direct bypass claimed type matches, the master splitter is invoked,
     and segmented page indices are correctly routed to their respective specialized extractors.
     """
-    # Re-mock BQ record to have empty claimed_type (triggering splitter route!)
+    # Re-mock PostgreSQL ORM record to have empty claimed_type (triggering splitter route!)
     mock_record = MagicMock()
     mock_record.artifact_id = "mock-artifact-test"
     mock_record.customer_id = "customer-123"
     mock_record.claimed_artifact_type = None  # Null claimed type!
     mock_record.application_id = "app-456"
     mock_record.status = "PENDING_CLASSIFICATION"
-    mock_gcp_clients["bq"].query().result.return_value = [mock_record]
+    mock_gcp_clients["db"].query().filter().first.return_value = mock_record
     
     mock_docai_client = MagicMock()
     mock_gcp_clients["get_docai"].return_value = mock_docai_client

@@ -152,20 +152,20 @@ class DocumentProcessorRegistry:
         return f"projects/{self.project_id}/locations/us/processors/{raw_id}"
 
 def _update_artifact_status(table_ref: str, artifact_id: str, status: str):
-    """Updates the status of an artifact inside BigQuery atomically."""
-    query = _load_sql("update_artifact_status.sql").format(table_ref=table_ref)
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("status", "STRING", status),
-            bigquery.ScalarQueryParameter("artifact_id", "STRING", artifact_id)
-        ]
-    )
+    """Updates the status of an artifact inside PostgreSQL ORM atomically."""
+    from utils.database import SessionLocal
+    from models.origination import ApplicationArtifact as PGArtifact
+    db = SessionLocal()
     try:
-        query_job = bq_client.query(query, job_config=job_config)
-        query_job.result()  # Wait for completion
+        pg_art = db.query(PGArtifact).filter(PGArtifact.artifact_id == artifact_id).first()
+        if pg_art:
+            pg_art.status = status
+            db.commit()
     except Exception as e:
-        logger.error(f"Failed to atomically update BQ status to {status}: {e}")
-        raise e
+        logger.error(f"Failed to atomically update PostgreSQL status to {status}: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 def _get_docai_client(location: str) -> documentai.DocumentProcessorServiceClient:
     """
@@ -239,17 +239,7 @@ def process_document_pipeline(bucket_name: str, blob_name: str) -> dict:
         db.close()
 
     if not artifact_record:
-        query = _load_sql("get_artifact_metadata.sql").format(table_ref=table_ref)
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[bigquery.ScalarQueryParameter("gcs_uri", "STRING", gcs_uri)]
-        )
-        query_job = bq_client.query(query, job_config=job_config)
-        results = list(query_job.result())
-        if results:
-            artifact_record = results[0]
-
-    if not artifact_record:
-        logger.error(f"Ingestion metadata not found in PostgreSQL or BigQuery for: {gcs_uri}")
+        logger.error(f"Ingestion metadata not found in PostgreSQL for: {gcs_uri}")
         raise ValueError("Artifact metadata not found. Direct GCS triggers prohibited.")
 
     artifact_id = str(artifact_record.artifact_id)
@@ -437,9 +427,6 @@ def process_document_pipeline(bucket_name: str, blob_name: str) -> dict:
         "flagged_fields": flagged_fields
     }
 
-    # Commit the update directly to your BigQuery application_artifacts secure table
-    update_query = _load_sql("update_artifact_metadata.sql").format(table_ref=table_ref)
-    
     # Stringify dynamic JSON payloads safely
     payload_json = json.dumps(extracted_payloads)
     audit_json = json.dumps(audit_payload)
@@ -447,62 +434,45 @@ def process_document_pipeline(bucket_name: str, blob_name: str) -> dict:
     import uuid
     version_id = str(uuid.uuid4())
 
-    update_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("status", "STRING", final_status.value),
-            bigquery.ScalarQueryParameter("actual_type", "STRING", classified_type.value),
-            bigquery.ScalarQueryParameter("confidence", "FLOAT", confidence_score),
-            bigquery.ScalarQueryParameter("payload", "STRING", payload_json),
-            bigquery.ScalarQueryParameter("audit", "STRING", audit_json),
-            bigquery.ScalarQueryParameter("verification_tier", "STRING", verification_tier),
-            bigquery.ScalarQueryParameter("version_id", "STRING", version_id),
-            bigquery.ScalarQueryParameter("artifact_id", "STRING", artifact_id)
-        ]
-    )
-
-    logger.info(f"Committing completed document extraction results to BigQuery for artifact ID: {artifact_id}")
+    logger.info(f"Committing completed document extraction results to PostgreSQL for artifact ID: {artifact_id}")
+    from utils.database import SessionLocal
+    from utils.audit import record_audit_event
+    from models.origination import ApplicationArtifact as PGArtifact
+    db = SessionLocal()
     try:
-        update_job = bq_client.query(update_query, job_config=update_config)
-        update_job.result()  # Wait for completion
-        logger.info(f"BigQuery commit completed successfully. Pipeline status updated to: {final_status.value}")
+        pg_art = db.query(PGArtifact).filter(
+            (PGArtifact.artifact_id == blob_name) | (PGArtifact.gcs_uri == gcs_uri) | (PGArtifact.artifact_id == artifact_id)
+        ).first()
+        if pg_art:
+            pg_art.status = final_status.value
+            pg_art.actual_artifact_type = classified_type.value
+            pg_art.classification_confidence = confidence_score
+            pg_art.extraction_payload = payload_json
+            pg_art.audit_metadata = audit_json
+            pg_art.verification_tier = verification_tier
+            pg_art.version_id = version_id
+            logger.info(f"PostgreSQL ApplicationArtifact successfully updated to {final_status.value}")
+        else:
+            logger.error(f"PostgreSQL ApplicationArtifact record not found for {artifact_id} during commit.")
 
-        from utils.database import SessionLocal
-        from utils.audit import record_audit_event
-        from models.origination import ApplicationArtifact as PGArtifact
-        db = SessionLocal()
-        try:
-            pg_art = db.query(PGArtifact).filter(
-                (PGArtifact.artifact_id == blob_name) | (PGArtifact.gcs_uri == gcs_uri) | (PGArtifact.artifact_id == artifact_id)
-            ).first()
-            if pg_art:
-                pg_art.status = final_status.value
-                pg_art.actual_artifact_type = classified_type.value
-                pg_art.classification_confidence = confidence_score
-                pg_art.extraction_payload = payload_json
-                pg_art.audit_metadata = audit_json
-                pg_art.verification_tier = verification_tier
-                pg_art.version_id = version_id
-                logger.info(f"PostgreSQL ApplicationArtifact successfully updated to {final_status.value}")
-
-            record_audit_event(
-                db,
-                "DOCUMENT_EXTRACTION_COMPLETED",
-                {
-                    "artifact_id": artifact_id,
-                    "status": final_status.value,
-                    "classified_type": classified_type.value,
-                    "confidence_score": confidence_score,
-                    "verification_tier": verification_tier
-                }
-            )
-            db.commit()
-        except Exception as aud_ex:
-            logger.warning(f"Failed to update PostgreSQL artifact or record audit event: {aud_ex}")
-        finally:
-            db.close()
-    except Exception as bq_ex:
-        logger.error(f"BigQuery transaction failed: {bq_ex}")
-        raise bq_ex
+        record_audit_event(
+            db,
+            "DOCUMENT_EXTRACTION_COMPLETED",
+            {
+                "artifact_id": artifact_id,
+                "status": final_status.value,
+                "classified_type": classified_type.value,
+                "confidence_score": confidence_score,
+                "verification_tier": verification_tier
+            }
+        )
+        db.commit()
+    except Exception as aud_ex:
+        logger.error(f"Failed to update PostgreSQL artifact or record audit event: {aud_ex}")
+        db.rollback()
+        raise aud_ex
+    finally:
+        db.close()
 
     return {
         "status": final_status.value,

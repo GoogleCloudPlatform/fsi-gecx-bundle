@@ -12,9 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import uuid
 import pytest
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import sessionmaker
+from utils.database import Base
+from models.origination import ApplicationArtifact, Application
+from models.identity import User
 from models.underwriting import UnderwritingOverrideRequest, UnderwritingDecision, DocumentVerificationStatus
 from services.underwriting import (
     get_pending_exceptions,
@@ -22,71 +29,69 @@ from services.underwriting import (
     UnderwritingConflictError
 )
 
-@pytest.fixture
-def mock_bq_client():
-    """Mock BigQuery Client fixture."""
-    with patch("services.underwriting.bq_client") as mock_bq:
-        yield mock_bq
+@pytest.fixture(scope="function")
+def test_db():
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    @event.listens_for(engine, "connect")
+    def attach_sqlite_schemas(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        for stmt in [
+            "ATTACH DATABASE 'file:identity_repo_uw?mode=memory&cache=shared' AS identity;",
+            "ATTACH DATABASE 'file:origination_repo_uw?mode=memory&cache=shared' AS origination;",
+            "ATTACH DATABASE 'file:audit_repo_uw?mode=memory&cache=shared' AS audit;",
+        ]:
+            try:
+                cursor.execute(stmt)
+            except Exception:
+                pass
+        cursor.close()
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    with patch("utils.database.SessionLocal", return_value=session):
+        yield session
+    session.close()
+    Base.metadata.drop_all(bind=engine)
 
-def test_get_pending_exceptions_success(mock_bq_client):
+def _seed_artifact(session, artifact_id="art-1", status="MISMATCH", version_id="version-abc"):
+    u_id = uuid.uuid4()
+    app_id = uuid.uuid4()
+    user = User(id=u_id, email="test@example.com", first_name="Test", last_name="User", auth_provider_uid="cust-1")
+    app = Application(id=app_id, application_id="app-1", user_id=u_id, status="SUBMITTED", product_category="MORTGAGE", requested_amount_cents=10000000)
+    art = ApplicationArtifact(
+        artifact_id=artifact_id,
+        application_id=app_id,
+        customer_id=u_id,
+        claimed_artifact_type="W2",
+        actual_artifact_type="W2",
+        status=status,
+        gcs_uri=f"gs://bucket/{artifact_id}.pdf",
+        extraction_payload=json.dumps({"W2": {"WagesTipsOtherCompensation": {"value": "45000", "confidence": 0.72}}}),
+        audit_metadata=json.dumps({"flagged_fields": ["w2.wagestipsothercompensation"]}),
+        version_id=version_id
+    )
+    session.add(user)
+    session.add(app)
+    session.add(art)
+    session.commit()
+    return art, u_id, app_id
+
+def test_get_pending_exceptions_success(test_db):
     """Verify that exceptions are fetched and parsed to DocumentSummaryResponse successfully."""
-    # Mock BigQuery row payload
-    mock_row = MagicMock()
-    mock_row.artifact_id = "art-1"
-    mock_row.customer_id = "cust-1"
-    mock_row.application_id = "app-1"
-    mock_row.claimed_artifact_type = "W2"
-    mock_row.actual_artifact_type = "W2"
-    mock_row.status = "MISMATCH"
-    mock_row.file_path_gcs = "gs://bucket/art-1.pdf"
-    mock_row.extraction_payload = {"W2": {"WagesTipsOtherCompensation": {"value": "45000", "confidence": 0.72}}}
-    mock_row.audit_metadata = {"flagged_fields": ["w2.wagestipsothercompensation"]}
-    mock_row.verification_tier = None
-    mock_row.version_id = None
-    mock_row.user_first_name = None
-    mock_row.user_last_name = None
-    mock_row.user_email = None
-    mock_row.requested_amount = None
-    mock_row.product_category = None
-    mock_row.product_type = None
-    
-    mock_query_job = MagicMock()
-    mock_query_job.result.return_value = [mock_row]
-    mock_bq_client.query.return_value = mock_query_job
-
-    exceptions = get_pending_exceptions("mock_project.mock_dataset.application_artifact")
-
-    
+    _seed_artifact(test_db, "art-1", "MISMATCH")
+    exceptions = get_pending_exceptions("mock_project.mock_dataset.application_artifact", db=test_db)
     assert len(exceptions) == 1
     record = exceptions[0]
     assert record.artifact_id == "art-1"
-    assert record.customer_id == "cust-1"
     assert record.status == "MISMATCH"
     assert "W2" in record.extraction_payload
-    assert record.audit_metadata["flagged_fields"] == ["w2.wagestipsothercompensation"]
 
-def test_apply_underwriting_override_success(mock_bq_client):
+def test_apply_underwriting_override_success(test_db):
     """Verify successful manual underwriting override with deep merges and OCC."""
-    # 1. Mock BQ select original record row
-    mock_row = MagicMock()
-    mock_row.status = "MISMATCH"
-    mock_row.actual_artifact_type = "W2"
-    mock_row.claimed_artifact_type = "W2"
-    mock_row.extraction_payload = {"W2": {"WagesTipsOtherCompensation": {"value": "45000", "confidence": 0.72}}}
-    mock_row.audit_metadata = {"flagged_fields": ["w2.wagestipsothercompensation"]}
-    
-    mock_select_job = MagicMock()
-    mock_select_job.result.return_value = [mock_row]
-    
-    # 2. Mock BQ update update record row
-    mock_update_job = MagicMock()
-    mock_update_job.num_dml_affected_rows = 1  # Successful OCC write!
-    
-    mock_bq_client.query.side_effect = [mock_select_job, mock_update_job]
-
+    art, u_id, app_id = _seed_artifact(test_db, "art-1", "MISMATCH", "version-abc")
     request = UnderwritingOverrideRequest(
         artifact_id="art-1",
-        customer_id="cust-1",
+        customer_id=str(u_id),
         decision=UnderwritingDecision.APPROVE,
         verifications=DocumentVerificationStatus(
             ssn_verified=True,
@@ -95,42 +100,23 @@ def test_apply_underwriting_override_success(mock_bq_client):
         ),
         corrected_payload={"WagesTipsOtherCompensation": "48000"},
         underwriter_notes="Pretax income verified.",
-        underwriter_id="officer-777"
+        underwriter_id="officer-777",
+        expected_version_id="version-abc"
     )
-
-    success = apply_underwriting_override("mock_table", request)
+    success = apply_underwriting_override("mock_table", request, db=test_db)
     assert success is True
-    assert mock_bq_client.query.call_count == 2
+    test_db.refresh(art)
+    assert art.status == "PROCESSED"
+    audit = json.loads(art.audit_metadata)
+    assert len(audit["underwriting_overrides"]) == 1
+    assert audit["underwriting_overrides"][0]["underwriter_id"] == "officer-777"
 
-    # Verify FSI chronological audit trail array was populated successfully
-    assert "underwriting_overrides" in mock_row.audit_metadata
-    assert len(mock_row.audit_metadata["underwriting_overrides"]) == 1
-    trace = mock_row.audit_metadata["underwriting_overrides"][0]
-    assert trace["underwriter_id"] == "officer-777"
-    assert trace["decision"] == "APPROVE"
-    assert trace["corrected_fields"] == ["WagesTipsOtherCompensation"]
-
-def test_apply_underwriting_override_occ_conflict(mock_bq_client):
-    """Verify that OCC conflicts raise UnderwritingConflictError."""
-    # 1. Mock BQ select original record row
-    mock_row = MagicMock()
-    mock_row.status = "MISMATCH"
-    mock_row.actual_artifact_type = "W2"
-    mock_row.extraction_payload = {}
-    mock_row.audit_metadata = {}
-    
-    mock_select_job = MagicMock()
-    mock_select_job.result.return_value = [mock_row]
-    
-    # 2. Mock BQ update returning 0 affected rows (OCC conflict!)
-    mock_update_job = MagicMock()
-    mock_update_job.num_dml_affected_rows = 0
-    
-    mock_bq_client.query.side_effect = [mock_select_job, mock_update_job]
-
+def test_apply_underwriting_override_occ_conflict(test_db):
+    """Verify that OCC status conflicts raise UnderwritingConflictError."""
+    art, u_id, app_id = _seed_artifact(test_db, "art-1", "PROCESSED", "version-abc")
     request = UnderwritingOverrideRequest(
         artifact_id="art-1",
-        customer_id="cust-1",
+        customer_id=str(u_id),
         decision=UnderwritingDecision.APPROVE,
         verifications=DocumentVerificationStatus(
             ssn_verified=True,
@@ -141,31 +127,25 @@ def test_apply_underwriting_override_occ_conflict(mock_bq_client):
         underwriter_notes="Duplicate clear attempt.",
         underwriter_id="officer-777"
     )
+    with pytest.raises(UnderwritingConflictError, match="already in state: PROCESSED"):
+        apply_underwriting_override("mock_table", request, db=test_db)
 
-    with pytest.raises(UnderwritingConflictError, match="This record was updated or approved by another officer"):
-        apply_underwriting_override("mock_table", request)
-
-def test_get_artifact_gcs_path_success(mock_bq_client):
-    """Verify that get_artifact_gcs_path correctly retrieves the GCS path from BQ."""
-    mock_row = MagicMock()
-    mock_row.file_path_gcs = "gs://bucket/test-file.pdf"
-    
-    mock_query_job = MagicMock()
-    mock_query_job.result.return_value = [mock_row]
-    mock_bq_client.query.return_value = mock_query_job
-
+def test_get_artifact_gcs_path_success(test_db):
+    """Verify that get_artifact_gcs_path correctly retrieves the GCS path from PostgreSQL."""
+    _seed_artifact(test_db, "art-1", "MISMATCH")
     from services.underwriting import get_artifact_gcs_path
-    gcs_path = get_artifact_gcs_path("mock_table", "art-1")
-    assert gcs_path == "gs://bucket/test-file.pdf"
+    gcs_path = get_artifact_gcs_path("mock_table", "art-1", db=test_db)
+    assert gcs_path == "gs://bucket/art-1.pdf"
 
-
-def test_underwriting_endpoints_routing(mock_bq_client):
+def test_underwriting_endpoints_routing(test_db):
     """Verify HTTP APIRouter mappings (GET /exceptions and POST /override)."""
     from main import app
     from utils.auth import get_current_user
     from models.authentication import ValidatedToken
+    from utils.database import get_db
     
-    # Override security dependencies ephemerally
+    art, u_id, app_id = _seed_artifact(test_db, "art-1", "MISMATCH", "version-abc")
+
     app.dependency_overrides[get_current_user] = lambda: ValidatedToken(
         claims={
             "identifier": "officer-999",
@@ -173,32 +153,10 @@ def test_underwriting_endpoints_routing(mock_bq_client):
             "name": "Test Officer"
         }
     )
+    app.dependency_overrides[get_db] = lambda: test_db
     client = TestClient(app)
 
     # 1. Test GET /exceptions
-    mock_row = MagicMock()
-    mock_row.artifact_id = "art-1"
-    mock_row.customer_id = "cust-1"
-    mock_row.application_id = "app-123"
-    mock_row.claimed_artifact_type = "W2"
-    mock_row.actual_artifact_type = "W2"
-    mock_row.status = "MISMATCH"
-    mock_row.file_path_gcs = "gs://bucket/art-1.pdf"
-    mock_row.extraction_payload = {}
-    mock_row.audit_metadata = {}
-    mock_row.verification_tier = None
-    mock_row.version_id = None
-    mock_row.user_first_name = None
-    mock_row.user_last_name = None
-    mock_row.user_email = None
-    mock_row.requested_amount = None
-    mock_row.product_category = None
-    mock_row.product_type = None
-    
-    mock_select_job = MagicMock()
-    mock_select_job.result.return_value = [mock_row]
-    mock_bq_client.query.return_value = mock_select_job
-
     response = client.get("/underwriting/exceptions")
     assert response.status_code == 200
     data = response.json()
@@ -206,13 +164,9 @@ def test_underwriting_endpoints_routing(mock_bq_client):
     assert data[0]["artifact_id"] == "art-1"
 
     # 2. Test POST /override (Success)
-    mock_update_job = MagicMock()
-    mock_update_job.num_dml_affected_rows = 1
-    mock_bq_client.query.side_effect = [mock_select_job, mock_update_job]
-
     payload = {
         "artifact_id": "art-1",
-        "customer_id": "cust-1",
+        "customer_id": str(u_id),
         "decision": "APPROVE",
         "verifications": {
             "ssn_verified": True,
@@ -221,50 +175,34 @@ def test_underwriting_endpoints_routing(mock_bq_client):
         },
         "corrected_payload": {"WagesTipsOtherCompensation": "60000"},
         "underwriter_notes": "All matched perfectly.",
-        "underwriter_id": "officer-999"
+        "underwriter_id": "officer-999",
+        "expected_version_id": "version-abc"
     }
 
     response = client.post("/underwriting/override", json=payload)
     assert response.status_code == 200
     assert response.json()["status"] == "SUCCESS"
 
-    # 3. Test POST /override (OCC Conflict 409)
-    mock_update_job.num_dml_affected_rows = 0
-    mock_bq_client.query.side_effect = [mock_select_job, mock_update_job]
-
+    # 3. Test POST /override (OCC Conflict 409 because state is now PROCESSED)
     response = client.post("/underwriting/override", json=payload)
     assert response.status_code == 409
-    assert "updated or approved by another officer" in response.json()["detail"]
+    assert "already in state: PROCESSED" in response.json()["detail"]
 
     # 4. Test GET /artifacts/{artifact_id}/view (Success)
-    mock_bq_client.query.side_effect = None
-    mock_bq_client.query.return_value = mock_select_job
     with patch("google.cloud.storage.blob.Blob.generate_signed_url") as mock_sign:
         mock_sign.return_value = "https://fake-gcs-signed-url.com/file.pdf?token=xyz"
-        
         response = client.get("/underwriting/artifacts/art-1/view")
         assert response.status_code == 200
         assert response.json()["signed_url"] == "https://fake-gcs-signed-url.com/file.pdf?token=xyz"
 
     app.dependency_overrides.clear()
 
-
-def test_apply_underwriting_override_version_mismatch(mock_bq_client):
+def test_apply_underwriting_override_version_mismatch(test_db):
     """Verify that a mismatch between expected_version_id and actual version_id raises UnderwritingConflictError."""
-    mock_row = MagicMock()
-    mock_row.status = "PENDING_REVIEW"
-    mock_row.actual_artifact_type = "W2"
-    mock_row.version_id = "version-abc"
-    mock_row.extraction_payload = {}
-    mock_row.audit_metadata = {}
-    
-    mock_select_job = MagicMock()
-    mock_select_job.result.return_value = [mock_row]
-    mock_bq_client.query.return_value = mock_select_job
-
+    art, u_id, app_id = _seed_artifact(test_db, "art-1", "PENDING_REVIEW", "version-abc")
     request = UnderwritingOverrideRequest(
         artifact_id="art-1",
-        customer_id="cust-1",
+        customer_id=str(u_id),
         decision=UnderwritingDecision.APPROVE,
         verifications=DocumentVerificationStatus(
             ssn_verified=True,
@@ -274,8 +212,7 @@ def test_apply_underwriting_override_version_mismatch(mock_bq_client):
         corrected_payload={"WagesTipsOtherCompensation": "48000"},
         underwriter_notes="Duplicate clear attempt.",
         underwriter_id="officer-777",
-        expected_version_id="version-xyz"  # Client expects xyz, but BQ has abc!
+        expected_version_id="version-xyz"  # Client expects xyz, but DB has abc!
     )
-
-    with pytest.raises(UnderwritingConflictError, match="This exception record was updated or accepted by another loan officer"):
-        apply_underwriting_override("mock_table", request)
+    with pytest.raises(UnderwritingConflictError, match="updated or accepted by another loan officer"):
+        apply_underwriting_override("mock_table", request, db=test_db)

@@ -104,22 +104,7 @@ async def process_document(
         db.close()
 
     if not record_found:
-        dataset_id = os.getenv("DATASET_ID", "banking")
-        sql_query = get_check_status_sql().format(dataset_id=dataset_id)
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter("filename", "STRING", f"%{filename}")
-            ]
-        )
-        try:
-            query_job = bq_client.query(sql_query, job_config=job_config)
-            results = list(query_job.result())
-            if results:
-                record_found = True
-                status_val = results[0].status
-        except Exception as e:
-            logger.error(f"BigQuery idempotency check failed: {e}")
-            raise HTTPException(status_code=500, detail="Database verification error.")
+        logger.info(f"Artifact {filename} not found in PostgreSQL database during idempotency check.")
 
     if not record_found:
         delivery_attempt_str = request.headers.get("x-goog-pubsub-message-delivery-attempt") or request.headers.get("ce-deliveryattempt")

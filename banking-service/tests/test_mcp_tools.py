@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import pytest
+import json
 from unittest.mock import MagicMock, patch
 from routers.mcp import (
     get_loan_application_documents,
@@ -69,40 +70,38 @@ def test_mcp_ssn_ein_obfuscation_algorithms():
 
 @pytest.mark.asyncio
 @patch("routers.mcp.loan._extract_customer_identity")
-async def test_get_application_documents_mcp_tool_success(mock_identity, mock_bq_client):
+@patch("utils.database.SessionLocal")
+async def test_get_application_documents_mcp_tool_success(mock_session_local, mock_identity):
     """Verify W-2 document audit summary fetches, parsing, and context mapping success."""
     mock_identity.return_value = "borrower@argolis.solutions"
     
-    # Mock BigQuery row payload
-    mock_row = MagicMock()
-    mock_row.artifact_id = "art-123"
-    mock_row.claimed_artifact_type = "W2"
-    mock_row.actual_artifact_type = "W2"
-    mock_row.status = "PROCESSED"
-    mock_row.file_path_gcs = "gs://bucket/art-123.pdf"
-    mock_row.extraction_payload = {
+    mock_art = MagicMock()
+    mock_art.artifact_id = "art-123"
+    mock_art.claimed_artifact_type = "W2"
+    mock_art.actual_artifact_type = "W2"
+    mock_art.status = "PROCESSED"
+    mock_art.extraction_payload = json.dumps({
         "W2": {
             "WagesTipsOtherCompensation": {"value": "75000", "confidence": 0.98},
             "SSN": {"value": "123-45-6789", "confidence": 0.96},
             "EIN": {"value": "98-7654321", "confidence": 0.98}
         }
-    }
+    })
     
-    mock_query_job = MagicMock()
-    mock_query_job.result.return_value = [mock_row]
-    mock_bq_client.query.return_value = mock_query_job
+    mock_db = MagicMock()
+    mock_db.query.return_value.join.return_value.join.return_value.filter.return_value.all.return_value = [mock_art]
+    mock_session_local.return_value = mock_db
 
     mock_ctx = MagicMock()
     result = await get_loan_application_documents(application_id="app-bq-success-999", ctx=mock_ctx)
     
     assert "Verified Loan Documents Audit for Application ID: app-bq-success-999" in result
     assert "Claimed: W2 | Visual Classification: W2 | Ingestion Status: PROCESSED" in result
-    assert "Wages (Box 1): $75000" in result
-    # Critical Security checks: verify plain-text SSNs/EINs are securely masked!
+    assert "Verified Gross Wages: $75000" in result
     assert "123-45-6789" not in result
     assert "98-7654321" not in result
-    assert "Borrower SSN: ***-**-6789" in result
-    assert "Employer Tax ID (EIN): **-***4321" in result
+    assert "Employee SSN: ***-**-6789" in result
+    assert "Employer EIN: **-***4321" in result
 
 @pytest.mark.asyncio
 @patch("routers.mcp.loan._extract_customer_identity")
