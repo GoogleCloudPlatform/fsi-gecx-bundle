@@ -20,6 +20,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema to enforce enterprise bounded contexts."""
+    if op.get_bind().dialect.name != "postgresql":
+        return
+
     # 1. Create origination schema and grant least-privilege permissions
     op.execute("CREATE SCHEMA IF NOT EXISTS origination")
     op.execute("GRANT USAGE ON SCHEMA origination TO \"banking-service-sa\", \"kyc-service-sa\", \"ledger-service-sa\"")
@@ -39,6 +42,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
+    if op.get_bind().dialect.name != "postgresql":
+        return
+
     op.execute("ALTER TABLE IF EXISTS cards.posted_transactions RENAME TO account_ledger")
     op.execute("ALTER TABLE IF EXISTS operations.retail_locations SET SCHEMA identity")
     for table in ["applications", "application_artifacts", "mortgage_applications", "credit_card_applications", "deposit_applications"]:
