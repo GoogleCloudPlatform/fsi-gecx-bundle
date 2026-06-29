@@ -78,7 +78,7 @@ sequenceDiagram
 When a state mutation occurs, the backend application writes the event into the PostgreSQL `audit.audit_outbox` table with `status = 'PENDING'` inside the exact same database transaction. This guarantees atomicity: if the transaction rolls back, the outbox record rolls back as well. No external network API calls are made during this synchronous phase.
 
 ### B. Phase 2: Outbox Draining Worker (`POST /internal/process-outbox`)
-An asynchronous poller or scheduled trigger periodically invokes the draining endpoint. The worker queries pending records, formats each payload dictionary into top-level keys matching the regulatory schema (`event_id`, `event_type`, `created_at`, `payload`, `application_id`, `underwriter_id`), and publishes them in batches to the Google Cloud Pub/Sub topic `audit-events`. Upon receiving Pub/Sub acknowledgment, records are updated to `status = 'PUBLISHED'`. Failed deliveries automatically retry and eventually transition to `DLQ` state after exceeding maximum retry attempts.
+An asynchronous poller or scheduled trigger periodically invokes the draining endpoint. The worker queries pending records, formats each payload dictionary into top-level keys matching the regulatory schema (`event_id`, `event_type`, `created_at`, `payload`, `application_id`, `underwriter_id`), and dispatches them concurrently to the Google Cloud Pub/Sub topic `audit-events`. To prevent database connection pool starvation during network I/O, publish calls are dispatched non-blockingly in parallel; returned future objects are collected and resolved together prior to updating database rows to `status = 'PUBLISHED'`. Failed deliveries automatically retry and eventually transition to `DLQ` state after exceeding maximum retry attempts.
 
 ### C. Phase 3: Serverless OLAP Streaming (`audit-events-bq-sub`)
 Google Cloud’s native **Pub/Sub BigQuery Subscription** ingests messages from `audit-events` directly into BigQuery (`compliance_audit.origination_audit_log`) via the high-throughput BigQuery Storage Write API. Configured with `--use-table-schema = true`, serverless GCP infrastructure maps JSON message attributes directly to BigQuery columns, consuming zero container CPU cycles.
@@ -91,10 +91,10 @@ Google Cloud’s native **Pub/Sub BigQuery Subscription** ingests messages from 
 Audit outbox logging utilities strictly serialize structural metadata, status deltas, and UUID references. Plaintext PII strings (such as plain SSNs, raw tax form strings, or unmasked account numbers) are stripped at the application layer prior to outbox serialization.
 
 ### B. Cryptographic Schema Isolation & KMS Envelope Encryption
-Sensitive customer KYC records reside in an isolated PostgreSQL schema (`kyc.kyc_records`). PII is encrypted at rest using AES-256-GCM envelope encryption with Data Encryption Keys wrapped by Google Cloud KMS (`docai_cmek_key`). Encryption operations bind `user_id + kyc_record_id` as Additional Authenticated Data (AAD) to prevent ciphertext transplant attacks.
+Sensitive customer KYC records reside in an isolated PostgreSQL schema (`kyc.kyc_records`). PII is encrypted at rest using AES-256-GCM envelope encryption with Data Encryption Keys wrapped by Google Cloud KMS (`kyc-kek`). Encryption operations bind `user_id + kyc_record_id` as Additional Authenticated Data (AAD) to prevent ciphertext transplant attacks.
 
 ### C. BigQuery Data Catalog Policy Tags & Dynamic Masking
 In OLAP tables, sensitive NPI columns enforce Google Cloud Data Catalog Policy Tags (`sensitive_npi`, `PII_HIGH`). Unauthorized analysts querying BigQuery automatically receive masked outputs (e.g. `XXX-XX-1234`) dynamically evaluated by GCP IAM without requiring custom database views.
 
-### D. Mandatory Time Partitioning & CMEK at Rest
-Every analytical table enforces strict time partitioning (`require_partition_filter = true`) to prevent accidental full-table scans. All database tiers enforce Customer-Managed Encryption Keys (CMEK) at rest.
+### D. Mandatory Time Partitioning & Dedicated CMEK at Rest
+Every analytical table enforces strict time partitioning (`require_partition_filter = true`) to prevent accidental full-table scans. Compliance audit streaming topics (`audit-events`) and BigQuery analytical datasets enforce Customer-Managed Encryption Keys at rest using a dedicated cryptographic key domain (`audit-cmek-key`), ensuring full blast radius containment separated from Document AI processing pipelines.
