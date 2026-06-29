@@ -162,26 +162,29 @@ def run_migrations_online() -> None:
                 connection.execute(sa.text("SELECT pg_advisory_xact_lock(592837410);"))
             context.run_migrations()
 
-            if is_postgres:
+            if is_postgres and os.getenv("SKIP_IAM_GRANTS") != "true":
                 logger.info("Applying programmatic post-migration RBAC permission grants across all schemas...")
                 try:
                     from utils.gcp import get_project_id
                     project_id = get_project_id()
+                    if str(project_id) == "None":
+                        project_id = os.getenv("PROJECT_ID")
                 except Exception:
                     project_id = os.getenv("PROJECT_ID")
 
                 schemas = ["identity", "kyc", "ledger", "cards", "operations", "origination", "audit", "admin"]
                 sa_names = ["banking-service-sa", "kyc-service-sa", "ledger-service-sa"]
-                roles = [f"{sa}@{project_id}.iam" if project_id else sa for sa in sa_names]
+                roles = [f"{sa}@{project_id}.iam" if project_id and str(project_id) != "None" else sa for sa in sa_names]
                 if os.getenv("IAM_DBA_USERS"):
                     roles.extend([u.strip() for u in os.getenv("IAM_DBA_USERS").split(",") if u.strip()])
 
                 for s in schemas:
                     for role in roles:
                         try:
-                            connection.execute(sa.text(f'GRANT USAGE ON SCHEMA {s} TO "{role}";'))
-                            connection.execute(sa.text(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {s} TO "{role}";'))
-                            connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{role}";'))
+                            with connection.begin_nested():
+                                connection.execute(sa.text(f'GRANT USAGE ON SCHEMA {s} TO "{role}";'))
+                                connection.execute(sa.text(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {s} TO "{role}";'))
+                                connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{role}";'))
                         except Exception as grant_err:
                             logger.debug(f"Notice: Could not grant permissions on {s} to {role}: {grant_err}")
 
