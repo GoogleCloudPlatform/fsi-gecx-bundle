@@ -70,6 +70,11 @@ To prevent monolithic table coupling and enforce Principle of Least Privilege (P
 | **`admin`** | Platform Governance & Migrations | `system_settings`, `alembic_version` | Locked down to CI/CD and platform operators |
 | **`kyc`** | Sensitive Regulatory Compliance | `kyc_records` | Envelope-encrypted PII (DEK/KEK rotation) |
 
+### A. Origination Schema Structural Normalization (Parent-Child Extensions)
+Within the `origination` schema, onboarding workflows avoid monolithic null-heavy parent tables by utilizing a **Parent-Child Extension Architecture**:
+* **Parent Table (`applications`)**: Serves as the universal root workflow container holding common metadata (`id`, `user_id`, `product_category`, `status`, timestamps). `user_id` strictly links to `identity.users.id` via foreign key.
+* **Child Extension Tables**: Domain-specific financial figures and attributes are strictly isolated into 1-to-1 extension tables (`mortgage_applications`, `credit_card_applications`, `deposit_applications`). Each extension table defines its own surrogate UUID primary key (`id`), a unique foreign key back to the root application (`application_id`), and product-isolated requested amounts (`requested_loan_cents`, `requested_limit_cents`, `initial_deposit_cents`). This allows clean schema evolution for domain expansion (e.g. adding multi-property appraisal records referencing `mortgage_applications.id`).
+
 ---
 
 ## ⚙️ 3. Automated Deployment Governance (`alembic/env.py`)
