@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Optional
+from typing import Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -22,9 +22,10 @@ from utils.auth import get_current_user
 from models.authentication import ValidatedToken
 from models.fdx import (
     FDXAccount, RealTimeBalanceResponse, PaginatedTransactionsResult,
-    PaginatedPaymentNetworksResult
+    PaginatedPaymentNetworksResult, PersonalFinanceCategory
 )
 from services import credit_card as cc_service
+from services.taxonomy_service import TaxonomyService
 
 logger = logging.getLogger(__name__)
 
@@ -122,3 +123,19 @@ async def get_payment_networks(
         return cc_service.get_payment_networks(db, account_id, token.user_id)
     except ValueError as ve:
         raise HTTPException(status_code=403, detail=str(ve))
+
+
+@router.get("/api/fdx/v6/taxonomies", response_model=Dict[str, Dict[str, str]])
+@router.get("/credit-card/taxonomies", response_model=Dict[str, Dict[str, str]])
+async def list_taxonomies(token: ValidatedToken = Depends(require_scope("accounts:read"))):
+    if not token.user_id:
+        raise HTTPException(status_code=401, detail="Invalid token identity")
+    return TaxonomyService.get_taxonomy_map()
+
+
+@router.get("/api/fdx/v6/taxonomies/{mcc}", response_model=PersonalFinanceCategory)
+@router.get("/credit-card/taxonomies/{mcc}", response_model=PersonalFinanceCategory)
+async def get_taxonomy_by_mcc(mcc: str, token: ValidatedToken = Depends(require_scope("accounts:read"))):
+    if not token.user_id:
+        raise HTTPException(status_code=401, detail="Invalid token identity")
+    return TaxonomyService.get_category(mcc)

@@ -112,3 +112,27 @@ def test_payment_networks_success():
         assert data["payment_networks"][0]["transfer_in"] is True
     finally:
         app.dependency_overrides.clear()
+
+
+def test_list_taxonomies_success():
+    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "cust-123", "scope": "accounts:read"})
+    try:
+        resp = client.get("/api/fdx/v6/taxonomies")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "5411" in data
+        assert data["5411"]["primary"] == "GENERAL_MERCHANDISE"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_get_taxonomy_by_mcc_success():
+    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "cust-123", "scope": "accounts:read"})
+    try:
+        resp = client.get("/api/fdx/v6/taxonomies/5814")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["primary"] == "FOOD_AND_DRINK"
+        assert data["detailed"] == "FOOD_AND_DRINK_FAST_FOOD"
+    finally:
+        app.dependency_overrides.clear()
