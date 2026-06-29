@@ -92,7 +92,7 @@ class RetailLocation(Base):
     Bank branches and ATM locations.
     """
     __tablename__ = "retail_locations"
-    __table_args__ = {'schema': 'identity'}
+    __table_args__ = {'schema': 'operations'}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     name = Column(String(255), nullable=False)

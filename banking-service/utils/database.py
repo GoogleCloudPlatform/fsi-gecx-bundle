@@ -152,6 +152,7 @@ def attach_sqlite_schemas(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         try:
             cursor.execute("SELECT 1 FROM identity.sqlite_master LIMIT 1;")
+            cursor.execute("SELECT 1 FROM origination.sqlite_master LIMIT 1;")
             cursor.close()
             return
         except Exception:
@@ -173,6 +174,7 @@ def attach_sqlite_schemas(dbapi_connection, connection_record):
                     "ATTACH DATABASE 'file:ledger_mem?mode=memory&cache=shared' AS ledger;",
                     "ATTACH DATABASE 'file:cards_mem?mode=memory&cache=shared' AS cards;",
                     "ATTACH DATABASE 'file:operations_mem?mode=memory&cache=shared' AS operations;",
+                    "ATTACH DATABASE 'file:origination_mem?mode=memory&cache=shared' AS origination;",
                 ]
             else:
                 base_prefix = main_file.rsplit(".", 1)[0] if "." in main_file else main_file
@@ -186,6 +188,7 @@ def attach_sqlite_schemas(dbapi_connection, connection_record):
                     f"ATTACH DATABASE '{base_prefix}ledger.db' AS ledger;",
                     f"ATTACH DATABASE '{base_prefix}cards.db' AS cards;",
                     f"ATTACH DATABASE '{base_prefix}operations.db' AS operations;",
+                    f"ATTACH DATABASE '{base_prefix}origination.db' AS origination;",
                 ]
 
             for stmt in stmts:

@@ -51,7 +51,7 @@ class FinancialAccount(Base):
     # Relationships
     cards = relationship("IssuedCard", back_populates="account", cascade="all, delete-orphan")
     authorizations = relationship("TransactionAuthorization", back_populates="account")
-    ledger_entries = relationship("AccountLedger", back_populates="account")
+    ledger_entries = relationship("PostedTransaction", back_populates="account")
 
 
 class IssuedCard(Base):
@@ -125,7 +125,7 @@ class TransactionAuthorization(Base):
     # Relationships
     card = relationship("IssuedCard", back_populates="authorizations")
     account = relationship("FinancialAccount", back_populates="authorizations")
-    ledger_entries = relationship("AccountLedger", back_populates="authorization")
+    ledger_entries = relationship("PostedTransaction", back_populates="authorization")
 
     # Index for fast pending holds/balances computation
     __table_args__ = (
@@ -134,11 +134,11 @@ class TransactionAuthorization(Base):
     )
 
 
-class AccountLedger(Base):
+class PostedTransaction(Base):
     """
     Models the final, immutable system of record for cleared transactions and customer statement lines.
     """
-    __tablename__ = "account_ledger"
+    __tablename__ = "posted_transactions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     account_id = Column(UUID(as_uuid=True), ForeignKey("cards.financial_account.id", ondelete="RESTRICT"), nullable=False)
@@ -162,3 +162,6 @@ class AccountLedger(Base):
         Index("idx_ledger_account_posted", "account_id", "posted_at"),
         {'schema': 'cards'},
     )
+
+
+AccountLedger = PostedTransaction  # Backward compatibility alias for existing imports

@@ -51,7 +51,7 @@ class Application(Base):
     __table_args__ = (
         Index("idx_applications_user_id", "user_id"),
         Index("idx_applications_app_id", "application_id"),
-        {'schema': 'ledger'},
+        {'schema': 'origination'},
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
@@ -74,9 +74,9 @@ class Application(Base):
 class MortgageApplication(Base):
     """1-to-1 extension table for mortgage pre-approvals."""
     __tablename__ = "mortgage_applications"
-    __table_args__ = {'schema': 'ledger'}
+    __table_args__ = {'schema': 'origination'}
 
-    application_id = Column(UUID(as_uuid=True), ForeignKey("ledger.applications.id", ondelete="CASCADE"), primary_key=True)
+    application_id = Column(UUID(as_uuid=True), ForeignKey("origination.applications.id", ondelete="CASCADE"), primary_key=True)
     property_address = Column(String(255), nullable=True)
     estimated_value_cents = Column(BigInteger, nullable=True)
     loan_term_months = Column(Integer, nullable=True)
@@ -88,9 +88,9 @@ class MortgageApplication(Base):
 class CreditCardApplication(Base):
     """1-to-1 extension table for credit card originations."""
     __tablename__ = "credit_card_applications"
-    __table_args__ = {'schema': 'ledger'}
+    __table_args__ = {'schema': 'origination'}
 
-    application_id = Column(UUID(as_uuid=True), ForeignKey("ledger.applications.id", ondelete="CASCADE"), primary_key=True)
+    application_id = Column(UUID(as_uuid=True), ForeignKey("origination.applications.id", ondelete="CASCADE"), primary_key=True)
     requested_limit_cents = Column(BigInteger, nullable=True)
     card_product_id = Column(String(50), nullable=True)
 
@@ -100,9 +100,9 @@ class CreditCardApplication(Base):
 class DepositApplication(Base):
     """1-to-1 extension table for checking/savings deposit originations."""
     __tablename__ = "deposit_applications"
-    __table_args__ = {'schema': 'ledger'}
+    __table_args__ = {'schema': 'origination'}
 
-    application_id = Column(UUID(as_uuid=True), ForeignKey("ledger.applications.id", ondelete="CASCADE"), primary_key=True)
+    application_id = Column(UUID(as_uuid=True), ForeignKey("origination.applications.id", ondelete="CASCADE"), primary_key=True)
     deposit_product_name = Column(String(100), nullable=True)
     initial_deposit_cents = Column(BigInteger, nullable=True)
 
@@ -115,12 +115,12 @@ class ApplicationArtifact(Base):
     __table_args__ = (
         Index("idx_artifacts_application_id", "application_id"),
         Index("idx_artifacts_customer_id", "customer_id"),
-        {'schema': 'ledger'},
+        {'schema': 'origination'},
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     artifact_id = Column(String(128), unique=True, nullable=False)
-    application_id = Column(UUID(as_uuid=True), ForeignKey("ledger.applications.id", ondelete="CASCADE"), nullable=False)
+    application_id = Column(UUID(as_uuid=True), ForeignKey("origination.applications.id", ondelete="CASCADE"), nullable=False)
     customer_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="RESTRICT"), nullable=False)
     claimed_artifact_type = Column(String(100), nullable=True)
     gcs_uri = Column(String(500), nullable=False)
