@@ -235,8 +235,8 @@ export async function blockCreditCard(cardToken, targetCustomerId = null) {
   return res.data;
 }
 
-export async function resetDatabase() {
-  const res = await api.post('/internal/debug/reset-db');
+export async function resetDatabase(purgeAuditLogs = false) {
+  const res = await api.post(`/internal/debug/reset-db?purge_audit_logs=${purgeAuditLogs}`);
   return res.data;
 }
 

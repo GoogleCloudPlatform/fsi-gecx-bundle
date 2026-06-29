@@ -23,6 +23,7 @@ import { showInfoModals } from '../utils/constants.js';
 function AdminDashboardView() {
   const navigate = useNavigate();
   const [isResetting, setIsResetting] = useState(false);
+  const [purgeAuditLogs, setPurgeAuditLogs] = useState(false);
   const [notice, setNotice] = useState({ type: '', text: '' });
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
@@ -82,16 +83,18 @@ function AdminDashboardView() {
   };
 
   const handleResetDatabase = async () => {
-    if (!window.confirm("Are you sure you want to reset the database? This will clear all transactions, escalations, card block overrides, and restore the baseline configuration.")) {
+    const confirmMsg = purgeAuditLogs 
+      ? "Are you sure you want to reset the database AND PURGE ALL BIGQUERY & POSTGRESQL AUDIT LOGS? This cannot be undone."
+      : "Are you sure you want to reset the database? This will clear active applications and cards while preserving immutable audit logs.";
+    if (!window.confirm(confirmMsg)) {
       return;
     }
     setIsResetting(true);
     setNotice({ type: '', text: '' });
     try {
-      await resetDatabase();
-      setNotice({ type: 'success', text: 'Database successfully reset and re-seeded!' });
-      // Automatically clear success toast after 4 seconds
-      setTimeout(() => setNotice({ type: '', text: '' }), 4000);
+      const res = await resetDatabase(purgeAuditLogs);
+      setNotice({ type: 'success', text: res.message || 'Database successfully reset and re-seeded!' });
+      setTimeout(() => setNotice({ type: '', text: '' }), 5000);
     } catch (err) {
       setNotice({ type: 'error', text: err.response?.data?.detail || 'Failed to reset database.' });
     } finally {
@@ -201,18 +204,6 @@ function AdminDashboardView() {
           );
         })}
       </div>
-
-      {/* Notice Banner */}
-      {notice.text && (
-        <div className={`mt-8 p-4 rounded-2xl border flex items-center gap-3 text-xs font-semibold animate-fade-in ${
-          notice.type === 'success'
-            ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/30 text-emerald-700 dark:text-emerald-400'
-            : 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/30 text-rose-700 dark:text-rose-400'
-        }`}>
-          {notice.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-          <span>{notice.text}</span>
-        </div>
-      )}
 
       {/* Settings Form */}
       <form onSubmit={handleSaveSettings} className="mt-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 space-y-6">
@@ -338,6 +329,16 @@ function AdminDashboardView() {
         <div>
           <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">System Debug Tools</h4>
           <p className="text-xs text-slate-500 mt-0.5">Wipe the transactional database and re-seed all test accounts with baseline configurations in one click.</p>
+          <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={purgeAuditLogs}
+              onChange={(e) => setPurgeAuditLogs(e.target.checked)}
+              disabled={isResetting}
+              className="rounded border-slate-300 dark:border-slate-700 text-rose-600 focus:ring-rose-500"
+            />
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Purge BigQuery & PostgreSQL compliance audit logs</span>
+          </label>
         </div>
         <button
           onClick={handleResetDatabase}
@@ -351,6 +352,18 @@ function AdminDashboardView() {
           {isResetting ? 'Resetting Database...' : 'Reset Database'}
         </button>
       </div>
+
+      {/* Notice Banner */}
+      {notice.text && (
+        <div className={`mt-4 p-4 rounded-2xl border flex items-center gap-3 text-xs font-semibold animate-fade-in ${
+          notice.type === 'success'
+            ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/30 text-emerald-700 dark:text-emerald-400'
+            : 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/30 text-rose-700 dark:text-rose-400'
+        }`}>
+          {notice.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+          <span>{notice.text}</span>
+        </div>
+      )}
 
       <GcpInfoModal
         isOpen={isInfoModalOpen}

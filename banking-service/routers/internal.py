@@ -152,14 +152,17 @@ def process_outbox(batch_size: int = 50):
         db.close()
 
 @router.post("/debug/reset-db")
-def reset_database():
+def reset_database(purge_audit_logs: bool = False):
     """
     Deletes all rows in the database and re-seeds it with baseline cardholder data.
+    Optionally purges PostgreSQL and BigQuery compliance audit logs if purge_audit_logs=True.
     """
-    logger.info("Internal Debug request: Resetting database...")
+    logger.info(f"Internal Debug request: Resetting database (purge_audit_logs={purge_audit_logs})...")
     from utils.database import SessionLocal
     from models.credit_card import FinancialAccount, IssuedCard, TransactionAuthorization, AccountLedger
     from models.support import Escalation
+    from models.origination import Application, MortgageApplication, CreditCardApplication, DepositApplication, ApplicationArtifact
+    from models.audit import AuditOutbox
     from services.credit_card import initialize_db_and_seed
     
     db = SessionLocal()
@@ -170,12 +173,30 @@ def reset_database():
         db.query(IssuedCard).delete()
         db.query(Escalation).delete()
         db.query(FinancialAccount).delete()
+        db.query(ApplicationArtifact).delete()
+        db.query(MortgageApplication).delete()
+        db.query(CreditCardApplication).delete()
+        db.query(DepositApplication).delete()
+        db.query(Application).delete()
+        
+        if purge_audit_logs:
+            db.query(AuditOutbox).delete()
+            logger.info("Purging PostgreSQL audit outbox...")
+            try:
+                project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
+                for tbl in ["origination_audit_log", "financial_ledger_audit_log", "identity_access_audit_log"]:
+                    bq_client.query(f"DELETE FROM `{project_id}.compliance_audit.{tbl}` WHERE true").result()
+                logger.info("Purged BigQuery compliance_audit tables.")
+            except Exception as bq_ex:
+                logger.warning(f"Could not purge BigQuery audit logs: {bq_ex}")
+
         db.commit()
         logger.info("Database tables cleared.")
         
         initialize_db_and_seed(db)
         logger.info("Database re-seeded.")
-        return {"status": "SUCCESS", "message": "Database reset and re-seeded successfully."}
+        msg = "Database reset and re-seeded successfully." + (" (Audit logs purged)" if purge_audit_logs else " (Audit logs preserved)")
+        return {"status": "SUCCESS", "message": msg}
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to reset database: {e}")
