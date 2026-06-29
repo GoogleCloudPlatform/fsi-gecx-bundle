@@ -53,8 +53,10 @@ To prevent monolithic table coupling and enforce Principle of Least Privilege (P
 | **`identity`** | Customer IAM, Profiles & Messaging | `users`, `user_devices`, `user_secure_messages` | High read/write velocity; profile updates |
 | **`origination`** | Onboarding & Application Workflows | `applications`, `application_artifacts`, `mortgage_applications`, `credit_card_applications`, `deposit_applications` | Mutable state machines (`STARTED` -> `APPROVED`) |
 | **`ledger`** | Core Financial Bookkeeping | `accounts`, `transactions`, `account_ledger` (Splits) | **Strictly Immutable / Append-Only** (No UPDATE/DELETE) |
-| **`cards`** | Card Issuance & Network Authorizations | `issued_cards`, `transaction_authorizations`, `posted_transactions` | High-velocity hold & authorization gateway |
-| **`operations`** | Bank Admin & Support Routing | `support_escalations`, `retail_locations`, `system_settings` | Internal operational administration |
+| **`cards`** | Card Issuance & Network Authorizations | `credit_accounts`, `issued_cards`, `transaction_authorizations`, `posted_transactions` | High-velocity hold & authorization gateway |
+| **`operations`** | Bank Support & Retail Routing | `support_escalations`, `retail_locations` | Customer-facing support administration |
+| **`audit`** | Asynchronous Compliance Outbox | `audit_outbox` | Transactional outbox event publishing queue |
+| **`admin`** | Platform Governance & Migrations | `system_settings`, `alembic_version` | Locked down to CI/CD and platform operators |
 | **`kyc`** | Sensitive Regulatory Compliance | `kyc_records` | Envelope-encrypted PII (DEK/KEK rotation) |
 
 ---
