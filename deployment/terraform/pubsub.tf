@@ -84,3 +84,22 @@ resource "google_pubsub_topic_iam_member" "banking_service_sa_publisher" {
   member  = "serviceAccount:${google_service_account.banking_service_account.email}"
   project = var.project_id
 }
+
+# 5. Compliance Audit Outbox Streaming: Topic & BigQuery Subscription
+resource "google_pubsub_topic" "audit_events" {
+  name         = "audit-events"
+  project      = var.project_id
+  kms_key_name = google_kms_crypto_key.docai_cmek_key.id
+  depends_on   = [google_kms_crypto_key_iam_member.pubsub_kms_binding]
+}
+
+resource "google_pubsub_subscription" "audit_events_bq_sub" {
+  name    = "audit-events-bq-sub"
+  topic   = google_pubsub_topic.audit_events.name
+  project = var.project_id
+
+  bigquery_config {
+    table            = "${var.project_id}.compliance_audit.origination_audit_log"
+    use_table_schema = true
+  }
+}
