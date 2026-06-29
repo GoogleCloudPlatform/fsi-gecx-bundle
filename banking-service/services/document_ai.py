@@ -222,30 +222,41 @@ def process_document_pipeline(bucket_name: str, blob_name: str) -> dict:
     # 1. GCS Pre-Validation Gate
     resolved_mime_type = _pre_validate_gcs_file(bucket_name, blob_name)
 
-    # 2. BigQuery Idempotency and Ingestion Validation
+    # 2. Idempotency and Ingestion Validation (PostgreSQL OLTP Primary, BigQuery Fallback)
     dataset_id = "banking"
     table_id = "application_artifact"
     table_ref = f"{project_id}.{dataset_id}.{table_id}"
 
+    from utils.database import SessionLocal
+    from models.origination import ApplicationArtifact as PGArtifact
+    db = SessionLocal()
+    artifact_record = None
+    try:
+        artifact_record = db.query(PGArtifact).filter(
+            (PGArtifact.gcs_uri == gcs_uri) | (PGArtifact.artifact_id == blob_name)
+        ).first()
+    finally:
+        db.close()
 
-    query = _load_sql("get_artifact_metadata.sql").format(table_ref=table_ref)
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ScalarQueryParameter("gcs_uri", "STRING", gcs_uri)]
-    )
-    
-    query_job = bq_client.query(query, job_config=job_config)
-    results = list(query_job.result())
-    
-    if not results:
-        logger.error(f"Ingestion metadata not found in BigQuery for: {gcs_uri}")
+    if not artifact_record:
+        query = _load_sql("get_artifact_metadata.sql").format(table_ref=table_ref)
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[bigquery.ScalarQueryParameter("gcs_uri", "STRING", gcs_uri)]
+        )
+        query_job = bq_client.query(query, job_config=job_config)
+        results = list(query_job.result())
+        if results:
+            artifact_record = results[0]
+
+    if not artifact_record:
+        logger.error(f"Ingestion metadata not found in PostgreSQL or BigQuery for: {gcs_uri}")
         raise ValueError("Artifact metadata not found. Direct GCS triggers prohibited.")
 
-    artifact_record = results[0]
-    artifact_id = artifact_record.artifact_id
-    claimed_type = DocumentType.parse(artifact_record.claimed_artifact_type)
-    application_id = artifact_record.application_id
+    artifact_id = str(artifact_record.artifact_id)
+    claimed_type = DocumentType.parse(str(artifact_record.claimed_artifact_type) if artifact_record.claimed_artifact_type else None)
+    application_id = str(artifact_record.application_id)
 
-    if ProcessingStatus(artifact_record.status) != ProcessingStatus.PENDING_CLASSIFICATION:
+    if ProcessingStatus(str(artifact_record.status)) != ProcessingStatus.PENDING_CLASSIFICATION:
         logger.info(f"Idempotency check: File {gcs_uri} already processed (Status: {artifact_record.status}). Skipping.")
         return {"status": "SKIPPED", "message": f"Artifact already in state: {artifact_record.status}"}
 
@@ -253,8 +264,21 @@ def process_document_pipeline(bucket_name: str, blob_name: str) -> dict:
     registry = DocumentProcessorRegistry(project_id)
 
     # Atomic state lock transition to prevent duplicate execution races
-    logger.info(f"Locking artifact ID {artifact_id} to status CLASSIFYING in BigQuery")
-    _update_artifact_status(table_ref, artifact_id, ProcessingStatus.CLASSIFYING)
+    logger.info(f"Locking artifact ID {artifact_id} to status CLASSIFYING in PostgreSQL and BigQuery")
+    db_lock = SessionLocal()
+    try:
+        pg_lock = db_lock.query(PGArtifact).filter(PGArtifact.artifact_id == artifact_id).first()
+        if pg_lock:
+            pg_lock.status = ProcessingStatus.CLASSIFYING.value
+            db_lock.commit()
+    except Exception as lock_err:
+        logger.warning(f"Failed to update status in PostgreSQL: {lock_err}")
+    finally:
+        db_lock.close()
+    try:
+        _update_artifact_status(table_ref, artifact_id, ProcessingStatus.CLASSIFYING)
+    except Exception as bq_err:
+        logger.warning(f"Failed to update status in BigQuery: {bq_err}")
 
     # Enclose API execution in try-except to support atomic transaction state rollback
     try:
