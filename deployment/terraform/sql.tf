@@ -74,6 +74,12 @@ resource "google_sql_database_instance" "banking_data" {
       zone = "us-central1-c"
     }
 
+    # 1. Enable Data API for Conversational Analytics
+    data_api_access = "ALLOW_DATA_API"
+
+    # 2. Enable Knowledge Catalog (Dataplex) Integration
+    enable_dataplex_integration = true
+
     pricing_plan                = "PER_USE"
     tier                        = "db-custom-1-3840"
     deletion_protection_enabled = true
