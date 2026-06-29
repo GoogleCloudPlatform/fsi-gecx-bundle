@@ -126,7 +126,6 @@ async def get_payment_networks(
 
 
 @router.get("/api/fdx/v6/taxonomies", response_model=Dict[str, Dict[str, str]])
-@router.get("/credit-card/taxonomies", response_model=Dict[str, Dict[str, str]])
 async def list_taxonomies(token: ValidatedToken = Depends(require_scope("accounts:read"))):
     if not token.user_id:
         raise HTTPException(status_code=401, detail="Invalid token identity")
@@ -134,7 +133,6 @@ async def list_taxonomies(token: ValidatedToken = Depends(require_scope("account
 
 
 @router.get("/api/fdx/v6/taxonomies/{mcc}", response_model=PersonalFinanceCategory)
-@router.get("/credit-card/taxonomies/{mcc}", response_model=PersonalFinanceCategory)
 async def get_taxonomy_by_mcc(mcc: str, token: ValidatedToken = Depends(require_scope("accounts:read"))):
     if not token.user_id:
         raise HTTPException(status_code=401, detail="Invalid token identity")

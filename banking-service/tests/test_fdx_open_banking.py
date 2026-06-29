@@ -136,3 +136,25 @@ def test_get_taxonomy_by_mcc_success():
         assert data["detailed"] == "FOOD_AND_DRINK_FAST_FOOD"
     finally:
         app.dependency_overrides.clear()
+
+
+def test_internal_list_taxonomies_success():
+    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "cust-123"})
+    try:
+        resp = client.get("/credit-card/taxonomies")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "5411" in data
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_internal_get_taxonomy_by_mcc_success():
+    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "cust-123"})
+    try:
+        resp = client.get("/credit-card/taxonomies/5814")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["primary"] == "FOOD_AND_DRINK"
+    finally:
+        app.dependency_overrides.clear()
