@@ -114,6 +114,7 @@ def run_migrations_offline() -> None:
             context.execute("CREATE SCHEMA IF NOT EXISTS ledger;")
             context.execute("CREATE SCHEMA IF NOT EXISTS cards;")
             context.execute("CREATE SCHEMA IF NOT EXISTS operations;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS origination;")
         context.run_migrations()
 
 
@@ -138,6 +139,7 @@ def run_migrations_online() -> None:
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS ledger;"))
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS cards;"))
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS operations;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS origination;"))
             connection.commit()
 
         context.configure(
@@ -154,6 +156,29 @@ def run_migrations_online() -> None:
                 logger.info("Acquiring transactional advisory migration lock (ID: 592837410)...")
                 connection.execute(sa.text("SELECT pg_advisory_xact_lock(592837410);"))
             context.run_migrations()
+
+            if is_postgres:
+                logger.info("Applying programmatic post-migration RBAC permission grants across all schemas...")
+                try:
+                    from utils.gcp import get_project_id
+                    project_id = get_project_id()
+                except Exception:
+                    project_id = os.getenv("PROJECT_ID")
+
+                schemas = ["identity", "kyc", "ledger", "cards", "operations", "origination"]
+                sa_names = ["banking-service-sa", "kyc-service-sa", "ledger-service-sa"]
+                roles = [f"{sa}@{project_id}.iam" if project_id else sa for sa in sa_names]
+                if os.getenv("IAM_DBA_USERS"):
+                    roles.extend([u.strip() for u in os.getenv("IAM_DBA_USERS").split(",") if u.strip()])
+
+                for s in schemas:
+                    for role in roles:
+                        try:
+                            connection.execute(sa.text(f'GRANT USAGE ON SCHEMA {s} TO "{role}";'))
+                            connection.execute(sa.text(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {s} TO "{role}";'))
+                            connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{role}";'))
+                        except Exception as grant_err:
+                            logger.debug(f"Notice: Could not grant permissions on {s} to {role}: {grant_err}")
 
 
 if context.is_offline_mode():
