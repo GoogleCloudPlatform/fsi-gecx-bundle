@@ -178,6 +178,14 @@ def run_migrations_online() -> None:
                 if os.getenv("IAM_DBA_USERS"):
                     roles.extend([u.strip() for u in os.getenv("IAM_DBA_USERS").split(",") if u.strip()])
 
+                for role in roles:
+                    try:
+                        with connection.begin_nested():
+                            stmt = f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = \'{role}\') THEN CREATE ROLE "{role}" NOLOGIN; END IF; END $$;'
+                            connection.execute(sa.text(stmt))
+                    except Exception as role_err:
+                        logger.debug(f"Notice: Could not bootstrap role {role}: {role_err}")
+
                 for s in schemas:
                     for role in roles:
                         try:
