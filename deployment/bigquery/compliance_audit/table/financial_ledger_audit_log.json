@@ -1,0 +1,44 @@
+[
+  {
+    "name": "event_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unique UUID of the outbox audit event."
+  },
+  {
+    "name": "event_type",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Type of financial event (e.g. MONETARY_TRANSFER_EXECUTED, FEE_REVERSED)."
+  },
+  {
+    "name": "account_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Associated financial or card account ID."
+  },
+  {
+    "name": "transaction_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Associated transaction reference ID."
+  },
+  {
+    "name": "amount_cents",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Transaction amount in cents."
+  },
+  {
+    "name": "payload",
+    "type": "JSON",
+    "mode": "NULLABLE",
+    "description": "Strongly typed native JSON structured event payload."
+  },
+  {
+    "name": "created_at",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Event creation timestamp for monthly partitioning."
+  }
+]

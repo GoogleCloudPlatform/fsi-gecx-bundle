@@ -1,0 +1,38 @@
+[
+  {
+    "name": "event_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unique UUID of the outbox audit event."
+  },
+  {
+    "name": "event_type",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Type of identity event (e.g. USER_CREATED, DEVICE_REGISTERED)."
+  },
+  {
+    "name": "user_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Associated user UUID or OIDC subject claim."
+  },
+  {
+    "name": "pseudonymization_key",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Cryptographic shredding identifier for GDPR/CCPA right-to-be-forgotten requests."
+  },
+  {
+    "name": "payload",
+    "type": "JSON",
+    "mode": "NULLABLE",
+    "description": "Strongly typed native JSON structured event payload."
+  },
+  {
+    "name": "created_at",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Event creation timestamp for daily partitioning."
+  }
+]
