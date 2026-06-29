@@ -20,17 +20,19 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema to add OCR extraction columns to application_artifacts."""
-    op.add_column('application_artifacts', sa.Column('actual_artifact_type', sa.String(length=100), nullable=True), schema='origination')
-    op.add_column('application_artifacts', sa.Column('classification_confidence', sa.Float(), nullable=True), schema='origination')
-    op.add_column('application_artifacts', sa.Column('extraction_payload', sa.Text(), nullable=True), schema='origination')
-    op.add_column('application_artifacts', sa.Column('audit_metadata', sa.Text(), nullable=True), schema='origination')
-    op.add_column('application_artifacts', sa.Column('verification_tier', sa.String(length=50), nullable=True), schema='origination')
+    schema_name = 'ledger' if op.get_bind().dialect.name == 'sqlite' else 'origination'
+    op.add_column('application_artifacts', sa.Column('actual_artifact_type', sa.String(length=100), nullable=True), schema=schema_name)
+    op.add_column('application_artifacts', sa.Column('classification_confidence', sa.Float(), nullable=True), schema=schema_name)
+    op.add_column('application_artifacts', sa.Column('extraction_payload', sa.Text(), nullable=True), schema=schema_name)
+    op.add_column('application_artifacts', sa.Column('audit_metadata', sa.Text(), nullable=True), schema=schema_name)
+    op.add_column('application_artifacts', sa.Column('verification_tier', sa.String(length=50), nullable=True), schema=schema_name)
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_column('application_artifacts', 'verification_tier', schema='origination')
-    op.drop_column('application_artifacts', 'audit_metadata', schema='origination')
-    op.drop_column('application_artifacts', 'extraction_payload', schema='origination')
-    op.drop_column('application_artifacts', 'classification_confidence', schema='origination')
-    op.drop_column('application_artifacts', 'actual_artifact_type', schema='origination')
+    schema_name = 'ledger' if op.get_bind().dialect.name == 'sqlite' else 'origination'
+    op.drop_column('application_artifacts', 'verification_tier', schema=schema_name)
+    op.drop_column('application_artifacts', 'audit_metadata', schema=schema_name)
+    op.drop_column('application_artifacts', 'extraction_payload', schema=schema_name)
+    op.drop_column('application_artifacts', 'classification_confidence', schema=schema_name)
+    op.drop_column('application_artifacts', 'actual_artifact_type', schema=schema_name)
