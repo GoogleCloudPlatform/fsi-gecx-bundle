@@ -74,7 +74,18 @@ def publish_pending_audit_events(db: Session, batch_size: int = 50) -> int:
     for record in pending_records:
         try:
             if topic_path:
-                data_bytes = record.payload.encode("utf-8")
+                raw_p = json.loads(record.payload) if isinstance(record.payload, str) else record.payload
+                message_dict = {
+                    "event_id": str(record.event_id),
+                    "event_type": record.event_type,
+                    "created_at": record.created_at.isoformat() if record.created_at else datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    "payload": raw_p if isinstance(raw_p, (dict, list)) else {"raw": str(raw_p)},
+                }
+                if isinstance(raw_p, dict):
+                    for k in ["application_id", "artifact_id", "underwriter_id", "decision", "account_id", "user_id"]:
+                        if k in raw_p and raw_p[k] is not None:
+                            message_dict[k] = str(raw_p[k])
+                data_bytes = json.dumps(message_dict).encode("utf-8")
                 future = publisher.publish(
                     topic_path,
                     data_bytes,

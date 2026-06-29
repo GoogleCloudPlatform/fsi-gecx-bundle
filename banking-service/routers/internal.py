@@ -136,6 +136,21 @@ async def process_document(
         logger.error(f"Pipeline execution failed for {filename}: {pipeline_ex}")
         raise HTTPException(status_code=500, detail=f"Document processing pipeline failed: {str(pipeline_ex)}")
 
+@router.post("/process-outbox")
+def process_outbox(batch_size: int = 50):
+    """
+    Drains the transactional audit outbox, publishing pending events to Google Cloud Pub/Sub
+    for immediate streaming into BigQuery compliance audit tables.
+    """
+    from utils.database import SessionLocal
+    from utils.audit import publish_pending_audit_events
+    db = SessionLocal()
+    try:
+        count = publish_pending_audit_events(db, batch_size=batch_size)
+        return {"status": "SUCCESS", "published_count": count}
+    finally:
+        db.close()
+
 @router.post("/debug/reset-db")
 def reset_database():
     """
