@@ -93,9 +93,9 @@ async def test_get_application_documents_mcp_tool_success(mock_identity, mock_bq
     mock_bq_client.query.return_value = mock_query_job
 
     mock_ctx = MagicMock()
-    result = await get_loan_application_documents(application_id="app-999", ctx=mock_ctx)
+    result = await get_loan_application_documents(application_id="app-bq-success-999", ctx=mock_ctx)
     
-    assert "Verified Loan Documents Audit for Application ID: app-999" in result
+    assert "Verified Loan Documents Audit for Application ID: app-bq-success-999" in result
     assert "Claimed: W2 | Visual Classification: W2 | Ingestion Status: PROCESSED" in result
     assert "Wages (Box 1): $75000" in result
     # Critical Security checks: verify plain-text SSNs/EINs are securely masked!
@@ -115,7 +115,7 @@ async def test_get_application_documents_mcp_tool_empty(mock_identity, mock_bq_c
     mock_bq_client.query.return_value = mock_query_job
 
     mock_ctx = MagicMock()
-    result = await get_loan_application_documents(application_id="app-999", ctx=mock_ctx)
+    result = await get_loan_application_documents(application_id="app-bq-empty-999", ctx=mock_ctx)
     
     assert "No documents found under authorized profile" in result
 
