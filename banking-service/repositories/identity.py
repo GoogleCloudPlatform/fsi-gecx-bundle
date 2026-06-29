@@ -205,7 +205,7 @@ def get_messages_for_customer(db: Session, auth_provider_uid: str) -> List[Dict[
 
     msgs = (
         db.query(UserSecureMessage)
-        .filter(UserSecureMessage.user_id == user.id, UserSecureMessage.deleted == False)
+        .filter(UserSecureMessage.user_id == user.id, UserSecureMessage.deleted.is_(False))
         .order_by(UserSecureMessage.created_at.asc())
         .all()
     )
@@ -293,7 +293,7 @@ def mark_messages_as_user_read(db: Session, auth_provider_uid: str, thread_id: s
         .filter(
             UserSecureMessage.user_id == user.id,
             UserSecureMessage.thread_id == thread_id,
-            UserSecureMessage.is_user_read == False,
+            UserSecureMessage.is_user_read.is_(False),
         )
         .all()
     )
@@ -306,7 +306,7 @@ def mark_messages_as_user_read(db: Session, auth_provider_uid: str, thread_id: s
 def mark_messages_as_agent_read(db: Session, thread_id: str) -> None:
     msgs = (
         db.query(UserSecureMessage)
-        .filter(UserSecureMessage.thread_id == thread_id, UserSecureMessage.is_agent_read == False)
+        .filter(UserSecureMessage.thread_id == thread_id, UserSecureMessage.is_agent_read.is_(False))
         .all()
     )
     for m in msgs:

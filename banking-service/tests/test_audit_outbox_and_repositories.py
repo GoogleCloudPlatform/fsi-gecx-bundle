@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import uuid
 import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker

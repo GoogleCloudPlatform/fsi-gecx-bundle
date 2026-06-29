@@ -19,8 +19,7 @@ from models.artifact import ArtifactUploadRequest, SignedUrlRequest
 from models.authentication import ValidatedToken
 from utils.auth import get_current_user
 from utils.database import get_db
-from utils.gemini import extract_data
-from services.origination import OriginationService, BUCKET_NAME, storage_client
+from services.origination import OriginationService
 from unittest.mock import MagicMock
 
 logger = logging.getLogger(__name__)

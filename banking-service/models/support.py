@@ -1,4 +1,3 @@
-import uuid
 from sqlalchemy import Column, String, DateTime, JSON
 from utils.database import UniversalUUID as UUID, generate_uuid
 from datetime import datetime, timezone

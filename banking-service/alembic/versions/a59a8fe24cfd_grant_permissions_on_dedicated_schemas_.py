@@ -5,10 +5,10 @@ Revises: 888d74ebf127
 Create Date: 2026-06-27 20:57:50.237869
 
 """
+import os
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
@@ -16,9 +16,6 @@ revision: str = 'a59a8fe24cfd'
 down_revision: Union[str, Sequence[str], None] = '888d74ebf127'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
-
-
-import os
 
 def upgrade() -> None:
     """Upgrade schema."""

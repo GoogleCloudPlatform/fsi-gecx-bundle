@@ -22,7 +22,6 @@ from main import app
 from models.secure_messaging import SECURE_MESSAGES_TOPIC
 from utils.database import SessionLocal
 from models.identity import User, UserDevice
-from utils.gcp import get_project_id
 
 
 @pytest.fixture

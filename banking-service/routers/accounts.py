@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from fastapi import APIRouter, Depends, Header, Request, Response, status
+from fastapi import APIRouter, Depends, Header, Response, status
 from sqlalchemy.orm import Session
 
 from utils.database import get_db

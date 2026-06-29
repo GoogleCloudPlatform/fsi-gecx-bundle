@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import uuid
 import datetime
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Float, Index
 from utils.database import UniversalUUID as UUID, generate_uuid

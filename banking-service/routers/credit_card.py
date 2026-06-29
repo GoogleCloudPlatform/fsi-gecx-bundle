@@ -25,7 +25,7 @@ from models.authentication import ValidatedToken
 from models.fdx import PersonalFinanceCategory
 from repositories.credit_card import CreditCardRepository
 from services.credit_card import (
-    freeze_card, apply_limit_increase, reverse_posted_fee, initialize_db_and_seed
+    freeze_card, apply_limit_increase, reverse_posted_fee
 )
 from services.taxonomy_service import TaxonomyService
 

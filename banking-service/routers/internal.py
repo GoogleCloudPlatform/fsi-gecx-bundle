@@ -22,7 +22,6 @@ from fastapi.concurrency import run_in_threadpool
 from google.cloud import bigquery
 from pydantic import BaseModel, Field
 from utils.auth import verify_eventarc_oidc_token
-from services.document_ai import ProcessingStatus
 
 logger = logging.getLogger(__name__)
 bq_client = bigquery.Client()

@@ -17,7 +17,7 @@ import logging
 import httpx
 import google.auth
 from google.auth.transport.requests import Request
-from google.cloud import bigquery
+from google.cloud import bigquery  # noqa: F401
 from cachetools import TTLCache
 from utils.gcp import get_project_id
 from services.messaging import MessagingService

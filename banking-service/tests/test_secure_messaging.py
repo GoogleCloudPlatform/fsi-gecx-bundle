@@ -28,7 +28,6 @@ from models.secure_messaging import (
 )
 from utils.database import SessionLocal
 from models.identity import User, UserSecureMessage
-from utils.gcp import get_project_id
 
 
 @pytest.fixture
@@ -83,7 +82,7 @@ async def test_secure_messaging_flow(async_client):
     db = SessionLocal()
     user = db.query(User).filter(User.auth_provider_uid == unique_user_id).first()
     assert user is not None
-    msgs = db.query(UserSecureMessage).filter(UserSecureMessage.user_id == user.id, UserSecureMessage.deleted == False).all()
+    msgs = db.query(UserSecureMessage).filter(UserSecureMessage.user_id == user.id, UserSecureMessage.deleted.is_(False)).all()
     assert len(msgs) == 2
     db.close()
 

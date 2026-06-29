@@ -15,7 +15,7 @@
 import json
 import logging
 import uuid
-from typing import Optional, Any
+from typing import Optional
 from datetime import datetime, timezone
 from pathlib import Path
 from google.cloud import bigquery

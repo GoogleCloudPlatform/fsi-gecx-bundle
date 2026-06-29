@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 

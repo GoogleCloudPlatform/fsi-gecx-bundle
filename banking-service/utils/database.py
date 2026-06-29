@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import sys
 import logging
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import make_url, Engine
@@ -270,13 +271,13 @@ def get_kyc_db():
 
 
 def init_db():
-    import models.identity
-    import models.origination
-    import models.audit
-    import models.credit_card
-    import models.support
-    import models.settings
-    import models.kyc
+    import models.identity  # noqa: F401
+    import models.origination  # noqa: F401
+    import models.audit  # noqa: F401
+    import models.credit_card  # noqa: F401
+    import models.support  # noqa: F401
+    import models.settings  # noqa: F401
+    import models.kyc  # noqa: F401
     try:
         Base.metadata.create_all(bind=ledger_pool)
         Base.metadata.create_all(bind=kyc_pool)
@@ -284,6 +285,5 @@ def init_db():
         logger.warning(f"Could not auto-initialize tables: {e}")
 
 
-import sys
 if not any("alembic" in arg for arg in sys.argv) and os.getenv("DISABLE_INIT_DB") != "true":
     init_db()

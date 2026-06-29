@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import uuid
 from typing import Optional
 import datetime
 from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Integer, Index, Text, Float

@@ -15,7 +15,7 @@
 import json
 import uuid
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker

@@ -21,7 +21,7 @@ from google.cloud import bigquery, storage
 from utils.gcp import get_project_id
 
 from .utils import (
-    _load_sql, _extract_customer_identity, _mask_ssn, _mask_ein
+    _extract_customer_identity, _mask_ssn, _mask_ein
 )
 from . import mcp  # Import the shared FastMCP server instance
 

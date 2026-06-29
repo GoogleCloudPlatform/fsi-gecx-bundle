@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import threading
-from typing import Dict, Any
+from typing import Dict
 from cachetools import TTLCache
 from models.fdx import PersonalFinanceCategory
 

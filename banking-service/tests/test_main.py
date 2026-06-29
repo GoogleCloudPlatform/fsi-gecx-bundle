@@ -21,7 +21,7 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 
 from main import app
-from routers.artifact import BUCKET_NAME, storage_client, bq_client
+from services.origination import BUCKET_NAME, storage_client
 from utils.database import SessionLocal
 from models.origination import ApplicationArtifact
 

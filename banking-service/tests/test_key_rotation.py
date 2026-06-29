@@ -17,7 +17,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models.kyc import KYCRecord, Base
-from utils.encryption import encrypt_pii, decrypt_pii
+from utils.encryption import decrypt_pii
 from utils.key_rotation import batch_rotate_kyc_deks
 
 

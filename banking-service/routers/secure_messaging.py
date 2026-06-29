@@ -23,7 +23,7 @@ from models.secure_messaging import (
 )
 from utils.auth import get_current_user
 from utils.database import get_db
-from services.messaging import MessagingService, messaging, identity_repo
+from services.messaging import MessagingService, messaging, identity_repo  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
