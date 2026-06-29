@@ -84,31 +84,59 @@ async def process_document(
         logger.info(f"Skipping processing for non-supported GCS finalized object: {filename} (resolved MIME: {mime_type})")
         return {"message": "Skipped: object is not a supported document file.", "filename": filename}
 
-    dataset_id = os.getenv("DATASET_ID", "banking")
-    sql_query = get_check_status_sql().format(dataset_id=dataset_id)
-    
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("filename", "STRING", f"%{filename}")
-        ]
-    )
+    # 3. Check PostgreSQL ApplicationArtifact table first, falling back to BigQuery
+    status_val = None
+    record_found = False
+
+    from utils.database import SessionLocal
+    from models.origination import ApplicationArtifact as PGArtifact
+    db = SessionLocal()
     try:
-        query_job = bq_client.query(sql_query, job_config=job_config)
-        results = list(query_job.result())
-        if not results:
-            logger.error(f"Artifact record not found in BigQuery for {filename}")
-            raise HTTPException(status_code=404, detail="Artifact metadata not found.")
+        pg_art = db.query(PGArtifact).filter(
+            (PGArtifact.artifact_id == filename) | (PGArtifact.gcs_uri.endswith(filename))
+        ).first()
+        if pg_art:
+            record_found = True
+            status_val = pg_art.status
+    except Exception as pg_ex:
+        logger.warning(f"PostgreSQL artifact verification check failed: {pg_ex}")
+    finally:
+        db.close()
+
+    if not record_found:
+        dataset_id = os.getenv("DATASET_ID", "banking")
+        sql_query = get_check_status_sql().format(dataset_id=dataset_id)
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("filename", "STRING", f"%{filename}")
+            ]
+        )
+        try:
+            query_job = bq_client.query(sql_query, job_config=job_config)
+            results = list(query_job.result())
+            if results:
+                record_found = True
+                status_val = results[0].status
+        except Exception as e:
+            logger.error(f"BigQuery idempotency check failed: {e}")
+            raise HTTPException(status_code=500, detail="Database verification error.")
+
+    if not record_found:
+        delivery_attempt_str = request.headers.get("x-goog-pubsub-message-delivery-attempt") or request.headers.get("ce-deliveryattempt")
+        delivery_attempt = int(delivery_attempt_str) if delivery_attempt_str and delivery_attempt_str.isdigit() else 1
         
-        status = ProcessingStatus(results[0].status)
-        if status != ProcessingStatus.PENDING_CLASSIFICATION:
-            logger.info(f"Idempotency check: Artifact {filename} already processed (Status: {status.value}). Skipping.")
-            return {"message": "Idempotent success: Artifact already processed.", "status": status.value}
-            
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        logger.error(f"BigQuery idempotency check failed: {e}")
-        raise HTTPException(status_code=500, detail="Database verification error.")
+        # Hybrid Strategy: If Pub/Sub has retried more than 3 times, or if delivery attempt tracking header is absent,
+        # acknowledge terminally (HTTP 200) to drain orphaned files from Eventarc / Pub/Sub retry loops.
+        if delivery_attempt > 3 or not delivery_attempt_str:
+            logger.warning(f"Artifact {filename} missing from database after retries (delivery attempt: {delivery_attempt}). Terminal ACK to prevent infinite retry loop.")
+            return {"status": "ignored", "reason": "artifact_metadata_not_found_after_retries", "filename": filename}
+        
+        logger.error(f"Artifact record not found in database for {filename} on attempt {delivery_attempt}. Raising 404 for retry.")
+        raise HTTPException(status_code=404, detail="Artifact metadata not found.")
+
+    if status_val and status_val not in ["UPLOADED", "PENDING_CLASSIFICATION", "CLASSIFYING"]:
+        logger.info(f"Idempotency check: Artifact {filename} already processed (Status: {status_val}). Skipping.")
+        return {"message": "Idempotent success: Artifact already processed.", "status": status_val}
     
     # Invoke the Document AI pipeline directly (synchronous/blocking inside Cloud Run to guarantee CPU allocation!)
     try:
