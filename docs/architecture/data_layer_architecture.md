@@ -102,7 +102,7 @@ with connection.begin_nested():
 Sub-transaction savepoints guarantee that even if a role grant fails in an isolated environment, it rolls back cleanly without aborting the parent migration transaction.
 
 ### D. Containerized CI Migration Validation
-In Step #2 of Cloud Build (`validate-ephemeral-migrations` in `cloudbuild-publish-deploy.yaml`), our CI/CD pipeline validates migration health prior to staging artifacts. It spins up an ephemeral `postgres:16-alpine` background daemon and connects the newly built banking container over shared container networking (`--network container:pg-validate`) to execute:
+In Step #2 of Cloud Build (`validate-ephemeral-migrations` in `cloudbuild-publish-deploy.yaml`), our CI/CD pipeline validates migration health prior to staging artifacts. It spins up an ephemeral `mirror.gcr.io/library/postgres:16-alpine` background daemon and connects the newly built banking container over shared container networking (`--network container:pg-validate`) to execute:
 ```bash
 alembic upgrade head && alembic downgrade base && alembic upgrade head
 ```
