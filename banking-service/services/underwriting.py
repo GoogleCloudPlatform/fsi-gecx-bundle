@@ -74,7 +74,7 @@ def get_pending_exceptions(table_ref: str, db: Optional[Session] = None) -> list
                     user_first_name=user.first_name if user else None,
                     user_last_name=user.last_name if user else None,
                     user_email=user.email if user else None,
-                    requested_amount=getattr(app, "requested_amount", getattr(app, "requested_amount_cents", None)) if app else None,
+                    requested_amount=(getattr(app, "requested_amount_cents") / 100.0 if getattr(app, "requested_amount_cents", None) is not None else None) if app else None,
                     product_category=getattr(app, "product_category", None) if app else None,
                     product_type=getattr(app, "product_type", None) if app else None
                 ))
