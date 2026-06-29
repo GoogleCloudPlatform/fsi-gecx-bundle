@@ -19,6 +19,7 @@ from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Integer
 from utils.database import UniversalUUID as UUID, generate_uuid
 from sqlalchemy.orm import relationship
 from utils.database import Base
+from models.application import ProductCategory
 
 
 class Account(Base):
@@ -84,11 +85,11 @@ class Application(Base):
     @property
     def requested_amount_cents(self) -> Optional[int]:
         cat = (self.product_category or "").upper()
-        if cat == "MORTGAGE" and self.mortgage_detail:
+        if cat in (ProductCategory.MORTGAGE.value, ProductCategory.LOAN.value) and self.mortgage_detail:
             return self.mortgage_detail.requested_loan_cents
-        elif cat == "CREDIT_CARD" and self.credit_card_detail:
+        elif cat in (ProductCategory.CREDIT_CARD.value, ProductCategory.CARD.value) and self.credit_card_detail:
             return self.credit_card_detail.requested_limit_cents
-        elif cat == "DEPOSIT" and self.deposit_detail:
+        elif cat == ProductCategory.DEPOSIT.value and self.deposit_detail:
             return self.deposit_detail.initial_deposit_cents
         if self.mortgage_detail and self.mortgage_detail.requested_loan_cents is not None:
             return self.mortgage_detail.requested_loan_cents
@@ -101,11 +102,11 @@ class Application(Base):
     @requested_amount_cents.setter
     def requested_amount_cents(self, value: Optional[int]):
         cat = (self.product_category or "").upper()
-        if cat == "CREDIT_CARD":
+        if cat in (ProductCategory.CREDIT_CARD.value, ProductCategory.CARD.value):
             if not self.credit_card_detail:
                 self.credit_card_detail = CreditCardApplication()
             self.credit_card_detail.requested_limit_cents = value
-        elif cat == "DEPOSIT":
+        elif cat == ProductCategory.DEPOSIT.value:
             if not self.deposit_detail:
                 self.deposit_detail = DepositApplication()
             self.deposit_detail.initial_deposit_cents = value

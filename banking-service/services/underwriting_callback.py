@@ -20,10 +20,20 @@ from google.auth.transport.requests import Request
 from google.cloud import bigquery
 from cachetools import TTLCache
 from utils.gcp import get_project_id
-from routers.secure_messaging import create_message
+from services.messaging import MessagingService
+from utils.database import SessionLocal
 from models.secure_messaging import SecureMessageCreateRequest, SENDER_TYPE_BANK
 
 logger = logging.getLogger(__name__)
+
+
+async def create_message(request, token=None):
+    db = SessionLocal()
+    try:
+        service = MessagingService(db)
+        return service.create_message(request, token)
+    finally:
+        db.close()
 
 DIALOGFLOW_AGENT_ID = os.getenv("DIALOGFLOW_AGENT_ID", "e0b952c1-280d-41d0-8da5-46db4b0e6ad9")
 DIALOGFLOW_LOCATION = os.getenv("DIALOGFLOW_LOCATION", "us-central1")
