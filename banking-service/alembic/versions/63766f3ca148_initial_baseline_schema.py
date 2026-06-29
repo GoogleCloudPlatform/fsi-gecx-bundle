@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+import os
 
 
 # revision identifiers, used by Alembic.
@@ -116,7 +117,6 @@ def upgrade() -> None:
     # Grant DML permissions to the runtime application user only if deploying against PostgreSQL
     bind = op.get_bind()
     if bind.dialect.name == "postgresql" and os.getenv("SKIP_IAM_GRANTS") != "true":
-        import os
         from utils.gcp import get_project_id
         try:
             project_id = get_project_id()
