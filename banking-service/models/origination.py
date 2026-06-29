@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import uuid
+from typing import Optional
 import datetime
 from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Integer, Index, Text, Float
 from utils.database import UniversalUUID as UUID, generate_uuid
@@ -59,7 +60,6 @@ class Application(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="RESTRICT"), nullable=False)
     product_category = Column(String(50), nullable=False)  # 'MORTGAGE', 'CREDIT_CARD', 'DEPOSIT'
     status = Column(String(50), nullable=False, default="STARTED")
-    requested_amount_cents = Column(BigInteger, nullable=True)
     started_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     last_updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
 
@@ -70,13 +70,68 @@ class Application(Base):
     credit_card_detail = relationship("CreditCardApplication", back_populates="application", uselist=False, cascade="all, delete")
     deposit_detail = relationship("DepositApplication", back_populates="application", uselist=False, cascade="all, delete")
 
+    def __init__(self, **kwargs):
+        if "product_category" in kwargs:
+            self.product_category = kwargs.pop("product_category")
+        req_cents = kwargs.pop("requested_amount_cents", None)
+        req_amt = kwargs.pop("requested_amount", None)
+        super().__init__(**kwargs)
+        if req_cents is not None:
+            self.requested_amount_cents = req_cents
+        elif req_amt is not None:
+            self.requested_amount = req_amt
+
+    @property
+    def requested_amount_cents(self) -> Optional[int]:
+        cat = (self.product_category or "").upper()
+        if cat == "MORTGAGE" and self.mortgage_detail:
+            return self.mortgage_detail.requested_loan_cents
+        elif cat == "CREDIT_CARD" and self.credit_card_detail:
+            return self.credit_card_detail.requested_limit_cents
+        elif cat == "DEPOSIT" and self.deposit_detail:
+            return self.deposit_detail.initial_deposit_cents
+        if self.mortgage_detail and self.mortgage_detail.requested_loan_cents is not None:
+            return self.mortgage_detail.requested_loan_cents
+        if self.credit_card_detail and self.credit_card_detail.requested_limit_cents is not None:
+            return self.credit_card_detail.requested_limit_cents
+        if self.deposit_detail and self.deposit_detail.initial_deposit_cents is not None:
+            return self.deposit_detail.initial_deposit_cents
+        return None
+
+    @requested_amount_cents.setter
+    def requested_amount_cents(self, value: Optional[int]):
+        cat = (self.product_category or "").upper()
+        if cat == "CREDIT_CARD":
+            if not self.credit_card_detail:
+                self.credit_card_detail = CreditCardApplication()
+            self.credit_card_detail.requested_limit_cents = value
+        elif cat == "DEPOSIT":
+            if not self.deposit_detail:
+                self.deposit_detail = DepositApplication()
+            self.deposit_detail.initial_deposit_cents = value
+        else:
+            if not self.mortgage_detail:
+                self.mortgage_detail = MortgageApplication()
+            self.mortgage_detail.requested_loan_cents = value
+
+    @property
+    def requested_amount(self) -> Optional[float]:
+        val = self.requested_amount_cents
+        return val / 100.0 if val is not None else None
+
+    @requested_amount.setter
+    def requested_amount(self, value: Optional[float]):
+        self.requested_amount_cents = int(value * 100) if value is not None else None
+
 
 class MortgageApplication(Base):
     """1-to-1 extension table for mortgage pre-approvals."""
     __tablename__ = "mortgage_applications"
     __table_args__ = {'schema': 'origination'}
 
-    application_id = Column(UUID(as_uuid=True), ForeignKey("origination.applications.id", ondelete="CASCADE"), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    application_id = Column(UUID(as_uuid=True), ForeignKey("origination.applications.id", ondelete="CASCADE"), unique=True, nullable=False)
+    requested_loan_cents = Column(BigInteger, nullable=True)
     property_address = Column(String(255), nullable=True)
     estimated_value_cents = Column(BigInteger, nullable=True)
     loan_term_months = Column(Integer, nullable=True)
@@ -90,7 +145,8 @@ class CreditCardApplication(Base):
     __tablename__ = "credit_card_applications"
     __table_args__ = {'schema': 'origination'}
 
-    application_id = Column(UUID(as_uuid=True), ForeignKey("origination.applications.id", ondelete="CASCADE"), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    application_id = Column(UUID(as_uuid=True), ForeignKey("origination.applications.id", ondelete="CASCADE"), unique=True, nullable=False)
     requested_limit_cents = Column(BigInteger, nullable=True)
     card_product_id = Column(String(50), nullable=True)
 
@@ -102,7 +158,8 @@ class DepositApplication(Base):
     __tablename__ = "deposit_applications"
     __table_args__ = {'schema': 'origination'}
 
-    application_id = Column(UUID(as_uuid=True), ForeignKey("origination.applications.id", ondelete="CASCADE"), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    application_id = Column(UUID(as_uuid=True), ForeignKey("origination.applications.id", ondelete="CASCADE"), unique=True, nullable=False)
     deposit_product_name = Column(String(100), nullable=True)
     initial_deposit_cents = Column(BigInteger, nullable=True)
 

@@ -92,12 +92,16 @@ class AccountsService:
         self.db.add(app)
         self.db.flush()
 
-        dep_app = DepositApplication(
-            application_id=app.id,
-            deposit_product_name=request.product_name,
-            initial_deposit_cents=request.initial_deposit_cents
-        )
-        self.db.add(dep_app)
+        if app.deposit_detail:
+            app.deposit_detail.deposit_product_name = request.product_name
+            app.deposit_detail.initial_deposit_cents = request.initial_deposit_cents
+        else:
+            dep_app = DepositApplication(
+                application_id=app.id,
+                deposit_product_name=request.product_name,
+                initial_deposit_cents=request.initial_deposit_cents
+            )
+            self.db.add(dep_app)
         self.db.flush()
 
         # If initial funding provided, post double-entry journal against clearing account
