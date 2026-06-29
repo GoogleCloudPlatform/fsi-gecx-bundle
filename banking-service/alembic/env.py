@@ -102,9 +102,9 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         include_schemas=True,
-        compare_type=compare_type,
         compare_foreign_keys=False,
         process_revision_directives=process_revision_directives,
+        version_table_schema="admin" if (url and url.startswith("postgresql")) else None,
     )
 
     with context.begin_transaction():
@@ -115,6 +115,8 @@ def run_migrations_offline() -> None:
             context.execute("CREATE SCHEMA IF NOT EXISTS cards;")
             context.execute("CREATE SCHEMA IF NOT EXISTS operations;")
             context.execute("CREATE SCHEMA IF NOT EXISTS origination;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS audit;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS admin;")
         context.run_migrations()
 
 
@@ -140,15 +142,18 @@ def run_migrations_online() -> None:
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS cards;"))
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS operations;"))
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS origination;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS audit;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS admin;"))
+            connection.execute(sa.text("ALTER TABLE IF EXISTS public.alembic_version SET SCHEMA admin;"))
             connection.commit()
 
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
             include_schemas=True,
-            compare_type=compare_type,
             compare_foreign_keys=False,
             process_revision_directives=process_revision_directives,
+            version_table_schema="admin" if is_postgres else None,
         )
 
         with context.begin_transaction():
@@ -165,7 +170,7 @@ def run_migrations_online() -> None:
                 except Exception:
                     project_id = os.getenv("PROJECT_ID")
 
-                schemas = ["identity", "kyc", "ledger", "cards", "operations", "origination"]
+                schemas = ["identity", "kyc", "ledger", "cards", "operations", "origination", "audit", "admin"]
                 sa_names = ["banking-service-sa", "kyc-service-sa", "ledger-service-sa"]
                 roles = [f"{sa}@{project_id}.iam" if project_id else sa for sa in sa_names]
                 if os.getenv("IAM_DBA_USERS"):

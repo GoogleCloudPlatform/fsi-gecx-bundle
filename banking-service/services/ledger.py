@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
 
 from models.origination import Account, Transaction, AccountLedgerEntry
+from utils.audit import record_audit_event
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +155,8 @@ class LedgerService:
 
         tx.response_payload = json.dumps(result)
         tx.response_status = 200
+
+        record_audit_event(self.db, "MONETARY_TRANSFER_EXECUTED", result)
 
         try:
             self.db.commit()

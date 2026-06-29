@@ -16,6 +16,9 @@ import os
 import logging
 import datetime
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from sqlalchemy.orm import Session
+from utils.database import get_db
+from utils.audit import record_audit_event
 from google.auth import default
 from google.auth.impersonated_credentials import Credentials as ImpersonatedCredentials
 from google.cloud import storage, bigquery
@@ -68,7 +71,8 @@ async def get_exceptions(
 async def post_override(
     payload: UnderwritingOverrideRequest,
     background_tasks: BackgroundTasks,
-    token: ValidatedToken = Depends(get_current_user)
+    token: ValidatedToken = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """
     Secure Endpoint: Commits human loan officer corrections, verifications, 
@@ -78,6 +82,19 @@ async def post_override(
     table_ref = _get_table_ref()
     try:
         apply_underwriting_override(table_ref, payload)
+        
+        record_audit_event(
+            db,
+            "UNDERWRITING_OVERRIDE_APPLIED",
+            {
+                "artifact_id": payload.artifact_id,
+                "customer_id": payload.customer_id,
+                "underwriter_id": payload.underwriter_id,
+                "decision": payload.decision.value,
+                "verified_income": payload.verifications.calculated_gross_monthly_income
+            }
+        )
+        db.commit()
         
         # Dispatch Asynchronous Webhook Callback to propagate verified status back to Gemini/Dialogflow CX
         background_tasks.add_task(

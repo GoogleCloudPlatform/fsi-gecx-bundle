@@ -441,6 +441,27 @@ def process_document_pipeline(bucket_name: str, blob_name: str) -> dict:
         update_job = bq_client.query(update_query, job_config=update_config)
         update_job.result()  # Wait for completion
         logger.info(f"BigQuery commit completed successfully. Pipeline status updated to: {final_status.value}")
+
+        from utils.database import SessionLocal
+        from utils.audit import record_audit_event
+        db = SessionLocal()
+        try:
+            record_audit_event(
+                db,
+                "DOCUMENT_EXTRACTION_COMPLETED",
+                {
+                    "artifact_id": artifact_id,
+                    "status": final_status.value,
+                    "classified_type": classified_type.value,
+                    "confidence_score": confidence_score,
+                    "verification_tier": verification_tier
+                }
+            )
+            db.commit()
+        except Exception as aud_ex:
+            logger.warning(f"Failed to record audit event for document AI extraction: {aud_ex}")
+        finally:
+            db.close()
     except Exception as bq_ex:
         logger.error(f"BigQuery transaction failed: {bq_ex}")
         raise bq_ex

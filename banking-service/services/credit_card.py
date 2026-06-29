@@ -17,6 +17,7 @@ import datetime
 from sqlalchemy.orm import Session
 from models.credit_card import FinancialAccount, IssuedCard, AccountLedger
 from models.settings import SystemSetting
+from utils.audit import record_audit_event
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +152,7 @@ def freeze_card(db: Session, card_token: str, reason: str) -> dict:
         
     card.status = "BLOCKED"
     repo.save_card(card)
+    record_audit_event(db, "CARD_FROZEN", {"card_token": card_token, "reason": reason})
     db.commit()
     logger.info(f"Card token '{card_token}' successfully blocked.")
     return {"card_token": card_token, "status": "BLOCKED"}
@@ -178,6 +180,7 @@ def apply_limit_increase(db: Session, account_id: str, requested_limit_cents: in
     account.available_credit_cents += limit_change
     
     repo.save_account(account)
+    record_audit_event(db, "CREDIT_LIMIT_INCREASED", {"account_id": str(account_id), "new_limit_cents": account.credit_limit_cents})
     db.commit()
     logger.info(f"Limit updated. New Limit: {account.credit_limit_cents} cents, Available Credit: {account.available_credit_cents} cents")
     return {
@@ -237,6 +240,7 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
     account.available_credit_cents += reversal_amount  # Available credit increases
 
     repo.save_account(account)
+    record_audit_event(db, "FEE_REVERSED", {"account_id": str(account_id), "reversal_amount_cents": reversal_amount})
     db.commit()
     logger.info(f"Transaction reversed successfully. New Cleared Balance: {account.cleared_balance_cents} cents, Available Credit: {account.available_credit_cents} cents")
     return {

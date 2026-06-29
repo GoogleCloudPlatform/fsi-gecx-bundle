@@ -3,7 +3,7 @@ from utils.database import Base
 
 class SystemSetting(Base):
     __tablename__ = "system_settings"
-    __table_args__ = {'schema': 'operations'}
+    __table_args__ = {'schema': 'admin'}
     
     key = Column(String, primary_key=True, index=True)
     value = Column(String, nullable=False)

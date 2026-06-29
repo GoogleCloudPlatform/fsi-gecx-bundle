@@ -28,7 +28,7 @@ class AuditOutbox(Base):
     __table_args__ = (
         Index("idx_audit_outbox_status", "status"),
         Index("idx_audit_outbox_event_id", "event_id"),
-        {'schema': 'ledger'},
+        {'schema': 'audit'},
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)

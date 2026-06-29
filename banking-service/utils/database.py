@@ -153,6 +153,8 @@ def attach_sqlite_schemas(dbapi_connection, connection_record):
         try:
             cursor.execute("SELECT 1 FROM identity.sqlite_master LIMIT 1;")
             cursor.execute("SELECT 1 FROM origination.sqlite_master LIMIT 1;")
+            cursor.execute("SELECT 1 FROM audit.sqlite_master LIMIT 1;")
+            cursor.execute("SELECT 1 FROM admin.sqlite_master LIMIT 1;")
             cursor.close()
             return
         except Exception:
@@ -175,6 +177,8 @@ def attach_sqlite_schemas(dbapi_connection, connection_record):
                     "ATTACH DATABASE 'file:cards_mem?mode=memory&cache=shared' AS cards;",
                     "ATTACH DATABASE 'file:operations_mem?mode=memory&cache=shared' AS operations;",
                     "ATTACH DATABASE 'file:origination_mem?mode=memory&cache=shared' AS origination;",
+                    "ATTACH DATABASE 'file:audit_mem?mode=memory&cache=shared' AS audit;",
+                    "ATTACH DATABASE 'file:admin_mem?mode=memory&cache=shared' AS admin;",
                 ]
             else:
                 base_prefix = main_file.rsplit(".", 1)[0] if "." in main_file else main_file
@@ -189,6 +193,8 @@ def attach_sqlite_schemas(dbapi_connection, connection_record):
                     f"ATTACH DATABASE '{base_prefix}cards.db' AS cards;",
                     f"ATTACH DATABASE '{base_prefix}operations.db' AS operations;",
                     f"ATTACH DATABASE '{base_prefix}origination.db' AS origination;",
+                    f"ATTACH DATABASE '{base_prefix}audit.db' AS audit;",
+                    f"ATTACH DATABASE '{base_prefix}admin.db' AS admin;",
                 ]
 
             for stmt in stmts:
