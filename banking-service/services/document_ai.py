@@ -116,6 +116,7 @@ class DocumentType(str, Enum):
             return cls.UNKNOWN
 
 class ProcessingStatus(str, Enum):
+    UPLOADED = "UPLOADED"
     PENDING_CLASSIFICATION = "PENDING_CLASSIFICATION"
     CLASSIFYING = "CLASSIFYING"
     PROCESSED = "PROCESSED"
@@ -246,7 +247,7 @@ def process_document_pipeline(bucket_name: str, blob_name: str) -> dict:
     claimed_type = DocumentType.parse(str(artifact_record.claimed_artifact_type) if artifact_record.claimed_artifact_type else None)
     application_id = str(artifact_record.application_id)
 
-    if ProcessingStatus(str(artifact_record.status)) != ProcessingStatus.PENDING_CLASSIFICATION:
+    if ProcessingStatus(str(artifact_record.status)) not in [ProcessingStatus.UPLOADED, ProcessingStatus.PENDING_CLASSIFICATION]:
         logger.info(f"Idempotency check: File {gcs_uri} already processed (Status: {artifact_record.status}). Skipping.")
         return {"status": "SKIPPED", "message": f"Artifact already in state: {artifact_record.status}"}
 
