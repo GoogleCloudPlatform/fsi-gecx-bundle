@@ -179,7 +179,7 @@ function AccountsView({ fbUser, customerProfile }) {
                 <div 
                   key={`chk-${idx}`} 
                   onClick={() => handleSelectAccount(acc.account_id, 'checking')}
-                  className="bg-slate-900/80 border border-slate-850 hover:border-teal-500/50 rounded-3xl p-8 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between group h-64"
+                  className="bg-slate-900/40 backdrop-blur-md border border-slate-800/60 hover:border-teal-500/40 rounded-3xl p-8 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between group h-64 shadow-xl hover:shadow-teal-500/5"
                 >
                   <div className="flex justify-between items-start">
                     <div className="w-12 h-12 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400">
@@ -203,7 +203,7 @@ function AccountsView({ fbUser, customerProfile }) {
                 <div 
                   key={`sav-${idx}`} 
                   onClick={() => handleSelectAccount(acc.account_id, 'savings')}
-                  className="bg-slate-900/80 border border-slate-850 hover:border-emerald-500/50 rounded-3xl p-8 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between group h-64"
+                  className="bg-slate-900/40 backdrop-blur-md border border-slate-800/60 hover:border-emerald-500/40 rounded-3xl p-8 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between group h-64 shadow-xl hover:shadow-emerald-500/5"
                 >
                   <div className="flex justify-between items-start">
                     <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
@@ -227,7 +227,7 @@ function AccountsView({ fbUser, customerProfile }) {
                 <div 
                   key={`cred-${idx}`} 
                   onClick={() => handleSelectAccount(acc.account_id, 'credit')}
-                  className="bg-slate-900/80 border border-slate-850 hover:border-indigo-500/50 rounded-3xl p-8 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between group h-64"
+                  className="bg-slate-900/40 backdrop-blur-md border border-slate-800/60 hover:border-indigo-500/40 rounded-3xl p-8 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between group h-64 shadow-xl hover:shadow-indigo-500/5"
                 >
                   <div className="flex justify-between items-start">
                     <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
