@@ -72,6 +72,8 @@ resource "google_compute_instance" "cloudsql_proxy_vm" {
   metadata = {
     startup-script = <<-EOT
       #!/bin/bash
+      # Open port 5432 in Container-Optimized OS local kernel iptables firewall
+      iptables -I INPUT -p tcp --dport 5432 -j ACCEPT
       # Run official Google Cloud SQL Auth Proxy container in Docker
       docker run -d --restart=always --net=host \
         gcr.io/cloud-sql-connectors/cloud-sql-proxy:latest \
