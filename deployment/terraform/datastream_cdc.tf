@@ -34,7 +34,7 @@ resource "google_datastream_connection_profile" "postgres_source" {
   connection_profile_id = "postgres-source-profile"
 
   postgresql_profile {
-    hostname = google_sql_database_instance.banking_data.private_ip_address
+    hostname = google_compute_address.proxy_internal_ip.address
     port     = 5432
     username = google_sql_user.banking_bq_connector.name
     password = random_password.banking_bq_connector_password.result
@@ -45,7 +45,11 @@ resource "google_datastream_connection_profile" "postgres_source" {
     private_connection = google_datastream_private_connection.vpc_connection.id
   }
 
-  depends_on = [google_project_service.datastream_googleapis_com]
+  depends_on = [
+    google_project_service.datastream_googleapis_com,
+    google_compute_instance.cloudsql_proxy_vm,
+    google_compute_firewall.allow_datastream_to_proxy
+  ]
 }
 
 resource "google_datastream_connection_profile" "bigquery_destination" {
