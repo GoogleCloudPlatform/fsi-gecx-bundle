@@ -113,7 +113,7 @@ async def test_provision_my_demo_conflict(async_client, db_session):
     # Provision again -> Conflict
     response2 = await async_client.post("/api/v1/simulation/provision-my-demo")
     assert response2.status_code == status.HTTP_409_CONFLICT
-    assert response2.json()["detail"] == "Profile already provisioned."
+    assert response2.json()["detail"] == "Profile already provisioned with active accounts."
 
 @pytest.mark.asyncio
 async def test_reset_my_demo_success(async_client, db_session):

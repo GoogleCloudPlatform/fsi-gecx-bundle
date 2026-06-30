@@ -24,6 +24,7 @@ from services.card_network import process_authorization, process_settlement, pro
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/card-network", tags=["Card Network Switch"])
+v1_router = APIRouter(prefix="/v1/card-network", tags=["Card Network Switch"])
 
 CARD_NETWORK_TOKEN = os.getenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")
 
@@ -53,6 +54,7 @@ class CardReversalRequest(BaseModel):
     retrieval_reference_number: str = Field(..., max_length=12, description="RRN matching the hold authorization to void")
 
 @router.post("/authorize", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_network_switch_secret)])
+@v1_router.post("/authorize", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_network_switch_secret)])
 def card_network_authorize(
     request: CardAuthHoldRequest,
     db: Session = Depends(get_db)
@@ -64,6 +66,7 @@ def card_network_authorize(
     return res
 
 @router.post("/settle", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_network_switch_secret)])
+@v1_router.post("/settle", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_network_switch_secret)])
 def card_network_settle(
     request: CardSettlementRequest,
     db: Session = Depends(get_db)
@@ -86,6 +89,7 @@ def card_network_settle(
         )
 
 @router.post("/reverse", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_network_switch_secret)])
+@v1_router.post("/reverse", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_network_switch_secret)])
 def card_network_reverse(
     request: CardReversalRequest,
     db: Session = Depends(get_db)

@@ -32,6 +32,7 @@ from services.taxonomy_service import TaxonomyService
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/credit-card", tags=["Credit Card Support"])
 apiv1_router = APIRouter(prefix="/api/v1/credit-card", tags=["Credit Card Support"])
+v1_router = APIRouter(prefix="/v1/credit-card", tags=["Credit Card Support"])
 
 # LiveKit Server Settings (Defaults match local development Docker setup)
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "devkey")
@@ -317,6 +318,7 @@ from fastapi import status
 
 @router.post("/pay", status_code=status.HTTP_200_OK)
 @apiv1_router.post("/pay", status_code=status.HTTP_200_OK)
+@v1_router.post("/pay", status_code=status.HTTP_200_OK)
 def pay_credit_card(
     request: BillPaymentRequest,
     db: Session = Depends(get_db),

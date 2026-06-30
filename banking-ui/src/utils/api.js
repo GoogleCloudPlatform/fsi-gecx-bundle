@@ -264,7 +264,7 @@ export async function getLocations({ lat, lng, address, type }) {
 
 export async function createDepositAccount(depositData) {
   const idempotencyKey = 'IDEMP-UI-' + Math.random().toString(36).substring(2, 15) + '-' + Date.now();
-  const res = await api.post('/api/v1/accounts/deposit', depositData, {
+  const res = await api.post('/v1/accounts/deposit', depositData, {
     headers: {
       'X-Idempotency-Key': idempotencyKey
     }
@@ -273,22 +273,22 @@ export async function createDepositAccount(depositData) {
 }
 
 export async function provisionMyDemo() {
-  const res = await api.post('/api/v1/simulation/provision-my-demo');
+  const res = await api.post('/v1/simulation/provision-my-demo');
   return res.data;
 }
 
 export async function resetMyDemo() {
-  const res = await api.post('/api/v1/simulation/reset-my-demo');
+  const res = await api.post('/v1/simulation/reset-my-demo');
   return res.data;
 }
 
 export async function getAccountsSummary() {
-  const res = await api.get('/api/v1/accounts/summary');
+  const res = await api.get('/v1/accounts/summary');
   return res.data;
 }
 
 export async function payCreditCard(paymentData) {
-  const res = await api.post('/api/v1/credit-card/pay', paymentData);
+  const res = await api.post('/v1/credit-card/pay', paymentData);
   return res.data;
 }
 

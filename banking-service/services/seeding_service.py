@@ -293,59 +293,67 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
         # 1. Check if user already exists
         existing_user = db.query(User).filter((User.email == email) | (User.auth_provider_uid == firebase_uid)).first()
         if existing_user:
-            raise ValueError("Profile already provisioned.")
-
-        # 2. Extract first and last names
-        name_part = email.split("@")[0]
-        if "." in name_part:
-            parts = name_part.split(".")
-            first_name = parts[0].capitalize()
-            last_name = parts[1].capitalize()
+            has_dep = db.query(Account).filter(Account.user_id == existing_user.id).first()
+            has_cc = db.query(CreditAccount).filter(CreditAccount.customer_id == existing_user.id).first()
+            if has_dep or has_cc:
+                raise ValueError("Profile already provisioned with active accounts.")
+            user_uuid = existing_user.id
         else:
-            first_name = name_part.capitalize()
-            last_name = "User"
+            # 2. Extract first and last names
+            name_part = email.split("@")[0]
+            if "." in name_part:
+                parts = name_part.split(".")
+                first_name = parts[0].capitalize()
+                last_name = parts[1].capitalize()
+            else:
+                first_name = name_part.capitalize()
+                last_name = "User"
 
-        user_uuid = uuid.uuid4()
-        
-        # 3. Create User
-        user = User(
-            id=user_uuid,
-            auth_provider_uid=firebase_uid,
-            first_name=first_name,
-            last_name=last_name,
-            email=email,
-            phone_number="555-01" + str(random.randint(10, 99))
-        )
-        db.add(user)
-        db.flush()
+            user_uuid = uuid.uuid4()
+            
+            # 3. Create User
+            user = User(
+                id=user_uuid,
+                auth_provider_uid=firebase_uid,
+                first_name=first_name,
+                last_name=last_name,
+                email=email,
+                phone_number="555-01" + str(random.randint(10, 99))
+            )
+            db.add(user)
+            db.flush()
 
-        # 4. Create KYCRecord (Envelope encrypted)
-        kyc_record_id = uuid.uuid4()
-        ssn = f"900-{random.randint(10, 99)}-{random.randint(1000, 9999)}"
-        enc_pii, wrapped_dek, iv, tag = encrypt_pii(
-            plaintext_pii=json.dumps({"ssn": ssn, "dob": "1990-01-01"}),
-            user_id=str(user_uuid),
-            record_id=str(kyc_record_id)
-        )
-        kyc_rec = KYCRecord(
-            id=kyc_record_id,
-            user_id=user_uuid,
-            encrypted_pii=enc_pii,
-            wrapped_dek=wrapped_dek,
-            encryption_iv=iv,
-            auth_tag=tag
-        )
-        db.add(kyc_rec)
+        # 4. Create KYCRecord (Envelope encrypted) if not exists
+        kyc_rec = db.query(KYCRecord).filter(KYCRecord.user_id == user_uuid).first()
+        if not kyc_rec:
+            kyc_record_id = uuid.uuid4()
+            ssn = f"900-{random.randint(10, 99)}-{random.randint(1000, 9999)}"
+            enc_pii, wrapped_dek, iv, tag = encrypt_pii(
+                plaintext_pii=json.dumps({"ssn": ssn, "dob": "1990-01-01"}),
+                user_id=str(user_uuid),
+                record_id=str(kyc_record_id)
+            )
+            kyc_rec = KYCRecord(
+                id=kyc_record_id,
+                user_id=user_uuid,
+                encrypted_pii=enc_pii,
+                wrapped_dek=wrapped_dek,
+                encryption_iv=iv,
+                auth_tag=tag
+            )
+            db.add(kyc_rec)
 
-        # 5. Create UserCreditProfile
-        credit_prof = UserCreditProfile(
-            id=uuid.uuid4(),
-            user_id=user_uuid,
-            credit_score=720,
-            credit_tier="PRIME",
-            stated_annual_income_cents=9500000  # $95,000.00
-        )
-        db.add(credit_prof)
+        # 5. Create UserCreditProfile if not exists
+        credit_prof = db.query(UserCreditProfile).filter(UserCreditProfile.user_id == user_uuid).first()
+        if not credit_prof:
+            credit_prof = UserCreditProfile(
+                id=uuid.uuid4(),
+                user_id=user_uuid,
+                credit_score=720,
+                credit_tier="PRIME",
+                stated_annual_income_cents=9500000  # $95,000.00
+            )
+            db.add(credit_prof)
         db.flush()
 
         # 6. Provision checking/savings deposit accounts

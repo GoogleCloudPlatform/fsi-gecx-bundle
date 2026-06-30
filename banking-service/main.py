@@ -35,16 +35,16 @@ from routers.health import router as health_router
 from routers.search import router as search_router
 from routers.secure_messaging import router as secure_messaging_router
 from routers.underwriting import router as underwriting_router
-from routers.credit_card import router as credit_card_router, apiv1_router as credit_card_apiv1_router
+from routers.credit_card import router as credit_card_router, apiv1_router as credit_card_apiv1_router, v1_router as credit_card_v1_router
 from routers.support import router as support_router
 from routers.settings import router as settings_router
 from models.authentication import ValidatedToken
 from utils.auth import get_current_user
 from routers.locator import router as locator_router
-from routers.accounts import router as accounts_router, alias_router as accounts_alias_router
+from routers.accounts import router as accounts_router, v1_router as accounts_v1_router, alias_router as accounts_alias_router
 from routers.fdx import router as fdx_router
 from routers.simulation import router as simulation_router, v1_router as simulation_v1_router, alias_router as simulation_alias_router
-from routers.card_network import router as card_network_router
+from routers.card_network import router as card_network_router, v1_router as card_network_v1_router
 
 # Import and register FastMCP tools and ASGI app from the isolated mcp router module
 from routers.mcp import mcp_app
@@ -140,11 +140,14 @@ app.include_router(secure_messaging_router)
 app.include_router(underwriting_router)
 app.include_router(credit_card_router)
 app.include_router(credit_card_apiv1_router)
+app.include_router(credit_card_v1_router)
 app.include_router(card_network_router)
+app.include_router(card_network_v1_router)
 app.include_router(support_router)
 app.include_router(settings_router)
 app.include_router(voice_bidi_router)
 app.include_router(accounts_router)
+app.include_router(accounts_v1_router)
 app.include_router(accounts_alias_router)
 app.include_router(fdx_router)
 app.include_router(simulation_router)
