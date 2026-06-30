@@ -270,5 +270,15 @@ export async function createDepositAccount(depositData) {
   return res.data;
 }
 
+export async function provisionMyDemo() {
+  const res = await api.post('/api/v1/simulation/provision-my-demo');
+  return res.data;
+}
+
+export async function resetMyDemo() {
+  const res = await api.post('/api/v1/simulation/reset-my-demo');
+  return res.data;
+}
+
 export default api;
 

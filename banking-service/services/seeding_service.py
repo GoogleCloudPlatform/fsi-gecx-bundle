@@ -37,9 +37,9 @@ logger = logging.getLogger(__name__)
 PERSONAS = [
     {
         "id": "11111111-1111-4111-8111-111111111111",
-        "first_name": "Eleanor",
-        "last_name": "Vance",
-        "email": "eleanor.vance@nova.horizon.test",
+        "first_name": "Erik",
+        "last_name": "Voit",
+        "email": "erikvoit@google.com",
         "phone_number": "555-0101",
         "ssn": "900-01-0001",
         "credit_score": 785,
@@ -51,8 +51,8 @@ PERSONAS = [
             {"type": "CHECKING", "balance_cents": 4500000, "product_code": "CHECKING_SIGNATURE", "product_name": "Nova Signature Checking"},
             {"type": "SAVINGS", "balance_cents": 15000000, "product_code": "SAVINGS_HIGH_YIELD", "product_name": "Nova High Yield Savings"},
         ],
-        "card_token": "tok_visa_eleanor_vance",
-        "cardholder_name": "Eleanor Vance"
+        "card_token": "tok_visa_erik_voit",
+        "cardholder_name": "Erik Voit"
     },
     {
         "id": "22222222-2222-4222-8222-222222222222",
@@ -111,9 +111,9 @@ PERSONAS = [
     },
     {
         "id": "55555555-5555-4555-8555-555555555555",
-        "first_name": "Sarah",
-        "last_name": "Jenkins",
-        "email": "sarah.jenkins@nova.horizon.test",
+        "first_name": "Mark",
+        "last_name": "Servedio",
+        "email": "mservedio@google.com",
         "phone_number": "555-0105",
         "ssn": "900-01-0005",
         "credit_score": 750,
@@ -124,8 +124,8 @@ PERSONAS = [
         "accounts": [
             {"type": "CHECKING", "balance_cents": 6000000, "product_code": "BUSINESS_CHECKING", "product_name": "Nova Business Checking"}
         ],
-        "card_token": "tok_visa_sarah_jenkins",
-        "cardholder_name": "Sarah Jenkins"
+        "card_token": "tok_visa_mark_servedio",
+        "cardholder_name": "Mark Servedio"
     },
     {
         "id": "12300000-0000-4000-8000-000000000123",
@@ -380,6 +380,230 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
     db.commit()
     logger.info("Algorithmic persona and card seeding completed successfully.")
     return cards_manifest
+
+
+def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str, Any]:
+    """Dynamically provisions a new user, kyc profile, deposit accounts, credit cards, and historical swipes."""
+    # Bypass RBAC
+    if hasattr(db.bind, "engine"):
+        db.bind.engine._ignore_rbac = True
+    else:
+        db.bind._ignore_rbac = True
+
+    # 1. Check if user already exists
+    existing_user = db.query(User).filter((User.email == email) | (User.auth_provider_uid == firebase_uid)).first()
+    if existing_user:
+        raise ValueError("Profile already provisioned.")
+
+    # 2. Extract first and last names
+    name_part = email.split("@")[0]
+    if "." in name_part:
+        parts = name_part.split(".")
+        first_name = parts[0].capitalize()
+        last_name = parts[1].capitalize()
+    else:
+        first_name = name_part.capitalize()
+        last_name = "User"
+
+    user_uuid = uuid.uuid4()
+    
+    # 3. Create User
+    user = User(
+        id=user_uuid,
+        auth_provider_uid=firebase_uid,
+        first_name=first_name,
+        last_name=last_name,
+        email=email,
+        phone_number="555-01" + str(random.randint(10, 99))
+    )
+    db.add(user)
+    db.flush()
+
+    # 4. Create KYCRecord (Envelope encrypted)
+    kyc_record_id = uuid.uuid4()
+    ssn = f"900-{random.randint(10, 99)}-{random.randint(1000, 9999)}"
+    enc_pii, wrapped_dek, iv, tag = encrypt_pii(
+        plaintext_pii=json.dumps({"ssn": ssn, "dob": "1990-01-01"}),
+        user_id=str(user_uuid),
+        record_id=str(kyc_record_id)
+    )
+    kyc_rec = KYCRecord(
+        id=kyc_record_id,
+        user_id=user_uuid,
+        encrypted_pii=enc_pii,
+        wrapped_dek=wrapped_dek,
+        encryption_iv=iv,
+        auth_tag=tag
+    )
+    db.add(kyc_rec)
+
+    # 5. Create UserCreditProfile
+    credit_prof = UserCreditProfile(
+        id=uuid.uuid4(),
+        user_id=user_uuid,
+        credit_score=720,
+        credit_tier="PRIME_GOOD",
+        stated_annual_income_cents=9500000  # $95,000.00
+    )
+    db.add(credit_prof)
+    db.flush()
+
+    # 6. Provision checking/savings deposit accounts
+    checking_acc = Account(
+        id=uuid.uuid4(),
+        user_id=user_uuid,
+        account_number=f"CHK-{random.randint(10000000, 99999999)}",
+        account_type="CHECKING",
+        product_name="Nova Signature Checking",
+        product_code="CHECKING_SIGNATURE",
+        cleared_balance_cents=1000000,  # $10,000.00
+        routing_number="021000021",
+        status="ACTIVE"
+    )
+    savings_acc = Account(
+        id=uuid.uuid4(),
+        user_id=user_uuid,
+        account_number=f"SAV-{random.randint(10000000, 99999999)}",
+        account_type="SAVINGS",
+        product_name="Nova High Yield Savings",
+        product_code="SAVINGS_HIGH_YIELD",
+        cleared_balance_cents=2000000,  # $20,000.00
+        routing_number="021000021",
+        status="ACTIVE"
+    )
+    db.add_all([checking_acc, savings_acc])
+
+    # 7. Create Credit Line Account
+    cred_acc_id = uuid.uuid4()
+    cred_acc = CreditAccount(
+        id=cred_acc_id,
+        customer_id=user_uuid,
+        product_code="CASHBACK_EVERYDAY",
+        status="ACTIVE",
+        credit_limit_cents=1000000,  # $10,000.00
+        cleared_balance_cents=0,
+        available_credit_cents=1000000,
+        payment_due_date=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=15),
+        statement_close_date=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=15)
+    )
+    db.add(cred_acc)
+    db.flush()
+
+    # 8. Issue Card
+    card_id = uuid.uuid4()
+    card_num = generate_luhn_card_number(prefix="4111", length=16)
+    card_token = f"tok_visa_{first_name.lower()}_{last_name.lower()}"
+    cvv = str(random.randint(100, 999))
+    exp_month = datetime.datetime.now(datetime.timezone.utc).month
+    exp_year = datetime.datetime.now(datetime.timezone.utc).year + 3
+    
+    card = IssuedCard(
+        id=card_id,
+        account_id=cred_acc_id,
+        cardholder_name=f"{first_name} {last_name}",
+        card_token=card_token,
+        last_four=card_num[-4:],
+        exp_month=exp_month,
+        exp_year=exp_year,
+        status="ACTIVE",
+        is_active=True
+    )
+    db.add(card)
+    db.flush()
+
+    # 9. Generate 10-15 historical swipes
+    swipe_options = [
+        {"description": "Starbucks Coffee", "min": 450, "max": 850},
+        {"description": "Whole Foods Market", "min": 4500, "max": 12000},
+        {"description": "Uber Trip", "min": 1200, "max": 3500},
+        {"description": "Amazon Purchase", "min": 1500, "max": 8500},
+        {"description": "Netflix Subscription", "min": 1549, "max": 1549},
+        {"description": "Chevron Gas Station", "min": 3500, "max": 5500},
+        {"description": "McDonald's Fast Food", "min": 850, "max": 1850},
+        {"description": "Walmart Superstore", "min": 2500, "max": 9500},
+        {"description": "YouTube Premium Subscription", "min": 1399, "max": 1399},
+        {"description": "Shell Petrol", "min": 3000, "max": 5000}
+    ]
+    
+    total_swipes_debt_cents = 0
+    now = datetime.datetime.now(datetime.timezone.utc)
+    
+    for i in range(12):
+        swipe_conf = random.choice(swipe_options)
+        amount_cents = random.randint(swipe_conf["min"], swipe_conf["max"])
+        total_swipes_debt_cents += amount_cents
+        
+        posted_date = now - datetime.timedelta(days=(14 - i), hours=random.randint(0, 12))
+        
+        tx = PostedTransaction(
+            id=uuid.uuid4(),
+            account_id=cred_acc_id,
+            amount_cents=-amount_cents,
+            description=swipe_conf["description"],
+            posted_at=posted_date
+        )
+        db.add(tx)
+        
+    cred_acc.cleared_balance_cents = total_swipes_debt_cents
+    cred_acc.available_credit_cents = cred_acc.credit_limit_cents - total_swipes_debt_cents
+    
+    db.commit()
+    logger.info(f"Dynamically provisioned personal demo suite for email={email} (user_id={user_uuid}) successfully.")
+    
+    return {
+        "user_id": str(user_uuid),
+        "first_name": first_name,
+        "last_name": last_name,
+        "email": email,
+        "card_token": card_token,
+        "card_number": card_num,
+        "cvv": cvv,
+        "exp_month": exp_month,
+        "exp_year": exp_year,
+        "checking_account_number": checking_acc.account_number,
+        "savings_account_number": savings_acc.account_number,
+        "credit_account_id": str(cred_acc_id)
+    }
+
+def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
+    """Resets the user's personal checking/savings balances to default and clears credit card transactions."""
+    # Bypass RBAC
+    if hasattr(db.bind, "engine"):
+        db.bind.engine._ignore_rbac = True
+    else:
+        db.bind._ignore_rbac = True
+
+    # 1. Fetch all checking/savings accounts belonging to user
+    accounts = db.query(Account).filter(Account.user_id == user_id).all()
+    for acc in accounts:
+        db.query(AccountLedgerEntry).filter(AccountLedgerEntry.account_id == acc.id).delete()
+        if acc.account_type == "CHECKING":
+            user = db.query(User).filter(User.id == user_id).first()
+            if user and user.email == "erikvoit@google.com":
+                acc.cleared_balance_cents = 4500000
+            elif user and user.email == "mservedio@google.com":
+                acc.cleared_balance_cents = 6000000
+            else:
+                acc.cleared_balance_cents = 1000000
+        elif acc.account_type == "SAVINGS":
+            user = db.query(User).filter(User.id == user_id).first()
+            if user and user.email == "erikvoit@google.com":
+                acc.cleared_balance_cents = 15000000
+            else:
+                acc.cleared_balance_cents = 2000000
+        else:
+            acc.cleared_balance_cents = 1000000
+
+    # 2. Fetch all credit accounts belonging to user
+    credit_accounts = db.query(CreditAccount).filter(CreditAccount.customer_id == user_id).all()
+    for cred_acc in credit_accounts:
+        db.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == cred_acc.id).delete()
+        db.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).delete()
+        cred_acc.cleared_balance_cents = 0
+        cred_acc.available_credit_cents = cred_acc.credit_limit_cents
+        
+    db.commit()
+    logger.info(f"Successfully reset personal demo suite accounts for user_id={user_id}.")
 
 
 if __name__ == "__main__":

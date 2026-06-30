@@ -43,6 +43,7 @@ from utils.auth import get_current_user
 from routers.locator import router as locator_router
 from routers.accounts import router as accounts_router, alias_router as accounts_alias_router
 from routers.fdx import router as fdx_router
+from routers.simulation import router as simulation_router
 
 # Import and register FastMCP tools and ASGI app from the isolated mcp router module
 from routers.mcp import mcp_app
@@ -143,6 +144,7 @@ app.include_router(voice_bidi_router)
 app.include_router(accounts_router)
 app.include_router(accounts_alias_router)
 app.include_router(fdx_router)
+app.include_router(simulation_router)
 
 
 def custom_openapi():
