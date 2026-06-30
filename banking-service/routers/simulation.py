@@ -46,6 +46,15 @@ def provision_my_demo(
             detail="Authenticated user ID not found in token claims."
         )
         
+    # Security check: restrict demo provisioning to corporate presenter domains
+    email_lower = email.lower()
+    allowed_domains = ["google.com", "gcp.solutions", "altostrat.com"]
+    if not any(email_lower.endswith(f"@{domain}") for domain in allowed_domains):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Demo provisioning is restricted to authorized presenter domains."
+        )
+        
     try:
         summary = provision_user_suite(db, email, uid)
         return {"status": "SUCCESS", "message": "Demo profile provisioned successfully.", "summary": summary}

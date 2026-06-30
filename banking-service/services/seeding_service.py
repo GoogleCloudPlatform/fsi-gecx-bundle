@@ -62,7 +62,7 @@ PERSONAS = [
         "phone_number": "555-0102",
         "ssn": "900-01-0002",
         "credit_score": 720,
-        "credit_tier": "PRIME_GOOD",
+        "credit_tier": "PRIME",
         "stated_annual_income_cents": 9500000,   # $95,000.00
         "credit_limit_cents": 1000000,          # $10,000.00
         "credit_product": "CASHBACK_EVERYDAY",
@@ -135,7 +135,7 @@ PERSONAS = [
         "phone_number": "555-0199",
         "ssn": "900-01-0123",
         "credit_score": 730,
-        "credit_tier": "PRIME_GOOD",
+        "credit_tier": "PRIME",
         "stated_annual_income_cents": 8500000,
         "credit_limit_cents": 1000000,
         "credit_product": "CASHBACK_EVERYDAY",
@@ -246,34 +246,190 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
     # Seed deterministic generator so results are consistent
     random.seed(42)
     
-    clean_database(db)
-    seed_catalogs_if_missing(db)
-    seed_system_settings_if_missing(db)
-    
-    cards_manifest = {}
-    
-    logger.info(f"Initializing {len(PERSONAS)} user profiles and bank accounts...")
-    
-    for p in PERSONAS:
-        user_uuid = uuid.UUID(p["id"])
-        auth_uid = p.get("auth_provider_uid") or f"auth-{p['first_name'].lower()}"
+    try:
+        clean_database(db)
+        seed_catalogs_if_missing(db)
+        seed_system_settings_if_missing(db)
         
-        # 1. Create User
+        cards_manifest = {}
+        
+        logger.info(f"Initializing {len(PERSONAS)} user profiles and bank accounts...")
+        
+        for p in PERSONAS:
+            user_uuid = uuid.UUID(p["id"])
+            auth_uid = p.get("auth_provider_uid") or f"auth-{p['first_name'].lower()}"
+            
+            # 1. Create User
+            user = User(
+                id=user_uuid,
+                auth_provider_uid=auth_uid,
+                first_name=p["first_name"],
+                last_name=p["last_name"],
+                email=p["email"],
+                phone_number=p["phone_number"]
+            )
+            db.add(user)
+            db.flush()
+            
+            # 2. Create KYCRecord (Envelope encrypted)
+            kyc_record_id = uuid.uuid4()
+            enc_pii, wrapped_dek, iv, tag = encrypt_pii(
+                plaintext_pii=json.dumps({"ssn": p["ssn"], "dob": "1985-06-15"}),
+                user_id=str(user_uuid),
+                record_id=str(kyc_record_id)
+            )
+            kyc_rec = KYCRecord(
+                id=kyc_record_id,
+                user_id=user_uuid,
+                encrypted_pii=enc_pii,
+                wrapped_dek=wrapped_dek,
+                encryption_iv=iv,
+                auth_tag=tag
+            )
+            db.add(kyc_rec)
+            
+            # 3. Create UserCreditProfile
+            credit_prof = UserCreditProfile(
+                id=uuid.uuid4(),
+                user_id=user_uuid,
+                credit_score=p["credit_score"],
+                credit_tier=p["credit_tier"],
+                stated_annual_income_cents=p["stated_annual_income_cents"]
+            )
+            db.add(credit_prof)
+            db.flush()
+            
+            # 4. Provision checking/savings deposit accounts
+            for acc_conf in p["accounts"]:
+                prefix = "CHK" if acc_conf["type"] == "CHECKING" else "SAV"
+                acc_num = f"{prefix}-{random.randint(10000000, 99999999)}"
+                while db.query(Account).filter_by(account_number=acc_num).first():
+                    acc_num = f"{prefix}-{random.randint(10000000, 99999999)}"
+                    
+                dep_acc = Account(
+                    id=uuid.uuid4(),
+                    user_id=user_uuid,
+                    account_number=acc_num,
+                    account_type=acc_conf["type"],
+                    product_name=acc_conf["product_name"],
+                    product_code=acc_conf["product_code"],
+                    cleared_balance_cents=acc_conf["balance_cents"],
+                    routing_number="021000021",
+                    status="ACTIVE"
+                )
+                db.add(dep_acc)
+                
+            # 5. Create Credit Line Account
+            cred_acc_id = uuid.uuid4()
+            # Set cleared balance to a minor randomized seed value (e.g. Eleanor has initial debt)
+            debt = random.randint(5000, 20000) if p["first_name"] == "Eleanor" else 0
+            cred_acc = CreditAccount(
+                id=cred_acc_id,
+                customer_id=user_uuid,
+                product_code=p["credit_product"],
+                status="ACTIVE",
+                credit_limit_cents=p["credit_limit_cents"],
+                cleared_balance_cents=debt,
+                available_credit_cents=p["credit_limit_cents"] - debt,
+                payment_due_date=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=15),
+                statement_close_date=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=15)
+            )
+            db.add(cred_acc)
+            db.flush()
+            
+            # 6. Issue Card
+            card_id = uuid.uuid4()
+            card_num = generate_luhn_card_number(prefix="4111", length=16)
+            cvv = str(random.randint(100, 999))
+            exp_month = datetime.datetime.now(datetime.timezone.utc).month
+            exp_year = datetime.datetime.now(datetime.timezone.utc).year + 3
+            
+            card = IssuedCard(
+                id=card_id,
+                account_id=cred_acc_id,
+                cardholder_name=p["cardholder_name"],
+                card_token=p["card_token"],
+                last_four=card_num[-4:],
+                exp_month=exp_month,
+                exp_year=exp_year,
+                status="ACTIVE",
+                is_active=True
+            )
+            db.add(card)
+            
+            # Add card to manifest
+            cards_manifest[p["first_name"].lower()] = {
+                "cardholder_name": p["cardholder_name"],
+                "card_number": card_num,
+                "token": p["card_token"],
+                "cvv": cvv,
+                "exp_month": exp_month,
+                "exp_year": exp_year,
+                "credit_limit_dollars": round(p["credit_limit_cents"] / 100.0, 2),
+                "email": p["email"],
+                "user_id": str(user_uuid),
+                "credit_account_id": str(cred_acc_id)
+            }
+            
+        # 7. Store manifest in SystemSetting
+        manifest_setting = db.query(SystemSetting).filter(SystemSetting.key == "simulation_cards_manifest").first()
+        if manifest_setting:
+            manifest_setting.value = json.dumps(cards_manifest)
+        else:
+            db.add(SystemSetting(key="simulation_cards_manifest", value=json.dumps(cards_manifest)))
+            
+        db.commit()
+        logger.info("Algorithmic persona and card seeding completed successfully.")
+        return cards_manifest
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error during algorithmic seeding: {e}")
+        raise e
+
+
+def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str, Any]:
+    """Dynamically provisions a new user, kyc profile, deposit accounts, credit cards, and historical swipes."""
+    # Bypass RBAC
+    if hasattr(db.bind, "engine"):
+        db.bind.engine._ignore_rbac = True
+    else:
+        db.bind._ignore_rbac = True
+
+    try:
+        # 1. Check if user already exists
+        existing_user = db.query(User).filter((User.email == email) | (User.auth_provider_uid == firebase_uid)).first()
+        if existing_user:
+            raise ValueError("Profile already provisioned.")
+
+        # 2. Extract first and last names
+        name_part = email.split("@")[0]
+        if "." in name_part:
+            parts = name_part.split(".")
+            first_name = parts[0].capitalize()
+            last_name = parts[1].capitalize()
+        else:
+            first_name = name_part.capitalize()
+            last_name = "User"
+
+        user_uuid = uuid.uuid4()
+        
+        # 3. Create User
         user = User(
             id=user_uuid,
-            auth_provider_uid=auth_uid,
-            first_name=p["first_name"],
-            last_name=p["last_name"],
-            email=p["email"],
-            phone_number=p["phone_number"]
+            auth_provider_uid=firebase_uid,
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            phone_number="555-01" + str(random.randint(10, 99))
         )
         db.add(user)
         db.flush()
-        
-        # 2. Create KYCRecord (Envelope encrypted)
+
+        # 4. Create KYCRecord (Envelope encrypted)
         kyc_record_id = uuid.uuid4()
+        ssn = f"900-{random.randint(10, 99)}-{random.randint(1000, 9999)}"
         enc_pii, wrapped_dek, iv, tag = encrypt_pii(
-            plaintext_pii=json.dumps({"ssn": p["ssn"], "dob": "1985-06-15"}),
+            plaintext_pii=json.dumps({"ssn": ssn, "dob": "1990-01-01"}),
             user_id=str(user_uuid),
             record_id=str(kyc_record_id)
         )
@@ -286,59 +442,63 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
             auth_tag=tag
         )
         db.add(kyc_rec)
-        
-        # 3. Create UserCreditProfile
+
+        # 5. Create UserCreditProfile
         credit_prof = UserCreditProfile(
             id=uuid.uuid4(),
             user_id=user_uuid,
-            credit_score=p["credit_score"],
-            credit_tier=p["credit_tier"],
-            stated_annual_income_cents=p["stated_annual_income_cents"]
+            credit_score=720,
+            credit_tier="PRIME",
+            stated_annual_income_cents=9500000  # $95,000.00
         )
         db.add(credit_prof)
         db.flush()
-        
-        # 4. Provision checking/savings deposit accounts
-        for acc_conf in p["accounts"]:
-            prefix = "CHK" if acc_conf["type"] == "CHECKING" else "SAV"
-            acc_num = f"{prefix}-{random.randint(10000000, 99999999)}"
-            while db.query(Account).filter_by(account_number=acc_num).first():
-                acc_num = f"{prefix}-{random.randint(10000000, 99999999)}"
-                
-            dep_acc = Account(
-                id=uuid.uuid4(),
-                user_id=user_uuid,
-                account_number=acc_num,
-                account_type=acc_conf["type"],
-                product_name=acc_conf["product_name"],
-                product_code=acc_conf["product_code"],
-                cleared_balance_cents=acc_conf["balance_cents"],
-                routing_number="021000021",
-                status="ACTIVE"
-            )
-            db.add(dep_acc)
-            
-        # 5. Create Credit Line Account
+
+        # 6. Provision checking/savings deposit accounts
+        checking_acc = Account(
+            id=uuid.uuid4(),
+            user_id=user_uuid,
+            account_number=f"CHK-{random.randint(10000000, 99999999)}",
+            account_type="CHECKING",
+            product_name="Nova Signature Checking",
+            product_code="CHECKING_SIGNATURE",
+            cleared_balance_cents=1000000,  # $10,000.00
+            routing_number="021000021",
+            status="ACTIVE"
+        )
+        savings_acc = Account(
+            id=uuid.uuid4(),
+            user_id=user_uuid,
+            account_number=f"SAV-{random.randint(10000000, 99999999)}",
+            account_type="SAVINGS",
+            product_name="Nova High Yield Savings",
+            product_code="SAVINGS_HIGH_YIELD",
+            cleared_balance_cents=2000000,  # $20,000.00
+            routing_number="021000021",
+            status="ACTIVE"
+        )
+        db.add_all([checking_acc, savings_acc])
+
+        # 7. Create Credit Line Account
         cred_acc_id = uuid.uuid4()
-        # Set cleared balance to a minor randomized seed value (e.g. Eleanor has some initial debt)
-        debt = random.randint(5000, 20000) if p["first_name"] == "Eleanor" else 0
         cred_acc = CreditAccount(
             id=cred_acc_id,
             customer_id=user_uuid,
-            product_code=p["credit_product"],
+            product_code="CASHBACK_EVERYDAY",
             status="ACTIVE",
-            credit_limit_cents=p["credit_limit_cents"],
-            cleared_balance_cents=debt,
-            available_credit_cents=p["credit_limit_cents"] - debt,
+            credit_limit_cents=1000000,  # $10,000.00
+            cleared_balance_cents=0,
+            available_credit_cents=1000000,
             payment_due_date=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=15),
             statement_close_date=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=15)
         )
         db.add(cred_acc)
         db.flush()
-        
-        # 6. Issue Card
+
+        # 8. Issue Card
         card_id = uuid.uuid4()
         card_num = generate_luhn_card_number(prefix="4111", length=16)
+        card_token = f"tok_visa_{first_name.lower()}_{last_name.lower()}"
         cvv = str(random.randint(100, 999))
         exp_month = datetime.datetime.now(datetime.timezone.utc).month
         exp_year = datetime.datetime.now(datetime.timezone.utc).year + 3
@@ -346,8 +506,8 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
         card = IssuedCard(
             id=card_id,
             account_id=cred_acc_id,
-            cardholder_name=p["cardholder_name"],
-            card_token=p["card_token"],
+            cardholder_name=f"{first_name} {last_name}",
+            card_token=card_token,
             last_four=card_num[-4:],
             exp_month=exp_month,
             exp_year=exp_year,
@@ -355,215 +515,65 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
             is_active=True
         )
         db.add(card)
+        db.flush()
+
+        # 9. Generate 10-15 historical swipes
+        swipe_options = [
+            {"description": "Starbucks Coffee", "min": 450, "max": 850},
+            {"description": "Whole Foods Market", "min": 4500, "max": 12000},
+            {"description": "Uber Trip", "min": 1200, "max": 3500},
+            {"description": "Amazon Purchase", "min": 1500, "max": 8500},
+            {"description": "Netflix Subscription", "min": 1549, "max": 1549},
+            {"description": "Chevron Gas Station", "min": 3500, "max": 5500},
+            {"description": "McDonald's Fast Food", "min": 850, "max": 1850},
+            {"description": "Walmart Superstore", "min": 2500, "max": 9500},
+            {"description": "YouTube Premium Subscription", "min": 1399, "max": 1399},
+            {"description": "Shell Petrol", "min": 3000, "max": 5000}
+        ]
         
-        # Add card to manifest
-        cards_manifest[p["first_name"].lower()] = {
-            "cardholder_name": p["cardholder_name"],
+        total_swipes_debt_cents = 0
+        now = datetime.datetime.now(datetime.timezone.utc)
+        
+        for i in range(12):
+            swipe_conf = random.choice(swipe_options)
+            amount_cents = random.randint(swipe_conf["min"], swipe_conf["max"])
+            total_swipes_debt_cents += amount_cents
+            
+            posted_date = now - datetime.timedelta(days=(14 - i), hours=random.randint(0, 12))
+            
+            tx = PostedTransaction(
+                id=uuid.uuid4(),
+                account_id=cred_acc_id,
+                amount_cents=-amount_cents,
+                description=swipe_conf["description"],
+                posted_at=posted_date
+            )
+            db.add(tx)
+            
+        cred_acc.cleared_balance_cents = total_swipes_debt_cents
+        cred_acc.available_credit_cents = cred_acc.credit_limit_cents - total_swipes_debt_cents
+        
+        db.commit()
+        logger.info(f"Dynamically provisioned personal demo suite for email={email} (user_id={user_uuid}) successfully.")
+        
+        return {
+            "user_id": str(user_uuid),
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email,
+            "card_token": card_token,
             "card_number": card_num,
-            "token": p["card_token"],
             "cvv": cvv,
             "exp_month": exp_month,
             "exp_year": exp_year,
-            "credit_limit_dollars": round(p["credit_limit_cents"] / 100.0, 2),
-            "email": p["email"],
-            "user_id": str(user_uuid),
+            "checking_account_number": checking_acc.account_number,
+            "savings_account_number": savings_acc.account_number,
             "credit_account_id": str(cred_acc_id)
         }
-        
-    # 7. Store manifest in SystemSetting
-    manifest_setting = db.query(SystemSetting).filter(SystemSetting.key == "simulation_cards_manifest").first()
-    if manifest_setting:
-        manifest_setting.value = json.dumps(cards_manifest)
-    else:
-        db.add(SystemSetting(key="simulation_cards_manifest", value=json.dumps(cards_manifest)))
-        
-    db.commit()
-    logger.info("Algorithmic persona and card seeding completed successfully.")
-    return cards_manifest
-
-
-def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str, Any]:
-    """Dynamically provisions a new user, kyc profile, deposit accounts, credit cards, and historical swipes."""
-    # Bypass RBAC
-    if hasattr(db.bind, "engine"):
-        db.bind.engine._ignore_rbac = True
-    else:
-        db.bind._ignore_rbac = True
-
-    # 1. Check if user already exists
-    existing_user = db.query(User).filter((User.email == email) | (User.auth_provider_uid == firebase_uid)).first()
-    if existing_user:
-        raise ValueError("Profile already provisioned.")
-
-    # 2. Extract first and last names
-    name_part = email.split("@")[0]
-    if "." in name_part:
-        parts = name_part.split(".")
-        first_name = parts[0].capitalize()
-        last_name = parts[1].capitalize()
-    else:
-        first_name = name_part.capitalize()
-        last_name = "User"
-
-    user_uuid = uuid.uuid4()
-    
-    # 3. Create User
-    user = User(
-        id=user_uuid,
-        auth_provider_uid=firebase_uid,
-        first_name=first_name,
-        last_name=last_name,
-        email=email,
-        phone_number="555-01" + str(random.randint(10, 99))
-    )
-    db.add(user)
-    db.flush()
-
-    # 4. Create KYCRecord (Envelope encrypted)
-    kyc_record_id = uuid.uuid4()
-    ssn = f"900-{random.randint(10, 99)}-{random.randint(1000, 9999)}"
-    enc_pii, wrapped_dek, iv, tag = encrypt_pii(
-        plaintext_pii=json.dumps({"ssn": ssn, "dob": "1990-01-01"}),
-        user_id=str(user_uuid),
-        record_id=str(kyc_record_id)
-    )
-    kyc_rec = KYCRecord(
-        id=kyc_record_id,
-        user_id=user_uuid,
-        encrypted_pii=enc_pii,
-        wrapped_dek=wrapped_dek,
-        encryption_iv=iv,
-        auth_tag=tag
-    )
-    db.add(kyc_rec)
-
-    # 5. Create UserCreditProfile
-    credit_prof = UserCreditProfile(
-        id=uuid.uuid4(),
-        user_id=user_uuid,
-        credit_score=720,
-        credit_tier="PRIME_GOOD",
-        stated_annual_income_cents=9500000  # $95,000.00
-    )
-    db.add(credit_prof)
-    db.flush()
-
-    # 6. Provision checking/savings deposit accounts
-    checking_acc = Account(
-        id=uuid.uuid4(),
-        user_id=user_uuid,
-        account_number=f"CHK-{random.randint(10000000, 99999999)}",
-        account_type="CHECKING",
-        product_name="Nova Signature Checking",
-        product_code="CHECKING_SIGNATURE",
-        cleared_balance_cents=1000000,  # $10,000.00
-        routing_number="021000021",
-        status="ACTIVE"
-    )
-    savings_acc = Account(
-        id=uuid.uuid4(),
-        user_id=user_uuid,
-        account_number=f"SAV-{random.randint(10000000, 99999999)}",
-        account_type="SAVINGS",
-        product_name="Nova High Yield Savings",
-        product_code="SAVINGS_HIGH_YIELD",
-        cleared_balance_cents=2000000,  # $20,000.00
-        routing_number="021000021",
-        status="ACTIVE"
-    )
-    db.add_all([checking_acc, savings_acc])
-
-    # 7. Create Credit Line Account
-    cred_acc_id = uuid.uuid4()
-    cred_acc = CreditAccount(
-        id=cred_acc_id,
-        customer_id=user_uuid,
-        product_code="CASHBACK_EVERYDAY",
-        status="ACTIVE",
-        credit_limit_cents=1000000,  # $10,000.00
-        cleared_balance_cents=0,
-        available_credit_cents=1000000,
-        payment_due_date=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=15),
-        statement_close_date=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=15)
-    )
-    db.add(cred_acc)
-    db.flush()
-
-    # 8. Issue Card
-    card_id = uuid.uuid4()
-    card_num = generate_luhn_card_number(prefix="4111", length=16)
-    card_token = f"tok_visa_{first_name.lower()}_{last_name.lower()}"
-    cvv = str(random.randint(100, 999))
-    exp_month = datetime.datetime.now(datetime.timezone.utc).month
-    exp_year = datetime.datetime.now(datetime.timezone.utc).year + 3
-    
-    card = IssuedCard(
-        id=card_id,
-        account_id=cred_acc_id,
-        cardholder_name=f"{first_name} {last_name}",
-        card_token=card_token,
-        last_four=card_num[-4:],
-        exp_month=exp_month,
-        exp_year=exp_year,
-        status="ACTIVE",
-        is_active=True
-    )
-    db.add(card)
-    db.flush()
-
-    # 9. Generate 10-15 historical swipes
-    swipe_options = [
-        {"description": "Starbucks Coffee", "min": 450, "max": 850},
-        {"description": "Whole Foods Market", "min": 4500, "max": 12000},
-        {"description": "Uber Trip", "min": 1200, "max": 3500},
-        {"description": "Amazon Purchase", "min": 1500, "max": 8500},
-        {"description": "Netflix Subscription", "min": 1549, "max": 1549},
-        {"description": "Chevron Gas Station", "min": 3500, "max": 5500},
-        {"description": "McDonald's Fast Food", "min": 850, "max": 1850},
-        {"description": "Walmart Superstore", "min": 2500, "max": 9500},
-        {"description": "YouTube Premium Subscription", "min": 1399, "max": 1399},
-        {"description": "Shell Petrol", "min": 3000, "max": 5000}
-    ]
-    
-    total_swipes_debt_cents = 0
-    now = datetime.datetime.now(datetime.timezone.utc)
-    
-    for i in range(12):
-        swipe_conf = random.choice(swipe_options)
-        amount_cents = random.randint(swipe_conf["min"], swipe_conf["max"])
-        total_swipes_debt_cents += amount_cents
-        
-        posted_date = now - datetime.timedelta(days=(14 - i), hours=random.randint(0, 12))
-        
-        tx = PostedTransaction(
-            id=uuid.uuid4(),
-            account_id=cred_acc_id,
-            amount_cents=-amount_cents,
-            description=swipe_conf["description"],
-            posted_at=posted_date
-        )
-        db.add(tx)
-        
-    cred_acc.cleared_balance_cents = total_swipes_debt_cents
-    cred_acc.available_credit_cents = cred_acc.credit_limit_cents - total_swipes_debt_cents
-    
-    db.commit()
-    logger.info(f"Dynamically provisioned personal demo suite for email={email} (user_id={user_uuid}) successfully.")
-    
-    return {
-        "user_id": str(user_uuid),
-        "first_name": first_name,
-        "last_name": last_name,
-        "email": email,
-        "card_token": card_token,
-        "card_number": card_num,
-        "cvv": cvv,
-        "exp_month": exp_month,
-        "exp_year": exp_year,
-        "checking_account_number": checking_acc.account_number,
-        "savings_account_number": savings_acc.account_number,
-        "credit_account_id": str(cred_acc_id)
-    }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to provision demo profile for email={email}: {e}")
+        raise e
 
 def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
     """Resets the user's personal checking/savings balances to default and clears credit card transactions."""
