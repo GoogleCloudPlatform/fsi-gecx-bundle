@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   ArrowLeft,
   CreditCard,
@@ -25,6 +25,7 @@ import BillPayModal from './BillPayModal.jsx';
 
 function AccountsView({ fbUser, customerProfile }) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { bankName, brandColorFrom, brandColorTo } = useSettings();
 
   const [accountsData, setAccountsData] = useState(null);
@@ -35,6 +36,9 @@ function AccountsView({ fbUser, customerProfile }) {
   const [isTxsLoading, setIsTxsLoading] = useState(false);
   const [isBillPayOpen, setIsBillPayOpen] = useState(false);
   const [showDocModal, setShowDocModal] = useState(false);
+
+  const idParam = searchParams.get('id');
+  const typeParam = searchParams.get('type');
 
   const fetchSummaryAndTransactions = useCallback(async () => {
     try {
@@ -47,12 +51,6 @@ function AccountsView({ fbUser, customerProfile }) {
       setIsLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    if (fbUser) {
-      fetchSummaryAndTransactions();
-    }
-  }, [fbUser, fetchSummaryAndTransactions]);
 
   const loadTransactions = useCallback(async (accountId, type) => {
     try {
@@ -72,16 +70,31 @@ function AccountsView({ fbUser, customerProfile }) {
     }
   }, []);
 
+  useEffect(() => {
+    if (fbUser) {
+      fetchSummaryAndTransactions();
+    }
+  }, [fbUser, fetchSummaryAndTransactions]);
+
+  // Synchronize dynamic routing query param selectors
+  useEffect(() => {
+    if (idParam && typeParam && accountsData) {
+      setSelectedAccountId(idParam);
+      setSelectedAccountType(typeParam);
+      loadTransactions(idParam, typeParam);
+    } else {
+      setSelectedAccountId(null);
+      setSelectedAccountType(null);
+      setTransactions([]);
+    }
+  }, [idParam, typeParam, accountsData, loadTransactions]);
+
   const handleSelectAccount = (accountId, type) => {
-    setSelectedAccountId(accountId);
-    setSelectedAccountType(type);
-    loadTransactions(accountId, type);
+    setSearchParams({ id: accountId, type: type });
   };
 
   const handleBackToMaster = () => {
-    setSelectedAccountId(null);
-    setSelectedAccountType(null);
-    setTransactions([]);
+    setSearchParams({});
   };
 
   if (!fbUser) {

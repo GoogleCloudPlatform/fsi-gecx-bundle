@@ -42,7 +42,8 @@ import {
   uploadAndValidateArtifact,
   getCxasAuthToken,
   getCustomerProfile,
-  getCcaiAuthToken
+  getCcaiAuthToken,
+  getAccountsSummary
 } from './utils/api.js';
 import GoogleCloudIcon from './components/GoogleCloudIcon.jsx';
 import GcpInfoModal from './components/GcpInfoModal.jsx';
@@ -232,6 +233,26 @@ function AppContent() {
     window.addEventListener('refresh-unread-count', handleRefreshUnread);
     return () => window.removeEventListener('refresh-unread-count', handleRefreshUnread);
   }, [fetchUnreadCount]);
+
+  const [accountsSummary, setAccountsSummary] = useState(null);
+
+  const fetchAccountsSummary = useCallback(async () => {
+    if (!window.firebaseAuth?.getCurrentUser()) return;
+    try {
+      const summary = await getAccountsSummary();
+      setAccountsSummary(summary);
+    } catch (err) {
+      console.error("Failed to load accounts summary for navigation dropdown:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (fbUser) {
+      fetchAccountsSummary();
+    } else {
+      setAccountsSummary(null);
+    }
+  }, [fbUser, location.pathname, fetchAccountsSummary]);
 
   useEffect(() => {
     const handleNotification = (e) => {
@@ -920,6 +941,10 @@ function AppContent() {
 
   const resolvedIconUrl = customLogoUrl || (logoIcon ? `https://unpkg.com/lucide-static@latest/icons/${kebabCase(logoIcon)}.svg` : "/favicon.svg");
 
+  const checkingAccs = accountsSummary?.deposit_accounts?.filter(a => a.account_type === 'CHECKING') || [];
+  const savingsAccs = accountsSummary?.deposit_accounts?.filter(a => a.account_type === 'SAVINGS') || [];
+  const creditAccs = accountsSummary?.credit_accounts || [];
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-[Outfit] antialiased overflow-x-hidden">
       {/* Navigation */}
@@ -950,7 +975,62 @@ function AppContent() {
               <Link to="/" className={`hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer ${location.pathname === '/' ? 'text-slate-900 dark:text-white font-bold' : ''}`}>Home</Link>
               
               {fbUser && (
-                <Link to="/accounts" className={`hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer ${location.pathname === '/accounts' ? 'text-emerald-600 dark:text-emerald-400 font-bold' : ''}`}>Accounts</Link>
+                <div className="relative group py-2">
+                  <Link to="/accounts" className={`hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${location.pathname === '/accounts' ? 'text-emerald-600 dark:text-emerald-400 font-bold' : ''}`}>
+                    <span>Accounts</span>
+                    <ChevronDown className="w-3.5 h-3.5 transition-transform duration-300 group-hover:rotate-180" />
+                  </Link>
+
+                  {/* Dropdown panel */}
+                  {accountsSummary && (checkingAccs.length > 0 || savingsAccs.length > 0 || creditAccs.length > 0) && (
+                    <div className="absolute left-0 top-full mt-1 w-64 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 shadow-2xl opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 translate-y-2 group-hover:translate-y-0 z-50">
+                      {checkingAccs.length > 0 && (
+                        <>
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5">Checking</div>
+                          {checkingAccs.map(acc => (
+                            <Link 
+                              key={acc.account_id}
+                              to={`/accounts?id=${acc.account_id}&type=checking`} 
+                              className="w-full text-left px-3 py-2 rounded-xl text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold block truncate"
+                            >
+                              {acc.product_name}
+                            </Link>
+                          ))}
+                        </>
+                      )}
+                      
+                      {savingsAccs.length > 0 && (
+                        <>
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800/60 pt-2">Savings</div>
+                          {savingsAccs.map(acc => (
+                            <Link 
+                              key={acc.account_id}
+                              to={`/accounts?id=${acc.account_id}&type=savings`} 
+                              className="w-full text-left px-3 py-2 rounded-xl text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold block truncate"
+                            >
+                              {acc.product_name}
+                            </Link>
+                          ))}
+                        </>
+                      )}
+
+                      {creditAccs.length > 0 && (
+                        <>
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800/60 pt-2">Credit Cards</div>
+                          {creditAccs.map(acc => (
+                            <Link 
+                              key={acc.account_id}
+                              to={`/accounts?id=${acc.account_id}&type=credit`} 
+                              className="w-full text-left px-3 py-2 rounded-xl text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold block truncate"
+                            >
+                              {acc.product_name || "Nova Everyday Visa"}
+                            </Link>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
               
               {/* Consolidated Products Menu with Mouseover Dropdown */}
