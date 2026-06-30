@@ -126,7 +126,7 @@ function AccountsView({ fbUser, customerProfile }) {
               {selectedAccountId ? "Account Ledger" : "My Accounts"}
             </h1>
             <p className="text-slate-400 text-sm mt-1">
-              Securely managed under profile: <span className="text-slate-200 font-medium">{customerProfile?.first_name ? `${customerProfile.first_name} ${customerProfile.last_name}` : fbUser.email}</span>
+              Hello, <span className="text-emerald-400 font-bold">{customerProfile?.first_name || fbUser.email.split('@')[0]}</span>
             </p>
           </div>
 
@@ -227,24 +227,48 @@ function AccountsView({ fbUser, customerProfile }) {
                 <div 
                   key={`cred-${idx}`} 
                   onClick={() => handleSelectAccount(acc.account_id, 'credit')}
-                  className="bg-slate-900/80 border border-slate-850 hover:border-rose-500/50 rounded-3xl p-8 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between group h-64"
+                  className="bg-slate-900/80 border border-slate-850 hover:border-indigo-500/50 rounded-3xl p-8 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between group h-64"
                 >
                   <div className="flex justify-between items-start">
-                    <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
                       <CreditCard className="w-6 h-6" />
                     </div>
-                    <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2.5 py-1 rounded-full uppercase">Credit Card</span>
+                    <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-full uppercase">Credit Card</span>
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-white group-hover:text-rose-300 transition-colors">Nova Everyday Visa</h3>
+                    <h3 className="text-lg font-bold text-white group-hover:text-indigo-300 transition-colors">Nova Everyday Visa</h3>
                     <p className="text-xs text-slate-500 mt-1">**** {acc.cards?.[0]?.last_four || "9921"}</p>
                   </div>
                   <div className="border-t border-slate-850/80 pt-4 flex justify-between items-end">
                     <span className="text-xs text-slate-400">Current Balance</span>
-                    <span className="text-2xl font-extrabold text-rose-400">${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-2xl font-extrabold text-slate-200">${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Personalized Offers Banner directly below account tiles in Master View */}
+            <div className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/25 rounded-3xl p-8 flex flex-col sm:flex-row items-center justify-between gap-6">
+              <div className="flex items-center space-x-5">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 flex-shrink-0">
+                  <Sparkles className="w-7 h-7 animate-pulse" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-white text-base">Earn 4.85% APY on Savings</h4>
+                  <p className="text-xs text-slate-400 mt-1 max-w-xl">Move your idle deposits into our high-yield growth tier. Federally insured, no monthly fees, and instant liquidity.</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  const firstSavings = savingsAccounts[0];
+                  if (firstSavings) {
+                    handleSelectAccount(firstSavings.account_id, 'savings');
+                  }
+                }}
+                className="px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-all cursor-pointer flex-shrink-0"
+              >
+                Boost Yield Now
+              </button>
             </div>
           </div>
         ) : (
@@ -372,46 +396,96 @@ function AccountsView({ fbUser, customerProfile }) {
                 /* TABLE RENDER */
                 <div className="overflow-x-auto">
                   {selectedAccountType === 'credit' ? (
-                    /* CREDIT CARD BLOTTER: Outgoing positive (purchases), Incoming negative (payments). Clean black/white text, no red. */
-                    <table className="w-full text-left text-sm border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-850 text-slate-400 font-semibold text-xs">
-                          <th className="pb-4 font-semibold">Posting Date</th>
-                          <th className="pb-4 font-semibold">Description</th>
-                          <th className="pb-4 font-semibold">Category</th>
-                          <th className="pb-4 font-semibold text-right">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-850/50">
-                        {transactions.map((tx, idx) => {
-                          const isPayment = tx.transaction_type === "DIRECTDEPOSIT" || tx.amount_cents > 0; // Wait, isPayment reduces credit balance
-                          const amtText = isPayment 
-                            ? `-$${Math.abs(tx.amount || (tx.amount_cents / 100)).toFixed(2)}`
-                            : `+$${Math.abs(tx.amount || (tx.amount_cents / 100)).toFixed(2)}`;
+                    /* CREDIT CARD BLOTTER: Pending holds list, followed by Posted ledger entries. Outgoing positive (no plus), Incoming negative (payments). */
+                    <div className="space-y-8">
+                      {/* PENDING TRANSACTIONS HOLD CONTAINER */}
+                      {transactions.filter(t => t.pending).length > 0 && (
+                        <div className="space-y-3">
+                          <div className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                            <span>Pending Authorizations</span>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm border-collapse">
+                              <thead>
+                                <tr className="border-b border-slate-850 text-slate-500 font-semibold text-xs">
+                                  <th className="pb-2 font-semibold">Date</th>
+                                  <th className="pb-2 font-semibold">Description</th>
+                                  <th className="pb-2 font-semibold">Category</th>
+                                  <th className="pb-2 font-semibold text-right">Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-850/30">
+                                {transactions.filter(t => t.pending).map((tx, idx) => {
+                                  const isLateFee = tx.description === "LATE_FEE";
+                                  const catLabel = tx.personal_finance_category?.primary 
+                                    ? tx.personal_finance_category.primary.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')
+                                    : "Fees";
+                                  return (
+                                    <tr key={`pending-${idx}`} className="hover:bg-slate-900/20 transition-colors">
+                                      <td className="py-3 text-xs text-slate-500 italic">Pending</td>
+                                      <td className="py-3 font-medium text-slate-300 flex items-center gap-2">
+                                        <span>{tx.description}</span>
+                                        {isLateFee && (
+                                          <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-400">Action Required</span>
+                                        )}
+                                      </td>
+                                      <td className="py-3 text-xs text-slate-400">{catLabel}</td>
+                                      <td className={`py-3 text-right font-bold text-sm ${isLateFee ? 'text-rose-400' : 'text-slate-300'}`}>
+                                        ${(tx.amount || (tx.amount_cents / 100)).toFixed(2)}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
 
-                          return (
-                            <tr key={idx} className="hover:bg-slate-900/30 transition-colors">
-                              <td className="py-4 text-xs text-slate-400">
-                                {tx.posted_timestamp ? new Date(tx.posted_timestamp).toLocaleDateString() : "Pending"}
-                              </td>
-                              <td className="py-4 font-medium text-slate-200">
-                                {tx.description}
-                              </td>
-                              <td className="py-4">
-                                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700/80 text-slate-300">
-                                  {tx.personal_finance_category || "General"}
-                                </span>
-                              </td>
-                              <td className={`py-4 text-right font-bold text-sm ${isPayment ? 'text-emerald-400 font-extrabold' : 'text-slate-200'}`}>
-                                {amtText}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                      {/* POSTED TRANSACTIONS LEDGER */}
+                      <div className="space-y-3 pt-4">
+                        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Posted Transactions Since Last Statement</div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-sm border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-850 text-slate-400 font-semibold text-xs">
+                                <th className="pb-4 font-semibold">Posting Date</th>
+                                <th className="pb-4 font-semibold">Description</th>
+                                <th className="pb-4 font-semibold">Category</th>
+                                <th className="pb-4 font-semibold text-right">Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-850/50">
+                              {transactions.filter(t => !t.pending).map((tx, idx) => {
+                                const isPayment = tx.transaction_type === "DIRECTDEPOSIT" || tx.amount_cents > 0;
+                                const catLabel = tx.personal_finance_category?.primary 
+                                  ? tx.personal_finance_category.primary.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')
+                                  : "General";
+                                return (
+                                  <tr key={`posted-${idx}`} className="hover:bg-slate-900/30 transition-colors">
+                                    <td className="py-4 text-xs text-slate-400">
+                                      {tx.posted_timestamp ? new Date(tx.posted_timestamp).toLocaleDateString() : "Pending"}
+                                    </td>
+                                    <td className="py-4 font-medium text-slate-200">{tx.description}</td>
+                                    <td className="py-4">
+                                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700/80 text-slate-300">
+                                        {catLabel}
+                                      </span>
+                                    </td>
+                                    <td className={`py-4 text-right font-bold text-sm ${isPayment ? 'text-emerald-400' : 'text-slate-200'}`}>
+                                      {isPayment ? '-' : ''}${Math.abs(tx.amount || (tx.amount_cents / 100)).toFixed(2)}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
                   ) : (
-                    /* DEPOSIT BLOTTER: Traditional columns. Incoming positive, Outgoing negative. */
+                    /* DEPOSIT BLOTTER: Traditional columns. Incoming positive (no sign), Outgoing negative. */
                     <table className="w-full text-left text-sm border-collapse">
                       <thead>
                         <tr className="border-b border-slate-850 text-slate-400 font-semibold text-xs">
@@ -439,7 +513,7 @@ function AccountsView({ fbUser, customerProfile }) {
                                 {isIncoming ? "Direct Deposit" : "ACH Withdrawal"}
                               </td>
                               <td className={`py-4 text-right font-bold text-sm ${isIncoming ? 'text-emerald-400' : 'text-slate-300'}`}>
-                                {isIncoming ? '+' : '-'}${amountVal.toFixed(2)}
+                                {isIncoming ? '' : '-'}${amountVal.toFixed(2)}
                               </td>
                               <td className="py-4 text-right text-slate-300">
                                 ${(tx.running_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}

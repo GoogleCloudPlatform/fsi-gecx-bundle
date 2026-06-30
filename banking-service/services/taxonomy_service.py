@@ -24,6 +24,10 @@ DEFAULT_TAXONOMY_MAP: Dict[str, Dict[str, str]] = {
     "4511": {"primary": "TRAVEL", "detailed": "TRAVEL_FLIGHTS"},
     "7011": {"primary": "TRAVEL", "detailed": "TRAVEL_LODGING"},
     "4814": {"primary": "GENERAL_SERVICES", "detailed": "GENERAL_SERVICES_TELECOMMUNICATIONS"},
+    "4121": {"primary": "TRANSPORTATION", "detailed": "TRANSPORTATION_TAXI"},
+    "4899": {"primary": "ENTERTAINMENT", "detailed": "ENTERTAINMENT_TV"},
+    "5541": {"primary": "TRANSPORTATION", "detailed": "TRANSPORTATION_GAS"},
+    "FEE": {"primary": "FEES", "detailed": "FEES_LATE"},
 }
 
 

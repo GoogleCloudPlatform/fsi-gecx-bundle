@@ -95,11 +95,19 @@ async def test_provision_my_demo_success(async_client, db_session):
     cred_acc = db_session.query(CreditAccount).filter(CreditAccount.customer_id == user.id).first()
     assert cred_acc is not None
     assert cred_acc.cleared_balance_cents > 0
-    assert cred_acc.available_credit_cents == cred_acc.credit_limit_cents - cred_acc.cleared_balance_cents
+    assert cred_acc.available_credit_cents == cred_acc.credit_limit_cents - cred_acc.cleared_balance_cents - 3500
     
-    # Check historical swipes (should have exactly 13 posted transactions including 1 late fee)
+    # Check historical swipes (should have exactly 12 posted transactions, plus 1 pending late fee authorization hold)
     swipes = db_session.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).all()
-    assert len(swipes) == 13
+    assert len(swipes) == 12
+
+    from models.credit_card import TransactionAuthorization
+    holds = db_session.query(TransactionAuthorization).filter(
+        TransactionAuthorization.account_id == cred_acc.id,
+        TransactionAuthorization.status == "PENDING"
+    ).all()
+    assert len(holds) == 1
+    assert holds[0].merchant_name == "LATE_FEE"
 
 @pytest.mark.asyncio
 async def test_provision_my_demo_conflict(async_client, db_session):

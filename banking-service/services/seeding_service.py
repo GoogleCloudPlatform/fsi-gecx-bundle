@@ -537,42 +537,50 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
 
         # 9. Generate 10-15 historical swipes
         swipe_options = [
-            {"description": "Starbucks Coffee", "min": 450, "max": 850},
-            {"description": "Whole Foods Market", "min": 4500, "max": 12000},
-            {"description": "Uber Trip", "min": 1200, "max": 3500},
-            {"description": "Netflix Subscription", "min": 1549, "max": 1549},
-            {"description": "Chevron Gas Station", "min": 3500, "max": 5500},
-            {"description": "McDonald's Fast Food", "min": 850, "max": 1850},
-            {"description": "Walmart Superstore", "min": 2500, "max": 9500},
-            {"description": "YouTube Premium Subscription", "min": 1399, "max": 1399},
-            {"description": "Shell Petrol", "min": 3000, "max": 5000}
+            {"description": "Starbucks Coffee", "min": 450, "max": 850, "mcc": "5814"},
+            {"description": "Whole Foods Market", "min": 4500, "max": 12000, "mcc": "5411"},
+            {"description": "Uber Trip", "min": 1200, "max": 3500, "mcc": "4121"},
+            {"description": "Netflix Subscription", "min": 1549, "max": 1549, "mcc": "4899"},
+            {"description": "Chevron Gas Station", "min": 3500, "max": 5500, "mcc": "5541"},
+            {"description": "McDonald's Fast Food", "min": 850, "max": 1850, "mcc": "5814"},
+            {"description": "Walmart Superstore", "min": 2500, "max": 9500, "mcc": "5411"},
+            {"description": "YouTube Premium Subscription", "min": 1399, "max": 1399, "mcc": "4899"},
+            {"description": "Shell Petrol", "min": 3000, "max": 5000, "mcc": "5541"}
         ]
         
         total_swipes_debt_cents = 0
         now = datetime.datetime.now(datetime.timezone.utc)
 
-        # 9a. Seed exactly one LATE_FEE transaction for support escalations CUJ
+        # 9a. Seed exactly one LATE_FEE transaction as a PENDING authorization hold
         late_fee_cents = 3500
-        late_fee_tx = PostedTransaction(
+        late_fee_auth = TransactionAuthorization(
             id=uuid.uuid4(),
+            card_id=card_id,
             account_id=cred_acc_id,
-            amount_cents=-late_fee_cents,
-            description="LATE_FEE",
-            posted_at=now - datetime.timedelta(days=5)
+            transaction_amount_cents=late_fee_cents,
+            billing_amount_cents=late_fee_cents,
+            status="PENDING",
+            auth_code="FEE350",
+            retrieval_reference_number="REF999999999",
+            card_network="VISA",
+            merchant_category_code="FEE",
+            merchant_name="LATE_FEE",
+            created_at=now - datetime.timedelta(days=5),
+            expires_at=now + datetime.timedelta(days=10)
         )
-        db.add(late_fee_tx)
+        db.add(late_fee_auth)
         record_audit_event(
             db,
-            "CREDIT_TRANSACTION_POSTED",
+            "CREDIT_TRANSACTION_AUTHORIZED",
             {
                 "account_id": str(cred_acc_id),
-                "transaction_id": str(late_fee_tx.id),
-                "amount_cents": late_fee_tx.amount_cents,
-                "description": late_fee_tx.description,
+                "authorization_id": str(late_fee_auth.id),
+                "amount_cents": late_fee_auth.transaction_amount_cents,
+                "merchant_name": late_fee_auth.merchant_name,
             },
         )
-        total_swipes_debt_cents += late_fee_cents
         
+        # 9b. Seed 12 posted transactions
         for i in range(12):
             swipe_conf = random.choice(swipe_options)
             amount_cents = random.randint(swipe_conf["min"], swipe_conf["max"])
@@ -580,9 +588,30 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             
             posted_date = now - datetime.timedelta(days=(14 - i), hours=random.randint(0, 12))
             
+            # Create matching authorization hold mapped as POSTED
+            auth = TransactionAuthorization(
+                id=uuid.uuid4(),
+                card_id=card_id,
+                account_id=cred_acc_id,
+                transaction_amount_cents=amount_cents,
+                billing_amount_cents=amount_cents,
+                status="POSTED",
+                auth_code=f"TX{100000+i}",
+                retrieval_reference_number=f"REF{888000+i:012d}",
+                card_network="VISA",
+                merchant_category_code=swipe_conf["mcc"],
+                merchant_name=swipe_conf["description"],
+                created_at=posted_date - datetime.timedelta(hours=2),
+                expires_at=posted_date + datetime.timedelta(days=7)
+            )
+            db.add(auth)
+            db.flush()
+            
+            # Create corresponding posted statement ledger line
             tx = PostedTransaction(
                 id=uuid.uuid4(),
                 account_id=cred_acc_id,
+                authorization_id=auth.id,
                 amount_cents=-amount_cents,
                 description=swipe_conf["description"],
                 posted_at=posted_date
@@ -600,7 +629,8 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             )
             
         cred_acc.cleared_balance_cents = total_swipes_debt_cents
-        cred_acc.available_credit_cents = cred_acc.credit_limit_cents - total_swipes_debt_cents
+        # Pending late fee also holds/reduces the available credit
+        cred_acc.available_credit_cents = cred_acc.credit_limit_cents - total_swipes_debt_cents - late_fee_cents
         
         db.commit()
         logger.info(f"Dynamically provisioned personal demo suite for email={email} (user_id={user_uuid}) successfully.")

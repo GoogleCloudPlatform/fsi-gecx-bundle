@@ -135,7 +135,45 @@ async def reverse_overdraft_fee(
         # Concurrency Locking: lock account row for balance updates
         account = repo.get_account_by_id(account_id, lock=True)
 
-        # Find the target fee transaction in the ledger (negative amount with "LATE_FEE" or similar)
+        # 1. Search pending authorizations for an active fee hold
+        pending_auths = repo.list_pending_authorizations(account.id)
+        pending_fee = next((
+            auth for auth in pending_auths
+            if auth.merchant_name in ["LATE_FEE", "OVERDRAFT", "Overdraft Fee"]
+        ), None)
+
+        if pending_fee:
+            current_year = datetime.datetime.now(datetime.timezone.utc).year
+            year_start = datetime.datetime(current_year, 1, 1, tzinfo=datetime.timezone.utc)
+            prior_reversal = repo.get_annual_reversal_entry(account.id, year_start)
+            if prior_reversal:
+                return {"success": False, "message": "Already used annual reversal limit."}
+
+            pending_fee.status = "VOIDED"
+            account.available_credit_cents += pending_fee.transaction_amount_cents
+
+            from utils.audit import record_audit_event
+            record_audit_event(
+                db,
+                "FEE_REVERSED",
+                {
+                    "account_id": str(account.id),
+                    "authorization_id": str(pending_fee.id),
+                    "amount_cents": pending_fee.transaction_amount_cents,
+                    "description": "FEE_REVERSAL"
+                }
+            )
+            db.commit()
+
+            session_id = f"session-{verified_customer_id}"
+            await send_session_event(session_id, {
+                "type": "FEE_REVERSED",
+                "cleared_balance_cents": account.cleared_balance_cents,
+                "available_credit_cents": account.available_credit_cents
+            })
+            return {"success": True, "message": "Pending late fee successfully voided."}
+
+        # 2. Otherwise fall back to posted ledger entries
         ledger = repo.list_ledger_entries(account.id)
         original_tx = next((
             entry for entry in ledger
