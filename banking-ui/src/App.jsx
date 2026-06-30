@@ -949,6 +949,10 @@ function AppContent() {
             <div className="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-600 dark:text-slate-300">
               <Link to="/" className={`hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer ${location.pathname === '/' ? 'text-slate-900 dark:text-white font-bold' : ''}`}>Home</Link>
               
+              {fbUser && (
+                <Link to="/accounts" className={`hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer ${location.pathname === '/accounts' ? 'text-emerald-600 dark:text-emerald-400 font-bold' : ''}`}>Accounts</Link>
+              )}
+              
               {/* Consolidated Products Menu with Mouseover Dropdown */}
               <div className="relative group py-2">
                 <button className={`hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${['/checking-accounts', '/credit-cards', '/mortgages', '/mortgage-rates'].includes(location.pathname) ? 'text-emerald-600 dark:text-emerald-400 font-bold' : ''}`}>

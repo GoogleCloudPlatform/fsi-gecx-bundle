@@ -125,7 +125,7 @@ function HomeView({
                   {hasAccounts ? (
                     <>
                       <button 
-                        onClick={() => navigate('/checking-accounts')}
+                        onClick={() => navigate('/accounts')}
                         className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
                         style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
                       >
@@ -327,25 +327,7 @@ function HomeView({
                       </div>
                     ))}
 
-                    {/* Recent Transactions Blotter */}
-                    {transactions && transactions.length > 0 && (
-                      <div className="mt-6 pt-6 border-t border-slate-800/80">
-                        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Recent Transactions</div>
-                        <div className="space-y-3">
-                          {transactions.map((tx, idx) => (
-                            <div key={idx} className="flex items-center justify-between text-xs">
-                              <div className="flex items-center space-x-2">
-                                <div className={`w-2 h-2 rounded-full ${tx.amount_cents < 0 ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
-                                <span className="text-slate-300 font-medium truncate max-w-[150px]">{tx.description}</span>
-                              </div>
-                              <span className={`font-semibold ${tx.amount_cents < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                                {tx.amount_cents < 0 ? '-' : '+'}${(Math.abs(tx.amount_cents) / 100).toFixed(2)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    
                   </div>
 
                   <div className="flex items-center justify-between text-xs text-slate-500">

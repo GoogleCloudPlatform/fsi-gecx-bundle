@@ -16,6 +16,7 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 
 import HomeView from './components/HomeView.jsx';
+import AccountsView from './components/AccountsView.jsx';
 import SettingsView from './components/SettingsView.jsx';
 import CreditCardsView from './components/CreditCardsView.jsx';
 import CheckingAccountsView from './components/CheckingAccountsView.jsx';
@@ -78,6 +79,9 @@ export default function AppRoutes({
       } />
       <Route path="/checking-accounts" element={
         <CheckingAccountsView activeBot={activeBot} setActiveBot={setActiveBot} />
+      } />
+      <Route path="/accounts" element={
+        <AccountsView fbUser={fbUser} customerProfile={customerProfile} />
       } />
       <Route path="/savings-accounts" element={
         <SavingsAccountsView />

@@ -99,3 +99,30 @@ async def test_deposit_account_validation_failure(async_client):
 
     res = await async_client.post("/api/v1/accounts/deposit", json=payload, headers=headers)
     assert res.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_get_deposit_transactions(async_client):
+    """Verify that we can retrieve deposit transaction ledger history for checking accounts."""
+    headers = {"Authorization": "Bearer TEST_USER_123"}
+    payload = {
+        "account_type": "CHECKING",
+        "product_name": "Nova Classic Everyday",
+        "member_type": "current",
+        "initial_deposit_cents": 25000  # $250.00
+    }
+
+    # Open account
+    res = await async_client.post("/api/v1/accounts/deposit", json=payload, headers=headers)
+    assert res.status_code == 201
+    data = res.json()
+    account_id = data["account_id"]
+
+    # Fetch transactions
+    tx_res = await async_client.get(f"/api/v1/accounts/{account_id}/transactions", headers=headers)
+    assert tx_res.status_code == 200
+    tx_data = tx_res.json()
+    assert len(tx_data) >= 1
+    assert tx_data[0]["amount_cents"] == 25000
+    assert tx_data[0]["entry_type"] == "DEBIT"
+    assert "running_balance_cents" in tx_data[0]

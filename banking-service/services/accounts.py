@@ -311,3 +311,33 @@ class AccountsService:
             "credit_cleared_balance_cents": credit_acc.cleared_balance_cents,
             "credit_available_credit_cents": credit_acc.available_credit_cents
         }
+
+    def get_deposit_transactions(self, token: ValidatedToken, account_id: str) -> list[Dict[str, Any]]:
+        # Resolve internal User entity
+        user = self.db.query(User).filter(User.auth_provider_uid == token.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User profile not found.")
+            
+        # Ensure account belongs to user
+        account = self.db.query(Account).filter(Account.id == account_id, Account.user_id == user.id).first()
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found.")
+            
+        # Fetch ledger entries
+        entries = self.db.query(AccountLedgerEntry).filter(AccountLedgerEntry.account_id == account.id).order_by(AccountLedgerEntry.posted_at.desc()).all()
+        
+        results = []
+        running_bal = account.cleared_balance_cents
+        for entry in entries:
+            results.append({
+                "entry_id": str(entry.entry_id),
+                "transaction_id": str(entry.transaction_id),
+                "amount_cents": entry.amount_cents,
+                "entry_type": entry.entry_type, # 'DEBIT', 'CREDIT'
+                "description": entry.transaction.description if entry.transaction else "Posted Transaction",
+                "posted_at": entry.posted_at.isoformat() if entry.posted_at else "",
+                "running_balance_cents": running_bal
+            })
+            running_bal -= entry.amount_cents # Move balance backward
+            
+        return results

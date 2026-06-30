@@ -292,5 +292,10 @@ export async function payCreditCard(paymentData) {
   return res.data;
 }
 
+export async function getDepositTransactions(accountId) {
+  const res = await api.get(`/v1/accounts/${accountId}/transactions`);
+  return res.data;
+}
+
 export default api;
 

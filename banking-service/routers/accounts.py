@@ -63,3 +63,16 @@ async def get_accounts_summary(
     """
     return service.get_user_accounts_summary(token)
 
+
+@router.get("/{account_id}/transactions", status_code=status.HTTP_200_OK)
+@v1_router.get("/{account_id}/transactions", status_code=status.HTTP_200_OK)
+async def get_deposit_transactions(
+    account_id: str,
+    service: AccountsService = Depends(get_accounts_service),
+    token: ValidatedToken = Depends(get_current_user)
+):
+    """
+    Retrieves deposit ledger splits and history for checking or savings accounts.
+    """
+    return service.get_deposit_transactions(token, account_id)
+
