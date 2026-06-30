@@ -190,8 +190,8 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
                   onClick={() => setSelectedAccountIndex(idx)}
                   className={`px-5 py-3 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center space-x-2 border ${
                     isSelected 
-                      ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg scale-105' 
-                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                      ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white border-slate-900 dark:border-slate-800 shadow-md scale-105' 
+                      : 'bg-slate-100 dark:bg-slate-900 text-slate-550 dark:text-slate-400 border-slate-250 dark:border-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-800'
                   }`}
                 >
                   <PiggyBank className={`w-4 h-4 ${isSelected ? 'text-teal-400 dark:text-teal-600' : ''}`} />
