@@ -254,8 +254,8 @@ function AccountsView({ fbUser, customerProfile }) {
                   <Sparkles className="w-7 h-7 animate-pulse" />
                 </div>
                 <div>
-                  <h4 className="font-extrabold text-white text-base">Earn 4.85% APY on Savings</h4>
-                  <p className="text-xs text-slate-400 mt-1 max-w-xl">Move your idle deposits into our high-yield growth tier. Federally insured, no monthly fees, and instant liquidity.</p>
+                  <h4 className="font-extrabold text-slate-900 dark:text-white text-base">Earn 4.85% APY on Savings</h4>
+                  <p className="text-xs text-slate-650 dark:text-slate-400 mt-1 max-w-xl">Move your idle deposits into our high-yield growth tier. Federally insured, no monthly fees, and instant liquidity.</p>
                 </div>
               </div>
               <button 

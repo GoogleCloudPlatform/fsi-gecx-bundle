@@ -200,7 +200,7 @@ function HomeView({
           {/* Interactive Glassmorphism Dashboard Preview */}
           <div className="relative hidden lg:block">
             <div className="absolute -inset-4 bg-gradient-to-tr from-emerald-500/20 to-cyan-500/20 rounded-3xl blur-3xl -z-10"></div>
-            <div className="relative border border-slate-800/80 rounded-2xl p-8 shadow-2xl shadow-black/50" style={{ backgroundColor: 'var(--card-bg-color, #0f172a)' }}>
+            <div className="relative bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-8 shadow-xl dark:shadow-black/50">
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-12 text-slate-400 space-y-3">
                   <div className="w-8 h-8 rounded-full border-2 border-slate-700 border-t-emerald-500 animate-spin"></div>
@@ -211,40 +211,40 @@ function HomeView({
                 <>
                   <div className="flex items-center justify-between mb-8">
                     <div>
-                      <div className="text-sm text-slate-400">Total Liquid Deposits</div>
-                      <div className="text-4xl font-bold text-white mt-1">$124,580.45</div>
+                      <div className="text-sm text-slate-500 dark:text-slate-400">Total Liquid Deposits</div>
+                      <div className="text-4xl font-bold text-slate-900 dark:text-white mt-1">$124,580.45</div>
                     </div>
                   </div>
 
                   <div className="space-y-4 mb-8">
-                    <div className="bg-slate-950/50 rounded-xl p-4 border border-slate-800/50 flex items-center justify-between">
+                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/80 dark:border-slate-800/50 flex items-center justify-between">
                       <div className="flex items-center space-x-4">
                         <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-400">
                           <CreditCard className="w-5 h-5" />
                         </div>
                         <div>
-                          <div className="font-medium text-white">Nova Signature Checking</div>
-                          <div className="text-xs text-slate-400">**** 4829</div>
+                          <div className="font-medium text-slate-900 dark:text-white">Nova Signature Checking</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">**** 4829</div>
                         </div>
                       </div>
-                      <div className="font-semibold text-white">$14,250.00</div>
+                      <div className="font-semibold text-slate-900 dark:text-white">$14,250.00</div>
                     </div>
 
-                    <div className="bg-slate-950/50 rounded-xl p-4 border border-slate-800/50 flex items-center justify-between">
+                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/80 dark:border-slate-800/50 flex items-center justify-between">
                       <div className="flex items-center space-x-4">
                         <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400">
                           <Percent className="w-5 h-5" />
                         </div>
                         <div>
-                          <div className="font-medium text-white">High-Yield Growth</div>
-                          <div className="text-xs text-slate-400">Active Savings Tier</div>
+                          <div className="font-medium text-slate-900 dark:text-white">High-Yield Growth</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">Active Savings Tier</div>
                         </div>
                       </div>
-                      <div className="font-semibold text-white">$110,330.45</div>
+                      <div className="font-semibold text-slate-900 dark:text-white">$110,330.45</div>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs text-slate-500">
+                  <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
                     <span>Secured by 256-bit AES Encryption</span>
                     <div className="flex items-center space-x-1 text-emerald-400">
                       <Lock className="w-3 h-3" />
@@ -257,8 +257,8 @@ function HomeView({
                 <>
                   <div className="flex items-center justify-between mb-8">
                     <div>
-                      <div className="text-sm text-slate-400">Total Liquid Deposits</div>
-                      <div className="text-4xl font-bold text-white mt-1">
+                      <div className="text-sm text-slate-500 dark:text-slate-400">Total Liquid Deposits</div>
+                      <div className="text-4xl font-bold text-slate-900 dark:text-white mt-1">
                         ${((accountsData.deposit_accounts?.reduce((sum, acc) => sum + acc.cleared_balance_cents, 0) || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
@@ -266,54 +266,54 @@ function HomeView({
 
                   <div className="space-y-4 mb-8">
                     {accountsData.deposit_accounts?.filter(a => a.account_type === 'CHECKING').map((acc, idx) => (
-                      <div key={`chk-${idx}`} className="bg-slate-950/50 rounded-xl p-4 border border-slate-800/50 flex items-center justify-between">
+                      <div key={`chk-${idx}`} className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/80 dark:border-slate-800/50 flex items-center justify-between">
                         <div className="flex items-center space-x-4">
                           <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-400">
                             <CreditCard className="w-5 h-5" />
                           </div>
                           <div>
-                            <div className="font-medium text-white">{acc.product_name}</div>
-                            <div className="text-xs text-slate-400">**** {acc.account_number.slice(-4)}</div>
+                            <div className="font-medium text-slate-900 dark:text-white">{acc.product_name}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">**** {acc.account_number.slice(-4)}</div>
                           </div>
                         </div>
-                        <div className="font-semibold text-white">
+                        <div className="font-semibold text-slate-900 dark:text-white">
                           ${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </div>
                       </div>
                     ))}
 
                     {accountsData.deposit_accounts?.filter(a => a.account_type === 'SAVINGS').map((acc, idx) => (
-                      <div key={`sav-${idx}`} className="bg-slate-950/50 rounded-xl p-4 border border-slate-800/50 flex items-center justify-between">
+                      <div key={`sav-${idx}`} className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/80 dark:border-slate-800/50 flex items-center justify-between">
                         <div className="flex items-center space-x-4">
                           <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400">
                             <Percent className="w-5 h-5" />
                           </div>
                           <div>
-                            <div className="font-medium text-white">{acc.product_name}</div>
-                            <div className="text-xs text-slate-400">Active Savings Tier</div>
+                            <div className="font-medium text-slate-900 dark:text-white">{acc.product_name}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">Active Savings Tier</div>
                           </div>
                         </div>
-                        <div className="font-semibold text-white">
+                        <div className="font-semibold text-slate-900 dark:text-white">
                           ${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </div>
                       </div>
                     ))}
 
                     {accountsData.credit_accounts?.map((acc, idx) => (
-                      <div key={`cred-${idx}`} className="bg-slate-950/50 rounded-xl p-4 border border-slate-800/50 flex items-center justify-between">
+                      <div key={`cred-${idx}`} className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/80 dark:border-slate-800/50 flex items-center justify-between">
                         <div className="flex items-center space-x-4">
                           <div className="w-10 h-10 rounded-lg bg-rose-500/20 flex items-center justify-center text-rose-400">
                             <CreditCard className="w-5 h-5" />
                           </div>
                           <div>
-                            <div className="font-medium text-white">Nova Credit Card</div>
-                            <div className="text-xs text-slate-400">Outstanding Balance</div>
+                            <div className="font-medium text-slate-900 dark:text-white">Nova Credit Card</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">Outstanding Balance</div>
                           </div>
                         </div>
                         <div className="flex items-center space-x-3">
-                          <div className="font-semibold text-rose-400 text-right">
+                          <div className="font-semibold text-rose-600 dark:text-rose-400 text-right">
                             ${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                            <div className="text-[10px] text-slate-500">Limit: ${(acc.credit_limit_cents / 100).toLocaleString()}</div>
+                            <div className="text-[10px] text-slate-400 dark:text-slate-500">Limit: ${(acc.credit_limit_cents / 100).toLocaleString()}</div>
                           </div>
                           {acc.cleared_balance_cents > 0 && (
                             <button
@@ -330,7 +330,7 @@ function HomeView({
                     
                   </div>
 
-                  <div className="flex items-center justify-between text-xs text-slate-500">
+                  <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
                     <span>Secured by 256-bit AES Encryption</span>
                     <div className="flex items-center space-x-1 text-emerald-400">
                       <Lock className="w-3 h-3" />
@@ -345,8 +345,8 @@ function HomeView({
                     <Shield className="w-8 h-8 animate-pulse" />
                   </div>
                   <div className="space-y-2">
-                    <h3 className="text-lg font-bold text-white">Set up your Sandbox</h3>
-                    <p className="text-xs leading-relaxed text-slate-400 max-w-sm">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Set up your Sandbox</h3>
+                    <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400 max-w-sm">
                       A database profile has been provisioned for <span className="text-emerald-400 font-semibold">{fbUser?.email}</span>, but you don't have any active accounts. 
                       Provision your isolated personal demo suite to test live payments, statements, and agent calls.
                     </p>
@@ -366,71 +366,71 @@ function HomeView({
       </section>
 
       {/* Personalized Offers or CTA Section (moved below Hero) */}
-      <section className="py-24 px-6 relative overflow-hidden border-y border-slate-200 dark:border-slate-800" style={{ backgroundColor: 'var(--card-bg-color, #0f172a)' }}>
+      <section className="py-24 px-6 relative overflow-hidden border-y border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-3xl -z-10"></div>
         <div className="max-w-7xl mx-auto relative z-10">
           {fbUser ? (
             <div>
               <div className="text-center max-w-2xl mx-auto mb-16">
-                <span className="text-emerald-400 font-semibold text-sm tracking-wider uppercase">Exclusive Benefits</span>
-                <h2 className="text-3xl md:text-5xl font-black mt-3 mb-6 text-white">
+                <span className="text-emerald-500 dark:text-emerald-400 font-semibold text-sm tracking-wider uppercase">Exclusive Benefits</span>
+                <h2 className="text-3xl md:text-5xl font-black mt-3 mb-6 text-slate-900 dark:text-white">
                   Personalized offers for you
                 </h2>
-                <p className="text-slate-400 text-sm">
+                <p className="text-slate-650 dark:text-slate-400 text-sm">
                   Maximize your wealth with active member benefits tailored to your credit profile and account history.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {/* Offer 1 */}
-                <div className="bg-slate-900/80 border border-slate-850 rounded-3xl p-8 hover:border-emerald-500/40 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
+                <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-850 rounded-3xl p-8 hover:border-emerald-500/40 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between shadow-sm dark:shadow-none">
                   <div>
-                    <div className="w-12 h-12 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 mb-6">
+                    <div className="w-12 h-12 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-500 dark:text-teal-400 mb-6">
                       <TrendingUp className="w-6 h-6" />
                     </div>
-                    <span className="text-xs font-semibold text-teal-400 bg-teal-500/10 px-3 py-1 rounded-full">High-Yield Special</span>
-                    <h3 className="text-2xl font-bold text-white mt-4 mb-3">4.85% APY Savings</h3>
-                    <p className="text-slate-400 text-sm leading-relaxed mb-8">
+                    <span className="text-xs font-semibold text-teal-600 dark:text-teal-400 bg-teal-500/10 px-3 py-1 rounded-full">High-Yield Special</span>
+                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-4 mb-3">4.85% APY Savings</h3>
+                    <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-8">
                       Earn interest rates 10x higher than the national average with zero minimum deposit rules and zero monthly maintenance fees.
                     </p>
                   </div>
                   <button 
                     onClick={() => navigate('/checking-accounts')}
-                    className="w-full py-3.5 rounded-xl bg-slate-800 text-slate-200 font-semibold hover:bg-slate-700 transition-all duration-200 cursor-pointer"
+                    className="w-full py-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer"
                   >
                     Deposit Funds
                   </button>
                 </div>
 
                 {/* Offer 2 */}
-                <div className="bg-slate-900/80 border border-slate-850 rounded-3xl p-8 hover:border-cyan-500/40 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
+                <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-850 rounded-3xl p-8 hover:border-cyan-500/40 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between shadow-sm dark:shadow-none">
                   <div>
-                    <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 mb-6">
+                    <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-500 dark:text-cyan-400 mb-6">
                       <CreditCard className="w-6 h-6" />
                     </div>
-                    <span className="text-xs font-semibold text-cyan-400 bg-cyan-500/10 px-3 py-1 rounded-full">1.5% Unlimited Cash</span>
-                    <h3 className="text-2xl font-bold text-white mt-4 mb-3">Nova Everyday Card</h3>
-                    <p className="text-slate-400 text-sm leading-relaxed mb-8">
+                    <span className="text-xs font-semibold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 px-3 py-1 rounded-full">1.5% Unlimited Cash</span>
+                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-4 mb-3">Nova Everyday Card</h3>
+                    <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-8">
                       Enjoy unlimited cash back on gas, groceries, and dining with a prime credit limit up to $10,000 and no annual fees.
                     </p>
                   </div>
                   <button 
                     onClick={() => navigate('/credit-cards')}
-                    className="w-full py-3.5 rounded-xl bg-slate-800 text-slate-200 font-semibold hover:bg-slate-700 transition-all duration-200 cursor-pointer"
+                    className="w-full py-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer"
                   >
                     Apply Instantly
                   </button>
                 </div>
 
                 {/* Offer 3 */}
-                <div className="bg-slate-900/80 border border-slate-850 rounded-3xl p-8 hover:border-emerald-500/40 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
+                <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-850 rounded-3xl p-8 hover:border-emerald-500/40 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between shadow-sm dark:shadow-none">
                   <div>
-                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-6">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 dark:text-emerald-400 mb-6">
                       <Percent className="w-6 h-6" />
                     </div>
-                    <span className="text-xs font-semibold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full">Low Fixed Rates</span>
-                    <h3 className="text-2xl font-bold text-white mt-4 mb-3">5.99% Personal Loan</h3>
-                    <p className="text-slate-400 text-sm leading-relaxed mb-8">
+                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full">Low Fixed Rates</span>
+                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-4 mb-3">5.99% Personal Loan</h3>
+                    <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-8">
                       Estimate, customize, and submit loan requests with instant approval decisions and check deposits within 24 hours.
                     </p>
                   </div>
@@ -439,7 +439,7 @@ function HomeView({
                       const calcSection = document.getElementById('calculator');
                       if (calcSection) calcSection.scrollIntoView({ behavior: 'smooth' });
                     }}
-                    className="w-full py-3.5 rounded-xl bg-slate-800 text-slate-200 font-semibold hover:bg-slate-700 transition-all duration-200 cursor-pointer"
+                    className="w-full py-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer"
                   >
                     Calculate Payments
                   </button>
@@ -448,10 +448,10 @@ function HomeView({
             </div>
           ) : (
             <div className="max-w-4xl mx-auto text-center">
-              <h2 className="text-3xl md:text-5xl font-black mb-6 text-white">
+              <h2 className="text-3xl md:text-5xl font-black mb-6 text-slate-900 dark:text-white">
                 Ready to take control of your wealth?
               </h2>
-              <p className="text-slate-400 max-w-xl mx-auto mb-8">
+              <p className="text-slate-650 dark:text-slate-400 max-w-xl mx-auto mb-8">
                 Join thousands of members who are earning more and paying less with {bankName} Credit Union.
               </p>
               <button
@@ -493,14 +493,14 @@ function HomeView({
             </div>
           </div>
 
-          <div className="card-slate-900 shadow-2xl">
-            <h3 className="text-xl font-semibold mb-8 text-white">Personal Loan Estimator</h3>
+          <div className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 rounded-3xl p-8 shadow-2xl">
+            <h3 className="text-xl font-semibold mb-8 text-slate-900 dark:text-white">Personal Loan Estimator</h3>
             
             {/* Loan Amount Slider */}
             <div className="mb-8">
               <div className="flex justify-between items-center mb-3">
-                <label className="text-sm font-medium text-slate-400">Loan Amount</label>
-                <span className="text-xl font-bold text-white">${loanAmount.toLocaleString()}</span>
+                <label className="text-sm font-medium text-slate-500 dark:text-slate-400">Loan Amount</label>
+                <span className="text-xl font-bold text-slate-900 dark:text-white">${loanAmount.toLocaleString()}</span>
               </div>
               <input 
                 type="range" 
@@ -509,9 +509,9 @@ function HomeView({
                 step="1000"
                 value={loanAmount}
                 onChange={(e) => setLoanAmount(Number(e.target.value))}
-                className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
               />
-              <div className="flex justify-between text-xs text-slate-600 mt-2">
+              <div className="flex justify-between text-xs text-slate-400 dark:text-slate-600 mt-2">
                 <span>$1,000</span>
                 <span>$100,000</span>
               </div>
@@ -520,8 +520,8 @@ function HomeView({
             {/* Loan Term Slider */}
             <div className="mb-12">
               <div className="flex justify-between items-center mb-3">
-                <label className="text-sm font-medium text-slate-400">Loan Term (Months)</label>
-                <span className="text-xl font-bold text-white">{loanTerm} Months</span>
+                <label className="text-sm font-medium text-slate-500 dark:text-slate-400">Loan Term (Months)</label>
+                <span className="text-xl font-bold text-slate-900 dark:text-white">{loanTerm} Months</span>
               </div>
               <input 
                 type="range" 
@@ -530,18 +530,18 @@ function HomeView({
                 step="12"
                 value={loanTerm}
                 onChange={(e) => setLoanTerm(Number(e.target.value))}
-                className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
               />
-              <div className="flex justify-between text-xs text-slate-600 mt-2">
+              <div className="flex justify-between text-xs text-slate-400 dark:text-slate-600 mt-2">
                 <span>12 months</span>
                 <span>84 months</span>
               </div>
 
               {/* Result Display */}
-              <div className="bg-sky-50 dark:bg-slate-950 rounded-xl p-6 border border-sky-200 dark:border-slate-800 flex items-center justify-between mb-6">
+              <div className="bg-sky-50 dark:bg-slate-950 rounded-xl p-6 border border-sky-200 dark:border-slate-800 flex items-center justify-between mt-6 mb-6">
                 <div>
                   <div className="text-xs text-slate-500 mb-1">Estimated Monthly Payment</div>
-                  <div className="text-4xl font-black text-emerald-400">${calculateMonthlyPayment()}</div>
+                  <div className="text-4xl font-black text-emerald-600 dark:text-emerald-400">${calculateMonthlyPayment()}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-slate-500 mb-1">Fixed APR</div>
@@ -661,12 +661,12 @@ function HomeView({
                 botName: "Lost Card Agent"
               }
             ].map((inquiry, idx) => (
-              <div key={idx} className="card-slate-900 flex flex-col justify-between hover:border-teal-500/50 hover:bg-slate-800 transition-all duration-300 group">
+              <div key={idx} className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 rounded-3xl p-6 flex flex-col justify-between hover:border-teal-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all duration-300 group shadow-sm dark:shadow-none">
                 <div>
-                  <h3 className="text-lg font-semibold text-white mb-2 group-hover:text-teal-400 transition-colors">
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
                     {inquiry.title}
                   </h3>
-                  <p className="text-slate-400 text-sm leading-relaxed mb-6">
+                  <p className="text-slate-650 dark:text-slate-400 text-sm leading-relaxed mb-6">
                     {inquiry.desc}
                   </p>
                 </div>
@@ -675,7 +675,7 @@ function HomeView({
                     setActiveBot(inquiry.botName);
                     setTimeout(() => setActiveBot(null), 3500);
                   }}
-                  className="w-full py-3 rounded-xl bg-slate-800 text-slate-200 text-sm font-semibold hover:bg-teal-500 hover:text-slate-950 transition-all duration-300 shadow-sm hover:shadow-teal-500/20"
+                  className="w-full py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-teal-500 hover:text-slate-950 dark:hover:bg-teal-500 dark:hover:text-slate-950 transition-all duration-300 shadow-sm hover:shadow-teal-500/20"
                 >
                   Launch {inquiry.botName}
                 </button>
@@ -685,13 +685,13 @@ function HomeView({
 
           {/* Interactive Bot Launch Modal/Toast */}
           {activeBot && (
-            <div className="fixed bottom-8 right-8 z-50 border border-teal-500/50 rounded-2xl p-4 shadow-2xl shadow-teal-500/20 flex items-center space-x-4 animate-bounce" style={{ backgroundColor: 'var(--card-bg-color, #0f172a)' }}>
+            <div className="fixed bottom-8 right-8 z-50 bg-white dark:bg-slate-900 border border-teal-500/50 rounded-2xl p-4 shadow-2xl shadow-teal-500/20 flex items-center space-x-4 animate-bounce">
               <div className="w-10 h-10 rounded-xl bg-teal-500/20 flex items-center justify-center text-teal-400">
                 <div className="w-2 h-2 bg-teal-400 rounded-full animate-ping"></div>
               </div>
               <div>
-                <div className="text-xs text-teal-400 font-semibold uppercase tracking-wider">Connecting...</div>
-                <div className="text-sm font-medium text-white">Initializing {activeBot}</div>
+                <div className="text-xs text-teal-500 dark:text-teal-400 font-semibold uppercase tracking-wider">Connecting...</div>
+                <div className="text-sm font-medium text-slate-900 dark:text-white">Initializing {activeBot}</div>
               </div>
             </div>
           )}

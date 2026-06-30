@@ -676,7 +676,7 @@ export default function VoiceSupportView() {
         </p>
         <button
           onClick={() => setIsInfoModalOpen(true)}
-          className="absolute right-0 top-1/2 -translate-y-1/2 p-2.5 rounded-2xl hover:bg-slate-800/80 border border-slate-800 bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+          className="absolute right-0 top-1/2 -translate-y-1/2 p-2.5 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-800 shadow-sm text-slate-500 hover:text-slate-750 dark:text-slate-400 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
           title="GCP App Integration Info"
         >
           <GoogleCloudIcon className="w-5 h-5" />
@@ -684,13 +684,13 @@ export default function VoiceSupportView() {
 
         {/* Engine Selection Toggle */}
         {!isConnected && !isConnecting && (
-          <div className="flex items-center gap-1.5 p-1 bg-slate-950/60 rounded-full border border-slate-800/80 mt-4">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-950/60 rounded-full border border-slate-200 dark:border-slate-800/80 mt-4">
             <button
               onClick={() => setEngine('livekit')}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                 engine === 'livekit' 
-                  ? 'bg-blue-600/20 border border-blue-500/30 text-blue-400' 
-                  : 'text-slate-500 hover:text-slate-300'
+                  ? 'bg-blue-600/20 border border-blue-500/30 text-blue-600 dark:text-blue-400' 
+                  : 'text-slate-500 dark:text-slate-450 hover:text-slate-750 dark:hover:text-slate-200'
               }`}
             >
               LiveKit WebRTC
@@ -699,8 +699,8 @@ export default function VoiceSupportView() {
               onClick={() => setEngine('gecx')}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                 engine === 'gecx' 
-                  ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-400' 
-                  : 'text-slate-500 hover:text-slate-300'
+                  ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-650 dark:text-indigo-400' 
+                  : 'text-slate-500 dark:text-slate-450 hover:text-slate-750 dark:hover:text-slate-200'
               }`}
             >
               GECX Direct WS
@@ -727,7 +727,7 @@ export default function VoiceSupportView() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch flex-grow mb-8">
         
         {/* Left Side: Credit Card Mockup & Account details */}
-        <div className="flex flex-col gap-6 bg-slate-900/50 backdrop-blur border border-slate-800 rounded-3xl p-8 justify-between">
+        <div className="flex flex-col gap-6 bg-white dark:bg-slate-900/50 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-3xl p-8 justify-between shadow-sm dark:shadow-none">
           
           {/* Card Mockup */}
           <div className="relative aspect-[1.586/1] w-full rounded-2xl overflow-hidden bg-gradient-to-tr from-slate-900 via-indigo-950 to-indigo-900 p-6 shadow-2xl flex flex-col justify-between border border-slate-700/50">
@@ -779,25 +779,25 @@ export default function VoiceSupportView() {
 
           {/* Account Balances Grid */}
           <div className="grid grid-cols-3 gap-4">
-            <div className="bg-slate-950/40 rounded-2xl p-4 border border-slate-800/80">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Available Credit</span>
-              <p className="text-xl font-bold mt-1 text-emerald-400">${availableCredit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Available Credit</span>
+              <p className="text-xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">${availableCredit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
 
-            <div className="bg-slate-950/40 rounded-2xl p-4 border border-slate-800/80">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Credit Limit</span>
-              <p className="text-xl font-bold mt-1 text-slate-200">${creditLimit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Credit Limit</span>
+              <p className="text-xl font-bold mt-1 text-slate-800 dark:text-slate-200">${creditLimit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
 
-            <div className="bg-slate-950/40 rounded-2xl p-4 border border-slate-800/80">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Owed Balance</span>
-              <p className="text-xl font-bold mt-1 text-indigo-400">${clearedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Owed Balance</span>
+              <p className="text-xl font-bold mt-1 text-indigo-600 dark:text-indigo-400">${clearedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
           </div>
 
           {/* Transaction Ledger List */}
-          <div className="bg-slate-950/30 rounded-2xl p-4 border border-slate-800/80 flex-grow max-h-[200px] overflow-y-auto">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Statement Ledger</h3>
+          <div className="bg-slate-50/50 dark:bg-slate-950/30 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80 flex-grow max-h-[200px] overflow-y-auto">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Statement Ledger</h3>
             <div className="space-y-2">
               {transactions.length === 0 ? (
                 <p className="text-xs text-slate-500 italic">No transactions posted.</p>
@@ -809,15 +809,15 @@ export default function VoiceSupportView() {
                       key={tx.id} 
                       className={`flex justify-between items-center p-2 rounded-lg border text-xs transition-all duration-500 ${
                         isHighlighted 
-                          ? 'border-yellow-500 bg-yellow-500/10 scale-[1.02] shadow-lg shadow-yellow-500/10' 
-                          : 'border-slate-800 bg-slate-900/30 text-slate-300'
+                          ? 'border-yellow-500 bg-yellow-500/10 scale-[1.02] shadow-lg shadow-yellow-500/10 text-slate-900 dark:text-white' 
+                          : 'border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/30 text-slate-700 dark:text-slate-300'
                       }`}
                     >
                       <div>
-                        <p className="font-semibold">{tx.description}</p>
-                        <p className="text-[9px] text-slate-500">{new Date(tx.posted_at).toLocaleDateString()}</p>
+                        <p className="font-semibold text-slate-900 dark:text-slate-200">{tx.description}</p>
+                        <p className="text-[9px] text-slate-450 dark:text-slate-500">{new Date(tx.posted_at).toLocaleDateString()}</p>
                       </div>
-                      <span className={`font-mono font-bold ${tx.amount_cents > 0 ? 'text-indigo-300' : 'text-emerald-400'}`}>
+                      <span className={`font-mono font-bold ${tx.amount_cents > 0 ? 'text-indigo-600 dark:text-indigo-300' : 'text-emerald-600 dark:text-emerald-400'}`}>
                         {tx.amount_cents > 0 ? '-' : '+'}
                         ${Math.abs(tx.amount_cents / 100).toFixed(2)}
                       </span>
@@ -830,15 +830,15 @@ export default function VoiceSupportView() {
         </div>
 
         {/* Right Side: Conversation Transcripts & Video Player Panel */}
-        <div className="flex flex-col bg-slate-900/50 backdrop-blur border border-slate-800 rounded-3xl p-6 min-h-[400px]">
+        <div className="flex flex-col bg-white dark:bg-slate-900/50 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-3xl p-6 min-h-[400px] shadow-sm dark:shadow-none">
           
           {/* Avatar Video Frame container if video mode is active */}
           {mode === 'video' && isConnected && (
             <div className="flex flex-col mb-4">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
                 Live Avatar Stream
               </h2>
-              <div className="aspect-square w-full max-w-[340px] mx-auto relative rounded-3xl overflow-hidden border-2 border-slate-800 shadow-inner bg-slate-950">
+              <div className="aspect-square w-full max-w-[340px] mx-auto relative rounded-3xl overflow-hidden border-2 border-slate-200 dark:border-slate-800 shadow-inner bg-slate-950">
                 <div 
                   id="avatar-video-container" 
                   className="w-full h-full"
@@ -863,7 +863,7 @@ export default function VoiceSupportView() {
             </div>
           )}
 
-          <h2 className="text-md font-bold uppercase tracking-wider text-slate-400 mb-4 border-b border-slate-800 pb-2">
+          <h2 className="text-md font-bold uppercase tracking-wider text-slate-900 dark:text-white mb-4 border-b border-slate-200 dark:border-slate-800 pb-2">
             Live Consultation Transcript
           </h2>
           
@@ -876,7 +876,7 @@ export default function VoiceSupportView() {
               if (t.author === 'system') {
                 return (
                   <div key={idx} className="text-center">
-                    <span className="inline-block text-[10px] bg-slate-800 text-slate-400 px-2.5 py-1 rounded-full font-mono">
+                    <span className="inline-block text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2.5 py-1 rounded-full font-mono">
                       {t.text}
                     </span>
                   </div>
@@ -891,9 +891,9 @@ export default function VoiceSupportView() {
                       ? 'bg-blue-600 text-white rounded-br-none' 
                       : isHumanAgentActive && t.author === 'agent'
                         ? 'bg-indigo-600 text-white rounded-bl-none'
-                        : 'bg-slate-800 text-slate-200 rounded-bl-none'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-bl-none border border-slate-200/50 dark:border-transparent'
                   }`}>
-                    <p className="text-[9px] uppercase tracking-wide text-slate-400 font-bold mb-0.5">
+                    <p className="text-[9px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-bold mb-0.5">
                       {isUser ? 'You' : isHumanAgentActive ? 'Supervisor' : 'AI Assistant'}
                     </p>
                     <p className="leading-relaxed">{t.text}</p>
@@ -907,7 +907,7 @@ export default function VoiceSupportView() {
       </div>
 
       {/* Footer / Control Section */}
-      <div className="flex flex-col items-center gap-4 bg-slate-900/50 backdrop-blur border border-slate-800 rounded-3xl p-6">
+      <div className="flex flex-col items-center gap-4 bg-white dark:bg-slate-900/50 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm dark:shadow-none">
         
         {/* Connection status notification */}
         {isHumanAgentActive && (
@@ -930,25 +930,25 @@ export default function VoiceSupportView() {
 
         {/* Diagnostics & Volume Control Panel (Only when connected) */}
         {isConnected && (
-          <div className="w-full max-w-md bg-slate-950/40 border border-slate-800/80 rounded-2xl p-4 flex flex-col gap-3 text-xs mb-2">
-            <div className="flex justify-between items-center text-slate-400">
+          <div className="w-full max-w-md bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 flex flex-col gap-3 text-xs mb-2">
+            <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
               <span className="font-semibold uppercase tracking-wider text-[10px]">Diagnostics</span>
-              <span className="font-mono text-emerald-400">Active</span>
+              <span className="font-mono text-emerald-600 dark:text-emerald-400">Active</span>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-300 font-mono">
-              <div>Engine: <span className="text-blue-400 font-bold">{engine === 'gecx' ? 'GECX Direct WS' : 'LiveKit WebRTC'}</span></div>
-              <div>Codec: <span className="text-indigo-400">{engine === 'gecx' ? 'PCM (16kHz 16-bit)' : 'Opus (48kHz)'}</span></div>
+            <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-700 dark:text-slate-300 font-mono">
+              <div>Engine: <span className="text-blue-600 dark:text-blue-400 font-bold">{engine === 'gecx' ? 'GECX Direct WS' : 'LiveKit WebRTC'}</span></div>
+              <div>Codec: <span className="text-indigo-650 dark:text-indigo-400">{engine === 'gecx' ? 'PCM (16kHz 16-bit)' : 'Opus (48kHz)'}</span></div>
               {engine === 'gecx' && (
                 <>
-                  <div>RTT Latency: <span className="text-yellow-400">{latency} ms</span></div>
-                  <div>Transport: <span className="text-slate-400">Stateless Proxy</span></div>
+                  <div>RTT Latency: <span className="text-yellow-650 dark:text-yellow-400">{latency} ms</span></div>
+                  <div>Transport: <span className="text-slate-500 dark:text-slate-400">Stateless Proxy</span></div>
                 </>
               )}
             </div>
             
             {/* Volume Playout slider control */}
-            <div className="flex items-center gap-3 border-t border-slate-800/80 pt-3 mt-1">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Volume:</span>
+            <div className="flex items-center gap-3 border-t border-slate-200 dark:border-slate-800/80 pt-3 mt-1">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Volume:</span>
               <input 
                 type="range" 
                 min="0" 
@@ -956,22 +956,22 @@ export default function VoiceSupportView() {
                 step="0.05"
                 value={volume}
                 onChange={(e) => setVolume(parseFloat(e.target.value))}
-                className="flex-grow h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                className="flex-grow h-1 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
               />
-              <span className="text-[10px] text-slate-300 font-mono w-8 text-right">{Math.round(volume * 100)}%</span>
+              <span className="text-[10px] text-slate-700 dark:text-slate-300 font-mono w-8 text-right">{Math.round(volume * 100)}%</span>
             </div>
           </div>
         )}
 
         {/* Mode Selection Toggle */}
         {!isConnected && !isConnecting && engine === 'livekit' && (
-          <div className="flex items-center gap-1.5 p-1 bg-slate-950/60 rounded-full border border-slate-800/80 mb-2">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-950/60 rounded-full border border-slate-200 dark:border-slate-800/80 mb-2">
             <button
               onClick={() => setMode('audio')}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                 mode === 'audio' 
-                  ? 'bg-blue-600/20 border border-blue-500/30 text-blue-400' 
-                  : 'text-slate-500 hover:text-slate-300'
+                  ? 'bg-blue-600/20 border border-blue-500/30 text-blue-600 dark:text-blue-400' 
+                  : 'text-slate-500 dark:text-slate-450 hover:text-slate-700 dark:hover:text-slate-200'
               }`}
             >
               <Mic size={14} />
@@ -981,8 +981,8 @@ export default function VoiceSupportView() {
               onClick={() => setMode('video')}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                 mode === 'video' 
-                  ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-400' 
-                  : 'text-slate-500 hover:text-slate-300'
+                  ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-650 dark:text-indigo-400' 
+                  : 'text-slate-500 dark:text-slate-450 hover:text-slate-700 dark:hover:text-slate-200'
               }`}
             >
               <Video size={14} />
