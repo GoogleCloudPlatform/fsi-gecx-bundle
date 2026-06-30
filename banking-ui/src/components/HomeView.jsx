@@ -137,7 +137,7 @@ function HomeView({
                           const helpSection = document.getElementById('help');
                           if (helpSection) helpSection.scrollIntoView({ behavior: 'smooth' });
                         }}
-                        className="flex items-center justify-center px-8 py-4 rounded-full bg-slate-900 border border-slate-800 text-slate-200 font-semibold hover:bg-slate-850 transition-colors cursor-pointer"
+                        className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-855 transition-colors cursor-pointer shadow-sm"
                       >
                         Help & Support
                       </button>
@@ -147,7 +147,7 @@ function HomeView({
                       <button 
                         onClick={handleProvision}
                         disabled={isProvisioning}
-                        className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer disabled:opacity-50"
+                        className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-955 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer disabled:opacity-50"
                         style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
                       >
                         <span>{isProvisioning ? "Provisioning Sandbox..." : "Provision Demo Suite"}</span>
@@ -158,7 +158,7 @@ function HomeView({
                           const calcSection = document.getElementById('calculator');
                           if (calcSection) calcSection.scrollIntoView({ behavior: 'smooth' });
                         }}
-                        className="flex items-center justify-center px-8 py-4 rounded-full bg-slate-900 border border-slate-800 text-slate-200 font-semibold hover:bg-slate-850 transition-colors cursor-pointer"
+                        className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-855 transition-colors cursor-pointer shadow-sm"
                       >
                         Explore Products
                       </button>
@@ -187,7 +187,7 @@ function HomeView({
                     <span>Become a Member</span>
                     <ArrowRight className="w-5 h-5" />
                   </button>
-                  <button className="flex items-center justify-center px-8 py-4 rounded-full bg-slate-900 border border-slate-800 text-slate-200 font-semibold hover:bg-slate-850 transition-colors cursor-pointer">
+                  <button className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-855 transition-colors cursor-pointer shadow-sm">
                     Compare Accounts
                   </button>
                 </div>
