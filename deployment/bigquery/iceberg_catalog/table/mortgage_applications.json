@@ -1,0 +1,44 @@
+[
+  {
+    "name": "id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unique identifier for mortgage application detail"
+  },
+  {
+    "name": "application_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Associated base application identifier"
+  },
+  {
+    "name": "requested_loan_cents",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Requested mortgage loan amount in cents"
+  },
+  {
+    "name": "property_address",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Address of the subject property"
+  },
+  {
+    "name": "estimated_value_cents",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Estimated property value in cents"
+  },
+  {
+    "name": "loan_term_months",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Loan term duration in months"
+  },
+  {
+    "name": "down_payment_cents",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Down payment amount in cents"
+  }
+]

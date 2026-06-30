@@ -44,6 +44,10 @@ resource "google_sql_database_instance" "banking_data" {
       name  = "cloudsql.iam_authentication"
       value = "on"
     }
+    database_flags {
+      name  = "cloudsql.logical_decoding"
+      value = "on"
+    }
 
     disk_autoresize       = true
     disk_autoresize_limit = 0

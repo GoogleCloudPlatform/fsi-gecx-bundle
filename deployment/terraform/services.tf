@@ -185,3 +185,18 @@ resource "google_project_service" "datalineage_googleapis_com" {
   service            = "datalineage.googleapis.com"
   disable_on_destroy = false
 }
+
+resource "google_project_service" "bigqueryconnection_googleapis_com" {
+  service            = "bigqueryconnection.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "bigquerydatatransfer_googleapis_com" {
+  service            = "bigquerydatatransfer.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "datastream_googleapis_com" {
+  service            = "datastream.googleapis.com"
+  disable_on_destroy = false
+}

@@ -151,12 +151,13 @@ def process_outbox(batch_size: int = 50):
         db.close()
 
 @router.post("/debug/reset-db")
-def reset_database(purge_audit_logs: bool = False):
+def reset_database(purge_audit_logs: bool = False, purge_data_lake: bool = False):
     """
     Deletes all rows in the database and re-seeds it with baseline cardholder data.
     Optionally purges PostgreSQL and BigQuery compliance audit logs if purge_audit_logs=True.
+    Optionally purges Apache Iceberg BigLake analytical tables if purge_data_lake=True.
     """
-    logger.info(f"Internal Debug request: Resetting database (purge_audit_logs={purge_audit_logs})...")
+    logger.info(f"Internal Debug request: Resetting database (purge_audit_logs={purge_audit_logs}, purge_data_lake={purge_data_lake})...")
     from utils.database import SessionLocal
     from models.credit_card import FinancialAccount, IssuedCard, TransactionAuthorization, AccountLedger
     from models.support import Escalation
@@ -189,12 +190,26 @@ def reset_database(purge_audit_logs: bool = False):
             except Exception as bq_ex:
                 logger.warning(f"Could not purge BigQuery audit logs: {bq_ex}")
 
+        if purge_data_lake:
+            logger.info("Purging BigLake Apache Iceberg catalog tables...")
+            try:
+                project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
+                for lake_tbl in ["posted_transactions", "applications_lake", "users_lake"]:
+                    bq_client.query(f"DELETE FROM `{project_id}.iceberg_catalog.{lake_tbl}` WHERE true").result()
+                logger.info("Purged BigLake Apache Iceberg catalog tables.")
+            except Exception as lake_ex:
+                logger.warning(f"Could not purge BigLake Iceberg tables: {lake_ex}")
+
         db.commit()
         logger.info("Database tables cleared.")
         
         initialize_db_and_seed(db)
         logger.info("Database re-seeded.")
-        msg = "Database reset and re-seeded successfully." + (" (Audit logs purged)" if purge_audit_logs else " (Audit logs preserved)")
+        msg = "Database reset and re-seeded successfully."
+        if purge_audit_logs:
+            msg += " (Audit logs purged)"
+        if purge_data_lake:
+            msg += " (Data Lake purged)"
         return {"status": "SUCCESS", "message": msg}
     except Exception as e:
         db.rollback()

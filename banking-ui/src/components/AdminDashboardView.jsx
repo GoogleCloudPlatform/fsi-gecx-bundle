@@ -24,6 +24,7 @@ function AdminDashboardView() {
   const navigate = useNavigate();
   const [isResetting, setIsResetting] = useState(false);
   const [purgeAuditLogs, setPurgeAuditLogs] = useState(false);
+  const [purgeDataLake, setPurgeDataLake] = useState(false);
   const [notice, setNotice] = useState({ type: '', text: '' });
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
@@ -83,16 +84,21 @@ function AdminDashboardView() {
   };
 
   const handleResetDatabase = async () => {
-    const confirmMsg = purgeAuditLogs 
-      ? "Are you sure you want to reset the database AND PURGE ALL BIGQUERY & POSTGRESQL AUDIT LOGS? This cannot be undone."
-      : "Are you sure you want to reset the database? This will clear active applications and cards while preserving immutable audit logs.";
+    let confirmMsg = "Are you sure you want to reset the database? This will clear active applications and cards while preserving immutable audit logs and analytical lake tables.";
+    if (purgeAuditLogs && purgeDataLake) {
+      confirmMsg = "Are you sure you want to reset the database AND PURGE ALL BIGQUERY AUDIT LOGS & APACHE ICEBERG DATA LAKE TABLES? This cannot be undone.";
+    } else if (purgeAuditLogs) {
+      confirmMsg = "Are you sure you want to reset the database AND PURGE ALL BIGQUERY & POSTGRESQL AUDIT LOGS? This cannot be undone.";
+    } else if (purgeDataLake) {
+      confirmMsg = "Are you sure you want to reset the database AND PURGE ALL APACHE ICEBERG DATA LAKE TABLES? This cannot be undone.";
+    }
     if (!window.confirm(confirmMsg)) {
       return;
     }
     setIsResetting(true);
     setNotice({ type: '', text: '' });
     try {
-      const res = await resetDatabase(purgeAuditLogs);
+      const res = await resetDatabase(purgeAuditLogs, purgeDataLake);
       setNotice({ type: 'success', text: res.message || 'Database successfully reset and re-seeded!' });
       setTimeout(() => setNotice({ type: '', text: '' }), 5000);
     } catch (err) {
@@ -338,6 +344,16 @@ function AdminDashboardView() {
               className="rounded border-slate-300 dark:border-slate-700 text-rose-600 focus:ring-rose-500"
             />
             <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Purge BigQuery & PostgreSQL compliance audit logs</span>
+          </label>
+          <label className="flex items-center gap-2 mt-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={purgeDataLake}
+              onChange={(e) => setPurgeDataLake(e.target.checked)}
+              disabled={isResetting}
+              className="rounded border-slate-300 dark:border-slate-700 text-amber-600 focus:ring-amber-500"
+            />
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Purge Apache Iceberg BigLake analytical tables</span>
           </label>
         </div>
         <button

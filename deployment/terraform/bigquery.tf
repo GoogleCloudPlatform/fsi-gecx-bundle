@@ -90,3 +90,218 @@ resource "google_bigquery_table" "identity_access_audit_log" {
   clustering = ["user_id", "event_type"]
   schema     = file("${path.module}/../bigquery/compliance_audit/table/identity_access_audit_log.json")
 }
+
+resource "google_bigquery_connection" "iceberg" {
+  connection_id = "iceberg-warehouse"
+  location      = "US"
+  friendly_name = "Iceberg Connection"
+  cloud_resource {}
+
+  depends_on = [google_project_service.bigqueryconnection_googleapis_com]
+}
+
+resource "google_bigquery_dataset" "iceberg_catalog" {
+  dataset_id    = "iceberg_catalog"
+  friendly_name = "Iceberg Catalog Dataset"
+  location      = "US"
+
+  # Security Finding 1.1: Do not enable delete_contents_on_destroy for production financial data lakes
+  delete_contents_on_destroy = false
+}
+
+resource "google_bigquery_table" "posted_transactions" {
+  dataset_id = google_bigquery_dataset.iceberg_catalog.dataset_id
+  table_id   = "posted_transactions"
+  # Security Finding 1.1: Enable deletion_protection in production environments
+  deletion_protection = false
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/posted_transactions/"
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+  }
+
+  schema = file("${path.module}/../bigquery/iceberg_catalog/table/posted_transactions.json")
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
+}
+
+resource "google_bigquery_table" "applications_lake" {
+  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
+  table_id            = "applications"
+  deletion_protection = false
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/applications/"
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+  }
+
+  schema = file("${path.module}/../bigquery/iceberg_catalog/table/applications.json")
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
+}
+
+resource "google_bigquery_table" "users_lake" {
+  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
+  table_id            = "users"
+  deletion_protection = false
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/users/"
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+  }
+
+  schema = file("${path.module}/../bigquery/iceberg_catalog/table/users.json")
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
+}
+
+resource "google_bigquery_table" "issued_card" {
+  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
+  table_id            = "issued_card"
+  deletion_protection = false
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/issued_card/"
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+  }
+
+  schema = file("${path.module}/../bigquery/iceberg_catalog/table/issued_card.json")
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
+}
+
+resource "google_bigquery_table" "transaction_authorization" {
+  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
+  table_id            = "transaction_authorization"
+  deletion_protection = false
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/transaction_authorization/"
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+  }
+
+  schema = file("${path.module}/../bigquery/iceberg_catalog/table/transaction_authorization.json")
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
+}
+
+resource "google_bigquery_table" "credit_card_applications" {
+  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
+  table_id            = "credit_card_applications"
+  deletion_protection = false
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/credit_card_applications/"
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+  }
+
+  schema = file("${path.module}/../bigquery/iceberg_catalog/table/credit_card_applications.json")
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
+}
+
+resource "google_bigquery_table" "mortgage_applications" {
+  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
+  table_id            = "mortgage_applications"
+  deletion_protection = false
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/mortgage_applications/"
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+  }
+
+  schema = file("${path.module}/../bigquery/iceberg_catalog/table/mortgage_applications.json")
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
+}
+
+# Silver/Gold Tier: Curated Analytical Reporting Dataset & Stock Views
+resource "google_bigquery_dataset" "analytics_curated" {
+  dataset_id                 = "analytics_curated"
+  friendly_name              = "Curated Lakehouse Analytics"
+  description                = "Business-facing Silver/Gold analytical views joining raw Bronze Datastream CDC Iceberg tables"
+  location                   = "US"
+  delete_contents_on_destroy = false
+}
+
+resource "google_bigquery_table" "enriched_posted_transactions_view" {
+  dataset_id          = google_bigquery_dataset.analytics_curated.dataset_id
+  table_id            = "enriched_posted_transactions"
+  deletion_protection = false
+
+  view {
+    query          = <<-SQL
+      SELECT 
+        pt.id AS transaction_id,
+        pt.account_id,
+        c.id AS card_id,
+        c.last_four AS card_last_four,
+        c.is_active AS card_is_active,
+        pt.amount_cents,
+        auth.merchant_name,
+        pt.description,
+        pt.posted_at,
+        auth.status AS authorization_status,
+        auth.decline_reason
+      FROM `${var.project_id}.iceberg_catalog.posted_transactions` pt
+      LEFT JOIN `${var.project_id}.iceberg_catalog.transaction_authorization` auth ON pt.authorization_id = auth.id
+      LEFT JOIN `${var.project_id}.iceberg_catalog.issued_card` c ON auth.card_id = c.id;
+    SQL
+    use_legacy_sql = false
+  }
+
+  depends_on = [
+    google_bigquery_table.posted_transactions,
+    google_bigquery_table.transaction_authorization,
+    google_bigquery_table.issued_card
+  ]
+}
+
+resource "google_bigquery_table" "unified_applications_view" {
+  dataset_id          = google_bigquery_dataset.analytics_curated.dataset_id
+  table_id            = "unified_applications"
+  deletion_protection = false
+
+  view {
+    query          = <<-SQL
+      SELECT 
+        app.application_id,
+        app.user_id,
+        u.email AS applicant_email,
+        app.status,
+        app.product_category AS application_type,
+        cc.card_product_id,
+        cc.requested_limit_cents AS credit_card_requested_limit_cents,
+        m.requested_loan_cents AS mortgage_requested_loan_cents,
+        m.property_address AS mortgage_property_address,
+        m.estimated_value_cents AS mortgage_estimated_value_cents,
+        app.started_at
+      FROM `${var.project_id}.iceberg_catalog.applications` app
+      LEFT JOIN `${var.project_id}.iceberg_catalog.users` u ON app.user_id = u.id
+      LEFT JOIN `${var.project_id}.iceberg_catalog.credit_card_applications` cc ON app.id = cc.application_id
+      LEFT JOIN `${var.project_id}.iceberg_catalog.mortgage_applications` m ON app.id = m.application_id;
+    SQL
+    use_legacy_sql = false
+  }
+
+  depends_on = [
+    google_bigquery_table.applications_lake,
+    google_bigquery_table.users_lake,
+    google_bigquery_table.credit_card_applications,
+    google_bigquery_table.mortgage_applications
+  ]
+}
