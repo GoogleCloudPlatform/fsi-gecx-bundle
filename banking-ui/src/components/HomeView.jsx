@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Shield, 
   ArrowRight, 
@@ -11,8 +11,11 @@ import {
   Check 
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
+import { getAccountsSummary } from '../utils/api.js';
+import BillPayModal from './BillPayModal.jsx';
 
 function HomeView({
+  fbUser,
   loanAmount,
   setLoanAmount,
   loanTerm,
@@ -27,6 +30,31 @@ function HomeView({
     brandColorFrom,
     brandColorTo
   } = useSettings();
+
+  const [accountsData, setAccountsData] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isBillPayOpen, setIsBillPayOpen] = useState(false);
+
+  const fetchAccounts = useCallback(async () => {
+    if (!fbUser) {
+      setAccountsData(null);
+      return;
+    }
+    try {
+      setIsLoading(true);
+      const data = await getAccountsSummary();
+      setAccountsData(data);
+    } catch (err) {
+      console.error("Failed to load accounts summary:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fbUser]);
+
+  useEffect(() => {
+    fetchAccounts();
+  }, [fetchAccounts]);
+
   return (
     <>
       {/* Hero Section */}
@@ -93,51 +121,105 @@ function HomeView({
           <div className="relative hidden lg:block">
             <div className="absolute -inset-4 bg-gradient-to-tr from-emerald-500/20 to-cyan-500/20 rounded-3xl blur-3xl -z-10"></div>
             <div className="relative border border-slate-800/80 rounded-2xl p-8 shadow-2xl shadow-black/50" style={{ backgroundColor: 'var(--card-bg-color, #0f172a)' }}>
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <div className="text-sm text-slate-400">Total Balance</div>
-                  <div className="text-4xl font-bold text-white mt-1">$124,580.45</div>
+              {isLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400 space-y-3">
+                  <div className="w-8 h-8 rounded-full border-2 border-slate-700 border-t-emerald-500 animate-spin"></div>
+                  <span className="text-xs font-semibold">Synchronizing secure balances...</span>
                 </div>
-                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400">
-                  <TrendingUp className="w-6 h-6" />
-                </div>
-              </div>
-
-              <div className="space-y-4 mb-8">
-                <div className="bg-slate-950/50 rounded-xl p-4 border border-slate-800/50 flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-400">
-                      <CreditCard className="w-5 h-5" />
-                    </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-8">
                     <div>
-                      <div className="font-medium text-white">Nova Signature Checking</div>
-                      <div className="text-xs text-slate-400">**** 4829</div>
+                      <div className="text-sm text-slate-400">Total Liquid Deposits</div>
+                      <div className="text-4xl font-bold text-white mt-1">
+                        ${((accountsData?.deposit_accounts?.reduce((sum, acc) => sum + acc.cleared_balance_cents, 0) || 12458045) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400">
+                      <TrendingUp className="w-6 h-6" />
                     </div>
                   </div>
-                  <div className="font-semibold text-white">$14,250.00</div>
-                </div>
 
-                <div className="bg-slate-950/50 rounded-xl p-4 border border-slate-800/50 flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-                      <Percent className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="font-medium text-white">High-Yield Growth</div>
-                      <div className="text-xs text-slate-400">4.85% APY Earned</div>
+                  <div className="space-y-4 mb-8">
+                    {/* Checking accounts */}
+                    {(accountsData?.deposit_accounts?.filter(a => a.account_type === 'CHECKING') || [
+                      { account_number: 'CHK-4829', product_name: 'Nova Signature Checking', cleared_balance_cents: 1425000 }
+                    ]).map((acc, idx) => (
+                      <div key={`chk-${idx}`} className="bg-slate-950/50 rounded-xl p-4 border border-slate-800/50 flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-400">
+                            <CreditCard className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-white">{acc.product_name}</div>
+                            <div className="text-xs text-slate-400">**** {acc.account_number.slice(-4)}</div>
+                          </div>
+                        </div>
+                        <div className="font-semibold text-white">
+                          ${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Savings accounts */}
+                    {(accountsData?.deposit_accounts?.filter(a => a.account_type === 'SAVINGS') || [
+                      { account_number: 'SAV-9021', product_name: 'High-Yield Growth', cleared_balance_cents: 11033045 }
+                    ]).map((acc, idx) => (
+                      <div key={`sav-${idx}`} className="bg-slate-950/50 rounded-xl p-4 border border-slate-800/50 flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                            <Percent className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-white">{acc.product_name}</div>
+                            <div className="text-xs text-slate-400">Active Savings Tier</div>
+                          </div>
+                        </div>
+                        <div className="font-semibold text-white">
+                          ${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Credit Card Accounts */}
+                    {accountsData?.credit_accounts?.map((acc, idx) => (
+                      <div key={`cred-${idx}`} className="bg-slate-950/50 rounded-xl p-4 border border-slate-800/50 flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-10 h-10 rounded-lg bg-rose-500/20 flex items-center justify-center text-rose-400">
+                            <CreditCard className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-white">Nova Credit Card</div>
+                            <div className="text-xs text-slate-400">Outstanding Balance</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <div className="font-semibold text-rose-400 text-right">
+                            ${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            <div className="text-[10px] text-slate-500">Limit: ${(acc.credit_limit_cents / 100).toLocaleString()}</div>
+                          </div>
+                          {acc.cleared_balance_cents > 0 && (
+                            <button
+                              onClick={() => setIsBillPayOpen(true)}
+                              className="px-2.5 py-1 rounded bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold active:scale-95 transition-all"
+                            >
+                              Pay
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>Secured by 256-bit AES Encryption</span>
+                    <div className="flex items-center space-x-1 text-emerald-400">
+                      <Lock className="w-3 h-3" />
+                      <span>End-to-End Encrypted</span>
                     </div>
                   </div>
-                  <div className="font-semibold text-white">$110,330.45</div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-xs text-slate-500">
-                <span>Secured by 256-bit AES Encryption</span>
-                <div className="flex items-center space-x-1 text-emerald-400">
-                  <Lock className="w-3 h-3" />
-                  <span>End-to-End Encrypted</span>
-                </div>
-              </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -374,6 +456,13 @@ function HomeView({
               </div>
             </div>
           )}
+
+          <BillPayModal
+            isOpen={isBillPayOpen}
+            onClose={() => setIsBillPayOpen(false)}
+            accountsData={accountsData}
+            onPaymentSuccess={fetchAccounts}
+          />
 
         </div>
       </section>

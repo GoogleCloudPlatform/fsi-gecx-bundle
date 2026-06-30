@@ -31,6 +31,7 @@ from services.taxonomy_service import TaxonomyService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/credit-card", tags=["Credit Card Support"])
+apiv1_router = APIRouter(prefix="/api/v1/credit-card", tags=["Credit Card Support"])
 
 # LiveKit Server Settings (Defaults match local development Docker setup)
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "devkey")
@@ -299,3 +300,34 @@ def get_voice_room_token(
     except Exception as e:
         logger.error(f"Failed to generate LiveKit token: {e}")
         raise HTTPException(status_code=500, detail="LiveKit token creation error.")
+
+
+from pydantic import BaseModel, Field
+
+class BillPaymentRequest(BaseModel):
+    source_account_id: str = Field(..., description="Deposit account UUID to debit")
+    credit_account_id: str = Field(..., description="Credit account UUID to credit")
+    amount_cents: int = Field(..., gt=0, description="Amount in cents")
+
+
+from fastapi import status
+
+@router.post("/pay", status_code=status.HTTP_200_OK)
+@apiv1_router.post("/pay", status_code=status.HTTP_200_OK)
+def pay_credit_card(
+    request: BillPaymentRequest,
+    db: Session = Depends(get_db),
+    token: ValidatedToken = Depends(get_current_user)
+):
+    """
+    Executes an inter-account bill payment from checking/savings deposit account to pay down credit card balance.
+    """
+    from services.accounts import AccountsService
+    service = AccountsService(db)
+    return service.execute_bill_payment(
+        token=token,
+        source_account_id=request.source_account_id,
+        credit_account_id=request.credit_account_id,
+        amount_cents=request.amount_cents
+    )
+

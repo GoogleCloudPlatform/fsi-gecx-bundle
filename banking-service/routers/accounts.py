@@ -47,3 +47,16 @@ async def create_deposit_account(
         return cached_payload
 
     return service.create_deposit_account(request, token, idempotency_key=x_idempotency_key)
+
+
+@router.get("/summary", status_code=status.HTTP_200_OK)
+@alias_router.get("/summary", status_code=status.HTTP_200_OK)
+async def get_accounts_summary(
+    service: AccountsService = Depends(get_accounts_service),
+    token: ValidatedToken = Depends(get_current_user)
+):
+    """
+    Retrieves all checking, savings, and credit accounts summary for the authenticated user context.
+    """
+    return service.get_user_accounts_summary(token)
+

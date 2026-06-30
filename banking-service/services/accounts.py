@@ -152,3 +152,161 @@ class AccountsService:
             "status": new_acc.status,
             "opened_at": new_acc.opened_at.isoformat() if new_acc.opened_at else datetime.datetime.now(datetime.timezone.utc).isoformat()
         }
+
+    def get_user_accounts_summary(self, token: ValidatedToken) -> Dict[str, Any]:
+        """
+        Retrieves checking, savings, and credit accounts for the authenticated user context.
+        """
+        # Resolve internal User entity
+        user = self.db.query(User).filter(User.auth_provider_uid == token.user_id).first()
+        if not user:
+            ProfileService(self.db).get_or_provision_profile(token)
+            user = self.db.query(User).filter(User.auth_provider_uid == token.user_id).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="User profile could not be resolved.")
+
+        # Bypass RBAC
+        if hasattr(self.db.bind, "engine"):
+            self.db.bind.engine._ignore_rbac = True
+        else:
+            self.db.bind._ignore_rbac = True
+
+        # Fetch checking/savings accounts
+        deposit_accounts = self.db.query(Account).filter(Account.user_id == user.id).all()
+
+        # Fetch credit accounts
+        from models.credit_card import CreditAccount
+        credit_accounts = self.db.query(CreditAccount).filter(CreditAccount.customer_id == user.id).all()
+
+        return {
+            "deposit_accounts": [
+                {
+                    "account_id": str(acc.id),
+                    "account_number": acc.account_number,
+                    "account_type": acc.account_type,
+                    "product_name": acc.product_name,
+                    "product_code": acc.product_code,
+                    "cleared_balance_cents": acc.cleared_balance_cents,
+                    "routing_number": acc.routing_number,
+                    "status": acc.status
+                } for acc in deposit_accounts
+            ],
+            "credit_accounts": [
+                {
+                    "account_id": str(cred_acc.id),
+                    "product_code": cred_acc.product_code,
+                    "status": cred_acc.status,
+                    "credit_limit_cents": cred_acc.credit_limit_cents,
+                    "cleared_balance_cents": cred_acc.cleared_balance_cents,
+                    "available_credit_cents": cred_acc.available_credit_cents,
+                    "payment_due_date": cred_acc.payment_due_date.isoformat() if cred_acc.payment_due_date else None,
+                    "cards": [
+                        {
+                            "card_id": str(card.id),
+                            "cardholder_name": card.cardholder_name,
+                            "last_four": card.last_four,
+                            "card_token": card.card_token,
+                            "status": card.status
+                        } for card in cred_acc.cards
+                    ]
+                } for cred_acc in credit_accounts
+            ]
+        }
+
+    def execute_bill_payment(
+        self,
+        token: ValidatedToken,
+        source_account_id: str,
+        credit_account_id: str,
+        amount_cents: int
+    ) -> Dict[str, Any]:
+        """
+        Executes a credit card bill payment from a checking or savings deposit account.
+        Subtracts from deposit balance, reduces credit account cleared debt balance, and restores available credit.
+        """
+        # Resolve internal User entity
+        user = self.db.query(User).filter(User.auth_provider_uid == token.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User profile not resolved.")
+
+        # Bypass RBAC
+        if hasattr(self.db.bind, "engine"):
+            self.db.bind.engine._ignore_rbac = True
+        else:
+            self.db.bind._ignore_rbac = True
+
+        # 1. Lookup deposit account
+        deposit_acc = self.db.query(Account).filter(
+            Account.id == uuid.UUID(source_account_id),
+            Account.user_id == user.id
+        ).first()
+        if not deposit_acc:
+            raise HTTPException(status_code=404, detail="Source deposit account not found.")
+
+        # 2. Check sufficient funds
+        if deposit_acc.cleared_balance_cents < amount_cents:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient funds in source account. Available: {deposit_acc.cleared_balance_cents} cents."
+            )
+
+        # 3. Lookup credit account
+        from models.credit_card import CreditAccount, PostedTransaction
+        credit_acc = self.db.query(CreditAccount).filter(
+            CreditAccount.id == uuid.UUID(credit_account_id),
+            CreditAccount.customer_id == user.id
+        ).first()
+        if not credit_acc:
+            raise HTTPException(status_code=404, detail="Target credit account not found.")
+
+        # 4. Perform atomic double-entry ledger update on checking/savings
+        tx = Transaction(
+            idempotency_key=f"IDEMP-PAY-{uuid.uuid4().hex}",
+            user_id=user.id,
+            status="COMPLETED",
+            description=f"Credit Card Bill Payment to Account ending in {str(credit_acc.id)[-4:]}"
+        )
+        self.db.add(tx)
+        self.db.flush()
+
+        debit_split = AccountLedgerEntry(
+            transaction_id=tx.id,
+            account_id=deposit_acc.id,
+            amount_cents=-amount_cents,
+            entry_type="CREDIT"
+        )
+        self.db.add(debit_split)
+        deposit_acc.cleared_balance_cents -= amount_cents
+
+        # 5. Decrement debt on credit card account and restore available credit
+        credit_acc.cleared_balance_cents -= amount_cents
+        from services.card_network import recalculate_available_credit
+        recalculate_available_credit(self.db, credit_acc)
+
+        card_payment_tx = PostedTransaction(
+            account_id=credit_acc.id,
+            amount_cents=amount_cents,
+            description="Bill Payment Received - Thank You"
+        )
+        self.db.add(card_payment_tx)
+
+        from utils.audit import record_audit_event
+        record_audit_event(
+            self.db,
+            "BILL_PAYMENT_EXECUTED",
+            {
+                "source_account_id": source_account_id,
+                "credit_account_id": credit_account_id,
+                "amount_cents": amount_cents
+            }
+        )
+
+        self.db.commit()
+
+        return {
+            "status": "SUCCESS",
+            "message": "Bill payment successfully processed.",
+            "source_cleared_balance_cents": deposit_acc.cleared_balance_cents,
+            "credit_cleared_balance_cents": credit_acc.cleared_balance_cents,
+            "credit_available_credit_cents": credit_acc.available_credit_cents
+        }

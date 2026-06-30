@@ -280,5 +280,15 @@ export async function resetMyDemo() {
   return res.data;
 }
 
+export async function getAccountsSummary() {
+  const res = await api.get('/api/v1/accounts/summary');
+  return res.data;
+}
+
+export async function payCreditCard(paymentData) {
+  const res = await api.post('/api/v1/credit-card/pay', paymentData);
+  return res.data;
+}
+
 export default api;
 
