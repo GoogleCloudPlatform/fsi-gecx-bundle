@@ -112,15 +112,65 @@ import os
 DATA_GENERATOR_URL = os.getenv("DATA_GENERATOR_URL", "http://localhost:8001")
 
 @router.post("/surge", status_code=status.HTTP_200_OK)
-async def simulate_activity_surge():
+async def simulate_activity_surge(
+    token: ValidatedToken = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
-    Commands the simulation client to immediately fire 50 rapid-fire card swipes over 10 seconds.
+    Commands the simulation client to immediately fire 50 rapid-fire card swipes over 10 seconds,
+    passing the active presenter's card token to ensure visual feedback.
     """
+    email = token.email
+    uid = token.user_id
+    if not uid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Authenticated user ID not found in token claims."
+        )
+
+    # 1. Fetch user from DB (bypass RBAC)
+    db.connection().info["_ignore_rbac"] = True
+    user = db.query(User).filter((User.auth_provider_uid == uid) | (User.email == email)).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No seeded demo profile found. Please provision a profile first."
+        )
+
+    # 2. Fetch the user's active card details
+    from models.credit_card import CreditAccount, IssuedCard
+    card_info = db.query(IssuedCard, CreditAccount).join(
+        CreditAccount, IssuedCard.account_id == CreditAccount.id
+    ).filter(CreditAccount.customer_id == user.id, IssuedCard.status == "ACTIVE").first()
+
+    card_payloads = []
+    if card_info:
+        card, cred_acc = card_info
+        card_payloads.append({
+            "card_token": card.card_token,
+            "cardholder_name": card.cardholder_name,
+            "persona": "PRIME",
+            "mccs": ["5411", "5541", "5310", "4121"],
+            "amount_min": 1500,
+            "amount_max": 15000
+        })
+    else:
+        logger.warning(f"No active credit card found for user={user.id}. Data-generator will use default persona list.")
+
     target_url = f"{DATA_GENERATOR_URL}/simulate-surge"
-    logger.info(f"Forwarding surge request to data-generator at: {target_url}")
+    logger.info(f"Forwarding surge request to data-generator at: {target_url} with {len(card_payloads)} presenter cards.")
+    
+    switch_token = os.getenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")
+    headers = {"X-Card-Network-Token": switch_token}
+    
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(target_url, timeout=15.0)
+            response = await client.post(
+                target_url,
+                json={"active_cards": card_payloads if card_payloads else None},
+                headers=headers,
+                timeout=15.0
+            )
             if response.status_code != 200:
                 raise HTTPException(
                     status_code=response.status_code,

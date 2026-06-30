@@ -20,9 +20,21 @@ import random
 import sqlite3
 import sys
 from typing import List, Dict, Any, Optional
-from fastapi import FastAPI, BackgroundTasks, HTTPException, status
 from pydantic import BaseModel
+
+class CardPayload(BaseModel):
+    card_token: str
+    cardholder_name: str
+    persona: str
+    mccs: List[str]
+    amount_min: int
+    amount_max: int
+
+class SurgeRequest(BaseModel):
+    active_cards: Optional[List[CardPayload]] = None
+
 import httpx
+from fastapi import FastAPI, BackgroundTasks, HTTPException, status
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("data-generator")
@@ -236,10 +248,10 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
     except Exception as exc:
         logger.error(f"Failed to execute simulation cycle for card {card['cardholder_name']}: {exc}")
 
-async def run_activity_surge_task() -> None:
+async def run_activity_surge_task(active_cards: Optional[List[Dict[str, Any]]] = None) -> None:
     """Fires 50 rapid-fire swipes staggered over 10 seconds."""
     logger.info("Starting activity surge simulation (50 swipes over 10s)...")
-    cards = get_active_cards()
+    cards = active_cards or get_active_cards()
     if not cards:
         logger.warning("No cards resolved. Surge aborted.")
         return
@@ -275,9 +287,10 @@ async def simulate_pulse():
     return {"status": "SUCCESS", "swipes_attempted": batch_size}
 
 @app.post("/simulate-surge", status_code=status.HTTP_200_OK)
-def simulate_surge(background_tasks: BackgroundTasks):
+def simulate_surge(payload: SurgeRequest, background_tasks: BackgroundTasks):
     """Triggers an async rapid-fire activity surge of 50 swipes."""
-    background_tasks.add_task(run_activity_surge_task)
+    active_cards = [c.model_dump() for c in payload.active_cards] if payload.active_cards else None
+    background_tasks.add_task(run_activity_surge_task, active_cards)
     return {"status": "ACCEPTED", "message": "Simulation surge initiated in background."}
 
 if __name__ == "__main__":

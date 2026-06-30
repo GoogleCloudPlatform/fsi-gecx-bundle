@@ -155,3 +155,35 @@ async def test_reset_my_demo_not_found(async_client, db_session):
     response = await async_client.post("/api/v1/simulation/reset-my-demo")
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert "No seeded demo profile found" in response.json()["detail"]
+
+import respx
+import httpx
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_simulate_surge_success(async_client, db_session):
+    global mock_claims
+    mock_claims = {"sub": "presenter-1", "email": "presenter.one@google.com"}
+    
+    # 1. Provision profile first
+    prov_resp = await async_client.post("/api/v1/simulation/provision-my-demo")
+    assert prov_resp.status_code == status.HTTP_201_CREATED
+    
+    # 2. Mock the data-generator surge route
+    # read DATA_GENERATOR_URL from routers.simulation
+    from routers.simulation import DATA_GENERATOR_URL
+    surge_route = respx.post(f"{DATA_GENERATOR_URL}/simulate-surge").mock(
+        return_value=httpx.Response(200, json={"status": "ACCEPTED", "message": "Simulation surge initiated in background."})
+    )
+    
+    # 3. Call surge proxy endpoint
+    response = await async_client.post("/api/v1/simulation/surge")
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["status"] == "ACCEPTED"
+    
+    # 4. Assert data-generator received the payload with our presenter card
+    assert surge_route.called
+    payload = surge_route.calls.last.request.read().decode()
+    assert "active_cards" in payload
+    assert "tok_visa_presenter" in payload
+

@@ -76,6 +76,6 @@ async def test_simulate_pulse_declined():
     assert not settle_route.called
 
 def test_simulate_surge_accepted():
-    response = client.post("/simulate-surge")
+    response = client.post("/simulate-surge", json={})
     assert response.status_code == 200
     assert response.json()["status"] == "ACCEPTED"
