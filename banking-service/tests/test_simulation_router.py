@@ -97,9 +97,9 @@ async def test_provision_my_demo_success(async_client, db_session):
     assert cred_acc.cleared_balance_cents > 0
     assert cred_acc.available_credit_cents == cred_acc.credit_limit_cents - cred_acc.cleared_balance_cents
     
-    # Check historical swipes (should have exactly 12 posted transactions)
+    # Check historical swipes (should have exactly 13 posted transactions including 1 late fee)
     swipes = db_session.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).all()
-    assert len(swipes) == 12
+    assert len(swipes) == 13
 
 @pytest.mark.asyncio
 async def test_provision_my_demo_conflict(async_client, db_session):

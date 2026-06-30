@@ -437,6 +437,18 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
         
         total_swipes_debt_cents = 0
         now = datetime.datetime.now(datetime.timezone.utc)
+
+        # 9a. Seed exactly one LATE_FEE transaction for support escalations CUJ
+        late_fee_cents = 3500
+        late_fee_tx = PostedTransaction(
+            id=uuid.uuid4(),
+            account_id=cred_acc_id,
+            amount_cents=-late_fee_cents,
+            description="LATE_FEE",
+            posted_at=now - datetime.timedelta(days=5)
+        )
+        db.add(late_fee_tx)
+        total_swipes_debt_cents += late_fee_cents
         
         for i in range(12):
             swipe_conf = random.choice(swipe_options)
