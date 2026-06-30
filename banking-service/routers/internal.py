@@ -159,25 +159,15 @@ def reset_database(purge_audit_logs: bool = False, purge_data_lake: bool = False
     """
     logger.info(f"Internal Debug request: Resetting database (purge_audit_logs={purge_audit_logs}, purge_data_lake={purge_data_lake})...")
     from utils.database import SessionLocal
-    from models.credit_card import FinancialAccount, IssuedCard, TransactionAuthorization, AccountLedger
-    from models.support import Escalation
-    from models.origination import Application, MortgageApplication, CreditCardApplication, DepositApplication, ApplicationArtifact
+    from services.seeding_service import perform_algorithmic_seeding
     from models.audit import AuditOutbox
-    from services.credit_card import initialize_db_and_seed
     
     db = SessionLocal()
     try:
         db.connection().info["_ignore_rbac"] = True
-        db.query(TransactionAuthorization).delete()
-        db.query(AccountLedger).delete()
-        db.query(IssuedCard).delete()
-        db.query(Escalation).delete()
-        db.query(FinancialAccount).delete()
-        db.query(ApplicationArtifact).delete()
-        db.query(MortgageApplication).delete()
-        db.query(CreditCardApplication).delete()
-        db.query(DepositApplication).delete()
-        db.query(Application).delete()
+        
+        # Seed and clean databases using the Seeding Service
+        perform_algorithmic_seeding(db)
         
         if purge_audit_logs:
             db.query(AuditOutbox).delete()
@@ -201,10 +191,6 @@ def reset_database(purge_audit_logs: bool = False, purge_data_lake: bool = False
                 logger.warning(f"Could not purge BigLake Iceberg tables: {lake_ex}")
 
         db.commit()
-        logger.info("Database tables cleared.")
-        
-        initialize_db_and_seed(db)
-        logger.info("Database re-seeded.")
         msg = "Database reset and re-seeded successfully."
         if purge_audit_logs:
             msg += " (Audit logs purged)"

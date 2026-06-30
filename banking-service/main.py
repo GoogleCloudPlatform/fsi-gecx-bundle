@@ -62,20 +62,33 @@ except Exception as e:
     logging.error(f"Failed to initialize Firebase Admin SDK: {e}")
 
 
-@asynccontextmanager
-async def combined_lifespan(app_inst: FastAPI):
-    logging.info("Executing combined lifespan startup: verifying and seeding database...")
+import asyncio
+
+async def run_db_seeding():
+    logging.info("Starting background database verification and seeding...")
     try:
         from utils.database import SessionLocal
-        from services.credit_card import initialize_db_and_seed
+        from services.seeding_service import perform_algorithmic_seeding
         db = SessionLocal()
         try:
-            initialize_db_and_seed(db)
+            # Execute seeding in thread pool to prevent blocking main event loop
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, perform_algorithmic_seeding, db)
+            logging.info("Background database seeding completed successfully.")
         finally:
             db.close()
     except Exception as e:
-        logging.error(f"Error during startup database seeding: {e}")
-    
+        logging.error(f"Error during background database seeding: {e}")
+
+
+@asynccontextmanager
+async def combined_lifespan(app_inst: FastAPI):
+    import sys
+    if "pytest" not in sys.modules:
+        logging.info("Scheduling background database seeding task on lifespan startup...")
+        asyncio.create_task(run_db_seeding())
+    else:
+        logging.info("Test environment detected. Skipping background database seeding task.")
     async with mcp_app.lifespan(app_inst):
         yield
 
