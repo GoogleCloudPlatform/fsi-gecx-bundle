@@ -15,18 +15,37 @@
 # Divergence A & B: Replace scheduled federated queries with real-time Google Cloud Datastream CDC
 # streaming directly from PostgreSQL WAL into our BigLake Iceberg catalog for bounded domain tables.
 
+resource "google_datastream_private_connection" "vpc_connection" {
+  display_name          = "VPC Peering Connection for Datastream"
+  location              = var.region
+  private_connection_id = "datastream-vpc-connection"
+
+  vpc_peering_config {
+    vpc    = google_compute_network.fsi_gecx_vpc.id
+    subnet = "10.2.0.0/29"
+  }
+
+  depends_on = [google_project_service.datastream_googleapis_com]
+}
+
 resource "google_datastream_connection_profile" "postgres_source" {
   display_name          = "PostgreSQL Source Profile"
   location              = var.region
   connection_profile_id = "postgres-source-profile"
 
   postgresql_profile {
-    hostname = google_sql_database_instance.banking_data.public_ip_address
+    hostname = google_sql_database_instance.banking_data.private_ip_address
     port     = 5432
     username = google_sql_user.banking_bq_connector.name
     password = random_password.banking_bq_connector_password.result
     database = google_sql_database.banking.name
   }
+
+  private_connectivity {
+    private_connection = google_datastream_private_connection.vpc_connection.id
+  }
+
+  depends_on = [google_project_service.datastream_googleapis_com]
 }
 
 resource "google_datastream_connection_profile" "bigquery_destination" {
@@ -35,6 +54,8 @@ resource "google_datastream_connection_profile" "bigquery_destination" {
   connection_profile_id = "bigquery-destination-profile"
 
   bigquery_profile {}
+
+  depends_on = [google_project_service.datastream_googleapis_com]
 }
 
 resource "google_datastream_stream" "banking_cdc_stream" {
