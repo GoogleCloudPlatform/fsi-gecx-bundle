@@ -181,17 +181,20 @@ class AccountsService:
 
         # Auto-provision sandbox for mock user when running locally to speed up local dev onboarding!
         from utils.env import is_running_locally
-        if is_running_locally() and not deposit_accounts:
-            logger.info(f"Auto-provisioning local sandbox for user: {user.email}")
-            from services.seeding_service import provision_personal_demo_suite
+        if is_running_locally() and not deposit_accounts and not credit_accounts:
+            user_email = user.email
+            user_uid = user.auth_provider_uid
+            user_id = user.id
+            logger.info(f"Auto-provisioning local sandbox for user: {user_email}")
+            from services.seeding_service import provision_user_suite
             try:
-                provision_personal_demo_suite(self.db, user.email, user.first_name or "Mock", user.last_name or "User")
+                provision_user_suite(self.db, user_email, user_uid)
                 self.db.commit()
                 # Fetch accounts again
-                deposit_accounts = self.db.query(Account).filter(Account.user_id == user.id).all()
-                credit_accounts = self.db.query(CreditAccount).filter(CreditAccount.customer_id == user.id).all()
+                deposit_accounts = self.db.query(Account).filter(Account.user_id == user_id).all()
+                credit_accounts = self.db.query(CreditAccount).filter(CreditAccount.customer_id == user_id).all()
             except Exception as e:
-                logger.error(f"Failed to auto-provision local sandbox for user: {user.email}. Error: {e}")
+                logger.error(f"Failed to auto-provision local sandbox for user: {user_email}. Error: {e}")
                 self.db.rollback()
 
         return {

@@ -231,28 +231,28 @@ function HomeView({
                   <div className="space-y-4 mb-8">
                     <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer">
                       <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-500 dark:text-teal-405">
+                        <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-500 dark:text-teal-400">
                           <CreditCard className="w-5 h-5" />
                         </div>
                         <div>
-                          <div className="font-medium text-slate-905 dark:text-white">Nova Signature Checking</div>
+                          <div className="font-medium text-slate-900 dark:text-white">Nova Signature Checking</div>
                           <div className="text-xs text-slate-500 dark:text-slate-400">**** 4829</div>
                         </div>
                       </div>
-                      <div className="font-semibold text-slate-905 dark:text-white">$14,250.00</div>
+                      <div className="font-semibold text-slate-900 dark:text-white">$14,250.00</div>
                     </div>
 
                     <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer">
                       <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-500 dark:text-emerald-405">
+                        <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-500 dark:text-emerald-400">
                           <Percent className="w-5 h-5" />
                         </div>
                         <div>
-                          <div className="font-medium text-slate-905 dark:text-white">High-Yield Growth</div>
+                          <div className="font-medium text-slate-900 dark:text-white">High-Yield Growth</div>
                           <div className="text-xs text-slate-500 dark:text-slate-400">Active Savings Tier</div>
                         </div>
                       </div>
-                      <div className="font-semibold text-slate-905 dark:text-white">$110,330.45</div>
+                      <div className="font-semibold text-slate-900 dark:text-white">$110,330.45</div>
                     </div>
                   </div>
 
@@ -292,15 +292,15 @@ function HomeView({
                         className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer"
                       >
                         <div className="flex items-center space-x-4">
-                          <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-500 dark:text-teal-405">
+                          <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-500 dark:text-teal-400">
                             <CreditCard className="w-5 h-5" />
                           </div>
                           <div>
-                            <div className="font-medium text-slate-905 dark:text-white">{acc.product_name}</div>
+                            <div className="font-medium text-slate-900 dark:text-white">{acc.product_name}</div>
                             <div className="text-xs text-slate-500 dark:text-slate-400">**** {acc.account_number.slice(-4)}</div>
                           </div>
                         </div>
-                        <div className="font-semibold text-slate-905 dark:text-white">
+                        <div className="font-semibold text-slate-900 dark:text-white">
                           ${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </div>
                       </div>
@@ -313,15 +313,15 @@ function HomeView({
                         className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer"
                       >
                         <div className="flex items-center space-x-4">
-                          <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-500 dark:text-emerald-405">
+                          <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-500 dark:text-emerald-400">
                             <Percent className="w-5 h-5" />
                           </div>
                           <div>
-                            <div className="font-medium text-slate-905 dark:text-white">{acc.product_name}</div>
+                            <div className="font-medium text-slate-900 dark:text-white">{acc.product_name}</div>
                             <div className="text-xs text-slate-500 dark:text-slate-400">Active Savings Tier</div>
                           </div>
                         </div>
-                        <div className="font-semibold text-slate-905 dark:text-white">
+                        <div className="font-semibold text-slate-900 dark:text-white">
                           ${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </div>
                       </div>
@@ -330,35 +330,21 @@ function HomeView({
                     {accountsData.credit_accounts?.map((acc, idx) => (
                       <div 
                         key={`cred-${idx}`} 
-                        onClick={(e) => {
-                          if (e.target.tagName !== 'BUTTON') {
-                            navigate(`/accounts?id=${acc.account_id}&type=credit`);
-                          }
-                        }}
+                        onClick={() => navigate(`/accounts?id=${acc.account_id}&type=credit`)}
                         className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer"
                       >
                         <div className="flex items-center space-x-4">
-                          <div className="w-10 h-10 rounded-lg bg-rose-500/20 flex items-center justify-center text-rose-500 dark:text-rose-405">
+                          <div className="w-10 h-10 rounded-lg bg-rose-500/20 flex items-center justify-center text-rose-500 dark:text-rose-400">
                             <CreditCard className="w-5 h-5" />
                           </div>
                           <div>
-                            <div className="font-medium text-slate-905 dark:text-white">Nova Credit Card</div>
+                            <div className="font-medium text-slate-900 dark:text-white">Nova Credit Card</div>
                             <div className="text-xs text-slate-500 dark:text-slate-400">Outstanding Balance</div>
                           </div>
                         </div>
-                        <div className="flex items-center space-x-3">
-                          <div className="font-semibold text-rose-600 dark:text-rose-455 text-right">
-                            ${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                            <div className="text-[10px] text-slate-400 dark:text-slate-500">Limit: ${(acc.credit_limit_cents / 100).toLocaleString()}</div>
-                          </div>
-                          {acc.cleared_balance_cents > 0 && (
-                            <button
-                              onClick={() => setIsBillPayOpen(true)}
-                              className="px-2.5 py-1 rounded bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold active:scale-95 transition-all"
-                            >
-                              Pay
-                            </button>
-                          )}
+                        <div className="font-semibold text-slate-900 dark:text-white text-right">
+                          ${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          <div className="text-[10px] font-normal text-slate-400 dark:text-slate-500">Limit: ${(acc.credit_limit_cents / 100).toLocaleString()}</div>
                         </div>
                       </div>
                     ))}
