@@ -64,10 +64,11 @@ resource "google_datastream_connection_profile" "bigquery_destination" {
 }
 
 resource "google_datastream_stream" "banking_cdc_stream" {
-  display_name  = "Banking CDC Stream to Iceberg Data Lake"
-  location      = var.region
-  stream_id     = "banking-cdc-stream"
-  desired_state = "RUNNING"
+  display_name              = "Banking CDC Stream to Iceberg Data Lake"
+  location                  = var.region
+  stream_id                 = "banking-cdc-stream"
+  desired_state             = "RUNNING"
+  create_without_validation = true
 
   backfill_all {}
 
