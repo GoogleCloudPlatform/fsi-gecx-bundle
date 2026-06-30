@@ -74,7 +74,7 @@ run-data-generator: ## Run the FastAPI synthetic data generator locally
 run: ## Concurrently run both backend and frontend servers locally
 	@echo "Starting backend and frontend concurrently... Press Ctrl+C to stop."
 	@trap 'kill 0' SIGINT; \
-	$(MAKE) run-backend & \
+	$(MAKE) run-backend-iam & \
 	$(MAKE) run-frontend & \
 	wait
 
