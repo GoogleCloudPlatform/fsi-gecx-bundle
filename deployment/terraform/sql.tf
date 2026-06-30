@@ -58,8 +58,8 @@ resource "google_sql_database_instance" "banking_data" {
     }
 
     ip_configuration {
-      # For using CloudSQL Proxy need this external IP to be true
-      ipv4_enabled                                  = false
+      # For using CloudSQL Proxy and Datastream CDC need this external IP to be true
+      ipv4_enabled                                  = true
       private_network                               = google_compute_network.fsi_gecx_vpc.id
       enable_private_path_for_google_cloud_services = true
       ssl_mode                                      = "ENCRYPTED_ONLY"
@@ -67,6 +67,10 @@ resource "google_sql_database_instance" "banking_data" {
         # https://docs.cloud.google.com/data-studio/connect-to-postgresql#firewall_and_database_access
         name  = "Looker Studio"
         value = "142.251.74.0/23"
+      }
+      authorized_networks {
+        name  = "Datastream and GCP Services"
+        value = "0.0.0.0/0"
       }
     }
 
