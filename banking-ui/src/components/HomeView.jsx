@@ -9,7 +9,8 @@ import {
   Smartphone, 
   Globe, 
   Check,
-  ExternalLink
+  ExternalLink,
+  X
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { getAccountsSummary, provisionMyDemo, getCreditCardTransactions } from '../utils/api.js';
@@ -42,6 +43,7 @@ function HomeView({
   const [isLoading, setIsLoading] = useState(false);
   const [isBillPayOpen, setIsBillPayOpen] = useState(false);
   const [isProvisioning, setIsProvisioning] = useState(false);
+  const [isSchemaModalOpen, setIsSchemaModalOpen] = useState(false);
 
   const fetchAccounts = useCallback(async () => {
     if (!fbUser) {
@@ -216,34 +218,18 @@ function HomeView({
                       <div className="text-sm text-slate-500 dark:text-slate-400">Total Liquid Deposits</div>
                       <div className="text-4xl font-bold text-slate-900 dark:text-white mt-1">$124,580.45</div>
                     </div>
-                    {/* Tooltip on top right */}
-                    <div className="relative group/tooltip shrink-0">
-                      <button className="text-slate-400 hover:text-slate-650 dark:hover:text-slate-200 transition-colors p-1 cursor-pointer flex items-center justify-center">
-                        <GoogleCloudIcon className="w-4 h-4" />
-                      </button>
-                      <div className="absolute right-0 top-full mt-2 w-72 rounded-xl bg-slate-900 border border-slate-850 p-3 shadow-2xl opacity-0 pointer-events-none group-hover/tooltip:opacity-100 group-hover/tooltip:pointer-events-auto transition-all duration-300 translate-y-1 group-hover/tooltip:translate-y-0 z-50 text-left">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Back-end Data Schema</div>
-                        <p className="text-[11px] text-slate-300 leading-relaxed font-normal">
-                          Demo accounts and ledger tables are fully provisioned via mock database seeds. Real transactions are posted dynamically by backend engines.
-                        </p>
-                        <div className="mt-2 pt-2 border-t border-slate-800 flex justify-between items-center text-[10px]">
-                          <span className="text-slate-500 font-mono font-medium">SQLite / Postgres</span>
-                          <a 
-                            href="https://github.com/GoogleCloudPlatform/generative-ai/tree/main/docs" 
-                            target="_blank" 
-                            rel="noreferrer" 
-                            className="text-teal-400 hover:underline flex items-center gap-0.5 font-bold"
-                          >
-                            View Data Docs
-                            <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
-                        </div>
-                      </div>
-                    </div>
+                    {/* Schema trigger button on top right */}
+                    <button 
+                      onClick={() => setIsSchemaModalOpen(true)}
+                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 cursor-pointer flex items-center justify-center shrink-0"
+                      title="View Schema Details"
+                    >
+                      <GoogleCloudIcon className="w-4 h-4" />
+                    </button>
                   </div>
 
                   <div className="space-y-4 mb-8">
-                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-205/85 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer">
+                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer">
                       <div className="flex items-center space-x-4">
                         <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-500 dark:text-teal-405">
                           <CreditCard className="w-5 h-5" />
@@ -256,7 +242,7 @@ function HomeView({
                       <div className="font-semibold text-slate-905 dark:text-white">$14,250.00</div>
                     </div>
 
-                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-205/85 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer">
+                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer">
                       <div className="flex items-center space-x-4">
                         <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-500 dark:text-emerald-405">
                           <Percent className="w-5 h-5" />
@@ -288,30 +274,14 @@ function HomeView({
                         ${((accountsData.deposit_accounts?.reduce((sum, acc) => sum + acc.cleared_balance_cents, 0) || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
-                    {/* Tooltip on top right */}
-                    <div className="relative group/tooltip shrink-0">
-                      <button className="text-slate-400 hover:text-slate-650 dark:hover:text-slate-200 transition-colors p-1 cursor-pointer flex items-center justify-center">
-                        <GoogleCloudIcon className="w-4 h-4" />
-                      </button>
-                      <div className="absolute right-0 top-full mt-2 w-72 rounded-xl bg-slate-900 border border-slate-850 p-3 shadow-2xl opacity-0 pointer-events-none group-hover/tooltip:opacity-100 group-hover/tooltip:pointer-events-auto transition-all duration-300 translate-y-1 group-hover/tooltip:translate-y-0 z-50 text-left">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Back-end Data Schema</div>
-                        <p className="text-[11px] text-slate-300 leading-relaxed font-normal">
-                          Demo accounts and ledger tables are fully provisioned via mock database seeds. Real transactions are posted dynamically by backend engines.
-                        </p>
-                        <div className="mt-2 pt-2 border-t border-slate-800 flex justify-between items-center text-[10px]">
-                          <span className="text-slate-500 font-mono font-medium">SQLite / Postgres</span>
-                          <a 
-                            href="https://github.com/GoogleCloudPlatform/generative-ai/tree/main/docs" 
-                            target="_blank" 
-                            rel="noreferrer" 
-                            className="text-teal-400 hover:underline flex items-center gap-0.5 font-bold"
-                          >
-                            View Data Docs
-                            <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
-                        </div>
-                      </div>
-                    </div>
+                    {/* Schema trigger button on top right */}
+                    <button 
+                      onClick={() => setIsSchemaModalOpen(true)}
+                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 cursor-pointer flex items-center justify-center shrink-0"
+                      title="View Schema Details"
+                    >
+                      <GoogleCloudIcon className="w-4 h-4" />
+                    </button>
                   </div>
 
                   <div className="space-y-4 mb-8">
@@ -319,7 +289,7 @@ function HomeView({
                       <div 
                         key={`chk-${idx}`} 
                         onClick={() => navigate(`/accounts?id=${acc.account_id}&type=checking`)}
-                        className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-205/85 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer"
+                        className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer"
                       >
                         <div className="flex items-center space-x-4">
                           <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-500 dark:text-teal-405">
@@ -340,7 +310,7 @@ function HomeView({
                       <div 
                         key={`sav-${idx}`} 
                         onClick={() => navigate(`/accounts?id=${acc.account_id}&type=savings`)}
-                        className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-205/85 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer"
+                        className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer"
                       >
                         <div className="flex items-center space-x-4">
                           <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-500 dark:text-emerald-405">
@@ -365,7 +335,7 @@ function HomeView({
                             navigate(`/accounts?id=${acc.account_id}&type=credit`);
                           }
                         }}
-                        className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-205/85 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer"
+                        className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer"
                       >
                         <div className="flex items-center space-x-4">
                           <div className="w-10 h-10 rounded-lg bg-rose-500/20 flex items-center justify-center text-rose-500 dark:text-rose-405">
@@ -758,6 +728,58 @@ function HomeView({
               <div>
                 <div className="text-xs text-teal-500 dark:text-teal-400 font-semibold uppercase tracking-wider">Connecting...</div>
                 <div className="text-sm font-medium text-slate-900 dark:text-white">Initializing {activeBot}</div>
+              </div>
+            </div>
+          )}
+
+          {isSchemaModalOpen && (
+            <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col animate-scale-up">
+                {/* Header bar */}
+                <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950/50 flex-shrink-0">
+                  <div className="flex items-center gap-2">
+                    <GoogleCloudIcon className="w-5 h-5 text-emerald-500" />
+                    <h3 className="font-bold text-slate-900 dark:text-white text-base">Back-end Data Schema</h3>
+                  </div>
+                  <button 
+                    onClick={() => setIsSchemaModalOpen(false)}
+                    className="p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-550 dark:text-slate-400 transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Content body */}
+                <div className="p-6 space-y-4 text-sm text-slate-650 dark:text-slate-300 leading-relaxed text-left font-normal">
+                  <p>
+                    Demo account values, cleared balances, and transactional ledger history are fully provisioned and seeded via mock database migrations in the back end.
+                  </p>
+                  <p>
+                    Database queries, index configurations, and relationship mappings follow standard retail banking guidelines.
+                  </p>
+                  <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs">
+                    <span className="text-slate-500 font-mono">SQLite / PostgreSQL Schema</span>
+                    <a 
+                      href="https://github.com/GoogleCloudPlatform/generative-ai/tree/main/docs" 
+                      target="_blank" 
+                      rel="noreferrer" 
+                      className="text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-0.5 font-bold"
+                    >
+                      View Repo Documentation
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 bg-slate-50 dark:bg-slate-950/30 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+                  <button 
+                    onClick={() => setIsSchemaModalOpen(false)}
+                    className="px-5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-white font-bold text-xs transition cursor-pointer"
+                  >
+                    Close Details
+                  </button>
+                </div>
               </div>
             </div>
           )}
