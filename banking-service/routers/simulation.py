@@ -104,3 +104,32 @@ def reset_my_demo(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to reset demo profile: {e}"
         )
+
+
+import httpx
+import os
+
+DATA_GENERATOR_URL = os.getenv("DATA_GENERATOR_URL", "http://localhost:8001")
+
+@router.post("/surge", status_code=status.HTTP_200_OK)
+async def simulate_activity_surge():
+    """
+    Commands the simulation client to immediately fire 50 rapid-fire card swipes over 10 seconds.
+    """
+    target_url = f"{DATA_GENERATOR_URL}/simulate-surge"
+    logger.info(f"Forwarding surge request to data-generator at: {target_url}")
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(target_url, timeout=15.0)
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Data generator surge request failed: {response.text}"
+                )
+            return response.json()
+    except httpx.RequestError as exc:
+        logger.error(f"Network error trying to connect to data generator at {target_url}: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not connect to synthetic data generator: {exc}"
+        )
