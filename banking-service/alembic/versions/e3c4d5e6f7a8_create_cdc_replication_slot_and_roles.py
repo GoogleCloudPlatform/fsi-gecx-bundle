@@ -31,11 +31,22 @@ def upgrade() -> None:
         ).scalar()
 
         if user_exists:
-            try:
-                with conn.begin_nested():
-                    conn.execute(text(f'ALTER ROLE "{db_user}" WITH REPLICATION;'))
-            except Exception as role_ex:
-                logger.warning(f"Could not grant REPLICATION role: {role_ex}")
+            has_priv = conn.execute(text("""
+                SELECT EXISTS (
+                    SELECT 1 FROM pg_roles 
+                    WHERE rolname = CURRENT_USER 
+                      AND (rolsuper = true OR rolreplication = true)
+                );
+            """)).scalar()
+            
+            if has_priv:
+                try:
+                    with conn.begin_nested():
+                        conn.execute(text(f'ALTER ROLE "{db_user}" WITH REPLICATION;'))
+                except Exception as role_ex:
+                    logger.warning(f"Could not grant REPLICATION role: {role_ex}")
+            else:
+                logger.info("Current user does not have replication/superuser privileges; skipping ALTER ROLE WITH REPLICATION.")
 
             for schema_name in ["cards", "origination", "identity"]:
                 try:
@@ -63,13 +74,24 @@ def upgrade() -> None:
         try:
             wal_level = conn.execute(text("SHOW wal_level;")).scalar()
             if wal_level == 'logical':
-                with conn.begin_nested():
-                    slot_exists = conn.execute(
-                        text("SELECT 1 FROM pg_replication_slots WHERE slot_name = 'datastream_replication_slot'")
-                    ).scalar()
-                    if not slot_exists:
-                        conn.execute(text("SELECT pg_create_logical_replication_slot('datastream_replication_slot', 'pgoutput');"))
-                        logger.info("Created datastream_replication_slot for logical replication.")
+                has_priv = conn.execute(text("""
+                    SELECT EXISTS (
+                        SELECT 1 FROM pg_roles 
+                        WHERE rolname = CURRENT_USER 
+                          AND (rolsuper = true OR rolreplication = true)
+                    );
+                """)).scalar()
+                
+                if has_priv:
+                    with conn.begin_nested():
+                        slot_exists = conn.execute(
+                            text("SELECT 1 FROM pg_replication_slots WHERE slot_name = 'datastream_replication_slot'")
+                        ).scalar()
+                        if not slot_exists:
+                            conn.execute(text("SELECT pg_create_logical_replication_slot('datastream_replication_slot', 'pgoutput');"))
+                            logger.info("Created datastream_replication_slot for logical replication.")
+                else:
+                    logger.info("Current user does not have replication or superuser privileges; skipping slot creation.")
             else:
                 logger.info(f"PostgreSQL wal_level is '{wal_level}' (not logical); skipping logical replication slot creation.")
         except Exception as slot_ex:
