@@ -17,6 +17,7 @@ import BillPayModal from './BillPayModal.jsx';
 
 function HomeView({
   fbUser,
+  customerProfile,
   loanAmount,
   setLoanAmount,
   loanTerm,
@@ -102,7 +103,7 @@ function HomeView({
                 <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight leading-tight">
                   Welcome back, <br />
                   <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
-                    {accountsData?.user_profile?.first_name || fbUser.email.split('@')[0].toUpperCase()}
+                    {customerProfile?.first_name ? `${customerProfile.first_name} ${customerProfile.last_name}` : (accountsData?.user_profile?.first_name || fbUser.email.split('@')[0].toUpperCase())}
                   </span>
                 </h1>
                 
@@ -128,7 +129,7 @@ function HomeView({
                         }}
                         className="flex items-center justify-center px-8 py-4 rounded-full bg-slate-900 border border-slate-800 text-slate-200 font-semibold hover:bg-slate-850 transition-colors cursor-pointer"
                       >
-                        Dispute Fee with AI
+                        Help & Support
                       </button>
                     </>
                   ) : (
@@ -218,9 +219,6 @@ function HomeView({
                       <div className="text-sm text-slate-400">Total Liquid Deposits</div>
                       <div className="text-4xl font-bold text-white mt-1">$124,580.45</div>
                     </div>
-                    <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400">
-                      <TrendingUp className="w-6 h-6" />
-                    </div>
                   </div>
 
                   <div className="space-y-4 mb-8">
@@ -268,9 +266,6 @@ function HomeView({
                       <div className="text-4xl font-bold text-white mt-1">
                         ${((accountsData.deposit_accounts?.reduce((sum, acc) => sum + acc.cleared_balance_cents, 0) || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
-                    </div>
-                    <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400">
-                      <TrendingUp className="w-6 h-6" />
                     </div>
                   </div>
 

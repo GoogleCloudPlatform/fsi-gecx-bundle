@@ -65,6 +65,7 @@ export default function AppRoutes({
       <Route path="/" element={
         <HomeView
           fbUser={fbUser}
+          customerProfile={customerProfile}
           loanAmount={loanAmount}
           setLoanAmount={setLoanAmount}
           loanTerm={loanTerm}
