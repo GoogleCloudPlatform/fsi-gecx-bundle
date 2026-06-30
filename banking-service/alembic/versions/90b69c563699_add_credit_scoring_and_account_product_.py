@@ -231,7 +231,7 @@ def upgrade() -> None:
                 );
             """))
             conn.execute(text("""
-                DELETE FROM cards.transaction_authorizations
+                DELETE FROM cards.transaction_authorization
                 WHERE account_id IN (
                     SELECT id FROM cards.credit_accounts
                     WHERE customer_id NOT IN (SELECT CAST(id AS varchar) FROM identity.users)
