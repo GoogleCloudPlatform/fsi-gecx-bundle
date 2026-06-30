@@ -185,6 +185,15 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
         
     merchant = random.choice(matching_merchants)
     amount_cents = random.randint(card["amount_min"], card["amount_max"])
+    
+    # Apply category-specific caps to keep everyday transactions realistic (e.g. no $10k coffee)
+    if merchant["mcc"] == "5814": # Coffee
+        amount_cents = min(amount_cents, 5000) # Max $50.00
+    elif merchant["mcc"] == "5812": # Dining
+        amount_cents = min(amount_cents, 30000) # Max $300.00
+    elif merchant["mcc"] == "5541": # Gas
+        amount_cents = min(amount_cents, 10000) # Max $100.00
+
     rrn = "".join(random.choices("0123456789", k=12))
     
     headers = {"X-Card-Network-Token": CARD_NETWORK_TOKEN}

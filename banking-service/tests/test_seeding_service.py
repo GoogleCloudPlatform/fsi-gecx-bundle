@@ -44,23 +44,24 @@ def test_perform_algorithmic_seeding_success(db_session):
     # Execute seeding
     manifest = perform_algorithmic_seeding(db_session)
     
-    # Assert manifest is returned and contains Erik, Marcus, Chloe, David, Mark, and Jane
-    assert len(manifest) == 6
+    # Assert manifest is returned and contains Erik, Marcus, Chloe, David, Mark, Jane + 15 Googlers
+    assert len(manifest) == 21
     assert "erik" in manifest
     assert "marcus" in manifest
     assert "chloe" in manifest
     assert "david" in manifest
     assert "mark" in manifest
     assert "jane" in manifest
+    assert "larry" in manifest
     
     # Assert database table counts
-    assert db_session.query(User).count() == 6
-    assert db_session.query(KYCRecord).count() == 6
-    assert db_session.query(UserCreditProfile).count() == 6
-    # Erik, Marcus, and Jane have 2 accounts each, the others have 1. Total = 9 deposit accounts
-    assert db_session.query(Account).count() == 9
-    assert db_session.query(CreditAccount).count() == 6
-    assert db_session.query(IssuedCard).count() == 6
+    assert db_session.query(User).count() == 21
+    assert db_session.query(KYCRecord).count() == 21
+    assert db_session.query(UserCreditProfile).count() == 21
+    # Original (9) + 15 Googlers with 2 accounts each (30) = 39 deposit accounts
+    assert db_session.query(Account).count() == 39
+    assert db_session.query(CreditAccount).count() == 21
+    assert db_session.query(IssuedCard).count() == 21
     
     # Assert SystemSetting contains the manifest
     setting = db_session.query(SystemSetting).filter(SystemSetting.key == "simulation_cards_manifest").first()
