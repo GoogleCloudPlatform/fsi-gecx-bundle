@@ -298,6 +298,8 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             if has_dep or has_cc:
                 raise ValueError("Profile already provisioned with active accounts.")
             user_uuid = existing_user.id
+            first_name = existing_user.first_name
+            last_name = existing_user.last_name
         else:
             # 2. Extract first and last names
             name_part = email.split("@")[0]
