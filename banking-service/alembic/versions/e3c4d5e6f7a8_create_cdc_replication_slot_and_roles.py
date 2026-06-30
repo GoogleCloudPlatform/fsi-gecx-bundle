@@ -32,9 +32,11 @@ def upgrade() -> None:
 
         if user_exists:
             try:
-                conn.execute(text(f'ALTER ROLE "{db_user}" WITH REPLICATION;'))
+                with conn.begin_nested():
+                    conn.execute(text(f'ALTER ROLE "{db_user}" WITH REPLICATION;'))
             except Exception as role_ex:
                 logger.warning(f"Could not grant REPLICATION role: {role_ex}")
+
             for schema_name in ["cards", "origination", "identity"]:
                 conn.execute(text(f'GRANT USAGE ON SCHEMA "{schema_name}" TO "{db_user}";'))
                 conn.execute(text(f'GRANT SELECT ON ALL TABLES IN SCHEMA "{schema_name}" TO "{db_user}";'))
@@ -49,13 +51,17 @@ def upgrade() -> None:
             conn.execute(text('CREATE PUBLICATION datastream_publication FOR ALL TABLES;'))
             logger.info("Created datastream_publication for logical replication.")
 
-        # Create replication slot for Datastream CDC replication
-        slot_exists = conn.execute(
-            text("SELECT 1 FROM pg_replication_slots WHERE slot_name = 'datastream_replication_slot'")
-        ).scalar()
-        if not slot_exists:
-            conn.execute(text("SELECT pg_create_logical_replication_slot('datastream_replication_slot', 'pgoutput');"))
-            logger.info("Created datastream_replication_slot for logical replication.")
+        # Check PostgreSQL wal_level before attempting replication slot creation
+        wal_level = conn.execute(text("SHOW wal_level;")).scalar()
+        if wal_level == 'logical':
+            slot_exists = conn.execute(
+                text("SELECT 1 FROM pg_replication_slots WHERE slot_name = 'datastream_replication_slot'")
+            ).scalar()
+            if not slot_exists:
+                conn.execute(text("SELECT pg_create_logical_replication_slot('datastream_replication_slot', 'pgoutput');"))
+                logger.info("Created datastream_replication_slot for logical replication.")
+        else:
+            logger.info(f"PostgreSQL wal_level is '{wal_level}' (not logical); skipping logical replication slot creation.")
     except Exception as e:
         logger.warning(f"Failed to execute CDC IAM grants or replication slot creation: {e}")
 
@@ -64,6 +70,8 @@ def downgrade() -> None:
     """Downgrade schema by dropping logical replication slot."""
     conn = op.get_bind()
     try:
-        conn.execute(text("SELECT pg_drop_replication_slot('datastream_replication_slot') WHERE EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'datastream_replication_slot');"))
+        wal_level = conn.execute(text("SHOW wal_level;")).scalar()
+        if wal_level == 'logical':
+            conn.execute(text("SELECT pg_drop_replication_slot('datastream_replication_slot') WHERE EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'datastream_replication_slot');"))
     except Exception as e:
         logger.warning(f"Failed to drop logical replication slot: {e}")
