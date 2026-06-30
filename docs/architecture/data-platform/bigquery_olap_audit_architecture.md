@@ -44,6 +44,11 @@ graph TD
 * **Core Events**: `USER_CREATED`, `DEVICE_REGISTERED`, `MESSAGE_SENT`.
 * **Partitioning & Clustering**: Partitioned by `DAY` on `created_at`. Clustered by `[user_id, event_type]`.
 
+### D. `system_config_audit_log` (System Pricing & Catalog Policies)
+* **Regulatory Regime**: Truth in Lending (TILA), Truth in Savings (TISA), SOX internal control guidelines. Requires preserving pricing rate updates and limits policies modification history.
+* **Core Events**: `CREDIT_PRODUCT_CATALOG_UPDATED`, `DEPOSIT_PRODUCT_CATALOG_UPDATED`, `SYSTEM_FEATURE_FLAG_MODIFIED`.
+* **Partitioning & Clustering**: Partitioned by `MONTH` on `created_at`. Clustered by `[product_code, event_type]`.
+
 ---
 
 ## ⚙️ 3. Transactional Outbox Pipeline & Ingestion Architecture
