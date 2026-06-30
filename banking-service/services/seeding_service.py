@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import uuid
 import random
 import datetime
@@ -20,8 +21,11 @@ import json
 from typing import Dict, Any
 from sqlalchemy.orm import Session
 
+RESOURCE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "data")
+
 from utils.database import SessionLocal
 from utils.encryption import encrypt_pii
+from utils.audit import record_audit_event
 
 # Models
 from models.identity import User
@@ -100,35 +104,27 @@ def seed_catalogs_if_missing(db: Session) -> None:
     """Ensures CreditProduct and DepositProduct catalogs are seeded in the database."""
     if db.query(CreditProduct).count() == 0:
         logger.info("Seeding CreditProduct catalog...")
-        products = [
-            CreditProduct(product_code="PLATINUM_TRAVEL_REWARDS", product_name="Nova Platinum Travel", min_credit_limit_cents=1500000, max_credit_limit_cents=10000000, purchase_apr=0.1899, cashback_rate=0.0000, travel_multiplier=3, dining_multiplier=3, annual_fee_cents=9500),
-            CreditProduct(product_code="CASHBACK_EVERYDAY", product_name="Nova Cashback Everyday", min_credit_limit_cents=300000, max_credit_limit_cents=1500000, purchase_apr=0.2199, cashback_rate=0.0150, travel_multiplier=1, dining_multiplier=1, annual_fee_cents=0),
-            CreditProduct(product_code="BUSINESS_ADVANTAGE", product_name="Executive Business Advantage", min_credit_limit_cents=2000000, max_credit_limit_cents=15000000, purchase_apr=0.1799, cashback_rate=0.0200, travel_multiplier=2, dining_multiplier=2, annual_fee_cents=0),
-            CreditProduct(product_code="SECURED_STARTER", product_name="Nova Secured Rebuilder", min_credit_limit_cents=50000, max_credit_limit_cents=250000, purchase_apr=0.2799, cashback_rate=0.0100, travel_multiplier=1, dining_multiplier=1, annual_fee_cents=0)
-        ]
+        path = os.path.join(RESOURCE_DIR, "credit_products.json")
+        with open(path, "r") as f:
+            data = json.load(f)
+        products = [CreditProduct(**item) for item in data]
         db.add_all(products)
 
     if db.query(DepositProduct).count() == 0:
         logger.info("Seeding DepositProduct catalog...")
-        deposits = [
-            DepositProduct(product_code="CHECKING_SIGNATURE", product_name="Nova Signature Checking", annual_percentage_yield=0.0005, monthly_maintenance_fee_cents=1500),
-            DepositProduct(product_code="CHECKING_EVERYDAY", product_name="Nova Everyday Checking", annual_percentage_yield=0.0000, monthly_maintenance_fee_cents=0),
-            DepositProduct(product_code="SAVINGS_HIGH_YIELD", product_name="Nova High Yield Savings", annual_percentage_yield=0.0450, monthly_maintenance_fee_cents=0),
-            DepositProduct(product_code="BUSINESS_CHECKING", product_name="Nova Business Checking", annual_percentage_yield=0.0010, monthly_maintenance_fee_cents=1000)
-        ]
+        path = os.path.join(RESOURCE_DIR, "deposit_products.json")
+        with open(path, "r") as f:
+            data = json.load(f)
+        deposits = [DepositProduct(**item) for item in data]
         db.add_all(deposits)
         
     db.flush()
 
 def seed_system_settings_if_missing(db: Session) -> None:
     """Ensures default voice and live avatar system settings are seeded."""
-    default_keys = {
-        "voice_agent_hard_timeout_enabled": "false",
-        "voice_agent_max_duration": "300",
-        "voice_agent_warning_duration": "240",
-        "voice_agent_avatar_selection": "random",
-        "voice_agent_mock_avatar_enabled": "false"
-    }
+    path = os.path.join(RESOURCE_DIR, "system_settings.json")
+    with open(path, "r") as f:
+        default_keys = json.load(f)
     for k, v in default_keys.items():
         existing = db.query(SystemSetting).filter(SystemSetting.key == k).first()
         if not existing:
@@ -164,6 +160,16 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
             )
             db.add(user)
             db.flush()
+            record_audit_event(
+                db,
+                "USER_CREATED",
+                {
+                    "user_id": str(user_uuid),
+                    "email": p["email"],
+                    "first_name": p["first_name"],
+                    "last_name": p["last_name"],
+                },
+            )
             
             # 2. Create KYCRecord (Envelope encrypted)
             kyc_record_id = uuid.uuid4()
@@ -181,6 +187,14 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
                 auth_tag=tag
             )
             db.add(kyc_rec)
+            record_audit_event(
+                db,
+                "KYC_RECORD_CREATED",
+                {
+                    "user_id": str(user_uuid),
+                    "kyc_record_id": str(kyc_rec.id),
+                },
+            )
             
             # 3. Create UserCreditProfile
             credit_prof = UserCreditProfile(
@@ -191,6 +205,14 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
                 stated_annual_income_cents=p["stated_annual_income_cents"]
             )
             db.add(credit_prof)
+            record_audit_event(
+                db,
+                "USER_CREDIT_PROFILE_CREATED",
+                {
+                    "user_id": str(user_uuid),
+                    "credit_score": p["credit_score"],
+                },
+            )
             db.flush()
             
             # 4. Provision checking/savings deposit accounts
@@ -212,6 +234,16 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
                     status="ACTIVE"
                 )
                 db.add(dep_acc)
+                record_audit_event(
+                    db,
+                    "DEPOSIT_ACCOUNT_CREATED",
+                    {
+                        "user_id": str(user_uuid),
+                        "account_id": str(dep_acc.id),
+                        "account_number": dep_acc.account_number,
+                        "account_type": dep_acc.account_type,
+                    },
+                )
                 
             # 5. Create Credit Line Account
             cred_acc_id = uuid.uuid4()
@@ -229,6 +261,15 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
                 statement_close_date=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=15)
             )
             db.add(cred_acc)
+            record_audit_event(
+                db,
+                "CREDIT_ACCOUNT_CREATED",
+                {
+                    "user_id": str(user_uuid),
+                    "account_id": str(cred_acc.id),
+                    "product_code": p["credit_product"],
+                },
+            )
             db.flush()
             
             # 6. Issue Card
@@ -250,6 +291,15 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
                 is_active=True
             )
             db.add(card)
+            record_audit_event(
+                db,
+                "CREDIT_CARD_ISSUED",
+                {
+                    "user_id": str(user_uuid),
+                    "account_id": str(cred_acc_id),
+                    "card_token": p["card_token"],
+                },
+            )
             
             # Add card to manifest
             cards_manifest[p["first_name"].lower()] = {
@@ -324,6 +374,16 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             )
             db.add(user)
             db.flush()
+            record_audit_event(
+                db,
+                "USER_CREATED",
+                {
+                    "user_id": str(user_uuid),
+                    "email": email,
+                    "first_name": first_name,
+                    "last_name": last_name,
+                },
+            )
 
         # 4. Create KYCRecord (Envelope encrypted) if not exists
         kyc_rec = db.query(KYCRecord).filter(KYCRecord.user_id == user_uuid).first()
@@ -344,6 +404,14 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
                 auth_tag=tag
             )
             db.add(kyc_rec)
+            record_audit_event(
+                db,
+                "KYC_RECORD_CREATED",
+                {
+                    "user_id": str(user_uuid),
+                    "kyc_record_id": str(kyc_rec.id),
+                },
+            )
 
         # 5. Create UserCreditProfile if not exists
         credit_prof = db.query(UserCreditProfile).filter(UserCreditProfile.user_id == user_uuid).first()
@@ -356,6 +424,14 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
                 stated_annual_income_cents=9500000  # $95,000.00
             )
             db.add(credit_prof)
+            record_audit_event(
+                db,
+                "USER_CREDIT_PROFILE_CREATED",
+                {
+                    "user_id": str(user_uuid),
+                    "credit_score": 720,
+                },
+            )
         db.flush()
 
         # 6. Provision checking/savings deposit accounts
@@ -382,6 +458,26 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             status="ACTIVE"
         )
         db.add_all([checking_acc, savings_acc])
+        record_audit_event(
+            db,
+            "DEPOSIT_ACCOUNT_CREATED",
+            {
+                "user_id": str(user_uuid),
+                "account_id": str(checking_acc.id),
+                "account_number": checking_acc.account_number,
+                "account_type": "CHECKING",
+            },
+        )
+        record_audit_event(
+            db,
+            "DEPOSIT_ACCOUNT_CREATED",
+            {
+                "user_id": str(user_uuid),
+                "account_id": str(savings_acc.id),
+                "account_number": savings_acc.account_number,
+                "account_type": "SAVINGS",
+            },
+        )
 
         # 7. Create Credit Line Account
         cred_acc_id = uuid.uuid4()
@@ -397,6 +493,15 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             statement_close_date=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=15)
         )
         db.add(cred_acc)
+        record_audit_event(
+            db,
+            "CREDIT_ACCOUNT_CREATED",
+            {
+                "user_id": str(user_uuid),
+                "account_id": str(cred_acc.id),
+                "product_code": "CASHBACK_EVERYDAY",
+            },
+        )
         db.flush()
 
         # 8. Issue Card
@@ -420,13 +525,21 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
         )
         db.add(card)
         db.flush()
+        record_audit_event(
+            db,
+            "CREDIT_CARD_ISSUED",
+            {
+                "user_id": str(user_uuid),
+                "account_id": str(cred_acc_id),
+                "card_token": card_token,
+            },
+        )
 
         # 9. Generate 10-15 historical swipes
         swipe_options = [
             {"description": "Starbucks Coffee", "min": 450, "max": 850},
             {"description": "Whole Foods Market", "min": 4500, "max": 12000},
             {"description": "Uber Trip", "min": 1200, "max": 3500},
-            {"description": "Amazon Purchase", "min": 1500, "max": 8500},
             {"description": "Netflix Subscription", "min": 1549, "max": 1549},
             {"description": "Chevron Gas Station", "min": 3500, "max": 5500},
             {"description": "McDonald's Fast Food", "min": 850, "max": 1850},
@@ -448,6 +561,16 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             posted_at=now - datetime.timedelta(days=5)
         )
         db.add(late_fee_tx)
+        record_audit_event(
+            db,
+            "CREDIT_TRANSACTION_POSTED",
+            {
+                "account_id": str(cred_acc_id),
+                "transaction_id": str(late_fee_tx.id),
+                "amount_cents": late_fee_tx.amount_cents,
+                "description": late_fee_tx.description,
+            },
+        )
         total_swipes_debt_cents += late_fee_cents
         
         for i in range(12):
@@ -465,6 +588,16 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
                 posted_at=posted_date
             )
             db.add(tx)
+            record_audit_event(
+                db,
+                "CREDIT_TRANSACTION_POSTED",
+                {
+                    "account_id": str(cred_acc_id),
+                    "transaction_id": str(tx.id),
+                    "amount_cents": tx.amount_cents,
+                    "description": tx.description,
+                },
+            )
             
         cred_acc.cleared_balance_cents = total_swipes_debt_cents
         cred_acc.available_credit_cents = cred_acc.credit_limit_cents - total_swipes_debt_cents

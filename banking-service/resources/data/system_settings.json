@@ -1,0 +1,7 @@
+{
+  "voice_agent_hard_timeout_enabled": "false",
+  "voice_agent_max_duration": "300",
+  "voice_agent_warning_duration": "240",
+  "voice_agent_avatar_selection": "random",
+  "voice_agent_mock_avatar_enabled": "false"
+}

@@ -1,0 +1,26 @@
+[
+  {
+    "product_code": "CHECKING_SIGNATURE",
+    "product_name": "Nova Signature Checking",
+    "annual_percentage_yield": 0.0005,
+    "monthly_maintenance_fee_cents": 1500
+  },
+  {
+    "product_code": "CHECKING_EVERYDAY",
+    "product_name": "Nova Everyday Checking",
+    "annual_percentage_yield": 0.0000,
+    "monthly_maintenance_fee_cents": 0
+  },
+  {
+    "product_code": "SAVINGS_HIGH_YIELD",
+    "product_name": "Nova High Yield Savings",
+    "annual_percentage_yield": 0.0450,
+    "monthly_maintenance_fee_cents": 0
+  },
+  {
+    "product_code": "BUSINESS_CHECKING",
+    "product_name": "Nova Business Checking",
+    "annual_percentage_yield": 0.0010,
+    "monthly_maintenance_fee_cents": 1000
+  }
+]
