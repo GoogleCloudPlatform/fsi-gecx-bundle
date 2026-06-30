@@ -12,16 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import uuid
 import random
 import datetime
 import logging
 import json
-from typing import List, Dict, Any
+from typing import Dict, Any
 from sqlalchemy.orm import Session
 
-from utils.database import SessionLocal, generate_uuid
+from utils.database import SessionLocal
 from utils.encryption import encrypt_pii
 
 # Models
