@@ -12,6 +12,7 @@ dependencies = [
     "faker==33.3.0",
     "pyopenssl",
     "cachetools==7.0.6",
+    "httpx==0.28.1",
 ]
 
 [dependency-groups]
