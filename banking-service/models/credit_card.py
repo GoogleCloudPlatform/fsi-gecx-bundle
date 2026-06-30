@@ -27,7 +27,7 @@ class CreditProduct(Base):
     Enforces pricing disclosures (APR, fees) and rewards parameters.
     """
     __tablename__ = "credit_products"
-    __table_args__ = {'schema': 'cards'}
+    __table_args__ = {'schema': 'catalog'}
 
     product_code = Column(String(50), primary_key=True)  # e.g. 'PLATINUM_TRAVEL_REWARDS'
     product_name = Column(String(100), nullable=False)
@@ -57,7 +57,7 @@ class CreditAccount(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     customer_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="RESTRICT"), nullable=False)
-    product_code = Column(String(50), ForeignKey("cards.credit_products.product_code", ondelete="RESTRICT"), nullable=False)
+    product_code = Column(String(50), ForeignKey("catalog.credit_products.product_code", ondelete="RESTRICT"), nullable=False)
     status = Column(String(20), nullable=False, default="ACTIVE") # 'ACTIVE', 'FROZEN', 'DELINQUENT', 'CLOSED'
     
     # Values represented in cents (BIGINT) to guarantee ledger precision

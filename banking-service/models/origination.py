@@ -27,7 +27,7 @@ class DepositProduct(Base):
     Enforces yield/interest pricing (Truth in Savings / Reg DD).
     """
     __tablename__ = "deposit_products"
-    __table_args__ = {'schema': 'ledger'}
+    __table_args__ = {'schema': 'catalog'}
 
     product_code = Column(String(50), primary_key=True)  # e.g. 'SAVINGS_HIGH_YIELD'
     product_name = Column(String(100), nullable=False)
@@ -53,7 +53,7 @@ class Account(Base):
     account_number = Column(String(50), unique=True, nullable=False)
     account_type = Column(String(30), nullable=False)  # 'CREDIT_CARD', 'CHECKING', 'SAVINGS', 'SYSTEM'
     product_name = Column(String(100), nullable=False)
-    product_code = Column(String(50), ForeignKey("ledger.deposit_products.product_code", ondelete="RESTRICT"), nullable=False, default="CHECKING_EVERYDAY")
+    product_code = Column(String(50), ForeignKey("catalog.deposit_products.product_code", ondelete="RESTRICT"), nullable=False, default="CHECKING_EVERYDAY")
     routing_number = Column(String(9), nullable=False, default="021000021")
     status = Column(String(20), nullable=False, default="ACTIVE")
     credit_limit_cents = Column(BigInteger, nullable=False, default=0)

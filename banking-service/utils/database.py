@@ -180,6 +180,7 @@ def attach_sqlite_schemas(dbapi_connection, connection_record):
                     "ATTACH DATABASE 'file:origination_mem?mode=memory&cache=shared' AS origination;",
                     "ATTACH DATABASE 'file:audit_mem?mode=memory&cache=shared' AS audit;",
                     "ATTACH DATABASE 'file:admin_mem?mode=memory&cache=shared' AS admin;",
+                    "ATTACH DATABASE 'file:catalog_mem?mode=memory&cache=shared' AS catalog;",
                 ]
             else:
                 base_prefix = main_file.rsplit(".", 1)[0] if "." in main_file else main_file
@@ -196,6 +197,7 @@ def attach_sqlite_schemas(dbapi_connection, connection_record):
                     f"ATTACH DATABASE '{base_prefix}origination.db' AS origination;",
                     f"ATTACH DATABASE '{base_prefix}audit.db' AS audit;",
                     f"ATTACH DATABASE '{base_prefix}admin.db' AS admin;",
+                    f"ATTACH DATABASE '{base_prefix}catalog.db' AS catalog;",
                 ]
 
             for stmt in stmts:

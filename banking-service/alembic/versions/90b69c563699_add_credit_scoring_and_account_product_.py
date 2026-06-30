@@ -26,8 +26,14 @@ logger = logging.getLogger(__name__)
 def upgrade() -> None:
     conn = op.get_bind()
 
-    # 1. Create table cards.credit_products
-    logger.info("Creating table cards.credit_products")
+    # 0. Create schema catalog
+    logger.info("Creating schema catalog")
+    if conn.dialect.name == "postgresql":
+        with conn.begin_nested():
+            conn.execute(text("CREATE SCHEMA IF NOT EXISTS catalog;"))
+
+    # 1. Create table catalog.credit_products
+    logger.info("Creating table catalog.credit_products")
     with conn.begin_nested():
         op.create_table(
             'credit_products',
@@ -43,11 +49,11 @@ def upgrade() -> None:
             sa.Column('is_active', sa.Boolean(), nullable=False, server_default='true'),
             sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint('product_code'),
-            schema='cards'
+            schema='catalog'
         )
 
-    # 2. Create table ledger.deposit_products
-    logger.info("Creating table ledger.deposit_products")
+    # 2. Create table catalog.deposit_products
+    logger.info("Creating table catalog.deposit_products")
     with conn.begin_nested():
         op.create_table(
             'deposit_products',
@@ -58,7 +64,7 @@ def upgrade() -> None:
             sa.Column('is_active', sa.Boolean(), nullable=False, server_default='true'),
             sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint('product_code'),
-            schema='ledger'
+            schema='catalog'
         )
 
     # 3. Create table kyc.user_credit_profiles
@@ -91,7 +97,8 @@ def upgrade() -> None:
         sa.column('travel_multiplier', sa.Integer),
         sa.column('dining_multiplier', sa.Integer),
         sa.column('annual_fee_cents', sa.BigInteger),
-        sa.column('is_active', sa.Boolean)
+        sa.column('is_active', sa.Boolean),
+        schema='catalog'
     )
     with conn.begin_nested():
         op.bulk_insert(credit_products_table, [
@@ -153,7 +160,8 @@ def upgrade() -> None:
         sa.column('product_name', sa.String),
         sa.column('annual_percentage_yield', sa.Numeric),
         sa.column('monthly_maintenance_fee_cents', sa.BigInteger),
-        sa.column('is_active', sa.Boolean)
+        sa.column('is_active', sa.Boolean),
+        schema='catalog'
     )
     with conn.begin_nested():
         op.bulk_insert(deposit_products_table, [
@@ -192,13 +200,13 @@ def upgrade() -> None:
     with conn.begin_nested():
         op.add_column('accounts', sa.Column('product_code', sa.String(length=50), nullable=False, server_default='CHECKING_EVERYDAY'), schema='ledger')
         op.add_column('accounts', sa.Column('routing_number', sa.String(length=9), nullable=False, server_default='021000021'), schema='ledger')
-        op.create_foreign_key('fk_accounts_deposit_products', 'accounts', 'deposit_products', ['product_code'], ['product_code'], source_schema='ledger', referent_schema='ledger', ondelete='RESTRICT')
+        op.create_foreign_key('fk_accounts_deposit_products', 'accounts', 'deposit_products', ['product_code'], ['product_code'], source_schema='ledger', referent_schema='catalog', ondelete='RESTRICT')
 
     # 7. Add product_code column to cards.credit_accounts
     logger.info("Adding columns to cards.credit_accounts")
     with conn.begin_nested():
         op.add_column('credit_accounts', sa.Column('product_code', sa.String(length=50), nullable=False, server_default='CASHBACK_EVERYDAY'), schema='cards')
-        op.create_foreign_key('fk_credit_accounts_credit_products', 'credit_accounts', 'credit_products', ['product_code'], ['product_code'], source_schema='cards', referent_schema='cards', ondelete='RESTRICT')
+        op.create_foreign_key('fk_credit_accounts_credit_products', 'credit_accounts', 'credit_products', ['product_code'], ['product_code'], source_schema='cards', referent_schema='catalog', ondelete='RESTRICT')
 
     # 8. Alter customer_id type to UUID in cards.credit_accounts and add foreign key
     logger.info("Altering customer_id column in cards.credit_accounts")
@@ -229,5 +237,11 @@ def downgrade() -> None:
     logger.info("Dropping tables")
     with conn.begin_nested():
         op.drop_table('user_credit_profiles', schema='kyc')
-        op.drop_table('deposit_products', schema='ledger')
-        op.drop_table('credit_products', schema='cards')
+        op.drop_table('deposit_products', schema='catalog')
+        op.drop_table('credit_products', schema='catalog')
+
+    # 4. Drop schema catalog
+    logger.info("Dropping schema catalog")
+    if conn.dialect.name == "postgresql":
+        with conn.begin_nested():
+            conn.execute(text("DROP SCHEMA IF EXISTS catalog;"))

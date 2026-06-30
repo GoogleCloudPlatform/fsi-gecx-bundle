@@ -313,7 +313,7 @@ resource "google_bigquery_table" "credit_products" {
 
   biglake_configuration {
     connection_id = google_bigquery_connection.iceberg.name
-    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/credit_products/"
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/catalog/credit_products/"
     file_format   = "PARQUET"
     table_format  = "ICEBERG"
   }
@@ -330,7 +330,7 @@ resource "google_bigquery_table" "deposit_products" {
 
   biglake_configuration {
     connection_id = google_bigquery_connection.iceberg.name
-    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/deposit_products/"
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/catalog/deposit_products/"
     file_format   = "PARQUET"
     table_format  = "ICEBERG"
   }

@@ -172,7 +172,7 @@ def run_migrations_online() -> None:
                 except Exception:
                     project_id = os.getenv("PROJECT_ID")
 
-                schemas = ["identity", "kyc", "ledger", "cards", "operations", "origination", "audit", "admin"]
+                schemas = ["identity", "kyc", "ledger", "cards", "operations", "origination", "audit", "admin", "catalog"]
                 sa_names = ["banking-service-sa", "kyc-service-sa", "ledger-service-sa"]
                 roles = [f"{sa}@{project_id}.iam" if project_id and str(project_id) != "None" else sa for sa in sa_names]
                 if os.getenv("IAM_DBA_USERS"):
@@ -192,7 +192,7 @@ def run_migrations_online() -> None:
                     elif role.startswith("ledger-service-sa"):
                         allowed_schemas = ["ledger", "audit"]
                     elif role.startswith("banking-service-sa"):
-                        allowed_schemas = ["identity", "cards", "operations", "origination", "audit", "admin"]
+                        allowed_schemas = ["identity", "cards", "operations", "origination", "audit", "admin", "catalog"]
                     else:
                         allowed_schemas = schemas
 
