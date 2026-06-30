@@ -117,6 +117,7 @@ def run_migrations_offline() -> None:
             context.execute("CREATE SCHEMA IF NOT EXISTS origination;")
             context.execute("CREATE SCHEMA IF NOT EXISTS audit;")
             context.execute("CREATE SCHEMA IF NOT EXISTS admin;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS catalog;")
         context.run_migrations()
 
 
@@ -144,6 +145,7 @@ def run_migrations_online() -> None:
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS origination;"))
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS audit;"))
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS admin;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS catalog;"))
             connection.execute(sa.text("ALTER TABLE IF EXISTS public.alembic_version SET SCHEMA admin;"))
             connection.commit()
 
@@ -190,7 +192,7 @@ def run_migrations_online() -> None:
                     if role.startswith("kyc-service-sa"):
                         allowed_schemas = ["kyc", "identity"]
                     elif role.startswith("ledger-service-sa"):
-                        allowed_schemas = ["ledger", "audit"]
+                        allowed_schemas = ["ledger", "audit", "catalog"]
                     elif role.startswith("banking-service-sa"):
                         allowed_schemas = ["identity", "cards", "operations", "origination", "audit", "admin", "catalog"]
                     else:

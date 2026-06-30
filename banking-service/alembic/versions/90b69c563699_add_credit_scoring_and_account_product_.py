@@ -201,18 +201,24 @@ def upgrade() -> None:
         op.add_column('accounts', sa.Column('product_code', sa.String(length=50), nullable=False, server_default='CHECKING_EVERYDAY'), schema='ledger')
         op.add_column('accounts', sa.Column('routing_number', sa.String(length=9), nullable=False, server_default='021000021'), schema='ledger')
         op.create_foreign_key('fk_accounts_deposit_products', 'accounts', 'deposit_products', ['product_code'], ['product_code'], source_schema='ledger', referent_schema='catalog', ondelete='RESTRICT')
+        # Index foreign key to avoid full table scans on joins
+        op.create_index('idx_accounts_product_code', 'accounts', ['product_code'], schema='ledger')
 
     # 7. Add product_code column to cards.credit_accounts
     logger.info("Adding columns to cards.credit_accounts")
     with conn.begin_nested():
         op.add_column('credit_accounts', sa.Column('product_code', sa.String(length=50), nullable=False, server_default='CASHBACK_EVERYDAY'), schema='cards')
         op.create_foreign_key('fk_credit_accounts_credit_products', 'credit_accounts', 'credit_products', ['product_code'], ['product_code'], source_schema='cards', referent_schema='catalog', ondelete='RESTRICT')
+        # Index foreign key
+        op.create_index('idx_credit_accounts_product_code', 'credit_accounts', ['product_code'], schema='cards')
 
     # 8. Alter customer_id type to UUID in cards.credit_accounts and add foreign key
     logger.info("Altering customer_id column in cards.credit_accounts")
     with conn.begin_nested():
         op.execute(text('ALTER TABLE cards.credit_accounts ALTER COLUMN customer_id TYPE uuid USING customer_id::uuid;'))
         op.create_foreign_key('fk_credit_accounts_users', 'credit_accounts', 'users', ['customer_id'], ['id'], source_schema='cards', referent_schema='identity', ondelete='RESTRICT')
+        # Index foreign key
+        op.create_index('idx_credit_accounts_customer_id', 'credit_accounts', ['customer_id'], schema='cards')
 
 
 def downgrade() -> None:
@@ -221,6 +227,8 @@ def downgrade() -> None:
     # 1. Drop foreign keys and columns on cards.credit_accounts
     logger.info("Reverting columns in cards.credit_accounts")
     with conn.begin_nested():
+        op.drop_index('idx_credit_accounts_customer_id', table_name='credit_accounts', schema='cards')
+        op.drop_index('idx_credit_accounts_product_code', table_name='credit_accounts', schema='cards')
         op.drop_constraint('fk_credit_accounts_users', 'credit_accounts', schema='cards', type_='foreignkey')
         op.drop_constraint('fk_credit_accounts_credit_products', 'credit_accounts', schema='cards', type_='foreignkey')
         op.drop_column('credit_accounts', 'product_code', schema='cards')
@@ -229,6 +237,7 @@ def downgrade() -> None:
     # 2. Drop foreign keys and columns on ledger.accounts
     logger.info("Reverting columns in ledger.accounts")
     with conn.begin_nested():
+        op.drop_index('idx_accounts_product_code', table_name='accounts', schema='ledger')
         op.drop_constraint('fk_accounts_deposit_products', 'accounts', schema='ledger', type_='foreignkey')
         op.drop_column('accounts', 'routing_number', schema='ledger')
         op.drop_column('accounts', 'product_code', schema='ledger')

@@ -45,6 +45,7 @@ class Account(Base):
     __tablename__ = "accounts"
     __table_args__ = (
         Index("idx_accounts_user_id", "user_id"),
+        Index("idx_accounts_product_code", "product_code"),
         {'schema': 'ledger'},
     )
 

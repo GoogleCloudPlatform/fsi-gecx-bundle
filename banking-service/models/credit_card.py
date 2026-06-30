@@ -53,7 +53,11 @@ class CreditAccount(Base):
     and dynamic available credit in cents.
     """
     __tablename__ = "credit_accounts"
-    __table_args__ = {'schema': 'cards'}
+    __table_args__ = (
+        Index("idx_credit_accounts_customer_id", "customer_id"),
+        Index("idx_credit_accounts_product_code", "product_code"),
+        {'schema': 'cards'},
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     customer_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="RESTRICT"), nullable=False)
