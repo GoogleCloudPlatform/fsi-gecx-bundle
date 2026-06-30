@@ -289,7 +289,7 @@ resource "google_bigquery_table" "unified_applications_view" {
         m.requested_loan_cents AS mortgage_requested_loan_cents,
         m.property_address AS mortgage_property_address,
         m.estimated_value_cents AS mortgage_estimated_value_cents,
-        app.created_at
+        app.started_at
       FROM `${var.project_id}.iceberg_catalog.applications` app
       LEFT JOIN `${var.project_id}.iceberg_catalog.users` u ON app.user_id = u.id
       LEFT JOIN `${var.project_id}.iceberg_catalog.credit_card_applications` cc ON app.id = cc.application_id
