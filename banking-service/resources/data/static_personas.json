@@ -9,7 +9,7 @@
         "credit_score": 785,
         "credit_tier": "PRIME_EXCELLENT",
         "stated_annual_income_cents": 25000000,
-        "credit_limit_cents": 2500000,
+        "credit_limit_cents": 3000000,
         "credit_product": "PLATINUM_TRAVEL_REWARDS",
         "accounts": [
             {"type": "CHECKING", "balance_cents": 4500000, "product_code": "CHECKING_SIGNATURE", "product_name": "Nova Signature Checking"},
@@ -82,8 +82,8 @@
         "ssn": "900-01-0005",
         "credit_score": 750,
         "credit_tier": "PRIME_EXCELLENT",
-        "stated_annual_income_cents": 18500000,
-        "credit_limit_cents": 3500000,
+        "stated_annual_income_cents": 25000000,
+        "credit_limit_cents": 3000000,
         "credit_product": "BUSINESS_ADVANTAGE",
         "accounts": [
             {"type": "CHECKING", "balance_cents": 6000000, "product_code": "BUSINESS_CHECKING", "product_name": "Nova Business Checking"}
@@ -121,7 +121,7 @@
         "credit_score": 830,
         "credit_tier": "PRIME_EXCELLENT",
         "stated_annual_income_cents": 5000000000,
-        "credit_limit_cents": 500000000,
+        "credit_limit_cents": 25000000,
         "credit_product": "PLATINUM_TRAVEL_REWARDS",
         "accounts": [
             {"type": "CHECKING", "balance_cents": 120000000, "product_code": "CHECKING_SIGNATURE", "product_name": "Nova Signature Checking"},
@@ -140,7 +140,7 @@
         "credit_score": 830,
         "credit_tier": "PRIME_EXCELLENT",
         "stated_annual_income_cents": 5000000000,
-        "credit_limit_cents": 500000000,
+        "credit_limit_cents": 25000000,
         "credit_product": "PLATINUM_TRAVEL_REWARDS",
         "accounts": [
             {"type": "CHECKING", "balance_cents": 110000000, "product_code": "CHECKING_SIGNATURE", "product_name": "Nova Signature Checking"},
@@ -158,8 +158,8 @@
         "ssn": "900-10-0003",
         "credit_score": 810,
         "credit_tier": "PRIME_EXCELLENT",
-        "stated_annual_income_cents": 150000000,
-        "credit_limit_cents": 150000000,
+        "stated_annual_income_cents": 250000000,
+        "credit_limit_cents": 10000000,
         "credit_product": "PLATINUM_TRAVEL_REWARDS",
         "accounts": [
             {"type": "CHECKING", "balance_cents": 50000000, "product_code": "CHECKING_SIGNATURE", "product_name": "Nova Signature Checking"},
@@ -177,8 +177,8 @@
         "ssn": "900-10-0004",
         "credit_score": 795,
         "credit_tier": "PRIME_EXCELLENT",
-        "stated_annual_income_cents": 85000000,
-        "credit_limit_cents": 50000000,
+        "stated_annual_income_cents": 120000000,
+        "credit_limit_cents": 7500000,
         "credit_product": "PLATINUM_TRAVEL_REWARDS",
         "accounts": [
             {"type": "CHECKING", "balance_cents": 15000000, "product_code": "CHECKING_SIGNATURE", "product_name": "Nova Signature Checking"},
@@ -215,8 +215,8 @@
         "ssn": "900-10-0006",
         "credit_score": 820,
         "credit_tier": "PRIME_EXCELLENT",
-        "stated_annual_income_cents": 200000000,
-        "credit_limit_cents": 200000000,
+        "stated_annual_income_cents": 350000000,
+        "credit_limit_cents": 10000000,
         "credit_product": "PLATINUM_TRAVEL_REWARDS",
         "accounts": [
             {"type": "CHECKING", "balance_cents": 90000000, "product_code": "CHECKING_SIGNATURE", "product_name": "Nova Signature Checking"},
@@ -234,8 +234,8 @@
         "ssn": "900-10-0007",
         "credit_score": 780,
         "credit_tier": "PRIME_EXCELLENT",
-        "stated_annual_income_cents": 75000000,
-        "credit_limit_cents": 75000000,
+        "stated_annual_income_cents": 120000000,
+        "credit_limit_cents": 5000000,
         "credit_product": "PLATINUM_TRAVEL_REWARDS",
         "accounts": [
             {"type": "CHECKING", "balance_cents": 20000000, "product_code": "CHECKING_SIGNATURE", "product_name": "Nova Signature Checking"},
@@ -254,7 +254,7 @@
         "credit_score": 760,
         "credit_tier": "PRIME_EXCELLENT",
         "stated_annual_income_cents": 50000000,
-        "credit_limit_cents": 50000000,
+        "credit_limit_cents": 5000000,
         "credit_product": "PLATINUM_TRAVEL_REWARDS",
         "accounts": [
             {"type": "CHECKING", "balance_cents": 10000000, "product_code": "CHECKING_SIGNATURE", "product_name": "Nova Signature Checking"},
@@ -273,7 +273,7 @@
         "credit_score": 800,
         "credit_tier": "PRIME_EXCELLENT",
         "stated_annual_income_cents": 95000000,
-        "credit_limit_cents": 25000000,
+        "credit_limit_cents": 10000000,
         "credit_product": "BUSINESS_ADVANTAGE",
         "accounts": [
             {"type": "CHECKING", "balance_cents": 9500000, "product_code": "BUSINESS_CHECKING", "product_name": "Nova Business Checking"},
@@ -310,8 +310,8 @@
         "ssn": "900-10-0011",
         "credit_score": 820,
         "credit_tier": "PRIME_EXCELLENT",
-        "stated_annual_income_cents": 120000000,
-        "credit_limit_cents": 100000000,
+        "stated_annual_income_cents": 250000000,
+        "credit_limit_cents": 15000000,
         "credit_product": "PLATINUM_TRAVEL_REWARDS",
         "accounts": [
             {"type": "CHECKING", "balance_cents": 40000000, "product_code": "CHECKING_SIGNATURE", "product_name": "Nova Signature Checking"},
@@ -330,7 +330,7 @@
         "credit_score": 780,
         "credit_tier": "PRIME_EXCELLENT",
         "stated_annual_income_cents": 60000000,
-        "credit_limit_cents": 15000000,
+        "credit_limit_cents": 5000000,
         "credit_product": "BUSINESS_ADVANTAGE",
         "accounts": [
             {"type": "CHECKING", "balance_cents": 6000000, "product_code": "BUSINESS_CHECKING", "product_name": "Nova Business Checking"},
@@ -348,8 +348,8 @@
         "ssn": "900-10-0013",
         "credit_score": 800,
         "credit_tier": "PRIME_EXCELLENT",
-        "stated_annual_income_cents": 110000000,
-        "credit_limit_cents": 100000000,
+        "stated_annual_income_cents": 150000000,
+        "credit_limit_cents": 7500000,
         "credit_product": "PLATINUM_TRAVEL_REWARDS",
         "accounts": [
             {"type": "CHECKING", "balance_cents": 30000000, "product_code": "CHECKING_SIGNATURE", "product_name": "Nova Signature Checking"},
@@ -367,8 +367,8 @@
         "ssn": "900-10-0014",
         "credit_score": 790,
         "credit_tier": "PRIME_EXCELLENT",
-        "stated_annual_income_cents": 3000000,
-        "credit_limit_cents": 3000000,
+        "stated_annual_income_cents": 25000000,
+        "credit_limit_cents": 2500000,
         "credit_product": "CASHBACK_EVERYDAY",
         "accounts": [
             {"type": "CHECKING", "balance_cents": 4000000, "product_code": "CHECKING_EVERYDAY", "product_name": "Nova Everyday Checking"},
@@ -386,8 +386,8 @@
         "ssn": "900-10-0015",
         "credit_score": 800,
         "credit_tier": "PRIME_EXCELLENT",
-        "stated_annual_income_cents": 3500000,
-        "credit_limit_cents": 3000000,
+        "stated_annual_income_cents": 25000000,
+        "credit_limit_cents": 2500000,
         "credit_product": "CASHBACK_EVERYDAY",
         "accounts": [
             {"type": "CHECKING", "balance_cents": 4500000, "product_code": "CHECKING_EVERYDAY", "product_name": "Nova Everyday Checking"},
