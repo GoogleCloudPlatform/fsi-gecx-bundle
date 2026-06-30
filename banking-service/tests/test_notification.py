@@ -13,15 +13,15 @@
 # limitations under the License.
 
 import uuid
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 
 import pytest
 from httpx import AsyncClient, ASGITransport
 
 from main import app
 from models.secure_messaging import SECURE_MESSAGES_TOPIC
-from routers.artifact import bq_client
-from utils.gcp import get_project_id
+from utils.database import SessionLocal
+from models.identity import User, UserDevice
 
 
 @pytest.fixture
@@ -58,19 +58,14 @@ async def test_register_device_success(mock_subscribe, async_client):
     mock_subscribe.assert_any_call([device_token], "all")
     mock_subscribe.assert_any_call([device_token], SECURE_MESSAGES_TOPIC)
 
-    # Verify directly in BigQuery
-    project_id = get_project_id()
-    query = f"""
-        SELECT *
-        FROM `{project_id}.banking.user_device`
-
-        WHERE user_id = '{unique_id}' AND device_token = '{device_token}'
-    """
-    query_job = bq_client.query(query)
-    results = list(query_job.result())
-    assert len(results) == 1
-    assert results[0].user_id == unique_id
-    assert results[0].device_token == device_token
+    # Verify in SQLAlchemy database
+    db = SessionLocal()
+    user = db.query(User).filter(User.auth_provider_uid == unique_id).first()
+    assert user is not None
+    devices = db.query(UserDevice).filter(UserDevice.user_id == user.id, UserDevice.device_token == device_token).all()
+    assert len(devices) == 1
+    assert devices[0].device_token == device_token
+    db.close()
 
 
 @pytest.mark.asyncio
@@ -112,17 +107,13 @@ async def test_unregister_device_success(mock_unsubscribe, mock_subscribe, async
     mock_unsubscribe.assert_any_call([device_token], "all")
     mock_unsubscribe.assert_any_call([device_token], SECURE_MESSAGES_TOPIC)
 
-    # Verify deleted in BigQuery
-    project_id = get_project_id()
-    query = f"""
-        SELECT *
-        FROM `{project_id}.banking.user_device`
-
-        WHERE user_id = '{unique_id}' AND device_token = '{device_token}'
-    """
-    query_job = bq_client.query(query)
-    results = list(query_job.result())
-    assert len(results) == 0
+    # Verify deleted in SQLAlchemy database
+    db = SessionLocal()
+    user = db.query(User).filter(User.auth_provider_uid == unique_id).first()
+    if user:
+        devices = db.query(UserDevice).filter(UserDevice.user_id == user.id, UserDevice.device_token == device_token).all()
+        assert len(devices) == 0
+    db.close()
 
 
 @pytest.mark.asyncio
@@ -159,7 +150,7 @@ async def test_send_notification_topic_success(mock_send, async_client):
 
 
 @pytest.mark.asyncio
-@patch("routers.notification.get_device_tokens_for_customer")
+@patch("routers.notification.identity_repo.get_device_tokens_for_customer")
 @patch("routers.notification.messaging.send_each_for_multicast")
 async def test_send_notification_customer_success(mock_send_multicast, mock_get_tokens, async_client):
     mock_get_tokens.return_value = ["token_abc", "token_xyz"]
@@ -189,7 +180,7 @@ async def test_send_notification_customer_success(mock_send_multicast, mock_get_
     assert response.json()["sent_count"] == 2
     assert response.json()["failure_count"] == 0
 
-    mock_get_tokens.assert_called_once_with(target_user_id)
+    mock_get_tokens.assert_called_once_with(ANY, target_user_id)
     mock_send_multicast.assert_called_once()
     multicast_arg = mock_send_multicast.call_args[0][0]
     assert multicast_arg.notification is None
@@ -201,7 +192,7 @@ async def test_send_notification_customer_success(mock_send_multicast, mock_get_
 
 
 @pytest.mark.asyncio
-@patch("routers.notification.get_device_tokens_for_customer")
+@patch("routers.notification.identity_repo.get_device_tokens_for_customer")
 async def test_send_notification_customer_no_devices(mock_get_tokens, async_client):
     mock_get_tokens.return_value = []
 
@@ -224,4 +215,4 @@ async def test_send_notification_customer_no_devices(mock_get_tokens, async_clie
     assert response.json()["sent_count"] == 0
     assert "No registered devices found" in response.json()["message"]
 
-    mock_get_tokens.assert_called_once_with(target_user_id)
+    mock_get_tokens.assert_called_once_with(ANY, target_user_id)

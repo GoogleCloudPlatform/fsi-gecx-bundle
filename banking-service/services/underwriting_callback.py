@@ -17,13 +17,23 @@ import logging
 import httpx
 import google.auth
 from google.auth.transport.requests import Request
-from google.cloud import bigquery
+from google.cloud import bigquery  # noqa: F401
 from cachetools import TTLCache
 from utils.gcp import get_project_id
-from routers.secure_messaging import create_message
+from services.messaging import MessagingService
+from utils.database import SessionLocal
 from models.secure_messaging import SecureMessageCreateRequest, SENDER_TYPE_BANK
 
 logger = logging.getLogger(__name__)
+
+
+async def create_message(request, token=None):
+    db = SessionLocal()
+    try:
+        service = MessagingService(db)
+        return service.create_message(request, token)
+    finally:
+        db.close()
 
 DIALOGFLOW_AGENT_ID = os.getenv("DIALOGFLOW_AGENT_ID", "e0b952c1-280d-41d0-8da5-46db4b0e6ad9")
 DIALOGFLOW_LOCATION = os.getenv("DIALOGFLOW_LOCATION", "us-central1")
@@ -171,34 +181,19 @@ async def trigger_session_propagation_flow(
     """
     logger.info(f"Resolving session mapping for underwriting override callback. Artifact ID: {artifact_id}")
     
-    bq_client = bigquery.Client()
-    query = f"""
-        SELECT 
-            JSON_VALUE(audit_metadata.session_id) AS session_id,
-            customer_id,
-            claimed_artifact_type
-        FROM `{table_ref}`
-        WHERE artifact_id = @artifact_id
-        LIMIT 1
-    """
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("artifact_id", "STRING", artifact_id)
-        ]
-    )
-    
+    from utils.database import SessionLocal
+    from models.origination import ApplicationArtifact
+    import json
+    db = SessionLocal()
     try:
-        query_job = bq_client.query(query, job_config=job_config)
-        results = list(query_job.result())
-        
-        if not results:
-            logger.warning(f"Artifact not found in database: {artifact_id}. Skipping callback.")
+        art = db.query(ApplicationArtifact).filter(ApplicationArtifact.artifact_id == artifact_id).first()
+        if not art:
+            logger.warning(f"Artifact not found in PostgreSQL database: {artifact_id}. Skipping callback.")
             return False
-            
-        row = results[0]
-        customer_id = getattr(row, "customer_id", None)
-        claimed_artifact_type = getattr(row, "claimed_artifact_type", "W-2")
-        session_id = getattr(row, "session_id", None)
+        customer_id = str(art.customer_id) if art.customer_id else None
+        claimed_artifact_type = art.claimed_artifact_type or "W-2"
+        audit_meta = json.loads(art.audit_metadata) if art.audit_metadata else {}
+        session_id = audit_meta.get("session_id")
         
         # Generate secure support message and push notification for the customer
         if customer_id:
@@ -218,3 +213,5 @@ async def trigger_session_propagation_flow(
     except Exception as e:
         logger.error(f"Error executing underwriting override callback: {e}")
         return False
+    finally:
+        db.close()

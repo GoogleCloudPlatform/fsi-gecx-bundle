@@ -22,8 +22,8 @@ from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.agents.live_request_queue import LiveRequestQueue
 from google.genai import types
 
-from agent.patch_adk import apply_patch
-apply_patch()
+# from agent.patch_adk import apply_patch
+# apply_patch()
 
 class HandoffException(Exception):
     pass
@@ -312,20 +312,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 
     register_event_callback(on_agent_event)
 
-    user_stt_queue = asyncio.Queue()
-    agent_stt_queue = asyncio.Queue()
+    user_stt_queue = None
+    agent_stt_queue = None
     user_stt_task = None
     agent_stt_task = None
-    
-    if mode == "video":
-        from google.cloud import speech
-        stt_client = speech.SpeechAsyncClient()
-        user_stt_task = asyncio.create_task(
-            run_stt_worker(stt_client, user_stt_queue, 16000, "user", on_agent_event)
-        )
-        agent_stt_task = asyncio.create_task(
-            run_stt_worker(stt_client, agent_stt_queue, 24000, "agent", on_agent_event)
-        )
 
     # Configure ADK streaming for native audio
     # Configure ADK streaming modalities dynamically
@@ -441,11 +431,9 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 # Resample the incoming frame
                 resampled_frames = resampler.push(frame)
                 for res_frame in resampled_frames:
-                    # Check if the agent is currently processing a tool call to drop user mic buffers
-                    session = await session_service.get_session(app_name="credit-support-agent", user_id=user_id, session_id=session_id)
-                    is_processing_tool = session.state.get("is_processing_tool", False) if session else False
-                    if is_processing_tool:
-                        logger.debug("Muting microphone audio: tool execution in progress.")
+                    # Check if the agent is currently processing a tool call or shutting down to drop user mic buffers
+                    if agent_module.is_processing_tool or agent_module.session_should_end:
+                        logger.debug("Muting microphone audio: tool execution or session shutdown in progress.")
                         continue
 
                     # Convert to Float32 array for VAD
@@ -625,6 +613,16 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         "author": "agent",
                         "text": event.output_transcription.text
                     })
+                    if agent_module.session_should_end:
+                        logger.info("Session end requested via end_consultation tool. Initiating shutdown after farewell.")
+                        agent_module.session_should_end = False  # Reset flag
+                        on_agent_event({
+                            "type": "SESSION_END"
+                        })
+                        async def delayed_disconnect():
+                            await asyncio.sleep(5.0)  # Give time for speech output and UI transition
+                            disconnect_event.set()
+                        asyncio.create_task(delayed_disconnect())
 
                 # Log any final responses or tool call events for tracking
                 if event.is_final_response():

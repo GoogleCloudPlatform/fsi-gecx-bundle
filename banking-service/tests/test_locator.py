@@ -40,8 +40,8 @@ async def test_locator_by_coordinates(async_client, monkeypatch):
     ]
 
     monkeypatch.setattr(
-        "routers.locator.find_nearest_locations",
-        lambda lat, lng, location_type: mock_locations
+        "services.locator.identity_repo.find_nearest_locations",
+        lambda db, lat, lng, location_type: mock_locations
     )
 
     response = await async_client.get("/locator?lat=40.7128&lng=-74.0060&type=ALL")
@@ -73,10 +73,10 @@ async def test_locator_by_address_geocoded(async_client, monkeypatch):
     async def mock_geocode(address):
         return 40.7580, -73.9855
 
-    monkeypatch.setattr("routers.locator.geocode_address", mock_geocode)
+    monkeypatch.setattr("services.locator.geocode_address", mock_geocode)
     monkeypatch.setattr(
-        "routers.locator.find_nearest_locations",
-        lambda lat, lng, location_type: mock_locations
+        "services.locator.identity_repo.find_nearest_locations",
+        lambda db, lat, lng, location_type: mock_locations
     )
 
     response = await async_client.get("/locator?address=Times%20Square&type=ATM")
@@ -108,10 +108,10 @@ async def test_locator_by_address_fallback(async_client, monkeypatch):
     async def mock_geocode(address):
         return None
 
-    monkeypatch.setattr("routers.locator.geocode_address", mock_geocode)
+    monkeypatch.setattr("services.locator.geocode_address", mock_geocode)
     monkeypatch.setattr(
-        "routers.locator.search_locations_by_text",
-        lambda text, location_type: mock_locations
+        "services.locator.identity_repo.search_locations_by_text",
+        lambda db, text, location_type: mock_locations
     )
 
     response = await async_client.get("/locator?address=Market%20St&type=BRANCH")

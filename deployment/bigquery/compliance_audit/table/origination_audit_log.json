@@ -1,0 +1,50 @@
+[
+  {
+    "name": "event_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unique UUID of the outbox audit event."
+  },
+  {
+    "name": "event_type",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Type of origination event (e.g. APPLICATION_CREATED, UNDERWRITING_OVERRIDE_APPLIED)."
+  },
+  {
+    "name": "application_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Associated loan or onboarding application ID."
+  },
+  {
+    "name": "artifact_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Associated document artifact ID."
+  },
+  {
+    "name": "underwriter_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "ID of loan officer executing override."
+  },
+  {
+    "name": "decision",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Underwriting decision outcome."
+  },
+  {
+    "name": "payload",
+    "type": "JSON",
+    "mode": "NULLABLE",
+    "description": "Strongly typed native JSON structured event payload."
+  },
+  {
+    "name": "created_at",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Event creation timestamp for daily partitioning."
+  }
+]

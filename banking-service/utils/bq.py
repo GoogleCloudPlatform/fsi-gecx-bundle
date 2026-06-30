@@ -22,9 +22,12 @@ from utils.gcp import get_project_id
 
 from pathlib import Path
 
+import warnings
+
 PROJECT_ID = get_project_id()
 
 logger = logging.getLogger(__name__)
+warnings.warn("utils.bq operational DML methods are deprecated and replaced by repository layer sessions (Story 2.2).", DeprecationWarning, stacklevel=2)
 
 SQL_DIR = Path(__file__).resolve().parent.parent / "resources" / "sql"
 

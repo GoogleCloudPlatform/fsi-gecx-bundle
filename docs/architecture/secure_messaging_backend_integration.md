@@ -6,7 +6,7 @@ This document details the system architecture, event flow, security framework, a
 
 ## 📐 1. System Topology & Event Flow
 
-The secure messaging system uses an asynchronous, real-time push architecture to enable two-way support conversations between customers and bank agents. It synchronizes records in a BigQuery database while dispatching low-latency push notifications via **Firebase Cloud Messaging (FCM)**.
+The secure messaging system uses an asynchronous, real-time push architecture to enable two-way support conversations between customers and bank agents. It synchronizes records in Cloud SQL PostgreSQL while dispatching low-latency push notifications via **Firebase Cloud Messaging (FCM)**.
 
 ```mermaid
 sequenceDiagram
@@ -14,7 +14,7 @@ sequenceDiagram
     actor Customer as Customer (Browser)
     participant API as banking-service (Cloud Run)
     participant FCM as Firebase Cloud Messaging (FCM)
-    participant BQ as BigQuery Database
+    participant PG as Cloud SQL (PostgreSQL)
     actor Agent as Support Agent (Browser)
 
     %% Phase 1: Device Registration
@@ -24,7 +24,7 @@ sequenceDiagram
         Customer->>FCM: Request FCM Registration Token
         FCM-->>Customer: Return FCM Device Token
         Customer->>API: POST /notification/device (Send token, authenticated)
-        API->>BQ: Save token in banking.user_device (Merge logic)
+        API->>PG: Save token in identity.user_devices (Merge logic)
         API->>FCM: Subscribe token to topics ("all" and "all_secure_messages")
         FCM-->>API: Subscription Confirmation
         API-->>Customer: HTTP 200 (Success)
@@ -33,7 +33,7 @@ sequenceDiagram
     %% Phase 2: Customer sends message
     Note over Customer, Agent: 2. Customer Sends Support Message
     Customer->>API: POST /secure-messaging (message, thread_id, category)
-    API->>BQ: Insert message into banking.user_secure_message (DML)
+    API->>PG: Insert message into identity.user_secure_messages (ORM)
     API->>FCM: Send topic message to "all_secure_messages" (silent data payload)
     FCM-->>Agent: Deliver event to active Admin console
     Agent->>API: GET /secure-messaging/admin/customer/{user_id}
@@ -43,9 +43,9 @@ sequenceDiagram
     %% Phase 3: Agent replies
     Note over Agent, Customer: 3. Agent Replies to Customer
     Agent->>API: POST /secure-messaging (sender="support", user_id, message)
-    API->>BQ: Insert message into banking.user_secure_message (DML)
-    API->>BQ: Query user_device for user_id's device tokens
-    BQ-->>API: Return customer device tokens
+    API->>PG: Insert message into identity.user_secure_messages (ORM)
+    API->>PG: Query identity.user_devices for user_id's device tokens
+    PG-->>API: Return customer device tokens
     alt Device Tokens Exist
         API->>FCM: Send MulticastMessage (data payload & visual notification block)
         FCM-->>Customer: Deliver push notification to customer device(s)
@@ -86,11 +86,11 @@ The secure messaging module integrates strict security compliance mechanisms to 
 
 ---
 
-## 💾 4. Database Schema & Storage (BigQuery)
+## 💾 4. Database Schema & Storage (Cloud SQL PostgreSQL)
 
-All messages, threads, and device registrations are stored persistently in Google Cloud BigQuery.
+All messages, threads, and device registrations are stored persistently in Google Cloud SQL PostgreSQL under the `identity` schema.
 
-### A. `banking.user_secure_message`
+### A. `identity.user_secure_messages`
 Stores the records of individual messages and thread properties.
 
 | Field Name | Type | Description |
@@ -106,7 +106,7 @@ Stores the records of individual messages and thread properties.
 | `is_user_read` | BOOLEAN | Indicates if the customer has read the message |
 | `is_agent_read` | BOOLEAN | Indicates if a support agent has read the message |
 
-### B. `banking.user_device`
+### B. `identity.user_devices`
 Maps active user IDs to their registered Firebase Cloud Messaging tokens.
 
 | Field Name | Type | Description |
@@ -125,4 +125,4 @@ Maps active user IDs to their registered Firebase Cloud Messaging tokens.
 
 ### B. Multicast Notification Failures and Token Cleanup
 * **The Pitfall**: Customers registering multiple devices (e.g., phone, laptop) will have multiple active entries in the `user_device` table. Sending individual messages in a loop blocking on failures creates latency.
-* **The Solution**: The backend utilizes `messaging.send_each_for_multicast()` in [secure_messaging.py](../../banking-service/routers/secure_messaging.py) to deliver push notifications to all registered tokens concurrently. The API response returns a breakdown of success/failure counts, allowing developers to clean up expired or invalid device tokens from BigQuery in subsequent batches.
+* **The Solution**: The backend utilizes `messaging.send_each_for_multicast()` in [secure_messaging.py](../../banking-service/routers/secure_messaging.py) to deliver push notifications to all registered tokens concurrently. The API response returns a breakdown of success/failure counts, allowing developers to clean up expired or invalid device tokens from PostgreSQL in subsequent batches.

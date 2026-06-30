@@ -235,8 +235,8 @@ export async function blockCreditCard(cardToken, targetCustomerId = null) {
   return res.data;
 }
 
-export async function resetDatabase() {
-  const res = await api.post('/internal/debug/reset-db');
+export async function resetDatabase(purgeAuditLogs = false) {
+  const res = await api.post(`/internal/debug/reset-db?purge_audit_logs=${purgeAuditLogs}`);
   return res.data;
 }
 
@@ -257,6 +257,16 @@ export async function getLocations({ lat, lng, address, type }) {
   if (address) params.address = address;
   if (type) params.type = type;
   const res = await api.get('/locator', { params });
+  return res.data;
+}
+
+export async function createDepositAccount(depositData) {
+  const idempotencyKey = 'IDEMP-UI-' + Math.random().toString(36).substring(2, 15) + '-' + Date.now();
+  const res = await api.post('/api/v1/accounts/deposit', depositData, {
+    headers: {
+      'X-Idempotency-Key': idempotencyKey
+    }
+  });
   return res.data;
 }
 

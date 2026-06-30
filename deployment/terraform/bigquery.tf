@@ -12,90 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-resource "google_bigquery_dataset" "banking" {
-  dataset_id                  = "banking"
-  friendly_name               = "Banking Dataset"
-  description                 = "Dataset for banking universal profile, applications, and artifacts"
-  location                    = "US"
-  default_table_expiration_ms = null
-}
-
-resource "google_bigquery_table" "user" {
-  dataset_id = google_bigquery_dataset.banking.dataset_id
-  table_id   = "user"
-
-  clustering = ["user_id", "last_name"]
-
-  schema = file("${path.module}/../bigquery/banking/table/user.json")
-
-  deletion_protection = false
-}
-
-resource "google_bigquery_table" "application" {
-  dataset_id = google_bigquery_dataset.banking.dataset_id
-  table_id   = "application"
-
-  time_partitioning {
-    type  = "DAY"
-    field = "started_at"
-  }
-
-  clustering = ["user_id", "application_status"]
-
-  schema = file("${path.module}/../bigquery/banking/table/application.json")
-
-  deletion_protection = false
-}
-
-resource "google_bigquery_table" "application_artifact" {
-  dataset_id = google_bigquery_dataset.banking.dataset_id
-  table_id   = "application_artifact"
-
-  clustering = ["application_id", "status"]
-
-  schema = templatefile("${path.module}/../bigquery/banking/table/application_artifact.json.tftpl", {
-    policy_tag_id = google_data_catalog_policy_tag.sensitive_npi.id
-  })
-
-  encryption_configuration {
-    kms_key_name = google_kms_crypto_key.banking_cmek_key.id
-  }
-
-  deletion_protection = false
-  depends_on          = [google_kms_crypto_key_iam_member.bq_kms_binding]
-}
-
-resource "google_bigquery_table" "user_device" {
-  dataset_id = google_bigquery_dataset.banking.dataset_id
-  table_id   = "user_device"
-
-  schema = file("${path.module}/../bigquery/banking/table/user_device.json")
-
-  deletion_protection = false
-}
-
-resource "google_bigquery_table" "user_secure_message" {
-  dataset_id = google_bigquery_dataset.banking.dataset_id
-  table_id   = "user_secure_message"
-
-  clustering = ["user_id", "category"]
-
-  schema = file("${path.module}/../bigquery/banking/table/user_secure_message.json")
-
-  deletion_protection = false
-}
-
-resource "google_bigquery_table" "retail_location" {
-  dataset_id = google_bigquery_dataset.banking.dataset_id
-  table_id   = "retail_location"
-
-  clustering = ["type"]
-
-  schema = file("${path.module}/../bigquery/banking/table/retail_location.json")
-
-  deletion_protection = false
-}
-
 resource "google_bigquery_connection" "banking_data_postgres_connection" {
   connection_id = "banking-postgres-connection"
   friendly_name = "banking-postgres-connection"
@@ -120,4 +36,57 @@ resource "google_bigquery_connection" "banking_data_spanner_connection" {
   cloud_spanner {
     database = "projects/${var.project_id}/instances/${google_spanner_instance.banking_data.name}/databases/${google_spanner_database.banking.name}"
   }
+}
+
+resource "google_bigquery_dataset" "compliance_audit" {
+  dataset_id                  = "compliance_audit"
+  friendly_name               = "Compliance Audit Dataset"
+  description                 = "Domain-segmented FSI compliance audit logs with mandatory partitioning"
+  location                    = "US"
+  default_table_expiration_ms = null
+}
+
+resource "google_bigquery_table" "origination_audit_log" {
+  dataset_id          = google_bigquery_dataset.compliance_audit.dataset_id
+  table_id            = "origination_audit_log"
+  deletion_protection = false
+
+  require_partition_filter = true
+  time_partitioning {
+    type  = "DAY"
+    field = "created_at"
+  }
+
+  clustering = ["application_id", "event_type"]
+  schema     = file("${path.module}/../bigquery/compliance_audit/table/origination_audit_log.json")
+}
+
+resource "google_bigquery_table" "financial_ledger_audit_log" {
+  dataset_id          = google_bigquery_dataset.compliance_audit.dataset_id
+  table_id            = "financial_ledger_audit_log"
+  deletion_protection = false
+
+  require_partition_filter = true
+  time_partitioning {
+    type  = "MONTH"
+    field = "created_at"
+  }
+
+  clustering = ["account_id", "event_type"]
+  schema     = file("${path.module}/../bigquery/compliance_audit/table/financial_ledger_audit_log.json")
+}
+
+resource "google_bigquery_table" "identity_access_audit_log" {
+  dataset_id          = google_bigquery_dataset.compliance_audit.dataset_id
+  table_id            = "identity_access_audit_log"
+  deletion_protection = false
+
+  require_partition_filter = true
+  time_partitioning {
+    type  = "DAY"
+    field = "created_at"
+  }
+
+  clustering = ["user_id", "event_type"]
+  schema     = file("${path.module}/../bigquery/compliance_audit/table/identity_access_audit_log.json")
 }

@@ -83,6 +83,11 @@ resource "google_cloud_run_v2_service" "banking_service" {
       }
 
       env {
+        name  = "PUBSUB_TOPIC_AUDIT"
+        value = google_pubsub_topic.audit_events.name
+      }
+
+      env {
         name  = "DOCAI_SPLITTER_PROCESSOR_ID"
         value = google_document_ai_processor.master_splitter.id
       }

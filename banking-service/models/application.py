@@ -26,8 +26,19 @@ class ProductType(str, Enum):
 
 
 class ProductCategory(str, Enum):
+    MORTGAGE = "MORTGAGE"
+    CREDIT_CARD = "CREDIT_CARD"
+    DEPOSIT = "DEPOSIT"
+    LOAN = "LOAN"
+    CARD = "CARD"
+    GENERAL = "GENERAL"
+    # Backwards compatibility aliases for lower-case attribute access if any
+    mortgage = "MORTGAGE"
+    credit_card = "CREDIT_CARD"
+    deposit = "DEPOSIT"
     loan = "LOAN"
     card = "CARD"
+    general = "GENERAL"
 
 
 class ApplicationCreateRequest(BaseModel):

@@ -10,8 +10,12 @@ import {
   Home,
   HelpCircle
 } from 'lucide-react';
-function SavingsAccountsView() {
+import { useSettings } from '../context/SettingsContext.jsx';
+import AccountOpeningModal from './AccountOpeningModal.jsx';
 
+function SavingsAccountsView() {
+  const { brandColorFrom = '#10b981', brandColorTo = '#059669' } = useSettings();
+  const [openingAccount, setOpeningAccount] = useState(null);
   const [premierBalance, setPremierBalance] = useState(25000);
   const [mortgageBalance, setMortgageBalance] = useState(2500);
 
@@ -296,6 +300,7 @@ function SavingsAccountsView() {
                   <th className="p-5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Min. to Open</th>
                   <th className="p-5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Base APY</th>
                   <th className="p-5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Key Details</th>
+                  <th className="p-5 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 text-sm">
@@ -319,6 +324,15 @@ function SavingsAccountsView() {
                     </td>
                     <td className="p-5 text-xs text-slate-500 leading-relaxed max-w-sm">
                       {prod.details}
+                    </td>
+                    <td className="p-5 text-right">
+                      <button
+                        onClick={() => setOpeningAccount(prod)}
+                        className="px-4 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-xs transition-colors flex items-center gap-1 ml-auto"
+                      >
+                        <span>Open</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -440,6 +454,15 @@ function SavingsAccountsView() {
           </div>
         </div>
       </section>
+
+      {/* Shared Account Opening Integration Modal */}
+      <AccountOpeningModal
+        openingAccount={openingAccount}
+        onClose={() => setOpeningAccount(null)}
+        accountType="SAVINGS"
+        brandColorFrom={brandColorFrom}
+        brandColorTo={brandColorTo}
+      />
     </div>
   );
 }

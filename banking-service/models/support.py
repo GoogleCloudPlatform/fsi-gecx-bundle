@@ -1,12 +1,13 @@
-import uuid
 from sqlalchemy import Column, String, DateTime, JSON
+from utils.database import UniversalUUID as UUID, generate_uuid
 from datetime import datetime, timezone
 from utils.database import Base
 
 class Escalation(Base):
     __tablename__ = "support_escalations"
+    __table_args__ = {'schema': 'operations'}
     
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     room_name = Column(String, nullable=False)
     customer_id = Column(String, nullable=False)
     reason = Column(String, nullable=True)

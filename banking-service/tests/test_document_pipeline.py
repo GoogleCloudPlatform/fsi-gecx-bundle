@@ -75,16 +75,15 @@ def test_process_document_header_buffer_overflow():
     response = client.post("/internal/process-document", json={"name": "file123.pdf", "bucket": "bucket"}, headers=headers)
     assert response.status_code == 422 # FastAPI validation error # FastAPI validation error
 
-@patch("routers.internal.bq_client")
-def test_process_document_idempotency_skip(mock_bq):
+@patch("utils.database.SessionLocal")
+def test_process_document_idempotency_skip(mock_session_local):
     app.dependency_overrides[verify_eventarc_oidc_token] = mock_valid_oidc
     
-    # Enforce strict autospec on BigQuery Client to catch signature breaking changes
-    mock_query_job = MagicMock()
-    mock_row = MagicMock()
-    mock_row.status = "PROCESSED"
-    mock_query_job.result.return_value = [mock_row]
-    mock_bq.query.return_value = mock_query_job
+    mock_art = MagicMock()
+    mock_art.status = "PROCESSED"
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter.return_value.first.return_value = mock_art
+    mock_session_local.return_value = mock_db
     
     headers = {
         "Authorization": MOCK_AUTH_HEADER,
@@ -96,16 +95,16 @@ def test_process_document_idempotency_skip(mock_bq):
     assert response.status_code == 200
     assert "Idempotent success" in response.json()["message"]
 
-@patch("routers.internal.bq_client")
+@patch("utils.database.SessionLocal")
 @pytest.mark.asyncio
-async def test_process_document_concurrent_thread_safety(mock_bq):
+async def test_process_document_concurrent_thread_safety(mock_session_local):
     app.dependency_overrides[verify_eventarc_oidc_token] = mock_valid_oidc
     
-    mock_query_job = MagicMock()
-    mock_row = MagicMock()
-    mock_row.status = "PROCESSED"
-    mock_query_job.result.return_value = [mock_row]
-    mock_bq.query.return_value = mock_query_job
+    mock_art = MagicMock()
+    mock_art.status = "PROCESSED"
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter.return_value.first.return_value = mock_art
+    mock_session_local.return_value = mock_db
     
     headers = {
         "Authorization": MOCK_AUTH_HEADER,

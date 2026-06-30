@@ -26,6 +26,10 @@ from utils.database import Base, DATABASE_URL  # noqa: E402
 import models.credit_card  # noqa: E402, F401
 import models.support  # noqa: E402, F401
 import models.settings  # noqa: E402, F401
+import models.identity  # noqa: E402, F401
+import models.origination  # noqa: E402, F401
+import models.audit  # noqa: E402, F401
+import models.kyc  # noqa: E402, F401
 
 # Set target metadata for alembic schema scanning
 target_metadata = Base.metadata
@@ -47,6 +51,37 @@ except Exception:
 # ... etc.
 
 
+def compare_type(context, inspected_column, metadata_column, inspected_type, metadata_type):
+    if context.dialect.name == "sqlite":
+        return False
+    return None
+
+
+def process_revision_directives(context, revision, directives):
+    if context.dialect.name == "sqlite":
+        script = directives[0]
+        if hasattr(script, "upgrade_ops") and hasattr(script.upgrade_ops, "ops"):
+            new_ops = []
+            for op in script.upgrade_ops.ops:
+                if op.__class__.__name__ == "ModifyTableOps":
+                    op.ops = [sub for sub in op.ops if sub.__class__.__name__ != "CreateForeignKeyOp"]
+                    if op.ops:
+                        new_ops.append(op)
+                elif op.__class__.__name__ != "CreateForeignKeyOp":
+                    new_ops.append(op)
+            script.upgrade_ops.ops = new_ops
+        if hasattr(script, "downgrade_ops") and hasattr(script.downgrade_ops, "ops"):
+            new_ops = []
+            for op in script.downgrade_ops.ops:
+                if op.__class__.__name__ == "ModifyTableOps":
+                    op.ops = [sub for sub in op.ops if sub.__class__.__name__ != "DropConstraintOp"]
+                    if op.ops:
+                        new_ops.append(op)
+                elif op.__class__.__name__ != "DropConstraintOp":
+                    new_ops.append(op)
+            script.downgrade_ops.ops = new_ops
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -66,9 +101,22 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_schemas=True,
+        compare_foreign_keys=False,
+        process_revision_directives=process_revision_directives,
+        version_table_schema="admin" if (url and url.startswith("postgresql")) else None,
     )
 
     with context.begin_transaction():
+        if url and url.startswith("postgresql"):
+            context.execute("CREATE SCHEMA IF NOT EXISTS identity;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS kyc;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS ledger;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS cards;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS operations;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS origination;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS audit;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS admin;")
         context.run_migrations()
 
 
@@ -87,8 +135,25 @@ def run_migrations_online() -> None:
         # Detect if we are deploying against PostgreSQL to prevent horizontal scaling lock contention
         is_postgres = connection.dialect.name == "postgresql"
 
+        if is_postgres:
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS identity;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS kyc;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS ledger;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS cards;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS operations;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS origination;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS audit;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS admin;"))
+            connection.execute(sa.text("ALTER TABLE IF EXISTS public.alembic_version SET SCHEMA admin;"))
+            connection.commit()
+
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            include_schemas=True,
+            compare_foreign_keys=False,
+            process_revision_directives=process_revision_directives,
+            version_table_schema="admin" if is_postgres else None,
         )
 
         with context.begin_transaction():
@@ -96,6 +161,62 @@ def run_migrations_online() -> None:
                 logger.info("Acquiring transactional advisory migration lock (ID: 592837410)...")
                 connection.execute(sa.text("SELECT pg_advisory_xact_lock(592837410);"))
             context.run_migrations()
+
+            if is_postgres and os.getenv("SKIP_IAM_GRANTS") != "true":
+                logger.info("Applying programmatic post-migration RBAC permission grants across all schemas...")
+                try:
+                    from utils.gcp import get_project_id
+                    project_id = get_project_id()
+                    if str(project_id) == "None":
+                        project_id = os.getenv("PROJECT_ID")
+                except Exception:
+                    project_id = os.getenv("PROJECT_ID")
+
+                schemas = ["identity", "kyc", "ledger", "cards", "operations", "origination", "audit", "admin"]
+                sa_names = ["banking-service-sa", "kyc-service-sa", "ledger-service-sa"]
+                roles = [f"{sa}@{project_id}.iam" if project_id and str(project_id) != "None" else sa for sa in sa_names]
+                if os.getenv("IAM_DBA_USERS"):
+                    roles.extend([u.strip() for u in os.getenv("IAM_DBA_USERS").split(",") if u.strip()])
+
+                for role in roles:
+                    try:
+                        with connection.begin_nested():
+                            stmt = f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = \'{role}\') THEN CREATE ROLE "{role}" NOLOGIN; END IF; END $$;'
+                            connection.execute(sa.text(stmt))
+                    except Exception as role_err:
+                        logger.debug(f"Notice: Could not bootstrap role {role}: {role_err}")
+
+                for role in roles:
+                    if role.startswith("kyc-service-sa"):
+                        allowed_schemas = ["kyc", "identity"]
+                    elif role.startswith("ledger-service-sa"):
+                        allowed_schemas = ["ledger", "audit"]
+                    elif role.startswith("banking-service-sa"):
+                        allowed_schemas = ["identity", "cards", "operations", "origination", "audit", "admin"]
+                    else:
+                        allowed_schemas = schemas
+
+                    for s in allowed_schemas:
+                        try:
+                            with connection.begin_nested():
+                                connection.execute(sa.text(f'GRANT USAGE ON SCHEMA {s} TO "{role}";'))
+                                connection.execute(sa.text(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {s} TO "{role}";'))
+                                connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{role}";'))
+                        except Exception as grant_err:
+                            logger.debug(f"Notice: Could not grant permissions on {s} to {role}: {grant_err}")
+
+                    if "ledger" in allowed_schemas:
+                        try:
+                            with connection.begin_nested():
+                                connection.execute(sa.text(f'REVOKE UPDATE, DELETE ON TABLE ledger.account_ledger FROM "{role}";'))
+                        except Exception as rev_err:
+                            logger.debug(f"Notice: Could not revoke immutable ledger permissions from {role}: {rev_err}")
+
+                try:
+                    with connection.begin_nested():
+                        connection.execute(sa.text('REVOKE UPDATE, DELETE ON TABLE ledger.account_ledger FROM PUBLIC;'))
+                except Exception as rev_err:
+                    logger.debug(f"Notice: Could not revoke immutable ledger permissions from PUBLIC: {rev_err}")
 
 
 if context.is_offline_mode():

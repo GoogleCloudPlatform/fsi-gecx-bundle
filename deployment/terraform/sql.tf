@@ -130,6 +130,18 @@ resource "google_sql_user" "banking_service_sa_iam_user" {
   type     = "CLOUD_IAM_SERVICE_ACCOUNT"
 }
 
+resource "google_sql_user" "ledger_service_iam_user" {
+  name     = replace(google_service_account.ledger_service_account.email, ".gserviceaccount.com", "")
+  instance = google_sql_database_instance.banking_data.name
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
+}
+
+resource "google_sql_user" "kyc_service_iam_user" {
+  name     = replace(google_service_account.kyc_service_account.email, ".gserviceaccount.com", "")
+  instance = google_sql_database_instance.banking_data.name
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
+}
+
 locals {
   db_iam_support_members = {
     for member in concat(var.database_iam_support_users, ["user:${data.google_client_openid_userinfo.me.email}"]) :

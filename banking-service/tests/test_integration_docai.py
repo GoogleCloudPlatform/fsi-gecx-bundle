@@ -148,6 +148,19 @@ def ephemeral_sandbox_env():
         logger.error(f"GCS temp teardown failed: {delete_gcs_ex}")
 
     try:
+        from utils.database import SessionLocal
+        from models.origination import ApplicationArtifact as PGArtifact
+        db = SessionLocal()
+        try:
+            deleted_count = db.query(PGArtifact).filter(PGArtifact.artifact_id == TEST_ARTIFACT_ID).delete()
+            db.commit()
+            logger.info(f"Deleted {deleted_count} test artifact record(s) from PostgreSQL OLTP database.")
+        finally:
+            db.close()
+    except Exception as delete_pg_ex:
+        logger.error(f"PostgreSQL temp teardown failed: {delete_pg_ex}")
+
+    try:
         # Drop ephemeral BigQuery Sandbox dataset
         bq_client.delete_dataset(dataset_ref, delete_contents=True, not_found_ok=True)
         logger.info(f"Dropped BigQuery Ephemeral Dataset: {dataset_ref}")

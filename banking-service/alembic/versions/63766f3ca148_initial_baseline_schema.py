@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+import os
 
 
 # revision identifiers, used by Alembic.
@@ -115,25 +116,30 @@ def upgrade() -> None:
     
     # Grant DML permissions to the runtime application user only if deploying against PostgreSQL
     bind = op.get_bind()
-    if bind.dialect.name == "postgresql":
-        import os
+    if bind.dialect.name == "postgresql" and os.getenv("SKIP_IAM_GRANTS") != "true":
         from utils.gcp import get_project_id
         try:
             project_id = get_project_id()
+            if str(project_id) == "None":
+                project_id = os.getenv("PROJECT_ID")
         except Exception:
             project_id = os.getenv("PROJECT_ID")
-        runtime_user = f"banking-service-sa@{project_id}.iam"
         
-        op.execute(f'GRANT USAGE ON SCHEMA public TO "{runtime_user}";')
-        op.execute(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "{runtime_user}";')
-        op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{runtime_user}";')
-
+        users = []
+        if project_id and str(project_id) != "None":
+            users.append(f"banking-service-sa@{project_id}.iam")
         iam_dba_users_env = os.getenv("IAM_DBA_USERS")
         if iam_dba_users_env:
-            for user in [u.strip() for u in iam_dba_users_env.split(",") if u.strip()]:
+            users.extend([u.strip() for u in iam_dba_users_env.split(",") if u.strip()])
+            
+        for user in users:
+            try:
+                op.execute(f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = \'{user}\') THEN CREATE ROLE "{user}" NOLOGIN; END IF; END $$;')
                 op.execute(f'GRANT USAGE ON SCHEMA public TO "{user}";')
                 op.execute(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "{user}";')
                 op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{user}";')
+            except Exception as e:
+                print(f"Notice: Could not grant permissions on public to {user}: {e}")
     # ### end Alembic commands ###
 
 

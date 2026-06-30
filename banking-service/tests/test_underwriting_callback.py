@@ -86,19 +86,19 @@ async def test_propagate_underwriting_to_session_missing_id():
 @pytest.mark.asyncio
 @patch("services.underwriting_callback._create_automated_underwriting_message")
 @patch("services.underwriting_callback.propagate_underwriting_to_session")
-async def test_trigger_session_propagation_flow_success(mock_propagate, mock_create_msg, mock_bq_client):
-    """Verify BQ resolves the session_id and passes it cleanly to the propagator."""
+@patch("utils.database.SessionLocal")
+async def test_trigger_session_propagation_flow_success(mock_session_local, mock_propagate, mock_create_msg):
+    """Verify PostgreSQL resolves the session_id and passes it cleanly to the propagator."""
     mock_propagate.return_value = True
     
-    # Mock BigQuery row mapping
-    mock_row = MagicMock()
-    mock_row.session_id = "session-resolved-from-bq-101"
-    mock_row.customer_id = "cust-123"
-    mock_row.claimed_artifact_type = "W-2"
+    mock_art = MagicMock()
+    mock_art.audit_metadata = '{"session_id": "session-resolved-from-bq-101"}'
+    mock_art.customer_id = "cust-123"
+    mock_art.claimed_artifact_type = "W-2"
     
-    mock_query_job = MagicMock()
-    mock_query_job.result.return_value = [mock_row]
-    mock_bq_client.return_value.query.return_value = mock_query_job
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter.return_value.first.return_value = mock_art
+    mock_session_local.return_value = mock_db
     
     success = await trigger_session_propagation_flow(
         table_ref="mock_project.mock_dataset.mock_table",
@@ -108,13 +108,6 @@ async def test_trigger_session_propagation_flow_success(mock_propagate, mock_cre
     )
     
     assert success is True
-    
-    # Verify BigQuery lookup query parameters
-    mock_bq_client.return_value.query.assert_called_once()
-    args, kwargs = mock_bq_client.return_value.query.call_args
-    query_params = kwargs["job_config"].query_parameters
-    assert query_params[0].name == "artifact_id"
-    assert query_params[0].value == "art-ssn-111"
     
     # Verify secure message creation helper was called once
     mock_create_msg.assert_called_once_with(

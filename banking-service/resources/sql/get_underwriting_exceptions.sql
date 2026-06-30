@@ -24,14 +24,12 @@ SELECT
     a.audit_metadata, 
     a.verification_tier, 
     a.version_id,
-    u.first_name AS user_first_name,
-    u.last_name AS user_last_name,
-    u.email AS user_email,
-    app.requested_amount,
-    app.product_category,
-    app.product_type
+    NULL AS user_first_name,
+    NULL AS user_last_name,
+    NULL AS user_email,
+    NULL AS requested_amount,
+    NULL AS product_category,
+    NULL AS product_type
 FROM `{table_ref}` a
-LEFT JOIN `{user_table_ref}` u ON a.customer_id = u.user_id
-LEFT JOIN `{application_table_ref}` app ON a.application_id = app.application_id
 WHERE a.status IN ('MISMATCH', 'PENDING_REVIEW')
 ORDER BY a.uploaded_at DESC

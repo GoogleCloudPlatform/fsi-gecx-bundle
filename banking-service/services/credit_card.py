@@ -17,6 +17,12 @@ import datetime
 from sqlalchemy.orm import Session
 from models.credit_card import FinancialAccount, IssuedCard, AccountLedger
 from models.settings import SystemSetting
+from utils.audit import record_audit_event
+from models.fdx import (
+    RealTimeBalanceResponse, PaginatedTransactionsResult, FDXTransaction,
+    PaymentMeta, PaymentNetwork, PaginatedPaymentNetworksResult, FDXAccount
+)
+from services.taxonomy_service import TaxonomyService
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +32,16 @@ def initialize_db_and_seed(db: Session):
     baseline cardholder profiles for development verification.
     """
     logger.info("Verifying credit card SQL schemas and tables...")
+    try:
+        db.connection().info["_ignore_rbac"] = True
+    except Exception:
+        pass
     
     from repositories.credit_card import CreditCardRepository
     repo = CreditCardRepository(db)
     
     # Check if a seed account already exists
-    if repo.get_account_by_id("acc-8888-9999"):
+    if repo.get_account_by_id("88888888-8888-4888-8888-999999999999"):
         logger.info("Database already seeded. Skipping migration initializations.")
         return
 
@@ -39,20 +49,20 @@ def initialize_db_and_seed(db: Session):
     try:
         # 1. Create a core Financial Account
         seed_account = FinancialAccount(
-            id="acc-8888-9999",
+            id="88888888-8888-4888-8888-999999999999",
             customer_id="cust-123",
             status="ACTIVE",
             credit_limit_cents=1000000,       # $10,000 credit limit
             cleared_balance_cents=18044,      # Total debt: $180.44 (Late Fee + Starbucks + YouTube + Whole Foods + Shell)
             available_credit_cents=981956,    # $9,819.56 available credit
-            payment_due_date=datetime.datetime.utcnow() + datetime.timedelta(days=15),
-            statement_close_date=datetime.datetime.utcnow() - datetime.timedelta(days=15)
+            payment_due_date=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=15),
+            statement_close_date=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=15)
         )
         repo.save_account(seed_account)
         
         # 2. Issue a primary Credit Card linked to this account
         seed_card = IssuedCard(
-            id="card-1111-2222",
+            id="11111111-1111-4111-8111-222222222222",
             account_id=seed_account.id,
             cardholder_name="Jane Doe",
             card_token="tok_visa_jane_doe",
@@ -66,47 +76,47 @@ def initialize_db_and_seed(db: Session):
         
         # 3. Post realistic transaction entries to the account ledger
         seed_fee = AccountLedger(
-            id="tx-fee-001",
+            id="00000000-0000-4000-8000-000000000001",
             account_id=seed_account.id,
             amount_cents=-3500,               # -$35 late fee charge
             description="LATE_FEE",
-            posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=5)
+            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=5)
         )
         repo.save_ledger(seed_fee)
 
         seed_youtube = AccountLedger(
-            id="tx-youtube-001",
+            id="00000000-0000-4000-8000-000000000002",
             account_id=seed_account.id,
             amount_cents=-1399,               # -$13.99 subscription
             description="YouTube Premium Subscription",
-            posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=12)
+            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=12)
         )
         repo.save_ledger(seed_youtube)
 
         seed_starbucks = AccountLedger(
-            id="tx-starbucks-001",
+            id="00000000-0000-4000-8000-000000000003",
             account_id=seed_account.id,
             amount_cents=-475,                 # -$4.75 coffee purchase
             description="Starbucks Coffee",
-            posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=4)
+            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=4)
         )
         repo.save_ledger(seed_starbucks)
 
         seed_grocery = AccountLedger(
-            id="tx-wholefoods-001",
+            id="00000000-0000-4000-8000-000000000004",
             account_id=seed_account.id,
             amount_cents=-8420,               # -$84.20 groceries
             description="Whole Foods Market",
-            posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=8)
+            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=8)
         )
         repo.save_ledger(seed_grocery)
 
         seed_gas = AccountLedger(
-            id="tx-shell-001",
+            id="00000000-0000-4000-8000-000000000005",
             account_id=seed_account.id,
             amount_cents=-4250,               # -$42.50 gas station purchase
             description="Shell Gasoline",
-            posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=2)
+            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)
         )
         repo.save_ledger(seed_gas)
         
@@ -147,6 +157,7 @@ def freeze_card(db: Session, card_token: str, reason: str) -> dict:
         
     card.status = "BLOCKED"
     repo.save_card(card)
+    record_audit_event(db, "CARD_FROZEN", {"card_token": card_token, "reason": reason})
     db.commit()
     logger.info(f"Card token '{card_token}' successfully blocked.")
     return {"card_token": card_token, "status": "BLOCKED"}
@@ -174,6 +185,7 @@ def apply_limit_increase(db: Session, account_id: str, requested_limit_cents: in
     account.available_credit_cents += limit_change
     
     repo.save_account(account)
+    record_audit_event(db, "CREDIT_LIMIT_INCREASED", {"account_id": str(account_id), "new_limit_cents": account.credit_limit_cents})
     db.commit()
     logger.info(f"Limit updated. New Limit: {account.credit_limit_cents} cents, Available Credit: {account.available_credit_cents} cents")
     return {
@@ -224,7 +236,7 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
         account_id=account_id,
         amount_cents=reversal_amount,
         description=desc,
-        posted_at=datetime.datetime.utcnow()
+        posted_at=datetime.datetime.now(datetime.timezone.utc)
     )
     repo.save_ledger(reversal_entry)
 
@@ -233,6 +245,7 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
     account.available_credit_cents += reversal_amount  # Available credit increases
 
     repo.save_account(account)
+    record_audit_event(db, "FEE_REVERSED", {"account_id": str(account_id), "reversal_amount_cents": reversal_amount})
     db.commit()
     logger.info(f"Transaction reversed successfully. New Cleared Balance: {account.cleared_balance_cents} cents, Available Credit: {account.available_credit_cents} cents")
     return {
@@ -241,3 +254,128 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
         "cleared_balance_cents": account.cleared_balance_cents,
         "available_credit_cents": account.available_credit_cents
     }
+
+
+def get_fdx_account(db: Session, account_id: str, customer_id: str) -> FDXAccount:
+    from repositories.credit_card import CreditCardRepository
+    repo = CreditCardRepository(db)
+    account = repo.get_account_by_id(account_id)
+    if not account or str(account.customer_id) != str(customer_id):
+        raise ValueError("Account not found or access denied.")
+    
+    cards = repo.list_cards_by_account(account_id)
+    mask = "3333"
+    if cards and cards[0].last_four:
+        mask = cards[0].last_four
+        
+    return FDXAccount(
+        account_id=str(account.id),
+        account_number_display=mask,
+        product_name="Nova Horizon Elite Credit Card",
+        status=account.status,
+        account_type="CREDIT_CARD",
+        current_balance=round(account.cleared_balance_cents / 100.0, 2),
+        available_credit=round(account.available_credit_cents / 100.0, 2),
+        credit_line=round(account.credit_limit_cents / 100.0, 2),
+        iso_currency_code="USD"
+    )
+
+
+def get_realtime_balance(db: Session, account_id: str, customer_id: str) -> RealTimeBalanceResponse:
+    from repositories.credit_card import CreditCardRepository
+    repo = CreditCardRepository(db)
+    account = repo.get_account_by_id(account_id)
+    if not account or str(account.customer_id) != str(customer_id):
+        raise ValueError("Account not found or access denied.")
+        
+    pending_auths = repo.list_pending_authorizations(account_id)
+    pending_amount_cents = sum(auth.transaction_amount_cents for auth in pending_auths)
+    realtime_available_cents = account.credit_limit_cents - account.cleared_balance_cents - pending_amount_cents
+    
+    return RealTimeBalanceResponse(
+        account_id=str(account.id),
+        credit_limit=round(account.credit_limit_cents / 100.0, 2),
+        cleared_balance=round(account.cleared_balance_cents / 100.0, 2),
+        pending_authorizations_amount=round(pending_amount_cents / 100.0, 2),
+        realtime_available_credit=round(realtime_available_cents / 100.0, 2),
+        iso_currency_code="USD"
+    )
+
+
+def get_unified_transactions(db: Session, account_id: str, customer_id: str, offset: int = 0, limit: int = 50) -> PaginatedTransactionsResult:
+    from repositories.credit_card import CreditCardRepository
+    repo = CreditCardRepository(db)
+    account = repo.get_account_by_id(account_id)
+    if not account or str(account.customer_id) != str(customer_id):
+        raise ValueError("Account not found or access denied.")
+        
+    pending_auths = repo.list_pending_authorizations(account_id)
+    posted_txs = repo.list_ledger_entries(account_id)
+    
+    unified: list[FDXTransaction] = []
+    for auth in pending_auths:
+        cat = TaxonomyService.get_category(auth.merchant_category_code)
+        meta = PaymentMeta(reference_number=auth.retrieval_reference_number, auth_code=auth.auth_code, payment_method=auth.card_network)
+        unified.append(FDXTransaction(
+            account_id=str(account_id),
+            transaction_id=str(auth.id),
+            pending_transaction_id=str(auth.id),
+            pending=True,
+            amount=round(auth.transaction_amount_cents / 100.0, 2),
+            iso_currency_code=auth.transaction_currency or "USD",
+            description=auth.merchant_name or "Pending Charge",
+            transaction_type="CREDITCARD",
+            posted_timestamp=None,
+            transaction_timestamp=auth.created_at.isoformat() if auth.created_at else "",
+            personal_finance_category=cat,
+            payment_meta=meta
+        ))
+        
+    for tx in posted_txs:
+        tx_type = "DIRECTDEPOSIT" if tx.amount_cents > 0 else "CREDITCARD"
+        if "FEE" in (tx.description or "").upper() or "REVERSAL" in (tx.description or "").upper():
+            tx_type = "ADJUSTMENT"
+            
+        pending_id = str(tx.authorization_id) if tx.authorization_id else None
+        meta = PaymentMeta(reference_number=tx.retrieval_reference_number, auth_code=tx.auth_code)
+        
+        mcc = "5411"
+        if tx.authorization and tx.authorization.merchant_category_code:
+            mcc = tx.authorization.merchant_category_code
+        cat = TaxonomyService.get_category(mcc)
+        
+        unified.append(FDXTransaction(
+            account_id=str(account_id),
+            transaction_id=str(tx.id),
+            pending_transaction_id=pending_id,
+            pending=False,
+            amount=round(abs(tx.amount_cents) / 100.0, 2),
+            iso_currency_code="USD",
+            description=tx.description or "Posted Transaction",
+            transaction_type=tx_type,
+            posted_timestamp=tx.posted_at.isoformat() if tx.posted_at else "",
+            transaction_timestamp=tx.posted_at.isoformat() if tx.posted_at else "",
+            personal_finance_category=cat,
+            payment_meta=meta
+        ))
+        
+    unified.sort(key=lambda x: x.transaction_timestamp or "", reverse=True)
+    paginated = unified[offset:offset + limit]
+    return PaginatedTransactionsResult(transactions=paginated, total=len(unified))
+
+
+def get_payment_networks(db: Session, account_id: str, customer_id: str) -> PaginatedPaymentNetworksResult:
+    from repositories.credit_card import CreditCardRepository
+    repo = CreditCardRepository(db)
+    account = repo.get_account_by_id(account_id)
+    if not account or str(account.customer_id) != str(customer_id):
+        raise ValueError("Account not found or access denied.")
+        
+    net = PaymentNetwork(
+        bank_id="010088889",
+        identifier="1111222233335820",
+        type="US_ACH",
+        transfer_in=True,
+        transfer_out=True
+    )
+    return PaginatedPaymentNetworksResult(payment_networks=[net], total=1)

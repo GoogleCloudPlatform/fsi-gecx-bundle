@@ -108,53 +108,38 @@ async def get_loan_application_documents(application_id: str, ctx: Context) -> s
         # Resolve customer identity dynamically from OIDC headers
         customer_id = _extract_customer_identity(ctx)
         
-        project_id = get_project_id()
-        dataset_id = os.getenv("DATASET_ID", "banking")
-        table_ref = f"{project_id}.{dataset_id}.application_artifact"
-
-        
-        # Load and execute decoupled SQL tenant query
-        query = _load_sql("get_application_artifacts.sql").format(table_ref=table_ref)
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter("application_id", "STRING", application_id),
-                bigquery.ScalarQueryParameter("customer_id", "STRING", customer_id)
-            ]
-        )
-        
-        query_job = bq_client.query(query, job_config=job_config)
-        results = list(query_job.result())
-        
-        if not results:
-            logger.warning(f"No documents found or tenant validation failed for App: {application_id}")
+        from utils.database import SessionLocal
+        from models.origination import ApplicationArtifact, Application
+        from models.identity import User
+        db = SessionLocal()
+        try:
+            pg_results = db.query(ApplicationArtifact).join(Application).join(User, ApplicationArtifact.customer_id == User.id).filter(
+                Application.application_id == application_id,
+                (User.auth_provider_uid == customer_id) | (User.email == customer_id) | (User.id == customer_id)
+            ).all()
+            if pg_results:
+                summary_lines = [f"=== Verified Loan Documents Audit for Application ID: {application_id} ==="]
+                for idx, art in enumerate(pg_results, 1):
+                    claimed = art.claimed_artifact_type or "UNKNOWN"
+                    actual = art.actual_artifact_type or "PENDING_OCR"
+                    status = art.status
+                    summary_lines.append(f"\n[Document #{idx}]: Claimed: {claimed} | Visual Classification: {actual} | Ingestion Status: {status}")
+                    payload = json.loads(art.extraction_payload) if art.extraction_payload else {}
+                    w2_data = payload.get("W2") or payload.get("w2")
+                    if w2_data:
+                        wages = w2_data.get("WagesTipsOtherCompensation", {}).get("value", "N/A")
+                        raw_ssn = w2_data.get("SSN", {}).get("value", "")
+                        raw_ein = w2_data.get("EIN", {}).get("value", "")
+                        summary_lines.append(f"  - Verified Gross Wages: ${wages}")
+                        summary_lines.append(f"  - Employee SSN: {_mask_ssn(raw_ssn)}")
+                        summary_lines.append(f"  - Employer EIN: {_mask_ein(raw_ein)}")
+                    else:
+                        summary_lines.append("  - OCR Extraction: Pending or Non-W2 format.")
+                return "\n".join(summary_lines)
+            logger.warning(f"No documents found for App: {application_id}")
             return f"No documents found under authorized profile for Application ID: {application_id}"
-            
-        # Format a clean, fully PII-masked summary table for the AI Agent
-        summary_lines = [
-            f"=== Verified Loan Documents Audit for Application ID: {application_id} ==="
-        ]
-        
-        for idx, row in enumerate(results, 1):
-            claimed = row.claimed_artifact_type if row.claimed_artifact_type else "UNKNOWN"
-            actual = row.actual_artifact_type if row.actual_artifact_type else "PENDING_OCR"
-            status = row.status
-            
-            summary_lines.append(f"\n[Document #{idx}]: Claimed: {claimed} | Visual Classification: {actual} | Ingestion Status: {status}")
-            
-            # Perform deep PII masking on extraction payload
-            payload = row.extraction_payload if row.extraction_payload else {}
-            w2_data = payload.get("W2") or payload.get("w2")
-            
-            if w2_data:
-                wages = w2_data.get("WagesTipsOtherCompensation", {}).get("value", "N/A")
-                raw_ssn = w2_data.get("SSN", {}).get("value", "")
-                raw_ein = w2_data.get("EIN", {}).get("value", "")
-                
-                summary_lines.append(f"  - Wages (Box 1): ${wages}")
-                summary_lines.append(f"  - Borrower SSN: {_mask_ssn(raw_ssn)}")
-                summary_lines.append(f"  - Employer Tax ID (EIN): {_mask_ein(raw_ein)}")
-                
-        return "\n".join(summary_lines)
+        finally:
+            db.close()
         
     except PermissionError as perm_err:
         return f"Access Denied: {str(perm_err)}"

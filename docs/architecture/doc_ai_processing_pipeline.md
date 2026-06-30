@@ -43,15 +43,17 @@ graph TD
   1. **Phase 1 (Classification & Slicing)**: The package is sent to the master `LENDING_DOCUMENT_SPLIT_PROCESSOR` to identify page boundaries and document types (e.g. classifying pages 1-2 as W2 and 3-5 as Paystub).
   2. **Phase 2 (Specialized Extraction)**: The worker extracts the raw byte slices for the specified pages and submits them concurrently to dedicated extractors (`W2_PROCESSOR` and `PAYSTUB_PROCESSOR`).
 
-### B. Idempotency Guards & Event Deduping
-* **Context**: Google Cloud Pub/Sub guarantees at-least-once delivery, which can result in duplicate events arriving at the `/internal/process-document` endpoint. Processing duplicate events multiple times wastes Document AI processor quota and causes database write contention.
-* **Decision**: The backend implements strict state-based idempotency checks. On event ingestion, the database status of the corresponding artifact ID is checked:
-  - If status is `PENDING_CLASSIFICATION`, the processing proceeds.
-  - If status is `PROCESSING` or `PROCESSED`, the event is dropped immediately with an HTTP 200 (OK) acknowledgment to prevent redundant processing.
+### B. Idempotency Guards & Event Deduping (Hybrid Strategy)
+* **Context**: Google Cloud Pub/Sub guarantees at-least-once delivery, which can result in duplicate events arriving at the `/internal/process-document` endpoint. Furthermore, ephemeral testing files can occasionally orphan GCS upload notifications.
+* **Decision**: The backend implements strict dual-database idempotency and retry drain checks:
+  - Queries PostgreSQL (`origination.application_artifacts`) first, falling back to BigQuery (`banking.application_artifact`).
+  - If status is `UPLOADED` or `PENDING_CLASSIFICATION`, processing proceeds and atomically locks status to `CLASSIFYING`.
+  - If status is `CLASSIFYING`, `PROCESSED`, or `FAILED`, the event is dropped immediately with an HTTP 200 (OK) acknowledgment.
+  - If the artifact metadata record is missing from both databases, the worker inspects the Pub/Sub delivery attempt header (`x-goog-pubsub-message-delivery-attempt`). If retries exceed 3 attempts, it terminally acknowledges (HTTP 200 OK) to drain orphaned test retries while allowing transient race conditions to heal cleanly.
 
 ### C. Split-State Schema (`claimed_artifact_type` vs. `actual_artifact_type`)
 * **Context**: When a user uploads a document, they indicate what it is (e.g., claiming it's a W-2). However, users frequently upload incorrect documents (e.g., uploading a utility bill instead).
-* **Decision**: The BigQuery schema tracks both `claimed_artifact_type` (what the user declared) and `actual_artifact_type` (what Document AI splitter classified). If a mismatch is detected, a state mismatch exception is raised, flagging the file for loan officer review.
+* **Decision**: Both PostgreSQL (`origination.application_artifacts`) and BigQuery schemas track `claimed_artifact_type` (what the user declared) versus `actual_artifact_type` (what Document AI splitter classified). If a mismatch is detected, status transitions to `PENDING_REVIEW`, dispatching an exception alert to the underwriting review queue.
 
 ---
 

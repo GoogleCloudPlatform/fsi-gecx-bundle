@@ -77,10 +77,13 @@ mcp_tools = McpToolset(
     )
 )
 
+session_should_end = False
+
 def end_consultation() -> dict:
     """Terminates the current voice consultation session. Call this when the customer confirms they are finished or want to end the call.
     """
-    notify_event({"type": DataChannelEvent.SESSION_END.value})
+    global session_should_end
+    session_should_end = True
     return {"status": "SUCCESS", "message": "Session end signal sent."}
 
 def transfer_to_human(reason: str) -> dict:
@@ -114,27 +117,35 @@ def get_auth_headers() -> dict:
         "x-target-customer-id": active_customer_id_var.get()
     }
 
+is_processing_tool = False
+
 async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
+    global is_processing_tool
     tool_name = getattr(tool, "name", str(tool))
     import logging
     logger = logging.getLogger("voice_agent")
     logger.info(f"[CALLBACK] before_tool_callback triggered: tool_name={tool_name}, args={args}")
+    is_processing_tool = True
     tool_context.state["is_processing_tool"] = True
     return None
 
 async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> None:
+    global is_processing_tool
     tool_name = getattr(tool, "name", str(tool))
     import logging
     logger = logging.getLogger("voice_agent")
     logger.info(f"[CALLBACK] on_tool_error_callback triggered: tool_name={tool_name}, error={error}")
+    is_processing_tool = False
     tool_context.state["is_processing_tool"] = False
     return None
 
 async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs) -> dict | None:
+    global is_processing_tool
     tool_name = getattr(tool, "name", str(tool))
     import logging
     logger = logging.getLogger("voice_agent")
     logger.info(f"[CALLBACK] after_tool_callback triggered: tool_name={tool_name}, result={tool_response}")
+    is_processing_tool = False
     tool_context.state["is_processing_tool"] = False
     # Check if the tool succeeded
     structured = tool_response.get("structuredContent") if isinstance(tool_response, dict) else None

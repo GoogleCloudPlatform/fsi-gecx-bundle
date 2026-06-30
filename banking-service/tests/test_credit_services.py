@@ -34,7 +34,7 @@ def fixture_db_session():
     try:
         # Seed test profiles
         account = FinancialAccount(
-            id="acc-test-123",
+            id="12300000-0000-4000-8000-000000000123",
             customer_id="cust-test-xyz",
             status="ACTIVE",
             credit_limit_cents=500000,       # $5,000 credit limit
@@ -44,7 +44,7 @@ def fixture_db_session():
         db.add(account)
         
         card = IssuedCard(
-            id="card-test-999",
+            id="99900000-0000-4000-8000-000000000999",
             account_id=account.id,
             cardholder_name="John Doe",
             card_token="tok_test_john_doe",
@@ -57,11 +57,11 @@ def fixture_db_session():
         db.add(card)
         
         fee_charge = AccountLedger(
-            id="tx-fee-test-01",
+            id="01000000-0000-4000-8000-000000000001",
             account_id=account.id,
             amount_cents=-3500,               # -$35 charge (debit)
             description="LATE_FEE",
-            posted_at=datetime.datetime.utcnow() - datetime.timedelta(days=2)
+            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)
         )
         db.add(fee_charge)
         
@@ -90,27 +90,27 @@ def test_freeze_card_not_found(db_session):
 
 def test_apply_limit_increase_success(db_session):
     """Verify that credit limit increases update credit limit and available balance correctly."""
-    res = apply_limit_increase(db_session, account_id="acc-test-123", requested_limit_cents=800000) # $8,000
+    res = apply_limit_increase(db_session, account_id="12300000-0000-4000-8000-000000000123", requested_limit_cents=800000) # $8,000
     assert res["new_limit_cents"] == 800000
     assert res["available_credit_cents"] == 796500 # $8,000 - $35 debt
     
     # Assert DB persistence
-    account = db_session.query(FinancialAccount).filter_by(id="acc-test-123").first()
+    account = db_session.query(FinancialAccount).filter_by(id="12300000-0000-4000-8000-000000000123").first()
     assert account.credit_limit_cents == 800000
     assert account.available_credit_cents == 796500
 
 
 def test_reverse_posted_fee_success(db_session):
     """Verify that late fee reversals post an offsetting credit and adjust balances."""
-    res = reverse_posted_fee(db_session, account_id="acc-test-123", transaction_id="tx-fee-test-01", reason="CUSTOMER_COURTESY")
+    res = reverse_posted_fee(db_session, account_id="12300000-0000-4000-8000-000000000123", transaction_id="01000000-0000-4000-8000-000000000001", reason="CUSTOMER_COURTESY")
     assert res["reversed_amount_cents"] == 3500
     assert res["cleared_balance_cents"] == 0         # Debt cleared
     assert res["available_credit_cents"] == 500000    # Back to full $5,000 available limit
     
     # Assert new offsetting ledger entry is appended to DB
     reversal_tx = db_session.query(AccountLedger).filter_by(
-        account_id="acc-test-123",
-        description="FEE_REVERSAL_REF_tx-fee-test-01"
+        account_id="12300000-0000-4000-8000-000000000123",
+        description="FEE_REVERSAL_REF_01000000-0000-4000-8000-000000000001"
     ).first()
     assert reversal_tx is not None
     assert reversal_tx.amount_cents == 3500
@@ -119,8 +119,8 @@ def test_reverse_posted_fee_success(db_session):
 def test_reverse_posted_fee_already_reversed(db_session):
     """Verify that attempting to reverse the same fee twice fails to prevent double adjustments."""
     # 1st reversal succeeds
-    reverse_posted_fee(db_session, account_id="acc-test-123", transaction_id="tx-fee-test-01", reason="FIRST_TRY")
+    reverse_posted_fee(db_session, account_id="12300000-0000-4000-8000-000000000123", transaction_id="01000000-0000-4000-8000-000000000001", reason="FIRST_TRY")
     
     # 2nd reversal must raise ValueError
     with pytest.raises(ValueError, match="has already been reversed"):
-        reverse_posted_fee(db_session, account_id="acc-test-123", transaction_id="tx-fee-test-01", reason="SECOND_TRY")
+        reverse_posted_fee(db_session, account_id="12300000-0000-4000-8000-000000000123", transaction_id="01000000-0000-4000-8000-000000000001", reason="SECOND_TRY")

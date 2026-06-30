@@ -122,3 +122,10 @@ class CreditCardRepository:
         self.db.add(auth)
         self.db.flush()
         return auth
+
+    def list_pending_authorizations(self, account_id: str) -> List[TransactionAuthorization]:
+        """Retrieves active pending authorization holds for an account."""
+        return self.db.query(TransactionAuthorization).filter(
+            TransactionAuthorization.account_id == account_id,
+            TransactionAuthorization.status == "PENDING"
+        ).order_by(TransactionAuthorization.created_at.desc()).all()

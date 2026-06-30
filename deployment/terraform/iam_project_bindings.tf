@@ -209,6 +209,30 @@ resource "google_project_iam_member" "banking_migration_sa_cloudsql_instance_use
   member  = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
 }
 
+resource "google_project_iam_member" "ledger_sa_cloudsql_client" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.ledger_service_account.email}"
+}
+
+resource "google_project_iam_member" "ledger_sa_cloudsql_instance_user" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = "serviceAccount:${google_service_account.ledger_service_account.email}"
+}
+
+resource "google_project_iam_member" "kyc_sa_cloudsql_client" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.kyc_service_account.email}"
+}
+
+resource "google_project_iam_member" "kyc_sa_cloudsql_instance_user" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = "serviceAccount:${google_service_account.kyc_service_account.email}"
+}
+
 resource "google_project_iam_member" "banking_migration_sa_log_writer" {
   project = data.google_project.project.project_id
   role    = "roles/logging.logWriter"

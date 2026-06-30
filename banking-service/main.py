@@ -41,13 +41,15 @@ from routers.settings import router as settings_router
 from models.authentication import ValidatedToken
 from utils.auth import get_current_user
 from routers.locator import router as locator_router
+from routers.accounts import router as accounts_router, alias_router as accounts_alias_router
+from routers.fdx import router as fdx_router
 
 # Import and register FastMCP tools and ASGI app from the isolated mcp router module
 from routers.mcp import mcp_app
 from routers.voice_bidi import router as voice_bidi_router
 
 import firebase_admin
-
+from contextlib import asynccontextmanager
 
 # Initialize Firebase Admin SDK using Application Default Credentials (ADC)
 try:
@@ -59,7 +61,27 @@ except ValueError:
 except Exception as e:
     logging.error(f"Failed to initialize Firebase Admin SDK: {e}")
 
+
+@asynccontextmanager
+async def combined_lifespan(app_inst: FastAPI):
+    logging.info("Executing combined lifespan startup: verifying and seeding database...")
+    try:
+        from utils.database import SessionLocal
+        from services.credit_card import initialize_db_and_seed
+        db = SessionLocal()
+        try:
+            initialize_db_and_seed(db)
+        finally:
+            db.close()
+    except Exception as e:
+        logging.error(f"Error during startup database seeding: {e}")
+    
+    async with mcp_app.lifespan(app_inst):
+        yield
+
+
 app = FastAPI(
+    lifespan=combined_lifespan,
     title="Banking Service API",
     description=(
         "Banking Service API for managing interactions."
@@ -105,6 +127,9 @@ app.include_router(credit_card_router)
 app.include_router(support_router)
 app.include_router(settings_router)
 app.include_router(voice_bidi_router)
+app.include_router(accounts_router)
+app.include_router(accounts_alias_router)
+app.include_router(fdx_router)
 
 
 def custom_openapi():
@@ -170,17 +195,11 @@ async def get_user(user: ValidatedToken = Depends(get_current_user)):
     return user
 
 
-# (mcp and mcp_app are imported directly from routers.mcp at top to avoid circular initialization)
+# Mount FastMCP directly onto the core application
+app.mount("/mcp", mcp_app)
 
-# 3. Combine FastAPI application routes with FastMCP routes under a unified ASGI engine
-combined_app = FastAPI(
-    title="Banking API with MCP",
-    routes=app.routes,      # Core FastAPI REST endpoints
-    lifespan=mcp_app.lifespan,
-    root_path=os.getenv("ROOT_PATH", ""),
-)
-
-combined_app.mount("/mcp", mcp_app)
+# Alias combined_app to app so any startup script referencing main:combined_app executes the full application cleanly
+combined_app = app
 
 if __name__ == "__main__":
     import uvicorn

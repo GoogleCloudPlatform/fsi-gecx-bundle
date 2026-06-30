@@ -17,7 +17,8 @@ sequenceDiagram
     participant Agent as GECX Agent (Google Cloud)
     participant API as banking-service (Cloud Run)
     participant DocAI as Document AI Processor (GCP)
-    participant BQ as BigQuery Database
+    participant PG as Cloud SQL (PostgreSQL)
+    participant BQ as BigQuery Analytics Warehousing
 
     %% Phase 1: Initiation
     Customer->>Messenger: Opens Chat Widget
@@ -45,7 +46,8 @@ sequenceDiagram
     Note over API: Extracts document layout.<br/>Sends PDF to Document AI Processor.
     API->>DocAI: Process Document (W-2 Processor)
     DocAI-->>API: Extracted structured payload (Wages, Tax Withheld, Employer)
-    API->>BQ: Save extracted W-2 records in BigQuery (user_w2_metadata)
+    API->>PG: Save workflow state in origination.application_artifacts (ORM)
+    API->>BQ: Archive immutable extraction record in BigQuery (application_artifact)
     API-->>UI: Return Success with extracted data summary
     UI-->>Messenger: Resolve client function with { status: "success" }
     Messenger-->>Agent: Handshake completion
@@ -106,8 +108,8 @@ node.registerClientSideFunction(
 ```
 
 ### B. Ingestion API Endpoint
-The FastAPI endpoint `/applications/upload-and-validate` orchestrates Document AI invocation and commits verified records to the BigQuery database:
+The FastAPI endpoint `/applications/upload-and-validate` orchestrates Document AI invocation and commits verified records using a hybrid storage strategy across Cloud SQL PostgreSQL and BigQuery:
 
 * **File Upload Router:** [underwriting.py](../../banking-service/routers/underwriting.py) or [applications.py](../../banking-service/routers/applications.py)
 * **Document AI Processing:** Calls `process_document()` using the official Vertex AI/Document AI Python Client libraries.
-* **Database Target:** Saves metadata in `banking.user_w2_metadata` and application status logs in `banking.application`.
+* **Database Target:** Tracks mutable application workflows and artifact metadata in PostgreSQL (`origination.applications` and `origination.application_artifacts`), while archiving final parsed JSON extractions and audit trails in immutable BigQuery tables (`banking.application_artifact`).

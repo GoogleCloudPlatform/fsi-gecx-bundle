@@ -22,7 +22,6 @@ from fastapi.concurrency import run_in_threadpool
 from google.cloud import bigquery
 from pydantic import BaseModel, Field
 from utils.auth import verify_eventarc_oidc_token
-from services.document_ai import ProcessingStatus
 
 logger = logging.getLogger(__name__)
 bq_client = bigquery.Client()
@@ -84,31 +83,44 @@ async def process_document(
         logger.info(f"Skipping processing for non-supported GCS finalized object: {filename} (resolved MIME: {mime_type})")
         return {"message": "Skipped: object is not a supported document file.", "filename": filename}
 
-    dataset_id = os.getenv("DATASET_ID", "banking")
-    sql_query = get_check_status_sql().format(dataset_id=dataset_id)
-    
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("filename", "STRING", f"%{filename}")
-        ]
-    )
+    # 3. Check PostgreSQL ApplicationArtifact table first, falling back to BigQuery
+    status_val = None
+    record_found = False
+
+    from utils.database import SessionLocal
+    from models.origination import ApplicationArtifact as PGArtifact
+    db = SessionLocal()
     try:
-        query_job = bq_client.query(sql_query, job_config=job_config)
-        results = list(query_job.result())
-        if not results:
-            logger.error(f"Artifact record not found in BigQuery for {filename}")
-            raise HTTPException(status_code=404, detail="Artifact metadata not found.")
+        pg_art = db.query(PGArtifact).filter(
+            (PGArtifact.artifact_id == filename) | (PGArtifact.gcs_uri.endswith(filename))
+        ).first()
+        if pg_art:
+            record_found = True
+            status_val = pg_art.status
+    except Exception as pg_ex:
+        logger.warning(f"PostgreSQL artifact verification check failed: {pg_ex}")
+    finally:
+        db.close()
+
+    if not record_found:
+        logger.info(f"Artifact {filename} not found in PostgreSQL database during idempotency check.")
+
+    if not record_found:
+        delivery_attempt_str = request.headers.get("x-goog-pubsub-message-delivery-attempt") or request.headers.get("ce-deliveryattempt")
+        delivery_attempt = int(delivery_attempt_str) if delivery_attempt_str and delivery_attempt_str.isdigit() else 1
         
-        status = ProcessingStatus(results[0].status)
-        if status != ProcessingStatus.PENDING_CLASSIFICATION:
-            logger.info(f"Idempotency check: Artifact {filename} already processed (Status: {status.value}). Skipping.")
-            return {"message": "Idempotent success: Artifact already processed.", "status": status.value}
-            
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        logger.error(f"BigQuery idempotency check failed: {e}")
-        raise HTTPException(status_code=500, detail="Database verification error.")
+        # Hybrid Strategy: If Pub/Sub has retried more than 3 times, or if delivery attempt tracking header is absent,
+        # acknowledge terminally (HTTP 200) to drain orphaned files from Eventarc / Pub/Sub retry loops.
+        if delivery_attempt > 3 or not delivery_attempt_str:
+            logger.warning(f"Artifact {filename} missing from database after retries (delivery attempt: {delivery_attempt}). Terminal ACK to prevent infinite retry loop.")
+            return {"status": "ignored", "reason": "artifact_metadata_not_found_after_retries", "filename": filename}
+        
+        logger.error(f"Artifact record not found in database for {filename} on attempt {delivery_attempt}. Raising 404 for retry.")
+        raise HTTPException(status_code=404, detail="Artifact metadata not found.")
+
+    if status_val and status_val not in ["UPLOADED", "PENDING_CLASSIFICATION", "CLASSIFYING"]:
+        logger.info(f"Idempotency check: Artifact {filename} already processed (Status: {status_val}). Skipping.")
+        return {"message": "Idempotent success: Artifact already processed.", "status": status_val}
     
     # Invoke the Document AI pipeline directly (synchronous/blocking inside Cloud Run to guarantee CPU allocation!)
     try:
@@ -123,30 +135,67 @@ async def process_document(
         logger.error(f"Pipeline execution failed for {filename}: {pipeline_ex}")
         raise HTTPException(status_code=500, detail=f"Document processing pipeline failed: {str(pipeline_ex)}")
 
+@router.post("/process-outbox")
+def process_outbox(batch_size: int = 50):
+    """
+    Drains the transactional audit outbox, publishing pending events to Google Cloud Pub/Sub
+    for immediate streaming into BigQuery compliance audit tables.
+    """
+    from utils.database import SessionLocal
+    from utils.audit import publish_pending_audit_events
+    db = SessionLocal()
+    try:
+        count = publish_pending_audit_events(db, batch_size=batch_size)
+        return {"status": "SUCCESS", "published_count": count}
+    finally:
+        db.close()
+
 @router.post("/debug/reset-db")
-def reset_database():
+def reset_database(purge_audit_logs: bool = False):
     """
     Deletes all rows in the database and re-seeds it with baseline cardholder data.
+    Optionally purges PostgreSQL and BigQuery compliance audit logs if purge_audit_logs=True.
     """
-    logger.info("Internal Debug request: Resetting database...")
+    logger.info(f"Internal Debug request: Resetting database (purge_audit_logs={purge_audit_logs})...")
     from utils.database import SessionLocal
     from models.credit_card import FinancialAccount, IssuedCard, TransactionAuthorization, AccountLedger
     from models.support import Escalation
+    from models.origination import Application, MortgageApplication, CreditCardApplication, DepositApplication, ApplicationArtifact
+    from models.audit import AuditOutbox
     from services.credit_card import initialize_db_and_seed
     
     db = SessionLocal()
     try:
+        db.connection().info["_ignore_rbac"] = True
         db.query(TransactionAuthorization).delete()
         db.query(AccountLedger).delete()
         db.query(IssuedCard).delete()
         db.query(Escalation).delete()
         db.query(FinancialAccount).delete()
+        db.query(ApplicationArtifact).delete()
+        db.query(MortgageApplication).delete()
+        db.query(CreditCardApplication).delete()
+        db.query(DepositApplication).delete()
+        db.query(Application).delete()
+        
+        if purge_audit_logs:
+            db.query(AuditOutbox).delete()
+            logger.info("Purging PostgreSQL audit outbox...")
+            try:
+                project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
+                for tbl in ["origination_audit_log", "financial_ledger_audit_log", "identity_access_audit_log"]:
+                    bq_client.query(f"DELETE FROM `{project_id}.compliance_audit.{tbl}` WHERE true").result()
+                logger.info("Purged BigQuery compliance_audit tables.")
+            except Exception as bq_ex:
+                logger.warning(f"Could not purge BigQuery audit logs: {bq_ex}")
+
         db.commit()
         logger.info("Database tables cleared.")
         
         initialize_db_and_seed(db)
         logger.info("Database re-seeded.")
-        return {"status": "SUCCESS", "message": "Database reset and re-seeded successfully."}
+        msg = "Database reset and re-seeded successfully." + (" (Audit logs purged)" if purge_audit_logs else " (Audit logs preserved)")
+        return {"status": "SUCCESS", "message": msg}
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to reset database: {e}")

@@ -36,6 +36,23 @@ steps:
     dir: "banking-service"
 
   - name: "gcr.io/cloud-builders/docker"
+    id: "validate-ephemeral-migrations"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        echo "Starting ephemeral PostgreSQL container for migration validation..."
+        docker rm -f pg-validate || true
+        docker run --name pg-validate -e POSTGRES_PASSWORD=secret -e POSTGRES_DB=banking -d mirror.gcr.io/library/postgres:16-alpine
+        trap "docker rm -f pg-validate || true" EXIT
+        echo "Waiting for PostgreSQL container to accept connections..."
+        until docker exec pg-validate pg_isready -U postgres; do sleep 1; done
+        echo "Executing Alembic upgrade head, downgrade base, and upgrade head against PostgreSQL..."
+        docker run --rm --network container:pg-validate -e SKIP_IAM_GRANTS=true -e DATABASE_URL="postgresql://postgres:secret@127.0.0.1:5432/banking" \
+          "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
+          bash -c "alembic upgrade head && alembic downgrade base && alembic upgrade head"
+
+  - name: "gcr.io/cloud-builders/docker"
     id: "push-image"
     args:
       [

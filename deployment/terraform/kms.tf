@@ -27,6 +27,14 @@ resource "google_kms_crypto_key" "docai_cmek_key" {
   destroy_scheduled_duration = "2592000s" # 30 days
 }
 
+resource "google_kms_crypto_key" "audit_cmek_key" {
+  name                       = "audit-cmek-key"
+  key_ring                   = google_kms_key_ring.banking_keyring.id
+  rotation_period            = "7776000s" # 90 days
+  purpose                    = "ENCRYPT_DECRYPT"
+  destroy_scheduled_duration = "2592000s" # 30 days
+}
+
 # 2. Multi-Regional Key Ring & Key for BigQuery & GCS (us)
 resource "google_kms_key_ring" "banking_us_keyring" {
   name       = "banking-us-keyring"

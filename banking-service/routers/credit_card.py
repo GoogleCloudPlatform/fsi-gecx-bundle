@@ -14,6 +14,7 @@
 
 import os
 import logging
+from typing import Dict
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from livekit import api as lk_api
@@ -21,10 +22,12 @@ from livekit import api as lk_api
 from utils.database import get_db
 from utils.auth import get_current_user, is_support_staff
 from models.authentication import ValidatedToken
+from models.fdx import PersonalFinanceCategory
 from repositories.credit_card import CreditCardRepository
 from services.credit_card import (
-    freeze_card, apply_limit_increase, reverse_posted_fee, initialize_db_and_seed
+    freeze_card, apply_limit_increase, reverse_posted_fee
 )
+from services.taxonomy_service import TaxonomyService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/credit-card", tags=["Credit Card Support"])
@@ -62,15 +65,7 @@ def resolve_effective_id(target_id: str | None, current_id: str, token: Validate
     return current_id
 
 
-@router.on_event("startup")
-def startup_db_init():
-    """Initializes tables and populates seed cardholders on application startup."""
-    from utils.database import SessionLocal
-    db = SessionLocal()
-    try:
-        initialize_db_and_seed(db)
-    finally:
-        db.close()
+
 
 
 @router.get("/account")
@@ -131,6 +126,18 @@ def get_transaction_history(
             "posted_at": entry.posted_at
         } for entry in ledger
     ]
+
+
+@router.get("/taxonomies", response_model=Dict[str, Dict[str, str]])
+def list_internal_taxonomies(token: ValidatedToken = Depends(get_current_user)):
+    """Returns authoritative MCC-to-taxonomy mapping for internal analytics and UI dashboards."""
+    return TaxonomyService.get_taxonomy_map()
+
+
+@router.get("/taxonomies/{mcc}", response_model=PersonalFinanceCategory)
+def get_internal_taxonomy_by_mcc(mcc: str, token: ValidatedToken = Depends(get_current_user)):
+    """Returns granular category object for a specific MCC code."""
+    return TaxonomyService.get_category(mcc)
 
 
 @router.post("/limit")

@@ -21,7 +21,7 @@ from google.cloud import bigquery, storage
 from utils.gcp import get_project_id
 
 from .utils import (
-    _load_sql, _extract_customer_identity, _mask_ssn, _mask_ein
+    _extract_customer_identity, _mask_ssn, _mask_ein
 )
 from . import mcp  # Import the shared FastMCP server instance
 
@@ -39,7 +39,7 @@ async def get_loan_application_documents(application_id: str, ctx: Context) -> s
     logger.info(f"FastMCP get_loan_application_documents invoked for Application ID: {application_id}")
     
     # Strict alphanumeric and length regex validation (Prevents Path Traversal & Command Injections)
-    if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", application_id):
+    if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", str(application_id)):
         logger.error(f"Security Alert: Malformed application ID input detected: {application_id}")
         return "Access Denied: Invalid Application ID format."
 
@@ -47,52 +47,44 @@ async def get_loan_application_documents(application_id: str, ctx: Context) -> s
         # Resolve customer identity dynamically from OIDC headers
         customer_id = _extract_customer_identity(ctx)
         
-        project_id = get_project_id()
-        dataset_id = os.getenv("DATASET_ID", "banking")
-        table_ref = f"{project_id}.{dataset_id}.application_artifact"
-
-        # Load and execute decoupled SQL tenant query
-        query = _load_sql("get_application_artifacts.sql").format(table_ref=table_ref)
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter("application_id", "STRING", application_id),
-                bigquery.ScalarQueryParameter("customer_id", "STRING", customer_id)
-            ]
-        )
-        
-        query_job = bq_client.query(query, job_config=job_config)
-        results = list(query_job.result())
-        
-        if not results:
-            logger.warning(f"No documents found or tenant validation failed for App: {application_id}")
-            return f"No documents found under authorized profile for Application ID: {application_id}"
-            
-        # Format a clean, fully PII-masked summary table for the AI Agent
-        summary_lines = [
-            f"=== Verified Loan Documents Audit for Application ID: {application_id} ==="
-        ]
-        
-        for idx, row in enumerate(results, 1):
-            claimed = row.claimed_artifact_type if row.claimed_artifact_type else "UNKNOWN"
-            actual = row.actual_artifact_type if row.actual_artifact_type else "PENDING_OCR"
-            status = row.status
-            
-            summary_lines.append(f"\n[Document #{idx}]: Claimed: {claimed} | Visual Classification: {actual} | Ingestion Status: {status}")
-            
-            # Perform deep PII masking on extraction payload
-            payload = row.extraction_payload if row.extraction_payload else {}
-            w2_data = payload.get("W2") or payload.get("w2")
-            
-            if w2_data:
-                wages = w2_data.get("WagesTipsOtherCompensation", {}).get("value", "N/A")
-                raw_ssn = w2_data.get("SSN", {}).get("value", "")
-                raw_ein = w2_data.get("EIN", {}).get("value", "")
-                
-                summary_lines.append(f"  - Wages (Box 1): ${wages}")
-                summary_lines.append(f"  - Borrower SSN: {_mask_ssn(raw_ssn)}")
-                summary_lines.append(f"  - Employer Tax ID (EIN): {_mask_ein(raw_ein)}")
-                
-        return "\n".join(summary_lines)
+        try:
+            from utils.database import SessionLocal
+            from models.origination import ApplicationArtifact, Application
+            from models.identity import User
+            from .utils import verified_customer_id_var
+            db = SessionLocal()
+            try:
+                auth_uid = verified_customer_id_var.get() or customer_id
+                pg_results = db.query(ApplicationArtifact).join(Application).join(User, ApplicationArtifact.customer_id == User.id).filter(
+                    Application.application_id == application_id,
+                    (User.auth_provider_uid == auth_uid) | (User.email == auth_uid) | (User.auth_provider_uid == customer_id)
+                ).all()
+                if pg_results:
+                    summary_lines = [f"=== Verified Loan Documents Audit for Application ID: {application_id} ==="]
+                    for idx, art in enumerate(pg_results, 1):
+                        claimed = art.claimed_artifact_type or "UNKNOWN"
+                        actual = art.actual_artifact_type or "PENDING_OCR"
+                        status = art.status
+                        summary_lines.append(f"\n[Document #{idx}]: Claimed: {claimed} | Visual Classification: {actual} | Ingestion Status: {status}")
+                        payload = json.loads(art.extraction_payload) if art.extraction_payload else {}
+                        w2_data = payload.get("W2") or payload.get("w2")
+                        if w2_data:
+                            wages = w2_data.get("WagesTipsOtherCompensation", {}).get("value", "N/A")
+                            raw_ssn = w2_data.get("SSN", {}).get("value", "")
+                            raw_ein = w2_data.get("EIN", {}).get("value", "")
+                            summary_lines.append(f"  - Verified Gross Wages: ${wages}")
+                            summary_lines.append(f"  - Employee SSN: {_mask_ssn(raw_ssn)}")
+                            summary_lines.append(f"  - Employer EIN: {_mask_ein(raw_ein)}")
+                        else:
+                            summary_lines.append("  - OCR Extraction: Pending or Non-W2 format.")
+                    return "\n".join(summary_lines)
+                logger.warning(f"No documents found for App: {application_id}")
+                return f"No documents found under authorized profile for Application ID: {application_id}"
+            finally:
+                db.close()
+        except Exception as ex:
+            logger.error(f"PostgreSQL document lookup failed: {ex}")
+            return f"Error retrieving documents for Application ID: {application_id}"
         
     except PermissionError as perm_err:
         return f"Access Denied: {str(perm_err)}"
@@ -117,7 +109,7 @@ async def generate_upload_session_url(
     logger.info(f"FastMCP generate_upload_session_url invoked for App ID: {application_id} (Type: {claimed_artifact_type}, MIME: {content_type})")
     
     # 1. Input sanitization gates
-    if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", application_id):
+    if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", str(application_id)):
         logger.error(f"Security Alert: Malformed application ID input: {application_id}")
         return "Access Denied: Invalid Application ID format."
         
@@ -226,6 +218,25 @@ async def generate_upload_session_url(
                 ]
             )
             bq_client.query(insert_query, job_config=insert_config).result()
+
+        try:
+            from utils.database import SessionLocal
+            from repositories.origination import log_artifact
+            from .utils import verified_customer_id_var
+            db = SessionLocal()
+            auth_uid = verified_customer_id_var.get() or customer_id
+            log_artifact(
+                db,
+                application_id=application_id,
+                artifact_type=type_upper,
+                gcs_uri=gcs_uri,
+                auth_provider_uid=auth_uid,
+                artifact_id=gcs_blob_name
+            )
+            db.close()
+            logger.info(f"PostgreSQL placeholder artifact logged for {gcs_blob_name}")
+        except Exception as pg_ex:
+            logger.warning(f"Failed to log placeholder artifact to PostgreSQL in FastMCP: {pg_ex}")
         
         # Retrieve GCP Credentials using default credential chains
         import google.auth
