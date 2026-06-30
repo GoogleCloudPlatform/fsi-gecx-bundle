@@ -213,6 +213,21 @@ def upgrade() -> None:
         op.create_index('idx_credit_accounts_product_code', 'credit_accounts', ['product_code'], schema='cards')
 
     # 8. Alter customer_id type to UUID in cards.credit_accounts and add foreign key
+    if conn.dialect.name == "postgresql":
+        logger.info("Cleaning up customer_id values in cards.credit_accounts before altering type to UUID")
+        with conn.begin_nested():
+            conn.execute(text("""
+                UPDATE cards.credit_accounts ca
+                SET customer_id = CAST(u.id AS varchar)
+                FROM identity.users u
+                WHERE ca.customer_id = u.auth_provider_uid;
+            """))
+            conn.execute(text("""
+                DELETE FROM cards.credit_accounts
+                WHERE customer_id NOT IN (SELECT CAST(id AS varchar) FROM identity.users)
+                   OR customer_id IS NULL;
+            """))
+
     logger.info("Altering customer_id column in cards.credit_accounts")
     with conn.begin_nested():
         op.execute(text('ALTER TABLE cards.credit_accounts ALTER COLUMN customer_id TYPE uuid USING customer_id::uuid;'))
