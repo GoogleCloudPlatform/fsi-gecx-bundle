@@ -1,24 +1,5 @@
 [
     {
-        "id": "11111111-1111-4111-8111-111111111111",
-        "first_name": "Erik",
-        "last_name": "Voit",
-        "email": "erikvoit@google.com",
-        "phone_number": "555-0101",
-        "ssn": "900-01-0001",
-        "credit_score": 785,
-        "credit_tier": "PRIME_EXCELLENT",
-        "stated_annual_income_cents": 25000000,
-        "credit_limit_cents": 3000000,
-        "credit_product": "PLATINUM_TRAVEL_REWARDS",
-        "accounts": [
-            {"type": "CHECKING", "balance_cents": 4500000, "product_code": "CHECKING_SIGNATURE", "product_name": "Nova Signature Checking"},
-            {"type": "SAVINGS", "balance_cents": 15000000, "product_code": "SAVINGS_HIGH_YIELD", "product_name": "Nova High Yield Savings"}
-        ],
-        "card_token": "tok_visa_erik_voit",
-        "cardholder_name": "Erik Voit"
-    },
-    {
         "id": "22222222-2222-4222-8222-222222222222",
         "first_name": "Marcus",
         "last_name": "Vance",
@@ -72,24 +53,6 @@
         ],
         "card_token": "tok_visa_david_miller",
         "cardholder_name": "David Miller"
-    },
-    {
-        "id": "55555555-5555-4555-8555-555555555555",
-        "first_name": "Mark",
-        "last_name": "Servedio",
-        "email": "mservedio@google.com",
-        "phone_number": "555-0105",
-        "ssn": "900-01-0005",
-        "credit_score": 750,
-        "credit_tier": "PRIME_EXCELLENT",
-        "stated_annual_income_cents": 25000000,
-        "credit_limit_cents": 3000000,
-        "credit_product": "BUSINESS_ADVANTAGE",
-        "accounts": [
-            {"type": "CHECKING", "balance_cents": 6000000, "product_code": "BUSINESS_CHECKING", "product_name": "Nova Business Checking"}
-        ],
-        "card_token": "tok_visa_mark_servedio",
-        "cardholder_name": "Mark Servedio"
     },
     {
         "id": "12300000-0000-4000-8000-000000000123",
