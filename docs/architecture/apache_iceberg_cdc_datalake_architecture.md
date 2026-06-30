@@ -94,7 +94,35 @@ The Datastream replication stream (`banking-cdc-stream`) filters and mirrors spe
 
 ---
 
-## ⚖️ 5. Governance, Compliance & Least-Privilege IAM
+## ❄️ 5. Hidden Partitioning & Partition Evolution
+
+A major architectural limitation of legacy data lakes (such as Apache Hive or standard Parquet directories) and native relational table partitioning is that partitions are physically bound to directory folder structures (e.g., `/year=2026/month=06/day=30/`). In those systems, queries must explicitly filter on synthetic partition columns, and changing the partitioning strategy requires expensive table rewrites and data migrations.
+
+Our data lakehouse overcomes this by leveraging **Apache Iceberg Hidden Partitioning and Partition Evolution**:
+
+### A. Manifest-Level Partition Pruning
+In Apache Iceberg, partition assignments and column min/max boundary statistics are maintained entirely inside the **metadata manifest files** (`v1.metadata.json`, manifest lists, and manifest files), not in physical file directory paths. 
+* When Datastream streams WAL mutations into Cloud Storage Parquet files, Iceberg metadata records the exact timestamp and ID ranges for each block.
+* When an analytical query filters on a timestamp or business key (e.g., `WHERE posted_at >= '2026-06-01'`), BigQuery BigLake evaluates the metadata manifests first, performs **manifest pruning (skipping)**, and reads only the relevant Parquet data blocks without needing explicit partition column predicates in the SQL query.
+
+### B. Partition Transforms
+Rather than creating redundant physical columns for year, month, or day, Iceberg utilizes transform expressions on existing domain columns:
+* `day(posted_at)` or `month(posted_at)` for time-series ledger clustering.
+* `bucket(16, application_id)` or `truncate(8, user_id)` for high-cardinality entity distribution.
+
+### C. Zero-Rewrite Partition Evolution
+As transaction volumes grow in our banking platform, our DBA team can dynamically alter the partitioning strategy of an existing table without rewriting historical Parquet data:
+```sql
+-- Example: Evolving from unpartitioned/monthly to daily partitioning as transaction volume surges
+ALTER TABLE iceberg_catalog.posted_transactions ADD PARTITION FIELD day(posted_at);
+```
+* **Historical Data Preservation**: Existing Parquet files retain their original metadata partitioning (or unpartitioned state).
+* **Incremental Application**: All new WAL mutations ingested by Datastream are automatically partitioned by `day(posted_at)`.
+* **Unified Query Execution**: When querying across the evolution boundary, query engines evaluate both old and new partition specs simultaneously, guaranteeing transparent query execution with zero downtime or historical data migration costs.
+
+---
+
+## ⚖️ 6. Governance, Compliance & Least-Privilege IAM
 
 To satisfy FSI regulatory regimes (SOX, GLBA, GDPR), our data lake infrastructure is provisioned with non-destructive safeguards and additive least-privilege IAM bindings:
 
