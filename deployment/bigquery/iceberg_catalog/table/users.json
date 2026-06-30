@@ -1,0 +1,44 @@
+[
+  {
+    "name": "id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Surrogate primary key UUID"
+  },
+  {
+    "name": "auth_provider_uid",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "External authentication provider UID"
+  },
+  {
+    "name": "first_name",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Customer first name"
+  },
+  {
+    "name": "last_name",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Customer last name"
+  },
+  {
+    "name": "email",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Customer email address"
+  },
+  {
+    "name": "phone_number",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Customer phone number"
+  },
+  {
+    "name": "created_at",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE",
+    "description": "Timestamp when customer profile was created"
+  }
+]

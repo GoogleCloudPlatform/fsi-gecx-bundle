@@ -209,3 +209,24 @@ resource "google_storage_bucket_iam_member" "discovery_engine_site_crawled_conte
   role   = "roles/storage.objectViewer"
   member = local.discovery_engine_service_account
 }
+
+resource "google_storage_bucket_iam_member" "iceberg_connection_access" {
+  bucket = google_storage_bucket.iceberg_warehouse.name
+  role   = "roles/storage.objectUser"
+  member = "serviceAccount:${google_bigquery_connection.iceberg.cloud_resource[0].service_account_id}"
+}
+
+# Dev Manager Finding 3.2: Grant connectionUser on BigLake connection
+resource "google_bigquery_connection_iam_member" "reporting_iceberg_connection_user" {
+  location      = google_bigquery_connection.iceberg.location
+  connection_id = google_bigquery_connection.iceberg.id
+  role          = "roles/bigquery.connectionUser"
+  member        = "serviceAccount:${google_service_account.reporting_service_account.email}"
+}
+
+# Security Finding 1.2: Use additive member instead of authoritative binding with least privilege
+resource "google_bigquery_dataset_iam_member" "reporting_iceberg_data_editor" {
+  dataset_id = google_bigquery_dataset.iceberg_catalog.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${google_service_account.reporting_service_account.email}"
+}

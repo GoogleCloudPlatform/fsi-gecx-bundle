@@ -90,3 +90,73 @@ resource "google_bigquery_table" "identity_access_audit_log" {
   clustering = ["user_id", "event_type"]
   schema     = file("${path.module}/../bigquery/compliance_audit/table/identity_access_audit_log.json")
 }
+
+resource "google_bigquery_connection" "iceberg" {
+  connection_id = "iceberg-warehouse"
+  location      = "US"
+  friendly_name = "Iceberg Connection"
+  cloud_resource {}
+
+  depends_on = [google_project_service.bigqueryconnection_googleapis_com]
+}
+
+resource "google_bigquery_dataset" "iceberg_catalog" {
+  dataset_id    = "iceberg_catalog"
+  friendly_name = "Iceberg Catalog Dataset"
+  location      = "US"
+
+  # Security Finding 1.1: Do not enable delete_contents_on_destroy for production financial data lakes
+  delete_contents_on_destroy = false
+}
+
+resource "google_bigquery_table" "posted_transactions" {
+  dataset_id = google_bigquery_dataset.iceberg_catalog.dataset_id
+  table_id   = "posted_transactions"
+  # Security Finding 1.1: Enable deletion_protection in production environments
+  deletion_protection = false
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/posted_transactions/"
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+  }
+
+  schema = file("${path.module}/../bigquery/iceberg_catalog/table/posted_transactions.json")
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
+}
+
+resource "google_bigquery_table" "applications_lake" {
+  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
+  table_id            = "applications"
+  deletion_protection = false
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/applications/"
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+  }
+
+  schema = file("${path.module}/../bigquery/iceberg_catalog/table/applications.json")
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
+}
+
+resource "google_bigquery_table" "users_lake" {
+  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
+  table_id            = "users"
+  deletion_protection = false
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/users/"
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+  }
+
+  schema = file("${path.module}/../bigquery/iceberg_catalog/table/users.json")
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
+}
