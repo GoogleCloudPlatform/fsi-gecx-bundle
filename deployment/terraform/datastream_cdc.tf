@@ -29,9 +29,10 @@ resource "google_datastream_private_connection" "vpc_connection" {
 }
 
 resource "google_datastream_connection_profile" "postgres_source" {
-  display_name          = "PostgreSQL Source Profile"
-  location              = var.region
-  connection_profile_id = "postgres-source-profile"
+  display_name              = "PostgreSQL Source Profile"
+  location                  = var.region
+  connection_profile_id     = "postgres-source-profile"
+  create_without_validation = true
 
   postgresql_profile {
     hostname = google_compute_address.proxy_internal_ip.address
