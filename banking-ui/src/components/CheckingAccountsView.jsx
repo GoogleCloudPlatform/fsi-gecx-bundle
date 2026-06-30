@@ -203,7 +203,7 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
           </div>
 
           {/* Active Account Comprehensive Panel */}
-          <div className="card-slate-900 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center shadow-2xl border border-slate-200 dark:border-slate-800/80 rounded-3xl p-8 md:p-12" style={{ backgroundColor: 'var(--card-bg-color, #0f172a)' }}>
+          <div className="bg-white dark:bg-slate-900/40 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center shadow-2xl border border-slate-200 dark:border-slate-800/80 rounded-3xl p-8 md:p-12">
             
             {/* Left side: Premium Rendered Realistic Debit Card Emblem */}
             <div className="lg:col-span-5 flex justify-center">

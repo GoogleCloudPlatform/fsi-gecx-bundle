@@ -1260,7 +1260,7 @@ function AppContent() {
                 const nextIndex = (themes.indexOf(theme) + 1) % themes.length;
                 setTheme(themes[nextIndex]);
               }}
-              className="hidden md:block p-2.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+              className="hidden md:block p-2.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-650 dark:text-slate-350 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
               title={`Current theme: ${theme}. Click to change.`}
             >
               {theme === 'light' && <Sun className="w-5 h-5" />}
@@ -1269,7 +1269,7 @@ function AppContent() {
             </button>
             <Link
               to="/settings"
-              className="hidden md:block p-2.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+              className="hidden md:block p-2.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-650 dark:text-slate-350 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
               title="Settings"
             >
               <Settings className="w-5 h-5" />
