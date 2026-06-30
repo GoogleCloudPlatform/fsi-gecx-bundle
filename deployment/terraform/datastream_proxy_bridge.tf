@@ -43,7 +43,7 @@ resource "google_compute_firewall" "allow_datastream_to_proxy" {
     ports    = ["5432"]
   }
 
-  source_ranges = ["172.16.1.0/29"]
+  source_ranges = ["0.0.0.0/0"]
   target_tags   = ["datastream-proxy"]
 }
 
