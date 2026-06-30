@@ -597,7 +597,7 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
                 billing_amount_cents=amount_cents,
                 status="POSTED",
                 auth_code=f"T{10000+i}",
-                retrieval_reference_number=f"REF{888000+i:012d}",
+                retrieval_reference_number=f"REF{888000+i:09d}",
                 card_network="VISA",
                 merchant_category_code=swipe_conf["mcc"],
                 merchant_name=swipe_conf["description"],
