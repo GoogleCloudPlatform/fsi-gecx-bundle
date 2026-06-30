@@ -223,6 +223,14 @@ def upgrade() -> None:
                 WHERE ca.customer_id = u.auth_provider_uid;
             """))
             conn.execute(text("""
+                DELETE FROM cards.issued_card
+                WHERE account_id IN (
+                    SELECT id FROM cards.credit_accounts
+                    WHERE customer_id NOT IN (SELECT CAST(id AS varchar) FROM identity.users)
+                       OR customer_id IS NULL
+                );
+            """))
+            conn.execute(text("""
                 DELETE FROM cards.credit_accounts
                 WHERE customer_id NOT IN (SELECT CAST(id AS varchar) FROM identity.users)
                    OR customer_id IS NULL;
