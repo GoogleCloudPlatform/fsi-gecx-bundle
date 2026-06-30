@@ -8,12 +8,12 @@ This document specifies the enterprise analytical data lakehouse architecture fo
 
 To support advanced financial reporting, credit risk analytics, and machine learning models without impacting live transactional OLTP performance, our platform implements an **Apache Iceberg BigLake Data Lakehouse**.
 
-Rather than relying on legacy batch ETL scripts or slow 5-minute scheduled federated polling queries (which trigger destructive full table scans on production databases), we utilize **Google Cloud Datastream** to capture physical row mutations directly from PostgreSQL's Write-Ahead Log (WAL). These logical data streams are mirrored in real time into cloud storage as immutable Apache Iceberg Parquet files, exposed to BigQuery and multi-engine OLAP query tools via Google's BigLake Catalog.
+Rather than relying on legacy batch ETL scripts or scheduled federated polling queries we utilize **Google Cloud Datastream** to capture physical row mutations directly from PostgreSQL's Write-Ahead Log (WAL). These logical data streams are mirrored in real time into cloud storage as immutable Apache Iceberg Parquet files, exposed to BigQuery and multi-engine OLAP query tools via Google's BigLake Catalog.
 
 ### Key Architectural Benefits
 * **Zero OLTP Impact**: Reading from PostgreSQL WAL (`wal_level = logical`) eliminates query polling load on the primary transactional database.
 * **Open Lakehouse Standard**: Apache Iceberg provides ACID transactions, snapshot time-travel, and schema evolution without vendor lock-in.
-* **Bounded Domain Alignment**: Mirrors our decoupled refactored domain schemas (`cards`, `origination`, `identity`) directly into distinct analytical tables.
+* **Bounded Domain Alignment**: Mirrors our decoupled domain schemas (`cards`, `origination`, `identity`) directly into distinct analytical tables.
 
 ---
 
@@ -64,14 +64,14 @@ graph TD
 
 ---
 
-## 🔐 3. The Security & Networking Stack (Option A Bridge)
+## 🔐 3. The Security & Networking Stack
 
 A critical engineering challenge when deploying managed CDC in banking environments is reconciling Google Cloud's network isolation rules with strict financial security compliance.
 
 ### A. The Non-Transitive Peering Constraint
 In Google Cloud Platform, when Cloud SQL connects to a customer VPC via Private Service Access, it resides inside Google's managed producer VPC (`10.212.0.0/16`). When Datastream connects via Private Connectivity, it resides inside Datastream's managed producer VPC (`172.16.1.0/29`). Because **GCP VPC peering is non-transitive**, traffic originating in Datastream's VPC cannot route *through* the customer application VPC to reach Cloud SQL's VPC directly.
 
-### B. Option A: Zero-Public-IP Auth Proxy Bridge
+### B. Zero-Public-IP Auth Proxy Bridge
 To bridge this non-transitive boundary without exposing our primary financial database to a public internet IP (`ipv4_enabled = false`), we implement an internal Container-Optimized OS (COS) proxy bridge:
 1. **Container-Optimized OS VM (`datastream-cloudsql-proxy`)**: Deployed in our application subnet (`10.0.0.4`), this lightweight instance runs Google's official immutable `cloud-sql-proxy` Docker container (`gcr.io/cloud-sql-connectors/cloud-sql-proxy:latest`).
 2. **Local Kernel Firewall Rules**: On boot, an automated metadata startup script executes `iptables -I INPUT -p tcp --dport 5432 -j ACCEPT`, opening the local kernel firewall to accept unencrypted TCP connections on port `5432` from internal peered subnets.
@@ -84,7 +84,7 @@ To prevent internal routing table collisions and route shadowing with existing a
 
 ## 🏛️ 4. Decoupled Domain Schema Mapping
 
-Our data lakehouse abandons legacy monolithic table dumping in favor of preserving our refactored Bounded Context domain schemas. The Datastream replication stream (`banking-cdc-stream`) filters and mirrors specific tables directly into corresponding BigLake Iceberg definitions:
+The Datastream replication stream (`banking-cdc-stream`) filters and mirrors specific tables directly into corresponding BigLake Iceberg definitions:
 
 | Domain Context | OLTP Source Schema | OLTP Source Table | BigLake Iceberg Table | Analytical Purpose |
 | :--- | :--- | :--- | :--- | :--- |
