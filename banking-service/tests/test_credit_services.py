@@ -16,7 +16,8 @@ import pytest
 import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from models.credit_card import Base, FinancialAccount, IssuedCard, AccountLedger
+from models.credit_card import Base, FinancialAccount, IssuedCard, AccountLedger, CreditProduct
+from models.identity import User
 from services.credit_card import freeze_card, apply_limit_increase, reverse_posted_fee
 
 # Use an isolated, in-memory SQLite database for sub-second, side-effect-free testing
@@ -32,10 +33,36 @@ def fixture_db_session():
     
     db = TestingSessionLocal()
     try:
+        # Pre-seed CreditProduct catalog
+        prod = CreditProduct(
+            product_code="CASHBACK_EVERYDAY",
+            product_name="Nova Cashback Everyday",
+            min_credit_limit_cents=300000,
+            max_credit_limit_cents=1500000,
+            purchase_apr=0.2199,
+            cashback_rate=0.0150,
+            travel_multiplier=1,
+            dining_multiplier=1,
+            annual_fee_cents=0
+        )
+        db.add(prod)
+        
+        # Pre-seed User
+        usr = User(
+            id="88888888-8888-4888-8888-222222222222",
+            auth_provider_uid="cust-test-xyz",
+            first_name="John",
+            last_name="Doe",
+            email="john@example.com"
+        )
+        db.add(usr)
+        db.flush()
+
         # Seed test profiles
         account = FinancialAccount(
             id="12300000-0000-4000-8000-000000000123",
-            customer_id="cust-test-xyz",
+            customer_id=usr.id,
+            product_code=prod.product_code,
             status="ACTIVE",
             credit_limit_cents=500000,       # $5,000 credit limit
             cleared_balance_cents=3500,       # Owed $35 (late fee)

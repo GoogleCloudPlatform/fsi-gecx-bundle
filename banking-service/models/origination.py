@@ -14,11 +14,30 @@
 
 from typing import Optional
 import datetime
-from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Integer, Index, Text, Float
+from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Integer, Index, Text, Float, Numeric, Boolean
 from utils.database import UniversalUUID as UUID, generate_uuid
 from sqlalchemy.orm import relationship
 from utils.database import Base
 from models.application import ProductCategory
+
+
+class DepositProduct(Base):
+    """
+    Catalog definition for deposit accounts (Checking, Savings).
+    Enforces yield/interest pricing (Truth in Savings / Reg DD).
+    """
+    __tablename__ = "deposit_products"
+    __table_args__ = {'schema': 'ledger'}
+
+    product_code = Column(String(50), primary_key=True)  # e.g. 'SAVINGS_HIGH_YIELD'
+    product_name = Column(String(100), nullable=False)
+    
+    # Yield & fees configurations
+    annual_percentage_yield = Column(Numeric(5, 4), nullable=False, default=0.0000)  # e.g. 0.0450 (4.50%)
+    monthly_maintenance_fee_cents = Column(BigInteger, nullable=False, default=0)
+    
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
 
 class Account(Base):
@@ -34,6 +53,8 @@ class Account(Base):
     account_number = Column(String(50), unique=True, nullable=False)
     account_type = Column(String(30), nullable=False)  # 'CREDIT_CARD', 'CHECKING', 'SAVINGS', 'SYSTEM'
     product_name = Column(String(100), nullable=False)
+    product_code = Column(String(50), ForeignKey("ledger.deposit_products.product_code", ondelete="RESTRICT"), nullable=False, default="CHECKING_EVERYDAY")
+    routing_number = Column(String(9), nullable=False, default="021000021")
     status = Column(String(20), nullable=False, default="ACTIVE")
     credit_limit_cents = Column(BigInteger, nullable=False, default=0)
     cleared_balance_cents = Column(BigInteger, nullable=False, default=0)

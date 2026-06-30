@@ -47,10 +47,54 @@ def initialize_db_and_seed(db: Session):
 
     logger.info("Seeding database with default bank-issuer profiles...")
     try:
+        # Seed credit products catalog if empty
+        from models.credit_card import CreditProduct
+        if db.query(CreditProduct).count() == 0:
+            logger.info("Seeding CreditProduct catalog in active DB session...")
+            products = [
+                CreditProduct(product_code="PLATINUM_TRAVEL_REWARDS", product_name="Nova Platinum Travel", min_credit_limit_cents=1500000, max_credit_limit_cents=10000000, purchase_apr=0.1899, cashback_rate=0.0000, travel_multiplier=3, dining_multiplier=3, annual_fee_cents=9500),
+                CreditProduct(product_code="CASHBACK_EVERYDAY", product_name="Nova Cashback Everyday", min_credit_limit_cents=300000, max_credit_limit_cents=1500000, purchase_apr=0.2199, cashback_rate=0.0150, travel_multiplier=1, dining_multiplier=1, annual_fee_cents=0),
+                CreditProduct(product_code="BUSINESS_ADVANTAGE", product_name="Executive Business Advantage", min_credit_limit_cents=2000000, max_credit_limit_cents=15000000, purchase_apr=0.1799, cashback_rate=0.0200, travel_multiplier=2, dining_multiplier=2, annual_fee_cents=0),
+                CreditProduct(product_code="SECURED_STARTER", product_name="Nova Secured Rebuilder", min_credit_limit_cents=50000, max_credit_limit_cents=250000, purchase_apr=0.2799, cashback_rate=0.0100, travel_multiplier=1, dining_multiplier=1, annual_fee_cents=0)
+            ]
+            db.add_all(products)
+            db.flush()
+
+        # Seed deposit products catalog if empty
+        from models.origination import DepositProduct
+        if db.query(DepositProduct).count() == 0:
+            logger.info("Seeding DepositProduct catalog in active DB session...")
+            deposits = [
+                DepositProduct(product_code="CHECKING_SIGNATURE", product_name="Nova Signature Checking", annual_percentage_yield=0.0005, monthly_maintenance_fee_cents=1500),
+                DepositProduct(product_code="CHECKING_EVERYDAY", product_name="Nova Everyday Checking", annual_percentage_yield=0.0000, monthly_maintenance_fee_cents=0),
+                DepositProduct(product_code="SAVINGS_HIGH_YIELD", product_name="Nova High Yield Savings", annual_percentage_yield=0.0450, monthly_maintenance_fee_cents=0),
+                DepositProduct(product_code="BUSINESS_CHECKING", product_name="Nova Business Checking", annual_percentage_yield=0.0010, monthly_maintenance_fee_cents=1000)
+            ]
+            db.add_all(deposits)
+            db.flush()
+
+        # Seed default user in identity.users if not present
+        from models.identity import User
+        seed_user_id = "12300000-0000-4000-8000-000000000123"
+        seed_user = db.query(User).filter(User.id == seed_user_id).first()
+        if not seed_user:
+            logger.info("Creating default seed user record...")
+            seed_user = User(
+                id=seed_user_id,
+                auth_provider_uid="cust-123",
+                first_name="Jane",
+                last_name="Doe",
+                email="customer@example.com",
+                phone_number="555-0199"
+            )
+            db.add(seed_user)
+            db.flush()
+
         # 1. Create a core Financial Account
         seed_account = FinancialAccount(
             id="88888888-8888-4888-8888-999999999999",
-            customer_id="cust-123",
+            customer_id=seed_user.id,
+            product_code="CASHBACK_EVERYDAY",
             status="ACTIVE",
             credit_limit_cents=1000000,       # $10,000 credit limit
             cleared_balance_cents=18044,      # Total debt: $180.44 (Late Fee + Starbucks + YouTube + Whole Foods + Shell)
@@ -260,7 +304,8 @@ def get_fdx_account(db: Session, account_id: str, customer_id: str) -> FDXAccoun
     from repositories.credit_card import CreditCardRepository
     repo = CreditCardRepository(db)
     account = repo.get_account_by_id(account_id)
-    if not account or str(account.customer_id) != str(customer_id):
+    resolved_uid = repo._resolve_user_id(customer_id)
+    if not account or str(account.customer_id) != resolved_uid:
         raise ValueError("Account not found or access denied.")
     
     cards = repo.list_cards_by_account(account_id)
@@ -285,7 +330,8 @@ def get_realtime_balance(db: Session, account_id: str, customer_id: str) -> Real
     from repositories.credit_card import CreditCardRepository
     repo = CreditCardRepository(db)
     account = repo.get_account_by_id(account_id)
-    if not account or str(account.customer_id) != str(customer_id):
+    resolved_uid = repo._resolve_user_id(customer_id)
+    if not account or str(account.customer_id) != resolved_uid:
         raise ValueError("Account not found or access denied.")
         
     pending_auths = repo.list_pending_authorizations(account_id)
@@ -306,7 +352,8 @@ def get_unified_transactions(db: Session, account_id: str, customer_id: str, off
     from repositories.credit_card import CreditCardRepository
     repo = CreditCardRepository(db)
     account = repo.get_account_by_id(account_id)
-    if not account or str(account.customer_id) != str(customer_id):
+    resolved_uid = repo._resolve_user_id(customer_id)
+    if not account or str(account.customer_id) != resolved_uid:
         raise ValueError("Account not found or access denied.")
         
     pending_auths = repo.list_pending_authorizations(account_id)
@@ -368,7 +415,8 @@ def get_payment_networks(db: Session, account_id: str, customer_id: str) -> Pagi
     from repositories.credit_card import CreditCardRepository
     repo = CreditCardRepository(db)
     account = repo.get_account_by_id(account_id)
-    if not account or str(account.customer_id) != str(customer_id):
+    resolved_uid = repo._resolve_user_id(customer_id)
+    if not account or str(account.customer_id) != resolved_uid:
         raise ValueError("Account not found or access denied.")
         
     net = PaymentNetwork(

@@ -21,6 +21,32 @@ from utils.database import UniversalUUID as UUID, generate_uuid
 from sqlalchemy.orm import relationship
 from utils.database import Base
 
+class CreditProduct(Base):
+    """
+    Catalog definition for revolving credit card products.
+    Enforces pricing disclosures (APR, fees) and rewards parameters.
+    """
+    __tablename__ = "credit_products"
+    __table_args__ = {'schema': 'cards'}
+
+    product_code = Column(String(50), primary_key=True)  # e.g. 'PLATINUM_TRAVEL_REWARDS'
+    product_name = Column(String(100), nullable=False)
+    
+    # Underwriting bounds
+    min_credit_limit_cents = Column(BigInteger, nullable=False)
+    max_credit_limit_cents = Column(BigInteger, nullable=False)
+    
+    # Financial rates (Regulatory Disclosures: Truth in Lending / Reg Z)
+    purchase_apr = Column(Numeric(5, 4), nullable=False)  # e.g., 0.1899 (18.99%)
+    cashback_rate = Column(Numeric(5, 4), nullable=False, default=0.0000)  # e.g. 0.0100 (1%)
+    travel_multiplier = Column(Integer, nullable=False, default=1)  # multiplier (e.g. 3x)
+    dining_multiplier = Column(Integer, nullable=False, default=1)
+    annual_fee_cents = Column(BigInteger, nullable=False, default=0)
+    
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+
 class CreditAccount(Base):
     """
     Models the core credit account line, storing credit limits, cleared balances (debts), 
@@ -30,7 +56,8 @@ class CreditAccount(Base):
     __table_args__ = {'schema': 'cards'}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    customer_id = Column(String(36), nullable=False)
+    customer_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="RESTRICT"), nullable=False)
+    product_code = Column(String(50), ForeignKey("cards.credit_products.product_code", ondelete="RESTRICT"), nullable=False)
     status = Column(String(20), nullable=False, default="ACTIVE") # 'ACTIVE', 'FROZEN', 'DELINQUENT', 'CLOSED'
     
     # Values represented in cents (BIGINT) to guarantee ledger precision

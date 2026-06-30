@@ -1,0 +1,32 @@
+[
+  {
+    "name": "event_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unique UUID of the outbox audit event."
+  },
+  {
+    "name": "event_type",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Type of event (e.g. CREDIT_PRODUCT_CATALOG_UPDATED, DEPOSIT_PRODUCT_CATALOG_UPDATED)."
+  },
+  {
+    "name": "product_code",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Associated product catalog code."
+  },
+  {
+    "name": "payload",
+    "type": "JSON",
+    "mode": "NULLABLE",
+    "description": "Strongly typed native JSON structured event payload."
+  },
+  {
+    "name": "created_at",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Event creation timestamp for partitioning."
+  }
+]

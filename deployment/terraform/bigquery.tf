@@ -305,3 +305,89 @@ resource "google_bigquery_table" "unified_applications_view" {
     google_bigquery_table.mortgage_applications
   ]
 }
+
+resource "google_bigquery_table" "credit_products" {
+  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
+  table_id            = "credit_products"
+  deletion_protection = false
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/credit_products/"
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+  }
+
+  schema = file("${path.module}/../bigquery/iceberg_catalog/table/credit_products.json")
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
+}
+
+resource "google_bigquery_table" "deposit_products" {
+  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
+  table_id            = "deposit_products"
+  deletion_protection = false
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/deposit_products/"
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+  }
+
+  schema = file("${path.module}/../bigquery/iceberg_catalog/table/deposit_products.json")
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
+}
+
+resource "google_bigquery_table" "user_credit_profiles" {
+  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
+  table_id            = "user_credit_profiles"
+  deletion_protection = false
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/user_credit_profiles/"
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+  }
+
+  schema = templatefile("${path.module}/../bigquery/iceberg_catalog/table/user_credit_profiles.json.tftpl", {
+    policy_tag_id = google_data_catalog_policy_tag.sensitive_npi.id
+  })
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
+}
+
+resource "google_bigquery_table" "kyc_records" {
+  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
+  table_id            = "kyc_records"
+  deletion_protection = false
+
+  biglake_configuration {
+    connection_id = google_bigquery_connection.iceberg.name
+    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/kyc_records/"
+    file_format   = "PARQUET"
+    table_format  = "ICEBERG"
+  }
+
+  schema = file("${path.module}/../bigquery/iceberg_catalog/table/kyc_records.json")
+
+  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
+}
+
+resource "google_bigquery_table" "system_config_audit_log" {
+  dataset_id          = google_bigquery_dataset.compliance_audit.dataset_id
+  table_id            = "system_config_audit_log"
+  deletion_protection = false
+
+  require_partition_filter = true
+  time_partitioning {
+    type  = "MONTH"
+    field = "created_at"
+  }
+
+  clustering = ["product_code", "event_type"]
+  schema     = file("${path.module}/../bigquery/compliance_audit/table/system_config_audit_log.json")
+}
+
