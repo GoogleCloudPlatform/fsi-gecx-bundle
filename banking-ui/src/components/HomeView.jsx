@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { getAccountsSummary, provisionMyDemo } from '../utils/api.js';
+import { useNavigate } from 'react-router-dom';
 import BillPayModal from './BillPayModal.jsx';
 
 function HomeView({
@@ -30,6 +31,8 @@ function HomeView({
     brandColorFrom,
     brandColorTo
   } = useSettings();
+
+  const navigate = useNavigate();
 
   const [accountsData, setAccountsData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -94,29 +97,91 @@ function HomeView({
               <span>Voted #1 Digital Credit Union 2026</span>
             </div>
             
-            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight leading-tight">
-              Banking that works <br />
-              <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
-                in your best interest.
-              </span>
-            </h1>
-            
-            <p className="text-lg text-slate-600 dark:text-slate-400 max-w-xl leading-relaxed">
-              Experience next-generation retail banking combined with the trusted values of a member-owned credit union. Higher yields, lower rates, zero hidden fees.
-            </p>
+            {fbUser ? (
+              <>
+                <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight leading-tight">
+                  Welcome back, <br />
+                  <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
+                    {accountsData?.user_profile?.first_name || fbUser.email.split('@')[0].toUpperCase()}
+                  </span>
+                </h1>
+                
+                <p className="text-lg text-slate-600 dark:text-slate-400 max-w-xl leading-relaxed">
+                  Manage your checks, deposits, credit cards, or simulate transactions using your active developer sandbox accounts.
+                </p>
 
-            <div className="flex flex-col sm:flex-row gap-4">
-              <button 
-                className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300"
-                style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
-              >
-                <span>Become a Member</span>
-                <ArrowRight className="w-5 h-5" />
-              </button>
-              <button className="flex items-center justify-center px-8 py-4 rounded-full bg-slate-900 border border-slate-800 text-slate-200 font-semibold hover:bg-slate-800 transition-colors">
-                Compare Accounts
-              </button>
-            </div>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  {hasAccounts ? (
+                    <>
+                      <button 
+                        onClick={() => navigate('/checking-accounts')}
+                        className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
+                        style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
+                      >
+                        <span>View My Accounts</span>
+                        <ArrowRight className="w-5 h-5" />
+                      </button>
+                      <button 
+                        onClick={() => {
+                          const helpSection = document.getElementById('help');
+                          if (helpSection) helpSection.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className="flex items-center justify-center px-8 py-4 rounded-full bg-slate-900 border border-slate-800 text-slate-200 font-semibold hover:bg-slate-850 transition-colors cursor-pointer"
+                      >
+                        Dispute Fee with AI
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button 
+                        onClick={handleProvision}
+                        disabled={isProvisioning}
+                        className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer disabled:opacity-50"
+                        style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
+                      >
+                        <span>{isProvisioning ? "Provisioning Sandbox..." : "Provision Demo Suite"}</span>
+                        <ArrowRight className="w-5 h-5" />
+                      </button>
+                      <button 
+                        onClick={() => {
+                          const calcSection = document.getElementById('calculator');
+                          if (calcSection) calcSection.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className="flex items-center justify-center px-8 py-4 rounded-full bg-slate-900 border border-slate-800 text-slate-200 font-semibold hover:bg-slate-850 transition-colors cursor-pointer"
+                      >
+                        Explore Products
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight leading-tight">
+                  Banking that works <br />
+                  <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
+                    in your best interest.
+                  </span>
+                </h1>
+                
+                <p className="text-lg text-slate-600 dark:text-slate-400 max-w-xl leading-relaxed">
+                  Experience next-generation retail banking combined with the trusted values of a member-owned credit union. Higher yields, lower rates, zero hidden fees.
+                </p>
+
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <button 
+                    className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
+                    style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
+                  >
+                    <span>Become a Member</span>
+                    <ArrowRight className="w-5 h-5" />
+                  </button>
+                  <button className="flex items-center justify-center px-8 py-4 rounded-full bg-slate-900 border border-slate-800 text-slate-200 font-semibold hover:bg-slate-850 transition-colors cursor-pointer">
+                    Compare Accounts
+                  </button>
+                </div>
+              </>
+            )}
 
             <div className="pt-8 border-t border-slate-200 dark:border-slate-900 flex items-center justify-between max-w-md">
               <div>
@@ -445,22 +510,103 @@ function HomeView({
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-20 px-6 relative overflow-hidden border-y border-slate-800" style={{ backgroundColor: 'var(--card-bg-color, #0f172a)' }}>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl"></div>
-        <div className="max-w-4xl mx-auto text-center relative z-10">
-          <h2 className="text-3xl md:text-5xl font-black mb-6 text-white">
-            Ready to take control of your wealth?
-          </h2>
-          <p className="text-slate-400 max-w-xl mx-auto mb-8">
-            Join thousands of members who are earning more and paying less with {bankName} Credit Union.
-          </p>
-                <button
-                  className="px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-105 transition-all duration-300"
-                  style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
-                >
-            Open an Account in 5 Minutes
-          </button>
+      {/* Personalized Offers or CTA Section */}
+      <section className="py-24 px-6 relative overflow-hidden border-y border-slate-200 dark:border-slate-800" style={{ backgroundColor: 'var(--card-bg-color, #0f172a)' }}>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-3xl -z-10"></div>
+        <div className="max-w-7xl mx-auto relative z-10">
+          {fbUser ? (
+            <div>
+              <div className="text-center max-w-2xl mx-auto mb-16">
+                <span className="text-emerald-400 font-semibold text-sm tracking-wider uppercase">Exclusive Benefits</span>
+                <h2 className="text-3xl md:text-5xl font-black mt-3 mb-6 text-white">
+                  Personalized offers for you
+                </h2>
+                <p className="text-slate-400 text-sm">
+                  Maximize your wealth with active member benefits tailored to your credit profile and account history.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {/* Offer 1 */}
+                <div className="bg-slate-900/80 border border-slate-850 rounded-3xl p-8 hover:border-emerald-500/40 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
+                  <div>
+                    <div className="w-12 h-12 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 mb-6">
+                      <TrendingUp className="w-6 h-6" />
+                    </div>
+                    <span className="text-xs font-semibold text-teal-400 bg-teal-500/10 px-3 py-1 rounded-full">High-Yield Special</span>
+                    <h3 className="text-2xl font-bold text-white mt-4 mb-3">4.85% APY Savings</h3>
+                    <p className="text-slate-400 text-sm leading-relaxed mb-8">
+                      Earn interest rates 10x higher than the national average with zero minimum deposit rules and zero monthly maintenance fees.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => navigate('/checking-accounts')}
+                    className="w-full py-3.5 rounded-xl bg-slate-800 text-slate-200 font-semibold hover:bg-slate-700 transition-all duration-200 cursor-pointer"
+                  >
+                    Deposit Funds
+                  </button>
+                </div>
+
+                {/* Offer 2 */}
+                <div className="bg-slate-900/80 border border-slate-850 rounded-3xl p-8 hover:border-cyan-500/40 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
+                  <div>
+                    <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 mb-6">
+                      <CreditCard className="w-6 h-6" />
+                    </div>
+                    <span className="text-xs font-semibold text-cyan-400 bg-cyan-500/10 px-3 py-1 rounded-full">1.5% Unlimited Cash</span>
+                    <h3 className="text-2xl font-bold text-white mt-4 mb-3">Nova Everyday Card</h3>
+                    <p className="text-slate-400 text-sm leading-relaxed mb-8">
+                      Enjoy unlimited cash back on gas, groceries, and dining with a prime credit limit up to $10,000 and no annual fees.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => navigate('/credit-cards')}
+                    className="w-full py-3.5 rounded-xl bg-slate-800 text-slate-200 font-semibold hover:bg-slate-700 transition-all duration-200 cursor-pointer"
+                  >
+                    Apply Instantly
+                  </button>
+                </div>
+
+                {/* Offer 3 */}
+                <div className="bg-slate-900/80 border border-slate-850 rounded-3xl p-8 hover:border-emerald-500/40 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
+                  <div>
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-6">
+                      <Percent className="w-6 h-6" />
+                    </div>
+                    <span className="text-xs font-semibold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full">Low Fixed Rates</span>
+                    <h3 className="text-2xl font-bold text-white mt-4 mb-3">5.99% Personal Loan</h3>
+                    <p className="text-slate-400 text-sm leading-relaxed mb-8">
+                      Estimate, customize, and submit loan requests with instant approval decisions and check deposits within 24 hours.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      const calcSection = document.getElementById('calculator');
+                      if (calcSection) calcSection.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="w-full py-3.5 rounded-xl bg-slate-800 text-slate-200 font-semibold hover:bg-slate-700 transition-all duration-200 cursor-pointer"
+                  >
+                    Calculate Payments
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="max-w-4xl mx-auto text-center">
+              <h2 className="text-3xl md:text-5xl font-black mb-6 text-white">
+                Ready to take control of your wealth?
+              </h2>
+              <p className="text-slate-400 max-w-xl mx-auto mb-8">
+                Join thousands of members who are earning more and paying less with {bankName} Credit Union.
+              </p>
+              <button
+                className="px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
+                style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
+              >
+                Open an Account in 5 Minutes
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
