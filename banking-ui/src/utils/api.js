@@ -169,8 +169,10 @@ export async function performSearch({ query }) {
   return res.data;
 }
 
-export async function getCreditCardAccount(targetCustomerId = null) {
-  const params = targetCustomerId ? { target_customer_id: targetCustomerId } : {};
+export async function getCreditCardAccount(targetCustomerId = null, fallback = true) {
+  const params = {};
+  if (targetCustomerId) params.target_customer_id = targetCustomerId;
+  if (fallback === false) params.fallback = 'false';
   const res = await api.get('/credit-card/account', { params });
   return res.data;
 }

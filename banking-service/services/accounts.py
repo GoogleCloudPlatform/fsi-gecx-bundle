@@ -161,6 +161,7 @@ class AccountsService:
         user = self.db.query(User).filter(User.auth_provider_uid == token.user_id).first()
         if not user:
             ProfileService(self.db).get_or_provision_profile(token)
+            self.db.commit()
             user = self.db.query(User).filter(User.auth_provider_uid == token.user_id).first()
             if not user:
                 raise HTTPException(status_code=404, detail="User profile could not be resolved.")

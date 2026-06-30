@@ -69,7 +69,7 @@ function AdminDashboardView() {
   useEffect(() => {
     async function checkSeededProfile() {
       try {
-        await getCreditCardAccount();
+        await getCreditCardAccount(null, false);
         setHasSeededProfile(true);
       } catch (err) {
         setHasSeededProfile(false);

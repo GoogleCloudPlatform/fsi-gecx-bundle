@@ -45,7 +45,8 @@ def get_credit_card_repo(db: Session = Depends(get_db)) -> CreditCardRepository:
 
 def _get_active_customer_id(
     token: ValidatedToken = Depends(get_current_user),
-    repo: CreditCardRepository = Depends(get_credit_card_repo)
+    repo: CreditCardRepository = Depends(get_credit_card_repo),
+    fallback: bool = True
 ) -> str:
     """Helper: Resolves active customer ID from validated Firebase token, falling back to seed profile if the user has no custom account."""
     if token and hasattr(token, "claims"):
@@ -53,7 +54,9 @@ def _get_active_customer_id(
         account = repo.get_account_by_customer(user_id)
         if account:
             return user_id
-    return "cust-123"
+    if fallback:
+        return "cust-123"
+    raise HTTPException(status_code=404, detail="No active credit card account found for the current user.")
 
 
 

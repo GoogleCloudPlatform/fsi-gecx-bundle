@@ -126,22 +126,6 @@ app.add_middleware(
     minimum_size=1000,
 )
 
-@app.get("/debug-db")
-async def debug_db():
-    from utils.database import SessionLocal
-    from models.identity import User
-    from models.credit_card import CreditAccount
-    db = SessionLocal()
-    try:
-        users = db.query(User).all()
-        credit_accounts = db.query(CreditAccount).all()
-        return {
-            "users": [{"id": str(u.id), "auth_uid": u.auth_provider_uid, "email": u.email} for u in users],
-            "credit_accounts": [{"id": str(c.id), "customer_id": str(c.customer_id), "product_code": c.product_code} for c in credit_accounts]
-        }
-    finally:
-        db.close()
-
 app.include_router(application_router)
 app.include_router(artifact_router)
 app.include_router(ccai_auth_router)
