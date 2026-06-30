@@ -83,11 +83,23 @@ resource "google_datastream_stream" "banking_cdc_stream" {
           postgresql_tables {
             table = "posted_transactions"
           }
+          postgresql_tables {
+            table = "issued_card"
+          }
+          postgresql_tables {
+            table = "transaction_authorization"
+          }
         }
         postgresql_schemas {
           schema = "origination"
           postgresql_tables {
             table = "applications"
+          }
+          postgresql_tables {
+            table = "credit_card_applications"
+          }
+          postgresql_tables {
+            table = "mortgage_applications"
           }
         }
         postgresql_schemas {
@@ -112,7 +124,11 @@ resource "google_datastream_stream" "banking_cdc_stream" {
   depends_on = [
     google_project_service.datastream_googleapis_com,
     google_bigquery_table.posted_transactions,
+    google_bigquery_table.issued_card,
+    google_bigquery_table.transaction_authorization,
     google_bigquery_table.applications_lake,
+    google_bigquery_table.credit_card_applications,
+    google_bigquery_table.mortgage_applications,
     google_bigquery_table.users_lake
   ]
 }

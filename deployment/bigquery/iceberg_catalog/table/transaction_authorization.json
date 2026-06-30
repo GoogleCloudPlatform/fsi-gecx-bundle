@@ -1,0 +1,110 @@
+[
+  {
+    "name": "id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unique identifier for transaction authorization"
+  },
+  {
+    "name": "card_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Associated issued card identifier"
+  },
+  {
+    "name": "account_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Associated credit account identifier"
+  },
+  {
+    "name": "transaction_amount_cents",
+    "type": "INTEGER",
+    "mode": "REQUIRED",
+    "description": "Transaction amount in cents"
+  },
+  {
+    "name": "transaction_currency",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "ISO-4217 transaction currency code"
+  },
+  {
+    "name": "billing_amount_cents",
+    "type": "INTEGER",
+    "mode": "REQUIRED",
+    "description": "Billing amount in cents"
+  },
+  {
+    "name": "billing_currency",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "ISO-4217 billing currency code"
+  },
+  {
+    "name": "exchange_rate",
+    "type": "NUMERIC",
+    "mode": "REQUIRED",
+    "description": "Foreign exchange rate applied"
+  },
+  {
+    "name": "status",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Authorization status (PENDING, APPROVED, DECLINED, REVERSED)"
+  },
+  {
+    "name": "decline_reason",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Reason for authorization decline"
+  },
+  {
+    "name": "auth_code",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Approval authorization code"
+  },
+  {
+    "name": "retrieval_reference_number",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "ISO-8583 retrieval reference number"
+  },
+  {
+    "name": "card_network",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Card network (VISA, MASTERCARD)"
+  },
+  {
+    "name": "merchant_category_code",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Merchant Category Code (MCC)"
+  },
+  {
+    "name": "merchant_name",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Name of the merchant"
+  },
+  {
+    "name": "fraud_risk_score",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Calculated fraud risk score"
+  },
+  {
+    "name": "created_at",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE",
+    "description": "Timestamp authorization was requested"
+  },
+  {
+    "name": "expires_at",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Timestamp authorization expires"
+  }
+]

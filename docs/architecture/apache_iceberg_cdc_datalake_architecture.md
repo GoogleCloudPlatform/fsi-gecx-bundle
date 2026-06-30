@@ -82,15 +82,29 @@ To prevent internal routing table collisions and route shadowing with existing a
 
 ---
 
-## 🏛️ 4. Decoupled Domain Schema Mapping
+## 🏛️ 4. Decoupled Domain Schema Mapping & Medallion Views
 
-The Datastream replication stream (`banking-cdc-stream`) filters and mirrors specific tables directly into corresponding BigLake Iceberg definitions:
+To solve the impedance mismatch between normalized OLTP schemas and denormalized analytical reporting without creating ETL lag or race conditions, our data lakehouse implements a strict **Medallion Lakehouse Architecture (Bronze Raw CDC -> Silver/Gold Curated Views)**.
+
+### A. Bronze Tier: Raw 1-to-1 CDC Replication
+The Datastream replication stream (`banking-cdc-stream`) filters and mirrors our refactored Bounded Context tables directly into corresponding BigLake Iceberg definitions in the `iceberg_catalog` dataset:
 
 | Domain Context | OLTP Source Schema | OLTP Source Table | BigLake Iceberg Table | Analytical Purpose |
 | :--- | :--- | :--- | :--- | :--- |
-| **Cards & Ledgers** | `cards` | `posted_transactions` | `iceberg_catalog.posted_transactions` | High-volume financial transaction auditing, fraud detection models, and merchant settlement analytics. |
-| **Origination & Loans** | `origination` | `applications` | `iceberg_catalog.applications_lake` | Loan underwriting funnel analysis, fair lending compliance (ECOA), and credit score performance tracking. |
-| **Identity & IAM** | `identity` | `users` | `iceberg_catalog.users_lake` | Customer demographic segmentation, KYC compliance reporting, and cross-service identity reconciliation. |
+| **Cards & Ledgers** | `cards` | `posted_transactions` | `iceberg_catalog.posted_transactions` | Base posted ledger entries and authorization links. |
+| **Cards & Ledgers** | `cards` | `issued_card` | `iceberg_catalog.issued_card` | Issued card instruments, PAN tokens, last 4 digits, and status. |
+| **Cards & Ledgers** | `cards` | `transaction_authorization` | `iceberg_catalog.transaction_authorization` | ISO-8583 authorization holds, MCC codes, merchant names, and FX rates. |
+| **Origination & Loans** | `origination` | `applications` | `iceberg_catalog.applications_lake` | Core applicant funnel, workflow status, and customer links. |
+| **Origination & Loans** | `origination` | `credit_card_applications` | `iceberg_catalog.credit_card_applications` | Requested credit limits and card product selections. |
+| **Origination & Loans** | `origination` | `mortgage_applications` | `iceberg_catalog.mortgage_applications` | Requested mortgage loan amounts, property addresses, and valuations. |
+| **Identity & IAM** | `identity` | `users` | `iceberg_catalog.users_lake` | Customer demographics, email addresses, and KYC records. |
+
+### B. Silver/Gold Tier: Curated BigQuery Semantic Layer (`analytics_curated`)
+Rather than forcing data scientists or business analysts to write complex multi-table joins across raw UUIDs, we expose clean, business-ready SQL views in the `analytics_curated` dataset:
+* **`analytics_curated.enriched_posted_transactions`**: Joins `posted_transactions` -> `transaction_authorization` -> `issued_card` to provide an instant, denormalized view of transactions with card numbers (`last_four`), card active status, merchant names, and authorization decline reasons.
+* **`analytics_curated.unified_applications`**: Joins `applications_lake` -> `users_lake` -> `credit_card_applications` / `mortgage_applications` into a unified applicant underwriting funnel with applicant email addresses, credit card requested limits, and mortgage property details.
+
+Because these views query directly against the underlying BigLake Iceberg Parquet manifests, queries benefit from **zero data duplication**, **zero batch ETL latency**, and automatic manifest-level partition pruning!
 
 ---
 
