@@ -43,7 +43,7 @@ from utils.auth import get_current_user
 from routers.locator import router as locator_router
 from routers.accounts import router as accounts_router, alias_router as accounts_alias_router
 from routers.fdx import router as fdx_router
-from routers.simulation import router as simulation_router
+from routers.simulation import router as simulation_router, v1_router as simulation_v1_router, alias_router as simulation_alias_router
 from routers.card_network import router as card_network_router
 
 # Import and register FastMCP tools and ASGI app from the isolated mcp router module
@@ -148,6 +148,8 @@ app.include_router(accounts_router)
 app.include_router(accounts_alias_router)
 app.include_router(fdx_router)
 app.include_router(simulation_router)
+app.include_router(simulation_v1_router)
+app.include_router(simulation_alias_router)
 
 
 def custom_openapi():

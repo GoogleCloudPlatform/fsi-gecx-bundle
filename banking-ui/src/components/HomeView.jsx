@@ -290,7 +290,7 @@ function HomeView({
                   <div className="space-y-2">
                     <h3 className="text-lg font-bold text-white">Set up your Sandbox</h3>
                     <p className="text-xs leading-relaxed text-slate-400 max-w-sm">
-                      Your database profile is resolved, but you don't have any active accounts. 
+                      A database profile has been provisioned for <span className="text-emerald-400 font-semibold">{fbUser?.email}</span>, but you don't have any active accounts. 
                       Provision your isolated personal demo suite to test live payments, statements, and agent calls.
                     </p>
                   </div>

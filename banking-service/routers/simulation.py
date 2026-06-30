@@ -24,8 +24,12 @@ from models.identity import User
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/simulation", tags=["simulation"], dependencies=[Depends(get_current_user)])
+v1_router = APIRouter(prefix="/v1/simulation", tags=["simulation"], dependencies=[Depends(get_current_user)])
+alias_router = APIRouter(prefix="/simulation", tags=["simulation"], dependencies=[Depends(get_current_user)])
 
 @router.post("/provision-my-demo", status_code=status.HTTP_201_CREATED)
+@v1_router.post("/provision-my-demo", status_code=status.HTTP_201_CREATED)
+@alias_router.post("/provision-my-demo", status_code=status.HTTP_201_CREATED)
 def provision_my_demo(
     token: ValidatedToken = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -71,6 +75,8 @@ def provision_my_demo(
         )
 
 @router.post("/reset-my-demo", status_code=status.HTTP_200_OK)
+@v1_router.post("/reset-my-demo", status_code=status.HTTP_200_OK)
+@alias_router.post("/reset-my-demo", status_code=status.HTTP_200_OK)
 def reset_my_demo(
     token: ValidatedToken = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -112,6 +118,8 @@ import os
 DATA_GENERATOR_URL = os.getenv("DATA_GENERATOR_URL", "http://localhost:8001")
 
 @router.post("/surge", status_code=status.HTTP_200_OK)
+@v1_router.post("/surge", status_code=status.HTTP_200_OK)
+@alias_router.post("/surge", status_code=status.HTTP_200_OK)
 async def simulate_activity_surge(
     token: ValidatedToken = Depends(get_current_user),
     db: Session = Depends(get_db)
