@@ -51,7 +51,7 @@ To guarantee zero transaction overhead or event loss, compliance ingestion opera
 2. **Outbox Draining**: The asynchronous `POST /internal/process-outbox` poller batches pending records and dispatches network publish calls concurrently to Pub/Sub topic `audit-events`, awaiting future resolution in parallel to preserve database connection pool throughput.
 3. **Direct Serverless Streaming**: Google Cloud Pub/Sub BigQuery Subscriptions (`audit-events-bq-sub`) stream events directly into `compliance_audit.origination_audit_log` via the BigQuery Storage Write API (`--use-table-schema=true`).
 
-All layers enforce defense-in-depth PII protection: application-layer string stripping, KMS envelope encryption for KYC records, and Data Catalog Policy Tags (`sensitive_npi`) for dynamic column masking in analytical queries. For full specifications, see [BigQuery OLAP Audit Architecture](file:///docs/architecture/bigquery_olap_audit_architecture.md).
+All layers enforce defense-in-depth PII protection: application-layer string stripping, KMS envelope encryption for KYC records, and Data Catalog Policy Tags (`sensitive_npi`) for dynamic column masking in analytical queries. For full specifications, see [BigQuery OLAP Audit Architecture](./bigquery_olap_audit_architecture.md).
 
 ---
 
