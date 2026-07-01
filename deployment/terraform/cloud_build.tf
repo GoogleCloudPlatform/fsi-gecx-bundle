@@ -69,6 +69,7 @@ resource "google_cloudbuild_trigger" "service_deploy_trigger" {
 
   service_account    = google_service_account.cloudbuild_service_account.id
   included_files     = ["banking-service/**"]
+  ignored_files      = ["banking-service/cloudbuild-db-migrate.yaml"]
   filename           = "banking-service/cloudbuild-publish-deploy.yaml"
   include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
 
