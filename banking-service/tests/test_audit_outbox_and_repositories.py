@@ -46,26 +46,22 @@ def test_db():
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)
     session = Session()
+    session.query(AuditOutbox).delete()
+    session.commit()
     yield session
     session.close()
     Base.metadata.drop_all(bind=engine)
 
 
-def test_outbox_commit_and_publish_success(test_db):
+def test_outbox_commit_and_append_only_invariance(test_db):
     entry = record_audit_event(test_db, "USER_CREATED", {"user_id": "usr_123", "email": "test@example.com"})
-    assert entry.status == "PENDING"
+    assert entry.event_type == "USER_CREATED"
+    assert entry.created_at is not None
     test_db.commit()
 
-    pending = test_db.query(AuditOutbox).filter(AuditOutbox.status == "PENDING").all()
-    assert len(pending) == 1
-
-    # Simulate background publisher running
-    count = publish_pending_audit_events(test_db)
-    assert count == 1
-
-    published = test_db.query(AuditOutbox).filter(AuditOutbox.status == "PUBLISHED").all()
-    assert len(published) == 1
-    assert published[0].published_at is not None
+    all_events = test_db.query(AuditOutbox).all()
+    assert len(all_events) == 1
+    assert all_events[0].event_id == entry.event_id
 
 
 def test_outbox_transaction_rollback_invariance(test_db):
@@ -80,25 +76,13 @@ def test_outbox_transaction_rollback_invariance(test_db):
     assert len(all_records) == 0
 
 
-def test_outbox_dlq_failure_handling(test_db, monkeypatch):
+def test_outbox_cdc_monitoring_and_pruning(test_db):
+    import datetime
+    from utils.audit import prune_historical_audit_events
     entry = record_audit_event(test_db, "DEVICE_REGISTERED", {"device_token": "token_abc"})
+    entry.created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=45)
     test_db.commit()
 
-    # Mock publisher client to raise Exception
-    class MockPublisher:
-        def topic_path(self, project, topic):
-            return f"projects/{project}/topics/{topic}"
-        def publish(self, *args, **kwargs):
-            raise RuntimeError("Simulated Pub/Sub network failure")
-
-    monkeypatch.setattr("utils.audit.get_publisher_client", lambda: MockPublisher())
-    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
-    monkeypatch.setenv("PUBSUB_TOPIC_AUDIT", "test-topic")
-
-    # Retry up to max retries (5)
-    for _ in range(5):
-        publish_pending_audit_events(test_db)
-
-    failed_entry = test_db.query(AuditOutbox).filter(AuditOutbox.event_id == entry.event_id).first()
-    assert failed_entry.status in ("FAILED", "DLQ")
-    assert failed_entry.retry_count == 5
+    deleted = prune_historical_audit_events(test_db, retention_days=30)
+    assert deleted == 1
+    assert test_db.query(AuditOutbox).count() == 0

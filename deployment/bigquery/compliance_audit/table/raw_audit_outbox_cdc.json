@@ -1,0 +1,32 @@
+[
+  {
+    "name": "id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Postgres UUID primary key of the outbox record."
+  },
+  {
+    "name": "event_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unique UUID of the outbox audit event."
+  },
+  {
+    "name": "event_type",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Type of event (e.g. CARD_FROZEN, APPLICATION_CREATED, USER_CREATED)."
+  },
+  {
+    "name": "payload",
+    "type": "JSON",
+    "mode": "REQUIRED",
+    "description": "Strongly typed native JSON structured event payload containing domain attributes."
+  },
+  {
+    "name": "created_at",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Event creation timestamp for daily partitioning and CDC watermark ordering."
+  }
+]

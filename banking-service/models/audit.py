@@ -21,12 +21,14 @@ from utils.database import Base
 
 class AuditOutbox(Base):
     """
-    Transactional outbox table for reliable asynchronous event publishing to Pub/Sub.
+    Append-only transactional event log table (`audit.audit_outbox`) for zero-load WAL CDC streaming to BigQuery.
     Ensures zero loss of compliance audit events by persisting state changes and audit events within the same ACID transaction.
+    In a WAL CDC architecture, rows are immutable append-only records without state mutations (no status/retry updates).
     """
     __tablename__ = "audit_outbox"
     __table_args__ = (
-        Index("idx_audit_outbox_pending", "status", postgresql_where=(Column("status") == "PENDING")),
+        Index("idx_audit_outbox_created_at", "created_at"),
+        Index("idx_audit_outbox_event_type", "event_type"),
         {'schema': 'audit'},
     )
 
@@ -34,7 +36,7 @@ class AuditOutbox(Base):
     event_id = Column(String(128), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     event_type = Column(String(100), nullable=False)
     payload = Column(Text, nullable=False)
-    status = Column(String(20), nullable=False, default="PENDING")  # 'PENDING', 'PUBLISHED', 'FAILED'
-    retry_count = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
-    published_at = Column(DateTime, nullable=True)
+
+# Type alias for descriptive referencing in CDC architecture
+AuditEventLog = AuditOutbox
