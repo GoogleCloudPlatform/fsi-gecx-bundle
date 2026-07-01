@@ -39,6 +39,16 @@ function AccountsView({ fbUser, customerProfile }) {
   const [showDocModal, setShowDocModal] = useState(false);
   const [isSpendAnalyzerOpen, setIsSpendAnalyzerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+  const [activeFilterTab, setActiveFilterTab] = useState('category');
+  const [filters, setFilters] = useState({
+    category: 'ALL',
+    minAmount: '',
+    maxAmount: '',
+    dateRange: 'ALL',
+    card: 'ALL',
+    statement: 'ALL'
+  });
 
   const idParam = searchParams.get('id');
   const typeParam = searchParams.get('type');
@@ -96,16 +106,121 @@ function AccountsView({ fbUser, customerProfile }) {
     setSearchParams({ id: accountId, type: type });
   };
 
-  const filteredTransactions = useMemo(() => {
-    if (!searchQuery.trim()) return transactions;
-    const q = searchQuery.toLowerCase();
-    return transactions.filter(tx => {
-      const desc = (tx.description || '').toLowerCase();
-      const cat = (tx.personal_finance_category?.primary || '').toLowerCase();
-      const amount = String(tx.amount || (tx.amount_cents ? Math.abs(tx.amount_cents)/100 : ''));
-      return desc.includes(q) || cat.includes(q) || amount.includes(q);
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.category !== 'ALL') count++;
+    if (filters.minAmount !== '' || filters.maxAmount !== '') count++;
+    if (filters.dateRange !== 'ALL') count++;
+    if (filters.card !== 'ALL') count++;
+    if (filters.statement !== 'ALL') count++;
+    return count;
+  }, [filters]);
+
+  const resetFilters = () => {
+    setFilters({
+      category: 'ALL',
+      minAmount: '',
+      maxAmount: '',
+      dateRange: 'ALL',
+      card: 'ALL',
+      statement: 'ALL'
     });
-  }, [transactions, searchQuery]);
+  };
+
+  const filteredTransactions = useMemo(() => {
+    let result = transactions;
+
+    // 1. Search Query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(tx => {
+        const desc = (tx.description || '').toLowerCase();
+        const cat = (tx.personal_finance_category?.primary || '').toLowerCase();
+        const amount = String(tx.amount || (tx.amount_cents ? Math.abs(tx.amount_cents)/100 : ''));
+        return desc.includes(q) || cat.includes(q) || amount.includes(q);
+      });
+    }
+
+    // 2. Category Filter
+    if (filters.category !== 'ALL') {
+      result = result.filter(tx => {
+        const rawCat = (tx.personal_finance_category?.primary || 'GENERAL').toUpperCase();
+        return rawCat === filters.category;
+      });
+    }
+
+    // 3. Amount Filter (Min/Max in dollars)
+    if (filters.minAmount !== '') {
+      const minVal = parseFloat(filters.minAmount);
+      if (!isNaN(minVal)) {
+        result = result.filter(tx => {
+          const amt = tx.amount_cents !== undefined ? Math.abs(tx.amount_cents)/100 : Math.abs(tx.amount || 0);
+          return amt >= minVal;
+        });
+      }
+    }
+    if (filters.maxAmount !== '') {
+      const maxVal = parseFloat(filters.maxAmount);
+      if (!isNaN(maxVal)) {
+        result = result.filter(tx => {
+          const amt = tx.amount_cents !== undefined ? Math.abs(tx.amount_cents)/100 : Math.abs(tx.amount || 0);
+          return amt <= maxVal;
+        });
+      }
+    }
+
+    // 4. Date Range Filter
+    if (filters.dateRange !== 'ALL') {
+      const now = new Date();
+      result = result.filter(tx => {
+        const txDateStr = tx.posted_at || tx.created_at || tx.timestamp;
+        if (!txDateStr) return true;
+        const txDate = new Date(txDateStr);
+        if (filters.dateRange === '30D') {
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(now.getDate() - 30);
+          return txDate >= thirtyDaysAgo;
+        } else if (filters.dateRange === '60D') {
+          const sixtyDaysAgo = new Date();
+          sixtyDaysAgo.setDate(now.getDate() - 60);
+          return txDate >= sixtyDaysAgo;
+        } else if (filters.dateRange === 'YTD') {
+          const startOfYear = new Date(now.getFullYear(), 0, 1);
+          return txDate >= startOfYear;
+        }
+        return true;
+      });
+    }
+
+    // 5. Card Filter
+    if (filters.card !== 'ALL') {
+      result = result.filter(tx => {
+        const cardStr = tx.last_four ? `...${tx.last_four}` : (tx.card_last_four ? `...${tx.card_last_four}` : '');
+        if (!cardStr) return true;
+        return cardStr.includes(filters.card) || (filters.card === '2304' && cardStr.includes('2304')) || (filters.card === '2344' && cardStr.includes('2344'));
+      });
+    }
+
+    // 6. Statement Period Filter
+    if (filters.statement !== 'ALL') {
+      result = result.filter(tx => {
+        if (filters.statement === 'CURRENT') {
+          return tx.pending || !tx.description?.includes('Statement');
+        } else if (filters.statement === 'JUNE_2026') {
+          const txDateStr = tx.posted_at || tx.created_at;
+          if (!txDateStr) return true;
+          return txDateStr.includes('-06-') || txDateStr.includes('/06/');
+        } else if (filters.statement === 'MAY_2026') {
+          const txDateStr = tx.posted_at || tx.created_at;
+          if (!txDateStr) return true;
+          return txDateStr.includes('-05-') || txDateStr.includes('/05/');
+        }
+        return true;
+      });
+    }
+
+    return result;
+  }, [transactions, searchQuery, filters]);
 
   const handleBackToMaster = () => {
     setSearchParams({});
@@ -434,13 +549,22 @@ function AccountsView({ fbUser, customerProfile }) {
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => {}}
-                    className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all shadow-sm cursor-pointer"
+                    onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
+                    className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm cursor-pointer border ${
+                      isFilterMenuOpen || activeFilterCount > 0
+                        ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-500 text-blue-600 dark:text-blue-400'
+                        : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
                   >
-                    <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                     </svg>
                     <span>Filter</span>
+                    {activeFilterCount > 0 && (
+                      <span className="ml-1 px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[11px] font-bold">
+                        {activeFilterCount}
+                      </span>
+                    )}
                   </button>
 
                   {selectedAccountType === 'credit' && (
@@ -457,6 +581,242 @@ function AccountsView({ fbUser, customerProfile }) {
                   )}
                 </div>
               </div>
+
+              {/* Capital One Inspired Interactive Filter Submenu Panel */}
+              {isFilterMenuOpen && (
+                <div className="mb-8 p-6 bg-slate-50/90 dark:bg-slate-850/90 border border-slate-200 dark:border-slate-750 rounded-3xl shadow-xl animate-fadeIn space-y-6">
+                  {/* Filter Submenu Tabs Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-750 pb-4">
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                      {[
+                        { id: 'category', label: 'Category', icon: '🏷️' },
+                        { id: 'amount', label: 'Amount', icon: '💰' },
+                        { id: 'date', label: 'Custom Dates', icon: '📅' },
+                        { id: 'card', label: 'Cardholder', icon: '💳' },
+                        { id: 'statement', label: 'Statement Period', icon: '📄' }
+                      ].map(tab => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setActiveFilterTab(tab.id)}
+                          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            activeFilterTab === tab.id
+                              ? 'bg-blue-600 text-white shadow-sm'
+                              : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-750 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span>{tab.icon}</span>
+                          <span>{tab.label}</span>
+                          {((tab.id === 'category' && filters.category !== 'ALL') ||
+                            (tab.id === 'amount' && (filters.minAmount !== '' || filters.maxAmount !== '')) ||
+                            (tab.id === 'date' && filters.dateRange !== 'ALL') ||
+                            (tab.id === 'card' && filters.card !== 'ALL') ||
+                            (tab.id === 'statement' && filters.statement !== 'ALL')) && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    {activeFilterCount > 0 && (
+                      <button
+                        onClick={resetFilters}
+                        className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer flex items-center gap-1"
+                      >
+                        <span>Reset All Filters ({activeFilterCount})</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Active Tab Control Content */}
+                  <div className="pt-1">
+                    {activeFilterTab === 'category' && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Filter by Spending Category
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { id: 'ALL', label: 'All Categories' },
+                            { id: 'GROCERY', label: 'Grocery' },
+                            { id: 'DINING', label: 'Dining' },
+                            { id: 'OTHER_TRAVEL', label: 'Travel & Flights' },
+                            { id: 'GAS_AUTOMOTIVE', label: 'Gas / Automotive' },
+                            { id: 'MERCHANDISE', label: 'Merchandise & Stores' },
+                            { id: 'HEALTHCARE', label: 'Healthcare' },
+                            { id: 'FEES', label: 'Fees & Interest' },
+                            { id: 'OTHER', label: 'Other & Entertainment' }
+                          ].map(cat => (
+                            <button
+                              key={cat.id}
+                              onClick={() => setFilters(prev => ({ ...prev, category: cat.id }))}
+                              className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                                filters.category === cat.id
+                                  ? 'bg-blue-500/10 dark:bg-blue-500/20 border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
+                                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-750 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                              }`}
+                            >
+                              {cat.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {activeFilterTab === 'amount' && (
+                      <div className="space-y-4 max-w-lg">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Filter by Transaction Amount Range ($)
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1">
+                            <span className="block text-[11px] font-semibold text-slate-500 mb-1">Min Amount ($)</span>
+                            <input
+                              type="number"
+                              placeholder="0.00"
+                              value={filters.minAmount}
+                              onChange={(e) => setFilters(prev => ({ ...prev, minAmount: e.target.value }))}
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white"
+                            />
+                          </div>
+                          <span className="text-slate-400 font-bold mt-5">—</span>
+                          <div className="flex-1">
+                            <span className="block text-[11px] font-semibold text-slate-500 mb-1">Max Amount ($)</span>
+                            <input
+                              type="number"
+                              placeholder="1000.00"
+                              value={filters.maxAmount}
+                              onChange={(e) => setFilters(prev => ({ ...prev, maxAmount: e.target.value }))}
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <button
+                            onClick={() => setFilters(prev => ({ ...prev, minAmount: '', maxAmount: '25' }))}
+                            className="px-3.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-750 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 cursor-pointer"
+                          >
+                            Under $25
+                          </button>
+                          <button
+                            onClick={() => setFilters(prev => ({ ...prev, minAmount: '25', maxAmount: '100' }))}
+                            className="px-3.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-750 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 cursor-pointer"
+                          >
+                            $25 - $100
+                          </button>
+                          <button
+                            onClick={() => setFilters(prev => ({ ...prev, minAmount: '100', maxAmount: '' }))}
+                            className="px-3.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-750 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 cursor-pointer"
+                          >
+                            Over $100
+                          </button>
+                          <button
+                            onClick={() => setFilters(prev => ({ ...prev, minAmount: '', maxAmount: '' }))}
+                            className="px-3.5 py-1.5 bg-slate-200 dark:bg-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-300 cursor-pointer"
+                          >
+                            Clear Amount
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeFilterTab === 'date' && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Filter by Custom Date Range
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { id: 'ALL', label: 'All Time' },
+                            { id: '30D', label: 'Last 30 Days' },
+                            { id: '60D', label: 'Last 60 Days' },
+                            { id: 'YTD', label: 'Year to Date (YTD)' }
+                          ].map(d => (
+                            <button
+                              key={d.id}
+                              onClick={() => setFilters(prev => ({ ...prev, dateRange: d.id }))}
+                              className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                                filters.dateRange === d.id
+                                  ? 'bg-blue-500/10 dark:bg-blue-500/20 border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
+                                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-750 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                              }`}
+                            >
+                              {d.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {activeFilterTab === 'card' && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Filter by Authorized Cardholder
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { id: 'ALL', label: 'All Cards & Account Users' },
+                            { id: '2304', label: 'Erik V. ...2304 (Primary)' },
+                            { id: '2344', label: 'Erik V. ...2344 (Virtual Card)' },
+                            { id: '8234', label: 'Jane D. ...8234 (Authorized User)' }
+                          ].map(c => (
+                            <button
+                              key={c.id}
+                              onClick={() => setFilters(prev => ({ ...prev, card: c.id }))}
+                              className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                                filters.card === c.id
+                                  ? 'bg-blue-500/10 dark:bg-blue-500/20 border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
+                                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-750 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                              }`}
+                            >
+                              {c.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {activeFilterTab === 'statement' && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Filter by Billing Statement Period
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { id: 'ALL', label: 'All Statements' },
+                            { id: 'CURRENT', label: 'Current Open Statement (Since Last Statement)' },
+                            { id: 'JUNE_2026', label: 'June 2026 Statement (Closed)' },
+                            { id: 'MAY_2026', label: 'May 2026 Statement (Closed)' }
+                          ].map(s => (
+                            <button
+                              key={s.id}
+                              onClick={() => setFilters(prev => ({ ...prev, statement: s.id }))}
+                              className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                                filters.statement === s.id
+                                  ? 'bg-blue-500/10 dark:bg-blue-500/20 border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
+                                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-750 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                              }`}
+                            >
+                              {s.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Filter Submenu Footer */}
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-750 text-xs">
+                    <span className="text-slate-600 dark:text-slate-400 font-semibold">
+                      Showing <strong className="text-slate-900 dark:text-white font-bold">{filteredTransactions.length}</strong> matching transactions
+                    </span>
+                    <button
+                      onClick={() => setIsFilterMenuOpen(false)}
+                      className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white font-bold transition-all cursor-pointer shadow-sm"
+                    >
+                      Apply & Close Panel
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {isTxsLoading ? (
                 <div className="py-12 flex flex-col items-center justify-center space-y-3">
