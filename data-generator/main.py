@@ -194,8 +194,12 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
     elif merchant["mcc"] == "5541": # Gas
         amount_cents = min(amount_cents, 10000) # Max $100.00
 
-    metros = ["CHICAGO IL", "NEW YORK NY", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA"]
-    home_metro = metros[hash(card.get("cardholder_name", "default")) % len(metros)]
+    metros = ["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA"]
+    is_googler = "GOOGLE" in str(card.get("cardholder_name", "")).upper() or "PRESENTER" in str(card.get("cardholder_name", "")).upper() or "DEMO" in str(card.get("cardholder_name", "")).upper()
+    if is_googler:
+        home_metro = ["MOUNTAIN VIEW CA", "SAN FRANCISCO CA"][hash(card.get("cardholder_name", "default")) % 2]
+    else:
+        home_metro = metros[hash(card.get("cardholder_name", "default")) % len(metros)]
     raw_name = merchant["merchant"]
     if merchant.get("category") in ["Streaming & Entertainment", "Electronics & Software"] or raw_name in ["Amazon", "Netflix", "Spotify", "Apple"]:
         formatted_merchant = f"{raw_name.upper()}*ONLINE" if "Amazon" not in raw_name else "AMAZON.COM*MKTPLACE"

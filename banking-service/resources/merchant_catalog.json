@@ -8,8 +8,8 @@
     "is_subscription": false,
     "stores": [
       {
-        "location_name": "Uber USA - NYC",
-        "raw_descriptor": "UBER *TRIP NEW YORK NY",
+        "location_name": "Uber Googleplex MTV",
+        "raw_descriptor": "UBER *TRIP MOUNTAIN VIEW CA",
         "country_code": "USA",
         "is_international": false,
         "risk_score": 0
@@ -17,6 +17,13 @@
       {
         "location_name": "Uber USA - SFO",
         "raw_descriptor": "UBER *TRIP SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Uber USA - NYC",
+        "raw_descriptor": "UBER *TRIP NEW YORK NY",
         "country_code": "USA",
         "is_international": false,
         "risk_score": 0
@@ -81,6 +88,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Lyft Ride SFO",
+        "raw_descriptor": "LYFT *RIDE SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Lyft Ride MTV",
+        "raw_descriptor": "LYFT *RIDE MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Lyft Ride NYC",
         "raw_descriptor": "LYFT *RIDE NEW YORK NY",
         "country_code": "USA",
@@ -104,6 +125,13 @@
     "logo_url": "https://logo.clearbit.com/delta.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Delta Air Lines SFO",
+        "raw_descriptor": "DELTA AIR LINES SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Delta Air Lines ATL",
         "raw_descriptor": "DELTA AIR LINES ATLANTA GA",
@@ -136,6 +164,13 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "United Airlines SFO",
+        "raw_descriptor": "UNITED AIRLINES SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "United Airlines ORD",
         "raw_descriptor": "UNITED AIRLINES CHICAGO IL",
         "country_code": "USA",
@@ -159,6 +194,13 @@
     "logo_url": "https://logo.clearbit.com/aa.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "American Airlines SFO",
+        "raw_descriptor": "AMERICAN AIRLINES SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "American Airlines DFW",
         "raw_descriptor": "AMERICAN AIRLINES DALLAS TX",
@@ -190,6 +232,13 @@
     "logo_url": "https://logo.clearbit.com/southwest.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Southwest Air SJC",
+        "raw_descriptor": "SOUTHWEST AIRLINES SAN JOSE CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Southwest Air DAL",
         "raw_descriptor": "SOUTHWEST AIRLINES DALLAS TX",
@@ -273,6 +322,13 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Marriott Marquis SFO",
+        "raw_descriptor": "MARRIOTT MARQUIS SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Marriott Marquis NYC",
         "raw_descriptor": "MARRIOTT MARQUIS NEW YORK NY",
         "country_code": "USA",
@@ -310,6 +366,13 @@
     "logo_url": "https://logo.clearbit.com/hilton.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Hilton Union Square SFO",
+        "raw_descriptor": "HILTON UNION SQUARE SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Hilton Garden Inn CHI",
         "raw_descriptor": "HILTON GARDEN INN CHICAGO IL",
@@ -417,6 +480,13 @@
     "logo_url": "https://logo.clearbit.com/hertz.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Hertz Rental SFO",
+        "raw_descriptor": "HERTZ RENTAL SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Hertz Rental LAX",
         "raw_descriptor": "HERTZ RENTAL LOS ANGELES CA",
@@ -867,6 +937,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Whole Foods Mountain View CA",
+        "raw_descriptor": "WHOLE FOODS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Whole Foods San Francisco CA",
+        "raw_descriptor": "WHOLE FOODS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Whole Foods Market NYC",
         "raw_descriptor": "WHOLE FOODS MARKET NEW YORK NY",
         "country_code": "USA",
@@ -890,6 +974,20 @@
     "logo_url": "https://logo.clearbit.com/traderjoes.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Trader Joes Mountain View CA",
+        "raw_descriptor": "TRADER JOES - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Trader Joes San Francisco CA",
+        "raw_descriptor": "TRADER JOES - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Trader Joes NYC Union Sq",
         "raw_descriptor": "TRADER JOES - NEW YORK NY",
@@ -932,6 +1030,13 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Safeway Mountain View CA",
+        "raw_descriptor": "SAFEWAY SUPERMARKET MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Safeway Store SFO",
         "raw_descriptor": "SAFEWAY SUPERMARKET SAN FRANCISCO CA",
         "country_code": "USA",
@@ -965,6 +1070,20 @@
     "logo_url": "https://logo.clearbit.com/aldi.us",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "ALDI - Mountain View CA",
+        "raw_descriptor": "ALDI - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "ALDI - San Francisco CA",
+        "raw_descriptor": "ALDI - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "ALDI - Chicago IL",
         "raw_descriptor": "ALDI - CHICAGO IL",
@@ -1011,6 +1130,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Costco Mountain View CA",
+        "raw_descriptor": "COSTCO WHOLESALE MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Costco San Francisco CA",
+        "raw_descriptor": "COSTCO WHOLESALE SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Costco Wholesale Seattle",
         "raw_descriptor": "COSTCO WHOLESALE SEATTLE WA",
         "country_code": "USA",
@@ -1041,6 +1174,20 @@
     "logo_url": "https://logo.clearbit.com/samsclub.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Sam's Club - Mountain View CA",
+        "raw_descriptor": "SAM'S CLUB - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Sam's Club - San Francisco CA",
+        "raw_descriptor": "SAM'S CLUB - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Sam's Club - Chicago IL",
         "raw_descriptor": "SAM'S CLUB - CHICAGO IL",
@@ -1087,6 +1234,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Wegmans Food Markets - Mountain View CA",
+        "raw_descriptor": "WEGMANS FOOD MARKETS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Wegmans Food Markets - San Francisco CA",
+        "raw_descriptor": "WEGMANS FOOD MARKETS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Wegmans Food Markets - Chicago IL",
         "raw_descriptor": "WEGMANS FOOD MARKETS - CHICAGO IL",
         "country_code": "USA",
@@ -1131,6 +1292,20 @@
     "logo_url": "https://logo.clearbit.com/heb.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "H-E-B Grocery - Mountain View CA",
+        "raw_descriptor": "H-E-B GROCERY - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "H-E-B Grocery - San Francisco CA",
+        "raw_descriptor": "H-E-B GROCERY - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "H-E-B Grocery - Chicago IL",
         "raw_descriptor": "H-E-B GROCERY - CHICAGO IL",
@@ -1177,6 +1352,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Sprouts Farmers Market - Mountain View CA",
+        "raw_descriptor": "SPROUTS FARMERS MARKET - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Sprouts Farmers Market - San Francisco CA",
+        "raw_descriptor": "SPROUTS FARMERS MARKET - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Sprouts Farmers Market - Chicago IL",
         "raw_descriptor": "SPROUTS FARMERS MARKET - CHICAGO IL",
         "country_code": "USA",
@@ -1221,6 +1410,20 @@
     "logo_url": "https://logo.clearbit.com/meijer.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Meijer - Mountain View CA",
+        "raw_descriptor": "MEIJER - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Meijer - San Francisco CA",
+        "raw_descriptor": "MEIJER - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Meijer - Chicago IL",
         "raw_descriptor": "MEIJER - CHICAGO IL",
@@ -1267,6 +1470,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Food Lion - Mountain View CA",
+        "raw_descriptor": "FOOD LION - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Food Lion - San Francisco CA",
+        "raw_descriptor": "FOOD LION - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Food Lion - Chicago IL",
         "raw_descriptor": "FOOD LION - CHICAGO IL",
         "country_code": "USA",
@@ -1311,6 +1528,20 @@
     "logo_url": "https://logo.clearbit.com/gianteagle.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Giant Eagle - Mountain View CA",
+        "raw_descriptor": "GIANT EAGLE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Giant Eagle - San Francisco CA",
+        "raw_descriptor": "GIANT EAGLE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Giant Eagle - Chicago IL",
         "raw_descriptor": "GIANT EAGLE - CHICAGO IL",
@@ -1357,6 +1588,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Stop & Shop - Mountain View CA",
+        "raw_descriptor": "STOP & SHOP - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Stop & Shop - San Francisco CA",
+        "raw_descriptor": "STOP & SHOP - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Stop & Shop - Chicago IL",
         "raw_descriptor": "STOP & SHOP - CHICAGO IL",
         "country_code": "USA",
@@ -1401,6 +1646,20 @@
     "logo_url": "https://logo.clearbit.com/shoprite.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "ShopRite - Mountain View CA",
+        "raw_descriptor": "SHOPRITE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "ShopRite - San Francisco CA",
+        "raw_descriptor": "SHOPRITE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "ShopRite - Chicago IL",
         "raw_descriptor": "SHOPRITE - CHICAGO IL",
@@ -1447,6 +1706,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Harris Teeter - Mountain View CA",
+        "raw_descriptor": "HARRIS TEETER - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Harris Teeter - San Francisco CA",
+        "raw_descriptor": "HARRIS TEETER - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Harris Teeter - Chicago IL",
         "raw_descriptor": "HARRIS TEETER - CHICAGO IL",
         "country_code": "USA",
@@ -1491,6 +1764,20 @@
     "logo_url": "https://logo.clearbit.com/wincofoods.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "WinCo Foods - Mountain View CA",
+        "raw_descriptor": "WINCO FOODS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "WinCo Foods - San Francisco CA",
+        "raw_descriptor": "WINCO FOODS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "WinCo Foods - Chicago IL",
         "raw_descriptor": "WINCO FOODS - CHICAGO IL",
@@ -1537,6 +1824,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Hy-Vee - Mountain View CA",
+        "raw_descriptor": "HY-VEE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Hy-Vee - San Francisco CA",
+        "raw_descriptor": "HY-VEE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Hy-Vee - Chicago IL",
         "raw_descriptor": "HY-VEE - CHICAGO IL",
         "country_code": "USA",
@@ -1581,6 +1882,20 @@
     "logo_url": "https://logo.clearbit.com/groceryoutlet.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Grocery Outlet - Mountain View CA",
+        "raw_descriptor": "GROCERY OUTLET - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Grocery Outlet - San Francisco CA",
+        "raw_descriptor": "GROCERY OUTLET - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Grocery Outlet - Chicago IL",
         "raw_descriptor": "GROCERY OUTLET - CHICAGO IL",
@@ -1627,6 +1942,27 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Starbucks Googleplex MTV",
+        "raw_descriptor": "STARBUCKS - GOOGLEPLEX MTV",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Starbucks Mountain View CA",
+        "raw_descriptor": "STARBUCKS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Starbucks San Francisco CA",
+        "raw_descriptor": "STARBUCKS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Starbucks NYC 5th Ave",
         "raw_descriptor": "STARBUCKS - NEW YORK NY",
         "country_code": "USA",
@@ -1665,6 +2001,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "McDonalds Mountain View CA",
+        "raw_descriptor": "MCDONALDS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "McDonalds San Francisco CA",
+        "raw_descriptor": "MCDONALDS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "McDonalds Chicago",
         "raw_descriptor": "MCDONALDS - CHICAGO IL",
         "country_code": "USA",
@@ -1688,6 +2038,20 @@
     "logo_url": "https://logo.clearbit.com/chipotle.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Chipotle Mexican Grill - Mountain View CA",
+        "raw_descriptor": "CHIPOTLE MEXICAN GRILL - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Chipotle Mexican Grill - San Francisco CA",
+        "raw_descriptor": "CHIPOTLE MEXICAN GRILL - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Chipotle Mexican Grill - Chicago IL",
         "raw_descriptor": "CHIPOTLE MEXICAN GRILL - CHICAGO IL",
@@ -1734,6 +2098,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Chick-fil-A - Mountain View CA",
+        "raw_descriptor": "CHICK-FIL-A - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Chick-fil-A - San Francisco CA",
+        "raw_descriptor": "CHICK-FIL-A - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Chick-fil-A - Chicago IL",
         "raw_descriptor": "CHICK-FIL-A - CHICAGO IL",
         "country_code": "USA",
@@ -1778,6 +2156,20 @@
     "logo_url": "https://logo.clearbit.com/tacobell.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Taco Bell - Mountain View CA",
+        "raw_descriptor": "TACO BELL - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Taco Bell - San Francisco CA",
+        "raw_descriptor": "TACO BELL - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Taco Bell - Chicago IL",
         "raw_descriptor": "TACO BELL - CHICAGO IL",
@@ -1824,6 +2216,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Wendy's - Mountain View CA",
+        "raw_descriptor": "WENDY'S - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Wendy's - San Francisco CA",
+        "raw_descriptor": "WENDY'S - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Wendy's - Chicago IL",
         "raw_descriptor": "WENDY'S - CHICAGO IL",
         "country_code": "USA",
@@ -1868,6 +2274,20 @@
     "logo_url": "https://logo.clearbit.com/bk.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Burger King - Mountain View CA",
+        "raw_descriptor": "BURGER KING - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Burger King - San Francisco CA",
+        "raw_descriptor": "BURGER KING - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Burger King - Chicago IL",
         "raw_descriptor": "BURGER KING - CHICAGO IL",
@@ -1914,6 +2334,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Subway - Mountain View CA",
+        "raw_descriptor": "SUBWAY - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Subway - San Francisco CA",
+        "raw_descriptor": "SUBWAY - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Subway - Chicago IL",
         "raw_descriptor": "SUBWAY - CHICAGO IL",
         "country_code": "USA",
@@ -1958,6 +2392,20 @@
     "logo_url": "https://logo.clearbit.com/dominos.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Domino's Pizza - Mountain View CA",
+        "raw_descriptor": "DOMINO'S PIZZA - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Domino's Pizza - San Francisco CA",
+        "raw_descriptor": "DOMINO'S PIZZA - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Domino's Pizza - Chicago IL",
         "raw_descriptor": "DOMINO'S PIZZA - CHICAGO IL",
@@ -2004,6 +2452,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Pizza Hut - Mountain View CA",
+        "raw_descriptor": "PIZZA HUT - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Pizza Hut - San Francisco CA",
+        "raw_descriptor": "PIZZA HUT - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Pizza Hut - Chicago IL",
         "raw_descriptor": "PIZZA HUT - CHICAGO IL",
         "country_code": "USA",
@@ -2048,6 +2510,20 @@
     "logo_url": "https://logo.clearbit.com/papajohns.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Papa John's Pizza - Mountain View CA",
+        "raw_descriptor": "PAPA JOHN'S PIZZA - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Papa John's Pizza - San Francisco CA",
+        "raw_descriptor": "PAPA JOHN'S PIZZA - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Papa John's Pizza - Chicago IL",
         "raw_descriptor": "PAPA JOHN'S PIZZA - CHICAGO IL",
@@ -2094,6 +2570,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Dunkin' - Mountain View CA",
+        "raw_descriptor": "DUNKIN' - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Dunkin' - San Francisco CA",
+        "raw_descriptor": "DUNKIN' - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Dunkin' - Chicago IL",
         "raw_descriptor": "DUNKIN' - CHICAGO IL",
         "country_code": "USA",
@@ -2138,6 +2628,20 @@
     "logo_url": "https://logo.clearbit.com/panerabread.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Panera Bread - Mountain View CA",
+        "raw_descriptor": "PANERA BREAD - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Panera Bread - San Francisco CA",
+        "raw_descriptor": "PANERA BREAD - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Panera Bread - Chicago IL",
         "raw_descriptor": "PANERA BREAD - CHICAGO IL",
@@ -2184,6 +2688,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Shake Shack - Mountain View CA",
+        "raw_descriptor": "SHAKE SHACK - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Shake Shack - San Francisco CA",
+        "raw_descriptor": "SHAKE SHACK - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Shake Shack - Chicago IL",
         "raw_descriptor": "SHAKE SHACK - CHICAGO IL",
         "country_code": "USA",
@@ -2228,6 +2746,20 @@
     "logo_url": "https://logo.clearbit.com/sweetgreen.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Sweetgreen - Mountain View CA",
+        "raw_descriptor": "SWEETGREEN - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Sweetgreen - San Francisco CA",
+        "raw_descriptor": "SWEETGREEN - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Sweetgreen - Chicago IL",
         "raw_descriptor": "SWEETGREEN - CHICAGO IL",
@@ -2274,6 +2806,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "In-N-Out Burger - Mountain View CA",
+        "raw_descriptor": "IN-N-OUT BURGER - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "In-N-Out Burger - San Francisco CA",
+        "raw_descriptor": "IN-N-OUT BURGER - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "In-N-Out Burger - Chicago IL",
         "raw_descriptor": "IN-N-OUT BURGER - CHICAGO IL",
         "country_code": "USA",
@@ -2318,6 +2864,20 @@
     "logo_url": "https://logo.clearbit.com/fiveguys.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Five Guys - Mountain View CA",
+        "raw_descriptor": "FIVE GUYS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Five Guys - San Francisco CA",
+        "raw_descriptor": "FIVE GUYS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Five Guys - Chicago IL",
         "raw_descriptor": "FIVE GUYS - CHICAGO IL",
@@ -2364,6 +2924,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Panda Express - Mountain View CA",
+        "raw_descriptor": "PANDA EXPRESS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Panda Express - San Francisco CA",
+        "raw_descriptor": "PANDA EXPRESS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Panda Express - Chicago IL",
         "raw_descriptor": "PANDA EXPRESS - CHICAGO IL",
         "country_code": "USA",
@@ -2408,6 +2982,20 @@
     "logo_url": "https://logo.clearbit.com/popeyes.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Popeyes Louisiana Kitchen - Mountain View CA",
+        "raw_descriptor": "POPEYES LOUISIANA KITCHEN - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Popeyes Louisiana Kitchen - San Francisco CA",
+        "raw_descriptor": "POPEYES LOUISIANA KITCHEN - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Popeyes Louisiana Kitchen - Chicago IL",
         "raw_descriptor": "POPEYES LOUISIANA KITCHEN - CHICAGO IL",
@@ -2454,6 +3042,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Sonic Drive-In - Mountain View CA",
+        "raw_descriptor": "SONIC DRIVE-IN - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Sonic Drive-In - San Francisco CA",
+        "raw_descriptor": "SONIC DRIVE-IN - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Sonic Drive-In - Chicago IL",
         "raw_descriptor": "SONIC DRIVE-IN - CHICAGO IL",
         "country_code": "USA",
@@ -2498,6 +3100,20 @@
     "logo_url": "https://logo.clearbit.com/arbys.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Arby's - Mountain View CA",
+        "raw_descriptor": "ARBY'S - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Arby's - San Francisco CA",
+        "raw_descriptor": "ARBY'S - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Arby's - Chicago IL",
         "raw_descriptor": "ARBY'S - CHICAGO IL",
@@ -2544,6 +3160,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Jack in the Box - Mountain View CA",
+        "raw_descriptor": "JACK IN THE BOX - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Jack in the Box - San Francisco CA",
+        "raw_descriptor": "JACK IN THE BOX - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Jack in the Box - Chicago IL",
         "raw_descriptor": "JACK IN THE BOX - CHICAGO IL",
         "country_code": "USA",
@@ -2588,6 +3218,20 @@
     "logo_url": "https://logo.clearbit.com/whataburger.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Whataburger - Mountain View CA",
+        "raw_descriptor": "WHATABURGER - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Whataburger - San Francisco CA",
+        "raw_descriptor": "WHATABURGER - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Whataburger - Chicago IL",
         "raw_descriptor": "WHATABURGER - CHICAGO IL",
@@ -2634,6 +3278,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Culver's - Mountain View CA",
+        "raw_descriptor": "CULVER'S - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Culver's - San Francisco CA",
+        "raw_descriptor": "CULVER'S - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Culver's - Chicago IL",
         "raw_descriptor": "CULVER'S - CHICAGO IL",
         "country_code": "USA",
@@ -2678,6 +3336,20 @@
     "logo_url": "https://logo.clearbit.com/jerseymikes.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Jersey Mike's Subs - Mountain View CA",
+        "raw_descriptor": "JERSEY MIKE'S SUBS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Jersey Mike's Subs - San Francisco CA",
+        "raw_descriptor": "JERSEY MIKE'S SUBS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Jersey Mike's Subs - Chicago IL",
         "raw_descriptor": "JERSEY MIKE'S SUBS - CHICAGO IL",
@@ -2724,6 +3396,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Jimmy John's - Mountain View CA",
+        "raw_descriptor": "JIMMY JOHN'S - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Jimmy John's - San Francisco CA",
+        "raw_descriptor": "JIMMY JOHN'S - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Jimmy John's - Chicago IL",
         "raw_descriptor": "JIMMY JOHN'S - CHICAGO IL",
         "country_code": "USA",
@@ -2768,6 +3454,20 @@
     "logo_url": "https://logo.clearbit.com/wingstop.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Wingstop - Mountain View CA",
+        "raw_descriptor": "WINGSTOP - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Wingstop - San Francisco CA",
+        "raw_descriptor": "WINGSTOP - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Wingstop - Chicago IL",
         "raw_descriptor": "WINGSTOP - CHICAGO IL",
@@ -2814,6 +3514,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Raising Cane's - Mountain View CA",
+        "raw_descriptor": "RAISING CANE'S - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Raising Cane's - San Francisco CA",
+        "raw_descriptor": "RAISING CANE'S - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Raising Cane's - Chicago IL",
         "raw_descriptor": "RAISING CANE'S - CHICAGO IL",
         "country_code": "USA",
@@ -2858,6 +3572,20 @@
     "logo_url": "https://logo.clearbit.com/olivegarden.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Olive Garden - Mountain View CA",
+        "raw_descriptor": "OLIVE GARDEN - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Olive Garden - San Francisco CA",
+        "raw_descriptor": "OLIVE GARDEN - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Olive Garden - Chicago IL",
         "raw_descriptor": "OLIVE GARDEN - CHICAGO IL",
@@ -2904,6 +3632,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Texas Roadhouse - Mountain View CA",
+        "raw_descriptor": "TEXAS ROADHOUSE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Texas Roadhouse - San Francisco CA",
+        "raw_descriptor": "TEXAS ROADHOUSE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Texas Roadhouse - Chicago IL",
         "raw_descriptor": "TEXAS ROADHOUSE - CHICAGO IL",
         "country_code": "USA",
@@ -2948,6 +3690,20 @@
     "logo_url": "https://logo.clearbit.com/chilis.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Chili's Grill & Bar - Mountain View CA",
+        "raw_descriptor": "CHILI'S GRILL & BAR - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Chili's Grill & Bar - San Francisco CA",
+        "raw_descriptor": "CHILI'S GRILL & BAR - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Chili's Grill & Bar - Chicago IL",
         "raw_descriptor": "CHILI'S GRILL & BAR - CHICAGO IL",
@@ -2994,6 +3750,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Applebee's - Mountain View CA",
+        "raw_descriptor": "APPLEBEE'S - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Applebee's - San Francisco CA",
+        "raw_descriptor": "APPLEBEE'S - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Applebee's - Chicago IL",
         "raw_descriptor": "APPLEBEE'S - CHICAGO IL",
         "country_code": "USA",
@@ -3038,6 +3808,20 @@
     "logo_url": "https://logo.clearbit.com/outback.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Outback Steakhouse - Mountain View CA",
+        "raw_descriptor": "OUTBACK STEAKHOUSE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Outback Steakhouse - San Francisco CA",
+        "raw_descriptor": "OUTBACK STEAKHOUSE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Outback Steakhouse - Chicago IL",
         "raw_descriptor": "OUTBACK STEAKHOUSE - CHICAGO IL",
@@ -3084,6 +3868,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Red Lobster - Mountain View CA",
+        "raw_descriptor": "RED LOBSTER - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Red Lobster - San Francisco CA",
+        "raw_descriptor": "RED LOBSTER - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Red Lobster - Chicago IL",
         "raw_descriptor": "RED LOBSTER - CHICAGO IL",
         "country_code": "USA",
@@ -3128,6 +3926,20 @@
     "logo_url": "https://logo.clearbit.com/thecheesecakefactory.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "The Cheesecake Factory - Mountain View CA",
+        "raw_descriptor": "THE CHEESECAKE FACTORY - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "The Cheesecake Factory - San Francisco CA",
+        "raw_descriptor": "THE CHEESECAKE FACTORY - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "The Cheesecake Factory - Chicago IL",
         "raw_descriptor": "THE CHEESECAKE FACTORY - CHICAGO IL",
@@ -3174,6 +3986,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Buffalo Wild Wings - Mountain View CA",
+        "raw_descriptor": "BUFFALO WILD WINGS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Buffalo Wild Wings - San Francisco CA",
+        "raw_descriptor": "BUFFALO WILD WINGS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Buffalo Wild Wings - Chicago IL",
         "raw_descriptor": "BUFFALO WILD WINGS - CHICAGO IL",
         "country_code": "USA",
@@ -3218,6 +4044,20 @@
     "logo_url": "https://logo.clearbit.com/ihop.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "IHOP - Mountain View CA",
+        "raw_descriptor": "IHOP - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "IHOP - San Francisco CA",
+        "raw_descriptor": "IHOP - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "IHOP - Chicago IL",
         "raw_descriptor": "IHOP - CHICAGO IL",
@@ -3264,6 +4104,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Denny's - Mountain View CA",
+        "raw_descriptor": "DENNY'S - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Denny's - San Francisco CA",
+        "raw_descriptor": "DENNY'S - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Denny's - Chicago IL",
         "raw_descriptor": "DENNY'S - CHICAGO IL",
         "country_code": "USA",
@@ -3309,6 +4163,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Cracker Barrel - Mountain View CA",
+        "raw_descriptor": "CRACKER BARREL - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Cracker Barrel - San Francisco CA",
+        "raw_descriptor": "CRACKER BARREL - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Cracker Barrel - Chicago IL",
         "raw_descriptor": "CRACKER BARREL - CHICAGO IL",
         "country_code": "USA",
@@ -3353,6 +4221,20 @@
     "logo_url": "https://logo.clearbit.com/wafflehouse.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Waffle House - Mountain View CA",
+        "raw_descriptor": "WAFFLE HOUSE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Waffle House - San Francisco CA",
+        "raw_descriptor": "WAFFLE HOUSE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Waffle House - Chicago IL",
         "raw_descriptor": "WAFFLE HOUSE - CHICAGO IL",
@@ -3430,6 +4312,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Target Mountain View CA",
+        "raw_descriptor": "TARGET STORE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Target San Francisco CA",
+        "raw_descriptor": "TARGET STORE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Target Store CHI",
         "raw_descriptor": "TARGET STORE - CHICAGO IL",
         "country_code": "USA",
@@ -3453,6 +4349,20 @@
     "logo_url": "https://logo.clearbit.com/walmart.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Walmart Mountain View CA",
+        "raw_descriptor": "WALMART - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Walmart San Francisco CA",
+        "raw_descriptor": "WALMART - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Walmart Store DAL",
         "raw_descriptor": "WALMART SUPERCENTER DALLAS TX",
@@ -3484,6 +4394,20 @@
     "logo_url": "https://logo.clearbit.com/bestbuy.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Best Buy - Mountain View CA",
+        "raw_descriptor": "BEST BUY - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Best Buy - San Francisco CA",
+        "raw_descriptor": "BEST BUY - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Best Buy - Chicago IL",
         "raw_descriptor": "BEST BUY - CHICAGO IL",
@@ -3530,6 +4454,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "The Home Depot - Mountain View CA",
+        "raw_descriptor": "THE HOME DEPOT - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "The Home Depot - San Francisco CA",
+        "raw_descriptor": "THE HOME DEPOT - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "The Home Depot - Chicago IL",
         "raw_descriptor": "THE HOME DEPOT - CHICAGO IL",
         "country_code": "USA",
@@ -3574,6 +4512,20 @@
     "logo_url": "https://logo.clearbit.com/lowes.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Lowe's Home Improvement - Mountain View CA",
+        "raw_descriptor": "LOWE'S HOME IMPROVEMENT - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Lowe's Home Improvement - San Francisco CA",
+        "raw_descriptor": "LOWE'S HOME IMPROVEMENT - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Lowe's Home Improvement - Chicago IL",
         "raw_descriptor": "LOWE'S HOME IMPROVEMENT - CHICAGO IL",
@@ -3620,6 +4572,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Costco Wholesale Retail - Mountain View CA",
+        "raw_descriptor": "COSTCO WHOLESALE RETAIL - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Costco Wholesale Retail - San Francisco CA",
+        "raw_descriptor": "COSTCO WHOLESALE RETAIL - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Costco Wholesale Retail - Chicago IL",
         "raw_descriptor": "COSTCO WHOLESALE RETAIL - CHICAGO IL",
         "country_code": "USA",
@@ -3664,6 +4630,20 @@
     "logo_url": "https://logo.clearbit.com/nordstrom.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Nordstrom - Mountain View CA",
+        "raw_descriptor": "NORDSTROM - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Nordstrom - San Francisco CA",
+        "raw_descriptor": "NORDSTROM - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Nordstrom - Chicago IL",
         "raw_descriptor": "NORDSTROM - CHICAGO IL",
@@ -3710,6 +4690,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Nordstrom Rack - Mountain View CA",
+        "raw_descriptor": "NORDSTROM RACK - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Nordstrom Rack - San Francisco CA",
+        "raw_descriptor": "NORDSTROM RACK - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Nordstrom Rack - Chicago IL",
         "raw_descriptor": "NORDSTROM RACK - CHICAGO IL",
         "country_code": "USA",
@@ -3754,6 +4748,20 @@
     "logo_url": "https://logo.clearbit.com/macys.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Macy's - Mountain View CA",
+        "raw_descriptor": "MACY'S - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Macy's - San Francisco CA",
+        "raw_descriptor": "MACY'S - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Macy's - Chicago IL",
         "raw_descriptor": "MACY'S - CHICAGO IL",
@@ -3800,6 +4808,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Bloomingdale's - Mountain View CA",
+        "raw_descriptor": "BLOOMINGDALE'S - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Bloomingdale's - San Francisco CA",
+        "raw_descriptor": "BLOOMINGDALE'S - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Bloomingdale's - Chicago IL",
         "raw_descriptor": "BLOOMINGDALE'S - CHICAGO IL",
         "country_code": "USA",
@@ -3844,6 +4866,20 @@
     "logo_url": "https://logo.clearbit.com/saksfifthavenue.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Saks Fifth Avenue - Mountain View CA",
+        "raw_descriptor": "SAKS FIFTH AVENUE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Saks Fifth Avenue - San Francisco CA",
+        "raw_descriptor": "SAKS FIFTH AVENUE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Saks Fifth Avenue - Chicago IL",
         "raw_descriptor": "SAKS FIFTH AVENUE - CHICAGO IL",
@@ -3890,6 +4926,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Kohl's - Mountain View CA",
+        "raw_descriptor": "KOHL'S - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Kohl's - San Francisco CA",
+        "raw_descriptor": "KOHL'S - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Kohl's - Chicago IL",
         "raw_descriptor": "KOHL'S - CHICAGO IL",
         "country_code": "USA",
@@ -3934,6 +4984,20 @@
     "logo_url": "https://logo.clearbit.com/jcpenney.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "JCPenney - Mountain View CA",
+        "raw_descriptor": "JCPENNEY - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "JCPenney - San Francisco CA",
+        "raw_descriptor": "JCPENNEY - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "JCPenney - Chicago IL",
         "raw_descriptor": "JCPENNEY - CHICAGO IL",
@@ -3980,6 +5044,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "T.J. Maxx - Mountain View CA",
+        "raw_descriptor": "T.J. MAXX - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "T.J. Maxx - San Francisco CA",
+        "raw_descriptor": "T.J. MAXX - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "T.J. Maxx - Chicago IL",
         "raw_descriptor": "T.J. MAXX - CHICAGO IL",
         "country_code": "USA",
@@ -4024,6 +5102,20 @@
     "logo_url": "https://logo.clearbit.com/marshalls.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Marshalls - Mountain View CA",
+        "raw_descriptor": "MARSHALLS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Marshalls - San Francisco CA",
+        "raw_descriptor": "MARSHALLS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Marshalls - Chicago IL",
         "raw_descriptor": "MARSHALLS - CHICAGO IL",
@@ -4070,6 +5162,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "HomeGoods - Mountain View CA",
+        "raw_descriptor": "HOMEGOODS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "HomeGoods - San Francisco CA",
+        "raw_descriptor": "HOMEGOODS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "HomeGoods - Chicago IL",
         "raw_descriptor": "HOMEGOODS - CHICAGO IL",
         "country_code": "USA",
@@ -4114,6 +5220,20 @@
     "logo_url": "https://logo.clearbit.com/rossstores.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Ross Dress for Less - Mountain View CA",
+        "raw_descriptor": "ROSS DRESS FOR LESS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Ross Dress for Less - San Francisco CA",
+        "raw_descriptor": "ROSS DRESS FOR LESS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Ross Dress for Less - Chicago IL",
         "raw_descriptor": "ROSS DRESS FOR LESS - CHICAGO IL",
@@ -4160,6 +5280,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Burlington Stores - Mountain View CA",
+        "raw_descriptor": "BURLINGTON STORES - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Burlington Stores - San Francisco CA",
+        "raw_descriptor": "BURLINGTON STORES - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Burlington Stores - Chicago IL",
         "raw_descriptor": "BURLINGTON STORES - CHICAGO IL",
         "country_code": "USA",
@@ -4204,6 +5338,20 @@
     "logo_url": "https://logo.clearbit.com/biglots.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Big Lots - Mountain View CA",
+        "raw_descriptor": "BIG LOTS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Big Lots - San Francisco CA",
+        "raw_descriptor": "BIG LOTS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Big Lots - Chicago IL",
         "raw_descriptor": "BIG LOTS - CHICAGO IL",
@@ -4250,6 +5398,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Dollar General - Mountain View CA",
+        "raw_descriptor": "DOLLAR GENERAL - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Dollar General - San Francisco CA",
+        "raw_descriptor": "DOLLAR GENERAL - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Dollar General - Chicago IL",
         "raw_descriptor": "DOLLAR GENERAL - CHICAGO IL",
         "country_code": "USA",
@@ -4294,6 +5456,20 @@
     "logo_url": "https://logo.clearbit.com/dollartree.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Dollar Tree - Mountain View CA",
+        "raw_descriptor": "DOLLAR TREE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Dollar Tree - San Francisco CA",
+        "raw_descriptor": "DOLLAR TREE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Dollar Tree - Chicago IL",
         "raw_descriptor": "DOLLAR TREE - CHICAGO IL",
@@ -4340,6 +5516,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Five Below - Mountain View CA",
+        "raw_descriptor": "FIVE BELOW - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Five Below - San Francisco CA",
+        "raw_descriptor": "FIVE BELOW - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Five Below - Chicago IL",
         "raw_descriptor": "FIVE BELOW - CHICAGO IL",
         "country_code": "USA",
@@ -4384,6 +5574,20 @@
     "logo_url": "https://logo.clearbit.com/ikea.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "IKEA - Mountain View CA",
+        "raw_descriptor": "IKEA - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "IKEA - San Francisco CA",
+        "raw_descriptor": "IKEA - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "IKEA - Chicago IL",
         "raw_descriptor": "IKEA - CHICAGO IL",
@@ -4430,6 +5634,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Wayfair - Mountain View CA",
+        "raw_descriptor": "WAYFAIR - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Wayfair - San Francisco CA",
+        "raw_descriptor": "WAYFAIR - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Wayfair - Chicago IL",
         "raw_descriptor": "WAYFAIR - CHICAGO IL",
         "country_code": "USA",
@@ -4474,6 +5692,20 @@
     "logo_url": "https://logo.clearbit.com/bedbathandbeyond.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Bed Bath & Beyond - Mountain View CA",
+        "raw_descriptor": "BED BATH & BEYOND - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Bed Bath & Beyond - San Francisco CA",
+        "raw_descriptor": "BED BATH & BEYOND - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Bed Bath & Beyond - Chicago IL",
         "raw_descriptor": "BED BATH & BEYOND - CHICAGO IL",
@@ -4520,6 +5752,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Williams-Sonoma - Mountain View CA",
+        "raw_descriptor": "WILLIAMS-SONOMA - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Williams-Sonoma - San Francisco CA",
+        "raw_descriptor": "WILLIAMS-SONOMA - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Williams-Sonoma - Chicago IL",
         "raw_descriptor": "WILLIAMS-SONOMA - CHICAGO IL",
         "country_code": "USA",
@@ -4564,6 +5810,20 @@
     "logo_url": "https://logo.clearbit.com/potterybarn.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Pottery Barn - Mountain View CA",
+        "raw_descriptor": "POTTERY BARN - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Pottery Barn - San Francisco CA",
+        "raw_descriptor": "POTTERY BARN - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Pottery Barn - Chicago IL",
         "raw_descriptor": "POTTERY BARN - CHICAGO IL",
@@ -4610,6 +5870,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Crate & Barrel - Mountain View CA",
+        "raw_descriptor": "CRATE & BARREL - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Crate & Barrel - San Francisco CA",
+        "raw_descriptor": "CRATE & BARREL - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Crate & Barrel - Chicago IL",
         "raw_descriptor": "CRATE & BARREL - CHICAGO IL",
         "country_code": "USA",
@@ -4654,6 +5928,20 @@
     "logo_url": "https://logo.clearbit.com/rh.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "RH (Restoration Hardware) - Mountain View CA",
+        "raw_descriptor": "RH (RESTORATION HARDWARE) - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "RH (Restoration Hardware) - San Francisco CA",
+        "raw_descriptor": "RH (RESTORATION HARDWARE) - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "RH (Restoration Hardware) - Chicago IL",
         "raw_descriptor": "RH (RESTORATION HARDWARE) - CHICAGO IL",
@@ -4700,6 +5988,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "The Container Store - Mountain View CA",
+        "raw_descriptor": "THE CONTAINER STORE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "The Container Store - San Francisco CA",
+        "raw_descriptor": "THE CONTAINER STORE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "The Container Store - Chicago IL",
         "raw_descriptor": "THE CONTAINER STORE - CHICAGO IL",
         "country_code": "USA",
@@ -4744,6 +6046,20 @@
     "logo_url": "https://logo.clearbit.com/nike.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Nike - Mountain View CA",
+        "raw_descriptor": "NIKE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Nike - San Francisco CA",
+        "raw_descriptor": "NIKE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Nike - Chicago IL",
         "raw_descriptor": "NIKE - CHICAGO IL",
@@ -4790,6 +6106,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Adidas - Mountain View CA",
+        "raw_descriptor": "ADIDAS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Adidas - San Francisco CA",
+        "raw_descriptor": "ADIDAS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Adidas - Chicago IL",
         "raw_descriptor": "ADIDAS - CHICAGO IL",
         "country_code": "USA",
@@ -4834,6 +6164,20 @@
     "logo_url": "https://logo.clearbit.com/lululemon.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Lululemon Athletica - Mountain View CA",
+        "raw_descriptor": "LULULEMON ATHLETICA - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Lululemon Athletica - San Francisco CA",
+        "raw_descriptor": "LULULEMON ATHLETICA - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Lululemon Athletica - Chicago IL",
         "raw_descriptor": "LULULEMON ATHLETICA - CHICAGO IL",
@@ -4880,6 +6224,13 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Zara Store SFO",
+        "raw_descriptor": "ZARA - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Zara Store NYC",
         "raw_descriptor": "ZARA USA - NEW YORK NY",
         "country_code": "USA",
@@ -4903,6 +6254,20 @@
     "logo_url": "https://logo.clearbit.com/hm.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "H&M - Mountain View CA",
+        "raw_descriptor": "H&M - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "H&M - San Francisco CA",
+        "raw_descriptor": "H&M - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "H&M - Chicago IL",
         "raw_descriptor": "H&M - CHICAGO IL",
@@ -4949,6 +6314,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Gap - Mountain View CA",
+        "raw_descriptor": "GAP - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Gap - San Francisco CA",
+        "raw_descriptor": "GAP - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Gap - Chicago IL",
         "raw_descriptor": "GAP - CHICAGO IL",
         "country_code": "USA",
@@ -4993,6 +6372,20 @@
     "logo_url": "https://logo.clearbit.com/oldnavy.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Old Navy - Mountain View CA",
+        "raw_descriptor": "OLD NAVY - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Old Navy - San Francisco CA",
+        "raw_descriptor": "OLD NAVY - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Old Navy - Chicago IL",
         "raw_descriptor": "OLD NAVY - CHICAGO IL",
@@ -5039,6 +6432,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Banana Republic - Mountain View CA",
+        "raw_descriptor": "BANANA REPUBLIC - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Banana Republic - San Francisco CA",
+        "raw_descriptor": "BANANA REPUBLIC - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Banana Republic - Chicago IL",
         "raw_descriptor": "BANANA REPUBLIC - CHICAGO IL",
         "country_code": "USA",
@@ -5083,6 +6490,20 @@
     "logo_url": "https://logo.clearbit.com/jcrew.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "J.Crew - Mountain View CA",
+        "raw_descriptor": "J.CREW - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "J.Crew - San Francisco CA",
+        "raw_descriptor": "J.CREW - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "J.Crew - Chicago IL",
         "raw_descriptor": "J.CREW - CHICAGO IL",
@@ -5129,6 +6550,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Levi's - Mountain View CA",
+        "raw_descriptor": "LEVI'S - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Levi's - San Francisco CA",
+        "raw_descriptor": "LEVI'S - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Levi's - Chicago IL",
         "raw_descriptor": "LEVI'S - CHICAGO IL",
         "country_code": "USA",
@@ -5173,6 +6608,20 @@
     "logo_url": "https://logo.clearbit.com/ralphlauren.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Ralph Lauren - Mountain View CA",
+        "raw_descriptor": "RALPH LAUREN - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Ralph Lauren - San Francisco CA",
+        "raw_descriptor": "RALPH LAUREN - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Ralph Lauren - Chicago IL",
         "raw_descriptor": "RALPH LAUREN - CHICAGO IL",
@@ -5219,6 +6668,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Coach - Mountain View CA",
+        "raw_descriptor": "COACH - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Coach - San Francisco CA",
+        "raw_descriptor": "COACH - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Coach - Chicago IL",
         "raw_descriptor": "COACH - CHICAGO IL",
         "country_code": "USA",
@@ -5263,6 +6726,20 @@
     "logo_url": "https://logo.clearbit.com/michaelkors.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Michael Kors - Mountain View CA",
+        "raw_descriptor": "MICHAEL KORS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Michael Kors - San Francisco CA",
+        "raw_descriptor": "MICHAEL KORS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Michael Kors - Chicago IL",
         "raw_descriptor": "MICHAEL KORS - CHICAGO IL",
@@ -5309,6 +6786,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Tiffany & Co. - Mountain View CA",
+        "raw_descriptor": "TIFFANY & CO. - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Tiffany & Co. - San Francisco CA",
+        "raw_descriptor": "TIFFANY & CO. - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Tiffany & Co. - Chicago IL",
         "raw_descriptor": "TIFFANY & CO. - CHICAGO IL",
         "country_code": "USA",
@@ -5353,6 +6844,20 @@
     "logo_url": "https://logo.clearbit.com/sephora.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Sephora - Mountain View CA",
+        "raw_descriptor": "SEPHORA - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Sephora - San Francisco CA",
+        "raw_descriptor": "SEPHORA - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Sephora - Chicago IL",
         "raw_descriptor": "SEPHORA - CHICAGO IL",
@@ -5399,6 +6904,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Ulta Beauty - Mountain View CA",
+        "raw_descriptor": "ULTA BEAUTY - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Ulta Beauty - San Francisco CA",
+        "raw_descriptor": "ULTA BEAUTY - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Ulta Beauty - Chicago IL",
         "raw_descriptor": "ULTA BEAUTY - CHICAGO IL",
         "country_code": "USA",
@@ -5443,6 +6962,20 @@
     "logo_url": "https://logo.clearbit.com/bathandbodyworks.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Bath & Body Works - Mountain View CA",
+        "raw_descriptor": "BATH & BODY WORKS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Bath & Body Works - San Francisco CA",
+        "raw_descriptor": "BATH & BODY WORKS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Bath & Body Works - Chicago IL",
         "raw_descriptor": "BATH & BODY WORKS - CHICAGO IL",
@@ -5489,6 +7022,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Victoria's Secret - Mountain View CA",
+        "raw_descriptor": "VICTORIA'S SECRET - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Victoria's Secret - San Francisco CA",
+        "raw_descriptor": "VICTORIA'S SECRET - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Victoria's Secret - Chicago IL",
         "raw_descriptor": "VICTORIA'S SECRET - CHICAGO IL",
         "country_code": "USA",
@@ -5533,6 +7080,20 @@
     "logo_url": "https://logo.clearbit.com/ae.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "American Eagle Outfitters - Mountain View CA",
+        "raw_descriptor": "AMERICAN EAGLE OUTFITTERS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "American Eagle Outfitters - San Francisco CA",
+        "raw_descriptor": "AMERICAN EAGLE OUTFITTERS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "American Eagle Outfitters - Chicago IL",
         "raw_descriptor": "AMERICAN EAGLE OUTFITTERS - CHICAGO IL",
@@ -5579,6 +7140,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Urban Outfitters - Mountain View CA",
+        "raw_descriptor": "URBAN OUTFITTERS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Urban Outfitters - San Francisco CA",
+        "raw_descriptor": "URBAN OUTFITTERS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Urban Outfitters - Chicago IL",
         "raw_descriptor": "URBAN OUTFITTERS - CHICAGO IL",
         "country_code": "USA",
@@ -5623,6 +7198,20 @@
     "logo_url": "https://logo.clearbit.com/anthropologie.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Anthropologie - Mountain View CA",
+        "raw_descriptor": "ANTHROPOLOGIE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Anthropologie - San Francisco CA",
+        "raw_descriptor": "ANTHROPOLOGIE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Anthropologie - Chicago IL",
         "raw_descriptor": "ANTHROPOLOGIE - CHICAGO IL",
@@ -5669,6 +7258,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Free People - Mountain View CA",
+        "raw_descriptor": "FREE PEOPLE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Free People - San Francisco CA",
+        "raw_descriptor": "FREE PEOPLE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Free People - Chicago IL",
         "raw_descriptor": "FREE PEOPLE - CHICAGO IL",
         "country_code": "USA",
@@ -5713,6 +7316,20 @@
     "logo_url": "https://logo.clearbit.com/abercrombie.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Abercrombie & Fitch - Mountain View CA",
+        "raw_descriptor": "ABERCROMBIE & FITCH - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Abercrombie & Fitch - San Francisco CA",
+        "raw_descriptor": "ABERCROMBIE & FITCH - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Abercrombie & Fitch - Chicago IL",
         "raw_descriptor": "ABERCROMBIE & FITCH - CHICAGO IL",
@@ -5759,6 +7376,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Hollister Co. - Mountain View CA",
+        "raw_descriptor": "HOLLISTER CO. - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Hollister Co. - San Francisco CA",
+        "raw_descriptor": "HOLLISTER CO. - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Hollister Co. - Chicago IL",
         "raw_descriptor": "HOLLISTER CO. - CHICAGO IL",
         "country_code": "USA",
@@ -5803,6 +7434,20 @@
     "logo_url": "https://logo.clearbit.com/express.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Express - Mountain View CA",
+        "raw_descriptor": "EXPRESS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Express - San Francisco CA",
+        "raw_descriptor": "EXPRESS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Express - Chicago IL",
         "raw_descriptor": "EXPRESS - CHICAGO IL",
@@ -5849,6 +7494,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Foot Locker - Mountain View CA",
+        "raw_descriptor": "FOOT LOCKER - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Foot Locker - San Francisco CA",
+        "raw_descriptor": "FOOT LOCKER - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Foot Locker - Chicago IL",
         "raw_descriptor": "FOOT LOCKER - CHICAGO IL",
         "country_code": "USA",
@@ -5893,6 +7552,20 @@
     "logo_url": "https://logo.clearbit.com/dickssportinggoods.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "DICK'S Sporting Goods - Mountain View CA",
+        "raw_descriptor": "DICK'S SPORTING GOODS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "DICK'S Sporting Goods - San Francisco CA",
+        "raw_descriptor": "DICK'S SPORTING GOODS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "DICK'S Sporting Goods - Chicago IL",
         "raw_descriptor": "DICK'S SPORTING GOODS - CHICAGO IL",
@@ -5939,6 +7612,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "REI Co-op - Mountain View CA",
+        "raw_descriptor": "REI CO-OP - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "REI Co-op - San Francisco CA",
+        "raw_descriptor": "REI CO-OP - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "REI Co-op - Chicago IL",
         "raw_descriptor": "REI CO-OP - CHICAGO IL",
         "country_code": "USA",
@@ -5984,6 +7671,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Shell Gas Mountain View CA",
+        "raw_descriptor": "SHELL OIL - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Shell Gas San Francisco CA",
+        "raw_descriptor": "SHELL OIL - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Shell Gas Station DAL",
         "raw_descriptor": "SHELL OIL - DALLAS TX",
         "country_code": "USA",
@@ -6007,6 +7708,20 @@
     "logo_url": "https://logo.clearbit.com/chevron.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Chevron Gas - Mountain View CA",
+        "raw_descriptor": "CHEVRON GAS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Chevron Gas - San Francisco CA",
+        "raw_descriptor": "CHEVRON GAS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Chevron Gas - Chicago IL",
         "raw_descriptor": "CHEVRON GAS - CHICAGO IL",
@@ -6053,6 +7768,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "ExxonMobil - Mountain View CA",
+        "raw_descriptor": "EXXONMOBIL - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "ExxonMobil - San Francisco CA",
+        "raw_descriptor": "EXXONMOBIL - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "ExxonMobil - Chicago IL",
         "raw_descriptor": "EXXONMOBIL - CHICAGO IL",
         "country_code": "USA",
@@ -6097,6 +7826,20 @@
     "logo_url": "https://logo.clearbit.com/bp.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "BP Gas & Convenience - Mountain View CA",
+        "raw_descriptor": "BP GAS & CONVENIENCE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "BP Gas & Convenience - San Francisco CA",
+        "raw_descriptor": "BP GAS & CONVENIENCE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "BP Gas & Convenience - Chicago IL",
         "raw_descriptor": "BP GAS & CONVENIENCE - CHICAGO IL",
@@ -6143,6 +7886,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Sunoco - Mountain View CA",
+        "raw_descriptor": "SUNOCO - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Sunoco - San Francisco CA",
+        "raw_descriptor": "SUNOCO - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Sunoco - Chicago IL",
         "raw_descriptor": "SUNOCO - CHICAGO IL",
         "country_code": "USA",
@@ -6187,6 +7944,20 @@
     "logo_url": "https://logo.clearbit.com/marathonbrand.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Marathon Gas - Mountain View CA",
+        "raw_descriptor": "MARATHON GAS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Marathon Gas - San Francisco CA",
+        "raw_descriptor": "MARATHON GAS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Marathon Gas - Chicago IL",
         "raw_descriptor": "MARATHON GAS - CHICAGO IL",
@@ -6233,6 +8004,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Valero Energy - Mountain View CA",
+        "raw_descriptor": "VALERO ENERGY - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Valero Energy - San Francisco CA",
+        "raw_descriptor": "VALERO ENERGY - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Valero Energy - Chicago IL",
         "raw_descriptor": "VALERO ENERGY - CHICAGO IL",
         "country_code": "USA",
@@ -6277,6 +8062,20 @@
     "logo_url": "https://logo.clearbit.com/citgo.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "CITGO Petroleum - Mountain View CA",
+        "raw_descriptor": "CITGO PETROLEUM - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "CITGO Petroleum - San Francisco CA",
+        "raw_descriptor": "CITGO PETROLEUM - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "CITGO Petroleum - Chicago IL",
         "raw_descriptor": "CITGO PETROLEUM - CHICAGO IL",
@@ -6323,6 +8122,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Speedway - Mountain View CA",
+        "raw_descriptor": "SPEEDWAY - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Speedway - San Francisco CA",
+        "raw_descriptor": "SPEEDWAY - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Speedway - Chicago IL",
         "raw_descriptor": "SPEEDWAY - CHICAGO IL",
         "country_code": "USA",
@@ -6367,6 +8180,20 @@
     "logo_url": "https://logo.clearbit.com/circlek.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Circle K - Mountain View CA",
+        "raw_descriptor": "CIRCLE K - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Circle K - San Francisco CA",
+        "raw_descriptor": "CIRCLE K - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Circle K - Chicago IL",
         "raw_descriptor": "CIRCLE K - CHICAGO IL",
@@ -6413,6 +8240,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Wawa - Mountain View CA",
+        "raw_descriptor": "WAWA - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Wawa - San Francisco CA",
+        "raw_descriptor": "WAWA - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Wawa - Chicago IL",
         "raw_descriptor": "WAWA - CHICAGO IL",
         "country_code": "USA",
@@ -6457,6 +8298,20 @@
     "logo_url": "https://logo.clearbit.com/sheetz.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Sheetz - Mountain View CA",
+        "raw_descriptor": "SHEETZ - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Sheetz - San Francisco CA",
+        "raw_descriptor": "SHEETZ - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Sheetz - Chicago IL",
         "raw_descriptor": "SHEETZ - CHICAGO IL",
@@ -6503,6 +8358,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "QuikTrip (QT) - Mountain View CA",
+        "raw_descriptor": "QUIKTRIP (QT) - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "QuikTrip (QT) - San Francisco CA",
+        "raw_descriptor": "QUIKTRIP (QT) - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "QuikTrip (QT) - Chicago IL",
         "raw_descriptor": "QUIKTRIP (QT) - CHICAGO IL",
         "country_code": "USA",
@@ -6547,6 +8416,20 @@
     "logo_url": "https://logo.clearbit.com/buc-ees.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Buc-ee's - Mountain View CA",
+        "raw_descriptor": "BUC-EE'S - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Buc-ee's - San Francisco CA",
+        "raw_descriptor": "BUC-EE'S - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Buc-ee's - Chicago IL",
         "raw_descriptor": "BUC-EE'S - CHICAGO IL",
@@ -6593,6 +8476,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Love's Travel Stops - Mountain View CA",
+        "raw_descriptor": "LOVE'S TRAVEL STOPS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Love's Travel Stops - San Francisco CA",
+        "raw_descriptor": "LOVE'S TRAVEL STOPS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Love's Travel Stops - Chicago IL",
         "raw_descriptor": "LOVE'S TRAVEL STOPS - CHICAGO IL",
         "country_code": "USA",
@@ -6637,6 +8534,20 @@
     "logo_url": "https://logo.clearbit.com/pilotflyingj.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Pilot Flying J - Mountain View CA",
+        "raw_descriptor": "PILOT FLYING J - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Pilot Flying J - San Francisco CA",
+        "raw_descriptor": "PILOT FLYING J - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Pilot Flying J - Chicago IL",
         "raw_descriptor": "PILOT FLYING J - CHICAGO IL",
@@ -6683,6 +8594,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "AutoZone - Mountain View CA",
+        "raw_descriptor": "AUTOZONE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "AutoZone - San Francisco CA",
+        "raw_descriptor": "AUTOZONE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "AutoZone - Chicago IL",
         "raw_descriptor": "AUTOZONE - CHICAGO IL",
         "country_code": "USA",
@@ -6727,6 +8652,20 @@
     "logo_url": "https://logo.clearbit.com/oreillyauto.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "O'Reilly Auto Parts - Mountain View CA",
+        "raw_descriptor": "O'REILLY AUTO PARTS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "O'Reilly Auto Parts - San Francisco CA",
+        "raw_descriptor": "O'REILLY AUTO PARTS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "O'Reilly Auto Parts - Chicago IL",
         "raw_descriptor": "O'REILLY AUTO PARTS - CHICAGO IL",
@@ -6773,6 +8712,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Advance Auto Parts - Mountain View CA",
+        "raw_descriptor": "ADVANCE AUTO PARTS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Advance Auto Parts - San Francisco CA",
+        "raw_descriptor": "ADVANCE AUTO PARTS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Advance Auto Parts - Chicago IL",
         "raw_descriptor": "ADVANCE AUTO PARTS - CHICAGO IL",
         "country_code": "USA",
@@ -6818,6 +8771,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "NAPA Auto Parts - Mountain View CA",
+        "raw_descriptor": "NAPA AUTO PARTS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "NAPA Auto Parts - San Francisco CA",
+        "raw_descriptor": "NAPA AUTO PARTS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "NAPA Auto Parts - Chicago IL",
         "raw_descriptor": "NAPA AUTO PARTS - CHICAGO IL",
         "country_code": "USA",
@@ -6862,6 +8829,20 @@
     "logo_url": "https://logo.clearbit.com/goodyear.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Goodyear Auto Service - Mountain View CA",
+        "raw_descriptor": "GOODYEAR AUTO SERVICE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Goodyear Auto Service - San Francisco CA",
+        "raw_descriptor": "GOODYEAR AUTO SERVICE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Goodyear Auto Service - Chicago IL",
         "raw_descriptor": "GOODYEAR AUTO SERVICE - CHICAGO IL",
@@ -7586,6 +9567,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "CVS Pharmacy Mountain View CA",
+        "raw_descriptor": "CVS PHARMACY - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "CVS Pharmacy San Francisco CA",
+        "raw_descriptor": "CVS PHARMACY - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "CVS Pharmacy NYC",
         "raw_descriptor": "CVS/PHARMACY - BOSTON MA",
         "country_code": "USA",
@@ -7603,6 +9598,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Walgreens Store Mountain View CA",
+        "raw_descriptor": "WALGREENS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Walgreens Store San Francisco CA",
+        "raw_descriptor": "WALGREENS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Walgreens Store CHI",
         "raw_descriptor": "WALGREENS - CHICAGO IL",
         "country_code": "USA",
@@ -7619,6 +9628,20 @@
     "logo_url": "https://logo.clearbit.com/riteaid.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Rite Aid - Mountain View CA",
+        "raw_descriptor": "RITE AID - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Rite Aid - San Francisco CA",
+        "raw_descriptor": "RITE AID - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Rite Aid - Chicago IL",
         "raw_descriptor": "RITE AID - CHICAGO IL",
@@ -7665,6 +9688,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Quest Diagnostics - Mountain View CA",
+        "raw_descriptor": "QUEST DIAGNOSTICS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Quest Diagnostics - San Francisco CA",
+        "raw_descriptor": "QUEST DIAGNOSTICS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Quest Diagnostics - Chicago IL",
         "raw_descriptor": "QUEST DIAGNOSTICS - CHICAGO IL",
         "country_code": "USA",
@@ -7709,6 +9746,20 @@
     "logo_url": "https://logo.clearbit.com/labcorp.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Labcorp - Mountain View CA",
+        "raw_descriptor": "LABCORP - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Labcorp - San Francisco CA",
+        "raw_descriptor": "LABCORP - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Labcorp - Chicago IL",
         "raw_descriptor": "LABCORP - CHICAGO IL",
@@ -7755,6 +9806,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "UnitedHealthcare - Mountain View CA",
+        "raw_descriptor": "UNITEDHEALTHCARE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "UnitedHealthcare - San Francisco CA",
+        "raw_descriptor": "UNITEDHEALTHCARE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "UnitedHealthcare - Chicago IL",
         "raw_descriptor": "UNITEDHEALTHCARE - CHICAGO IL",
         "country_code": "USA",
@@ -7799,6 +9864,20 @@
     "logo_url": "https://logo.clearbit.com/bcbs.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Blue Cross Blue Shield - Mountain View CA",
+        "raw_descriptor": "BLUE CROSS BLUE SHIELD - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Blue Cross Blue Shield - San Francisco CA",
+        "raw_descriptor": "BLUE CROSS BLUE SHIELD - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Blue Cross Blue Shield - Chicago IL",
         "raw_descriptor": "BLUE CROSS BLUE SHIELD - CHICAGO IL",
@@ -7845,6 +9924,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Aetna - Mountain View CA",
+        "raw_descriptor": "AETNA - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Aetna - San Francisco CA",
+        "raw_descriptor": "AETNA - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Aetna - Chicago IL",
         "raw_descriptor": "AETNA - CHICAGO IL",
         "country_code": "USA",
@@ -7889,6 +9982,20 @@
     "logo_url": "https://logo.clearbit.com/cigna.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Cigna Healthcare - Mountain View CA",
+        "raw_descriptor": "CIGNA HEALTHCARE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Cigna Healthcare - San Francisco CA",
+        "raw_descriptor": "CIGNA HEALTHCARE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Cigna Healthcare - Chicago IL",
         "raw_descriptor": "CIGNA HEALTHCARE - CHICAGO IL",
@@ -7935,6 +10042,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Humana - Mountain View CA",
+        "raw_descriptor": "HUMANA - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Humana - San Francisco CA",
+        "raw_descriptor": "HUMANA - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Humana - Chicago IL",
         "raw_descriptor": "HUMANA - CHICAGO IL",
         "country_code": "USA",
@@ -7979,6 +10100,20 @@
     "logo_url": "https://logo.clearbit.com/kp.org",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Kaiser Permanente - Mountain View CA",
+        "raw_descriptor": "KAISER PERMANENTE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Kaiser Permanente - San Francisco CA",
+        "raw_descriptor": "KAISER PERMANENTE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Kaiser Permanente - Chicago IL",
         "raw_descriptor": "KAISER PERMANENTE - CHICAGO IL",
@@ -8121,6 +10256,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "SoulCycle - Mountain View CA",
+        "raw_descriptor": "SOULCYCLE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "SoulCycle - San Francisco CA",
+        "raw_descriptor": "SOULCYCLE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "SoulCycle - Chicago IL",
         "raw_descriptor": "SOULCYCLE - CHICAGO IL",
         "country_code": "USA",
@@ -8190,6 +10339,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "GNC (General Nutrition Centers) - Mountain View CA",
+        "raw_descriptor": "GNC (GENERAL NUTRITION CENTERS) - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "GNC (General Nutrition Centers) - San Francisco CA",
+        "raw_descriptor": "GNC (GENERAL NUTRITION CENTERS) - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "GNC (General Nutrition Centers) - Chicago IL",
         "raw_descriptor": "GNC (GENERAL NUTRITION CENTERS) - CHICAGO IL",
         "country_code": "USA",
@@ -8235,6 +10398,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "The Vitamin Shoppe - Mountain View CA",
+        "raw_descriptor": "THE VITAMIN SHOPPE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "The Vitamin Shoppe - San Francisco CA",
+        "raw_descriptor": "THE VITAMIN SHOPPE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "The Vitamin Shoppe - Chicago IL",
         "raw_descriptor": "THE VITAMIN SHOPPE - CHICAGO IL",
         "country_code": "USA",
@@ -8279,6 +10456,20 @@
     "logo_url": "https://logo.clearbit.com/lenscrafters.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "LensCrafters - Mountain View CA",
+        "raw_descriptor": "LENSCRAFTERS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "LensCrafters - San Francisco CA",
+        "raw_descriptor": "LENSCRAFTERS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "LensCrafters - Chicago IL",
         "raw_descriptor": "LENSCRAFTERS - CHICAGO IL",
@@ -8397,6 +10588,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Staples - Mountain View CA",
+        "raw_descriptor": "STAPLES - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Staples - San Francisco CA",
+        "raw_descriptor": "STAPLES - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Staples - Chicago IL",
         "raw_descriptor": "STAPLES - CHICAGO IL",
         "country_code": "USA",
@@ -8441,6 +10646,20 @@
     "logo_url": "https://logo.clearbit.com/officedepot.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Office Depot - Mountain View CA",
+        "raw_descriptor": "OFFICE DEPOT - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Office Depot - San Francisco CA",
+        "raw_descriptor": "OFFICE DEPOT - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Office Depot - Chicago IL",
         "raw_descriptor": "OFFICE DEPOT - CHICAGO IL",
@@ -8487,6 +10706,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "PetSmart - Mountain View CA",
+        "raw_descriptor": "PETSMART - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "PetSmart - San Francisco CA",
+        "raw_descriptor": "PETSMART - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "PetSmart - Chicago IL",
         "raw_descriptor": "PETSMART - CHICAGO IL",
         "country_code": "USA",
@@ -8531,6 +10764,20 @@
     "logo_url": "https://logo.clearbit.com/petco.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Petco - Mountain View CA",
+        "raw_descriptor": "PETCO - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Petco - San Francisco CA",
+        "raw_descriptor": "PETCO - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Petco - Chicago IL",
         "raw_descriptor": "PETCO - CHICAGO IL",
@@ -8577,6 +10824,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Chewy - Mountain View CA",
+        "raw_descriptor": "CHEWY - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Chewy - San Francisco CA",
+        "raw_descriptor": "CHEWY - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Chewy - Chicago IL",
         "raw_descriptor": "CHEWY - CHICAGO IL",
         "country_code": "USA",
@@ -8621,6 +10882,20 @@
     "logo_url": "https://logo.clearbit.com/barnesandnoble.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Barnes & Noble - Mountain View CA",
+        "raw_descriptor": "BARNES & NOBLE - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Barnes & Noble - San Francisco CA",
+        "raw_descriptor": "BARNES & NOBLE - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Barnes & Noble - Chicago IL",
         "raw_descriptor": "BARNES & NOBLE - CHICAGO IL",
@@ -8667,6 +10942,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "GameStop - Mountain View CA",
+        "raw_descriptor": "GAMESTOP - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "GameStop - San Francisco CA",
+        "raw_descriptor": "GAMESTOP - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "GameStop - Chicago IL",
         "raw_descriptor": "GAMESTOP - CHICAGO IL",
         "country_code": "USA",
@@ -8711,6 +11000,20 @@
     "logo_url": "https://logo.clearbit.com/guitarcenter.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Guitar Center - Mountain View CA",
+        "raw_descriptor": "GUITAR CENTER - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Guitar Center - San Francisco CA",
+        "raw_descriptor": "GUITAR CENTER - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Guitar Center - Chicago IL",
         "raw_descriptor": "GUITAR CENTER - CHICAGO IL",
@@ -8757,6 +11060,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Michaels Stores - Mountain View CA",
+        "raw_descriptor": "MICHAELS STORES - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Michaels Stores - San Francisco CA",
+        "raw_descriptor": "MICHAELS STORES - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Michaels Stores - Chicago IL",
         "raw_descriptor": "MICHAELS STORES - CHICAGO IL",
         "country_code": "USA",
@@ -8801,6 +11118,20 @@
     "logo_url": "https://logo.clearbit.com/joann.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "JOANN Fabric and Craft Stores - Mountain View CA",
+        "raw_descriptor": "JOANN FABRIC AND CRAFT STORES - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "JOANN Fabric and Craft Stores - San Francisco CA",
+        "raw_descriptor": "JOANN FABRIC AND CRAFT STORES - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "JOANN Fabric and Craft Stores - Chicago IL",
         "raw_descriptor": "JOANN FABRIC AND CRAFT STORES - CHICAGO IL",
@@ -8847,6 +11178,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Hobby Lobby - Mountain View CA",
+        "raw_descriptor": "HOBBY LOBBY - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Hobby Lobby - San Francisco CA",
+        "raw_descriptor": "HOBBY LOBBY - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Hobby Lobby - Chicago IL",
         "raw_descriptor": "HOBBY LOBBY - CHICAGO IL",
         "country_code": "USA",
@@ -8892,6 +11237,20 @@
     "is_subscription": false,
     "stores": [
       {
+        "location_name": "Harbor Freight Tools - Mountain View CA",
+        "raw_descriptor": "HARBOR FREIGHT TOOLS - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Harbor Freight Tools - San Francisco CA",
+        "raw_descriptor": "HARBOR FREIGHT TOOLS - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
         "location_name": "Harbor Freight Tools - Chicago IL",
         "raw_descriptor": "HARBOR FREIGHT TOOLS - CHICAGO IL",
         "country_code": "USA",
@@ -8936,6 +11295,20 @@
     "logo_url": "https://logo.clearbit.com/tractorsupply.com",
     "is_subscription": false,
     "stores": [
+      {
+        "location_name": "Tractor Supply Co. - Mountain View CA",
+        "raw_descriptor": "TRACTOR SUPPLY CO. - MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Tractor Supply Co. - San Francisco CA",
+        "raw_descriptor": "TRACTOR SUPPLY CO. - SAN FRANCISCO CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
       {
         "location_name": "Tractor Supply Co. - Chicago IL",
         "raw_descriptor": "TRACTOR SUPPLY CO. - CHICAGO IL",

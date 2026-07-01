@@ -497,7 +497,13 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
         )
 
         # Assign a consistent geographical home metro and international travel trip for this customer's demo card
-        user_home_metro = random.choice(["CHICAGO IL", "NEW YORK NY", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA"])
+        from models.identity import User
+        user_obj = db.query(User).filter(User.id == user_uuid).first()
+        is_googler = user_obj and "GOOGLE" in str(user_obj.email).upper()
+        if is_googler:
+            user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA"])
+        else:
+            user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA"])
         user_travel_country = random.choice(["MEX", "BHS", "JAM", "DOM", "PRI"])
 
         for i in range(12):
