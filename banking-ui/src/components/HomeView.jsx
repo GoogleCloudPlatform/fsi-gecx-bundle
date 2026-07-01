@@ -730,13 +730,13 @@ function HomeView({
                     <div className="flex items-start gap-2.5">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0"></span>
                       <div>
-                        <strong className="text-slate-900 dark:text-white font-bold">Reference Data (`ref_data`):</strong> Centralized Merchant Category Code (MCC) catalogs mapping ISO merchant codes to FDX open banking taxonomy with high-performance in-memory TTL caching.
+                        <strong className="text-slate-900 dark:text-white font-bold">Transactional Ledgers:</strong> Event-driven outbox pattern recording append-only cryptographic audit logs and double-entry accounting for pending holds and posted transactions.
                       </div>
                     </div>
                     <div className="flex items-start gap-2.5">
                       <span className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0"></span>
                       <div>
-                        <strong className="text-slate-900 dark:text-white font-bold">Transactional Ledgers:</strong> Event-driven outbox pattern recording append-only cryptographic audit logs and double-entry accounting for pending holds and posted transactions.
+                        <strong className="text-slate-900 dark:text-white font-bold">CDC Iceberg Pipeline:</strong> Real-time Write-Ahead Log (WAL) streaming via Google Cloud Datastream into Apache Iceberg tables and BigQuery Medallion Materialized Views for sub-second OLAP compliance analytics.
                       </div>
                     </div>
                     <div className="flex items-start gap-2.5">
