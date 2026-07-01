@@ -220,7 +220,7 @@ def freeze_card(db: Session, card_token: str, reason: str) -> dict:
         
     card.status = "BLOCKED"
     repo.save_card(card)
-    record_audit_event(db, "CARD_FROZEN", {"card_token": card_token, "reason": reason})
+    record_audit_event(db, "CARD_FROZEN", {"account_id": str(card.account_id), "card_token": card_token, "reason": reason})
     db.commit()
     logger.info(f"Card token '{card_token}' successfully blocked.")
     return {"card_token": card_token, "status": "BLOCKED"}
