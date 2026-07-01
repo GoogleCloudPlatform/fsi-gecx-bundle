@@ -496,9 +496,19 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
             },
         )
 
+        # Assign a consistent geographical home metro and international travel trip for this customer's demo card
+        user_home_metro = random.choice(["CHICAGO IL", "NEW YORK NY", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA"])
+        user_travel_country = random.choice(["MEX", "BHS", "JAM", "DOM", "PRI"])
+
         for i in range(12):
             is_intl = (i in [2, 7, 10])  # 25% international anomaly ratio for travel/fraud alert testing
-            mch, store_desc = MerchantEnrichmentService.get_random_merchant(db, is_international=is_intl)
+            target_country = user_travel_country if is_intl else None
+            mch, store_desc = MerchantEnrichmentService.get_random_merchant(
+                db, 
+                is_international=is_intl, 
+                country=target_country, 
+                home_metro=user_home_metro
+            )
             amount_cents = random.randint(1250, 45000)
             total_swipes_debt_cents += amount_cents
             

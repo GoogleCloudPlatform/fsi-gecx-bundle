@@ -234,16 +234,40 @@ class MerchantEnrichmentService:
         }
 
     @classmethod
-    def get_random_merchant(cls, db: Session, is_international: bool = False, category: Optional[str] = None) -> Tuple[Union[MerchantMaster, MerchantDTO], str]:
+    def get_random_merchant(
+        cls,
+        db: Session,
+        is_international: bool = False,
+        category: Optional[str] = None,
+        country: Optional[str] = None,
+        home_metro: Optional[str] = None,
+    ) -> Tuple[Union[MerchantMaster, MerchantDTO], str]:
         """
         Returns a random store location DTO and a realistic store variation string.
-        Used by algorithmic seeding to generate rich domestic vs. international anomaly distributions.
+        Enforces geographic boundedness by filtering physical store locations to the customer's home metro area
+        or consistent travel destination country, preventing random multi-city teleports on the same day.
         """
         cls.load_cache_if_needed(db)
 
         pool = cls._international_merchants if is_international else cls._domestic_merchants
+        if country:
+            pool = [dto for dto in pool if dto.country_code.upper() == country.upper()] or pool
         if category:
             pool = [dto for dto in pool if dto.category.lower() == category.lower()] or pool
+
+        if not is_international and home_metro:
+            # Keep online/digital/subscription billing stores OR physical stores matching the customer's home metro
+            metro_pool = []
+            for dto in pool:
+                desc = dto.raw_descriptor_pattern.upper()
+                is_digital = dto.is_subscription or any(k in desc for k in ["ONLINE", "STREAMING", "SUBSCRIPTION", "BILL", ".COM", "MKTPLACE", "PRIME", "ORDER", "/"])
+                if is_digital:
+                    metro_pool.append(dto)
+                elif home_metro.upper() in desc or any(w in desc for w in home_metro.upper().split() if len(w) > 2):
+                    metro_pool.append(dto)
+            if metro_pool:
+                pool = metro_pool
+
         if not pool:
             pool = cls._stores_list or list(cls._merchants_by_id.values())
 
