@@ -711,33 +711,50 @@ function HomeView({
                 <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950/50 flex-shrink-0">
                   <div className="flex items-center gap-2">
                     <GoogleCloudIcon className="w-5 h-5 text-emerald-500" />
-                    <h3 className="font-bold text-slate-900 dark:text-white text-base">Back-end Data Schema</h3>
+                    <h3 className="font-bold text-slate-900 dark:text-white text-base">Enterprise Data Layer Architecture</h3>
                   </div>
                   <button 
                     onClick={() => setIsSchemaModalOpen(false)}
-                    className="p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-550 dark:text-slate-400 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
 
                 {/* Content body */}
-                <div className="p-6 space-y-4 text-sm text-slate-650 dark:text-slate-300 leading-relaxed text-left font-normal">
+                <div className="p-6 space-y-4 text-sm text-slate-600 dark:text-slate-300 leading-relaxed text-left font-normal">
                   <p>
-                    Demo account values, cleared balances, and transactional ledger history are fully provisioned and seeded via mock database migrations in the back end.
+                    Our cloud-native banking platform utilizes a multi-schema relational data architecture designed for real-time transaction processing, high-concurrency simulation, and regulatory compliance.
                   </p>
-                  <p>
-                    Database queries, index configurations, and relationship mappings follow standard retail banking guidelines.
-                  </p>
-                  <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs">
-                    <span className="text-slate-500 font-mono">SQLite / PostgreSQL Schema</span>
+                  <div className="space-y-2.5 pt-1 text-xs">
+                    <div className="flex items-start gap-2.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0"></span>
+                      <div>
+                        <strong className="text-slate-900 dark:text-white font-bold">Reference Data (`ref_data`):</strong> Centralized Merchant Category Code (MCC) catalogs mapping ISO merchant codes to FDX open banking taxonomy with high-performance in-memory TTL caching.
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <span className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0"></span>
+                      <div>
+                        <strong className="text-slate-900 dark:text-white font-bold">Transactional Ledgers:</strong> Event-driven outbox pattern recording append-only cryptographic audit logs and double-entry accounting for pending holds and posted transactions.
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <span className="w-2 h-2 rounded-full bg-purple-500 mt-1.5 shrink-0"></span>
+                      <div>
+                        <strong className="text-slate-900 dark:text-white font-bold">Sandbox Isolation:</strong> Automated persona provisioning with multi-layered KYC credit profile isolation and real-time surge data generators.
+                      </div>
+                    </div>
+                  </div>
+                  <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center text-xs">
+                    <span className="text-slate-500 font-mono">Enterprise Data Platform</span>
                     <a 
-                      href="https://github.com/GoogleCloudPlatform/generative-ai/tree/main/docs" 
+                      href="https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/tree/main/docs/architecture/data-platform" 
                       target="_blank" 
                       rel="noreferrer" 
-                      className="text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-0.5 font-bold"
+                      className="text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 font-bold"
                     >
-                      View Repo Documentation
+                      View Architecture Docs
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   </div>

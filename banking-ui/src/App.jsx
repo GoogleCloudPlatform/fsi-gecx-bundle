@@ -1139,8 +1139,8 @@ function AppContent() {
 
           {/* Header Search Input centered in middle */}
           {fbUser && (
-            <div className="relative hidden md:block flex-1 max-w-xs mx-6">
-              <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
+            <div className="relative hidden md:block flex-1 max-w-lg mx-6">
+              <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search site..."
@@ -1321,12 +1321,6 @@ function AppContent() {
               </div>
             )}
 
-            <button 
-              className="hidden sm:flex px-5 rounded-full text-slate-950 font-semibold text-sm shadow-lg hover:scale-105 transition-all duration-300 h-9 items-center justify-center"
-              style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 10px 15px -3px ${brandColorFrom}20` }}
-            >
-              Open Account
-            </button>
             <button
               onClick={() => setIsMobileMenuOpen(true)}
               className="md:hidden w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer flex items-center justify-center shrink-0"
