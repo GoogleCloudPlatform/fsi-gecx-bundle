@@ -35,12 +35,12 @@ def setup_db():
 def test_taxonomy_service():
     from services.taxonomy_service import TaxonomyService
     cat = TaxonomyService.get_category("5411")
-    assert cat.primary == "GENERAL_MERCHANDISE"
-    assert cat.detailed == "GENERAL_MERCHANDISE_SUPERSTORES"
+    assert cat.primary == "GROCERY"
+    assert cat.detailed == "GROCERY_SUPERMARKETS"
     
     # Test fallback
     cat_unknown = TaxonomyService.get_category("9999")
-    assert cat_unknown.primary == "GENERAL_MERCHANDISE"
+    assert cat_unknown.primary == "MERCHANDISE"
 
 
 def test_fdx_account_info_unauthorized_scope():
@@ -121,7 +121,7 @@ def test_list_taxonomies_success():
         assert resp.status_code == 200
         data = resp.json()
         assert "5411" in data
-        assert data["5411"]["primary"] == "GENERAL_MERCHANDISE"
+        assert data["5411"]["primary"] == "GROCERY"
     finally:
         app.dependency_overrides.clear()
 
@@ -132,8 +132,8 @@ def test_get_taxonomy_by_mcc_success():
         resp = client.get("/api/fdx/v6/taxonomies/5814")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["primary"] == "FOOD_AND_DRINK"
-        assert data["detailed"] == "FOOD_AND_DRINK_FAST_FOOD"
+        assert data["primary"] == "DINING"
+        assert data["detailed"] == "DINING_FAST_FOOD"
     finally:
         app.dependency_overrides.clear()
 
@@ -155,6 +155,6 @@ def test_internal_get_taxonomy_by_mcc_success():
         resp = client.get("/credit-card/taxonomies/5814")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["primary"] == "FOOD_AND_DRINK"
+        assert data["primary"] == "DINING"
     finally:
         app.dependency_overrides.clear()

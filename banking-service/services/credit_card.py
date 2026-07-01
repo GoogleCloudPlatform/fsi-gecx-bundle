@@ -90,79 +90,81 @@ def initialize_db_and_seed(db: Session):
             db.add(seed_user)
             db.flush()
 
-        # 1. Create a core Financial Account
-        seed_account = FinancialAccount(
-            id="88888888-8888-4888-8888-999999999999",
-            customer_id=seed_user.id,
-            product_code="CASHBACK_EVERYDAY",
-            status="ACTIVE",
-            credit_limit_cents=1000000,       # $10,000 credit limit
-            cleared_balance_cents=18044,      # Total debt: $180.44 (Late Fee + Starbucks + YouTube + Whole Foods + Shell)
-            available_credit_cents=981956,    # $9,819.56 available credit
-            payment_due_date=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=15),
-            statement_close_date=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=15)
-        )
-        repo.save_account(seed_account)
-        
-        # 2. Issue a primary Credit Card linked to this account
-        seed_card = IssuedCard(
-            id="11111111-1111-4111-8111-222222222222",
-            account_id=seed_account.id,
-            cardholder_name="Jane Doe",
-            card_token="tok_visa_jane_doe",
-            last_four="8234",
-            exp_month=12,
-            exp_year=2028,
-            status="ACTIVE",
-            is_active=True
-        )
-        repo.save_card(seed_card)
-        
-        # 3. Post realistic transaction entries to the account ledger
-        seed_fee = AccountLedger(
-            id="00000000-0000-4000-8000-000000000001",
-            account_id=seed_account.id,
-            amount_cents=-3500,               # -$35 late fee charge
-            description="LATE_FEE",
-            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=5)
-        )
-        repo.save_ledger(seed_fee)
+        # 1. Create a core Financial Account if not already seeded
+        seed_acc_id = "88888888-8888-4888-8888-999999999999"
+        if not db.query(FinancialAccount).filter(FinancialAccount.id == seed_acc_id).first():
+            seed_account = FinancialAccount(
+                id=seed_acc_id,
+                customer_id=seed_user.id,
+                product_code="CASHBACK_EVERYDAY",
+                status="ACTIVE",
+                credit_limit_cents=1000000,       # $10,000 credit limit
+                cleared_balance_cents=18044,      # Total debt: $180.44
+                available_credit_cents=981956,    # $9,819.56 available credit
+                payment_due_date=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=15),
+                statement_close_date=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=15)
+            )
+            repo.save_account(seed_account)
+            
+            # 2. Issue a primary Credit Card linked to this account
+            seed_card = IssuedCard(
+                id="11111111-1111-4111-8111-222222222222",
+                account_id=seed_account.id,
+                cardholder_name="Jane Doe",
+                card_token="tok_visa_seed_8888",
+                last_four="8234",
+                exp_month=12,
+                exp_year=2028,
+                status="ACTIVE",
+                is_active=True
+            )
+            repo.save_card(seed_card)
+            
+            # 3. Post realistic transaction entries to the account ledger
+            seed_fee = AccountLedger(
+                id="00000000-0000-4000-8000-000000000001",
+                account_id=seed_account.id,
+                amount_cents=-3500,
+                description="LATE_FEE",
+                posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=5)
+            )
+            repo.save_ledger(seed_fee)
 
-        seed_youtube = AccountLedger(
-            id="00000000-0000-4000-8000-000000000002",
-            account_id=seed_account.id,
-            amount_cents=-1399,               # -$13.99 subscription
-            description="YouTube Premium Subscription",
-            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=12)
-        )
-        repo.save_ledger(seed_youtube)
+            seed_youtube = AccountLedger(
+                id="00000000-0000-4000-8000-000000000002",
+                account_id=seed_account.id,
+                amount_cents=-1399,
+                description="YouTube Premium Subscription",
+                posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=12)
+            )
+            repo.save_ledger(seed_youtube)
 
-        seed_starbucks = AccountLedger(
-            id="00000000-0000-4000-8000-000000000003",
-            account_id=seed_account.id,
-            amount_cents=-475,                 # -$4.75 coffee purchase
-            description="Starbucks Coffee",
-            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=4)
-        )
-        repo.save_ledger(seed_starbucks)
+            seed_starbucks = AccountLedger(
+                id="00000000-0000-4000-8000-000000000003",
+                account_id=seed_account.id,
+                amount_cents=-475,
+                description="Starbucks Coffee",
+                posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=4)
+            )
+            repo.save_ledger(seed_starbucks)
 
-        seed_grocery = AccountLedger(
-            id="00000000-0000-4000-8000-000000000004",
-            account_id=seed_account.id,
-            amount_cents=-8420,               # -$84.20 groceries
-            description="Whole Foods Market",
-            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=8)
-        )
-        repo.save_ledger(seed_grocery)
+            seed_grocery = AccountLedger(
+                id="00000000-0000-4000-8000-000000000004",
+                account_id=seed_account.id,
+                amount_cents=-8420,
+                description="Whole Foods Market",
+                posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=8)
+            )
+            repo.save_ledger(seed_grocery)
 
-        seed_gas = AccountLedger(
-            id="00000000-0000-4000-8000-000000000005",
-            account_id=seed_account.id,
-            amount_cents=-4250,               # -$42.50 gas station purchase
-            description="Shell Gasoline",
-            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)
-        )
-        repo.save_ledger(seed_gas)
+            seed_gas = AccountLedger(
+                id="00000000-0000-4000-8000-000000000005",
+                account_id=seed_account.id,
+                amount_cents=-4250,
+                description="Shell Gasoline",
+                posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)
+            )
+            repo.save_ledger(seed_gas)
         
         # 5. Seed system settings with baseline Voice & Live Avatar configs
         from repositories.settings import SystemSettingsRepository
