@@ -30,14 +30,15 @@ def upgrade() -> None:
     except Exception:
         project_id = os.getenv("PROJECT_ID")
 
-    schemas = ["identity", "kyc", "ledger", "cards", "operations"]
+    schemas = ["identity", "kyc", "ledger", "cards", "operations", "ref_data"]
 
     users_by_schema = {
         "identity": [],
         "kyc": [],
         "ledger": [],
         "cards": [],
-        "operations": []
+        "operations": [],
+        "ref_data": []
     }
 
     if project_id and str(project_id) != "None":
@@ -46,6 +47,8 @@ def upgrade() -> None:
             users_by_schema[s].append(main_sa)
         users_by_schema["kyc"].append(f"kyc-service-sa@{project_id}.iam")
         users_by_schema["ledger"].append(f"ledger-service-sa@{project_id}.iam")
+        users_by_schema["ref_data"].append(f"kyc-service-sa@{project_id}.iam")
+        users_by_schema["ref_data"].append(f"ledger-service-sa@{project_id}.iam")
 
     iam_dba_users_env = os.getenv("IAM_DBA_USERS")
     if iam_dba_users_env:
