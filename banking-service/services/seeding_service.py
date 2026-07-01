@@ -467,22 +467,22 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
             created_at=now - datetime.timedelta(days=5),
             expires_at=now + datetime.timedelta(days=10)
         )
-        priceline_auth = TransactionAuthorization(
+        curb_auth = TransactionAuthorization(
             id=uuid.uuid4(),
             card_id=card.id,
             account_id=cred_acc.id,
             transaction_amount_cents=-1,
             billing_amount_cents=-1,
             status="PENDING",
-            auth_code="PRC001",
+            auth_code="CRB001",
             retrieval_reference_number="REF999999998",
             card_network="VISA",
-            merchant_category_code="4511",
-            merchant_name="PRICELINE OFFER 2AD77E",
+            merchant_category_code="4121",
+            merchant_name="CURB CHI TAXI",
             created_at=now - datetime.timedelta(hours=6),
             expires_at=now + datetime.timedelta(days=7)
         )
-        db.add_all([late_fee_auth, priceline_auth])
+        db.add_all([late_fee_auth, curb_auth])
         record_audit_event(
             db,
             "CREDIT_TRANSACTION_AUTHORIZED",
@@ -495,16 +495,16 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
         )
 
         swipe_options = [
-            {"description": "Starbucks Coffee", "min": 450, "max": 850, "mcc": "5814"},
-            {"description": "Whole Foods Market", "min": 4500, "max": 12000, "mcc": "5411"},
-            {"description": "Uber Trip", "min": 1200, "max": 3500, "mcc": "4121"},
+            {"description": "Taqueria Orinoco CDMX", "min": 350, "max": 650, "mcc": "5812"},
+            {"description": "Oxxo Convenience Mexico", "min": 150, "max": 450, "mcc": "5411"},
+            {"description": "Uber CDMX Trip", "min": 850, "max": 2500, "mcc": "4121"},
             {"description": "Netflix Subscription", "min": 1549, "max": 1549, "mcc": "4899"},
-            {"description": "Chevron Gas Station", "min": 3500, "max": 5500, "mcc": "5541"},
-            {"description": "McDonald's Fast Food", "min": 850, "max": 1850, "mcc": "5814"},
-            {"description": "Walmart Superstore", "min": 2500, "max": 9500, "mcc": "5411"},
+            {"description": "Pemex Gas Station", "min": 3500, "max": 5500, "mcc": "5541"},
+            {"description": "Pujol Restaurant CDMX", "min": 8500, "max": 18500, "mcc": "5812"},
+            {"description": "Superama CDMX Grocery", "min": 2500, "max": 9500, "mcc": "5411"},
             {"description": "YouTube Premium Subscription", "min": 1399, "max": 1399, "mcc": "4899"},
-            {"description": "Shell Petrol", "min": 3000, "max": 5000, "mcc": "5541"},
-            {"description": "DAN STROBEL DDS", "min": 10300, "max": 10300, "mcc": "8011"},
+            {"description": "Aeromexico Airlines CDMX", "min": 35000, "max": 65000, "mcc": "4511"},
+            {"description": "Hotel Carlota CDMX", "min": 25000, "max": 45000, "mcc": "7011"},
             {"description": "CURB CHI TAXI", "min": 875, "max": 875, "mcc": "4121"},
             {"description": "eBay", "min": 218651, "max": 218651, "mcc": "5311"}
         ]
