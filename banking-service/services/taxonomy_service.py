@@ -18,15 +18,17 @@ from cachetools import TTLCache
 from models.fdx import PersonalFinanceCategory
 
 DEFAULT_TAXONOMY_MAP: Dict[str, Dict[str, str]] = {
-    "5411": {"primary": "GENERAL_MERCHANDISE", "detailed": "GENERAL_MERCHANDISE_SUPERSTORES"},
-    "5814": {"primary": "FOOD_AND_DRINK", "detailed": "FOOD_AND_DRINK_FAST_FOOD"},
-    "5812": {"primary": "FOOD_AND_DRINK", "detailed": "FOOD_AND_DRINK_RESTAURANTS"},
-    "4511": {"primary": "TRAVEL", "detailed": "TRAVEL_FLIGHTS"},
-    "7011": {"primary": "TRAVEL", "detailed": "TRAVEL_LODGING"},
-    "4814": {"primary": "GENERAL_SERVICES", "detailed": "GENERAL_SERVICES_TELECOMMUNICATIONS"},
-    "4121": {"primary": "TRANSPORTATION", "detailed": "TRANSPORTATION_TAXI"},
-    "4899": {"primary": "ENTERTAINMENT", "detailed": "ENTERTAINMENT_TV"},
-    "5541": {"primary": "TRANSPORTATION", "detailed": "TRANSPORTATION_GAS"},
+    "5311": {"primary": "MERCHANDISE", "detailed": "MERCHANDISE_DEPARTMENT_STORES"},
+    "5411": {"primary": "GROCERY", "detailed": "GROCERY_SUPERMARKETS"},
+    "5814": {"primary": "DINING", "detailed": "DINING_FAST_FOOD"},
+    "5812": {"primary": "DINING", "detailed": "DINING_RESTAURANTS"},
+    "4511": {"primary": "OTHER_TRAVEL", "detailed": "OTHER_TRAVEL_FLIGHTS"},
+    "7011": {"primary": "OTHER_TRAVEL", "detailed": "OTHER_TRAVEL_LODGING"},
+    "4121": {"primary": "OTHER_TRAVEL", "detailed": "OTHER_TRAVEL_TAXI"},
+    "8011": {"primary": "HEALTHCARE", "detailed": "HEALTHCARE_MEDICAL"},
+    "5541": {"primary": "GAS_AUTOMOTIVE", "detailed": "GAS_AUTOMOTIVE_FUEL"},
+    "4814": {"primary": "OTHER", "detailed": "OTHER_TELECOMMUNICATIONS"},
+    "4899": {"primary": "OTHER", "detailed": "OTHER_ENTERTAINMENT"},
     "FEE": {"primary": "FEES", "detailed": "FEES_LATE"},
 }
 
@@ -49,7 +51,7 @@ class TaxonomyService:
     @classmethod
     def get_category(cls, mcc: str) -> PersonalFinanceCategory:
         mapping = cls.get_taxonomy_map()
-        cat_data = mapping.get(str(mcc), {"primary": "GENERAL_MERCHANDISE", "detailed": "GENERAL_MERCHANDISE_OTHER"})
+        cat_data = mapping.get(str(mcc), {"primary": "MERCHANDISE", "detailed": "MERCHANDISE_OTHER"})
         return PersonalFinanceCategory(
             primary=cat_data["primary"],
             detailed=cat_data["detailed"],

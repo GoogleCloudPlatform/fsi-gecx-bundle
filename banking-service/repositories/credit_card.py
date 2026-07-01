@@ -113,6 +113,13 @@ class CreditCardRepository:
             query = query.limit(limit)
         return query.all()
 
+    def list_authorizations(self, account_id: str, status: Optional[str] = "PENDING") -> List[TransactionAuthorization]:
+        """Retrieves authorization holds for an account."""
+        query = self.db.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == account_id)
+        if status:
+            query = query.filter(TransactionAuthorization.status == status)
+        return query.order_by(TransactionAuthorization.created_at.desc()).all()
+
     def get_ledger_entry_by_id(self, entry_id: str) -> Optional[AccountLedger]:
         """Retrieves a single ledger entry transaction by its unique ID."""
         return self.db.query(AccountLedger).filter(AccountLedger.id == entry_id).first()

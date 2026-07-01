@@ -118,21 +118,57 @@ def get_transaction_history(
     token: ValidatedToken = Depends(get_current_user),
     customer_id: str = Depends(_get_active_customer_id)
 ):
-    """Fetches full transaction and statement ledger lines for the customer."""
+    """Fetches full transaction and statement ledger lines for the customer, including pending authorizations."""
     effective_id = resolve_effective_id(target_customer_id, customer_id, token)
     account = repo.get_account_by_customer(effective_id)
     if not account:
         raise HTTPException(status_code=404, detail="No account registered.")
         
+    auths = repo.list_authorizations(account.id, status="PENDING")
     ledger = repo.list_ledger_entries(account.id)
-    return [
-        {
-            "id": entry.id,
+    
+    results = []
+    for auth in auths:
+        cat = TaxonomyService.get_category(auth.merchant_category_code)
+        results.append({
+            "id": str(auth.id),
+            "amount_cents": auth.transaction_amount_cents,
+            "amount": auth.transaction_amount_cents / 100.0,
+            "description": auth.merchant_name or auth.auth_code,
+            "posted_at": auth.created_at.isoformat() if auth.created_at else None,
+            "pending": True,
+            "personal_finance_category": {
+                "primary": cat.primary,
+                "detailed": cat.detailed,
+                "confidence_level": cat.confidence_level
+            },
+            "merchant_category_code": auth.merchant_category_code,
+            "cardholder_name": auth.card.cardholder_name if auth.card else "Erik V.",
+            "last_four": auth.card.last_four if auth.card else "2304"
+        })
+        
+    for entry in ledger:
+        mcc = entry.authorization.merchant_category_code if entry.authorization else "5411"
+        cat = TaxonomyService.get_category(mcc)
+        results.append({
+            "id": str(entry.id),
             "amount_cents": entry.amount_cents,
+            "amount": abs(entry.amount_cents) / 100.0,
             "description": entry.description,
-            "posted_at": entry.posted_at
-        } for entry in ledger
-    ]
+            "posted_at": entry.posted_at.isoformat() if entry.posted_at else None,
+            "posted_timestamp": entry.posted_at.isoformat() if entry.posted_at else None,
+            "pending": False,
+            "personal_finance_category": {
+                "primary": cat.primary,
+                "detailed": cat.detailed,
+                "confidence_level": cat.confidence_level
+            },
+            "merchant_category_code": mcc,
+            "cardholder_name": entry.authorization.card.cardholder_name if entry.authorization and entry.authorization.card else "Erik V.",
+            "last_four": entry.authorization.card.last_four if entry.authorization and entry.authorization.card else "2304"
+        })
+        
+    return results
 
 
 @router.get("/taxonomies", response_model=Dict[str, Dict[str, str]])

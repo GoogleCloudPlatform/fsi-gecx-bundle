@@ -331,6 +331,216 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
         raise e
 
 
+def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Account, savings_acc: Account, cred_acc: CreditAccount, card: IssuedCard, first_name: str, last_name: str) -> None:
+    """Seeds consistent pending and posted transactions across checking, savings, and credit card accounts."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    # 1. Clear any existing transactions for these accounts
+    if checking_acc:
+        db.query(AccountLedgerEntry).filter(AccountLedgerEntry.account_id == checking_acc.id).delete()
+    if savings_acc:
+        db.query(AccountLedgerEntry).filter(AccountLedgerEntry.account_id == savings_acc.id).delete()
+    if cred_acc:
+        db.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == cred_acc.id).delete()
+        db.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).delete()
+
+    # 2. Checking Account Seeding (Pending & Posted)
+    if checking_acc:
+        chk_pending_1 = Transaction(
+            id=uuid.uuid4(),
+            idempotency_key=f"idemp_chk_p1_{uuid.uuid4()}",
+            user_id=user_uuid,
+            status="PENDING",
+            description="Target Store #1042 - Pending Debit Hold"
+        )
+        chk_p1_entry = AccountLedgerEntry(
+            entry_id=uuid.uuid4(),
+            transaction_id=chk_pending_1.id,
+            account_id=checking_acc.id,
+            amount_cents=4550,
+            entry_type="CREDIT",
+            posted_at=now - datetime.timedelta(hours=4)
+        )
+        chk_pending_2 = Transaction(
+            id=uuid.uuid4(),
+            idempotency_key=f"idemp_chk_p2_{uuid.uuid4()}",
+            user_id=user_uuid,
+            status="PENDING",
+            description="Amazon.com - Pending Authorization"
+        )
+        chk_p2_entry = AccountLedgerEntry(
+            entry_id=uuid.uuid4(),
+            transaction_id=chk_pending_2.id,
+            account_id=checking_acc.id,
+            amount_cents=8999,
+            entry_type="CREDIT",
+            posted_at=now - datetime.timedelta(hours=2)
+        )
+        db.add_all([chk_pending_1, chk_p1_entry, chk_pending_2, chk_p2_entry])
+
+        chk_posted_items = [
+            ("Direct Deposit - Employer Payroll", 250000, "DEBIT", 12),
+            ("Con Edison Electric Utility", 12000, "CREDIT", 10),
+            ("Whole Foods Market", 14520, "CREDIT", 8),
+            ("Venmo Payment - Rent", 120000, "CREDIT", 6),
+            ("Spotify USA Subscription", 1699, "CREDIT", 5),
+            ("Shell Gas Station", 4850, "CREDIT", 4),
+            ("Apple Store Online", 12900, "CREDIT", 3),
+            ("Trader Joe's Grocery", 8540, "CREDIT", 1),
+        ]
+        for desc, amount, etype, days_ago in chk_posted_items:
+            tx = Transaction(
+                id=uuid.uuid4(),
+                idempotency_key=f"idemp_chk_{days_ago}_{uuid.uuid4()}",
+                user_id=user_uuid,
+                status="POSTED",
+                description=desc
+            )
+            entry = AccountLedgerEntry(
+                entry_id=uuid.uuid4(),
+                transaction_id=tx.id,
+                account_id=checking_acc.id,
+                amount_cents=amount,
+                entry_type=etype,
+                posted_at=now - datetime.timedelta(days=days_ago, hours=random.randint(1, 10))
+            )
+            db.add_all([tx, entry])
+
+    # 3. Savings Account Seeding (Posted)
+    if savings_acc:
+        sav_items = [
+            ("Monthly Interest Paid", 4512, "DEBIT", 14),
+            ("Automated Transfer from Checking", 50000, "DEBIT", 7),
+            ("Online Transfer to Checking", 20000, "CREDIT", 2),
+        ]
+        for desc, amount, etype, days_ago in sav_items:
+            tx = Transaction(
+                id=uuid.uuid4(),
+                idempotency_key=f"idemp_sav_{days_ago}_{uuid.uuid4()}",
+                user_id=user_uuid,
+                status="POSTED",
+                description=desc
+            )
+            entry = AccountLedgerEntry(
+                entry_id=uuid.uuid4(),
+                transaction_id=tx.id,
+                account_id=savings_acc.id,
+                amount_cents=amount,
+                entry_type=etype,
+                posted_at=now - datetime.timedelta(days=days_ago, hours=random.randint(1, 10))
+            )
+            db.add_all([tx, entry])
+
+    # 4. Credit Card Seeding (Pending Authorizations & Posted Transactions)
+    if cred_acc and card:
+        total_swipes_debt_cents = 0
+
+        late_fee_cents = 3500
+        late_fee_auth = TransactionAuthorization(
+            id=uuid.uuid4(),
+            card_id=card.id,
+            account_id=cred_acc.id,
+            transaction_amount_cents=late_fee_cents,
+            billing_amount_cents=late_fee_cents,
+            status="PENDING",
+            auth_code="FEE350",
+            retrieval_reference_number="REF999999999",
+            card_network="VISA",
+            merchant_category_code="FEE",
+            merchant_name="LATE_FEE",
+            created_at=now - datetime.timedelta(days=5),
+            expires_at=now + datetime.timedelta(days=10)
+        )
+        priceline_auth = TransactionAuthorization(
+            id=uuid.uuid4(),
+            card_id=card.id,
+            account_id=cred_acc.id,
+            transaction_amount_cents=-1,
+            billing_amount_cents=-1,
+            status="PENDING",
+            auth_code="PRC001",
+            retrieval_reference_number="REF999999998",
+            card_network="VISA",
+            merchant_category_code="4511",
+            merchant_name="PRICELINE OFFER 2AD77E",
+            created_at=now - datetime.timedelta(hours=6),
+            expires_at=now + datetime.timedelta(days=7)
+        )
+        db.add_all([late_fee_auth, priceline_auth])
+        record_audit_event(
+            db,
+            "CREDIT_TRANSACTION_AUTHORIZED",
+            {
+                "account_id": str(cred_acc.id),
+                "authorization_id": str(late_fee_auth.id),
+                "amount_cents": late_fee_auth.transaction_amount_cents,
+                "merchant_name": late_fee_auth.merchant_name,
+            },
+        )
+
+        swipe_options = [
+            {"description": "Starbucks Coffee", "min": 450, "max": 850, "mcc": "5814"},
+            {"description": "Whole Foods Market", "min": 4500, "max": 12000, "mcc": "5411"},
+            {"description": "Uber Trip", "min": 1200, "max": 3500, "mcc": "4121"},
+            {"description": "Netflix Subscription", "min": 1549, "max": 1549, "mcc": "4899"},
+            {"description": "Chevron Gas Station", "min": 3500, "max": 5500, "mcc": "5541"},
+            {"description": "McDonald's Fast Food", "min": 850, "max": 1850, "mcc": "5814"},
+            {"description": "Walmart Superstore", "min": 2500, "max": 9500, "mcc": "5411"},
+            {"description": "YouTube Premium Subscription", "min": 1399, "max": 1399, "mcc": "4899"},
+            {"description": "Shell Petrol", "min": 3000, "max": 5000, "mcc": "5541"},
+            {"description": "DAN STROBEL DDS", "min": 10300, "max": 10300, "mcc": "8011"},
+            {"description": "CURB CHI TAXI", "min": 875, "max": 875, "mcc": "4121"},
+            {"description": "eBay", "min": 218651, "max": 218651, "mcc": "5311"}
+        ]
+        for i in range(12):
+            swipe_conf = swipe_options[i % len(swipe_options)]
+            amount_cents = random.randint(swipe_conf["min"], swipe_conf["max"]) if swipe_conf["min"] != swipe_conf["max"] else swipe_conf["min"]
+            total_swipes_debt_cents += amount_cents
+            
+            posted_date = now - datetime.timedelta(days=(14 - i), hours=random.randint(0, 12))
+            
+            auth = TransactionAuthorization(
+                id=uuid.uuid4(),
+                card_id=card.id,
+                account_id=cred_acc.id,
+                transaction_amount_cents=amount_cents,
+                billing_amount_cents=amount_cents,
+                status="POSTED",
+                auth_code=f"T{10000+i}",
+                retrieval_reference_number=f"REF{888000+i:09d}",
+                card_network="VISA",
+                merchant_category_code=swipe_conf["mcc"],
+                merchant_name=swipe_conf["description"],
+                created_at=posted_date - datetime.timedelta(hours=2),
+                expires_at=posted_date + datetime.timedelta(days=7)
+            )
+            db.add(auth)
+            db.flush()
+            
+            tx = PostedTransaction(
+                id=uuid.uuid4(),
+                account_id=cred_acc.id,
+                authorization_id=auth.id,
+                amount_cents=-amount_cents,
+                description=swipe_conf["description"],
+                posted_at=posted_date
+            )
+            db.add(tx)
+            record_audit_event(
+                db,
+                "CREDIT_TRANSACTION_POSTED",
+                {
+                    "account_id": str(cred_acc.id),
+                    "transaction_id": str(tx.id),
+                    "amount_cents": tx.amount_cents,
+                    "description": tx.description,
+                },
+            )
+            
+        cred_acc.cleared_balance_cents = total_swipes_debt_cents
+        cred_acc.available_credit_cents = cred_acc.credit_limit_cents - total_swipes_debt_cents - late_fee_cents
+
+
 def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str, Any]:
     """Dynamically provisions a new user, kyc profile, deposit accounts, credit cards, and historical swipes."""
     # Bypass RBAC
@@ -434,7 +644,9 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             )
         db.flush()
 
-        # 6. Provision checking/savings deposit accounts
+        # 6. Provision checking/savings deposit accounts with harmonized default balances
+        chk_balance = 4500000 if email == "erikvoit@google.com" else (6000000 if email == "mservedio@google.com" else 1000000)
+        sav_balance = 15000000 if email == "erikvoit@google.com" else 2000000
         checking_acc = Account(
             id=uuid.uuid4(),
             user_id=user_uuid,
@@ -442,7 +654,7 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             account_type="CHECKING",
             product_name="Nova Signature Checking",
             product_code="CHECKING_SIGNATURE",
-            cleared_balance_cents=1000000,  # $10,000.00
+            cleared_balance_cents=chk_balance,
             routing_number="021000021",
             status="ACTIVE"
         )
@@ -453,7 +665,7 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             account_type="SAVINGS",
             product_name="Nova High Yield Savings",
             product_code="SAVINGS_HIGH_YIELD",
-            cleared_balance_cents=2000000,  # $20,000.00
+            cleared_balance_cents=sav_balance,
             routing_number="021000021",
             status="ACTIVE"
         )
@@ -535,102 +747,8 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             },
         )
 
-        # 9. Generate 10-15 historical swipes
-        swipe_options = [
-            {"description": "Starbucks Coffee", "min": 450, "max": 850, "mcc": "5814"},
-            {"description": "Whole Foods Market", "min": 4500, "max": 12000, "mcc": "5411"},
-            {"description": "Uber Trip", "min": 1200, "max": 3500, "mcc": "4121"},
-            {"description": "Netflix Subscription", "min": 1549, "max": 1549, "mcc": "4899"},
-            {"description": "Chevron Gas Station", "min": 3500, "max": 5500, "mcc": "5541"},
-            {"description": "McDonald's Fast Food", "min": 850, "max": 1850, "mcc": "5814"},
-            {"description": "Walmart Superstore", "min": 2500, "max": 9500, "mcc": "5411"},
-            {"description": "YouTube Premium Subscription", "min": 1399, "max": 1399, "mcc": "4899"},
-            {"description": "Shell Petrol", "min": 3000, "max": 5000, "mcc": "5541"}
-        ]
-        
-        total_swipes_debt_cents = 0
-        now = datetime.datetime.now(datetime.timezone.utc)
-
-        # 9a. Seed exactly one LATE_FEE transaction as a PENDING authorization hold
-        late_fee_cents = 3500
-        late_fee_auth = TransactionAuthorization(
-            id=uuid.uuid4(),
-            card_id=card_id,
-            account_id=cred_acc_id,
-            transaction_amount_cents=late_fee_cents,
-            billing_amount_cents=late_fee_cents,
-            status="PENDING",
-            auth_code="FEE350",
-            retrieval_reference_number="REF999999999",
-            card_network="VISA",
-            merchant_category_code="FEE",
-            merchant_name="LATE_FEE",
-            created_at=now - datetime.timedelta(days=5),
-            expires_at=now + datetime.timedelta(days=10)
-        )
-        db.add(late_fee_auth)
-        record_audit_event(
-            db,
-            "CREDIT_TRANSACTION_AUTHORIZED",
-            {
-                "account_id": str(cred_acc_id),
-                "authorization_id": str(late_fee_auth.id),
-                "amount_cents": late_fee_auth.transaction_amount_cents,
-                "merchant_name": late_fee_auth.merchant_name,
-            },
-        )
-        
-        # 9b. Seed 12 posted transactions
-        for i in range(12):
-            swipe_conf = random.choice(swipe_options)
-            amount_cents = random.randint(swipe_conf["min"], swipe_conf["max"])
-            total_swipes_debt_cents += amount_cents
-            
-            posted_date = now - datetime.timedelta(days=(14 - i), hours=random.randint(0, 12))
-            
-            # Create matching authorization hold mapped as POSTED
-            auth = TransactionAuthorization(
-                id=uuid.uuid4(),
-                card_id=card_id,
-                account_id=cred_acc_id,
-                transaction_amount_cents=amount_cents,
-                billing_amount_cents=amount_cents,
-                status="POSTED",
-                auth_code=f"T{10000+i}",
-                retrieval_reference_number=f"REF{888000+i:09d}",
-                card_network="VISA",
-                merchant_category_code=swipe_conf["mcc"],
-                merchant_name=swipe_conf["description"],
-                created_at=posted_date - datetime.timedelta(hours=2),
-                expires_at=posted_date + datetime.timedelta(days=7)
-            )
-            db.add(auth)
-            db.flush()
-            
-            # Create corresponding posted statement ledger line
-            tx = PostedTransaction(
-                id=uuid.uuid4(),
-                account_id=cred_acc_id,
-                authorization_id=auth.id,
-                amount_cents=-amount_cents,
-                description=swipe_conf["description"],
-                posted_at=posted_date
-            )
-            db.add(tx)
-            record_audit_event(
-                db,
-                "CREDIT_TRANSACTION_POSTED",
-                {
-                    "account_id": str(cred_acc_id),
-                    "transaction_id": str(tx.id),
-                    "amount_cents": tx.amount_cents,
-                    "description": tx.description,
-                },
-            )
-            
-        cred_acc.cleared_balance_cents = total_swipes_debt_cents
-        # Pending late fee also holds/reduces the available credit
-        cred_acc.available_credit_cents = cred_acc.credit_limit_cents - total_swipes_debt_cents - late_fee_cents
+        # 9. Seed unified transactions across checking, savings, and credit cards
+        _seed_user_transactions(db, user_uuid=user_uuid, checking_acc=checking_acc, savings_acc=savings_acc, cred_acc=cred_acc, card=card, first_name=first_name, last_name=last_name)
         
         db.commit()
         logger.info(f"Dynamically provisioned personal demo suite for email={email} (user_id={user_uuid}) successfully.")
@@ -683,13 +801,25 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
         else:
             acc.cleared_balance_cents = 1000000
 
-    # 2. Fetch all credit accounts belonging to user
+    # 2. Fetch credit accounts belonging to user
     credit_accounts = db.query(CreditAccount).filter(CreditAccount.customer_id == user_id).all()
-    for cred_acc in credit_accounts:
-        db.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == cred_acc.id).delete()
-        db.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).delete()
-        cred_acc.cleared_balance_cents = 0
-        cred_acc.available_credit_cents = cred_acc.credit_limit_cents
+    cred_acc = credit_accounts[0] if credit_accounts else None
+    card = db.query(IssuedCard).filter(IssuedCard.account_id == cred_acc.id).first() if cred_acc else None
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    checking_acc = db.query(Account).filter(Account.user_id == user_id, Account.account_type == "CHECKING").first()
+    savings_acc = db.query(Account).filter(Account.user_id == user_id, Account.account_type == "SAVINGS").first()
+    
+    _seed_user_transactions(
+        db, 
+        user_uuid=user_id, 
+        checking_acc=checking_acc, 
+        savings_acc=savings_acc, 
+        cred_acc=cred_acc, 
+        card=card, 
+        first_name=user.first_name if user else "Erik", 
+        last_name=user.last_name if user else "Vance"
+    )
         
     db.commit()
     logger.info(f"Successfully reset personal demo suite accounts for user_id={user_id}.")

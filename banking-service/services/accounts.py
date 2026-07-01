@@ -347,15 +347,19 @@ class AccountsService:
         results = []
         running_bal = account.cleared_balance_cents
         for entry in entries:
+            is_pending = entry.transaction.status == "PENDING" if entry.transaction else False
             results.append({
                 "entry_id": str(entry.entry_id),
                 "transaction_id": str(entry.transaction_id),
                 "amount_cents": entry.amount_cents,
+                "amount": abs(entry.amount_cents) / 100.0,
                 "entry_type": entry.entry_type, # 'DEBIT', 'CREDIT'
                 "description": entry.transaction.description if entry.transaction else "Posted Transaction",
                 "posted_at": entry.posted_at.isoformat() if entry.posted_at else "",
-                "running_balance_cents": running_bal
+                "running_balance_cents": running_bal,
+                "pending": is_pending
             })
-            running_bal -= entry.amount_cents # Move balance backward
+            if not is_pending:
+                running_bal -= entry.amount_cents # Move balance backward
             
         return results

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   ArrowLeft,
@@ -22,6 +22,7 @@ import {
   provisionMyDemo
 } from '../utils/api.js';
 import BillPayModal from './BillPayModal.jsx';
+import SpendAnalyzerModal from './SpendAnalyzerModal.jsx';
 
 function AccountsView({ fbUser, customerProfile }) {
   const navigate = useNavigate();
@@ -36,6 +37,8 @@ function AccountsView({ fbUser, customerProfile }) {
   const [isTxsLoading, setIsTxsLoading] = useState(false);
   const [isBillPayOpen, setIsBillPayOpen] = useState(false);
   const [showDocModal, setShowDocModal] = useState(false);
+  const [isSpendAnalyzerOpen, setIsSpendAnalyzerOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const idParam = searchParams.get('id');
   const typeParam = searchParams.get('type');
@@ -92,6 +95,17 @@ function AccountsView({ fbUser, customerProfile }) {
   const handleSelectAccount = (accountId, type) => {
     setSearchParams({ id: accountId, type: type });
   };
+
+  const filteredTransactions = useMemo(() => {
+    if (!searchQuery.trim()) return transactions;
+    const q = searchQuery.toLowerCase();
+    return transactions.filter(tx => {
+      const desc = (tx.description || '').toLowerCase();
+      const cat = (tx.personal_finance_category?.primary || '').toLowerCase();
+      const amount = String(tx.amount || (tx.amount_cents ? Math.abs(tx.amount_cents)/100 : ''));
+      return desc.includes(q) || cat.includes(q) || amount.includes(q);
+    });
+  }, [transactions, searchQuery]);
 
   const handleBackToMaster = () => {
     setSearchParams({});
@@ -395,24 +409,73 @@ function AccountsView({ fbUser, customerProfile }) {
             <div className="bg-white dark:bg-slate-900/40 border border-slate-205 dark:border-slate-850 rounded-3xl p-6 md:p-8 shadow-sm dark:shadow-none">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Transaction History</h3>
 
+              {/* Capital One inspired Search & Filter Top Bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6 bg-slate-50 dark:bg-slate-850/60 p-3 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    placeholder="Search/filter transactions..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                  />
+                  <svg className="w-4 h-4 text-slate-400 absolute left-3 top-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {}}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm transition-all"
+                  >
+                    <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                    </svg>
+                    <span>Filter</span>
+                  </button>
+
+                  {selectedAccountType === 'credit' && (
+                    <button
+                      onClick={() => setIsSpendAnalyzerOpen(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-sm font-bold shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+                      </svg>
+                      <span>View spend analyzer</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {isTxsLoading ? (
                 <div className="py-12 flex flex-col items-center justify-center space-y-3">
                   <div className="w-8 h-8 rounded-full border-2 border-slate-200 dark:border-slate-700 border-t-emerald-500 animate-spin"></div>
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">Tailing transaction ledgers...</span>
                 </div>
-              ) : transactions.length === 0 ? (
+              ) : filteredTransactions.length === 0 ? (
                 <div className="py-16 text-center space-y-2">
                   <Activity className="w-10 h-10 text-slate-405 dark:text-slate-600 mx-auto" />
-                  <p className="text-slate-500 dark:text-slate-400 text-sm">No transactions found for this account.</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm">No transactions found matching your criteria.</p>
                 </div>
               ) : (
                 /* TABLE RENDER */
                 <div className="overflow-x-auto">
                   {selectedAccountType === 'credit' ? (
-                    /* CREDIT CARD BLOTTER: Pending holds list, followed by Posted ledger entries. Outgoing positive (no plus), Incoming negative (payments). */
+                    /* CREDIT CARD BLOTTER: Pending holds list, followed by Posted ledger entries. */
                     <div className="space-y-8">
                       {/* PENDING TRANSACTIONS HOLD CONTAINER */}
-                      {transactions.filter(t => t.pending).length > 0 && (
+                      {filteredTransactions.filter(t => t.pending).length > 0 && (
                         <div className="space-y-3">
                           <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full bg-amber-500 dark:bg-amber-400 animate-pulse"></span>
@@ -425,15 +488,18 @@ function AccountsView({ fbUser, customerProfile }) {
                                   <th className="pb-2 font-semibold">Date</th>
                                   <th className="pb-2 font-semibold">Description</th>
                                   <th className="pb-2 font-semibold">Category</th>
+                                  <th className="pb-2 font-semibold">Card</th>
                                   <th className="pb-2 font-semibold text-right">Amount</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-200 dark:divide-slate-855/30">
-                                {transactions.filter(t => t.pending).map((tx, idx) => {
-                                  const isLateFee = tx.description === "LATE_FEE";
+                                {filteredTransactions.filter(t => t.pending).map((tx, idx) => {
+                                  const isLateFee = tx.description === "LATE_FEE" || tx.merchant_name === "LATE_FEE";
+                                  const isCredit = (tx.amount_cents !== undefined && tx.amount_cents < 0) || tx.description?.toUpperCase().includes('OFFER');
                                   const catLabel = tx.personal_finance_category?.primary 
                                     ? tx.personal_finance_category.primary.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')
                                     : "Fees";
+                                  const amountVal = Math.abs(tx.amount || (tx.amount_cents ? tx.amount_cents / 100 : 0));
                                   return (
                                     <tr key={`pending-${idx}`} className="hover:bg-slate-100/50 dark:hover:bg-slate-900/20 transition-colors">
                                       <td className="py-3 text-xs text-slate-450 dark:text-slate-500 italic">Pending</td>
@@ -443,9 +509,16 @@ function AccountsView({ fbUser, customerProfile }) {
                                           <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400">Action Required</span>
                                         )}
                                       </td>
-                                      <td className="py-3 text-xs text-slate-550 dark:text-slate-400">{catLabel}</td>
-                                      <td className={`py-3 text-right font-bold text-sm ${isLateFee ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-300'}`}>
-                                        ${(tx.amount || (tx.amount_cents / 100)).toFixed(2)}
+                                      <td className="py-3">
+                                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300">
+                                          {catLabel}
+                                        </span>
+                                      </td>
+                                      <td className="py-3 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                        {tx.cardholder_name || "Erik V."} ...{tx.last_four || "2304"}
+                                      </td>
+                                      <td className={`py-3 text-right font-bold text-sm ${isCredit ? 'text-emerald-600 dark:text-emerald-400 italic' : isLateFee ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-300'}`}>
+                                        {isCredit ? '-' : ''}${amountVal.toFixed(2)}
                                       </td>
                                     </tr>
                                   );
@@ -466,19 +539,21 @@ function AccountsView({ fbUser, customerProfile }) {
                                 <th className="pb-4 font-semibold">Posting Date</th>
                                 <th className="pb-4 font-semibold">Description</th>
                                 <th className="pb-4 font-semibold">Category</th>
+                                <th className="pb-4 font-semibold">Card</th>
                                 <th className="pb-4 font-semibold text-right">Amount</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200 dark:divide-slate-850/50">
-                              {transactions.filter(t => !t.pending).map((tx, idx) => {
-                                const isPayment = tx.transaction_type === "DIRECTDEPOSIT" || tx.amount_cents > 0;
+                              {filteredTransactions.filter(t => !t.pending).map((tx, idx) => {
+                                const isPayment = tx.transaction_type === "DIRECTDEPOSIT" || (tx.amount_cents !== undefined ? tx.amount_cents > 0 : tx.amount < 0) || tx.description?.toUpperCase().includes('PAYMENT');
                                 const catLabel = tx.personal_finance_category?.primary 
                                   ? tx.personal_finance_category.primary.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')
                                   : "General";
+                                const amountVal = Math.abs(tx.amount || (tx.amount_cents ? tx.amount_cents / 100 : 0));
                                 return (
                                   <tr key={`posted-${idx}`} className="hover:bg-slate-100/50 dark:hover:bg-slate-900/30 transition-colors">
                                     <td className="py-4 text-xs text-slate-500 dark:text-slate-400">
-                                      {tx.posted_timestamp ? new Date(tx.posted_timestamp).toLocaleDateString() : "Pending"}
+                                      {tx.posted_timestamp || tx.posted_at ? new Date(tx.posted_timestamp || tx.posted_at).toLocaleDateString() : "Pending"}
                                     </td>
                                     <td className="py-4 font-medium text-slate-800 dark:text-slate-200">{tx.description}</td>
                                     <td className="py-4">
@@ -486,8 +561,11 @@ function AccountsView({ fbUser, customerProfile }) {
                                         {catLabel}
                                       </span>
                                     </td>
+                                    <td className="py-4 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                      {tx.cardholder_name || "Erik V."} ...{tx.last_four || "2304"}
+                                    </td>
                                     <td className={`py-4 text-right font-bold text-sm ${isPayment ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                                      {isPayment ? '-' : ''}${Math.abs(tx.amount || (tx.amount_cents / 100)).toFixed(2)}
+                                      {isPayment ? '-' : ''}${amountVal.toFixed(2)}
                                     </td>
                                   </tr>
                                 );
@@ -498,44 +576,81 @@ function AccountsView({ fbUser, customerProfile }) {
                       </div>
                     </div>
                   ) : (
-                    /* DEPOSIT BLOTTER: Traditional columns. Incoming positive (no sign), Outgoing negative. */
-                    <table className="w-full text-left text-sm border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200 dark:border-slate-850 text-slate-500 dark:text-slate-400 font-semibold text-xs">
-                          <th className="pb-4 font-semibold">Posting Date</th>
-                          <th className="pb-4 font-semibold">Description</th>
-                          <th className="pb-4 font-semibold">Type</th>
-                          <th className="pb-4 font-semibold text-right">Amount</th>
-                          <th className="pb-4 font-semibold text-right">Available Balance</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200 dark:divide-slate-850/50">
-                        {transactions.map((tx, idx) => {
-                          const isIncoming = tx.entry_type === "DEBIT"; // DEBIT increases checking assets!
-                          const amountVal = Math.abs(tx.amount_cents) / 100;
-                          
-                          return (
-                            <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-slate-900/30 transition-colors">
-                              <td className="py-4 text-xs text-slate-500 dark:text-slate-400">
-                                {tx.posted_at ? new Date(tx.posted_at).toLocaleDateString() : "Pending"}
-                              </td>
-                              <td className="py-4 font-medium text-slate-800 dark:text-slate-200">
-                                {tx.description}
-                              </td>
-                              <td className="py-4 text-xs text-slate-500 dark:text-slate-400">
-                                {isIncoming ? "Direct Deposit" : "ACH Withdrawal"}
-                              </td>
-                              <td className={`py-4 text-right font-bold text-sm ${isIncoming ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-850 dark:text-slate-300'}`}>
-                                {isIncoming ? '' : '-'}${amountVal.toFixed(2)}
-                              </td>
-                              <td className="py-4 text-right text-slate-800 dark:text-slate-300">
-                                ${(tx.running_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                              </td>
+                    /* DEPOSIT BLOTTER: Separated by Pending vs Posted with search & filter */
+                    <div className="space-y-8">
+                      {filteredTransactions.filter(t => t.pending).length > 0 && (
+                        <div className="space-y-3">
+                          <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 dark:bg-amber-400 animate-pulse"></span>
+                            <span>Pending Authorizations</span>
+                          </div>
+                          <table className="w-full text-left text-sm border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-200 dark:border-slate-850 text-slate-500 dark:text-slate-400 font-semibold text-xs">
+                                <th className="pb-4 font-semibold">Date</th>
+                                <th className="pb-4 font-semibold">Description</th>
+                                <th className="pb-4 font-semibold">Type</th>
+                                <th className="pb-4 font-semibold text-right">Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 dark:divide-slate-850/50">
+                              {filteredTransactions.filter(t => t.pending).map((tx, idx) => {
+                                const isIncoming = tx.entry_type === "DEBIT";
+                                const amountVal = Math.abs(tx.amount || (tx.amount_cents ? tx.amount_cents / 100 : 0));
+                                return (
+                                  <tr key={`dep-pen-${idx}`} className="hover:bg-slate-100/50 dark:hover:bg-slate-900/30 transition-colors">
+                                    <td className="py-4 text-xs text-slate-450 dark:text-slate-500 italic">Pending</td>
+                                    <td className="py-4 font-medium text-slate-800 dark:text-slate-200">{tx.description}</td>
+                                    <td className="py-4 text-xs text-slate-500 dark:text-slate-400">Hold</td>
+                                    <td className={`py-4 text-right font-bold text-sm ${isIncoming ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-850 dark:text-slate-300'}`}>
+                                      {isIncoming ? '' : '-'}${amountVal.toFixed(2)}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      <div className="space-y-3 pt-2">
+                        <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Posted Transactions</div>
+                        <table className="w-full text-left text-sm border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-200 dark:border-slate-850 text-slate-500 dark:text-slate-400 font-semibold text-xs">
+                              <th className="pb-4 font-semibold">Posting Date</th>
+                              <th className="pb-4 font-semibold">Description</th>
+                              <th className="pb-4 font-semibold">Type</th>
+                              <th className="pb-4 font-semibold text-right">Amount</th>
+                              <th className="pb-4 font-semibold text-right">Available Balance</th>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 dark:divide-slate-850/50">
+                            {filteredTransactions.filter(t => !t.pending).map((tx, idx) => {
+                              const isIncoming = tx.entry_type === "DEBIT";
+                              const amountVal = Math.abs(tx.amount || (tx.amount_cents ? tx.amount_cents / 100 : 0));
+                              return (
+                                <tr key={`dep-pos-${idx}`} className="hover:bg-slate-100/50 dark:hover:bg-slate-900/30 transition-colors">
+                                  <td className="py-4 text-xs text-slate-500 dark:text-slate-400">
+                                    {tx.posted_at ? new Date(tx.posted_at).toLocaleDateString() : "Pending"}
+                                  </td>
+                                  <td className="py-4 font-medium text-slate-800 dark:text-slate-200">{tx.description}</td>
+                                  <td className="py-4 text-xs text-slate-500 dark:text-slate-400">
+                                    {isIncoming ? "Direct Deposit" : "ACH Withdrawal"}
+                                  </td>
+                                  <td className={`py-4 text-right font-bold text-sm ${isIncoming ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-850 dark:text-slate-300'}`}>
+                                    {isIncoming ? '' : '-'}${amountVal.toFixed(2)}
+                                  </td>
+                                  <td className="py-4 text-right text-slate-800 dark:text-slate-300">
+                                    ${(tx.running_balance_cents !== undefined ? tx.running_balance_cents / 100 : 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -552,6 +667,15 @@ function AccountsView({ fbUser, customerProfile }) {
           creditAccounts={creditAccounts}
           depositAccounts={checkingAccounts}
           onSuccess={fetchSummaryAndTransactions}
+        />
+      )}
+
+      {/* Spend Analyzer Modal Overlay */}
+      {isSpendAnalyzerOpen && (
+        <SpendAnalyzerModal 
+          isOpen={isSpendAnalyzerOpen}
+          onClose={() => setIsSpendAnalyzerOpen(false)}
+          transactions={transactions}
         />
       )}
 
