@@ -127,6 +127,9 @@ def create_db_engine(url_str=DATABASE_URL, **kwargs):
     
     if url_str.startswith("sqlite"):
         connect_args["check_same_thread"] = False
+        exec_opts = engine_args.get("execution_options", {}).copy()
+        exec_opts["schema_translate_map"] = {"merchants": "ref_data"}
+        engine_args["execution_options"] = exec_opts
     elif url_str.startswith("postgresql"):
         if "pool_size" not in engine_args and "poolclass" not in engine_args:
             engine_args["pool_size"] = 10

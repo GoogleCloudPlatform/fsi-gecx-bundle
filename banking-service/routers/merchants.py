@@ -78,10 +78,10 @@ def list_merchants(
 def get_merchant(merchant_id: str, db: Session = Depends(get_db)):
     """Retrieves authoritative brand intelligence and CDN logo mapping for a specific MID."""
     MerchantEnrichmentService.load_cache_if_needed(db)
-    merchant = db.query(MerchantMaster).filter(MerchantMaster.merchant_id == merchant_id).first()
-    if not merchant:
+    dto = MerchantEnrichmentService._merchants_by_id.get(merchant_id)
+    if not dto:
         raise HTTPException(status_code=404, detail=f"Merchant ID '{merchant_id}' not found in Master Merchant Database.")
-    return merchant
+    return dto
 
 
 @router.post("/enrich", response_model=Dict[str, Any], summary="Simulate Real-Time Transaction Enrichment")
@@ -101,13 +101,47 @@ def create_custom_merchant(req: CreateMerchantRequest, db: Session = Depends(get
     Dynamically registers a custom brand entity in the Master Merchant Database.
     Ideal for live client presentations or sales engineer customizations.
     """
+    from models.merchant import MerchantStore
     existing = db.query(MerchantMaster).filter(MerchantMaster.merchant_id == req.merchant_id).first()
     if existing:
         raise HTTPException(status_code=409, detail=f"Merchant ID '{req.merchant_id}' already exists.")
 
-    merchant = MerchantMaster(**req.model_dump())
+    merchant = MerchantMaster(
+        merchant_id=req.merchant_id,
+        clean_name=req.clean_name,
+        default_mcc=req.mcc,
+        merchant_domain=req.merchant_domain,
+        logo_url=req.logo_url,
+        is_subscription=req.is_subscription
+    )
     db.add(merchant)
+    
+    store = MerchantStore(
+        merchant_id=req.merchant_id,
+        location_name=req.clean_name,
+        raw_descriptor=req.raw_descriptor_pattern,
+        country_code=req.country_code,
+        is_international=req.is_international,
+        risk_score=req.risk_score
+    )
+    db.add(store)
     db.commit()
     db.refresh(merchant)
     MerchantEnrichmentService.invalidate_cache()
-    return merchant
+    
+    from services.merchant_service import MerchantDTO
+    return MerchantDTO(
+        id=merchant.id,
+        merchant_id=merchant.merchant_id,
+        clean_name=merchant.clean_name,
+        location_name=store.location_name,
+        raw_descriptor_pattern=store.raw_descriptor,
+        mcc=merchant.default_mcc,
+        category=req.category,
+        country_code=store.country_code,
+        logo_url=merchant.logo_url,
+        merchant_domain=merchant.merchant_domain,
+        is_subscription=merchant.is_subscription,
+        is_international=store.is_international,
+        risk_score=store.risk_score
+    )

@@ -19,7 +19,7 @@ import logging
 from typing import List, Dict, Any, Optional, Tuple, Union
 from dataclasses import dataclass
 from sqlalchemy.orm import Session
-from models.merchant import MerchantMaster, Merchant
+from models.merchant import MerchantMaster, MerchantStore, Merchant
 
 logger = logging.getLogger("banking_service.merchants")
 
@@ -32,6 +32,7 @@ class MerchantDTO:
     id: Any
     merchant_id: str
     clean_name: str
+    location_name: str
     raw_descriptor_pattern: str
     mcc: str
     category: str
@@ -45,36 +46,36 @@ class MerchantDTO:
 
 class MerchantEnrichmentService:
     """
-    State-of-the-art Master Merchant Database & Transaction Enrichment Engine.
+    State-of-the-art Master Merchant Database & Transaction Enrichment Engine (3NF Normalized Architecture).
     Provides microsecond in-memory TTL/regex caching, entity resolution, CDN logo link mapping,
     and algorithmic store variation generation for domestic and international fraud/travel simulations.
     """
     _cache_initialized: bool = False
     _merchants_by_id: Dict[str, MerchantDTO] = {}
+    _stores_list: List[MerchantDTO] = []
     _domestic_merchants: List[MerchantDTO] = []
     _international_merchants: List[MerchantDTO] = []
-    _store_variations_map: Dict[str, List[str]] = {}
 
     @classmethod
     def invalidate_cache(cls) -> None:
         """Clears in-memory merchant catalog cache."""
         cls._cache_initialized = False
         cls._merchants_by_id.clear()
+        cls._stores_list.clear()
         cls._domestic_merchants.clear()
         cls._international_merchants.clear()
-        cls._store_variations_map.clear()
 
     @classmethod
     def seed_merchant_catalog(cls, db: Session) -> int:
         """
-        Seeds the Master Merchant Database (`merchants.merchant_master`) from authoritative JSON resources
-        if the catalog is empty. Returns the count of seeded merchant entities.
+        Seeds the Normalized Master Merchant Database (`merchants.merchant_master` and `merchants.merchant_stores`)
+        from authoritative JSON resources if empty. Returns count of seeded parent brands.
         """
         if db.query(MerchantMaster).count() > 0:
             cls.load_cache_if_needed(db)
             return 0
 
-        logger.info("Seeding Master Merchant Database (`merchants.merchant_master`) from authoritative catalog...")
+        logger.info("Seeding Normalized Master Merchant Database (`merchants.merchant_master` and `stores`) from JSON...")
         catalog_path = os.path.join(RESOURCE_DIR, "merchant_catalog.json")
         if not os.path.exists(catalog_path):
             logger.warning(f"Merchant catalog resource not found at {catalog_path}.")
@@ -83,96 +84,138 @@ class MerchantEnrichmentService:
         with open(catalog_path, "r") as f:
             raw_data = json.load(f)
 
-        new_merchants = []
+        seeded_count = 0
         for item in raw_data:
-            variations = item.pop("store_variations", [])
-            m = MerchantMaster(**item)
-            new_merchants.append(m)
-            cls._store_variations_map[item["merchant_id"]] = variations
+            stores = item.pop("stores", [])
+            legacy_vars = item.pop("store_variations", [])
+            mcc_val = item.pop("default_mcc", item.pop("mcc", "0000"))
+            
+            m = MerchantMaster(
+                merchant_id=item["merchant_id"],
+                clean_name=item["clean_name"],
+                default_mcc=mcc_val,
+                merchant_domain=item.get("merchant_domain"),
+                logo_url=item.get("logo_url"),
+                is_subscription=item.get("is_subscription", False)
+            )
+            db.add(m)
+            db.flush()
+            seeded_count += 1
 
-        db.add_all(new_merchants)
+            if stores:
+                for s_dict in stores:
+                    s = MerchantStore(
+                        merchant_id=m.merchant_id,
+                        location_name=s_dict["location_name"],
+                        raw_descriptor=s_dict["raw_descriptor"],
+                        country_code=s_dict.get("country_code", "USA"),
+                        is_international=s_dict.get("is_international", False),
+                        risk_score=s_dict.get("risk_score", 0)
+                    )
+                    db.add(s)
+            elif legacy_vars:
+                for idx, v in enumerate(legacy_vars):
+                    s = MerchantStore(
+                        merchant_id=m.merchant_id,
+                        location_name=f"{m.clean_name} #{idx+1}",
+                        raw_descriptor=v,
+                        country_code="USA",
+                        is_international=False,
+                        risk_score=0
+                    )
+                    db.add(s)
+            else:
+                s = MerchantStore(
+                    merchant_id=m.merchant_id,
+                    location_name=m.clean_name,
+                    raw_descriptor=m.clean_name.upper(),
+                    country_code="USA",
+                    is_international=False,
+                    risk_score=0
+                )
+                db.add(s)
+
         db.flush()
-        logger.info(f"Seeded {len(new_merchants)} Master Merchant entities into `ref_data.merchant_master`.")
+        logger.info(f"Seeded {seeded_count} parent brands and store locations into normalized `merchants` schema.")
         cls.invalidate_cache()
-        return len(new_merchants)
+        return seeded_count
 
     @classmethod
     def load_cache_if_needed(cls, db: Session) -> None:
-        """Loads merchant entities into in-memory dictionary for microsecond lookup performance."""
-        if cls._cache_initialized and cls._merchants_by_id:
+        """Loads normalized stores and parent brands into in-memory DTO dictionary for microsecond lookup performance."""
+        if cls._cache_initialized and cls._stores_list:
             return
 
-        all_merchants = db.query(MerchantMaster).all()
-        if not all_merchants:
+        all_stores = db.query(MerchantStore).all()
+        if not all_stores:
             cls.seed_merchant_catalog(db)
-            all_merchants = db.query(MerchantMaster).all()
+            all_stores = db.query(MerchantStore).all()
 
-        detached_merchants = [
-            MerchantDTO(
-                id=m.id,
-                merchant_id=m.merchant_id,
-                clean_name=m.clean_name,
-                raw_descriptor_pattern=m.raw_descriptor_pattern,
-                mcc=m.mcc,
-                category=m.category,
-                country_code=m.country_code,
-                logo_url=m.logo_url,
-                merchant_domain=m.merchant_domain,
-                is_subscription=m.is_subscription,
-                is_international=m.is_international,
-                risk_score=m.risk_score,
+        from services.taxonomy_service import TaxonomyService
+        tax_map = TaxonomyService.get_taxonomy_map(db=db)
+
+        detached_stores = []
+        merchants_map = {}
+        for s in all_stores:
+            m = s.merchant
+            mcc_val = m.default_mcc if m else "0000"
+            cat_data = tax_map.get(str(mcc_val), {"primary": "MERCHANDISE", "detailed": "MERCHANDISE_OTHER"})
+            
+            dto = MerchantDTO(
+                id=s.id,
+                merchant_id=s.merchant_id,
+                clean_name=m.clean_name if m else s.location_name,
+                location_name=s.location_name,
+                raw_descriptor_pattern=s.raw_descriptor,
+                mcc=mcc_val,
+                category=cat_data["primary"],
+                country_code=s.country_code,
+                logo_url=m.logo_url if m else None,
+                merchant_domain=m.merchant_domain if m else None,
+                is_subscription=m.is_subscription if m else False,
+                is_international=s.is_international,
+                risk_score=s.risk_score,
             )
-            for m in all_merchants
-        ]
+            detached_stores.append(dto)
+            if s.merchant_id not in merchants_map:
+                merchants_map[s.merchant_id] = dto
 
-        cls._merchants_by_id = {m.merchant_id: m for m in detached_merchants}
-        cls._domestic_merchants = [m for m in detached_merchants if not m.is_international]
-        cls._international_merchants = [m for m in detached_merchants if m.is_international]
-
-        # Load store variations from file if map is empty after DB load
-        if not cls._store_variations_map:
-            catalog_path = os.path.join(RESOURCE_DIR, "merchant_catalog.json")
-            if os.path.exists(catalog_path):
-                try:
-                    with open(catalog_path, "r") as f:
-                        raw_data = json.load(f)
-                    for item in raw_data:
-                        cls._store_variations_map[item["merchant_id"]] = item.get("store_variations", [item["clean_name"]])
-                except Exception as e:
-                    logger.debug(f"Could not reload store variations map: {e}")
+        cls._stores_list = detached_stores
+        cls._merchants_by_id = merchants_map
+        cls._domestic_merchants = [dto for dto in detached_stores if not dto.is_international]
+        cls._international_merchants = [dto for dto in detached_stores if dto.is_international]
 
         cls._cache_initialized = True
-        logger.debug(f"Merchant cache warmed with {len(all_merchants)} entities ({len(cls._domestic_merchants)} domestic, {len(cls._international_merchants)} international).")
+        logger.debug(f"Merchant cache warmed with {len(merchants_map)} parent brands and {len(detached_stores)} store locations.")
 
     @classmethod
     def enrich_transaction(cls, db: Session, raw_descriptor: str, mcc: Optional[str] = None, country: str = "USA") -> Dict[str, Any]:
         """
-        Simulates a live Tier-1 transaction enrichment API lookup.
-        Performs regex/substring matching against in-memory merchant catalog to return clean brand entity JSON,
-        CDN logo URL, industry MCC, and international fraud flags.
+        Simulates a live Tier-1 transaction enrichment API lookup against normalized 3NF database.
+        Performs substring matching against store descriptors and returns clean brand entity JSON.
         """
         cls.load_cache_if_needed(db)
         upper_desc = raw_descriptor.upper()
 
-        matched_merchant: Optional[Merchant] = None
-        for m in cls._merchants_by_id.values():
-            pat = m.raw_descriptor_pattern.replace("%", "").upper()
-            if pat in upper_desc or m.clean_name.upper() in upper_desc:
-                matched_merchant = m
+        matched_dto: Optional[MerchantDTO] = None
+        for dto in cls._stores_list:
+            pat = dto.raw_descriptor_pattern.replace("%", "").upper()
+            if pat in upper_desc or dto.clean_name.upper() in upper_desc or dto.location_name.upper() in upper_desc:
+                matched_dto = dto
                 break
 
-        if matched_merchant:
+        if matched_dto:
             return {
-                "merchant_id": str(matched_merchant.merchant_id),
-                "clean_name": matched_merchant.clean_name,
-                "merchant_domain": matched_merchant.merchant_domain,
-                "logo_url": matched_merchant.logo_url,
-                "mcc": matched_merchant.mcc,
-                "category": matched_merchant.category,
-                "country_code": matched_merchant.country_code,
-                "is_subscription": matched_merchant.is_subscription,
-                "is_international": matched_merchant.is_international,
-                "risk_score": matched_merchant.risk_score,
+                "merchant_id": str(matched_dto.merchant_id),
+                "clean_name": matched_dto.clean_name,
+                "merchant_domain": matched_dto.merchant_domain,
+                "logo_url": matched_dto.logo_url,
+                "mcc": matched_dto.mcc,
+                "category": matched_dto.category,
+                "country_code": matched_dto.country_code,
+                "is_subscription": matched_dto.is_subscription,
+                "is_international": matched_dto.is_international,
+                "risk_score": matched_dto.risk_score,
             }
 
         # Fallback for unrecognized local merchants
@@ -193,31 +236,29 @@ class MerchantEnrichmentService:
     @classmethod
     def get_random_merchant(cls, db: Session, is_international: bool = False, category: Optional[str] = None) -> Tuple[Union[MerchantMaster, MerchantDTO], str]:
         """
-        Returns a random merchant entity and a realistic store variation string.
+        Returns a random store location DTO and a realistic store variation string.
         Used by algorithmic seeding to generate rich domestic vs. international anomaly distributions.
         """
         cls.load_cache_if_needed(db)
 
         pool = cls._international_merchants if is_international else cls._domestic_merchants
         if category:
-            pool = [m for m in pool if m.category.lower() == category.lower()] or pool
+            pool = [dto for dto in pool if dto.category.lower() == category.lower()] or pool
         if not pool:
-            pool = list(cls._merchants_by_id.values())
+            pool = cls._stores_list or list(cls._merchants_by_id.values())
 
-        merchant = random.choice(pool)
-        variations = cls._store_variations_map.get(merchant.merchant_id, [merchant.clean_name])
-        store_string = random.choice(variations)
-        return merchant, store_string
+        dto = random.choice(pool)
+        return dto, dto.raw_descriptor_pattern
 
     @classmethod
     def list_merchants(cls, db: Session, category: Optional[str] = None, country: Optional[str] = None, is_international: Optional[bool] = None) -> List[Union[MerchantMaster, MerchantDTO]]:
-        """Returns filtered list of merchants from Master Merchant Database."""
+        """Returns filtered list of canonical parent brands from Normalized Master Merchant Database."""
         cls.load_cache_if_needed(db)
         results = list(cls._merchants_by_id.values())
         if category:
-            results = [m for m in results if m.category.lower() == category.lower()]
+            results = [dto for dto in results if dto.category.lower() == category.lower()]
         if country:
-            results = [m for m in results if m.country_code.upper() == country.upper()]
+            results = [dto for dto in results if dto.country_code.upper() == country.upper()]
         if is_international is not None:
-            results = [m for m in results if m.is_international == is_international]
+            results = [dto for dto in results if dto.is_international == is_international]
         return results

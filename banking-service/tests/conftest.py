@@ -14,6 +14,22 @@
 
 """Test configuration module."""
 
+import sqlalchemy as _sa
+_orig_create_engine = _sa.create_engine
+def _patched_create_engine(*args, **kwargs):
+    if args and str(args[0]).startswith("sqlite"):
+        exec_opts = kwargs.get("execution_options", {}).copy()
+        if "schema_translate_map" not in exec_opts:
+            exec_opts["schema_translate_map"] = {"merchants": "ref_data"}
+        kwargs["execution_options"] = exec_opts
+    elif "sqlite" in kwargs.get("url", "") or "sqlite" in str(kwargs.get("url_str", "")):
+        exec_opts = kwargs.get("execution_options", {}).copy()
+        if "schema_translate_map" not in exec_opts:
+            exec_opts["schema_translate_map"] = {"merchants": "ref_data"}
+        kwargs["execution_options"] = exec_opts
+    return _orig_create_engine(*args, **kwargs)
+_sa.create_engine = _patched_create_engine
+
 from fastapi import Header, HTTPException
 import pytest
 

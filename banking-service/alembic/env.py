@@ -120,6 +120,7 @@ def run_migrations_offline() -> None:
             context.execute("CREATE SCHEMA IF NOT EXISTS admin;")
             context.execute("CREATE SCHEMA IF NOT EXISTS catalog;")
             context.execute("CREATE SCHEMA IF NOT EXISTS ref_data;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS merchants;")
         context.run_migrations()
 
 
@@ -149,6 +150,7 @@ def run_migrations_online() -> None:
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS admin;"))
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS catalog;"))
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS ref_data;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS merchants;"))
             connection.execute(sa.text("ALTER TABLE IF EXISTS public.alembic_version SET SCHEMA admin;"))
             connection.commit()
 
@@ -177,7 +179,7 @@ def run_migrations_online() -> None:
                 except Exception:
                     project_id = os.getenv("PROJECT_ID")
 
-                schemas = ["identity", "kyc", "ledger", "cards", "operations", "origination", "audit", "admin", "catalog", "ref_data"]
+                schemas = ["identity", "kyc", "ledger", "cards", "operations", "origination", "audit", "admin", "catalog", "ref_data", "merchants"]
                 sa_names = ["banking-service-sa", "kyc-service-sa", "ledger-service-sa"]
                 roles = [f"{sa}@{project_id}.iam" if project_id and str(project_id) != "None" else sa for sa in sa_names]
                 if os.getenv("IAM_DBA_USERS"):
@@ -193,11 +195,11 @@ def run_migrations_online() -> None:
 
                 for role in roles:
                     if role.startswith("kyc-service-sa"):
-                        allowed_schemas = ["kyc", "identity", "ref_data"]
+                        allowed_schemas = ["kyc", "identity", "ref_data", "merchants"]
                     elif role.startswith("ledger-service-sa"):
-                        allowed_schemas = ["ledger", "audit", "catalog", "ref_data"]
+                        allowed_schemas = ["ledger", "audit", "catalog", "ref_data", "merchants"]
                     elif role.startswith("banking-service-sa"):
-                        allowed_schemas = ["identity", "cards", "operations", "origination", "audit", "admin", "catalog", "ref_data"]
+                        allowed_schemas = ["identity", "cards", "operations", "origination", "audit", "admin", "catalog", "ref_data", "merchants"]
                     else:
                         allowed_schemas = schemas
 
