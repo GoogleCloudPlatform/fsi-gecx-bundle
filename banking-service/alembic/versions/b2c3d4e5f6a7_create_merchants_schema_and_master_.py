@@ -19,7 +19,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # 1. Create merchant_master table in ref_data schema
+    # 1. Ensure merchant_category_codes lookup table exists in ref_data schema
+    op.create_table(
+        'merchant_category_codes',
+        sa.Column('mcc', sa.String(length=10), nullable=False),
+        sa.Column('primary_category', sa.String(length=50), nullable=False),
+        sa.Column('detailed_category', sa.String(length=100), nullable=False),
+        sa.Column('updated_at', sa.DateTime(), nullable=True),
+        sa.PrimaryKeyConstraint('mcc'),
+        schema='ref_data'
+    )
+
+    # 2. Create merchant_master table in ref_data schema
     op.create_table(
         'merchant_master',
         sa.Column('id', sa.UUID(), nullable=False),
@@ -81,3 +92,4 @@ def downgrade() -> None:
     op.drop_index('idx_merchants_category', table_name='merchant_master', schema='ref_data')
     op.drop_index('idx_merchants_mcc_country', table_name='merchant_master', schema='ref_data')
     op.drop_table('merchant_master', schema='ref_data')
+    op.drop_table('merchant_category_codes', schema='ref_data')
