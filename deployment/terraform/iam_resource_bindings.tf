@@ -230,3 +230,19 @@ resource "google_bigquery_dataset_iam_member" "reporting_iceberg_data_editor" {
   role       = "roles/bigquery.dataEditor"
   member     = "serviceAccount:${google_service_account.reporting_service_account.email}"
 }
+
+# Grant Pub/Sub Service Identity permission to write messages to BigQuery
+resource "google_bigquery_dataset_iam_member" "pubsub_bq_data_editor" {
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.compliance_audit.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${google_project_service_identity.pubsub_sa.email}"
+}
+
+resource "google_bigquery_dataset_iam_member" "pubsub_bq_metadata_viewer" {
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.compliance_audit.dataset_id
+  role       = "roles/bigquery.metadataViewer"
+  member     = "serviceAccount:${google_project_service_identity.pubsub_sa.email}"
+}
+
