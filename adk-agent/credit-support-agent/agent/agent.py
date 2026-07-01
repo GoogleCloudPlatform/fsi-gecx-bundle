@@ -72,7 +72,7 @@ def custom_client_factory(headers=None, timeout=None, auth=None):
 # Initialize MCP Toolset using Streamable HTTP
 mcp_tools = McpToolset(
     connection_params=StreamableHTTPConnectionParams(
-        url=f"{BANKING_SERVICE_URL}/api/mcp/",
+        url=f"{BANKING_SERVICE_URL}/mcp/",
         httpx_client_factory=custom_client_factory
     )
 )
@@ -103,7 +103,7 @@ async def fetch_updated_account_details() -> dict:
     
     async with httpx.AsyncClient(timeout=5.0) as client:
         try:
-            resp = await client.get(f"{BANKING_SERVICE_URL}/api/credit-card/account", headers=headers)
+            resp = await client.get(f"{BANKING_SERVICE_URL}/credit-card/account", headers=headers)
             if resp.status_code == 200:
                 return resp.json()
         except Exception:

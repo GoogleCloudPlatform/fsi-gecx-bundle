@@ -221,6 +221,8 @@ async def reverse_overdraft_fee(
 async def request_credit_limit_increase(
     account_id: str = None,
     requested_limit: float = None,
+    limit: float = None,
+    amount: float = None,
     ctx: Context = None,
 ) -> dict:
     """
@@ -229,6 +231,8 @@ async def request_credit_limit_increase(
     Args:
         account_id: Optional unique identifier for the credit card account.
         requested_limit: Optional desired new credit limit amount (in dollars).
+        limit: Desired new credit limit amount (alias in dollars).
+        amount: Desired new credit limit amount (alias in dollars).
     """
     verified_customer_id = verified_customer_id_var.get()
     logger.info(f"FastMCP request_credit_limit_increase invoked for account: {account_id} (Customer: {verified_customer_id})")
@@ -255,11 +259,12 @@ async def request_credit_limit_increase(
         account = repo.get_account_by_id(account_id, lock=True)
 
         # Check requested limit
-        if not requested_limit:
+        target_limit = requested_limit or limit or amount
+        if not target_limit:
             current_limit = account.credit_limit_cents / 100
-            requested_limit = current_limit * 1.2
+            target_limit = current_limit * 1.2
             
-        requested_limit_cents = int(requested_limit * 100)
+        requested_limit_cents = int(target_limit * 100)
 
         # Underwriting rule check: reject if increase is > 2x current limit
         limit_ceiling_cents = account.credit_limit_cents * 2
@@ -280,7 +285,7 @@ async def request_credit_limit_increase(
         return {
             "success": True,
             "message": "Credit limit increase approved.",
-            "new_limit": requested_limit
+            "new_limit": target_limit
         }
     except Exception as e:
         logger.error(f"Error in FastMCP request_credit_limit_increase: {e}")

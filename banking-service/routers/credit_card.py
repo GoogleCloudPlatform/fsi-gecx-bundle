@@ -15,7 +15,7 @@
 import os
 import logging
 from typing import Dict
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header
 from sqlalchemy.orm import Session
 from livekit import api as lk_api
 
@@ -51,7 +51,7 @@ def _get_active_customer_id(
 ) -> str:
     """Helper: Resolves active customer ID from validated Firebase token, falling back to seed profile if the user has no custom account."""
     if token and hasattr(token, "claims"):
-        user_id = token.claims.get("user_id") or token.claims.get("identifier") or "cust-123"
+        user_id = token.user_id or token.claims.get("user_id") or token.claims.get("identifier") or "cust-123"
         account = repo.get_account_by_customer(user_id)
         if account:
             return user_id
@@ -76,12 +76,14 @@ def resolve_effective_id(target_id: str | None, current_id: str, token: Validate
 @router.get("/account")
 def get_customer_account(
     target_customer_id: str | None = None,
+    x_target_customer_id: str | None = Header(None),
     repo: CreditCardRepository = Depends(get_credit_card_repo),
     token: ValidatedToken = Depends(get_current_user),
     customer_id: str = Depends(_get_active_customer_id)
 ):
     """Retrieves the customer's financial account and linked cards."""
-    effective_id = resolve_effective_id(target_customer_id, customer_id, token)
+    target_id = target_customer_id or x_target_customer_id
+    effective_id = resolve_effective_id(target_id, customer_id, token)
     logger.info(f"Retrieving account details for customer: {effective_id}")
     account = repo.get_account_by_customer(effective_id)
     if not account:
