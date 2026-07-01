@@ -204,6 +204,8 @@ gcloud secrets create ccai-company-secret \
 
 11. Copy the name of the secret that was created by the Cloud Build GitHub Connection (it should be in the format of GoogleCloudPlatform-github-token-xxxxxx).
 12. Paste this value into the `github_oauth_token_secret_name` variable in the `terraform.tfvars` file of the deployment/terraform directory. Only paste the name, not the fully qualified resource name.
+13. Also take note of the app installation ID for the GitHub App (it should be in the format of xxxxxxx), by clicking the ellipsis to the right of the connection name and then clicking on "Manage installation". The last part of the url path is the app installation ID.
+14. Paste this value into the `github_app_installation_id` variable in the `terraform.tfvars` file of the deployment/terraform directory.
 
 ### Infrastructure Deployment
 Update the terraform.tfvars file with the following values:
