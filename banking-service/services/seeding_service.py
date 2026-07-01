@@ -34,6 +34,8 @@ from models.origination import Account, AccountLedgerEntry, Transaction
 from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, CreditProduct, TransactionAuthorization
 from models.origination import DepositProduct
 from models.settings import SystemSetting
+from models.reference import MerchantCategoryCode
+from services.taxonomy_service import DEFAULT_TAXONOMY_MAP, TaxonomyService
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +119,20 @@ def seed_catalogs_if_missing(db: Session) -> None:
             data = json.load(f)
         deposits = [DepositProduct(**item) for item in data]
         db.add_all(deposits)
+        
+    if db.query(MerchantCategoryCode).count() == 0:
+        logger.info("Seeding MerchantCategoryCode ref_data catalog...")
+        mcc_records = [
+            MerchantCategoryCode(
+                mcc=code,
+                primary_category=data["primary"],
+                detailed_category=data["detailed"]
+            )
+            for code, data in DEFAULT_TAXONOMY_MAP.items()
+        ]
+        db.add_all(mcc_records)
+        db.flush()
+        TaxonomyService.invalidate_cache()
         
     db.flush()
 

@@ -73,6 +73,23 @@ def initialize_db_and_seed(db: Session):
             db.add_all(deposits)
             db.flush()
 
+        # Seed merchant category code ref_data catalog if empty
+        from models.reference import MerchantCategoryCode
+        from services.taxonomy_service import DEFAULT_TAXONOMY_MAP, TaxonomyService
+        if db.query(MerchantCategoryCode).count() == 0:
+            logger.info("Seeding MerchantCategoryCode ref_data catalog in active DB session...")
+            mcc_records = [
+                MerchantCategoryCode(
+                    mcc=code,
+                    primary_category=data["primary"],
+                    detailed_category=data["detailed"]
+                )
+                for code, data in DEFAULT_TAXONOMY_MAP.items()
+            ]
+            db.add_all(mcc_records)
+            db.flush()
+            TaxonomyService.invalidate_cache()
+
         # Seed default user in identity.users if not present
         from models.identity import User
         seed_user_id = "12300000-0000-4000-8000-000000000123"

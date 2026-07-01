@@ -181,6 +181,7 @@ def attach_sqlite_schemas(dbapi_connection, connection_record):
                     "ATTACH DATABASE 'file:audit_mem?mode=memory&cache=shared' AS audit;",
                     "ATTACH DATABASE 'file:admin_mem?mode=memory&cache=shared' AS admin;",
                     "ATTACH DATABASE 'file:catalog_mem?mode=memory&cache=shared' AS catalog;",
+                    "ATTACH DATABASE 'file:ref_data_mem?mode=memory&cache=shared' AS ref_data;",
                 ]
             else:
                 base_prefix = main_file.rsplit(".", 1)[0] if "." in main_file else main_file
@@ -198,6 +199,7 @@ def attach_sqlite_schemas(dbapi_connection, connection_record):
                     f"ATTACH DATABASE '{base_prefix}audit.db' AS audit;",
                     f"ATTACH DATABASE '{base_prefix}admin.db' AS admin;",
                     f"ATTACH DATABASE '{base_prefix}catalog.db' AS catalog;",
+                    f"ATTACH DATABASE '{base_prefix}ref_data.db' AS ref_data;",
                 ]
 
             for stmt in stmts:
@@ -280,6 +282,7 @@ def init_db():
     import models.support  # noqa: F401
     import models.settings  # noqa: F401
     import models.kyc  # noqa: F401
+    import models.reference  # noqa: F401
     try:
         Base.metadata.create_all(bind=ledger_pool)
         Base.metadata.create_all(bind=kyc_pool)

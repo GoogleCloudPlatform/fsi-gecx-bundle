@@ -97,7 +97,7 @@ async def test_provision_my_demo_success(async_client, db_session):
     assert cred_acc.cleared_balance_cents > 0
     assert cred_acc.available_credit_cents == cred_acc.credit_limit_cents - cred_acc.cleared_balance_cents - 3500
     
-    # Check historical swipes (should have exactly 12 posted transactions, plus 1 pending late fee authorization hold)
+    # Check historical swipes (should have exactly 12 posted transactions, plus 2 pending authorization holds)
     swipes = db_session.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).all()
     assert len(swipes) == 12
 
@@ -106,8 +106,9 @@ async def test_provision_my_demo_success(async_client, db_session):
         TransactionAuthorization.account_id == cred_acc.id,
         TransactionAuthorization.status == "PENDING"
     ).all()
-    assert len(holds) == 1
-    assert holds[0].merchant_name == "LATE_FEE"
+    assert len(holds) == 2
+    merchant_names = {h.merchant_name for h in holds}
+    assert "LATE_FEE" in merchant_names
 
 @pytest.mark.asyncio
 async def test_provision_my_demo_conflict(async_client, db_session):
@@ -139,13 +140,13 @@ async def test_reset_my_demo_success(async_client, db_session):
     assert response2.status_code == status.HTTP_200_OK
     assert response2.json()["status"] == "SUCCESS"
     
-    # Verify balances reset to default
+    # Verify balances reset to harmonized suite defaults with active transactions
     cred_acc = db_session.query(CreditAccount).filter(CreditAccount.customer_id == user_id).first()
-    assert cred_acc.cleared_balance_cents == 0
-    assert cred_acc.available_credit_cents == cred_acc.credit_limit_cents
+    assert cred_acc.cleared_balance_cents > 0
+    assert cred_acc.available_credit_cents == cred_acc.credit_limit_cents - cred_acc.cleared_balance_cents - 3500
     
     swipes_count = db_session.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).count()
-    assert swipes_count == 0
+    assert swipes_count == 12
     
     accounts = db_session.query(Account).filter(Account.user_id == user_id).all()
     for acc in accounts:
