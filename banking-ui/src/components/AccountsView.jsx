@@ -584,9 +584,9 @@ function AccountsView({ fbUser, customerProfile }) {
 
               {/* Capital One Inspired Interactive Filter Submenu Panel */}
               {isFilterMenuOpen && (
-                <div className="mb-8 p-6 bg-slate-50/90 dark:bg-slate-850/90 border border-slate-200 dark:border-slate-750 rounded-3xl shadow-xl animate-fadeIn space-y-6">
+                <div className="mb-8 p-6 bg-slate-50/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xl animate-fadeIn space-y-6">
                   {/* Filter Submenu Tabs Bar */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-750 pb-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
                     <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
                       {[
                         { id: 'category', label: 'Category', icon: '🏷️' },
@@ -601,7 +601,7 @@ function AccountsView({ fbUser, customerProfile }) {
                           className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                             activeFilterTab === tab.id
                               ? 'bg-blue-600 text-white shadow-sm'
-                              : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-750 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                              : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
                           }`}
                         >
                           <span>{tab.icon}</span>
@@ -651,7 +651,7 @@ function AccountsView({ fbUser, customerProfile }) {
                               className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                                 filters.category === cat.id
                                   ? 'bg-blue-500/10 dark:bg-blue-500/20 border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
-                                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-750 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600'
                               }`}
                             >
                               {cat.label}
@@ -674,7 +674,7 @@ function AccountsView({ fbUser, customerProfile }) {
                               placeholder="0.00"
                               value={filters.minAmount}
                               onChange={(e) => setFilters(prev => ({ ...prev, minAmount: e.target.value }))}
-                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white"
+                              className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white"
                             />
                           </div>
                           <span className="text-slate-400 font-bold mt-5">—</span>
@@ -685,32 +685,32 @@ function AccountsView({ fbUser, customerProfile }) {
                               placeholder="1000.00"
                               value={filters.maxAmount}
                               onChange={(e) => setFilters(prev => ({ ...prev, maxAmount: e.target.value }))}
-                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white"
+                              className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white"
                             />
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2 pt-1">
                           <button
                             onClick={() => setFilters(prev => ({ ...prev, minAmount: '', maxAmount: '25' }))}
-                            className="px-3.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-750 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 cursor-pointer"
+                            className="px-3.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
                           >
                             Under $25
                           </button>
                           <button
                             onClick={() => setFilters(prev => ({ ...prev, minAmount: '25', maxAmount: '100' }))}
-                            className="px-3.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-750 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 cursor-pointer"
+                            className="px-3.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
                           >
                             $25 - $100
                           </button>
                           <button
                             onClick={() => setFilters(prev => ({ ...prev, minAmount: '100', maxAmount: '' }))}
-                            className="px-3.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-750 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 cursor-pointer"
+                            className="px-3.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
                           >
                             Over $100
                           </button>
                           <button
                             onClick={() => setFilters(prev => ({ ...prev, minAmount: '', maxAmount: '' }))}
-                            className="px-3.5 py-1.5 bg-slate-200 dark:bg-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-300 cursor-pointer"
+                            className="px-3.5 py-1.5 bg-slate-200 dark:bg-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 cursor-pointer"
                           >
                             Clear Amount
                           </button>
@@ -736,7 +736,7 @@ function AccountsView({ fbUser, customerProfile }) {
                               className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                                 filters.dateRange === d.id
                                   ? 'bg-blue-500/10 dark:bg-blue-500/20 border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
-                                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-750 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600'
                               }`}
                             >
                               {d.label}
@@ -764,7 +764,7 @@ function AccountsView({ fbUser, customerProfile }) {
                               className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                                 filters.card === c.id
                                   ? 'bg-blue-500/10 dark:bg-blue-500/20 border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
-                                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-750 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600'
                               }`}
                             >
                               {c.label}
@@ -792,7 +792,7 @@ function AccountsView({ fbUser, customerProfile }) {
                               className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                                 filters.statement === s.id
                                   ? 'bg-blue-500/10 dark:bg-blue-500/20 border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
-                                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-750 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600'
                               }`}
                             >
                               {s.label}
@@ -804,8 +804,8 @@ function AccountsView({ fbUser, customerProfile }) {
                   </div>
 
                   {/* Filter Submenu Footer */}
-                  <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-750 text-xs">
-                    <span className="text-slate-600 dark:text-slate-400 font-semibold">
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800 text-xs">
+                    <span className="text-slate-600 dark:text-slate-300 font-semibold">
                       Showing <strong className="text-slate-900 dark:text-white font-bold">{filteredTransactions.length}</strong> matching transactions
                     </span>
                     <button
@@ -842,17 +842,17 @@ function AccountsView({ fbUser, customerProfile }) {
                             <span>Pending Authorizations</span>
                           </div>
                           <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm border-collapse">
+                            <table className="w-full text-left text-sm border-collapse table-fixed">
                               <thead>
-                                <tr className="border-b border-slate-200 dark:border-slate-850 text-slate-500 font-semibold text-xs">
-                                  <th className="pb-2 font-semibold">Date</th>
-                                  <th className="pb-2 font-semibold">Description</th>
-                                  <th className="pb-2 font-semibold">Category</th>
-                                  <th className="pb-2 font-semibold">Card</th>
-                                  <th className="pb-2 font-semibold text-right">Amount</th>
+                                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold text-xs">
+                                  <th className="pb-2 font-semibold w-[14%]">Date</th>
+                                  <th className="pb-2 font-semibold w-[32%]">Description</th>
+                                  <th className="pb-2 font-semibold w-[22%]">Category</th>
+                                  <th className="pb-2 font-semibold w-[18%]">Card</th>
+                                  <th className="pb-2 font-semibold text-right w-[14%]">Amount</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-200 dark:divide-slate-855/30">
+                              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
                                 {filteredTransactions.filter(t => t.pending).map((tx, idx) => {
                                   const isLateFee = tx.description === "LATE_FEE" || tx.merchant_name === "LATE_FEE";
                                   const isCredit = (tx.amount_cents !== undefined && tx.amount_cents < 0) || tx.description?.toUpperCase().includes('OFFER');
@@ -862,22 +862,22 @@ function AccountsView({ fbUser, customerProfile }) {
                                   const amountVal = Math.abs(tx.amount || (tx.amount_cents ? tx.amount_cents / 100 : 0));
                                   return (
                                     <tr key={`pending-${idx}`} className="hover:bg-slate-100/50 dark:hover:bg-slate-900/20 transition-colors">
-                                      <td className="py-3 text-xs text-slate-450 dark:text-slate-500 italic">Pending</td>
-                                      <td className="py-3 font-medium text-slate-800 dark:text-slate-300 flex items-center gap-2">
+                                      <td className="py-3 text-xs text-slate-500 dark:text-slate-400 italic w-[14%]">Pending</td>
+                                      <td className="py-3 font-medium text-slate-800 dark:text-slate-300 flex items-center gap-2 w-[32%]">
                                         <span>{tx.description}</span>
                                         {isLateFee && (
                                           <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400">Action Required</span>
                                         )}
                                       </td>
-                                      <td className="py-3">
+                                      <td className="py-3 w-[22%]">
                                         <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300">
                                           {catLabel}
                                         </span>
                                       </td>
-                                      <td className="py-3 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                      <td className="py-3 text-xs text-slate-500 dark:text-slate-400 font-medium w-[18%]">
                                         {tx.cardholder_name || "Erik V."} ...{tx.last_four || "2304"}
                                       </td>
-                                      <td className={`py-3 text-right font-bold text-sm ${isCredit ? 'text-emerald-600 dark:text-emerald-400 italic' : isLateFee ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-300'}`}>
+                                      <td className={`py-3 text-right font-bold text-sm w-[14%] ${isCredit ? 'text-emerald-600 dark:text-emerald-400 italic' : isLateFee ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-300'}`}>
                                         {isCredit ? '-' : ''}${amountVal.toFixed(2)}
                                       </td>
                                     </tr>
@@ -893,17 +893,17 @@ function AccountsView({ fbUser, customerProfile }) {
                       <div className="space-y-3 pt-4">
                         <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Posted Transactions Since Last Statement</div>
                         <div className="overflow-x-auto">
-                          <table className="w-full text-left text-sm border-collapse">
+                          <table className="w-full text-left text-sm border-collapse table-fixed">
                             <thead>
-                              <tr className="border-b border-slate-200 dark:border-slate-850 text-slate-500 dark:text-slate-400 font-semibold text-xs">
-                                <th className="pb-4 font-semibold">Posting Date</th>
-                                <th className="pb-4 font-semibold">Description</th>
-                                <th className="pb-4 font-semibold">Category</th>
-                                <th className="pb-4 font-semibold">Card</th>
-                                <th className="pb-4 font-semibold text-right">Amount</th>
+                              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold text-xs">
+                                <th className="pb-4 font-semibold w-[14%]">Posting Date</th>
+                                <th className="pb-4 font-semibold w-[32%]">Description</th>
+                                <th className="pb-4 font-semibold w-[22%]">Category</th>
+                                <th className="pb-4 font-semibold w-[18%]">Card</th>
+                                <th className="pb-4 font-semibold text-right w-[14%]">Amount</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-200 dark:divide-slate-850/50">
+                            <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
                               {filteredTransactions.filter(t => !t.pending).map((tx, idx) => {
                                 const isPayment = tx.transaction_type === "DIRECTDEPOSIT" || (tx.amount_cents !== undefined ? tx.amount_cents > 0 : tx.amount < 0) || tx.description?.toUpperCase().includes('PAYMENT');
                                 const catLabel = tx.personal_finance_category?.primary 
@@ -912,19 +912,19 @@ function AccountsView({ fbUser, customerProfile }) {
                                 const amountVal = Math.abs(tx.amount || (tx.amount_cents ? tx.amount_cents / 100 : 0));
                                 return (
                                   <tr key={`posted-${idx}`} className="hover:bg-slate-100/50 dark:hover:bg-slate-900/30 transition-colors">
-                                    <td className="py-4 text-xs text-slate-500 dark:text-slate-400">
+                                    <td className="py-4 text-xs text-slate-500 dark:text-slate-400 w-[14%]">
                                       {tx.posted_timestamp || tx.posted_at ? new Date(tx.posted_timestamp || tx.posted_at).toLocaleDateString() : "Pending"}
                                     </td>
-                                    <td className="py-4 font-medium text-slate-800 dark:text-slate-200">{tx.description}</td>
-                                    <td className="py-4">
+                                    <td className="py-4 font-medium text-slate-800 dark:text-slate-200 w-[32%]">{tx.description}</td>
+                                    <td className="py-4 w-[22%]">
                                       <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300">
                                         {catLabel}
                                       </span>
                                     </td>
-                                    <td className="py-4 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                    <td className="py-4 text-xs text-slate-500 dark:text-slate-400 font-medium w-[18%]">
                                       {tx.cardholder_name || "Erik V."} ...{tx.last_four || "2304"}
                                     </td>
-                                    <td className={`py-4 text-right font-bold text-sm ${isPayment ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                                    <td className={`py-4 text-right font-bold text-sm w-[14%] ${isPayment ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>
                                       {isPayment ? '-' : ''}${amountVal.toFixed(2)}
                                     </td>
                                   </tr>
