@@ -211,19 +211,24 @@ def freeze_card(db: Session, card_token: str, reason: str) -> dict:
     Locates the card by token and sets its status to 'BLOCKED' to freeze auth checks.
     """
     logger.info(f"Freezing card token: {card_token} (Reason: {reason})")
-    from repositories.credit_card import CreditCardRepository
-    repo = CreditCardRepository(db)
-    card = repo.get_card_by_token(card_token)
-    if not card:
-        logger.error(f"Card token '{card_token}' not found.")
-        raise ValueError(f"Card token '{card_token}' not found.")
-        
-    card.status = "BLOCKED"
-    repo.save_card(card)
-    record_audit_event(db, "CARD_FROZEN", {"account_id": str(card.account_id), "card_token": card_token, "reason": reason})
-    db.commit()
-    logger.info(f"Card token '{card_token}' successfully blocked.")
-    return {"card_token": card_token, "status": "BLOCKED"}
+    try:
+        from repositories.credit_card import CreditCardRepository
+        repo = CreditCardRepository(db)
+        card = repo.get_card_by_token(card_token)
+        if not card:
+            logger.error(f"Card token '{card_token}' not found.")
+            raise ValueError(f"Card token '{card_token}' not found.")
+            
+        card.status = "BLOCKED"
+        repo.save_card(card)
+        record_audit_event(db, "CARD_FROZEN", {"account_id": str(card.account_id), "card_token": card_token, "reason": reason})
+        db.commit()
+        logger.info(f"Card token '{card_token}' successfully blocked.")
+        return {"card_token": card_token, "status": "BLOCKED"}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error freezing card: {e}")
+        raise e
 
 
 def apply_limit_increase(db: Session, account_id: str, requested_limit_cents: int) -> dict:
@@ -231,31 +236,45 @@ def apply_limit_increase(db: Session, account_id: str, requested_limit_cents: in
     Processes credit limit adjustments with Pessimistic Row Locking to prevent balance race conditions.
     """
     logger.info(f"Processing credit limit request for account: {account_id} to {requested_limit_cents} cents")
-    
-    # Acquire exclusive database lock on the financial account row until transaction commit
-    from repositories.credit_card import CreditCardRepository
-    repo = CreditCardRepository(db)
-    account = repo.get_account_by_id(account_id, lock=True)
-    if not account:
-        logger.error(f"Account '{account_id}' not found.")
-        raise ValueError(f"Account '{account_id}' not found.")
-        
-    if account.status != "ACTIVE":
-        raise ValueError(f"Account is in '{account.status}' status and ineligible for credit limit changes.")
+    try:
+        # Acquire exclusive database lock on the financial account row until transaction commit
+        from repositories.credit_card import CreditCardRepository
+        repo = CreditCardRepository(db)
+        account = repo.get_account_by_id(account_id, lock=True)
+        if not account:
+            logger.error(f"Account '{account_id}' not found.")
+            raise ValueError(f"Account '{account_id}' not found.")
+            
+        if account.status != "ACTIVE":
+            raise ValueError(f"Account is in '{account.status}' status and ineligible for credit limit changes.")
 
-    limit_change = requested_limit_cents - account.credit_limit_cents
-    account.credit_limit_cents = requested_limit_cents
-    account.available_credit_cents += limit_change
-    
-    repo.save_account(account)
-    record_audit_event(db, "CREDIT_LIMIT_INCREASED", {"account_id": str(account_id), "new_limit_cents": account.credit_limit_cents})
-    db.commit()
-    logger.info(f"Limit updated. New Limit: {account.credit_limit_cents} cents, Available Credit: {account.available_credit_cents} cents")
-    return {
-        "account_id": account_id,
-        "new_limit_cents": account.credit_limit_cents,
-        "available_credit_cents": account.available_credit_cents
-    }
+        # Product Constraint Check: Validate requested limit against CreditProduct catalog parameters
+        from models.credit_card import CreditProduct
+        product = db.query(CreditProduct).filter(CreditProduct.product_code == account.product_code).first()
+        if product:
+            if requested_limit_cents < product.min_credit_limit_cents or requested_limit_cents > product.max_credit_limit_cents:
+                raise ValueError(
+                    f"Requested limit {requested_limit_cents} cents is out of bounds for credit product '{account.product_code}'. "
+                    f"Allowed range: {product.min_credit_limit_cents} to {product.max_credit_limit_cents} cents."
+                )
+
+        limit_change = requested_limit_cents - account.credit_limit_cents
+        account.credit_limit_cents = requested_limit_cents
+        account.available_credit_cents += limit_change
+        
+        repo.save_account(account)
+        record_audit_event(db, "CREDIT_LIMIT_INCREASED", {"account_id": str(account_id), "new_limit_cents": account.credit_limit_cents})
+        db.commit()
+        logger.info(f"Limit updated. New Limit: {account.credit_limit_cents} cents, Available Credit: {account.available_credit_cents} cents")
+        return {
+            "account_id": account_id,
+            "new_limit_cents": account.credit_limit_cents,
+            "available_credit_cents": account.available_credit_cents
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error applying credit limit increase: {e}")
+        raise e
 
 
 def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason: str) -> dict:
@@ -265,58 +284,62 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
     Supports reversing any debit (negative amount) transaction.
     """
     logger.info(f"Processing transaction reversal for account: {account_id}, Original Tx ID: {transaction_id}")
-
-    # Acquire exclusive database lock on the financial account row to lock balances
-    from repositories.credit_card import CreditCardRepository
-    repo = CreditCardRepository(db)
-    account = repo.get_account_by_id(account_id, lock=True)
-    if not account:
-        logger.error(f"Account '{account_id}' not found.")
-        raise ValueError(f"Account '{account_id}' not found.")
+    try:
+        # Acquire exclusive database lock on the financial account row to lock balances
+        from repositories.credit_card import CreditCardRepository
+        repo = CreditCardRepository(db)
+        account = repo.get_account_by_id(account_id, lock=True)
+        if not account:
+            logger.error(f"Account '{account_id}' not found.")
+            raise ValueError(f"Account '{account_id}' not found.")
+            
+        # Find original transaction in ledger
+        original_tx = repo.get_ledger_entry_by_id(transaction_id)
+        if not original_tx or original_tx.account_id != account_id:
+            raise ValueError(f"Original transaction '{transaction_id}' not found in ledger.")
+            
+        # Verify the original transaction is a debit (charge)
+        if original_tx.amount_cents >= 0:
+            raise ValueError(f"Transaction '{transaction_id}' is a credit and cannot be reversed (Amount: {original_tx.amount_cents} cents).")
+            
+        # Verify no prior reversals exist for this transaction ID to prevent double-reversal adjustments
+        reversal_description_old = f"FEE_REVERSAL_REF_{transaction_id}"
+        reversal_description_new = f"REVERSAL_REF_{transaction_id}"
         
-    # Find original transaction in ledger
-    original_tx = repo.get_ledger_entry_by_id(transaction_id)
-    if not original_tx or original_tx.account_id != account_id:
-        raise ValueError(f"Original transaction '{transaction_id}' not found in ledger.")
+        prior_reversal = repo.get_reversal_entry(account_id, transaction_id)
+        if prior_reversal:
+            raise ValueError(f"Transaction '{transaction_id}' has already been reversed in ledger (Reversal ID: {prior_reversal.id}).")
+
+        # Insert offsetting credit entry into account ledger (double-entry standard)
+        reversal_amount = abs(original_tx.amount_cents) # Credit offset (positive)
+        desc = reversal_description_old if original_tx.description == "LATE_FEE" else reversal_description_new
         
-    # Verify the original transaction is a debit (charge)
-    if original_tx.amount_cents >= 0:
-        raise ValueError(f"Transaction '{transaction_id}' is a credit and cannot be reversed (Amount: {original_tx.amount_cents} cents).")
-        
-    # Verify no prior reversals exist for this transaction ID to prevent double-reversal adjustments
-    reversal_description_old = f"FEE_REVERSAL_REF_{transaction_id}"
-    reversal_description_new = f"REVERSAL_REF_{transaction_id}"
-    
-    prior_reversal = repo.get_reversal_entry(account_id, transaction_id)
-    if prior_reversal:
-        raise ValueError(f"Transaction '{transaction_id}' has already been reversed in ledger (Reversal ID: {prior_reversal.id}).")
+        reversal_entry = AccountLedger(
+            account_id=account_id,
+            amount_cents=reversal_amount,
+            description=desc,
+            posted_at=datetime.datetime.now(datetime.timezone.utc)
+        )
+        repo.save_ledger(reversal_entry)
 
-    # Insert offsetting credit entry into account ledger (double-entry standard)
-    reversal_amount = abs(original_tx.amount_cents) # Credit offset (positive)
-    desc = reversal_description_old if original_tx.description == "LATE_FEE" else reversal_description_new
-    
-    reversal_entry = AccountLedger(
-        account_id=account_id,
-        amount_cents=reversal_amount,
-        description=desc,
-        posted_at=datetime.datetime.now(datetime.timezone.utc)
-    )
-    repo.save_ledger(reversal_entry)
+        # Recalculate account balances
+        account.cleared_balance_cents -= reversal_amount   # Debt decreases
+        account.available_credit_cents += reversal_amount  # Available credit increases
 
-    # Recalculate account balances
-    account.cleared_balance_cents -= reversal_amount   # Debt decreases
-    account.available_credit_cents += reversal_amount  # Available credit increases
-
-    repo.save_account(account)
-    record_audit_event(db, "FEE_REVERSED", {"account_id": str(account_id), "reversal_amount_cents": reversal_amount})
-    db.commit()
-    logger.info(f"Transaction reversed successfully. New Cleared Balance: {account.cleared_balance_cents} cents, Available Credit: {account.available_credit_cents} cents")
-    return {
-        "account_id": account_id,
-        "reversed_amount_cents": reversal_amount,
-        "cleared_balance_cents": account.cleared_balance_cents,
-        "available_credit_cents": account.available_credit_cents
-    }
+        repo.save_account(account)
+        record_audit_event(db, "FEE_REVERSED", {"account_id": str(account_id), "reversal_amount_cents": reversal_amount})
+        db.commit()
+        logger.info(f"Transaction reversed successfully. New Cleared Balance: {account.cleared_balance_cents} cents, Available Credit: {account.available_credit_cents} cents")
+        return {
+            "account_id": account_id,
+            "reversed_amount_cents": reversal_amount,
+            "cleared_balance_cents": account.cleared_balance_cents,
+            "available_credit_cents": account.available_credit_cents
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error reversing posted transaction: {e}")
+        raise e
 
 
 def get_fdx_account(db: Session, account_id: str, customer_id: str) -> FDXAccount:

@@ -23,15 +23,32 @@ from models.identity import User
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/simulation", tags=["simulation"], dependencies=[Depends(get_current_user)])
-v1_router = APIRouter(prefix="/v1/simulation", tags=["simulation"], dependencies=[Depends(get_current_user)])
-alias_router = APIRouter(prefix="/simulation", tags=["simulation"], dependencies=[Depends(get_current_user)])
+def verify_presenter_domain(token: ValidatedToken = Depends(get_current_user)) -> ValidatedToken:
+    """Security dependency restricting simulation suite operations to authorized presenter domains."""
+    email = token.email
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Authenticated email not found in token claims."
+        )
+    email_lower = email.lower()
+    allowed_domains = ["google.com", "gcp.solutions", "altostrat.com"]
+    if not any(email_lower.endswith(f"@{domain}") for domain in allowed_domains):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Simulation actions are restricted to authorized presenter domains."
+        )
+    return token
+
+router = APIRouter(prefix="/api/v1/simulation", tags=["simulation"], dependencies=[Depends(verify_presenter_domain)])
+v1_router = APIRouter(prefix="/v1/simulation", tags=["simulation"], dependencies=[Depends(verify_presenter_domain)])
+alias_router = APIRouter(prefix="/simulation", tags=["simulation"], dependencies=[Depends(verify_presenter_domain)])
 
 @router.post("/provision-my-demo", status_code=status.HTTP_201_CREATED)
 @v1_router.post("/provision-my-demo", status_code=status.HTTP_201_CREATED)
 @alias_router.post("/provision-my-demo", status_code=status.HTTP_201_CREATED)
 def provision_my_demo(
-    token: ValidatedToken = Depends(get_current_user),
+    token: ValidatedToken = Depends(verify_presenter_domain),
     db: Session = Depends(get_db)
 ):
     """
@@ -48,15 +65,6 @@ def provision_my_demo(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Authenticated user ID not found in token claims."
-        )
-        
-    # Security check: restrict demo provisioning to corporate presenter domains
-    email_lower = email.lower()
-    allowed_domains = ["google.com", "gcp.solutions", "altostrat.com"]
-    if not any(email_lower.endswith(f"@{domain}") for domain in allowed_domains):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Demo provisioning is restricted to authorized presenter domains."
         )
         
     try:
@@ -78,7 +86,7 @@ def provision_my_demo(
 @v1_router.post("/reset-my-demo", status_code=status.HTTP_200_OK)
 @alias_router.post("/reset-my-demo", status_code=status.HTTP_200_OK)
 def reset_my_demo(
-    token: ValidatedToken = Depends(get_current_user),
+    token: ValidatedToken = Depends(verify_presenter_domain),
     db: Session = Depends(get_db)
 ):
     """
@@ -121,7 +129,7 @@ DATA_GENERATOR_URL = os.getenv("DATA_GENERATOR_URL", "http://localhost:8001")
 @v1_router.post("/surge", status_code=status.HTTP_200_OK)
 @alias_router.post("/surge", status_code=status.HTTP_200_OK)
 async def simulate_activity_surge(
-    token: ValidatedToken = Depends(get_current_user),
+    token: ValidatedToken = Depends(verify_presenter_domain),
     db: Session = Depends(get_db)
 ):
     """

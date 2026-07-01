@@ -254,81 +254,86 @@ class AccountsService:
         else:
             self.db.bind._ignore_rbac = True
 
-        # 1. Lookup deposit account
-        deposit_acc = self.db.query(Account).filter(
-            Account.id == uuid.UUID(source_account_id),
-            Account.user_id == user.id
-        ).first()
-        if not deposit_acc:
-            raise HTTPException(status_code=404, detail="Source deposit account not found.")
+        try:
+            # 1. Lookup deposit account
+            deposit_acc = self.db.query(Account).filter(
+                Account.id == uuid.UUID(source_account_id),
+                Account.user_id == user.id
+            ).first()
+            if not deposit_acc:
+                raise HTTPException(status_code=404, detail="Source deposit account not found.")
 
-        # 2. Check sufficient funds
-        if deposit_acc.cleared_balance_cents < amount_cents:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Insufficient funds in source account. Available: {deposit_acc.cleared_balance_cents} cents."
+            # 2. Check sufficient funds
+            if deposit_acc.cleared_balance_cents < amount_cents:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient funds in source account. Available: {deposit_acc.cleared_balance_cents} cents."
+                )
+
+            # 3. Lookup credit account
+            from models.credit_card import CreditAccount, PostedTransaction
+            credit_acc = self.db.query(CreditAccount).filter(
+                CreditAccount.id == uuid.UUID(credit_account_id),
+                CreditAccount.customer_id == user.id
+            ).first()
+            if not credit_acc:
+                raise HTTPException(status_code=404, detail="Target credit account not found.")
+
+            # 4. Perform atomic double-entry ledger update on checking/savings
+            tx = Transaction(
+                idempotency_key=f"IDEMP-PAY-{uuid.uuid4().hex}",
+                user_id=user.id,
+                status="COMPLETED",
+                description=f"Credit Card Bill Payment to Account ending in {str(credit_acc.id)[-4:]}"
+            )
+            self.db.add(tx)
+            self.db.flush()
+
+            debit_split = AccountLedgerEntry(
+                transaction_id=tx.id,
+                account_id=deposit_acc.id,
+                amount_cents=-amount_cents,
+                entry_type="CREDIT"
+            )
+            self.db.add(debit_split)
+            deposit_acc.cleared_balance_cents -= amount_cents
+
+            # 5. Decrement debt on credit card account and restore available credit
+            credit_acc.cleared_balance_cents -= amount_cents
+            from services.card_network import recalculate_available_credit
+            recalculate_available_credit(self.db, credit_acc)
+
+            card_payment_tx = PostedTransaction(
+                account_id=credit_acc.id,
+                amount_cents=amount_cents,
+                description="Bill Payment Received - Thank You"
+            )
+            self.db.add(card_payment_tx)
+
+            from utils.audit import record_audit_event
+            record_audit_event(
+                self.db,
+                "BILL_PAYMENT_EXECUTED",
+                {
+                    "source_account_id": source_account_id,
+                    "credit_account_id": credit_account_id,
+                    "amount_cents": amount_cents
+                }
             )
 
-        # 3. Lookup credit account
-        from models.credit_card import CreditAccount, PostedTransaction
-        credit_acc = self.db.query(CreditAccount).filter(
-            CreditAccount.id == uuid.UUID(credit_account_id),
-            CreditAccount.customer_id == user.id
-        ).first()
-        if not credit_acc:
-            raise HTTPException(status_code=404, detail="Target credit account not found.")
+            self.db.commit()
 
-        # 4. Perform atomic double-entry ledger update on checking/savings
-        tx = Transaction(
-            idempotency_key=f"IDEMP-PAY-{uuid.uuid4().hex}",
-            user_id=user.id,
-            status="COMPLETED",
-            description=f"Credit Card Bill Payment to Account ending in {str(credit_acc.id)[-4:]}"
-        )
-        self.db.add(tx)
-        self.db.flush()
-
-        debit_split = AccountLedgerEntry(
-            transaction_id=tx.id,
-            account_id=deposit_acc.id,
-            amount_cents=-amount_cents,
-            entry_type="CREDIT"
-        )
-        self.db.add(debit_split)
-        deposit_acc.cleared_balance_cents -= amount_cents
-
-        # 5. Decrement debt on credit card account and restore available credit
-        credit_acc.cleared_balance_cents -= amount_cents
-        from services.card_network import recalculate_available_credit
-        recalculate_available_credit(self.db, credit_acc)
-
-        card_payment_tx = PostedTransaction(
-            account_id=credit_acc.id,
-            amount_cents=amount_cents,
-            description="Bill Payment Received - Thank You"
-        )
-        self.db.add(card_payment_tx)
-
-        from utils.audit import record_audit_event
-        record_audit_event(
-            self.db,
-            "BILL_PAYMENT_EXECUTED",
-            {
-                "source_account_id": source_account_id,
-                "credit_account_id": credit_account_id,
-                "amount_cents": amount_cents
+            return {
+                "status": "SUCCESS",
+                "message": "Bill payment successfully processed.",
+                "source_cleared_balance_cents": deposit_acc.cleared_balance_cents,
+                "credit_cleared_balance_cents": credit_acc.cleared_balance_cents,
+                "credit_available_credit_cents": credit_acc.available_credit_cents
             }
-        )
-
-        self.db.commit()
-
-        return {
-            "status": "SUCCESS",
-            "message": "Bill payment successfully processed.",
-            "source_cleared_balance_cents": deposit_acc.cleared_balance_cents,
-            "credit_cleared_balance_cents": credit_acc.cleared_balance_cents,
-            "credit_available_credit_cents": credit_acc.available_credit_cents
-        }
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error during bill payment transaction: {e}")
+            raise e
 
     def get_deposit_transactions(self, token: ValidatedToken, account_id: str) -> list[Dict[str, Any]]:
         # Resolve internal User entity
