@@ -36,6 +36,7 @@ from models.origination import DepositProduct
 from models.settings import SystemSetting
 from models.reference import MerchantCategoryCode
 from services.taxonomy_service import DEFAULT_TAXONOMY_MAP, TaxonomyService
+from services.merchant_service import MerchantEnrichmentService
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,7 @@ def seed_catalogs_if_missing(db: Session) -> None:
         db.flush()
         TaxonomyService.invalidate_cache()
         
+    MerchantEnrichmentService.seed_merchant_catalog(db)
     db.flush()
 
 def seed_system_settings_if_missing(db: Session) -> None:
@@ -494,23 +496,10 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
             },
         )
 
-        swipe_options = [
-            {"description": "Taqueria Orinoco CDMX", "min": 350, "max": 650, "mcc": "5812"},
-            {"description": "Oxxo Convenience Mexico", "min": 150, "max": 450, "mcc": "5411"},
-            {"description": "Uber CDMX Trip", "min": 850, "max": 2500, "mcc": "4121"},
-            {"description": "Netflix Subscription", "min": 1549, "max": 1549, "mcc": "4899"},
-            {"description": "Pemex Gas Station", "min": 3500, "max": 5500, "mcc": "5541"},
-            {"description": "Pujol Restaurant CDMX", "min": 8500, "max": 18500, "mcc": "5812"},
-            {"description": "Superama CDMX Grocery", "min": 2500, "max": 9500, "mcc": "5411"},
-            {"description": "YouTube Premium Subscription", "min": 1399, "max": 1399, "mcc": "4899"},
-            {"description": "Aeromexico Airlines CDMX", "min": 35000, "max": 65000, "mcc": "4511"},
-            {"description": "Hotel Carlota CDMX", "min": 25000, "max": 45000, "mcc": "7011"},
-            {"description": "CURB CHI TAXI", "min": 875, "max": 875, "mcc": "4121"},
-            {"description": "eBay", "min": 218651, "max": 218651, "mcc": "5311"}
-        ]
         for i in range(12):
-            swipe_conf = swipe_options[i % len(swipe_options)]
-            amount_cents = random.randint(swipe_conf["min"], swipe_conf["max"]) if swipe_conf["min"] != swipe_conf["max"] else swipe_conf["min"]
+            is_intl = (i in [2, 7, 10])  # 25% international anomaly ratio for travel/fraud alert testing
+            mch, store_desc = MerchantEnrichmentService.get_random_merchant(db, is_international=is_intl)
+            amount_cents = random.randint(1250, 45000)
             total_swipes_debt_cents += amount_cents
             
             posted_date = now - datetime.timedelta(days=(14 - i), hours=random.randint(0, 12))
@@ -525,8 +514,8 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
                 auth_code=f"T{10000+i}",
                 retrieval_reference_number=f"REF{888000+i:09d}",
                 card_network="VISA",
-                merchant_category_code=swipe_conf["mcc"],
-                merchant_name=swipe_conf["description"],
+                merchant_category_code=mch.mcc,
+                merchant_name=store_desc,
                 created_at=posted_date - datetime.timedelta(hours=2),
                 expires_at=posted_date + datetime.timedelta(days=7)
             )
@@ -538,7 +527,7 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
                 account_id=cred_acc.id,
                 authorization_id=auth.id,
                 amount_cents=-amount_cents,
-                description=swipe_conf["description"],
+                description=store_desc,
                 posted_at=posted_date
             )
             db.add(tx)

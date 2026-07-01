@@ -39,6 +39,13 @@ def test_db():
             "ATTACH DATABASE 'file:identity_repo_uw?mode=memory&cache=shared' AS identity;",
             "ATTACH DATABASE 'file:origination_repo_uw?mode=memory&cache=shared' AS origination;",
             "ATTACH DATABASE 'file:audit_repo_uw?mode=memory&cache=shared' AS audit;",
+            "ATTACH DATABASE 'file:kyc_repo_uw?mode=memory&cache=shared' AS kyc;",
+            "ATTACH DATABASE 'file:ledger_repo_uw?mode=memory&cache=shared' AS ledger;",
+            "ATTACH DATABASE 'file:cards_repo_uw?mode=memory&cache=shared' AS cards;",
+            "ATTACH DATABASE 'file:operations_repo_uw?mode=memory&cache=shared' AS operations;",
+            "ATTACH DATABASE 'file:admin_repo_uw?mode=memory&cache=shared' AS admin;",
+            "ATTACH DATABASE 'file:catalog_repo_uw?mode=memory&cache=shared' AS catalog;",
+            "ATTACH DATABASE 'file:ref_data_repo_uw?mode=memory&cache=shared' AS ref_data;",
         ]:
             try:
                 cursor.execute(stmt)

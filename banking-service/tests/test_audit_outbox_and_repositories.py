@@ -36,6 +36,8 @@ def test_db():
             "ATTACH DATABASE 'file:origination_repo?mode=memory&cache=shared' AS origination;",
             "ATTACH DATABASE 'file:audit_repo?mode=memory&cache=shared' AS audit;",
             "ATTACH DATABASE 'file:admin_repo?mode=memory&cache=shared' AS admin;",
+            "ATTACH DATABASE 'file:catalog_repo?mode=memory&cache=shared' AS catalog;",
+            "ATTACH DATABASE 'file:ref_data_repo?mode=memory&cache=shared' AS ref_data;",
         ]:
             try:
                 cursor.execute(stmt)

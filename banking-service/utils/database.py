@@ -156,6 +156,12 @@ def attach_sqlite_schemas(dbapi_connection, connection_record):
             cursor.execute("SELECT 1 FROM origination.sqlite_master LIMIT 1;")
             cursor.execute("SELECT 1 FROM audit.sqlite_master LIMIT 1;")
             cursor.execute("SELECT 1 FROM admin.sqlite_master LIMIT 1;")
+            cursor.execute("SELECT 1 FROM kyc.sqlite_master LIMIT 1;")
+            cursor.execute("SELECT 1 FROM ledger.sqlite_master LIMIT 1;")
+            cursor.execute("SELECT 1 FROM cards.sqlite_master LIMIT 1;")
+            cursor.execute("SELECT 1 FROM operations.sqlite_master LIMIT 1;")
+            cursor.execute("SELECT 1 FROM catalog.sqlite_master LIMIT 1;")
+            cursor.execute("SELECT 1 FROM ref_data.sqlite_master LIMIT 1;")
             cursor.close()
             return
         except Exception:
