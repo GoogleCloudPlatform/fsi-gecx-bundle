@@ -10,7 +10,8 @@ import {
   Globe, 
   Check,
   ExternalLink,
-  X
+  X,
+  Wallet
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { getAccountsSummary, provisionMyDemo, getCreditCardTransactions } from '../utils/api.js';
@@ -105,25 +106,37 @@ function HomeView({
           <div className="absolute inset-0 bg-gradient-to-b from-slate-50/50 via-slate-50/80 to-slate-50 dark:from-slate-950/50 dark:via-slate-950/80 dark:to-slate-950"></div>
         </div>
 
-        <div className="max-width-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
           <div className="space-y-8">
-            <div className="inline-flex items-center space-x-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold tracking-wide">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>Voted #1 Digital Credit Union 2026</span>
-            </div>
-            
             {fbUser ? (
               <>
-                <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight leading-tight">
-                  Welcome back, <br />
-                  <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
-                    {customerProfile?.first_name ? `${customerProfile.first_name} ${customerProfile.last_name}` : (accountsData?.user_profile?.first_name || fbUser.email.split('@')[0].toUpperCase())}
+                <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight">
+                  Welcome back, <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
+                    {customerProfile?.first_name ? `${customerProfile.first_name}` : (() => {
+                      const name = accountsData?.user_profile?.first_name || fbUser.email.split('@')[0];
+                      return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+                    })()}
                   </span>
                 </h1>
                 
                 <p className="text-lg text-slate-600 dark:text-slate-400 max-w-xl leading-relaxed">
-                  Take control of your financial future.
+                  Take control of your financial future. Manage daily accounts, build long-term deposits, and explore premium credit offers designed just for you.
                 </p>
+
+                <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs font-semibold text-slate-500 dark:text-slate-400 py-2">
+                  <div className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>High-Yield Deposits</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Zero Account Fees</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>256-Bit Security</span>
+                  </div>
+                </div>
 
                 <div className="flex flex-col sm:flex-row gap-4">
                   <button 
@@ -139,7 +152,7 @@ function HomeView({
                       const helpSection = document.getElementById('help');
                       if (helpSection) helpSection.scrollIntoView({ behavior: 'smooth' });
                     }}
-                    className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer shadow-sm"
+                    className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 hover:scale-[1.02] active:scale-95 transition-all duration-300 cursor-pointer shadow-sm"
                   >
                     Help & Support
                   </button>
@@ -177,7 +190,7 @@ function HomeView({
           </div>
 
           {/* Interactive Glassmorphism Dashboard Preview */}
-          <div className="relative hidden lg:block">
+          <div className="relative block mt-12 lg:mt-0">
             <div className="absolute -inset-4 bg-gradient-to-tr from-emerald-500/20 to-cyan-500/20 rounded-3xl blur-3xl -z-10"></div>
             <div className="relative bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-8 shadow-xl dark:shadow-black/50">
               {isLoading ? (
@@ -204,10 +217,10 @@ function HomeView({
                   </div>
 
                   <div className="space-y-4 mb-8">
-                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer">
+                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.008] will-change-transform hover:shadow-md hover:border-emerald-500/20 cursor-pointer">
                       <div className="flex items-center space-x-4">
                         <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-500 dark:text-teal-400">
-                          <CreditCard className="w-5 h-5" />
+                          <Wallet className="w-5 h-5" />
                         </div>
                         <div>
                           <div className="font-medium text-slate-900 dark:text-white">Nova Signature Checking</div>
@@ -217,7 +230,7 @@ function HomeView({
                       <div className="font-semibold text-slate-900 dark:text-white">$14,250.00</div>
                     </div>
 
-                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer">
+                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.008] will-change-transform hover:shadow-md hover:border-emerald-500/20 cursor-pointer">
                       <div className="flex items-center space-x-4">
                         <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-500 dark:text-emerald-400">
                           <Percent className="w-5 h-5" />
@@ -231,8 +244,7 @@ function HomeView({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
-                    <span>Secured by 256-bit AES Encryption</span>
+                  <div className="flex justify-end text-xs text-slate-400 dark:text-slate-500">
                     <div className="flex items-center space-x-1 text-emerald-500 dark:text-emerald-400">
                       <Lock className="w-3 h-3" />
                       <span>End-to-End Encrypted</span>
@@ -264,11 +276,11 @@ function HomeView({
                       <div 
                         key={`chk-${idx}`} 
                         onClick={() => navigate(`/accounts?id=${acc.account_id}&type=checking`)}
-                        className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer"
+                        className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.008] will-change-transform hover:shadow-md hover:border-emerald-500/20 cursor-pointer"
                       >
                         <div className="flex items-center space-x-4">
                           <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-500 dark:text-teal-400">
-                            <CreditCard className="w-5 h-5" />
+                            <Wallet className="w-5 h-5" />
                           </div>
                           <div>
                             <div className="font-medium text-slate-900 dark:text-white">{acc.product_name}</div>
@@ -285,7 +297,7 @@ function HomeView({
                       <div 
                         key={`sav-${idx}`} 
                         onClick={() => navigate(`/accounts?id=${acc.account_id}&type=savings`)}
-                        className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer"
+                        className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.008] will-change-transform hover:shadow-md hover:border-emerald-500/20 cursor-pointer"
                       >
                         <div className="flex items-center space-x-4">
                           <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-500 dark:text-emerald-400">
@@ -306,10 +318,10 @@ function HomeView({
                       <div 
                         key={`cred-${idx}`} 
                         onClick={() => navigate(`/accounts?id=${acc.account_id}&type=credit`)}
-                        className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.01] hover:shadow-md hover:border-emerald-500/20 cursor-pointer"
+                        className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.008] will-change-transform hover:shadow-md hover:border-emerald-500/20 cursor-pointer"
                       >
                         <div className="flex items-center space-x-4">
-                          <div className="w-10 h-10 rounded-lg bg-rose-500/20 flex items-center justify-center text-rose-500 dark:text-rose-400">
+                          <div className="w-10 h-10 rounded-lg bg-indigo-500/10 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
                             <CreditCard className="w-5 h-5" />
                           </div>
                           <div>
@@ -327,8 +339,7 @@ function HomeView({
                     
                   </div>
 
-                  <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
-                    <span>Secured by 256-bit AES Encryption</span>
+                  <div className="flex justify-end text-xs text-slate-400 dark:text-slate-500">
                     <div className="flex items-center space-x-1 text-emerald-400">
                       <Lock className="w-3 h-3" />
                       <span>End-to-End Encrypted</span>

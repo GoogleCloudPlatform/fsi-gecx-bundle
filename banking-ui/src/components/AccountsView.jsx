@@ -129,7 +129,7 @@ function AccountsView({ fbUser, customerProfile }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-6 md:p-12">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 pt-28 pb-12 px-6 md:pt-36 md:pb-20 md:px-12">
       <div className="max-w-6xl mx-auto space-y-12">
         {/* Header bar */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-6 border-b border-slate-200 dark:border-slate-900">
