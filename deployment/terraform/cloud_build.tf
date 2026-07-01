@@ -219,7 +219,7 @@ resource "google_cloudbuild_trigger" "db_migration_manual_trigger" {
   include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
 
   substitutions = {
-    _REGION         = var.region
+    _REGION = var.region
   }
 }
 
