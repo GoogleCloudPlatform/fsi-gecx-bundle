@@ -122,7 +122,7 @@ def seed_catalogs_if_missing(db: Session) -> None:
         db.add_all(deposits)
         
     if db.query(MerchantCategoryCode).count() == 0:
-        logger.info("Seeding MerchantCategoryCode ref_data catalog...")
+        logger.info("Seeding MerchantCategoryCode merchants catalog...")
         mcc_records = [
             MerchantCategoryCode(
                 mcc=code,

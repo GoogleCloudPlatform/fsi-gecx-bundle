@@ -17,9 +17,9 @@ from sqlalchemy import Column, String, DateTime
 from utils.database import Base
 
 class MerchantCategoryCode(Base):
-    """Authoritative industry reference mapping of MCC codes to FDX spend categories."""
+    """Authoritative industry reference mapping of MCC codes to FDX spend categories (`merchants.merchant_category_codes`)."""
     __tablename__ = "merchant_category_codes"
-    __table_args__ = {'schema': 'ref_data'}
+    __table_args__ = {'schema': 'merchants'}
 
     mcc = Column(String(10), primary_key=True, index=True)
     primary_category = Column(String(50), nullable=False)

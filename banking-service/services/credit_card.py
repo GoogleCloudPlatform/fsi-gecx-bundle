@@ -77,7 +77,7 @@ def initialize_db_and_seed(db: Session):
         from models.reference import MerchantCategoryCode
         from services.taxonomy_service import DEFAULT_TAXONOMY_MAP, TaxonomyService
         if db.query(MerchantCategoryCode).count() == 0:
-            logger.info("Seeding MerchantCategoryCode ref_data catalog in active DB session...")
+            logger.info("Seeding MerchantCategoryCode merchants catalog in active DB session...")
             mcc_records = [
                 MerchantCategoryCode(
                     mcc=code,

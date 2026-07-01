@@ -31,7 +31,7 @@ def upgrade() -> None:
         sa.Column('detailed_category', sa.String(length=100), nullable=False),
         sa.Column('updated_at', sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint('mcc'),
-        schema='ref_data'
+        schema='merchants'
     )
 
     # 2. Create normalized merchant_master table in merchants schema
@@ -110,4 +110,4 @@ def downgrade() -> None:
     op.drop_index('idx_merchants_mcc', table_name='merchant_master', schema='merchants')
     op.drop_table('merchant_stores', schema='merchants')
     op.drop_table('merchant_master', schema='merchants')
-    op.drop_table('merchant_category_codes', schema='ref_data')
+    op.drop_table('merchant_category_codes', schema='merchants')

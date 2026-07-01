@@ -16,6 +16,7 @@ import datetime
 from sqlalchemy import Column, String, Boolean, Integer, DateTime, Index, ForeignKey
 from sqlalchemy.orm import relationship
 from utils.database import Base, UniversalUUID as UUID, generate_uuid
+from models.reference import MerchantCategoryCode
 
 
 class MerchantMaster(Base):
@@ -81,5 +82,6 @@ class MerchantStore(Base):
         return self.merchant.default_mcc if self.merchant else "0000"
 
 
-# Type alias for legacy referencing
+# Type aliases and exports
 Merchant = MerchantMaster
+__all__ = ["MerchantMaster", "MerchantStore", "Merchant", "MerchantCategoryCode"]
