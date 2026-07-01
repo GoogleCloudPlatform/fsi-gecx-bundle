@@ -83,16 +83,49 @@ async def run_db_seeding():
         logging.error(f"Error during background database seeding: {e}")
 
 
+async def run_outbox_drain_loop():
+    logging.info("Starting background audit outbox draining poller...")
+    try:
+        while True:
+            await asyncio.sleep(10)  # Poll every 10 seconds
+            try:
+                from utils.database import SessionLocal
+                from utils.audit import publish_pending_audit_events
+                db = SessionLocal()
+                try:
+                    loop = asyncio.get_running_loop()
+                    count = await loop.run_in_executor(None, publish_pending_audit_events, db, 50)
+                    if count > 0:
+                        logging.info(f"Background outbox poller published {count} audit events to Pub/Sub.")
+                finally:
+                    db.close()
+            except Exception as ex:
+                logging.error(f"Error in background outbox poller: {ex}")
+    except asyncio.CancelledError:
+        logging.info("Background audit outbox poller shutting down.")
+
+
 @asynccontextmanager
 async def combined_lifespan(app_inst: FastAPI):
     import sys
+    outbox_task = None
     if "pytest" not in sys.modules:
         logging.info("Scheduling background database seeding task on lifespan startup...")
         asyncio.create_task(run_db_seeding())
+        logging.info("Scheduling background audit outbox poller on lifespan startup...")
+        outbox_task = asyncio.create_task(run_outbox_drain_loop())
     else:
-        logging.info("Test environment detected. Skipping background database seeding task.")
-    async with mcp_app.lifespan(app_inst):
-        yield
+        logging.info("Test environment detected. Skipping background database seeding and outbox poller tasks.")
+    try:
+        async with mcp_app.lifespan(app_inst):
+            yield
+    finally:
+        if outbox_task:
+            outbox_task.cancel()
+            try:
+                await outbox_task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(
