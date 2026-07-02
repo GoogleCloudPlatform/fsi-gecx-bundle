@@ -196,3 +196,25 @@ async def test_simulate_surge_success(async_client, db_session):
     assert "active_cards" in payload
     assert "tok_visa_presenter" in payload
 
+@pytest.mark.asyncio
+async def test_inject_anomaly_success(async_client, db_session):
+    global mock_claims
+    mock_claims = {"sub": "presenter-2", "email": "presenter.two@google.com"}
+    
+    # 1. Provision profile first
+    prov_resp = await async_client.post("/api/v1/simulation/provision-my-demo")
+    assert prov_resp.status_code == status.HTTP_201_CREATED
+    
+    # 2. Call inject-anomaly
+    response = await async_client.post("/api/v1/simulation/inject-anomaly")
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["status"] == "ANOMALY_INJECTED"
+    assert data["injected_swipes_count"] == 4
+    assert data["total_fraud_cents"] == 685399
+    
+    # 3. Verify in database
+    from models.credit_card import TransactionAuthorization
+    auths = db_session.query(TransactionAuthorization).filter(TransactionAuthorization.merchant_name == "LUXURY BOUTIQUE CANCUN [MEX]").all()
+    assert len(auths) == 1
+

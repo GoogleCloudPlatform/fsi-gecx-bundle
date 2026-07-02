@@ -93,6 +93,24 @@ def test_identity_models_creation(test_db):
     test_db.refresh(msg)
     assert msg.message == "Hello support"
 
+    address = identity_models.UserAddress(
+        user_id=user.id,
+        address_type="RESIDENTIAL",
+        is_primary=True,
+        street_line_1="1600 Amphitheatre Pkwy",
+        city="Mountain View",
+        state="CA",
+        postal_code="94043",
+        country_code="USA"
+    )
+    test_db.add(address)
+    test_db.commit()
+    test_db.refresh(address)
+    assert address.user_id == user.id
+    assert address.city == "Mountain View"
+    assert len(user.addresses) == 1
+
+
 
 def test_origination_and_ledger_models(test_db):
     user = identity_models.User(

@@ -1,0 +1,257 @@
+[
+  {
+    "name": "Sundar Pichai",
+    "email": "sundar@google.com",
+    "role": "Chief Executive Officer",
+    "home_metro": "MOUNTAIN VIEW CA",
+    "residential_address": {
+      "street": "1600 Amphitheatre Pkwy",
+      "city": "Mountain View",
+      "state": "CA",
+      "postal_code": "94043"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 845,
+    "favorite_mexico_resort": "PARQUE XCARET CANCUN [MEX]"
+  },
+  {
+    "name": "Jeff Dean",
+    "email": "jeff@google.com",
+    "role": "Chief Scientist, Google DeepMind",
+    "home_metro": "MOUNTAIN VIEW CA",
+    "residential_address": {
+      "street": "1800 Page Mill Rd",
+      "city": "Palo Alto",
+      "state": "CA",
+      "postal_code": "94304"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 850,
+    "favorite_mexico_resort": "UBER *TRIP CDMX [MEX]"
+  },
+  {
+    "name": "Demis Hassabis",
+    "email": "demis@google.com",
+    "role": "CEO, Google DeepMind",
+    "home_metro": "SAN FRANCISCO CA",
+    "residential_address": {
+      "street": "345 Speer Blvd",
+      "city": "San Francisco",
+      "state": "CA",
+      "postal_code": "94105"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 835,
+    "favorite_mexico_resort": "RIU PALACE RIVIERA MAYA [MEX]"
+  },
+  {
+    "name": "Ruth Porat",
+    "email": "ruth@google.com",
+    "role": "President and Chief Investment Officer",
+    "home_metro": "MOUNTAIN VIEW CA",
+    "residential_address": {
+      "street": "2400 Sand Hill Rd",
+      "city": "Menlo Park",
+      "state": "CA",
+      "postal_code": "94025"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 840,
+    "favorite_mexico_resort": "JW MARRIOTT CANCUN [MEX]"
+  },
+  {
+    "name": "Thomas Kurian",
+    "email": "tkurian@google.com",
+    "role": "CEO, Google Cloud",
+    "home_metro": "MOUNTAIN VIEW CA",
+    "residential_address": {
+      "street": "1260 Crossman Ave",
+      "city": "Sunnyvale",
+      "state": "CA",
+      "postal_code": "94089"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 830,
+    "favorite_mexico_resort": "PUJOL RESTAURANTE CDMX [MEX]"
+  },
+  {
+    "name": "Marian Croak",
+    "email": "marian@google.com",
+    "role": "VP of Engineering, Responsible AI",
+    "home_metro": "MOUNTAIN VIEW CA",
+    "residential_address": {
+      "street": "1600 Amphitheatre Pkwy",
+      "city": "Mountain View",
+      "state": "CA",
+      "postal_code": "94043"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 820,
+    "favorite_mexico_resort": "STARBUCKS REFORMA CDMX [MEX]"
+  },
+  {
+    "name": "Prabhakar Raghavan",
+    "email": "prabhakar@google.com",
+    "role": "Chief Technologist",
+    "home_metro": "MOUNTAIN VIEW CA",
+    "residential_address": {
+      "street": "10600 N De Anza Blvd",
+      "city": "Cupertino",
+      "state": "CA",
+      "postal_code": "95014"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 825,
+    "favorite_mexico_resort": "PARQUE XCARET CANCUN [MEX]"
+  },
+  {
+    "name": "James Manyika",
+    "email": "jmanyika@google.com",
+    "role": "SVP, Research, Technology & Society",
+    "home_metro": "SAN FRANCISCO CA",
+    "residential_address": {
+      "street": "1 Ferry Building",
+      "city": "San Francisco",
+      "state": "CA",
+      "postal_code": "94111"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 815,
+    "favorite_mexico_resort": "UBER *TRIP CDMX [MEX]"
+  },
+  {
+    "name": "Sissi Hsiao",
+    "email": "sissi@google.com",
+    "role": "VP/GM, Gemini Experiences and Google Assistant",
+    "home_metro": "MOUNTAIN VIEW CA",
+    "residential_address": {
+      "street": "1600 Amphitheatre Pkwy",
+      "city": "Mountain View",
+      "state": "CA",
+      "postal_code": "94043"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 810,
+    "favorite_mexico_resort": "RIU PALACE RIVIERA MAYA [MEX]"
+  },
+  {
+    "name": "Eli Collins",
+    "email": "elicollins@google.com",
+    "role": "VP, Product Management, DeepMind",
+    "home_metro": "SAN FRANCISCO CA",
+    "residential_address": {
+      "street": "543 Market St",
+      "city": "San Francisco",
+      "state": "CA",
+      "postal_code": "94105"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 805,
+    "favorite_mexico_resort": "JW MARRIOTT CANCUN [MEX]"
+  },
+  {
+    "name": "Logan Kilpatrick",
+    "email": "logank@google.com",
+    "role": "Product Lead, Google AI Studio",
+    "home_metro": "SAN FRANCISCO CA",
+    "residential_address": {
+      "street": "345 Speer Blvd",
+      "city": "San Francisco",
+      "state": "CA",
+      "postal_code": "94105"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 795,
+    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+  },
+  {
+    "name": "Paige Bailey",
+    "email": "paigebailey@google.com",
+    "role": "Lead Product Manager, Generative AI Models",
+    "home_metro": "MOUNTAIN VIEW CA",
+    "residential_address": {
+      "street": "1600 Amphitheatre Pkwy",
+      "city": "Mountain View",
+      "state": "CA",
+      "postal_code": "94043"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 790,
+    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+  },
+  {
+    "name": "Josh Woodward",
+    "email": "joshw@google.com",
+    "role": "VP, Google Labs",
+    "home_metro": "SAN FRANCISCO CA",
+    "residential_address": {
+      "street": "2000 Mission St",
+      "city": "San Francisco",
+      "state": "CA",
+      "postal_code": "94110"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 800,
+    "favorite_mexico_resort": "PUJOL RESTAURANTE CDMX [MEX]"
+  },
+  {
+    "name": "Koray Kavukcuoglu",
+    "email": "korayk@google.com",
+    "role": "CTO, Google DeepMind",
+    "home_metro": "MOUNTAIN VIEW CA",
+    "residential_address": {
+      "street": "1600 Amphitheatre Pkwy",
+      "city": "Mountain View",
+      "state": "CA",
+      "postal_code": "94043"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 810,
+    "favorite_mexico_resort": "PARQUE XCARET CANCUN [MEX]"
+  },
+  {
+    "name": "Oriol Vinyals",
+    "email": "vinyals@google.com",
+    "role": "Principal Scientist, Google DeepMind",
+    "home_metro": "SAN FRANCISCO CA",
+    "residential_address": {
+      "street": "345 Speer Blvd",
+      "city": "San Francisco",
+      "state": "CA",
+      "postal_code": "94105"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 805,
+    "favorite_mexico_resort": "STARBUCKS REFORMA CDMX [MEX]"
+  },
+  {
+    "name": "Erik Voit",
+    "email": "erikvoit@google.com",
+    "role": "Principal AI Customer Engineer",
+    "home_metro": "MOUNTAIN VIEW CA",
+    "residential_address": {
+      "street": "1600 Amphitheatre Pkwy",
+      "city": "Mountain View",
+      "state": "CA",
+      "postal_code": "94043"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 825,
+    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+  },
+  {
+    "name": "Mark Presenter",
+    "email": "mark@google.com",
+    "role": "Lead Customer Engineer",
+    "home_metro": "MOUNTAIN VIEW CA",
+    "residential_address": {
+      "street": "1600 Amphitheatre Pkwy",
+      "city": "Mountain View",
+      "state": "CA",
+      "postal_code": "94043"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 820,
+    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+  }
+]

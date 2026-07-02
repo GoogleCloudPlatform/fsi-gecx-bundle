@@ -13,6 +13,11 @@
 # limitations under the License.
 
 import logging
+import uuid
+import datetime
+import random
+import os
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from models.authentication import ValidatedToken
@@ -20,6 +25,8 @@ from utils.auth import get_current_user
 from utils.database import get_db
 from services.seeding_service import provision_user_suite, reset_user_suite
 from models.identity import User
+from models.credit_card import IssuedCard, CreditAccount, TransactionAuthorization
+from utils.audit import record_audit_event
 
 logger = logging.getLogger(__name__)
 
@@ -199,3 +206,84 @@ async def simulate_activity_surge(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Could not connect to synthetic data generator: {exc}"
         )
+
+@router.post("/inject-anomaly", status_code=status.HTTP_200_OK)
+@v1_router.post("/inject-anomaly", status_code=status.HTTP_200_OK)
+@alias_router.post("/inject-anomaly", status_code=status.HTTP_200_OK)
+def inject_targeted_fraud(
+    token: ValidatedToken = Depends(verify_presenter_domain),
+    db: Session = Depends(get_db)
+):
+    """
+    Injects a high-velocity card-not-present (CNP) and international retail fraud surge against the CE presenter's card.
+    simulating someone who skimmed or found their physical card after Coco Bongo.
+    """
+    email = token.email
+    uid = token.user_id
+    if not uid:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User ID missing in claims.")
+
+    db.connection().info["_ignore_rbac"] = True
+    user = db.query(User).filter((User.auth_provider_uid == uid) | (User.email == email)).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo profile not found.")
+
+    card_info = db.query(IssuedCard, CreditAccount).join(
+        CreditAccount, IssuedCard.account_id == CreditAccount.id
+    ).filter(CreditAccount.customer_id == user.id, IssuedCard.status == "ACTIVE").first()
+
+    if not card_info:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active credit card found for user.")
+
+    card, cred_acc = card_info
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    swipes = [
+        ("GAME*TEST TOKEN ONLINE", 499, "5814", "USA", 0),
+        ("APPLE.COM*ONLINE", 149900, "5310", "USA", 0),
+        ("BEST BUY*MKTPLACE", 215000, "5310", "USA", 0),
+        ("LUXURY BOUTIQUE CANCUN [MEX]", 320000, "5310", "MEX", 30),
+    ]
+
+    injected_auths = []
+    for idx, (desc, amt, mcc, country, risk) in enumerate(swipes):
+        auth = TransactionAuthorization(
+            id=uuid.uuid4(),
+            card_id=card.id,
+            account_id=cred_acc.id,
+            transaction_amount_cents=amt,
+            billing_amount_cents=amt,
+            status="PENDING",
+            auth_code=f"FRD{random.randint(100, 999)}",
+            retrieval_reference_number=f"REF{999000+idx:09d}",
+            card_network="VISA",
+            merchant_category_code=mcc,
+            merchant_name=desc,
+            created_at=now - datetime.timedelta(minutes=(3 - idx)),
+            expires_at=now + datetime.timedelta(days=7)
+        )
+        db.add(auth)
+        injected_auths.append(auth)
+        record_audit_event(
+            db,
+            "CREDIT_TRANSACTION_AUTHORIZED",
+            {
+                "account_id": str(cred_acc.id),
+                "authorization_id": str(auth.id),
+                "amount_cents": amt,
+                "merchant_name": desc,
+                "is_fraud_simulation": True,
+                "risk_score": risk
+            },
+        )
+
+    db.commit()
+    logger.info(f"Injected 4 targeted fraud anomaly swipes for user={user.id} ({email}).")
+    return {
+        "status": "ANOMALY_INJECTED",
+        "user_id": str(user.id),
+        "card_token": card.card_token,
+        "injected_swipes_count": len(injected_auths),
+        "total_fraud_cents": sum(amt for _, amt, _, _, _ in swipes),
+        "message": "Fraud surge successfully injected into cards.transaction_authorizations."
+    }

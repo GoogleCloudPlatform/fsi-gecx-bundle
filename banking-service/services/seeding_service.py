@@ -28,7 +28,7 @@ from utils.encryption import encrypt_pii
 from utils.audit import record_audit_event
 
 # Models
-from models.identity import User
+from models.identity import User, UserAddress
 from models.kyc import KYCRecord, UserCreditProfile
 from models.origination import Account, AccountLedgerEntry, Transaction
 from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, CreditProduct, TransactionAuthorization
@@ -46,6 +46,157 @@ def load_static_personas():
     path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "static_personas.json")
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+def load_vip_googlers():
+    path = os.path.join(os.path.dirname(__file__), "..", "resources", "vip_googlers.json")
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+def get_seeding_personas():
+    base_personas = load_static_personas()
+    vip_googlers = load_vip_googlers()
+    
+    existing_tokens = {p.get("card_token", "").lower(): p for p in base_personas}
+    existing_emails = {p.get("email", "").lower(): p for p in base_personas}
+    existing_names = {p.get("first_name", "").lower(): p for p in base_personas}
+    
+    for p in base_personas:
+        p["is_vip_googler"] = True
+        p.setdefault("favorite_mexico_resort", "COCO BONGO CANCUN [MEX]")
+        p.setdefault("address", {
+            "street": "1600 Amphitheatre Pkwy",
+            "city": "Mountain View",
+            "state": "CA",
+            "postal_code": "94043"
+        })
+
+    formatted_vips = []
+    for vip in vip_googlers:
+        name_parts = vip["name"].split(maxsplit=1)
+        first_name = name_parts[0]
+        last_name = name_parts[1] if len(name_parts) > 1 else "Googler"
+        token = f"tok_visa_{first_name.lower()}_{last_name.lower()}"
+        
+        if token.lower() in existing_tokens:
+            match = existing_tokens[token.lower()]
+            match["favorite_mexico_resort"] = vip.get("favorite_mexico_resort", "COCO BONGO CANCUN [MEX]")
+            match["address"] = vip["residential_address"]
+            continue
+        if vip["email"].lower() in existing_emails or first_name.lower() in existing_names:
+            continue
+            
+        vip_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, vip["email"]))
+        score = vip.get("fico_score", 800)
+        
+        formatted_vips.append({
+            "id": vip_id,
+            "first_name": first_name,
+            "last_name": last_name,
+            "cardholder_name": f"{first_name} {last_name}",
+            "card_token": token,
+            "email": vip["email"],
+            "phone_number": "650-253-0000",
+            "ssn": f"999-{random.randint(10, 99)}-{random.randint(1000, 9999)}",
+            "credit_score": score,
+            "credit_tier": vip.get("credit_tier", "PRIME_EXCELLENT"),
+            "stated_annual_income_cents": 35000000,
+            "credit_limit_cents": 2500000,
+            "credit_product": "CASHBACK_EVERYDAY",
+            "home_metro": vip.get("home_metro", "MOUNTAIN VIEW CA"),
+            "favorite_mexico_resort": vip.get("favorite_mexico_resort", "COCO BONGO CANCUN [MEX]"),
+            "is_vip_googler": True,
+            "address": {
+                "street": vip["residential_address"]["street"],
+                "city": vip["residential_address"]["city"],
+                "state": vip["residential_address"]["state"],
+                "postal_code": vip["residential_address"]["postal_code"],
+            },
+            "accounts": [
+                {"type": "CHECKING", "product_name": "Googler Executive Checking", "product_code": "CHECKING_EVERYDAY", "balance_cents": 1500000},
+                {"type": "SAVINGS", "product_name": "Googler High Yield Savings", "product_code": "SAVINGS_HIGH_YIELD", "balance_cents": 5000000},
+            ],
+            "cards": [
+                {"type": "VIRTUAL", "network": "VISA", "status": "ACTIVE"}
+            ]
+        })
+        
+    metros = [
+        ("CHICAGO IL", "Chicago", "IL", "60601"),
+        ("NEW YORK NY", "New York", "NY", "10001"),
+        ("SAN FRANCISCO CA", "San Francisco", "CA", "94105"),
+        ("DALLAS TX", "Dallas", "TX", "75201"),
+        ("SEATTLE WA", "Seattle", "WA", "98101"),
+        ("LOS ANGELES CA", "Los Angeles", "CA", "90001"),
+        ("ATLANTA GA", "Atlanta", "GA", "30301"),
+        ("MIAMI FL", "Miami", "FL", "33101"),
+    ]
+    
+    mock_needed = max(0, 200 - len(base_personas))
+    generated_mock = []
+    
+    first_names = ["Alex", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Jamie", "Avery", "Peyton", "Cameron", "Devon", "Logan", "Jesse", "Reese", "Quinn", "Skyler", "Dakota", "Kendall", "Harley", "Drew", "Finley", "Hayden", "Rowan", "Sawyer", "Teagan", "Emerson", "Lennon", "Parker", "Phoenix", "River"]
+    last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin", "Lee", "Perez", "Thompson", "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson"]
+    
+    for i in range(mock_needed):
+        fn = first_names[i % len(first_names)]
+        ln = f"{last_names[(i // len(first_names)) % len(last_names)]}{i}"
+        email = f"{fn.lower()}.{ln.lower()}@mockbanking.local"
+        uid = str(uuid.uuid5(uuid.NAMESPACE_DNS, email))
+        
+        metro_name, city, state, zip_code = metros[i % len(metros)]
+        
+        tier_roll = i % 10
+        if tier_roll < 3:
+            tier = "PRIME_EXCELLENT"
+            score = random.randint(750, 850)
+            limit = 1500000
+        elif tier_roll < 7:
+            tier = "PRIME"
+            score = random.randint(680, 749)
+            limit = 1000000
+        elif tier_roll < 9:
+            tier = "NEAR_PRIME"
+            score = random.randint(620, 679)
+            limit = 500000
+        else:
+            tier = "SUBPRIME"
+            score = random.randint(550, 619)
+            limit = 250000
+            
+        generated_mock.append({
+            "id": uid,
+            "first_name": fn,
+            "last_name": ln,
+            "cardholder_name": f"{fn} {ln}",
+            "card_token": f"tok_visa_{fn.lower()}_{ln.lower()}",
+            "email": email,
+            "phone_number": f"555-100-{i:04d}",
+            "ssn": f"900-{random.randint(10, 99)}-{random.randint(1000, 9999)}",
+            "credit_score": score,
+            "credit_tier": tier,
+            "stated_annual_income_cents": random.randint(50000, 150000) * 100,
+            "credit_limit_cents": limit,
+            "credit_product": "CASHBACK_EVERYDAY",
+            "home_metro": metro_name,
+            "is_vip_googler": False,
+            "address": {
+                "street": f"{100 + i} Market St",
+                "city": city,
+                "state": state,
+                "postal_code": zip_code,
+            },
+            "accounts": [
+                {"type": "CHECKING", "product_name": "Standard Checking", "product_code": "CHECKING_EVERYDAY", "balance_cents": random.randint(1000, 10000) * 100},
+                {"type": "SAVINGS", "product_name": "High Yield Savings", "product_code": "SAVINGS_HIGH_YIELD", "balance_cents": random.randint(2000, 25000) * 100},
+            ],
+            "cards": [
+                {"type": "VIRTUAL", "network": "VISA", "status": "ACTIVE"}
+            ]
+        })
+        
+    return base_personas + generated_mock + formatted_vips
 
 PERSONAS = load_static_personas()
 
@@ -159,13 +310,14 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
         seed_catalogs_if_missing(db)
         seed_system_settings_if_missing(db)
         
+        seeding_personas = get_seeding_personas()
         cards_manifest = {}
         
-        logger.info(f"Initializing {len(PERSONAS)} user profiles and bank accounts...")
+        logger.info(f"Initializing {len(seeding_personas)} user profiles and bank accounts...")
         
-        for p in PERSONAS:
+        for p in seeding_personas:
             user_uuid = uuid.UUID(p["id"])
-            auth_uid = p.get("auth_provider_uid") or f"auth-{p['first_name'].lower()}"
+            auth_uid = p.get("auth_provider_uid") or f"auth-{p['email']}"
             
             # 1. Create User
             user = User(
@@ -188,6 +340,21 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
                     "last_name": p["last_name"],
                 },
             )
+            
+            # 1b. Create 3NF UserAddress
+            addr_conf = p.get("address", {})
+            user_addr = UserAddress(
+                id=uuid.uuid4(),
+                user_id=user_uuid,
+                address_type="RESIDENTIAL",
+                is_primary=True,
+                street_line_1=addr_conf.get("street", "100 Main St"),
+                city=addr_conf.get("city", p.get("home_metro", "CHICAGO IL").split()[0].title()),
+                state=addr_conf.get("state", "CA"),
+                postal_code=addr_conf.get("postal_code", "94043"),
+                country_code="USA"
+            )
+            db.add(user_addr)
             
             # 2. Create KYCRecord (Envelope encrypted)
             kyc_record_id = uuid.uuid4()
@@ -499,15 +666,17 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
         # Assign a consistent geographical home metro and international travel trip for this customer's demo card
         from models.identity import User
         user_obj = db.query(User).filter(User.id == user_uuid).first()
-        is_googler = user_obj and "GOOGLE" in str(user_obj.email).upper()
+        is_googler = user_obj and ("GOOGLE" in str(user_obj.email).upper() or "PRESENTER" in str(user_obj.last_name).upper())
         if is_googler:
             user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA"])
+            user_travel_country = random.choice(["MEX", "BHS", "DOM"])
         else:
-            user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA"])
-        user_travel_country = random.choice(["MEX", "BHS", "JAM", "DOM", "PRI"])
+            user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA", "ATLANTA GA", "MIAMI FL"])
+            user_travel_country = None
 
         for i in range(12):
-            is_intl = (i in [2, 7, 10])  # 25% international anomaly ratio for travel/fraud alert testing
+            # VIP Googler Mexico Exclusivity Rule: ONLY Googlers get international vacation swipes!
+            is_intl = is_googler and (i in [2, 7, 10])
             target_country = user_travel_country if is_intl else None
             mch, store_desc = MerchantEnrichmentService.get_random_merchant(
                 db, 
@@ -515,6 +684,11 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
                 country=target_country, 
                 home_metro=user_home_metro
             )
+            if is_googler and i == 10:
+                store_desc = "COCO BONGO CANCUN [MEX]"
+                if mch:
+                    mch.mcc = "7999"
+                    mch.category = "Entertainment"
             amount_cents = random.randint(1250, 45000)
             total_swipes_debt_cents += amount_cents
             
@@ -615,6 +789,20 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
                     "last_name": last_name,
                 },
             )
+
+            is_googler_email = "google.com" in email.lower() or "presenter" in email.lower()
+            user_addr = UserAddress(
+                id=uuid.uuid4(),
+                user_id=user_uuid,
+                address_type="RESIDENTIAL",
+                is_primary=True,
+                street_line_1="1600 Amphitheatre Pkwy" if is_googler_email else "500 Market St",
+                city="Mountain View" if is_googler_email else "San Francisco",
+                state="CA",
+                postal_code="94043" if is_googler_email else "94105",
+                country_code="USA"
+            )
+            db.add(user_addr)
 
         # 4. Create KYCRecord (Envelope encrypted) if not exists
         kyc_rec = db.query(KYCRecord).filter(KYCRecord.user_id == user_uuid).first()

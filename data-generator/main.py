@@ -48,6 +48,7 @@ SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "../banking-service/cards.db")
 
 # Load Merchants
 merchants_list: List[Dict[str, Any]] = []
+catalog_path = os.path.join(os.path.dirname(__file__), "..", "banking-service", "resources", "data", "merchant_catalog.json")
 csv_path = os.path.join(os.path.dirname(__file__), "resources", "merchants.csv")
 
 CATEGORY_MCC_MAP = {
@@ -66,7 +67,24 @@ CATEGORY_MCC_MAP = {
     "Rideshare & Transport": "4121",
 }
 
-if os.path.exists(csv_path):
+if os.path.exists(catalog_path):
+    with open(catalog_path, mode="r", encoding="utf-8") as f:
+        catalog_data = json.load(f)
+        for item in catalog_data:
+            mcc = item.get("default_mcc", "5310")
+            stores = item.get("stores", [])
+            for s in stores:
+                merchants_list.append({
+                    "merchant": item["clean_name"],
+                    "descriptor": s.get("raw_descriptor", item["clean_name"]),
+                    "category": item.get("category", "Retail"),
+                    "mcc": mcc,
+                    "country_code": s.get("country_code", "USA"),
+                    "is_international": s.get("is_international", False),
+                    "risk_score": s.get("risk_score", 0)
+                })
+    logger.info(f"Loaded {len(merchants_list)} store locations from 3NF merchant_catalog.json.")
+elif os.path.exists(csv_path):
     with open(csv_path, mode="r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -74,20 +92,23 @@ if os.path.exists(csv_path):
             mcc = CATEGORY_MCC_MAP.get(cat, "5310")
             merchants_list.append({
                 "merchant": row["Merchant"],
+                "descriptor": row["Merchant"],
                 "category": cat,
                 "mcc": mcc,
-                "rank": int(row["Rank"])
+                "country_code": "USA",
+                "is_international": False,
+                "risk_score": 0
             })
     logger.info(f"Loaded {len(merchants_list)} merchants from CSV.")
 else:
     # Minimal fallback list if file doesn't exist
     merchants_list = [
-        {"merchant": "Amazon", "category": "Retail", "mcc": "5310", "rank": 1},
-        {"merchant": "Starbucks", "category": "Coffee Shops & Dining", "mcc": "5814", "rank": 10},
-        {"merchant": "Delta Air Lines", "category": "Airlines & Travel", "mcc": "4511", "rank": 13},
-        {"merchant": "Shell", "category": "Gas Stations", "mcc": "5541", "rank": 22},
+        {"merchant": "Amazon", "descriptor": "AMAZON.COM*MKTPLACE", "category": "Retail", "mcc": "5310", "country_code": "USA", "is_international": False, "risk_score": 0},
+        {"merchant": "Starbucks", "descriptor": "STARBUCKS - MOUNTAIN VIEW CA", "category": "Coffee Shops & Dining", "mcc": "5814", "country_code": "USA", "is_international": False, "risk_score": 0},
+        {"merchant": "Delta Air Lines", "descriptor": "DELTA AIR LINES", "category": "Airlines & Travel", "mcc": "4511", "country_code": "USA", "is_international": False, "risk_score": 0},
+        {"merchant": "Coco Bongo", "descriptor": "COCO BONGO CANCUN [MEX]", "category": "Fast Food & Dining", "mcc": "5812", "country_code": "MEX", "is_international": True, "risk_score": 25},
     ]
-    logger.warning("Merchants CSV not found. Using minimal fallback merchants.")
+    logger.warning("Catalog and CSV not found. Using minimal fallback merchants.")
 
 # Static Fallback Personas
 DEFAULT_PERSONAS = [
@@ -183,6 +204,25 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
     if not matching_merchants:
         matching_merchants = merchants_list
         
+    is_googler = "GOOGLE" in str(card.get("cardholder_name", "")).upper() or "PRESENTER" in str(card.get("cardholder_name", "")).upper() or "DEMO" in str(card.get("cardholder_name", "")).upper()
+    metros = ["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA"]
+    if is_googler:
+        home_metro = ["MOUNTAIN VIEW CA", "SAN FRANCISCO CA"][hash(card.get("cardholder_name", "default")) % 2]
+    else:
+        home_metro = metros[hash(card.get("cardholder_name", "default")) % len(metros)]
+
+    # Filter merchants matching persona MCCs and region rules (Googlers get Mexico travel swipes; general accounts get domestic)
+    is_intl_swipe = is_googler and (random.random() < 0.25)
+    if is_intl_swipe:
+        region_merchants = [m for m in merchants_list if m.get("is_international") and m.get("country_code") == "MEX" and m["mcc"] in card["mccs"]]
+        if not region_merchants:
+            region_merchants = [m for m in merchants_list if m.get("is_international") and m.get("country_code") == "MEX"]
+    else:
+        region_merchants = [m for m in merchants_list if not m.get("is_international") and m["mcc"] in card["mccs"]]
+        if not region_merchants:
+            region_merchants = [m for m in merchants_list if not m.get("is_international")]
+
+    matching_merchants = region_merchants if region_merchants else merchants_list
     merchant = random.choice(matching_merchants)
     amount_cents = random.randint(card["amount_min"], card["amount_max"])
     
@@ -194,14 +234,10 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
     elif merchant["mcc"] == "5541": # Gas
         amount_cents = min(amount_cents, 10000) # Max $100.00
 
-    metros = ["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA"]
-    is_googler = "GOOGLE" in str(card.get("cardholder_name", "")).upper() or "PRESENTER" in str(card.get("cardholder_name", "")).upper() or "DEMO" in str(card.get("cardholder_name", "")).upper()
-    if is_googler:
-        home_metro = ["MOUNTAIN VIEW CA", "SAN FRANCISCO CA"][hash(card.get("cardholder_name", "default")) % 2]
-    else:
-        home_metro = metros[hash(card.get("cardholder_name", "default")) % len(metros)]
     raw_name = merchant["merchant"]
-    if merchant.get("category") in ["Streaming & Entertainment", "Electronics & Software"] or raw_name in ["Amazon", "Netflix", "Spotify", "Apple"]:
+    if merchant.get("descriptor") and merchant["descriptor"] != raw_name:
+        formatted_merchant = merchant["descriptor"]
+    elif merchant.get("category") in ["Streaming & Entertainment", "Electronics & Software"] or raw_name in ["Amazon", "Netflix", "Spotify", "Apple"]:
         formatted_merchant = f"{raw_name.upper()}*ONLINE" if "Amazon" not in raw_name else "AMAZON.COM*MKTPLACE"
     else:
         formatted_merchant = f"{raw_name.upper()} - {home_metro}"
