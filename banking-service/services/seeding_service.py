@@ -58,18 +58,14 @@ def get_seeding_personas():
     base_personas = load_static_personas()
     vip_googlers = load_vip_googlers()
     
-    existing_tokens = {p.get("card_token", "").lower(): p for p in base_personas}
-    existing_emails = {p.get("email", "").lower(): p for p in base_personas}
-    existing_names = {p.get("first_name", "").lower(): p for p in base_personas}
-    
     for p in base_personas:
-        p["is_vip_googler"] = True
-        p.setdefault("favorite_mexico_resort", "COCO BONGO CANCUN [MEX]")
+        p["is_vip_googler"] = False
+        p.setdefault("home_metro", "CHICAGO IL")
         p.setdefault("address", {
-            "street": "1600 Amphitheatre Pkwy",
-            "city": "Mountain View",
-            "state": "CA",
-            "postal_code": "94043"
+            "street": "100 Market St",
+            "city": "Chicago",
+            "state": "IL",
+            "postal_code": "60601"
         })
 
     formatted_vips = []
@@ -78,15 +74,6 @@ def get_seeding_personas():
         first_name = name_parts[0]
         last_name = name_parts[1] if len(name_parts) > 1 else "Googler"
         token = f"tok_visa_{first_name.lower()}_{last_name.lower()}"
-        
-        if token.lower() in existing_tokens:
-            match = existing_tokens[token.lower()]
-            match["favorite_mexico_resort"] = vip.get("favorite_mexico_resort", "COCO BONGO CANCUN [MEX]")
-            match["address"] = vip["residential_address"]
-            continue
-        if vip["email"].lower() in existing_emails or first_name.lower() in existing_names:
-            continue
-            
         vip_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, vip["email"]))
         score = vip.get("fico_score", 800)
         
