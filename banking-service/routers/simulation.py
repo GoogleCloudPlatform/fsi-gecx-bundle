@@ -274,7 +274,7 @@ def inject_targeted_fraud(
             card_network="VISA",
             merchant_category_code=mcc,
             merchant_name=desc,
-            created_at=now - datetime.timedelta(minutes=(3 - idx)),
+            created_at=now + datetime.timedelta(seconds=idx),
             expires_at=now + datetime.timedelta(days=7)
         )
         db.add(auth)
@@ -379,8 +379,8 @@ def get_global_stream(
     to animate the Admin Simulation Lakehouse CDC replication monitor.
     """
     from models.credit_card import TransactionAuthorization, PostedTransaction
-    auths = db.query(TransactionAuthorization).order_by(TransactionAuthorization.created_at.desc()).limit(15).all()
-    posteds = db.query(PostedTransaction).order_by(PostedTransaction.posted_at.desc()).limit(15).all()
+    auths = db.query(TransactionAuthorization).order_by(TransactionAuthorization.created_at.desc()).limit(50).all()
+    posteds = db.query(PostedTransaction).order_by(PostedTransaction.posted_at.desc()).limit(50).all()
 
     stream_items = []
     for a in auths:
@@ -433,8 +433,8 @@ async def stream_sse(
         while True:
             try:
                 db.expire_all()
-                auths = db.query(TransactionAuthorization).order_by(TransactionAuthorization.created_at.desc()).limit(15).all()
-                posteds = db.query(PostedTransaction).order_by(PostedTransaction.posted_at.desc()).limit(15).all()
+                auths = db.query(TransactionAuthorization).order_by(TransactionAuthorization.created_at.desc()).limit(50).all()
+                posteds = db.query(PostedTransaction).order_by(PostedTransaction.posted_at.desc()).limit(50).all()
                 stream_items = []
                 for a in auths:
                     is_mex = "[MEX]" in str(a.merchant_name) or str(a.merchant_category_code) == "7011"

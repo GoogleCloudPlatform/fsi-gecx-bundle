@@ -73,6 +73,15 @@ function AdminSimulationView() {
     };
   }, []);
 
+  useEffect(() => {
+    if (feedback.message) {
+      const timer = setTimeout(() => {
+        setFeedback({ type: '', title: '', message: '', data: null });
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [feedback]);
+
   // Simulate subtle real-time CDC fluctuations for dynamic feel
   useEffect(() => {
     const interval = setInterval(() => {
@@ -200,32 +209,6 @@ function AdminSimulationView() {
           </div>
         </div>
       </div>
-
-      {/* Feedback Alert Box */}
-      {feedback.message && (
-        <div className={`mb-8 p-5 rounded-2xl border backdrop-blur-md flex items-start gap-4 transition-all duration-300 shadow-lg ${
-          feedback.type === 'success' 
-            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-200' 
-            : feedback.type === 'warning'
-            ? 'bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200'
-            : 'bg-rose-500/10 border-rose-500/30 text-rose-900 dark:text-rose-200'
-        }`}>
-          <div className="p-2 rounded-xl bg-white/20 dark:bg-black/20 mt-0.5">
-            {feedback.type === 'success' && <CheckCircle2 className="w-6 h-6 text-emerald-500" />}
-            {feedback.type === 'warning' && <AlertTriangle className="w-6 h-6 text-amber-500" />}
-            {feedback.type === 'error' && <ShieldAlert className="w-6 h-6 text-rose-500" />}
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <h4 className="font-bold text-base">{feedback.title}</h4>
-            <p className="text-sm mt-1 opacity-90">{feedback.message}</p>
-            {feedback.data && (
-              <div className="mt-3 p-3 rounded-xl bg-slate-900/80 text-slate-200 font-mono text-xs overflow-x-auto border border-slate-700/50">
-                <pre>{JSON.stringify(feedback.data, null, 2)}</pre>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Section 1: Datastream & WAL CDC Replication Status */}
       <div className="mb-10 p-6 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5">
@@ -429,6 +412,35 @@ function AdminSimulationView() {
           </button>
         </div>
       </div>
+
+      {/* Feedback Alert Box (Pop-up above live streaming ledger) */}
+      {feedback.message && (
+        <div className={`mb-8 p-5 rounded-2xl border backdrop-blur-md flex items-start gap-4 transition-all duration-300 shadow-xl animate-fade-in ${
+          feedback.type === 'success' 
+            ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-900 dark:text-emerald-200 shadow-emerald-500/5' 
+            : feedback.type === 'warning'
+            ? 'bg-amber-500/15 border-amber-500/40 text-amber-900 dark:text-amber-200 shadow-amber-500/5'
+            : 'bg-rose-500/15 border-rose-500/40 text-rose-900 dark:text-rose-200 shadow-rose-500/5'
+        }`}>
+          <div className="p-2 rounded-xl bg-white/20 dark:bg-black/20 mt-0.5 shrink-0">
+            {feedback.type === 'success' && <CheckCircle2 className="w-6 h-6 text-emerald-500 animate-bounce" />}
+            {feedback.type === 'warning' && <AlertTriangle className="w-6 h-6 text-amber-500 animate-pulse" />}
+            {feedback.type === 'error' && <ShieldAlert className="w-6 h-6 text-rose-500 animate-pulse" />}
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-base">{feedback.title}</h4>
+              <span className="text-[10px] font-mono opacity-60 uppercase tracking-wider">Auto-dismissing in 5s...</span>
+            </div>
+            <p className="text-sm mt-1 opacity-90">{feedback.message}</p>
+            {feedback.data && (
+              <div className="mt-3 p-3 rounded-xl bg-slate-900/80 text-slate-200 font-mono text-xs overflow-x-auto border border-slate-700/50">
+                <pre>{JSON.stringify(feedback.data, null, 2)}</pre>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Section 3: Live Global Lakehouse Activity Stream */}
       <div className="p-7 rounded-3xl bg-slate-900 text-slate-300 border border-slate-800 shadow-2xl">
