@@ -256,6 +256,17 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
     rrn = "".join(random.choices("0123456789", k=12))
     
     headers = {"X-Card-Network-Token": CARD_NETWORK_TOKEN}
+    if BANKING_SERVICE_URL and "localhost" not in BANKING_SERVICE_URL and "127.0.0.1" not in BANKING_SERVICE_URL:
+        try:
+            import google.auth
+            import google.auth.transport.requests
+            from google.oauth2 import id_token
+            auth_req = google.auth.transport.requests.Request()
+            oidc_token = id_token.fetch_id_token(auth_req, BANKING_SERVICE_URL)
+            if oidc_token:
+                headers["Authorization"] = f"Bearer {oidc_token}"
+        except Exception as auth_err:
+            logger.warning(f"Could not fetch Google OIDC ID token for {BANKING_SERVICE_URL}: {auth_err}")
     auth_payload = {
         "card_token": card["card_token"],
         "amount_cents": amount_cents,
