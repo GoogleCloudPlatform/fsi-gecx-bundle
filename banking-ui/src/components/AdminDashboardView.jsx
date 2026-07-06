@@ -186,6 +186,13 @@ function AdminDashboardView() {
       path: "/debug",
       icon: Bell,
       color: "from-purple-500 to-pink-600"
+    },
+    {
+      title: "Active Lakehouse & Simulation",
+      description: "Monitor real-time BigQuery Data Canvas spend velocity, Datastream CDC sync status, and inject targeted fraud anomalies or activity surges.",
+      path: "/admin/simulation",
+      icon: Sparkles,
+      color: "from-cyan-500 to-blue-600"
     }
   ];
 

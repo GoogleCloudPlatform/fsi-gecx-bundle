@@ -34,7 +34,7 @@
   },
   {
     "product_code": "SECURED_STARTER",
-    "product_name": "Nova Secured Rebuilder",
+    "product_name": "Nova Secured Starter",
     "min_credit_limit_cents": 50000,
     "max_credit_limit_cents": 250000,
     "purchase_apr": 0.2799,

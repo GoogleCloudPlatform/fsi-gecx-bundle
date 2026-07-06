@@ -18,16 +18,24 @@ from main import app
 from models.authentication import ValidatedToken
 from utils.auth import get_current_user
 from utils.database import SessionLocal
-from services.credit_card import initialize_db_and_seed
+from services.seeding_service import perform_algorithmic_seeding
 
 client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
 def setup_db():
+    from utils.database import Base
+    import models.merchant
+    import models.identity
+    import models.kyc
+    import models.origination
+    import models.credit_card
+    import models.settings
     db = SessionLocal()
     try:
-        initialize_db_and_seed(db)
+        Base.metadata.create_all(bind=db.get_bind())
+        perform_algorithmic_seeding(db)
     finally:
         db.close()
 
@@ -44,7 +52,7 @@ def test_taxonomy_service():
 
 
 def test_fdx_account_info_unauthorized_scope():
-    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "cust-123", "scope": "other:scope"})
+    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "jane.doe@example.com", "scope": "other:scope"})
     try:
         resp = client.get("/api/fdx/v6/accounts/88888888-8888-4888-8888-999999999999")
         assert resp.status_code == 403
@@ -54,7 +62,7 @@ def test_fdx_account_info_unauthorized_scope():
 
 
 def test_fdx_account_info_success():
-    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "cust-123", "scope": "accounts:read"})
+    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "jane.doe@example.com", "scope": "accounts:read"})
     try:
         resp = client.get("/api/fdx/v6/accounts/88888888-8888-4888-8888-999999999999")
         assert resp.status_code == 200
@@ -67,8 +75,8 @@ def test_fdx_account_info_success():
 
 
 def test_fdx_idor_prevention():
-    # Attempting to read cust-123's account using cust-999 token
-    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "cust-999", "scope": "accounts:read"})
+    # Attempting to read Jane Doe's account using an unauthorized user's token
+    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "unauthorized@example.com", "scope": "accounts:read"})
     try:
         resp = client.get("/api/fdx/v6/accounts/88888888-8888-4888-8888-999999999999")
         assert resp.status_code == 403
@@ -78,7 +86,7 @@ def test_fdx_idor_prevention():
 
 
 def test_realtime_balance_success():
-    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "cust-123", "scope": "accounts:read"})
+    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "jane.doe@example.com", "scope": "accounts:read"})
     try:
         resp = client.get("/api/fdx/v6/accounts/88888888-8888-4888-8888-999999999999/balance/realtime")
         assert resp.status_code == 200
@@ -90,7 +98,7 @@ def test_realtime_balance_success():
 
 
 def test_unified_transactions_success():
-    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "cust-123", "scope": "transactions:read"})
+    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "jane.doe@example.com", "scope": "transactions:read"})
     try:
         resp = client.get("/api/fdx/v6/accounts/88888888-8888-4888-8888-999999999999/transactions")
         assert resp.status_code == 200
@@ -102,7 +110,7 @@ def test_unified_transactions_success():
 
 
 def test_payment_networks_success():
-    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "cust-123", "scope": "accounts:read"})
+    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "jane.doe@example.com", "scope": "accounts:read"})
     try:
         resp = client.get("/api/fdx/v6/accounts/88888888-8888-4888-8888-999999999999/payment-networks")
         assert resp.status_code == 200
@@ -115,7 +123,7 @@ def test_payment_networks_success():
 
 
 def test_list_taxonomies_success():
-    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "cust-123", "scope": "accounts:read"})
+    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "jane.doe@example.com", "scope": "accounts:read"})
     try:
         resp = client.get("/api/fdx/v6/taxonomies")
         assert resp.status_code == 200
@@ -127,7 +135,7 @@ def test_list_taxonomies_success():
 
 
 def test_get_taxonomy_by_mcc_success():
-    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "cust-123", "scope": "accounts:read"})
+    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "jane.doe@example.com", "scope": "accounts:read"})
     try:
         resp = client.get("/api/fdx/v6/taxonomies/5814")
         assert resp.status_code == 200
@@ -139,7 +147,7 @@ def test_get_taxonomy_by_mcc_success():
 
 
 def test_internal_list_taxonomies_success():
-    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "cust-123"})
+    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "jane.doe@example.com"})
     try:
         resp = client.get("/credit-card/taxonomies")
         assert resp.status_code == 200
@@ -150,7 +158,7 @@ def test_internal_list_taxonomies_success():
 
 
 def test_internal_get_taxonomy_by_mcc_success():
-    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "cust-123"})
+    app.dependency_overrides[get_current_user] = lambda: ValidatedToken(claims={"sub": "jane.doe@example.com"})
     try:
         resp = client.get("/credit-card/taxonomies/5814")
         assert resp.status_code == 200

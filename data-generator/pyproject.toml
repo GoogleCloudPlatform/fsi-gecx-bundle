@@ -26,3 +26,7 @@ dev = [
 name = "pypi"
 url = "https://pypi.org/simple"
 default = true
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "auto"

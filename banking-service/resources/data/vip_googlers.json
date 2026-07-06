@@ -11,8 +11,7 @@
       "postal_code": "94301"
     },
     "credit_tier": "PRIME_EXCELLENT",
-    "fico_score": 850,
-    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+    "fico_score": 850
   },
   {
     "name": "Sergey Brin",
@@ -26,8 +25,7 @@
       "postal_code": "94022"
     },
     "credit_tier": "PRIME_EXCELLENT",
-    "fico_score": 850,
-    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+    "fico_score": 850
   },
   {
     "name": "Sundar Pichai",
@@ -41,8 +39,7 @@
       "postal_code": "94062"
     },
     "credit_tier": "PRIME_EXCELLENT",
-    "fico_score": 845,
-    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+    "fico_score": 845
   },
   {
     "name": "Susan Wojcicki",
@@ -56,8 +53,7 @@
       "postal_code": "94025"
     },
     "credit_tier": "PRIME_EXCELLENT",
-    "fico_score": 835,
-    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+    "fico_score": 835
   },
   {
     "name": "Jeff Dean",
@@ -71,8 +67,7 @@
       "postal_code": "94304"
     },
     "credit_tier": "PRIME_EXCELLENT",
-    "fico_score": 850,
-    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+    "fico_score": 850
   },
   {
     "name": "Eric Schmidt",
@@ -86,8 +81,7 @@
       "postal_code": "94027"
     },
     "credit_tier": "PRIME_EXCELLENT",
-    "fico_score": 840,
-    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+    "fico_score": 840
   },
   {
     "name": "Marissa Mayer",
@@ -101,8 +95,7 @@
       "postal_code": "94301"
     },
     "credit_tier": "PRIME_EXCELLENT",
-    "fico_score": 820,
-    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+    "fico_score": 820
   },
   {
     "name": "Andy Rubin",
@@ -116,8 +109,7 @@
       "postal_code": "94022"
     },
     "credit_tier": "PRIME_EXCELLENT",
-    "fico_score": 810,
-    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+    "fico_score": 810
   },
   {
     "name": "Demis Hassabis",
@@ -131,8 +123,7 @@
       "postal_code": "94041"
     },
     "credit_tier": "PRIME_EXCELLENT",
-    "fico_score": 845,
-    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+    "fico_score": 845
   },
   {
     "name": "Sanjay Ghemawat",
@@ -146,8 +137,7 @@
       "postal_code": "94301"
     },
     "credit_tier": "PRIME_EXCELLENT",
-    "fico_score": 850,
-    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+    "fico_score": 850
   },
   {
     "name": "Ruth Porat",
@@ -161,8 +151,7 @@
       "postal_code": "94025"
     },
     "credit_tier": "PRIME_EXCELLENT",
-    "fico_score": 840,
-    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+    "fico_score": 840
   },
   {
     "name": "Paul Buchheit",
@@ -176,8 +165,7 @@
       "postal_code": "94041"
     },
     "credit_tier": "PRIME_EXCELLENT",
-    "fico_score": 830,
-    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+    "fico_score": 830
   },
   {
     "name": "Thomas Kurian",
@@ -191,8 +179,7 @@
       "postal_code": "95070"
     },
     "credit_tier": "PRIME_EXCELLENT",
-    "fico_score": 845,
-    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+    "fico_score": 845
   },
   {
     "name": "Tim Berners-Lee",
@@ -206,8 +193,7 @@
       "postal_code": "94028"
     },
     "credit_tier": "PRIME_EXCELLENT",
-    "fico_score": 835,
-    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+    "fico_score": 835
   },
   {
     "name": "Vint Cerf",
@@ -221,7 +207,6 @@
       "postal_code": "94010"
     },
     "credit_tier": "PRIME_EXCELLENT",
-    "fico_score": 840,
-    "favorite_mexico_resort": "COCO BONGO CANCUN [MEX]"
+    "fico_score": 840
   }
 ]

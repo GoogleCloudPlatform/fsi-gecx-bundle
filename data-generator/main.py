@@ -14,10 +14,10 @@
 
 import asyncio
 import csv
+import json
 import logging
 import os
 import random
-import sqlite3
 import sys
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
@@ -33,23 +33,40 @@ class CardPayload(BaseModel):
 class SurgeRequest(BaseModel):
     active_cards: Optional[List[CardPayload]] = None
 
+class AnomalyRequest(BaseModel):
+    card_token: Optional[str] = None
+    user_id: Optional[str] = None
+    email: Optional[str] = None
+
 import httpx
-from fastapi import FastAPI, BackgroundTasks, HTTPException, status
+from fastapi import FastAPI, BackgroundTasks, HTTPException, status, Header, Depends
+from fastapi.middleware.cors import CORSMiddleware
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("data-generator")
 
 app = FastAPI(title="Modernized Synthetic Transaction Data Generator")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Configs
 BANKING_SERVICE_URL = os.getenv("BANKING_SERVICE_URL", "http://localhost:8000")
 CARD_NETWORK_TOKEN = os.getenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")
-SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "../banking-service/cards.db")
 
-# Load Merchants
-merchants_list: List[Dict[str, Any]] = []
-catalog_path = os.path.join(os.path.dirname(__file__), "..", "banking-service", "resources", "data", "merchant_catalog.json")
-csv_path = os.path.join(os.path.dirname(__file__), "resources", "merchants.csv")
+def verify_switch_or_presenter_token(
+    x_card_network_token: Optional[str] = Header(None, alias="X-Card-Network-Token")
+):
+    if x_card_network_token and x_card_network_token == CARD_NETWORK_TOKEN:
+        return True
+    if os.getenv("ENV", "local") == "local" or not x_card_network_token:
+        return True
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized access to data generator.")
 
 CATEGORY_MCC_MAP = {
     "Airlines & Travel": "4511",
@@ -67,48 +84,71 @@ CATEGORY_MCC_MAP = {
     "Rideshare & Transport": "4121",
 }
 
-if os.path.exists(catalog_path):
-    with open(catalog_path, mode="r", encoding="utf-8") as f:
-        catalog_data = json.load(f)
-        for item in catalog_data:
-            mcc = item.get("default_mcc", "5310")
-            stores = item.get("stores", [])
-            for s in stores:
-                merchants_list.append({
-                    "merchant": item["clean_name"],
-                    "descriptor": s.get("raw_descriptor", item["clean_name"]),
-                    "category": item.get("category", "Retail"),
-                    "mcc": mcc,
-                    "country_code": s.get("country_code", "USA"),
-                    "is_international": s.get("is_international", False),
-                    "risk_score": s.get("risk_score", 0)
-                })
-    logger.info(f"Loaded {len(merchants_list)} store locations from 3NF merchant_catalog.json.")
-elif os.path.exists(csv_path):
-    with open(csv_path, mode="r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            cat = row["Category"]
-            mcc = CATEGORY_MCC_MAP.get(cat, "5310")
-            merchants_list.append({
-                "merchant": row["Merchant"],
-                "descriptor": row["Merchant"],
-                "category": cat,
-                "mcc": mcc,
-                "country_code": "USA",
-                "is_international": False,
-                "risk_score": 0
-            })
-    logger.info(f"Loaded {len(merchants_list)} merchants from CSV.")
-else:
-    # Minimal fallback list if file doesn't exist
+merchants_list: List[Dict[str, Any]] = []
+
+def get_merchants() -> List[Dict[str, Any]]:
+    """Fetches merchant catalog via HTTP from banking-service, falling back to local resources or static defaults."""
+    global merchants_list
+    if merchants_list:
+        return merchants_list
+        
+    try:
+        with httpx.Client(timeout=3.0) as client:
+            res = client.get(f"{BANKING_SERVICE_URL}/api/v1/merchants")
+            if res.status_code == 200:
+                data = res.json()
+                loaded = []
+                for item in data:
+                    loaded.append({
+                        "merchant": item.get("clean_name", "Unknown"),
+                        "descriptor": item.get("raw_descriptor", item.get("clean_name", "Unknown")),
+                        "category": item.get("category", "Retail"),
+                        "mcc": item.get("default_mcc", "5310"),
+                        "country_code": item.get("country_code", "USA"),
+                        "is_international": item.get("is_international", False),
+                        "risk_score": item.get("risk_score", 0)
+                    })
+                if loaded:
+                    merchants_list = loaded
+                    logger.info(f"Retrieved {len(merchants_list)} merchants via HTTP from {BANKING_SERVICE_URL}/api/v1/merchants.")
+                    return merchants_list
+    except Exception as e:
+        logger.warning(f"Could not fetch merchants via HTTP from {BANKING_SERVICE_URL}: {e}")
+
+    # Fallback to local CSV in data-generator/resources/merchants.csv if present
+    csv_path = os.path.join(os.path.dirname(__file__), "resources", "merchants.csv")
+    if os.path.exists(csv_path):
+        try:
+            with open(csv_path, mode="r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                loaded = []
+                for row in reader:
+                    cat = row.get("Category", "Retail")
+                    mcc = CATEGORY_MCC_MAP.get(cat, "5310")
+                    loaded.append({
+                        "merchant": row.get("Merchant", "Unknown"),
+                        "descriptor": row.get("Merchant", "Unknown"),
+                        "category": cat,
+                        "mcc": mcc,
+                        "country_code": "USA",
+                        "is_international": False,
+                        "risk_score": 0
+                    })
+                if loaded:
+                    merchants_list = loaded
+                    logger.info(f"Loaded {len(merchants_list)} merchants from local CSV.")
+                    return merchants_list
+        except Exception as e:
+            logger.error(f"Error reading local CSV: {e}")
+
+    # Minimal fallback list
     merchants_list = [
         {"merchant": "Amazon", "descriptor": "AMAZON.COM*MKTPLACE", "category": "Retail", "mcc": "5310", "country_code": "USA", "is_international": False, "risk_score": 0},
         {"merchant": "Starbucks", "descriptor": "STARBUCKS - MOUNTAIN VIEW CA", "category": "Coffee Shops & Dining", "mcc": "5814", "country_code": "USA", "is_international": False, "risk_score": 0},
         {"merchant": "Delta Air Lines", "descriptor": "DELTA AIR LINES", "category": "Airlines & Travel", "mcc": "4511", "country_code": "USA", "is_international": False, "risk_score": 0},
         {"merchant": "Coco Bongo", "descriptor": "COCO BONGO CANCUN [MEX]", "category": "Fast Food & Dining", "mcc": "5812", "country_code": "MEX", "is_international": True, "risk_score": 25},
     ]
-    logger.warning("Catalog and CSV not found. Using minimal fallback merchants.")
+    return merchants_list
 
 # Static Fallback Personas
 DEFAULT_PERSONAS = [
@@ -148,61 +188,32 @@ DEFAULT_PERSONAS = [
 
 def get_active_cards() -> List[Dict[str, Any]]:
     """
-    Attempts to fetch active card tokens dynamically from local SQLite cards.db.
+    Attempts to fetch active card tokens dynamically via HTTP GET from banking-service.
     Falls back to static DEFAULT_PERSONAS manifest.
     """
-    if os.path.exists(SQLITE_DB_PATH):
-        try:
-            conn = sqlite3.connect(SQLITE_DB_PATH)
-            cursor = conn.cursor()
-            cursor.execute("SELECT card_token, cardholder_name FROM issued_card WHERE status = 'ACTIVE'")
-            rows = cursor.fetchall()
-            conn.close()
-            
-            if rows:
-                cards = []
-                for row in rows:
-                    token, name = row[0], row[1]
-                    name_lower = name.lower()
-                    
-                    # Deduce profile persona mapping based on name
-                    if "erik" in name_lower:
-                        persona, mccs, a_min, a_max = "HNW", ["4511", "7011", "5812"], 50000, 400000
-                    elif "servedio" in name_lower or "marcus" in name_lower:
-                        persona, mccs, a_min, a_max = "PRIME", ["5411", "5541", "5310", "4121"], 1500, 15000
-                    elif "chloe" in name_lower:
-                        persona, mccs, a_min, a_max = "YPRO", ["5814", "7841", "5812"], 400, 3500
-                    else:
-                        # Fallback random persona
-                        persona = random.choice(["HNW", "PRIME", "YPRO"])
-                        if persona == "HNW":
-                            mccs, a_min, a_max = ["4511", "7011", "5812"], 50000, 400000
-                        elif persona == "PRIME":
-                            mccs, a_min, a_max = ["5411", "5541", "5310", "4121"], 1500, 15000
-                        else:
-                            mccs, a_min, a_max = ["5814", "7841", "5812"], 400, 3500
-                            
-                    cards.append({
-                        "card_token": token,
-                        "cardholder_name": name,
-                        "persona": persona,
-                        "mccs": mccs,
-                        "amount_min": a_min,
-                        "amount_max": a_max
-                    })
-                logger.info(f"Retrieved {len(cards)} active card tokens from SQLite.")
-                return cards
-        except Exception as e:
-            logger.warning(f"Failed to query SQLite cards.db: {e}. Falling back to default personas.")
-            
+    try:
+        headers = {"X-Card-Network-Token": CARD_NETWORK_TOKEN}
+        with httpx.Client(timeout=3.0) as client:
+            res = client.get(f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards", headers=headers)
+            if res.status_code == 200:
+                data = res.json()
+                cards = data.get("active_cards", [])
+                if cards:
+                    logger.info(f"Retrieved {len(cards)} active card tokens via HTTP from banking-service.")
+                    return cards
+    except Exception as e:
+        logger.warning(f"Could not fetch active cards via HTTP from {BANKING_SERVICE_URL}: {e}")
+
+    logger.info("Using static DEFAULT_PERSONAS fallback for active cards.")
     return DEFAULT_PERSONAS
 
 async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) -> None:
     """Simulates a single credit card auth/settle/reverse workflow against the issuing bank gateway."""
-    # Filter merchants matching persona MCCs
-    matching_merchants = [m for m in merchants_list if m["mcc"] in card["mccs"]]
+    merchants = get_merchants()
+    mccs = card.get("mccs", ["5310", "5411", "5541", "4121"])
+    matching_merchants = [m for m in merchants if m.get("mcc") in mccs]
     if not matching_merchants:
-        matching_merchants = merchants_list
+        matching_merchants = merchants
         
     is_googler = "GOOGLE" in str(card.get("cardholder_name", "")).upper() or "PRESENTER" in str(card.get("cardholder_name", "")).upper() or "DEMO" in str(card.get("cardholder_name", "")).upper()
     metros = ["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA"]
@@ -211,30 +222,30 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
     else:
         home_metro = metros[hash(card.get("cardholder_name", "default")) % len(metros)]
 
-    # Filter merchants matching persona MCCs and region rules (Googlers get Mexico travel swipes; general accounts get domestic)
     is_intl_swipe = is_googler and (random.random() < 0.25)
     if is_intl_swipe:
-        region_merchants = [m for m in merchants_list if m.get("is_international") and m.get("country_code") == "MEX" and m["mcc"] in card["mccs"]]
+        region_merchants = [m for m in merchants if m.get("is_international") and m.get("country_code") == "MEX" and m.get("mcc") in mccs]
         if not region_merchants:
-            region_merchants = [m for m in merchants_list if m.get("is_international") and m.get("country_code") == "MEX"]
+            region_merchants = [m for m in merchants if m.get("is_international") and m.get("country_code") == "MEX"]
     else:
-        region_merchants = [m for m in merchants_list if not m.get("is_international") and m["mcc"] in card["mccs"]]
+        region_merchants = [m for m in merchants if not m.get("is_international") and m.get("mcc") in mccs]
         if not region_merchants:
-            region_merchants = [m for m in merchants_list if not m.get("is_international")]
+            region_merchants = [m for m in merchants if not m.get("is_international")]
 
-    matching_merchants = region_merchants if region_merchants else merchants_list
+    matching_merchants = region_merchants if region_merchants else merchants
     merchant = random.choice(matching_merchants)
-    amount_cents = random.randint(card["amount_min"], card["amount_max"])
+    amount_min = card.get("amount_min", 1500)
+    amount_max = card.get("amount_max", 15000)
+    amount_cents = random.randint(amount_min, amount_max)
     
-    # Apply category-specific caps to keep everyday transactions realistic (e.g. no $10k coffee)
-    if merchant["mcc"] == "5814": # Coffee
-        amount_cents = min(amount_cents, 5000) # Max $50.00
-    elif merchant["mcc"] == "5812": # Dining
-        amount_cents = min(amount_cents, 30000) # Max $300.00
-    elif merchant["mcc"] == "5541": # Gas
-        amount_cents = min(amount_cents, 10000) # Max $100.00
+    if merchant.get("mcc") == "5814": # Coffee
+        amount_cents = min(amount_cents, 5000)
+    elif merchant.get("mcc") == "5812": # Dining
+        amount_cents = min(amount_cents, 30000)
+    elif merchant.get("mcc") == "5541": # Gas
+        amount_cents = min(amount_cents, 10000)
 
-    raw_name = merchant["merchant"]
+    raw_name = merchant.get("merchant", "Store")
     if merchant.get("descriptor") and merchant["descriptor"] != raw_name:
         formatted_merchant = merchant["descriptor"]
     elif merchant.get("category") in ["Streaming & Entertainment", "Electronics & Software"] or raw_name in ["Amazon", "Netflix", "Spotify", "Apple"]:
@@ -249,7 +260,7 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
         "card_token": card["card_token"],
         "amount_cents": amount_cents,
         "retrieval_reference_number": rrn,
-        "merchant_category_code": merchant["mcc"],
+        "merchant_category_code": merchant.get("mcc", "5310"),
         "merchant_name": formatted_merchant,
         "card_network": "VISA"
     }
@@ -257,7 +268,6 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
     auth_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
     
     try:
-        # 1. Authorize hold
         auth_resp = await client.post(auth_url, json=auth_payload, headers=headers, timeout=5.0)
         if auth_resp.status_code != 200:
             logger.warning(f"Auth request failed. HTTP {auth_resp.status_code}: {auth_resp.text}")
@@ -265,28 +275,26 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
             
         auth_data = auth_resp.json()
         if auth_data.get("action_code") != "00":
-            logger.info(f"Swipe declined by gateway: card={card['cardholder_name']}, reason={auth_data.get('decline_reason')}")
+            logger.info(f"Swipe declined by gateway: card={card.get('cardholder_name')}, reason={auth_data.get('decline_reason')}")
             return
             
-        # 2. Decide clearing resolution
         resolution = random.choices(["SETTLE", "REVERSE", "PENDING"], weights=[80, 10, 10], k=1)[0]
         
         if resolution == "SETTLE":
-            # Add potential restaurant tip (15-20%) for food categories
             final_amount = amount_cents
-            if merchant["mcc"] in ["5812", "5814"] and random.random() < 0.8:
+            if merchant.get("mcc") in ["5812", "5814"] and random.random() < 0.8:
                 tip = int(amount_cents * random.choice([0.15, 0.18, 0.20]))
                 final_amount += tip
                 
             settle_payload = {
                 "retrieval_reference_number": rrn,
                 "amount_cents": final_amount,
-                "description": f"{merchant['merchant']} Capture"
+                "description": f"{merchant.get('merchant', 'Store')} Capture"
             }
             settle_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/settle"
             settle_resp = await client.post(settle_url, json=settle_payload, headers=headers, timeout=5.0)
             if settle_resp.status_code == 200:
-                logger.info(f"Swipe settled successfully. Card: {card['cardholder_name']}, Merchant: {merchant['merchant']}, Amount: ${final_amount/100:.2f} (Hold: ${amount_cents/100:.2f})")
+                logger.info(f"Swipe settled successfully. Card: {card.get('cardholder_name')}, Merchant: {merchant.get('merchant')}, Amount: ${final_amount/100:.2f} (Hold: ${amount_cents/100:.2f})")
             else:
                 logger.error(f"Settlement failed. HTTP {settle_resp.status_code}: {settle_resp.text}")
                 
@@ -295,15 +303,15 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
             reverse_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse"
             rev_resp = await client.post(reverse_url, json=rev_payload, headers=headers, timeout=5.0)
             if rev_resp.status_code == 200:
-                logger.info(f"Swipe hold reversed successfully. Card: {card['cardholder_name']}, RRN: {rrn}")
+                logger.info(f"Swipe hold reversed successfully. Card: {card.get('cardholder_name')}, RRN: {rrn}")
             else:
                 logger.error(f"Reversal failed. HTTP {rev_resp.status_code}: {rev_resp.text}")
                 
         else:
-            logger.info(f"Swipe hold left PENDING (active hold). Card: {card['cardholder_name']}, Amount: ${amount_cents/100:.2f}")
+            logger.info(f"Swipe hold left PENDING (active hold). Card: {card.get('cardholder_name')}, Amount: ${amount_cents/100:.2f}")
             
     except Exception as exc:
-        logger.error(f"Failed to execute simulation cycle for card {card['cardholder_name']}: {exc}")
+        logger.error(f"Failed to execute simulation cycle for card {card.get('cardholder_name')}: {exc}")
 
 async def run_activity_surge_task(active_cards: Optional[List[Dict[str, Any]]] = None) -> None:
     """Fires 50 rapid-fire swipes staggered over 10 seconds."""
@@ -318,7 +326,7 @@ async def run_activity_surge_task(active_cards: Optional[List[Dict[str, Any]]] =
         for _ in range(50):
             card = random.choice(cards)
             tasks.append(simulate_swipe_event(client, card))
-            await asyncio.sleep(0.2) # Stagger swipes
+            await asyncio.sleep(0.2)
         await asyncio.gather(*tasks, return_exceptions=True)
     logger.info("Activity surge simulation completed successfully.")
 
@@ -326,7 +334,7 @@ async def run_activity_surge_task(active_cards: Optional[List[Dict[str, Any]]] =
 def health():
     return {"status": "ok", "service": "data-generator"}
 
-@app.post("/simulate-pulse", status_code=status.HTTP_200_OK)
+@app.post("/simulate-pulse", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
 async def simulate_pulse():
     """Wakes up and fires a randomized batch of 3-5 swipes across the persona pool."""
     logger.info("Triggered simulated activity pulse...")
@@ -343,12 +351,70 @@ async def simulate_pulse():
         
     return {"status": "SUCCESS", "swipes_attempted": batch_size}
 
-@app.post("/simulate-surge", status_code=status.HTTP_200_OK)
+@app.post("/simulate-surge", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
 def simulate_surge(payload: SurgeRequest, background_tasks: BackgroundTasks):
     """Triggers an async rapid-fire activity surge of 50 swipes."""
     active_cards = [c.model_dump() for c in payload.active_cards] if payload.active_cards else None
     background_tasks.add_task(run_activity_surge_task, active_cards)
     return {"status": "ACCEPTED", "message": "Simulation surge initiated in background."}
+
+@app.post("/inject-anomaly", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
+async def inject_anomaly(req: Optional[AnomalyRequest] = None):
+    """
+    Accepts a card token (or defaults to CE presenter) and fires 4 rapid-fire Mexico/Cancun fraud authorizations
+    against /api/v1/card-network/authorize.
+    """
+    target_token = req.card_token if req and req.card_token else None
+    if not target_token:
+        cards = get_active_cards()
+        if not cards:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active cards found to target for anomaly.")
+        for c in cards:
+            name_upper = str(c.get("cardholder_name", "")).upper()
+            if "PRESENTER" in name_upper or "SERVEDIO" in name_upper or "MARCUS" in name_upper:
+                target_token = c["card_token"]
+                break
+        if not target_token:
+            target_token = cards[0]["card_token"]
+
+    swipes = [
+        ("GAME*TEST TOKEN ONLINE", 499, "5814", "USA", 0),
+        ("APPLE.COM*ONLINE", 149900, "5310", "USA", 0),
+        ("BEST BUY*MKTPLACE", 215000, "5310", "USA", 0),
+        ("LUXURY BOUTIQUE CANCUN [MEX]", 320000, "5310", "MEX", 30),
+    ]
+
+    injected_auths = []
+    headers = {"X-Card-Network-Token": CARD_NETWORK_TOKEN}
+    auth_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
+
+    async with httpx.AsyncClient() as client:
+        for idx, (desc, amt, mcc, country, risk) in enumerate(swipes):
+            payload = {
+                "card_token": target_token,
+                "amount_cents": amt,
+                "retrieval_reference_number": f"REF{random.randint(100000000, 999999999)}",
+                "merchant_category_code": mcc,
+                "merchant_name": desc,
+                "card_network": "VISA"
+            }
+            try:
+                res = await client.post(auth_url, json=payload, headers=headers, timeout=5.0)
+                if res.status_code == 200:
+                    data = res.json()
+                    injected_auths.append(data)
+                else:
+                    logger.warning(f"Anomaly auth hold failed for {desc}: HTTP {res.status_code} - {res.text}")
+            except Exception as e:
+                logger.error(f"Error injecting anomaly auth hold for {desc}: {e}")
+
+    return {
+        "status": "ANOMALY_INJECTED",
+        "card_token": target_token,
+        "injected_swipes_count": len(injected_auths),
+        "total_fraud_cents": sum(amt for _, amt, _, _, _ in swipes),
+        "message": "Targeted fraud anomaly surge successfully dispatched against card-network gateway."
+    }
 
 if __name__ == "__main__":
     # Support running as a simple standalone script to trigger a pulse

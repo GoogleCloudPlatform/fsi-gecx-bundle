@@ -35,6 +35,7 @@ import AdminMessagingView from './components/AdminMessagingView.jsx';
 import ApplyCreditCardView from './components/ApplyCreditCardView.jsx';
 import AdminUnderwritingView from './components/AdminUnderwritingView.jsx';
 import AdminDashboardView from './components/AdminDashboardView.jsx';
+import AdminSimulationView from './components/AdminSimulationView.jsx';
 import VoiceSupportView from './components/VoiceSupportView.jsx';
 import AgentSupportDashboard from './components/AgentSupportDashboard.jsx';
 import LocatorView from './components/LocatorView.jsx';
@@ -165,6 +166,11 @@ export default function AppRoutes({
           <AdminUnderwritingView
             fbUser={fbUser}
           />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/simulation" element={
+        <ProtectedRoute isReady={isReady} fbUser={fbUser}>
+          <AdminSimulationView />
         </ProtectedRoute>
       } />
       <Route path="/search" element={

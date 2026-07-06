@@ -15,7 +15,7 @@
 import os
 import logging
 from typing import Dict
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header, Request
 from sqlalchemy.orm import Session
 from livekit import api as lk_api
 
@@ -23,9 +23,11 @@ from utils.database import get_db
 from utils.auth import get_current_user, is_support_staff
 from models.authentication import ValidatedToken
 from models.fdx import PersonalFinanceCategory
+from models.credit_card import IssuedCard, CreditAccount
 from repositories.credit_card import CreditCardRepository
 from services.credit_card import (
-    freeze_card, apply_limit_increase, reverse_posted_fee
+    freeze_card, unfreeze_card, apply_limit_increase, reverse_posted_fee,
+    get_account_summary_dto, get_transaction_history_dto
 )
 from services.taxonomy_service import TaxonomyService
 
@@ -47,16 +49,19 @@ def get_credit_card_repo(db: Session = Depends(get_db)) -> CreditCardRepository:
 def _get_active_customer_id(
     token: ValidatedToken = Depends(get_current_user),
     repo: CreditCardRepository = Depends(get_credit_card_repo),
-    fallback: bool = True
+    fallback: bool = False
 ) -> str:
-    """Helper: Resolves active customer ID from validated Firebase token, falling back to seed profile if the user has no custom account."""
+    """Helper: Resolves active customer ID from validated Firebase token."""
     if token and hasattr(token, "claims"):
-        user_id = token.user_id or token.claims.get("user_id") or token.claims.get("identifier") or "cust-123"
-        account = repo.get_account_by_customer(user_id)
-        if account:
-            return user_id
+        user_id = token.user_id or token.claims.get("user_id") or token.claims.get("identifier") or token.claims.get("sub")
+        if user_id:
+            account = repo.get_account_by_customer(user_id)
+            if account:
+                return user_id
     if fallback:
-        return "cust-123"
+        accounts = repo.get_all_accounts()
+        if accounts:
+            return str(accounts[0].customer_id)
     raise HTTPException(status_code=404, detail="No active credit card account found for the current user.")
 
 
@@ -68,6 +73,68 @@ def resolve_effective_id(target_id: str | None, current_id: str, token: Validate
             raise HTTPException(status_code=403, detail="Unauthorized target override.")
         return target_id
     return current_id
+
+
+def verify_admin_or_internal_secret(
+    request: Request,
+    x_card_network_token: str | None = Header(None, alias="X-Card-Network-Token")
+):
+    switch_token = os.getenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")
+    if x_card_network_token and x_card_network_token == switch_token:
+        return True
+        
+    try:
+        from utils.auth import get_current_user
+        token = get_current_user(request=request, x_forwarded_authorization=request.headers.get("X-Forwarded-Authorization"))
+        if token and token.email:
+            email_lower = token.email.lower()
+            allowed_domains = ["google.com", "gcp.solutions", "altostrat.com"]
+            if any(email_lower.endswith(f"@{domain}") for domain in allowed_domains):
+                return True
+    except Exception as e:
+        logger.warning(f"Presenter auth check failed in active-cards: {e}")
+        
+    raise HTTPException(status_code=401, detail="Unauthorized access to active cards list.")
+
+
+@router.get("/active-cards")
+@apiv1_router.get("/active-cards")
+@v1_router.get("/active-cards")
+def get_active_cards(
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_admin_or_internal_secret)
+):
+    """Returns all active credit card tokens and basic persona metadata for synthetic data simulation."""
+    cards = db.query(IssuedCard, CreditAccount).join(
+        CreditAccount, IssuedCard.account_id == CreditAccount.id
+    ).filter(IssuedCard.status == "ACTIVE", IssuedCard.is_active == True).all()
+    
+    results = []
+    for card, acc in cards:
+        name_lower = card.cardholder_name.lower() if card.cardholder_name else ""
+        if "erik" in name_lower or acc.credit_limit_cents > 2000000:
+            persona = "HNW"
+            mccs, a_min, a_max = ["4511", "7011", "5812"], 50000, 400000
+        elif "servedio" in name_lower or "marcus" in name_lower or acc.credit_limit_cents >= 1000000:
+            persona = "PRIME"
+            mccs, a_min, a_max = ["5411", "5541", "5310", "4121"], 1500, 15000
+        else:
+            persona = "YPRO"
+            mccs, a_min, a_max = ["5814", "7841", "5812"], 400, 3500
+            
+        results.append({
+            "card_token": card.card_token,
+            "cardholder_name": card.cardholder_name,
+            "credit_account_id": str(acc.id),
+            "customer_id": str(acc.customer_id),
+            "persona": persona,
+            "mccs": mccs,
+            "amount_min": a_min,
+            "amount_max": a_max,
+            "credit_limit_cents": acc.credit_limit_cents
+        })
+        
+    return {"active_cards": results, "count": len(results)}
 
 
 
@@ -85,30 +152,10 @@ def get_customer_account(
     target_id = target_customer_id or x_target_customer_id
     effective_id = resolve_effective_id(target_id, customer_id, token)
     logger.info(f"Retrieving account details for customer: {effective_id}")
-    account = repo.get_account_by_customer(effective_id)
-    if not account:
+    dto = get_account_summary_dto(repo, effective_id)
+    if not dto:
         raise HTTPException(status_code=404, detail=f"No account found for customer '{effective_id}'")
-        
-    return {
-        "account_id": account.id,
-        "credit_limit_cents": account.credit_limit_cents,
-        "cleared_balance_cents": account.cleared_balance_cents,
-        "available_credit_cents": account.available_credit_cents,
-        "payment_due_date": account.payment_due_date,
-        "status": account.status,
-        "cards": [
-            {
-                "card_id": card.id,
-                "cardholder_name": card.cardholder_name,
-                "last_four": card.last_four,
-                "card_token": card.card_token,
-                "status": card.status,
-                "is_virtual": card.is_virtual,
-                "exp_month": card.exp_month,
-                "exp_year": card.exp_year
-            } for card in account.cards
-        ]
-    }
+    return dto
 
 
 @router.get("/transactions")
@@ -120,55 +167,10 @@ def get_transaction_history(
 ):
     """Fetches full transaction and statement ledger lines for the customer, including pending authorizations."""
     effective_id = resolve_effective_id(target_customer_id, customer_id, token)
-    account = repo.get_account_by_customer(effective_id)
-    if not account:
+    dto = get_transaction_history_dto(repo, effective_id)
+    if dto is None:
         raise HTTPException(status_code=404, detail="No account registered.")
-        
-    auths = repo.list_authorizations(account.id, status="PENDING")
-    ledger = repo.list_ledger_entries(account.id)
-    
-    results = []
-    for auth in auths:
-        cat = TaxonomyService.get_category(auth.merchant_category_code)
-        results.append({
-            "id": str(auth.id),
-            "amount_cents": auth.transaction_amount_cents,
-            "amount": auth.transaction_amount_cents / 100.0,
-            "description": auth.merchant_name or auth.auth_code,
-            "posted_at": auth.created_at.isoformat() if auth.created_at else None,
-            "pending": True,
-            "personal_finance_category": {
-                "primary": cat.primary,
-                "detailed": cat.detailed,
-                "confidence_level": cat.confidence_level
-            },
-            "merchant_category_code": auth.merchant_category_code,
-            "cardholder_name": auth.card.cardholder_name if auth.card else "Erik V.",
-            "last_four": auth.card.last_four if auth.card else "2304"
-        })
-        
-    for entry in ledger:
-        mcc = entry.authorization.merchant_category_code if entry.authorization else "5411"
-        cat = TaxonomyService.get_category(mcc)
-        results.append({
-            "id": str(entry.id),
-            "amount_cents": entry.amount_cents,
-            "amount": abs(entry.amount_cents) / 100.0,
-            "description": entry.description,
-            "posted_at": entry.posted_at.isoformat() if entry.posted_at else None,
-            "posted_timestamp": entry.posted_at.isoformat() if entry.posted_at else None,
-            "pending": False,
-            "personal_finance_category": {
-                "primary": cat.primary,
-                "detailed": cat.detailed,
-                "confidence_level": cat.confidence_level
-            },
-            "merchant_category_code": mcc,
-            "cardholder_name": entry.authorization.card.cardholder_name if entry.authorization and entry.authorization.card else "Erik V.",
-            "last_four": entry.authorization.card.last_four if entry.authorization and entry.authorization.card else "2304"
-        })
-        
-    return results
+    return dto
 
 
 @router.get("/taxonomies", response_model=Dict[str, Dict[str, str]])
@@ -255,6 +257,34 @@ def block_card_instrument(
         reason = f"FREEZE_BY_{caller_email}" if target_customer_id else "CUSTOMER_DISPATCH"
         
         res = freeze_card(db, card_token=card_token, reason=reason)
+        return {"status": "SUCCESS", "data": res}
+    except ValueError as val_err:
+        raise HTTPException(status_code=400, detail=str(val_err))
+
+
+@router.post("/unfreeze")
+def unfreeze_card_instrument(
+    card_token: str,
+    target_customer_id: str | None = None,
+    db: Session = Depends(get_db),
+    repo: CreditCardRepository = Depends(get_credit_card_repo),
+    token: ValidatedToken = Depends(get_current_user),
+    customer_id: str = Depends(_get_active_customer_id)
+):
+    """Unblocks and reactivates a card token."""
+    effective_id = resolve_effective_id(target_customer_id, customer_id, token)
+    
+    # Security Validation: Verify the card token belongs to the effective customer's account to prevent BOLA/IDOR
+    card = repo.get_card_by_token_secured(card_token, effective_id)
+    if not card:
+        logger.error(f"Security Warning: Attempted unauthorized unblock for card token {card_token} by customer {effective_id}")
+        raise HTTPException(status_code=404, detail="Card token not found or unauthorized.")
+
+    try:
+        caller_email = token.claims.get("email", "unknown_user") if token and hasattr(token, "claims") else "unknown_user"
+        reason = f"UNFREEZE_BY_{caller_email}" if target_customer_id else "CUSTOMER_DISPATCH"
+        
+        res = unfreeze_card(db, card_token=card_token, reason=reason)
         return {"status": "SUCCESS", "data": res}
     except ValueError as val_err:
         raise HTTPException(status_code=400, detail=str(val_err))

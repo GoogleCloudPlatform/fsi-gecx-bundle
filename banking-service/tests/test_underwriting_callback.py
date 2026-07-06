@@ -93,7 +93,7 @@ async def test_trigger_session_propagation_flow_success(mock_session_local, mock
     
     mock_art = MagicMock()
     mock_art.audit_metadata = '{"session_id": "session-resolved-from-bq-101"}'
-    mock_art.customer_id = "cust-123"
+    mock_art.customer_id = "jane.doe@example.com"
     mock_art.claimed_artifact_type = "W-2"
     
     mock_db = MagicMock()
@@ -111,7 +111,7 @@ async def test_trigger_session_propagation_flow_success(mock_session_local, mock
     
     # Verify secure message creation helper was called once
     mock_create_msg.assert_called_once_with(
-        user_id="cust-123",
+        user_id="jane.doe@example.com",
         artifact_type="W-2",
         approved=True,
         gross_income=8500.00

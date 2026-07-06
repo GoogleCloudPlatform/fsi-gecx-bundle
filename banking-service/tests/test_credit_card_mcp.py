@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 
 from routers.mcp.credit_card import (
     report_lost_stolen_card,
+    unfreeze_card,
     reverse_overdraft_fee,
     request_credit_limit_increase
 )
@@ -44,8 +45,8 @@ def db_session(monkeypatch):
     monkeypatch.setattr("routers.mcp.credit_card.SessionLocal", TestingSessionLocal)
     
     db = TestingSessionLocal()
-    from services.credit_card import initialize_db_and_seed
-    initialize_db_and_seed(db)
+    from services.seeding_service import perform_algorithmic_seeding
+    perform_algorithmic_seeding(db)
     
     yield db
     db.close()
@@ -56,7 +57,7 @@ def db_session(monkeypatch):
 @patch("routers.mcp.credit_card.send_session_event")
 async def test_report_lost_stolen_card_success(mock_send_event, mock_validate_token, db_session):
     """Verify card replacement blocks the active card and pushes WebSocket notification."""
-    mock_validate_token.return_value = MagicMock(claims={"sub": "cust-123", "email": "customer@example.com"})
+    mock_validate_token.return_value = MagicMock(claims={"sub": "jane.doe@example.com", "email": "customer@example.com"})
     
     mock_ctx = MagicMock()
     result = await report_lost_stolen_card(
@@ -76,7 +77,7 @@ async def test_report_lost_stolen_card_success(mock_send_event, mock_validate_to
     # Verify WebSocket OOB sync event was dispatched
     mock_send_event.assert_called_once()
     args, kwargs = mock_send_event.call_args
-    assert args[0] == "session-cust-123"
+    assert args[0] == "session-jane.doe@example.com"
     assert args[1]["type"] == "CARD_STATUS"
     assert args[1]["status"] == "BLOCKED"
 
@@ -99,7 +100,7 @@ async def test_report_lost_stolen_card_unauthorized(mock_validate_token):
 async def test_report_lost_stolen_card_bola_prevention(mock_validate_token, monkeypatch, db_session):
     """Verify BOLA prevention blocks replacement when account belongs to customer B."""
     monkeypatch.setenv("ENABLE_DEMO_FALLBACK", "false")
-    # Token matches customer-B, but target account 88888888-8888-4888-8888-999999999999 is owned by cust-123
+    # Token matches customer-B, but target account 88888888-8888-4888-8888-999999999999 is owned by jane.doe@example.com
     mock_validate_token.return_value = MagicMock(claims={"sub": "customer-B", "email": "customerB@example.com"})
     
     mock_ctx = MagicMock()
@@ -113,9 +114,36 @@ async def test_report_lost_stolen_card_bola_prevention(mock_validate_token, monk
 @pytest.mark.asyncio
 @patch("routers.mcp.utils.validate_firebase_token")
 @patch("routers.mcp.credit_card.send_session_event")
+async def test_unfreeze_card_success(mock_send_event, mock_validate_token, db_session):
+    """Verify unfreeze_card restores a blocked card to ACTIVE and dispatches OOB sync."""
+    mock_validate_token.return_value = MagicMock(claims={"sub": "jane.doe@example.com", "email": "customer@example.com"})
+    
+    # First block the card
+    card = db_session.query(IssuedCard).filter_by(account_id="88888888-8888-4888-8888-999999999999").first()
+    card.status = "BLOCKED"
+    db_session.commit()
+    
+    mock_ctx = MagicMock()
+    response = await unfreeze_card(
+        account_id="88888888-8888-4888-8888-999999999999",
+        assertion_token="valid-token",
+        ctx=mock_ctx
+    )
+    
+    assert response["success"] is True
+    assert "successfully unblocked" in response["message"]
+    
+    db_session.refresh(card)
+    assert card.status == "ACTIVE"
+    mock_send_event.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("routers.mcp.utils.validate_firebase_token")
+@patch("routers.mcp.credit_card.send_session_event")
 async def test_reverse_overdraft_fee_success(mock_send_event, mock_validate_token, db_session):
     """Verify overdraft fee reversal resolves account ledger credit and resets available balance."""
-    mock_validate_token.return_value = MagicMock(claims={"sub": "cust-123", "email": "customer@example.com"})
+    mock_validate_token.return_value = MagicMock(claims={"sub": "jane.doe@example.com", "email": "customer@example.com"})
     
     # Fetch pre-reversal cleared balance ($180.44 -> 18044 cents)
     account = db_session.query(FinancialAccount).filter_by(id="88888888-8888-4888-8888-999999999999").first()
@@ -139,14 +167,14 @@ async def test_reverse_overdraft_fee_success(mock_send_event, mock_validate_toke
     # Assert OOB WebSocket sync dispatched
     mock_send_event.assert_called_once()
     args, kwargs = mock_send_event.call_args
-    assert args[0] == "session-cust-123"
+    assert args[0] == "session-jane.doe@example.com"
     assert args[1]["type"] == "FEE_REVERSED"
 
 @pytest.mark.asyncio
 @patch("routers.mcp.utils.validate_firebase_token")
 async def test_reverse_overdraft_fee_annual_limit_violation(mock_validate_token, db_session):
     """Verify that a second reversal in the same calendar year is rejected."""
-    mock_validate_token.return_value = MagicMock(claims={"sub": "cust-123", "email": "customer@example.com"})
+    mock_validate_token.return_value = MagicMock(claims={"sub": "jane.doe@example.com", "email": "customer@example.com"})
     mock_ctx = MagicMock()
     
     # Apply first reversal
@@ -172,7 +200,7 @@ async def test_reverse_overdraft_fee_annual_limit_violation(mock_validate_token,
 @patch("routers.mcp.credit_card.send_session_event")
 async def test_request_credit_limit_increase_success(mock_send_event, mock_validate_token, db_session):
     """Verify underwriting auto-approval for limits within reasonable bounds (<2x current)."""
-    mock_validate_token.return_value = MagicMock(claims={"sub": "cust-123", "email": "customer@example.com"})
+    mock_validate_token.return_value = MagicMock(claims={"sub": "jane.doe@example.com", "email": "customer@example.com"})
     
     mock_ctx = MagicMock()
     result = await request_credit_limit_increase(
@@ -193,14 +221,14 @@ async def test_request_credit_limit_increase_success(mock_send_event, mock_valid
     # Assert OOB WebSocket sync dispatched
     mock_send_event.assert_called_once()
     args, kwargs = mock_send_event.call_args
-    assert args[0] == "session-cust-123"
+    assert args[0] == "session-jane.doe@example.com"
     assert args[1]["type"] == "LIMIT_UPDATED"
 
 @pytest.mark.asyncio
 @patch("routers.mcp.utils.validate_firebase_token")
 async def test_request_credit_limit_increase_denied(mock_validate_token, db_session):
     """Verify underwriting rejection when requested limit exceeds double the current limit (>2x)."""
-    mock_validate_token.return_value = MagicMock(claims={"sub": "cust-123", "email": "customer@example.com"})
+    mock_validate_token.return_value = MagicMock(claims={"sub": "jane.doe@example.com", "email": "customer@example.com"})
     
     mock_ctx = MagicMock()
     result = await request_credit_limit_increase(
@@ -219,7 +247,7 @@ async def test_request_credit_limit_increase_denied(mock_validate_token, db_sess
 @patch("routers.mcp.credit_card.send_session_event")
 async def test_report_lost_stolen_card_optional_account_id(mock_send_event, mock_validate_token, db_session):
     """Verify that card replacement successfully resolves the default account when account_id is omitted."""
-    mock_validate_token.return_value = MagicMock(claims={"sub": "cust-123", "email": "customer@example.com"})
+    mock_validate_token.return_value = MagicMock(claims={"sub": "jane.doe@example.com", "email": "customer@example.com"})
     
     mock_ctx = MagicMock()
     result = await report_lost_stolen_card(

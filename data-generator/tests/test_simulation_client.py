@@ -79,3 +79,18 @@ def test_simulate_surge_accepted():
     response = client.post("/simulate-surge", json={})
     assert response.status_code == 200
     assert response.json()["status"] == "ACCEPTED"
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_inject_anomaly_success():
+    auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
+        return_value=httpx.Response(200, json={"action_code": "00", "auth_code": "999999", "status": "PENDING"})
+    )
+    
+    response = client.post("/inject-anomaly", json={"card_token": "tok_visa_test"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ANOMALY_INJECTED"
+    assert data["injected_swipes_count"] == 4
+    assert data["card_token"] == "tok_visa_test"
+    assert auth_route.call_count == 4

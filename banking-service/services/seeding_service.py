@@ -37,25 +37,28 @@ from models.settings import SystemSetting
 from models.reference import MerchantCategoryCode
 from services.taxonomy_service import DEFAULT_TAXONOMY_MAP, TaxonomyService
 from services.merchant_service import MerchantEnrichmentService
+from services.card_network import process_authorization, process_settlement
 
 logger = logging.getLogger(__name__)
 
 import os
 
-def load_static_personas():
+def get_base_personas():
     path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "static_personas.json")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Required seeding resource static_personas.json not found at {path}")
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 def load_vip_googlers():
-    path = os.path.join(os.path.dirname(__file__), "..", "resources", "vip_googlers.json")
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+    path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "vip_googlers.json")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Required seeding resource vip_googlers.json not found at {path}")
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 def get_seeding_personas():
-    base_personas = load_static_personas()
+    base_personas = get_base_personas()
     vip_googlers = load_vip_googlers()
     
     for p in base_personas:
@@ -75,7 +78,7 @@ def get_seeding_personas():
         last_name = name_parts[1] if len(name_parts) > 1 else "Googler"
         token = f"tok_visa_{first_name.lower()}_{last_name.lower()}"
         vip_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, vip["email"]))
-        score = vip.get("fico_score", 800)
+        score = vip["fico_score"]
         
         formatted_vips.append({
             "id": vip_id,
@@ -87,12 +90,11 @@ def get_seeding_personas():
             "phone_number": "650-253-0000",
             "ssn": f"999-{random.randint(10, 99)}-{random.randint(1000, 9999)}",
             "credit_score": score,
-            "credit_tier": vip.get("credit_tier", "PRIME_EXCELLENT"),
+            "credit_tier": vip["credit_tier"],
             "stated_annual_income_cents": 35000000,
             "credit_limit_cents": 2500000,
             "credit_product": "CASHBACK_EVERYDAY",
-            "home_metro": vip.get("home_metro", "MOUNTAIN VIEW CA"),
-            "favorite_mexico_resort": vip.get("favorite_mexico_resort", "COCO BONGO CANCUN [MEX]"),
+            "home_metro": vip["home_metro"],
             "is_vip_googler": True,
             "address": {
                 "street": vip["residential_address"]["street"],
@@ -109,49 +111,66 @@ def get_seeding_personas():
             ]
         })
         
-    metros = [
-        ("CHICAGO IL", "Chicago", "IL", "60601"),
-        ("NEW YORK NY", "New York", "NY", "10001"),
-        ("SAN FRANCISCO CA", "San Francisco", "CA", "94105"),
-        ("DALLAS TX", "Dallas", "TX", "75201"),
-        ("SEATTLE WA", "Seattle", "WA", "98101"),
-        ("LOS ANGELES CA", "Los Angeles", "CA", "90001"),
-        ("ATLANTA GA", "Atlanta", "GA", "30301"),
-        ("MIAMI FL", "Miami", "FL", "33101"),
-    ]
+    meta_path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "seeding_metadata.json")
+    if not os.path.exists(meta_path):
+        raise FileNotFoundError(f"Required seeding resource seeding_metadata.json not found at {meta_path}")
+    with open(meta_path, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+            
+    reserved_first_names = {p["first_name"].lower() for p in base_personas}.union({v["first_name"].lower() for v in formatted_vips})
+    first_names = [fn for fn in meta["first_names"] if fn.lower() not in reserved_first_names]
+    last_names = meta["last_names"]
+    metros = meta["metros"]
+    street_names = meta["street_names"]
+    underwriting_tiers = meta["underwriting_tiers"]
     
     mock_needed = max(0, 200 - len(base_personas))
     generated_mock = []
     
-    first_names = ["Alex", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Jamie", "Avery", "Peyton", "Cameron", "Devon", "Logan", "Jesse", "Reese", "Quinn", "Skyler", "Dakota", "Kendall", "Harley", "Drew", "Finley", "Hayden", "Rowan", "Sawyer", "Teagan", "Emerson", "Lennon", "Parker", "Phoenix", "River"]
-    last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin", "Lee", "Perez", "Thompson", "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson"]
+    rng = random.Random(42)
+    all_pairs = [(fn, ln) for fn in first_names for ln in last_names]
+    rng.shuffle(all_pairs)
     
+    existing_names = {f"{p['first_name']} {p['last_name']}".lower() for p in base_personas}
+    for vip in formatted_vips:
+        existing_names.add(vip["cardholder_name"].lower())
+        
+    pair_idx = 0
     for i in range(mock_needed):
-        fn = first_names[i % len(first_names)]
-        ln = f"{last_names[(i // len(first_names)) % len(last_names)]}{i}"
+        while pair_idx < len(all_pairs):
+            fn, ln = all_pairs[pair_idx]
+            pair_idx += 1
+            if f"{fn} {ln}".lower() not in existing_names:
+                break
+        else:
+            fn, ln = f"User{i}", f"Mock{i}"
+            
+        existing_names.add(f"{fn} {ln}".lower())
         email = f"{fn.lower()}.{ln.lower()}@mockbanking.local"
         uid = str(uuid.uuid5(uuid.NAMESPACE_DNS, email))
         
-        metro_name, city, state, zip_code = metros[i % len(metros)]
+        metro_obj = metros[i % len(metros)]
+        metro_name = metro_obj["name"]
+        city = metro_obj["city"]
+        state = metro_obj["state"]
+        zip_code = rng.choice(metro_obj["zips"])
+        street = f"{rng.randint(100, 9999)} {rng.choice(street_names)}"
         
         tier_roll = i % 10
         if tier_roll < 3:
-            tier = "PRIME_EXCELLENT"
-            score = random.randint(750, 850)
-            limit = 1500000
+            t_info = underwriting_tiers[0]
         elif tier_roll < 7:
-            tier = "PRIME"
-            score = random.randint(680, 749)
-            limit = 1000000
+            t_info = underwriting_tiers[1 % len(underwriting_tiers)]
         elif tier_roll < 9:
-            tier = "NEAR_PRIME"
-            score = random.randint(620, 679)
-            limit = 500000
+            t_info = underwriting_tiers[2 % len(underwriting_tiers)]
         else:
-            tier = "SUBPRIME"
-            score = random.randint(550, 619)
-            limit = 250000
+            t_info = underwriting_tiers[3 % len(underwriting_tiers)]
             
+        tier = t_info["tier"]
+        score = rng.randint(t_info["fico_min"], t_info["fico_max"])
+        limit = rng.randint(t_info["limit_min_cents"] // 10000, t_info["limit_max_cents"] // 10000) * 10000
+        income = rng.randint(t_info["income_min_cents"] // 10000, t_info["income_max_cents"] // 10000) * 10000
+        
         generated_mock.append({
             "id": uid,
             "first_name": fn,
@@ -160,23 +179,23 @@ def get_seeding_personas():
             "card_token": f"tok_visa_{fn.lower()}_{ln.lower()}",
             "email": email,
             "phone_number": f"555-100-{i:04d}",
-            "ssn": f"900-{random.randint(10, 99)}-{random.randint(1000, 9999)}",
+            "ssn": f"900-{rng.randint(10, 99)}-{rng.randint(1000, 9999)}",
             "credit_score": score,
             "credit_tier": tier,
-            "stated_annual_income_cents": random.randint(50000, 150000) * 100,
+            "stated_annual_income_cents": income,
             "credit_limit_cents": limit,
             "credit_product": "CASHBACK_EVERYDAY",
             "home_metro": metro_name,
             "is_vip_googler": False,
             "address": {
-                "street": f"{100 + i} Market St",
+                "street": street,
                 "city": city,
                 "state": state,
                 "postal_code": zip_code,
             },
             "accounts": [
-                {"type": "CHECKING", "product_name": "Standard Checking", "product_code": "CHECKING_EVERYDAY", "balance_cents": random.randint(1000, 10000) * 100},
-                {"type": "SAVINGS", "product_name": "High Yield Savings", "product_code": "SAVINGS_HIGH_YIELD", "balance_cents": random.randint(2000, 25000) * 100},
+                {"type": "CHECKING", "product_name": "Standard Checking", "product_code": "CHECKING_EVERYDAY", "balance_cents": rng.randint(1000, 10000) * 100},
+                {"type": "SAVINGS", "product_name": "High Yield Savings", "product_code": "SAVINGS_HIGH_YIELD", "balance_cents": rng.randint(2000, 25000) * 100},
             ],
             "cards": [
                 {"type": "VIRTUAL", "network": "VISA", "status": "ACTIVE"}
@@ -185,7 +204,7 @@ def get_seeding_personas():
         
     return base_personas + generated_mock + formatted_vips
 
-PERSONAS = load_static_personas()
+PERSONAS = get_base_personas()
 
 
 def generate_luhn_card_number(prefix: str, length: int) -> str:
@@ -329,17 +348,17 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
             )
             
             # 1b. Create 3NF UserAddress
-            addr_conf = p.get("address", {})
+            addr_conf = p["address"]
             user_addr = UserAddress(
                 id=uuid.uuid4(),
                 user_id=user_uuid,
                 address_type="RESIDENTIAL",
                 is_primary=True,
-                street_line_1=addr_conf.get("street", "100 Main St"),
-                city=addr_conf.get("city", p.get("home_metro", "CHICAGO IL").split()[0].title()),
-                state=addr_conf.get("state", "CA"),
-                postal_code=addr_conf.get("postal_code", "94043"),
-                country_code="USA"
+                street_line_1=addr_conf["street"],
+                city=addr_conf["city"],
+                state=addr_conf["state"],
+                postal_code=addr_conf["postal_code"],
+                country_code=addr_conf.get("country", "USA")
             )
             db.add(user_addr)
             
@@ -388,6 +407,8 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
             db.flush()
             
             # 4. Provision checking/savings deposit accounts
+            checking_acc = None
+            savings_acc = None
             for acc_conf in p["accounts"]:
                 prefix = "CHK" if acc_conf["type"] == "CHECKING" else "SAV"
                 acc_num = f"{prefix}-{random.randint(10000000, 99999999)}"
@@ -406,6 +427,10 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
                     status="ACTIVE"
                 )
                 db.add(dep_acc)
+                if acc_conf["type"] == "CHECKING":
+                    checking_acc = dep_acc
+                elif acc_conf["type"] == "SAVINGS":
+                    savings_acc = dep_acc
                 record_audit_event(
                     db,
                     "DEPOSIT_ACCOUNT_CREATED",
@@ -418,7 +443,7 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
                 )
                 
             # 5. Create Credit Line Account
-            cred_acc_id = uuid.uuid4()
+            cred_acc_id = uuid.UUID(p["credit_account_id"]) if "credit_account_id" in p else uuid.uuid4()
             # Set cleared balance to a minor randomized seed value (e.g. Eleanor has initial debt)
             debt = random.randint(5000, 20000) if p["first_name"] == "Eleanor" else 0
             cred_acc = CreditAccount(
@@ -445,18 +470,19 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
             db.flush()
             
             # 6. Issue Card
-            card_id = uuid.uuid4()
+            card_id = uuid.UUID(p["card_id"]) if "card_id" in p else uuid.uuid4()
             card_num = generate_luhn_card_number(prefix="4111", length=16)
             cvv = str(random.randint(100, 999))
             exp_month = datetime.datetime.now(datetime.timezone.utc).month
             exp_year = datetime.datetime.now(datetime.timezone.utc).year + 3
+            last_four = p["last_four"] if "last_four" in p else card_num[-4:]
             
             card = IssuedCard(
                 id=card_id,
                 account_id=cred_acc_id,
                 cardholder_name=p["cardholder_name"],
                 card_token=p["card_token"],
-                last_four=card_num[-4:],
+                last_four=last_four,
                 exp_month=exp_month,
                 exp_year=exp_year,
                 status="ACTIVE",
@@ -472,6 +498,8 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
                     "card_token": p["card_token"],
                 },
             )
+            
+            _seed_user_transactions(db, user_uuid=user_uuid, checking_acc=checking_acc, savings_acc=savings_acc, cred_acc=cred_acc, card=card, first_name=p["first_name"], last_name=p["last_name"])
             
             # Add card to manifest
             cards_manifest[p["first_name"].lower()] = {
@@ -603,63 +631,62 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
             )
             db.add_all([tx, entry])
 
-    # 4. Credit Card Seeding (Pending Authorizations & Posted Transactions)
+    # 4. Credit Card Seeding (Pending Authorizations & Posted Transactions via Gateway)
     if cred_acc and card:
-        total_swipes_debt_cents = 0
-
-        late_fee_cents = 3500
-        late_fee_auth = TransactionAuthorization(
-            id=uuid.uuid4(),
-            card_id=card.id,
-            account_id=cred_acc.id,
-            transaction_amount_cents=late_fee_cents,
-            billing_amount_cents=late_fee_cents,
-            status="PENDING",
-            auth_code="FEE350",
-            retrieval_reference_number="REF999999999",
-            card_network="VISA",
-            merchant_category_code="FEE",
-            merchant_name="LATE_FEE",
-            created_at=now - datetime.timedelta(days=5),
-            expires_at=now + datetime.timedelta(days=10)
-        )
-        curb_auth = TransactionAuthorization(
-            id=uuid.uuid4(),
-            card_id=card.id,
-            account_id=cred_acc.id,
-            transaction_amount_cents=-1,
-            billing_amount_cents=-1,
-            status="PENDING",
-            auth_code="CRB001",
-            retrieval_reference_number="REF999999998",
-            card_network="VISA",
-            merchant_category_code="4121",
-            merchant_name="CURB CHI TAXI",
-            created_at=now - datetime.timedelta(hours=6),
-            expires_at=now + datetime.timedelta(days=7)
-        )
-        db.add_all([late_fee_auth, curb_auth])
-        record_audit_event(
-            db,
-            "CREDIT_TRANSACTION_AUTHORIZED",
-            {
-                "account_id": str(cred_acc.id),
-                "authorization_id": str(late_fee_auth.id),
-                "amount_cents": late_fee_auth.transaction_amount_cents,
-                "merchant_name": late_fee_auth.merchant_name,
-            },
-        )
+        fee_rrn = f"FEE_{str(user_uuid)[:8]}"
+        process_authorization(db, {
+            "card_token": card.card_token,
+            "amount_cents": 3500,
+            "retrieval_reference_number": fee_rrn,
+            "merchant_category_code": "FEE",
+            "merchant_name": "LATE_FEE",
+            "card_network": "VISA",
+            "created_at": now - datetime.timedelta(days=5)
+        })
+        ovr_rrn = f"OVR_{str(user_uuid)[:8]}"
+        auth_ovr = process_authorization(db, {
+            "card_token": card.card_token,
+            "amount_cents": 3500,
+            "retrieval_reference_number": ovr_rrn,
+            "merchant_category_code": "FEE",
+            "merchant_name": "Overdraft Fee",
+            "card_network": "VISA",
+            "created_at": now - datetime.timedelta(days=4)
+        })
+        if auth_ovr.get("action_code") == "00":
+            process_settlement(db, {
+                "retrieval_reference_number": ovr_rrn,
+                "amount_cents": 3500,
+                "description": "Overdraft Fee",
+                "posted_at": now - datetime.timedelta(days=3)
+            })
+        tax_rrn = f"TAX_{str(user_uuid)[:8]}"
+        process_authorization(db, {
+            "card_token": card.card_token,
+            "amount_cents": 0,
+            "retrieval_reference_number": tax_rrn,
+            "merchant_category_code": "4121",
+            "merchant_name": "CURB CHI TAXI",
+            "card_network": "VISA",
+            "created_at": now - datetime.timedelta(hours=6)
+        })
 
         # Assign a consistent geographical home metro and international travel trip for this customer's demo card
         from models.identity import User
         user_obj = db.query(User).filter(User.id == user_uuid).first()
-        is_googler = user_obj and ("GOOGLE" in str(user_obj.email).upper() or "PRESENTER" in str(user_obj.last_name).upper())
+        is_googler = user_obj and ("GOOGLE" in str(user_obj.email).upper() or "PRESENTER" in str(user_obj.last_name).upper() or "NOVA.HORIZON" in str(user_obj.email).upper())
         if is_googler:
             user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA"])
             user_travel_country = random.choice(["MEX", "BHS", "DOM"])
         else:
             user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA", "ATLANTA GA", "MIAMI FL"])
             user_travel_country = None
+
+        meta_path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "seeding_metadata.json")
+        mex_charges = []
+        if os.path.exists(meta_path):
+            with open(meta_path, "r", encoding="utf-8") as f:
+                mex_charges = json.load(f).get("mexico_travel_charges", [])
 
         for i in range(12):
             # VIP Googler Mexico Exclusivity Rule: ONLY Googlers get international vacation swipes!
@@ -671,56 +698,33 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
                 country=target_country, 
                 home_metro=user_home_metro
             )
-            if is_googler and i == 10:
-                store_desc = "COCO BONGO CANCUN [MEX]"
-                if mch:
-                    mch.mcc = "7999"
-                    mch.category = "Entertainment"
-            amount_cents = random.randint(1250, 45000)
-            total_swipes_debt_cents += amount_cents
-            
+            if is_intl and mex_charges:
+                charge_item = random.choice(mex_charges)
+                store_desc = charge_item["merchant_name"]
+                mcc_val = charge_item["mcc"]
+                amount_cents = random.randint(charge_item["min_amount_cents"], charge_item["max_amount_cents"])
+            else:
+                mcc_val = mch.mcc if mch else "5310"
+                amount_cents = random.randint(1250, 45000)
             posted_date = now - datetime.timedelta(days=(14 - i), hours=random.randint(0, 12))
+            rrn = f"REF_{str(user_uuid)[:5]}_{i:02d}"
             
-            auth = TransactionAuthorization(
-                id=uuid.uuid4(),
-                card_id=card.id,
-                account_id=cred_acc.id,
-                transaction_amount_cents=amount_cents,
-                billing_amount_cents=amount_cents,
-                status="POSTED",
-                auth_code=f"T{10000+i}",
-                retrieval_reference_number=f"REF{888000+i:09d}",
-                card_network="VISA",
-                merchant_category_code=mch.mcc,
-                merchant_name=store_desc,
-                created_at=posted_date - datetime.timedelta(hours=2),
-                expires_at=posted_date + datetime.timedelta(days=7)
-            )
-            db.add(auth)
-            db.flush()
-            
-            tx = PostedTransaction(
-                id=uuid.uuid4(),
-                account_id=cred_acc.id,
-                authorization_id=auth.id,
-                amount_cents=-amount_cents,
-                description=store_desc,
-                posted_at=posted_date
-            )
-            db.add(tx)
-            record_audit_event(
-                db,
-                "CREDIT_TRANSACTION_POSTED",
-                {
-                    "account_id": str(cred_acc.id),
-                    "transaction_id": str(tx.id),
-                    "amount_cents": tx.amount_cents,
-                    "description": tx.description,
-                },
-            )
-            
-        cred_acc.cleared_balance_cents = total_swipes_debt_cents
-        cred_acc.available_credit_cents = cred_acc.credit_limit_cents - total_swipes_debt_cents - late_fee_cents
+            auth_res = process_authorization(db, {
+                "card_token": card.card_token,
+                "amount_cents": amount_cents,
+                "retrieval_reference_number": rrn,
+                "merchant_category_code": mcc_val,
+                "merchant_name": store_desc,
+                "card_network": "VISA",
+                "created_at": posted_date - datetime.timedelta(hours=2)
+            })
+            if auth_res.get("action_code") == "00":
+                process_settlement(db, {
+                    "retrieval_reference_number": rrn,
+                    "amount_cents": amount_cents,
+                    "description": store_desc,
+                    "posted_at": posted_date
+                })
 
 
 def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str, Any]:

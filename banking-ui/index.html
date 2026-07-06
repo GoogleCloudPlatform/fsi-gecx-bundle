@@ -28,7 +28,7 @@
         console.warn("⚠️ Firebase configuration missing or unconfigured. Activating Local Mock Authentication.");
         
         let currentUser = {
-          uid: "cust-123",
+          uid: "jane.doe@example.com",
           email: "mockuser@example.com",
           displayName: "Jane Doe",
           getIdToken: async () => "mock_firebase_id_token"
@@ -39,7 +39,7 @@
         window.firebaseAuth = {
           signInWithGoogle: async () => {
             currentUser = {
-              uid: "cust-123",
+              uid: "jane.doe@example.com",
               email: "mockuser@example.com",
               displayName: "Jane Doe",
               getIdToken: async () => "mock_firebase_id_token"

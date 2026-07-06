@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import datetime
-from typing import Optional, List
+from typing import Optional, List, Any
 from sqlalchemy.orm import Session
 from models.credit_card import FinancialAccount, IssuedCard, AccountLedger, TransactionAuthorization
 
@@ -43,11 +43,6 @@ class CreditCardRepository:
         user = self.db.query(User).filter(User.auth_provider_uid == customer_id).first()
         if user:
             return str(user.id)
-        
-        # Fallback to default seeded user UUID if not found and is "cust-123"
-        if customer_id == "cust-123":
-            return "12300000-0000-4000-8000-000000000123"
-            
         # Return a dummy valid UUID instead of raw string to prevent SQLAlchemy StatementError coercion failures
         return "00000000-0000-0000-0000-000000000000"
 
@@ -165,3 +160,28 @@ class CreditCardRepository:
             TransactionAuthorization.account_id == account_id,
             TransactionAuthorization.status == "PENDING"
         ).order_by(TransactionAuthorization.created_at.desc()).all()
+
+    def get_all_accounts(self) -> List[FinancialAccount]:
+        """Retrieves all Financial Accounts registered in the database."""
+        return self.db.query(FinancialAccount).all()
+
+    def get_pending_auth_total(self, account_id: str) -> int:
+        """Calculates the sum of all pending authorization holds for an account."""
+        from sqlalchemy import func
+        res = self.db.query(func.sum(TransactionAuthorization.transaction_amount_cents)).filter(
+            TransactionAuthorization.account_id == account_id,
+            TransactionAuthorization.status == "PENDING"
+        ).scalar()
+        return int(res or 0)
+
+    def get_authorization_by_rrn(self, rrn: str, status: Optional[str] = None) -> Optional[TransactionAuthorization]:
+        """Retrieves a transaction authorization by its retrieval reference number and optional status."""
+        query = self.db.query(TransactionAuthorization).filter(TransactionAuthorization.retrieval_reference_number == rrn)
+        if status:
+            query = query.filter(TransactionAuthorization.status == status)
+        return query.first()
+
+    def get_credit_product(self, product_code: str) -> Optional[Any]:
+        """Retrieves a CreditProduct catalog entity by its product code."""
+        from models.credit_card import CreditProduct
+        return self.db.query(CreditProduct).filter(CreditProduct.product_code == product_code).first()

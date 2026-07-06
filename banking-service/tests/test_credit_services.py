@@ -18,7 +18,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models.credit_card import Base, FinancialAccount, IssuedCard, AccountLedger, CreditProduct
 from models.identity import User
-from services.credit_card import freeze_card, apply_limit_increase, reverse_posted_fee
+from services.credit_card import freeze_card, unfreeze_card, apply_limit_increase, reverse_posted_fee
 
 # Use an isolated, in-memory SQLite database for sub-second, side-effect-free testing
 DATABASE_URL = "sqlite:///:memory:"
@@ -107,6 +107,16 @@ def test_freeze_card_success(db_session):
     # Query database to assert persistent state
     card = db_session.query(IssuedCard).filter_by(card_token="tok_test_john_doe").first()
     assert card.status == "BLOCKED"
+
+
+def test_unfreeze_card_success(db_session):
+    """Verify that unfreezing a blocked card restores its status to ACTIVE."""
+    freeze_card(db_session, card_token="tok_test_john_doe", reason="LOST")
+    res = unfreeze_card(db_session, card_token="tok_test_john_doe", reason="FOUND")
+    assert res["status"] == "ACTIVE"
+    
+    card = db_session.query(IssuedCard).filter_by(card_token="tok_test_john_doe").first()
+    assert card.status == "ACTIVE"
 
 
 def test_freeze_card_not_found(db_session):

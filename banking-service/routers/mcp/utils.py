@@ -163,8 +163,12 @@ def requires_user_assertion(func):
                 if not account:
                     enable_fallback = os.getenv("ENABLE_DEMO_FALLBACK", "true").lower() == "true"
                     if enable_fallback:
-                        logger.warning(f"Customer profile '{user_id}' not seeded. Falling back to 'cust-123' for demo purposes.")
-                        effective_id = "cust-123"
+                        accounts = repo.get_all_accounts()
+                        if accounts:
+                            effective_id = str(accounts[0].customer_id)
+                            logger.warning(f"Customer profile '{user_id}' not seeded. Falling back to seeded profile '{effective_id}' for demo purposes.")
+                        else:
+                            raise ValueError(f"No financial account found for customer ID '{user_id}' and no seeded accounts exist.")
                     else:
                         raise ValueError(f"No financial account found for customer ID '{user_id}'.")
             finally:

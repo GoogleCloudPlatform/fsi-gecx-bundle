@@ -720,26 +720,57 @@
     ]
   },
   {
-    "merchant_id": "coco_bongo",
-    "clean_name": "Coco Bongo Show & Disco",
-    "default_mcc": "4899",
-    "merchant_domain": "cocobongo.com",
-    "logo_url": "https://logo.clearbit.com/cocobongo.com",
+    "merchant_id": "la_casa_de_la_playa",
+    "clean_name": "La Casa de la Playa",
+    "default_mcc": "7011",
+    "merchant_domain": "lacasadelaplaya.com",
+    "logo_url": "https://logo.clearbit.com/lacasadelaplaya.com",
     "is_subscription": false,
     "stores": [
       {
-        "location_name": "Coco Bongo Cancun",
-        "raw_descriptor": "COCO BONGO CANCUN [MEX]",
+        "location_name": "La Casa de la Playa Riviera Maya",
+        "raw_descriptor": "LA CASA DE LA PLAYA RIVIERA MAYA [MEX]",
         "country_code": "MEX",
         "is_international": true,
-        "risk_score": 30
+        "risk_score": 10
       },
       {
-        "location_name": "Coco Bongo Punta Cana",
-        "raw_descriptor": "COCO BONGO PUNTA CANA [DOM]",
-        "country_code": "DOM",
+        "location_name": "Estero Restaurante Riviera Maya",
+        "raw_descriptor": "ESTERO RESTAURANTE RIVIERA MAYA [MEX]",
+        "country_code": "MEX",
         "is_international": true,
-        "risk_score": 30
+        "risk_score": 10
+      }
+    ]
+  },
+  {
+    "merchant_id": "rosewood_mayakoba",
+    "clean_name": "Rosewood Mayakoba",
+    "default_mcc": "7011",
+    "merchant_domain": "rosewoodhotels.com",
+    "logo_url": "https://logo.clearbit.com/rosewoodhotels.com",
+    "is_subscription": false,
+    "stores": [
+      {
+        "location_name": "Rosewood Mayakoba Playa del Carmen",
+        "raw_descriptor": "ROSEWOOD MAYAKOBA PLAYA DEL CARMEN [MEX]",
+        "country_code": "MEX",
+        "is_international": true,
+        "risk_score": 10
+      },
+      {
+        "location_name": "Sense Spa Mayakoba Playa del Carmen",
+        "raw_descriptor": "SENSE SPA MAYAKOBA PLAYA DEL CARMEN [MEX]",
+        "country_code": "MEX",
+        "is_international": true,
+        "risk_score": 10
+      },
+      {
+        "location_name": "Agave Azul Restaurant Mayakoba",
+        "raw_descriptor": "AGAVE AZUL RESTAURANT MAYAKOBA [MEX]",
+        "country_code": "MEX",
+        "is_international": true,
+        "risk_score": 10
       }
     ]
   },

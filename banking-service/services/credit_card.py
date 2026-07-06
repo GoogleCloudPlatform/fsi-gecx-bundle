@@ -14,6 +14,7 @@
 
 import logging
 import datetime
+from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 from models.credit_card import FinancialAccount, IssuedCard, AccountLedger
 from models.settings import SystemSetting
@@ -25,186 +26,6 @@ from models.fdx import (
 from services.taxonomy_service import TaxonomyService
 
 logger = logging.getLogger(__name__)
-
-def initialize_db_and_seed(db: Session):
-    """
-    Creates SQL tables if they do not exist and populates the database with
-    baseline cardholder profiles for development verification.
-    """
-    logger.info("Verifying credit card SQL schemas and tables...")
-    try:
-        db.connection().info["_ignore_rbac"] = True
-    except Exception:
-        pass
-    
-    from repositories.credit_card import CreditCardRepository
-    repo = CreditCardRepository(db)
-    
-    # Check if a seed account already exists
-    if repo.get_account_by_id("88888888-8888-4888-8888-999999999999"):
-        logger.info("Database already seeded. Skipping migration initializations.")
-        return
-
-    logger.info("Seeding database with default bank-issuer profiles...")
-    try:
-        # Seed credit products catalog if empty
-        from models.credit_card import CreditProduct
-        if db.query(CreditProduct).count() == 0:
-            logger.info("Seeding CreditProduct catalog in active DB session...")
-            products = [
-                CreditProduct(product_code="PLATINUM_TRAVEL_REWARDS", product_name="Nova Platinum Travel", min_credit_limit_cents=1500000, max_credit_limit_cents=10000000, purchase_apr=0.1899, cashback_rate=0.0000, travel_multiplier=3, dining_multiplier=3, annual_fee_cents=9500),
-                CreditProduct(product_code="CASHBACK_EVERYDAY", product_name="Nova Cashback Everyday", min_credit_limit_cents=300000, max_credit_limit_cents=1500000, purchase_apr=0.2199, cashback_rate=0.0150, travel_multiplier=1, dining_multiplier=1, annual_fee_cents=0),
-                CreditProduct(product_code="BUSINESS_ADVANTAGE", product_name="Executive Business Advantage", min_credit_limit_cents=2000000, max_credit_limit_cents=15000000, purchase_apr=0.1799, cashback_rate=0.0200, travel_multiplier=2, dining_multiplier=2, annual_fee_cents=0),
-                CreditProduct(product_code="SECURED_STARTER", product_name="Nova Secured Rebuilder", min_credit_limit_cents=50000, max_credit_limit_cents=250000, purchase_apr=0.2799, cashback_rate=0.0100, travel_multiplier=1, dining_multiplier=1, annual_fee_cents=0)
-            ]
-            db.add_all(products)
-            db.flush()
-
-        # Seed deposit products catalog if empty
-        from models.origination import DepositProduct
-        if db.query(DepositProduct).count() == 0:
-            logger.info("Seeding DepositProduct catalog in active DB session...")
-            deposits = [
-                DepositProduct(product_code="CHECKING_SIGNATURE", product_name="Nova Signature Checking", annual_percentage_yield=0.0005, monthly_maintenance_fee_cents=1500),
-                DepositProduct(product_code="CHECKING_EVERYDAY", product_name="Nova Everyday Checking", annual_percentage_yield=0.0000, monthly_maintenance_fee_cents=0),
-                DepositProduct(product_code="SAVINGS_HIGH_YIELD", product_name="Nova High Yield Savings", annual_percentage_yield=0.0450, monthly_maintenance_fee_cents=0),
-                DepositProduct(product_code="BUSINESS_CHECKING", product_name="Nova Business Checking", annual_percentage_yield=0.0010, monthly_maintenance_fee_cents=1000)
-            ]
-            db.add_all(deposits)
-            db.flush()
-
-        # Seed merchant category code ref_data catalog if empty
-        from models.reference import MerchantCategoryCode
-        from services.taxonomy_service import DEFAULT_TAXONOMY_MAP, TaxonomyService
-        if db.query(MerchantCategoryCode).count() == 0:
-            logger.info("Seeding MerchantCategoryCode merchants catalog in active DB session...")
-            mcc_records = [
-                MerchantCategoryCode(
-                    mcc=code,
-                    primary_category=data["primary"],
-                    detailed_category=data["detailed"]
-                )
-                for code, data in DEFAULT_TAXONOMY_MAP.items()
-            ]
-            db.add_all(mcc_records)
-            db.flush()
-            TaxonomyService.invalidate_cache()
-
-        # Seed default user in identity.users if not present
-        from models.identity import User
-        seed_user_id = "12300000-0000-4000-8000-000000000123"
-        seed_user = db.query(User).filter(User.id == seed_user_id).first()
-        if not seed_user:
-            logger.info("Creating default seed user record...")
-            seed_user = User(
-                id=seed_user_id,
-                auth_provider_uid="cust-123",
-                first_name="Jane",
-                last_name="Doe",
-                email="customer@example.com",
-                phone_number="555-0199"
-            )
-            db.add(seed_user)
-            db.flush()
-
-        # 1. Create a core Financial Account if not already seeded
-        seed_acc_id = "88888888-8888-4888-8888-999999999999"
-        if not db.query(FinancialAccount).filter(FinancialAccount.id == seed_acc_id).first():
-            seed_account = FinancialAccount(
-                id=seed_acc_id,
-                customer_id=seed_user.id,
-                product_code="CASHBACK_EVERYDAY",
-                status="ACTIVE",
-                credit_limit_cents=1000000,       # $10,000 credit limit
-                cleared_balance_cents=18044,      # Total debt: $180.44
-                available_credit_cents=981956,    # $9,819.56 available credit
-                payment_due_date=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=15),
-                statement_close_date=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=15)
-            )
-            repo.save_account(seed_account)
-            
-            # 2. Issue a primary Credit Card linked to this account
-            seed_card = IssuedCard(
-                id="11111111-1111-4111-8111-222222222222",
-                account_id=seed_account.id,
-                cardholder_name="Jane Doe",
-                card_token="tok_visa_seed_8888",
-                last_four="8234",
-                exp_month=12,
-                exp_year=2028,
-                status="ACTIVE",
-                is_active=True
-            )
-            repo.save_card(seed_card)
-            
-            # 3. Post realistic transaction entries to the account ledger
-            seed_fee = AccountLedger(
-                id="00000000-0000-4000-8000-000000000001",
-                account_id=seed_account.id,
-                amount_cents=-3500,
-                description="LATE_FEE",
-                posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=5)
-            )
-            repo.save_ledger(seed_fee)
-
-            seed_youtube = AccountLedger(
-                id="00000000-0000-4000-8000-000000000002",
-                account_id=seed_account.id,
-                amount_cents=-1399,
-                description="YouTube Premium Subscription",
-                posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=12)
-            )
-            repo.save_ledger(seed_youtube)
-
-            seed_starbucks = AccountLedger(
-                id="00000000-0000-4000-8000-000000000003",
-                account_id=seed_account.id,
-                amount_cents=-475,
-                description="Starbucks Coffee",
-                posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=4)
-            )
-            repo.save_ledger(seed_starbucks)
-
-            seed_grocery = AccountLedger(
-                id="00000000-0000-4000-8000-000000000004",
-                account_id=seed_account.id,
-                amount_cents=-8420,
-                description="Whole Foods Market",
-                posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=8)
-            )
-            repo.save_ledger(seed_grocery)
-
-            seed_gas = AccountLedger(
-                id="00000000-0000-4000-8000-000000000005",
-                account_id=seed_account.id,
-                amount_cents=-4250,
-                description="Shell Gasoline",
-                posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)
-            )
-            repo.save_ledger(seed_gas)
-        
-        # 5. Seed system settings with baseline Voice & Live Avatar configs
-        from repositories.settings import SystemSettingsRepository
-        settings_repo = SystemSettingsRepository(db)
-        if not settings_repo.get_first():
-            logger.info("Seeding baseline system settings configurations...")
-            default_settings = [
-                SystemSetting(key="voice_agent_hard_timeout_enabled", value="false"),
-                SystemSetting(key="voice_agent_max_duration", value="300"),
-                SystemSetting(key="voice_agent_warning_duration", value="240"),
-                SystemSetting(key="voice_agent_avatar_selection", value="random"),
-                SystemSetting(key="voice_agent_mock_avatar_enabled", value="false")
-            ]
-            db.add_all(default_settings)
-            db.flush()
-
-        db.commit()
-        logger.info("Database successfully seeded.")
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Failed to seed credit card database: {e}")
-        raise e
-
 
 def freeze_card(db: Session, card_token: str, reason: str) -> dict:
     """
@@ -231,6 +52,31 @@ def freeze_card(db: Session, card_token: str, reason: str) -> dict:
         raise e
 
 
+def unfreeze_card(db: Session, card_token: str, reason: str) -> dict:
+    """
+    Locates the card by token and sets its status to 'ACTIVE' to reactivate auth checks.
+    """
+    logger.info(f"Unfreezing card token: {card_token} (Reason: {reason})")
+    try:
+        from repositories.credit_card import CreditCardRepository
+        repo = CreditCardRepository(db)
+        card = repo.get_card_by_token(card_token)
+        if not card:
+            logger.error(f"Card token '{card_token}' not found.")
+            raise ValueError(f"Card token '{card_token}' not found.")
+            
+        card.status = "ACTIVE"
+        repo.save_card(card)
+        record_audit_event(db, "CARD_UNFROZEN", {"account_id": str(card.account_id), "card_token": card_token, "reason": reason})
+        db.commit()
+        logger.info(f"Card token '{card_token}' successfully unblocked and reactivated.")
+        return {"card_token": card_token, "status": "ACTIVE"}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error unfreezing card: {e}")
+        raise e
+
+
 def apply_limit_increase(db: Session, account_id: str, requested_limit_cents: int) -> dict:
     """
     Processes credit limit adjustments with Pessimistic Row Locking to prevent balance race conditions.
@@ -249,8 +95,7 @@ def apply_limit_increase(db: Session, account_id: str, requested_limit_cents: in
             raise ValueError(f"Account is in '{account.status}' status and ineligible for credit limit changes.")
 
         # Product Constraint Check: Validate requested limit against CreditProduct catalog parameters
-        from models.credit_card import CreditProduct
-        product = db.query(CreditProduct).filter(CreditProduct.product_code == account.product_code).first()
+        product = repo.get_credit_product(account.product_code)
         if product:
             if requested_limit_cents < product.min_credit_limit_cents or requested_limit_cents > product.max_credit_limit_cents:
                 raise ValueError(
@@ -469,3 +314,83 @@ def get_payment_networks(db: Session, account_id: str, customer_id: str) -> Pagi
         transfer_out=True
     )
     return PaginatedPaymentNetworksResult(payment_networks=[net], total=1)
+
+
+def get_account_summary_dto(repo: Any, customer_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieves credit account summary and formatted cards list DTO for a customer."""
+    account = repo.get_account_by_customer(customer_id)
+    if not account:
+        return None
+    return {
+        "account_id": account.id,
+        "credit_limit_cents": account.credit_limit_cents,
+        "cleared_balance_cents": account.cleared_balance_cents,
+        "available_credit_cents": account.available_credit_cents,
+        "payment_due_date": account.payment_due_date,
+        "status": account.status,
+        "cards": [
+            {
+                "card_id": card.id,
+                "cardholder_name": card.cardholder_name,
+                "last_four": card.last_four,
+                "card_token": card.card_token,
+                "status": card.status,
+                "is_virtual": card.is_virtual,
+                "exp_month": card.exp_month,
+                "exp_year": card.exp_year
+            } for card in account.cards
+        ]
+    }
+
+
+def get_transaction_history_dto(repo: Any, customer_id: str) -> Optional[List[Dict[str, Any]]]:
+    """Retrieves unified transaction ledger and pending authorization history DTO for a customer."""
+    account = repo.get_account_by_customer(customer_id)
+    if not account:
+        return None
+        
+    auths = repo.list_authorizations(account.id, status="PENDING")
+    ledger = repo.list_ledger_entries(account.id)
+    
+    results = []
+    for auth in auths:
+        cat = TaxonomyService.get_category(auth.merchant_category_code)
+        results.append({
+            "id": str(auth.id),
+            "amount_cents": auth.transaction_amount_cents,
+            "amount": auth.transaction_amount_cents / 100.0,
+            "description": auth.merchant_name or auth.auth_code,
+            "posted_at": auth.created_at.isoformat() if auth.created_at else None,
+            "pending": True,
+            "personal_finance_category": {
+                "primary": cat.primary,
+                "detailed": cat.detailed,
+                "confidence_level": cat.confidence_level
+            },
+            "merchant_category_code": auth.merchant_category_code,
+            "cardholder_name": auth.card.cardholder_name if auth.card else "Erik V.",
+            "last_four": auth.card.last_four if auth.card else "2304"
+        })
+        
+    for entry in ledger:
+        mcc = entry.authorization.merchant_category_code if entry.authorization else "5411"
+        cat = TaxonomyService.get_category(mcc)
+        results.append({
+            "id": str(entry.id),
+            "amount_cents": entry.amount_cents,
+            "amount": abs(entry.amount_cents) / 100.0,
+            "description": entry.description,
+            "posted_at": entry.posted_at.isoformat() if entry.posted_at else None,
+            "posted_timestamp": entry.posted_at.isoformat() if entry.posted_at else None,
+            "pending": False,
+            "personal_finance_category": {
+                "primary": cat.primary,
+                "detailed": cat.detailed,
+                "confidence_level": cat.confidence_level
+            },
+            "merchant_category_code": mcc,
+            "cardholder_name": entry.authorization.card.cardholder_name if entry.authorization and entry.authorization.card else "Erik V.",
+            "last_four": entry.authorization.card.last_four if entry.authorization and entry.authorization.card else "2304"
+        })
+        
+    return results

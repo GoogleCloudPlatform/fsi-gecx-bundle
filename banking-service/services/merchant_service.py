@@ -76,7 +76,7 @@ class MerchantEnrichmentService:
             return 0
 
         logger.info("Seeding Normalized Master Merchant Database (`merchants.merchant_master` and `stores`) from JSON...")
-        catalog_path = os.path.join(RESOURCE_DIR, "merchant_catalog.json")
+        catalog_path = os.path.join(RESOURCE_DIR, "data", "merchant_catalog.json")
         if not os.path.exists(catalog_path):
             logger.warning(f"Merchant catalog resource not found at {catalog_path}.")
             return 0

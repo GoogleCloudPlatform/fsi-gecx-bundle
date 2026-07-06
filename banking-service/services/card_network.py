@@ -17,18 +17,16 @@ import logging
 import random
 from typing import Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from models.credit_card import CreditAccount, IssuedCard, TransactionAuthorization, PostedTransaction
+from repositories.credit_card import CreditCardRepository
 
 logger = logging.getLogger(__name__)
 
 def recalculate_available_credit(db: Session, account: CreditAccount) -> None:
     """Updates the available credit cents for a credit account using the system of record."""
-    pending_sum = db.query(func.sum(TransactionAuthorization.transaction_amount_cents))\
-                    .filter(TransactionAuthorization.account_id == account.id)\
-                    .filter(TransactionAuthorization.status == "PENDING")\
-                    .scalar() or 0
+    repo = CreditCardRepository(db)
+    pending_sum = repo.get_pending_auth_total(str(account.id))
     account.available_credit_cents = account.credit_limit_cents - account.cleared_balance_cents - pending_sum
 
 def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -54,10 +52,9 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
     card_network = payload.get("card_network", "VISA")
 
     try:
+        repo = CreditCardRepository(db)
         # 1. Enforce Idempotency check via RRN
-        existing_auth = db.query(TransactionAuthorization).filter(
-            TransactionAuthorization.retrieval_reference_number == rrn
-        ).first()
+        existing_auth = repo.get_authorization_by_rrn(rrn)
         if existing_auth:
             logger.info(f"Duplicate auth hold request detected. RRN: {rrn}. Returning status: {existing_auth.status}")
             action_code = "00" if existing_auth.status == "PENDING" else "51"
@@ -69,7 +66,7 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
             }
 
         # 2. Lookup Card
-        card = db.query(IssuedCard).filter(IssuedCard.card_token == card_token).first()
+        card = repo.get_card_by_token(card_token)
         if not card:
             logger.warning(f"Swipe declined: card token not found. Token: {card_token}")
             return {
@@ -89,7 +86,7 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
             }
 
         # 3. Lookup Credit Account with pessimistic row locking to prevent limit overruns
-        account = db.query(CreditAccount).filter(CreditAccount.id == card.account_id).with_for_update().first()
+        account = repo.get_account_by_id(str(card.account_id), lock=True)
         if not account:
             logger.warning(f"Swipe declined: credit account not found for card {card.id}")
             return {
@@ -139,7 +136,7 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
 
         # 5. Approve Hold
         auth_code = f"{random.randint(100000, 999999)}"
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = payload.get("created_at") or datetime.datetime.now(datetime.timezone.utc)
         
         auth_hold = TransactionAuthorization(
             card_id=card.id,
@@ -153,6 +150,7 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
             card_network=card_network,
             merchant_category_code=mcc,
             merchant_name=merchant_name,
+            created_at=now,
             expires_at=now + datetime.timedelta(days=7)
         )
         db.add(auth_hold)
@@ -185,15 +183,13 @@ def process_settlement(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
         db.bind._ignore_rbac = True
 
     try:
+        repo = CreditCardRepository(db)
         rrn = payload.get("retrieval_reference_number")
         settle_amount = payload.get("amount_cents")
         description = payload.get("description")
 
         # Find active pending authorization hold
-        auth = db.query(TransactionAuthorization).filter(
-            TransactionAuthorization.retrieval_reference_number == rrn,
-            TransactionAuthorization.status == "PENDING"
-        ).first()
+        auth = repo.get_authorization_by_rrn(rrn, status="PENDING")
 
         if not auth:
             raise ValueError(f"No pending authorization hold found with RRN: {rrn}")
@@ -202,18 +198,20 @@ def process_settlement(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
         auth.status = "SETTLED"
 
         # Lookup account with pessimistic row locking to prevent balance conflicts
-        account = db.query(CreditAccount).filter(CreditAccount.id == auth.account_id).with_for_update().first()
+        account = repo.get_account_by_id(str(auth.account_id), lock=True)
         if not account:
             raise ValueError("Credit account not found")
 
         # Add transaction charge to cleared debt (immutable statement record)
+        posted_at_val = payload.get("posted_at") or datetime.datetime.now(datetime.timezone.utc)
         posted_tx = PostedTransaction(
             account_id=account.id,
             authorization_id=auth.id,
             auth_code=auth.auth_code,
             retrieval_reference_number=rrn,
             amount_cents=-settle_amount, # posted card charges are negative
-            description=description or auth.merchant_name or "Card Purchase"
+            description=description or auth.merchant_name or "Card Purchase",
+            posted_at=posted_at_val
         )
         db.add(posted_tx)
         
@@ -250,12 +248,10 @@ def process_reversal(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
         db.bind._ignore_rbac = True
 
     try:
+        repo = CreditCardRepository(db)
         rrn = payload.get("retrieval_reference_number")
 
-        auth = db.query(TransactionAuthorization).filter(
-            TransactionAuthorization.retrieval_reference_number == rrn,
-            TransactionAuthorization.status == "PENDING"
-        ).first()
+        auth = repo.get_authorization_by_rrn(rrn, status="PENDING")
 
         if not auth:
             raise ValueError(f"No pending authorization hold found with RRN: {rrn} to reverse.")
@@ -264,7 +260,7 @@ def process_reversal(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
         auth.status = "REVERSED"
 
         # Lookup account with pessimistic row locking
-        account = db.query(CreditAccount).filter(CreditAccount.id == auth.account_id).with_for_update().first()
+        account = repo.get_account_by_id(str(auth.account_id), lock=True)
         if not account:
             raise ValueError("Credit account not found")
 

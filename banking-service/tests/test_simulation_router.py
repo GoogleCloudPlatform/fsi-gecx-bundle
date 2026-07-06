@@ -99,7 +99,7 @@ async def test_provision_my_demo_success(async_client, db_session):
     
     # Check historical swipes (should have exactly 12 posted transactions, plus 2 pending authorization holds)
     swipes = db_session.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).all()
-    assert len(swipes) == 12
+    assert len(swipes) == 13
 
     from models.credit_card import TransactionAuthorization
     holds = db_session.query(TransactionAuthorization).filter(
@@ -146,7 +146,7 @@ async def test_reset_my_demo_success(async_client, db_session):
     assert cred_acc.available_credit_cents == cred_acc.credit_limit_cents - cred_acc.cleared_balance_cents - 3500
     
     swipes_count = db_session.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).count()
-    assert swipes_count == 12
+    assert swipes_count == 13
     
     accounts = db_session.query(Account).filter(Account.user_id == user_id).all()
     for acc in accounts:
@@ -215,6 +215,15 @@ async def test_inject_anomaly_success(async_client, db_session):
     
     # 3. Verify in database
     from models.credit_card import TransactionAuthorization
-    auths = db_session.query(TransactionAuthorization).filter(TransactionAuthorization.merchant_name == "LUXURY BOUTIQUE CANCUN [MEX]").all()
+    auths = db_session.query(TransactionAuthorization).filter(TransactionAuthorization.merchant_name == "LUXURY BOUTIQUE RIVIERA MAYA [MEX]").all()
     assert len(auths) == 1
+
+@pytest.mark.asyncio
+async def test_get_active_cards_success(async_client, db_session):
+    headers = {"X-Card-Network-Token": "switch-secret-key-12345"}
+    res = await async_client.get("/api/v1/credit-card/active-cards", headers=headers)
+    assert res.status_code == status.HTTP_200_OK
+    data = res.json()
+    assert "active_cards" in data
+    assert "count" in data
 

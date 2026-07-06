@@ -282,6 +282,16 @@ export async function resetMyDemo() {
   return res.data;
 }
 
+export async function triggerSpendSurge() {
+  const res = await api.post('/v1/simulation/surge');
+  return res.data;
+}
+
+export async function injectFraudAnomaly() {
+  const res = await api.post('/v1/simulation/inject-anomaly');
+  return res.data;
+}
+
 export async function getAccountsSummary() {
   const res = await api.get('/v1/accounts/summary');
   return res.data;

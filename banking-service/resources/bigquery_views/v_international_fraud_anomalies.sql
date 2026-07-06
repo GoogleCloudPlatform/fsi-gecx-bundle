@@ -17,7 +17,8 @@ SELECT
   s.risk_score,
   t.created_at AS swipe_timestamp
 FROM `fsi_lakehouse.cards_transaction_authorizations` t
-JOIN `fsi_lakehouse.identity_users` u ON t.account_id = u.id
+JOIN `fsi_lakehouse.cards_credit_accounts` c ON t.account_id = c.id
+JOIN `fsi_lakehouse.identity_users` u ON c.customer_id = u.id
 LEFT JOIN `fsi_lakehouse.identity_user_addresses` a ON u.id = a.user_id AND a.address_type = 'RESIDENTIAL'
 JOIN `fsi_lakehouse.merchants_merchant_stores` s ON t.merchant_name = s.raw_descriptor
 WHERE s.is_international = TRUE AND s.risk_score > 20

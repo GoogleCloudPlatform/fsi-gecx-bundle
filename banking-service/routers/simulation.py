@@ -216,7 +216,7 @@ def inject_targeted_fraud(
 ):
     """
     Injects a high-velocity card-not-present (CNP) and international retail fraud surge against the CE presenter's card.
-    simulating someone who skimmed or found their physical card after Coco Bongo.
+    simulating someone who skimmed or found their physical card while traveling in Riviera Maya.
     """
     email = token.email
     uid = token.user_id
@@ -242,7 +242,7 @@ def inject_targeted_fraud(
         ("GAME*TEST TOKEN ONLINE", 499, "5814", "USA", 0),
         ("APPLE.COM*ONLINE", 149900, "5310", "USA", 0),
         ("BEST BUY*MKTPLACE", 215000, "5310", "USA", 0),
-        ("LUXURY BOUTIQUE CANCUN [MEX]", 320000, "5310", "MEX", 30),
+        ("LUXURY BOUTIQUE RIVIERA MAYA [MEX]", 320000, "5310", "MEX", 30),
     ]
 
     injected_auths = []
