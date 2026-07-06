@@ -137,10 +137,13 @@ class CdcMonitoringService:
                 for result in results:
                     if result.points:
                         val = result.points[0].value
-                        if getattr(val, "int64_value", None) is not None and val.int64_value:
+                        oneof_field = val._pb.WhichOneof("value")
+                        if oneof_field == "int64_value":
                             metrics[key] = val.int64_value
-                        elif getattr(val, "double_value", None) is not None and val.double_value:
+                        elif oneof_field == "double_value":
                             metrics[key] = val.double_value
+                        elif oneof_field == "distribution_value":
+                            metrics[key] = int(val.distribution_value.mean)
                         break
         except Exception as e:
             logger.warning(f"Error fetching cloud monitoring metrics: {e}")

@@ -461,7 +461,7 @@ function AdminSimulationView() {
               </span>
             </h4>
             <p className="text-xs text-slate-400 mt-1">
-              Authenticated monitor comparing operational card-network writes with BigQuery lakehouse rows replicated by Datastream.
+              Authenticated monitor displaying live operational card-network writes pushed through the Redis event bus.
             </p>
             {cdcStatus && (
               <p className="text-[11px] text-slate-500 mt-1">
