@@ -65,6 +65,7 @@ class CdcMonitoringService:
         return value
 
     def get_operational_latest_timestamp(self):
+        self.db.connection().info["_ignore_rbac"] = True
         latest_auth = self.db.query(func.max(TransactionAuthorization.created_at)).scalar()
         latest_posted = self.db.query(func.max(PostedTransaction.posted_at)).scalar()
         return max([dt for dt in [latest_auth, latest_posted] if dt], default=None)
@@ -109,9 +110,9 @@ class CdcMonitoringService:
             })
 
             metric_types = [
-                ("system_lag", "datastream.googleapis.com/stream/system_lag"),
-                ("data_freshness", "datastream.googleapis.com/stream/data_freshness"),
-                ("total_bytes_processed", "datastream.googleapis.com/stream/total_bytes_processed")
+                ("system_lag", "datastream.googleapis.com/stream/system_latencies"),
+                ("data_freshness", "datastream.googleapis.com/stream/freshness"),
+                ("total_bytes_processed", "datastream.googleapis.com/stream/bytes_count")
             ]
             
             for key, mtype in metric_types:

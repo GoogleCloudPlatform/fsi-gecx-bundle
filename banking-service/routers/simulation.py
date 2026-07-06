@@ -357,6 +357,7 @@ def get_global_stream(
     to animate the Admin Simulation Lakehouse CDC replication monitor.
     """
     from models.credit_card import TransactionAuthorization, PostedTransaction
+    db.connection().info["_ignore_rbac"] = True
     auths = db.query(TransactionAuthorization).order_by(TransactionAuthorization.created_at.desc()).limit(50).all()
     posteds = db.query(PostedTransaction).order_by(PostedTransaction.posted_at.desc()).limit(50).all()
 
@@ -437,6 +438,7 @@ async def stream_sse(
         cdc_service = CdcMonitoringService(db)
         while True:
             try:
+                db.connection().info["_ignore_rbac"] = True
                 db.expire_all()
                 auths = db.query(TransactionAuthorization).order_by(TransactionAuthorization.created_at.desc()).limit(50).all()
                 posteds = db.query(PostedTransaction).order_by(PostedTransaction.posted_at.desc()).limit(50).all()
