@@ -86,14 +86,25 @@ CATEGORY_MCC_MAP = {
 
 merchants_list: List[Dict[str, Any]] = []
 
+_cached_oidc_token = None
+_cached_token_time = 0
+
 def get_service_headers() -> Dict[str, str]:
     """
     Constructs required headers for communicating with banking-service.
     Includes X-Card-Network-Token for application auth and an automatic Google OIDC ID token
     for Google Cloud Run IAM invoker verification.
     """
+    global _cached_oidc_token, _cached_token_time
+    import time
+    
     headers = {"X-Card-Network-Token": CARD_NETWORK_TOKEN}
     if BANKING_SERVICE_URL and "localhost" not in BANKING_SERVICE_URL and "127.0.0.1" not in BANKING_SERVICE_URL:
+        # Cache token for 50 minutes (expires in 60 min)
+        if _cached_oidc_token and (time.time() - _cached_token_time) < 3000:
+            headers["Authorization"] = f"Bearer {_cached_oidc_token}"
+            return headers
+            
         try:
             import google.auth
             import google.auth.transport.requests
@@ -101,6 +112,8 @@ def get_service_headers() -> Dict[str, str]:
             auth_req = google.auth.transport.requests.Request()
             oidc_token = id_token.fetch_id_token(auth_req, BANKING_SERVICE_URL)
             if oidc_token:
+                _cached_oidc_token = oidc_token
+                _cached_token_time = time.time()
                 headers["Authorization"] = f"Bearer {oidc_token}"
         except Exception as auth_err:
             logger.warning(f"Could not fetch Google OIDC ID token for {BANKING_SERVICE_URL}: {auth_err}")
@@ -330,7 +343,7 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
             logger.info(f"Swipe hold left PENDING (active hold). Card: {card.get('cardholder_name')}, Amount: ${amount_cents/100:.2f}")
             
     except Exception as exc:
-        logger.error(f"Failed to execute simulation cycle for card {card.get('cardholder_name')}: {exc}")
+        logger.error(f"Failed to execute simulation cycle for card {card.get('cardholder_name')}: {repr(exc)}")
 
 async def run_activity_surge_task(active_cards: Optional[List[Dict[str, Any]]] = None) -> None:
     """Fires 50 rapid-fire swipes staggered over 10 seconds."""
