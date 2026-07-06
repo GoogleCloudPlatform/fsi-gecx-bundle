@@ -19,7 +19,7 @@ import {
   ArrowLeft, CheckCircle2, AlertTriangle, TrendingUp, Globe, Clock, 
   Layers, ChevronRight, Play, Info, ExternalLink
 } from 'lucide-react';
-import { triggerSpendSurge, injectFraudAnomaly, injectLateFee, getGlobalStream, getLakehouseStream, getCdcStatus } from '../utils/api.js';
+import { triggerSpendSurge, injectFraudAnomaly, injectLateFee, getGlobalStream, getCdcStatus } from '../utils/api.js';
 import GoogleCloudIcon from './GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { showInfoModals } from '../utils/constants.js';
@@ -32,9 +32,7 @@ function AdminSimulationView() {
   const [isStreamLoading, setIsStreamLoading] = useState(false);
   const [isGcpInfoModalOpen, setIsGcpInfoModalOpen] = useState(false);
   const [streamData, setStreamData] = useState([]);
-  const [lakehouseData, setLakehouseData] = useState([]);
   const [cdcStatus, setCdcStatus] = useState(null);
-  const [lakehouseError, setLakehouseError] = useState('');
   const [feedback, setFeedback] = useState({ type: '', title: '', message: '', data: null });
   const [cdcStats, setCdcStats] = useState({
     systemLag: 0,
@@ -47,17 +45,12 @@ function AdminSimulationView() {
   const fetchGlobalStream = async () => {
     setIsStreamLoading(true);
     try {
-      const [operationalRes, lakehouseRes, statusRes] = await Promise.all([
+      const [operationalRes, statusRes] = await Promise.all([
         getGlobalStream(),
-        getLakehouseStream(),
         getCdcStatus(),
       ]);
       if (operationalRes && operationalRes.stream) {
         setStreamData(operationalRes.stream);
-      }
-      if (lakehouseRes && lakehouseRes.stream) {
-        setLakehouseData(lakehouseRes.stream);
-        setLakehouseError(lakehouseRes.bigquery_error || '');
       }
       if (statusRes) {
         setCdcStatus(statusRes);
@@ -80,7 +73,6 @@ function AdminSimulationView() {
         const data = JSON.parse(event.data);
         if (data.status === 'SUCCESS') {
           if (data.operational_stream) setStreamData(data.operational_stream);
-          if (data.lakehouse_stream) setLakehouseData(data.lakehouse_stream);
           
           if (data.cdc_metrics) {
             setCdcStats({
@@ -500,7 +492,7 @@ function AdminSimulationView() {
           </div>
         </div>
 
-        <h5 className="text-xs uppercase tracking-wider text-slate-500 font-bold mb-3">Operational Source of Truth</h5>
+        <h5 className="text-xs uppercase tracking-wider text-slate-500 font-bold mb-3">Live Unified Event Stream (Redis Bus)</h5>
         <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/70 mb-7">
           <table className="w-full text-left border-collapse font-mono text-xs">
             <thead>
@@ -552,59 +544,6 @@ function AdminSimulationView() {
           </table>
         </div>
 
-        <div className="flex items-center justify-between mb-3">
-          <h5 className="text-xs uppercase tracking-wider text-slate-500 font-bold">BigQuery Lakehouse CDC Destination</h5>
-          {lakehouseError && <span className="text-[10px] text-amber-400 font-mono">BigQuery degraded</span>}
-        </div>
-        {lakehouseError && (
-          <div className="mb-3 p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 text-xs font-mono overflow-x-auto">
-            {lakehouseError}
-          </div>
-        )}
-        <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/70">
-          <table className="w-full text-left border-collapse font-mono text-xs">
-            <thead>
-              <tr className="border-b border-slate-800 text-slate-400 bg-slate-900/50">
-                <th className="p-3.5 font-semibold">Timestamp</th>
-                <th className="p-3.5 font-semibold">RRN / Event ID</th>
-                <th className="p-3.5 font-semibold">Merchant / Descriptor</th>
-                <th className="p-3.5 font-semibold text-right">Amount</th>
-                <th className="p-3.5 font-semibold">Status / Source Table</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60">
-              {lakehouseData.length === 0 ? (
-                <tr>
-                  <td colSpan="5" className="p-8 text-center text-slate-500 font-sans">
-                    Waiting for replicated BigQuery rows from Datastream.
-                  </td>
-                </tr>
-              ) : (
-                lakehouseData.map((item, idx) => (
-                  <tr key={item.id + idx} className="hover:bg-slate-900/60 transition-colors">
-                    <td className="p-3.5 text-slate-400 whitespace-nowrap flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
-                      {item.timestamp}
-                    </td>
-                    <td className="p-3.5 text-slate-300 font-bold whitespace-nowrap">{item.rrn}</td>
-                    <td className="p-3.5 text-white font-sans font-medium truncate max-w-xs">{item.merchant_name}</td>
-                    <td className="p-3.5 text-right font-bold whitespace-nowrap">
-                      ${(Math.abs(item.amount_cents || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="p-3.5 whitespace-nowrap">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                          {item.status}
-                        </span>
-                        <span className="text-[10px] text-slate-500">{item.bq_view}</span>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
       </div>
 
       <GcpInfoModal

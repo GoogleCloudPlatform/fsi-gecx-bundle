@@ -380,17 +380,7 @@ def get_cdc_status(
     return CdcMonitoringService(db).get_cdc_status()
 
 
-@router.get("/lakehouse-stream", status_code=status.HTTP_200_OK)
-@v1_router.get("/lakehouse-stream", status_code=status.HTTP_200_OK)
-@alias_router.get("/lakehouse-stream", status_code=status.HTTP_200_OK)
-def get_lakehouse_stream(
-    token: ValidatedToken = Depends(verify_presenter_domain),
-    db: Session = Depends(get_db)
-):
-    """
-    Returns recent transactions from the BigQuery lakehouse CDC destination.
-    """
-    return CdcMonitoringService(db).get_lakehouse_stream()
+
 
 @router.get("/stream-sse")
 @v1_router.get("/stream-sse")
@@ -425,15 +415,13 @@ async def stream_sse(
                     stream_items = [json.loads(s) for s in recent_strs]
                 else:
                     # Fallback if Redis is down
-                    stream_items = cdc_service.get_operational_stream()[:20]
+                    stream_items = []
                 
-                lakehouse_res = cdc_service.get_lakehouse_stream()
                 metrics = cdc_service.get_cached_datastream_metrics()
                 
                 payload = json.dumps({
                     "status": "SUCCESS", 
                     "operational_stream": stream_items,
-                    "lakehouse_stream": lakehouse_res.get("stream", []),
                     "cdc_metrics": metrics
                 })
                 yield f"data: {payload}\n\n"

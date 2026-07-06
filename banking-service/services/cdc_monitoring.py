@@ -154,40 +154,4 @@ class CdcMonitoringService:
 
         return metrics
 
-    def get_lakehouse_stream(self) -> dict:
-        global _cache
-        if _cache:
-            try:
-                cached = _cache.get("lakehouse_stream")
-                if cached:
-                    return json.loads(cached)
-            except Exception:
-                pass
 
-        try:
-            rows = self.lakehouse_repo.list_recent_transactions(limit=20)
-        except Exception as exc:
-            logger.warning(f"Unable to query BigQuery CDC stream: {exc}")
-            return {"status": "DEGRADED", "stream": [], "bigquery_error": str(exc)}
-
-        stream_items = []
-        for row in rows:
-            event_time = row.get("event_time")
-            stream_items.append({
-                "id": row.get("id"),
-                "rrn": row.get("rrn") or "N/A",
-                "timestamp": event_time.strftime("%H:%M:%S") if event_time else "N/A",
-                "merchant_name": row.get("merchant_name"),
-                "amount_cents": row.get("amount_cents"),
-                "status": row.get("status"),
-                "bq_view": row.get("source"),
-                "raw_time": event_time.timestamp() if event_time else 0,
-            })
-
-        res = {"status": "SUCCESS", "stream": stream_items}
-        if _cache:
-            try:
-                _cache.setex("lakehouse_stream", 15, json.dumps(res))
-            except Exception:
-                pass
-        return res
