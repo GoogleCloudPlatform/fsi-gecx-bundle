@@ -65,6 +65,14 @@ resource "google_cloud_run_service_iam_member" "banking_service_invokes_voice_ag
   member   = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
+resource "google_cloud_run_service_iam_member" "banking_service_invokes_data_generator" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  service  = google_cloud_run_v2_service.data_generator[0].name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
 resource "google_cloud_run_service_iam_member" "voice_agent_invokes_banking_service" {
   count    = var.deploy_cloud_run_services ? 1 : 0
   service  = google_cloud_run_v2_service.banking_service[0].name
