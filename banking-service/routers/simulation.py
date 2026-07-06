@@ -360,7 +360,7 @@ def get_global_stream(
     to animate the Admin Simulation Lakehouse CDC replication monitor.
     """
     from models.credit_card import TransactionAuthorization, PostedTransaction
-    auths = db.query(TransactionAuthorization).order_by(TransactionAuthorization.created_at.desc()).limit(15).all()
+    auths = db.query(TransactionAuthorization).filter(TransactionAuthorization.status != "DECLINED").order_by(TransactionAuthorization.created_at.desc()).limit(15).all()
     posteds = db.query(PostedTransaction).order_by(PostedTransaction.posted_at.desc()).limit(15).all()
 
     stream_items = []

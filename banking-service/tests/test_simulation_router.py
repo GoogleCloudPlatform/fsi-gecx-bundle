@@ -103,9 +103,9 @@ async def test_provision_my_demo_success(async_client, db_session):
     pending_sum = sum(h.transaction_amount_cents for h in holds)
     assert cred_acc.available_credit_cents == cred_acc.credit_limit_cents - cred_acc.cleared_balance_cents - pending_sum
     
-    # Check historical swipes (should have exactly 10 posted retail transactions + 1 overdraft fee = 11 posted transactions)
+    # Check historical swipes (should have exactly 10 posted retail transactions without overdraft fee)
     swipes = db_session.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).all()
-    assert len(swipes) == 11
+    assert len(swipes) == 10
     assert len(holds) == 2
 
 @pytest.mark.asyncio
@@ -150,7 +150,7 @@ async def test_reset_my_demo_success(async_client, db_session):
     assert cred_acc.available_credit_cents == cred_acc.credit_limit_cents - cred_acc.cleared_balance_cents - pending_sum
     
     swipes_count = db_session.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).count()
-    assert swipes_count == 11
+    assert swipes_count == 10
     
     accounts = db_session.query(Account).filter(Account.user_id == user_id).all()
     for acc in accounts:

@@ -633,24 +633,6 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
 
     # 4. Credit Card Seeding (Pending Authorizations & Posted Transactions via Gateway)
     if cred_acc and card:
-        ovr_rrn = f"OVR_{str(user_uuid)[:8]}"
-        auth_ovr = process_authorization(db, {
-            "card_token": card.card_token,
-            "amount_cents": 3500,
-            "retrieval_reference_number": ovr_rrn,
-            "merchant_category_code": "FEE",
-            "merchant_name": "Overdraft Fee",
-            "card_network": "VISA",
-            "created_at": now - datetime.timedelta(days=4)
-        })
-        if auth_ovr.get("action_code") == "00":
-            process_settlement(db, {
-                "retrieval_reference_number": ovr_rrn,
-                "amount_cents": 3500,
-                "description": "Overdraft Fee",
-                "posted_at": now - datetime.timedelta(days=3)
-            })
-
         # Assign a consistent geographical home metro and international travel trip for this customer's demo card
         from models.identity import User
         user_obj = db.query(User).filter(User.id == user_uuid).first()
@@ -661,6 +643,25 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
         else:
             user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA", "ATLANTA GA", "MIAMI FL"])
             user_travel_country = None
+
+        if not is_googler:
+            ovr_rrn = f"OVR_{str(user_uuid)[:8]}"
+            auth_ovr = process_authorization(db, {
+                "card_token": card.card_token,
+                "amount_cents": 3500,
+                "retrieval_reference_number": ovr_rrn,
+                "merchant_category_code": "FEE",
+                "merchant_name": "Overdraft Fee",
+                "card_network": "VISA",
+                "created_at": now - datetime.timedelta(days=4)
+            })
+            if auth_ovr.get("action_code") == "00":
+                process_settlement(db, {
+                    "retrieval_reference_number": ovr_rrn,
+                    "amount_cents": 3500,
+                    "description": "Overdraft Fee",
+                    "posted_at": now - datetime.timedelta(days=3)
+                })
 
         meta_path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "seeding_metadata.json")
         mex_charges = []

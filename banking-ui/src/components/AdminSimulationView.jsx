@@ -17,7 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Sparkles, Activity, ShieldAlert, Zap, Database, RefreshCw, 
   ArrowLeft, CheckCircle2, AlertTriangle, TrendingUp, Globe, Clock, 
-  Layers, ChevronRight, Play
+  Layers, ChevronRight, Play, Info
 } from 'lucide-react';
 import { triggerSpendSurge, injectFraudAnomaly, injectLateFee, getGlobalStream } from '../utils/api.js';
 
@@ -26,6 +26,8 @@ function AdminSimulationView() {
   const [isSurgeLoading, setIsSurgeLoading] = useState(false);
   const [isAnomalyLoading, setIsAnomalyLoading] = useState(false);
   const [isFeeLoading, setIsFeeLoading] = useState(false);
+  const [isStreamLoading, setIsStreamLoading] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(false);
   const [streamData, setStreamData] = useState([]);
   const [feedback, setFeedback] = useState({ type: '', title: '', message: '', data: null });
   const [cdcStats, setCdcStats] = useState({
@@ -37,6 +39,7 @@ function AdminSimulationView() {
   });
 
   const fetchGlobalStream = async () => {
+    setIsStreamLoading(true);
     try {
       const res = await getGlobalStream();
       if (res && res.stream) {
@@ -44,6 +47,8 @@ function AdminSimulationView() {
       }
     } catch (e) {
       console.error("Failed to fetch global stream:", e);
+    } finally {
+      setIsStreamLoading(false);
     }
   };
 
@@ -419,16 +424,56 @@ function AdminSimulationView() {
               Live Lakehouse CDC Replication Feed (Global Ledger)
             </h4>
             <p className="text-xs text-slate-400 mt-1">
-              Real-time stream of authoritative card network events replicating into BigQuery views (<span className="text-cyan-400 font-mono">v_realtime_spend_velocity</span> &amp; <span className="text-rose-400 font-mono">v_international_fraud_anomalies</span>).
+              Real-time stream of authoritative card network events replicating through Datastream into Looker semantic models and AI Data Canvas.
             </p>
           </div>
-          <button
-            onClick={fetchGlobalStream}
-            className="self-start md:self-auto py-2 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-2 transition-colors border border-slate-700"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Refresh Stream
-          </button>
+
+          <div className="flex items-center gap-3 self-start md:self-auto">
+            <button
+              onClick={fetchGlobalStream}
+              disabled={isStreamLoading}
+              className="py-2 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-2 transition-all border border-slate-700 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isStreamLoading ? 'animate-spin' : ''}`} />
+              {isStreamLoading ? 'Refreshing...' : 'Refresh Stream'}
+            </button>
+
+            <div className="relative inline-block">
+              <button
+                onMouseEnter={() => setShowTooltip(true)}
+                onMouseLeave={() => setShowTooltip(false)}
+                onClick={() => setShowTooltip(!showTooltip)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-cyan-500/20 text-slate-400 hover:text-cyan-400 border border-slate-700 transition-colors flex items-center justify-center"
+                title="GCP BigQuery Target Views Info"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+
+              {showTooltip && (
+                <div className="absolute right-0 bottom-full mb-3 w-80 p-4 rounded-2xl bg-slate-950 text-slate-300 border border-slate-700 shadow-2xl z-50 text-xs font-sans">
+                  <div className="font-bold text-white mb-2 flex items-center gap-1.5">
+                    <Database className="w-4 h-4 text-cyan-400" />
+                    Target BigQuery View Definitions
+                  </div>
+                  <div className="space-y-2.5 font-mono text-[11px]">
+                    <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                      <div className="text-cyan-400 font-bold">fsi_lakehouse.v_realtime_spend_velocity</div>
+                      <div className="text-slate-400 font-sans mt-0.5 text-[10px]">
+                        Aggregates CDC transaction volume and ticket size by FDX category &amp; home metro.
+                      </div>
+                    </div>
+                    <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                      <div className="text-rose-400 font-bold">fsi_lakehouse.v_international_fraud_anomalies</div>
+                      <div className="text-slate-400 font-sans mt-0.5 text-[10px]">
+                        Isolates foreign card-present transactions where risk_score &gt; 20 for intervention.
+                      </div>
+                    </div>
+                  </div>
+                  <div className="absolute -bottom-1.5 right-3 w-3 h-3 bg-slate-950 border-r border-b border-slate-700 transform rotate-45" />
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/70">
