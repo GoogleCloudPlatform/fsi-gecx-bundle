@@ -20,8 +20,23 @@ from sqlalchemy.orm import Session
 
 from models.credit_card import CreditAccount, IssuedCard, TransactionAuthorization, PostedTransaction
 from repositories.credit_card import CreditCardRepository
+from services.fraud_scoring import FraudScoringService
+import json
 
 logger = logging.getLogger(__name__)
+
+def _publish_redis_event(event_type: str, item_dict: dict):
+    """Helper to publish real-time events to the Redis bus for the UI stream."""
+    try:
+        from utils.redis_client import get_redis_client
+        r = get_redis_client()
+        if r:
+            payload = json.dumps(item_dict)
+            r.lpush("recent_transactions", payload)
+            r.ltrim("recent_transactions", 0, 99)
+            r.publish("channel:transactions:live", payload)
+    except Exception as e:
+        logger.warning(f"Failed to publish transaction to Redis event bus: {e}")
 
 def recalculate_available_credit(db: Session, account: CreditAccount) -> None:
     """Updates the available credit cents for a credit account using the system of record."""
@@ -134,7 +149,12 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
                 "decline_reason": "INSUFFICIENT_FUNDS"
             }
 
-        # 5. Approve Hold
+        # 5. Evaluate Fraud Risk
+        fraud_service = FraudScoringService()
+        risk_score = fraud_service.evaluate_transaction_risk(payload)
+        auth_status = "FLAGGED" if risk_score > 20 else "PENDING"
+
+        # 6. Approve Hold
         auth_code = f"{random.randint(100000, 999999)}"
         now = payload.get("created_at") or datetime.datetime.now(datetime.timezone.utc)
         
@@ -143,7 +163,8 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
             account_id=account.id,
             transaction_amount_cents=amount_cents,
             billing_amount_cents=amount_cents,
-            status="PENDING",
+            status=auth_status,
+            fraud_risk_score=risk_score,
             decline_reason="NONE",
             auth_code=auth_code,
             retrieval_reference_number=rrn,
@@ -161,10 +182,24 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
         db.commit()
 
         logger.info(f"Swipe hold approved. Auth Code: {auth_code}. RRN: {rrn}. Account: {account.id}")
+
+        # Broadcast event to UI stream
+        _publish_redis_event("AUTH", {
+            "id": f"AUTH_{str(auth_hold.id)[:8]}",
+            "rrn": rrn or "N/A",
+            "timestamp": now.strftime("%H:%M:%S"),
+            "merchant_name": merchant_name,
+            "amount_cents": amount_cents,
+            "status": f"FLAGGED (RISK {risk_score})" if auth_status == "FLAGGED" else f"HOLD ({auth_status})",
+            "bq_view": "fsi_lakehouse.v_international_fraud_anomalies" if risk_score > 20 else "fsi_lakehouse.v_realtime_spend_velocity",
+            "raw_time": now.timestamp()
+        })
+
         return {
             "action_code": "00",
             "auth_code": auth_code,
-            "status": "PENDING",
+            "status": auth_status,
+            "fraud_risk_score": risk_score,
             "decline_reason": "NONE"
         }
     except Exception as e:
@@ -226,6 +261,19 @@ def process_settlement(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
         db.commit()
 
         logger.info(f"Swipe hold settled successfully. RRN: {rrn}. Cleared Balance: {account.cleared_balance_cents}")
+
+        # Broadcast event to UI stream
+        _publish_redis_event("POST", {
+            "id": f"POST_{str(posted_tx.id)[:8]}",
+            "rrn": rrn or "N/A",
+            "timestamp": posted_at_val.strftime("%H:%M:%S"),
+            "merchant_name": posted_tx.description,
+            "amount_cents": posted_tx.amount_cents,
+            "status": "SETTLE (POSTED)",
+            "bq_view": "fsi_lakehouse.v_realtime_spend_velocity",
+            "raw_time": posted_at_val.timestamp()
+        })
+
         return {
             "status": "SETTLED",
             "posted_transaction_id": str(posted_tx.id),

@@ -70,6 +70,38 @@ class CdcMonitoringService:
         latest_posted = self.db.query(func.max(PostedTransaction.posted_at)).scalar()
         return max([dt for dt in [latest_auth, latest_posted] if dt], default=None)
 
+    def get_cdc_status(self) -> dict:
+        operational_latest = self.get_operational_latest_timestamp()
+        lakehouse_latest = None
+        lakehouse_count = 0
+        bq_error = None
+
+        try:
+            watermark = self.lakehouse_repo.get_cdc_watermark()
+            if watermark:
+                lakehouse_latest = watermark.get("latest_ts")
+                lakehouse_count = int(watermark.get("row_count") or 0)
+        except Exception as exc:
+            logger.warning(f"Unable to query BigQuery CDC status: {exc}")
+            bq_error = str(exc)
+
+        lag_seconds = None
+        operational_latest = self._ensure_aware(operational_latest)
+        lakehouse_latest = self._ensure_aware(lakehouse_latest)
+        if operational_latest and lakehouse_latest:
+            lag_seconds = max(0, int((operational_latest - lakehouse_latest).total_seconds()))
+
+        return {
+            "status": "SUCCESS" if not bq_error else "DEGRADED",
+            "operational_latest_timestamp": operational_latest.isoformat() if operational_latest else None,
+            "lakehouse_latest_timestamp": lakehouse_latest.isoformat() if lakehouse_latest else None,
+            "replication_lag_seconds": lag_seconds,
+            "lakehouse_row_count": lakehouse_count,
+            "bigquery_dataset": self.lakehouse_repo.dataset,
+            "bigquery_error": bq_error,
+        }
+
+
     def get_cached_datastream_metrics(self) -> dict:
         global _cache
         if _cache:

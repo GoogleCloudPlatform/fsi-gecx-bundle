@@ -185,3 +185,4 @@ class CreditCardRepository:
         """Retrieves a CreditProduct catalog entity by its product code."""
         from models.credit_card import CreditProduct
         return self.db.query(CreditProduct).filter(CreditProduct.product_code == product_code).first()
+

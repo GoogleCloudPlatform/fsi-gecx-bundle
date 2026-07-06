@@ -35,13 +35,17 @@ class FakeLakehouseRepository:
             raise self.error
         return self.rows[:limit]
 
-
 class FakeSession:
     def query(self, *_args, **_kwargs):
         return self
 
     def scalar(self):
         return datetime.datetime(2026, 7, 6, 12, 0, 5, tzinfo=datetime.timezone.utc)
+
+    def connection(self):
+        class FakeConnection:
+            info = {}
+        return FakeConnection()
 
 
 def test_cdc_status_calculates_lag():
