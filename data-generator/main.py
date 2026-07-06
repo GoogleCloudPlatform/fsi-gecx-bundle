@@ -463,20 +463,25 @@ def health():
 @app.post("/generate", status_code=status.HTTP_200_OK)
 @app.post("/simulate-pulse", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
 async def simulate_pulse():
-    """Wakes up and fires a randomized batch of 3-5 swipes across the persona pool."""
-    logger.info("Triggered simulated activity pulse...")
+    """Wakes up and fires a randomized batch of 3-5 swipes every 10 seconds for a full minute."""
+    logger.info("Triggered simulated activity pulse (6 bursts over 60s)...")
     cards = get_active_cards()
     if not cards:
         raise HTTPException(status_code=400, detail="No active cards found to swipe.")
         
-    batch_size = random.randint(3, 5)
-    swipes_to_run = [random.choice(cards) for _ in range(batch_size)]
+    all_results = []
     
     async with httpx.AsyncClient() as client:
-        tasks = [simulate_swipe_event(client, card) for card in swipes_to_run]
-        results = await asyncio.gather(*tasks, return_exceptions=False)
+        for _ in range(6):
+            batch_size = random.randint(3, 5)
+            swipes_to_run = [random.choice(cards) for _ in range(batch_size)]
+            
+            tasks = [simulate_swipe_event(client, card) for card in swipes_to_run]
+            results = await asyncio.gather(*tasks, return_exceptions=False)
+            all_results.extend(results)
+            await asyncio.sleep(10)
         
-    summary = summarize_swipe_results(results)
+    summary = summarize_swipe_results(all_results)
     if summary["authorizations_created"] == 0:
         raise HTTPException(status_code=502, detail={"message": "No transaction authorizations were created.", **summary})
     return {"status": "SUCCESS", **summary, "active_cards_count": len(cards)}
