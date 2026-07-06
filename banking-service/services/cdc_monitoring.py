@@ -137,9 +137,9 @@ class CdcMonitoringService:
                 for result in results:
                     if result.points:
                         val = result.points[0].value
-                        if val.HasField("int64_value"):
+                        if getattr(val, "int64_value", None) is not None and val.int64_value:
                             metrics[key] = val.int64_value
-                        elif val.HasField("double_value"):
+                        elif getattr(val, "double_value", None) is not None and val.double_value:
                             metrics[key] = val.double_value
                         break
         except Exception as e:
