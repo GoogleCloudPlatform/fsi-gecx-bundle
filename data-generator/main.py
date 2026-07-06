@@ -86,6 +86,26 @@ CATEGORY_MCC_MAP = {
 
 merchants_list: List[Dict[str, Any]] = []
 
+def get_service_headers() -> Dict[str, str]:
+    """
+    Constructs required headers for communicating with banking-service.
+    Includes X-Card-Network-Token for application auth and an automatic Google OIDC ID token
+    for Google Cloud Run IAM invoker verification.
+    """
+    headers = {"X-Card-Network-Token": CARD_NETWORK_TOKEN}
+    if BANKING_SERVICE_URL and "localhost" not in BANKING_SERVICE_URL and "127.0.0.1" not in BANKING_SERVICE_URL:
+        try:
+            import google.auth
+            import google.auth.transport.requests
+            from google.oauth2 import id_token
+            auth_req = google.auth.transport.requests.Request()
+            oidc_token = id_token.fetch_id_token(auth_req, BANKING_SERVICE_URL)
+            if oidc_token:
+                headers["Authorization"] = f"Bearer {oidc_token}"
+        except Exception as auth_err:
+            logger.warning(f"Could not fetch Google OIDC ID token for {BANKING_SERVICE_URL}: {auth_err}")
+    return headers
+
 def get_merchants() -> List[Dict[str, Any]]:
     """Fetches merchant catalog via HTTP from banking-service, falling back to local resources or static defaults."""
     global merchants_list
@@ -93,8 +113,8 @@ def get_merchants() -> List[Dict[str, Any]]:
         return merchants_list
         
     try:
-        with httpx.Client(timeout=3.0) as client:
-            res = client.get(f"{BANKING_SERVICE_URL}/api/v1/merchants")
+        with httpx.Client(timeout=5.0) as client:
+            res = client.get(f"{BANKING_SERVICE_URL}/api/v1/merchants", headers=get_service_headers())
             if res.status_code == 200:
                 data = res.json()
                 loaded = []
@@ -192,9 +212,8 @@ def get_active_cards() -> List[Dict[str, Any]]:
     Falls back to static DEFAULT_PERSONAS manifest.
     """
     try:
-        headers = {"X-Card-Network-Token": CARD_NETWORK_TOKEN}
-        with httpx.Client(timeout=3.0) as client:
-            res = client.get(f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards", headers=headers)
+        with httpx.Client(timeout=5.0) as client:
+            res = client.get(f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards", headers=get_service_headers())
             if res.status_code == 200:
                 data = res.json()
                 cards = data.get("active_cards", [])
@@ -255,18 +274,7 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
 
     rrn = "".join(random.choices("0123456789", k=12))
     
-    headers = {"X-Card-Network-Token": CARD_NETWORK_TOKEN}
-    if BANKING_SERVICE_URL and "localhost" not in BANKING_SERVICE_URL and "127.0.0.1" not in BANKING_SERVICE_URL:
-        try:
-            import google.auth
-            import google.auth.transport.requests
-            from google.oauth2 import id_token
-            auth_req = google.auth.transport.requests.Request()
-            oidc_token = id_token.fetch_id_token(auth_req, BANKING_SERVICE_URL)
-            if oidc_token:
-                headers["Authorization"] = f"Bearer {oidc_token}"
-        except Exception as auth_err:
-            logger.warning(f"Could not fetch Google OIDC ID token for {BANKING_SERVICE_URL}: {auth_err}")
+    headers = get_service_headers()
     auth_payload = {
         "card_token": card["card_token"],
         "amount_cents": amount_cents,
@@ -345,6 +353,7 @@ async def run_activity_surge_task(active_cards: Optional[List[Dict[str, Any]]] =
 def health():
     return {"status": "ok", "service": "data-generator"}
 
+@app.post("/generate", status_code=status.HTTP_200_OK)
 @app.post("/simulate-pulse", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
 async def simulate_pulse():
     """Wakes up and fires a randomized batch of 3-5 swipes across the persona pool."""
@@ -396,7 +405,7 @@ async def inject_anomaly(req: Optional[AnomalyRequest] = None):
     ]
 
     injected_auths = []
-    headers = {"X-Card-Network-Token": CARD_NETWORK_TOKEN}
+    headers = get_service_headers()
     auth_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
 
     async with httpx.AsyncClient() as client:

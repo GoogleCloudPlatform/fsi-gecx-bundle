@@ -82,13 +82,12 @@ function AdminSimulationView() {
     }
   }, [feedback]);
 
-  // Simulate subtle real-time CDC fluctuations for dynamic feel
+  // Update latency and sync timestamp periodically without faking processed event increments
   useEffect(() => {
     const interval = setInterval(() => {
       setCdcStats(prev => ({
         ...prev,
         walLatencyMs: Math.floor(280 + Math.random() * 60),
-        eventsProcessed: prev.eventsProcessed + Math.floor(Math.random() * 3),
         lastSyncTime: new Date().toLocaleTimeString()
       }));
     }, 4000);
@@ -106,7 +105,6 @@ function AdminSimulationView() {
         message: res.message || 'Successfully triggered 50 rapid-fire swipes across 200 mock personas in the background.',
         data: res
       });
-      setCdcStats(prev => ({ ...prev, eventsProcessed: prev.eventsProcessed + 50 }));
       fetchGlobalStream();
     } catch (err) {
       setFeedback({
@@ -133,7 +131,6 @@ function AdminSimulationView() {
       });
       setCdcStats(prev => ({
         ...prev,
-        eventsProcessed: prev.eventsProcessed + (res.injected_swipes_count || 4),
         activeAnomalies: prev.activeAnomalies + (res.injected_swipes_count || 4)
       }));
       fetchGlobalStream();
@@ -160,10 +157,6 @@ function AdminSimulationView() {
         message: res.message || 'Injected $35.00 Late Fee against presenter card.',
         data: res
       });
-      setCdcStats(prev => ({
-        ...prev,
-        eventsProcessed: prev.eventsProcessed + 1
-      }));
       fetchGlobalStream();
     } catch (err) {
       setFeedback({
