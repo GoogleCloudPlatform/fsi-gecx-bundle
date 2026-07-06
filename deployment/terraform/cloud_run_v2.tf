@@ -575,7 +575,7 @@ resource "google_cloud_run_v2_service" "data_generator" {
       }
       env {
         name  = "BANKING_SERVICE_URL"
-        value = var.deploy_cloud_run_services ? google_cloud_run_v2_service.banking_service[0].uri : "http://localhost:8000"
+        value = "https://banking-service-${data.google_project.project.number}.${var.region}.run.app"
       }
     }
   }
