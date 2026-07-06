@@ -82,3 +82,13 @@ class CdcLakehouseRepository:
             ORDER BY event_time DESC
             LIMIT {int(limit)}
         """, limit=limit)
+
+    def get_anomalies_count(self) -> int:
+        try:
+            rows = self._query(f"""
+                SELECT COUNT(1) AS cnt
+                FROM `{self.project_id}.{self.dataset}.v_international_fraud_anomalies`
+            """, limit=1)
+            return int(rows[0]["cnt"]) if rows else 0
+        except Exception:
+            return 0

@@ -37,9 +37,9 @@ function AdminSimulationView() {
   const [lakehouseError, setLakehouseError] = useState('');
   const [feedback, setFeedback] = useState({ type: '', title: '', message: '', data: null });
   const [cdcStats, setCdcStats] = useState({
-    walLatencyMs: 0,
-    syncUptime: "Live",
-    eventsProcessed: 0,
+    systemLag: 0,
+    dataFreshness: 0,
+    totalThroughputMb: 0,
     activeAnomalies: 0,
     lastSyncTime: new Date().toLocaleTimeString()
   });
@@ -61,12 +61,6 @@ function AdminSimulationView() {
       }
       if (statusRes) {
         setCdcStatus(statusRes);
-        setCdcStats(prev => ({
-          ...prev,
-          walLatencyMs: statusRes.replication_lag_seconds ?? prev.walLatencyMs,
-          eventsProcessed: statusRes.lakehouse_row_count ?? prev.eventsProcessed,
-          lastSyncTime: new Date().toLocaleTimeString()
-        }));
       }
     } catch (e) {
       console.error("Failed to fetch global stream:", e);
@@ -77,8 +71,39 @@ function AdminSimulationView() {
 
   useEffect(() => {
     fetchGlobalStream();
-    const interval = setInterval(fetchGlobalStream, 3000);
-    return () => clearInterval(interval);
+    
+    // Replace manual polling with SSE Push
+    const eventSource = new EventSource('/api/v1/simulation/stream-sse', { withCredentials: true });
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.status === 'SUCCESS') {
+          if (data.operational_stream) setStreamData(data.operational_stream);
+          if (data.lakehouse_stream) setLakehouseData(data.lakehouse_stream);
+          
+          if (data.cdc_metrics) {
+            setCdcStats({
+              systemLag: data.cdc_metrics.system_lag ?? 0,
+              dataFreshness: data.cdc_metrics.data_freshness ?? 0,
+              totalThroughputMb: data.cdc_metrics.total_bytes_processed 
+                ? (data.cdc_metrics.total_bytes_processed / (1024 * 1024)).toFixed(2)
+                : 0,
+              activeAnomalies: data.cdc_metrics.active_anomalies ?? 0,
+              lastSyncTime: new Date().toLocaleTimeString()
+            });
+            setCdcStatus(prev => ({
+               ...prev, 
+               lakehouse_error: data.cdc_metrics.status === 'DEGRADED' ? 'Monitoring degraded' : '' 
+            }));
+          }
+        }
+      } catch (err) {
+        console.error("Error parsing SSE data", err);
+      }
+    };
+
+    return () => eventSource.close();
   }, []);
 
   useEffect(() => {
@@ -223,35 +248,35 @@ function AdminSimulationView() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>CDC Lag</span>
+              <span>System Lag</span>
               <Clock className="w-4 h-4 text-cyan-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {cdcStats.walLatencyMs} <span className="text-sm font-normal text-slate-500">sec</span>
+              {cdcStats.systemLag} <span className="text-sm font-normal text-slate-500">sec</span>
             </div>
-            <div className="text-[10px] text-emerald-500 font-medium mt-1">Operational latest vs BigQuery latest</div>
+            <div className="text-[10px] text-emerald-500 font-medium mt-1">Datastream ingestion delay</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Sync Uptime</span>
+              <span>Data Freshness</span>
               <Activity className="w-4 h-4 text-emerald-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {cdcStats.syncUptime}
+              {cdcStats.dataFreshness} <span className="text-sm font-normal text-slate-500">sec</span>
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">Zero dropped frames</div>
+            <div className="text-[10px] text-slate-400 mt-1">End-to-end CDC latency</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Processed Events</span>
+              <span>Total Throughput</span>
               <Layers className="w-4 h-4 text-blue-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {cdcStats.eventsProcessed.toLocaleString()}
+              {cdcStats.totalThroughputMb} <span className="text-sm font-normal text-slate-500">MB</span>
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">Authorizations &amp; Settlements</div>
+            <div className="text-[10px] text-slate-400 mt-1">Bytes processed via Datastream</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">

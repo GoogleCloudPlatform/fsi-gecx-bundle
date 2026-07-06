@@ -14,15 +14,41 @@
 
 import datetime
 import logging
+import os
+import time
+import json
+import redis
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from google.cloud import monitoring_v3
 
 from models.credit_card import PostedTransaction, TransactionAuthorization
 from repositories.cdc_lakehouse import CdcLakehouseRepository
+from utils.gcp import get_project_id
 
 logger = logging.getLogger(__name__)
 
+def get_redis_client():
+    redis_host = os.getenv("REDIS_HOST")
+    redis_port = os.getenv("REDIS_PORT", "6379")
+    redis_password = os.getenv("REDIS_PASSWORD")
+    if not redis_host:
+        return None
+    try:
+        return redis.Redis(
+            host=redis_host, 
+            port=int(redis_port), 
+            password=redis_password,
+            ssl=True,
+            ssl_cert_reqs="none",
+            decode_responses=True
+        )
+    except Exception as e:
+        logger.warning(f"Failed to connect to redis: {e}")
+        return None
+
+_cache = get_redis_client()
 
 class CdcMonitoringService:
     """Service layer for operational-to-lakehouse CDC monitoring."""
@@ -30,6 +56,7 @@ class CdcMonitoringService:
     def __init__(self, db: Session, lakehouse_repo: CdcLakehouseRepository | None = None):
         self.db = db
         self.lakehouse_repo = lakehouse_repo or CdcLakehouseRepository()
+        self.project_id = get_project_id()
 
     @staticmethod
     def _ensure_aware(value):
@@ -42,38 +69,87 @@ class CdcMonitoringService:
         latest_posted = self.db.query(func.max(PostedTransaction.posted_at)).scalar()
         return max([dt for dt in [latest_auth, latest_posted] if dt], default=None)
 
-    def get_cdc_status(self) -> dict:
-        operational_latest = self.get_operational_latest_timestamp()
-        lakehouse_latest = None
-        lakehouse_count = 0
-        bq_error = None
+    def get_cached_datastream_metrics(self) -> dict:
+        global _cache
+        if _cache:
+            try:
+                cached = _cache.get("datastream_metrics")
+                if cached:
+                    return json.loads(cached)
+            except Exception as e:
+                logger.warning(f"Redis cache error: {e}")
 
-        try:
-            watermark = self.lakehouse_repo.get_cdc_watermark()
-            if watermark:
-                lakehouse_latest = watermark.get("latest_ts")
-                lakehouse_count = int(watermark.get("row_count") or 0)
-        except Exception as exc:
-            logger.warning(f"Unable to query BigQuery CDC status: {exc}")
-            bq_error = str(exc)
-
-        lag_seconds = None
-        operational_latest = self._ensure_aware(operational_latest)
-        lakehouse_latest = self._ensure_aware(lakehouse_latest)
-        if operational_latest and lakehouse_latest:
-            lag_seconds = max(0, int((operational_latest - lakehouse_latest).total_seconds()))
-
-        return {
-            "status": "SUCCESS" if not bq_error else "DEGRADED",
-            "operational_latest_timestamp": operational_latest.isoformat() if operational_latest else None,
-            "lakehouse_latest_timestamp": lakehouse_latest.isoformat() if lakehouse_latest else None,
-            "replication_lag_seconds": lag_seconds,
-            "lakehouse_row_count": lakehouse_count,
-            "bigquery_dataset": self.lakehouse_repo.dataset,
-            "bigquery_error": bq_error,
+        metrics = {
+            "system_lag": None,
+            "data_freshness": None,
+            "total_bytes_processed": None,
+            "active_anomalies": 0,
+            "status": "SUCCESS"
         }
 
+        # Fetch active anomalies directly from BigQuery
+        try:
+            metrics["active_anomalies"] = self.lakehouse_repo.get_anomalies_count()
+        except Exception as e:
+            logger.warning(f"Error fetching anomalies count: {e}")
+            metrics["status"] = "DEGRADED"
+
+        # Fetch Cloud Monitoring metrics
+        try:
+            client = monitoring_v3.MetricServiceClient()
+            project_name = f"projects/{self.project_id}"
+            
+            now = time.time()
+            seconds = int(now)
+            nanos = int((now - seconds) * 10 ** 9)
+            # Look back up to 5 minutes to find the latest datapoint
+            interval = monitoring_v3.TimeInterval({
+                "end_time": {"seconds": seconds, "nanos": nanos},
+                "start_time": {"seconds": seconds - 300, "nanos": nanos},
+            })
+
+            metric_types = [
+                ("system_lag", "datastream.googleapis.com/stream/system_lag"),
+                ("data_freshness", "datastream.googleapis.com/stream/data_freshness"),
+                ("total_bytes_processed", "datastream.googleapis.com/stream/total_bytes_processed")
+            ]
+            
+            for key, mtype in metric_types:
+                results = client.list_time_series(request={
+                    "name": project_name,
+                    "filter": f'metric.type = "{mtype}"',
+                    "interval": interval,
+                })
+                for result in results:
+                    if result.points:
+                        val = result.points[0].value
+                        if val.HasField("int64_value"):
+                            metrics[key] = val.int64_value
+                        elif val.HasField("double_value"):
+                            metrics[key] = val.double_value
+                        break
+        except Exception as e:
+            logger.warning(f"Error fetching cloud monitoring metrics: {e}")
+            metrics["status"] = "DEGRADED"
+
+        if _cache:
+            try:
+                _cache.setex("datastream_metrics", 15, json.dumps(metrics))
+            except Exception:
+                pass
+
+        return metrics
+
     def get_lakehouse_stream(self) -> dict:
+        global _cache
+        if _cache:
+            try:
+                cached = _cache.get("lakehouse_stream")
+                if cached:
+                    return json.loads(cached)
+            except Exception:
+                pass
+
         try:
             rows = self.lakehouse_repo.list_recent_transactions(limit=20)
         except Exception as exc:
@@ -94,4 +170,10 @@ class CdcMonitoringService:
                 "raw_time": event_time.timestamp() if event_time else 0,
             })
 
-        return {"status": "SUCCESS", "stream": stream_items}
+        res = {"status": "SUCCESS", "stream": stream_items}
+        if _cache:
+            try:
+                _cache.setex("lakehouse_stream", 15, json.dumps(res))
+            except Exception:
+                pass
+        return res

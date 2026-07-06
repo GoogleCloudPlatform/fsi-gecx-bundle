@@ -434,6 +434,7 @@ async def stream_sse(
     directly to the Admin Simulation UI without requiring manual refreshes or client-side polling.
     """
     async def event_generator():
+        cdc_service = CdcMonitoringService(db)
         while True:
             try:
                 db.expire_all()
@@ -471,7 +472,16 @@ async def stream_sse(
                         "raw_time": p.posted_at.timestamp() if p.posted_at else 0
                     })
                 stream_items.sort(key=lambda x: x["raw_time"], reverse=True)
-                payload = json.dumps({"status": "SUCCESS", "stream": stream_items[:20]})
+                
+                lakehouse_res = cdc_service.get_lakehouse_stream()
+                metrics = cdc_service.get_cached_datastream_metrics()
+                
+                payload = json.dumps({
+                    "status": "SUCCESS", 
+                    "operational_stream": stream_items[:20],
+                    "lakehouse_stream": lakehouse_res.get("stream", []),
+                    "cdc_metrics": metrics
+                })
                 yield f"data: {payload}\n\n"
             except Exception as e:
                 logger.error(f"Error generating SSE stream: {e}")

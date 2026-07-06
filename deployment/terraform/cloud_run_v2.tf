@@ -143,6 +143,36 @@ resource "google_cloud_run_v2_service" "banking_service" {
       }
 
       env {
+        name  = "CDC_BIGQUERY_AUTH_TABLE"
+        value = "cards_transaction_authorization"
+      }
+
+      env {
+        name  = "CDC_BIGQUERY_POSTED_TABLE"
+        value = "cards_posted_transactions"
+      }
+
+      env {
+        name  = "REDIS_HOST"
+        value = google_redis_instance.banking.host
+      }
+
+      env {
+        name  = "REDIS_PORT"
+        value = google_redis_instance.banking.port
+      }
+
+      env {
+        name = "REDIS_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.redis_password.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
         name  = "GECX_APP_ID"
         value = var.cx_agent_studio_voice_agent_deployment_name
       }

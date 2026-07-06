@@ -56,6 +56,12 @@ resource "google_project_iam_member" "banking_service_sa_ai_user" {
   member  = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
+resource "google_project_iam_member" "banking_service_sa_monitoring_viewer" {
+  project = data.google_project.project.project_id
+  role    = "roles/monitoring.viewer"
+  member  = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
 resource "google_project_iam_member" "banking_service_sa_dialogflow_client" {
   project = data.google_project.project.project_id
   role    = "roles/dialogflow.client"
