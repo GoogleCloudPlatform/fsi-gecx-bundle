@@ -14,6 +14,7 @@
 
 import sys
 import os
+from unittest.mock import MagicMock, patch
 
 # Set dummy model environment variable to bypass Pydantic import-time validation
 os.environ["VOICE_AGENT_AUDIO_MODEL"] = "gemini-2.0-flash-exp"
@@ -25,19 +26,20 @@ if agent_dir not in sys.path:
 
 def test_monkeypatch_application():
     """Verifies that the ADK monkeypatch loads and applies receive method correctly without signature mismatch."""
-    from agent.patch_adk import apply_patch
-    from google.adk.models.gemini_llm_connection import GeminiLlmConnection
+    with patch("google.auth.default", return_value=(MagicMock(), "local-test-project")):
+        from agent.patch_adk import apply_patch
+        from google.adk.models.gemini_llm_connection import GeminiLlmConnection
 
-    original_receive = GeminiLlmConnection.receive
-    try:
-        # Apply the monkeypatch
-        apply_patch()
-        
-        # Check that the method was replaced
-        assert GeminiLlmConnection.receive != original_receive
-        
-        # Verify that it is callable
-        assert callable(GeminiLlmConnection.receive)
-    finally:
-        # Restore original method to avoid polluting other test states
-        GeminiLlmConnection.receive = original_receive
+        original_receive = GeminiLlmConnection.receive
+        try:
+            # Apply the monkeypatch
+            apply_patch()
+
+            # Check that the method was replaced
+            assert GeminiLlmConnection.receive != original_receive
+
+            # Verify that it is callable
+            assert callable(GeminiLlmConnection.receive)
+        finally:
+            # Restore original method to avoid polluting other test states
+            GeminiLlmConnection.receive = original_receive

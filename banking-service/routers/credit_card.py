@@ -105,9 +105,14 @@ def get_active_cards(
     _auth: bool = Depends(verify_admin_or_internal_secret)
 ):
     """Returns all active credit card tokens and basic persona metadata for synthetic data simulation."""
+    return list_active_cards_for_simulation(db)
+
+
+def list_active_cards_for_simulation(db: Session) -> dict:
+    """Returns active card payloads used by the synthetic transaction generator."""
     cards = db.query(IssuedCard, CreditAccount).join(
         CreditAccount, IssuedCard.account_id == CreditAccount.id
-    ).filter(IssuedCard.status == "ACTIVE", IssuedCard.is_active == True).all()
+    ).filter(IssuedCard.status == "ACTIVE", IssuedCard.is_active).all()
     
     results = []
     for card, acc in cards:
@@ -403,4 +408,3 @@ def pay_credit_card(
         credit_account_id=request.credit_account_id,
         amount_cents=request.amount_cents
     )
-

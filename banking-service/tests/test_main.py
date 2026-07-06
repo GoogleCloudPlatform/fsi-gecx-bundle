@@ -15,26 +15,35 @@
 import base64
 import uuid
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import AsyncClient, ASGITransport
 
 from main import app
-from services.origination import BUCKET_NAME, storage_client
 from utils.database import SessionLocal
 from models.origination import ApplicationArtifact
 
 test_data_dir = Path(__file__).parent / "data"
 
 
-# Integration tests using real services.
-# Assumes GCP credentials are available in the environment.
-
 @pytest.fixture
 async def async_client():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
+
+
+def _mock_storage_client(signed_url: str | None = None):
+    mock_blob = MagicMock()
+    if signed_url is not None:
+        mock_blob.generate_signed_url.return_value = signed_url
+
+    mock_bucket = MagicMock()
+    mock_bucket.blob.return_value = mock_blob
+
+    mock_storage_client = MagicMock()
+    mock_storage_client.bucket.return_value = mock_bucket
+    return mock_storage_client, mock_bucket, mock_blob
 
 
 @pytest.mark.asyncio
@@ -75,7 +84,10 @@ async def test_upload_artifact_success(async_client):
         "content_type": "text/plain"
     }
 
-    response = await async_client.post("/artifacts", json=json_payload)
+    mock_storage_client, mock_bucket, mock_blob = _mock_storage_client()
+
+    with patch("services.origination.storage_client", mock_storage_client):
+        response = await async_client.post("/artifacts", json=json_payload)
 
     assert response.status_code == 200
     resp_json = response.json()
@@ -88,10 +100,9 @@ async def test_upload_artifact_success(async_client):
     # gcs_uri format: gs://bucket_name/filename
     actual_filename = gcs_uri.split("/")[-1]
 
-    # Verify in GCS
-    bucket = storage_client.bucket(BUCKET_NAME)
-    blob = bucket.blob(actual_filename)
-    assert blob.exists()
+    mock_storage_client.bucket.assert_called_once()
+    mock_bucket.blob.assert_called_once_with(actual_filename)
+    mock_blob.upload_from_string.assert_called_once_with(file_content, content_type="text/plain")
 
     # Verify in SQLAlchemy database
     db = SessionLocal()
@@ -99,13 +110,6 @@ async def test_upload_artifact_success(async_client):
     assert art is not None
     assert art.claimed_artifact_type == "W2"
     db.close()
-
-    # Cleanup GCS file
-    try:
-        blob.delete()
-        print(f"Cleaned up GCS blob: {actual_filename}")
-    except Exception as e:
-        print(f"Failed to cleanup GCS blob: {e}")
 
     # We leave the BigQuery row as DML deletes can be slow and quota-limited in BQ.
     # Using unique prefixes prevents this from interfering with other operations.
@@ -175,31 +179,21 @@ async def test_extract_success(mock_extract, async_client):
         "content_type": "text/plain"
     }
 
-    upload_response = await async_client.post("/artifacts", json=json_payload)
-    assert upload_response.status_code == 200
-    upload_json = upload_response.json()
-    artifact_id = upload_json["artifact_id"]
+    mock_storage_client, _, _ = _mock_storage_client()
+    with patch("services.origination.storage_client", mock_storage_client):
+        upload_response = await async_client.post("/artifacts", json=json_payload)
+        assert upload_response.status_code == 200
+        upload_json = upload_response.json()
+        artifact_id = upload_json["artifact_id"]
 
-    # 2. Now call the extract endpoint
-    fields = ["application_id"]
-    extract_response = await async_client.post(f"/artifacts/{artifact_id}/extractions", json=fields)
+        # 2. Now call the extract endpoint
+        fields = ["application_id"]
+        extract_response = await async_client.post(f"/artifacts/{artifact_id}/extractions", json=fields)
 
     assert extract_response.status_code == 200
     extract_json = extract_response.json()
     assert "application_id" in extract_json
     assert extract_json.get("application_id") == "87345978"
-
-    # Cleanup GCS file (from upload)
-    gcs_uri = upload_json["gcs_uri"]
-    path_parts = gcs_uri.replace("gs://", "").split("/", 1)
-    bucket_name, blob_name = path_parts[0], path_parts[1]
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(blob_name)
-    try:
-        blob.delete()
-        print(f"Cleaned up GCS blob: {blob_name}")
-    except Exception as e:
-        print(f"Failed to cleanup GCS blob: {e}")
 
 
 @pytest.mark.asyncio
@@ -366,7 +360,9 @@ async def test_get_profile_not_found(mock_extract, async_client):
         "content_type": "application/pdf"
     }
 
-    response = await async_client.post("/artifacts/upload-and-validate", json=json_payload)
+    mock_storage_client, _, _ = _mock_storage_client()
+    with patch("services.origination.storage_client", mock_storage_client):
+        response = await async_client.post("/artifacts/upload-and-validate", json=json_payload)
 
     assert response.status_code == 200
 
@@ -390,9 +386,10 @@ async def test_generate_signed_url_success(async_client):
         "content_type": "application/pdf"
     }
 
-    with patch("google.cloud.storage.blob.Blob.generate_signed_url") as mock_sign:
-        mock_sign.return_value = "http://mock-signed-url"
-
+    mock_storage_client, _, mock_blob = _mock_storage_client(signed_url="http://mock-signed-url")
+    with patch("services.origination.storage_client", mock_storage_client), \
+         patch("services.origination.default", return_value=(MagicMock(), "local-test-project")), \
+         patch("services.origination.ImpersonatedCredentials", return_value=MagicMock()):
         response = await async_client.post("/artifacts/signed-url", json=json_payload)
 
     assert response.status_code == 200
@@ -401,6 +398,7 @@ async def test_generate_signed_url_success(async_client):
     assert resp_json["signed_url"] == "http://mock-signed-url"
     assert "artifact_id" in resp_json
     assert "gcs_uri" in resp_json
+    mock_blob.generate_signed_url.assert_called_once()
 
 
 @pytest.mark.asyncio

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 import pytest
 from fastapi.testclient import TestClient
 import respx
@@ -34,10 +33,10 @@ async def test_simulate_pulse_success():
     auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
         return_value=httpx.Response(200, json={"action_code": "00", "auth_code": "123456", "status": "PENDING"})
     )
-    settle_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
+    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
         return_value=httpx.Response(200, json={"status": "SETTLED"})
     )
-    reverse_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse").mock(
+    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse").mock(
         return_value=httpx.Response(200, json={"status": "REVERSED"})
     )
     
@@ -69,16 +68,40 @@ async def test_simulate_pulse_declined():
     )
     
     response = client.post("/simulate-pulse")
-    assert response.status_code == 200
+    assert response.status_code == 502
     
     # Assert auth was called, but settle was NOT called since it was declined
     assert auth_route.called
     assert not settle_route.called
 
-def test_simulate_surge_accepted():
+@respx.mock
+def test_simulate_surge_success():
+    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
+        return_value=httpx.Response(200, json={"action_code": "00", "auth_code": "123456", "status": "PENDING"})
+    )
+    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
+        return_value=httpx.Response(200, json={"status": "SETTLED"})
+    )
+    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse").mock(
+        return_value=httpx.Response(200, json={"status": "REVERSED"})
+    )
     response = client.post("/simulate-surge", json={})
     assert response.status_code == 200
-    assert response.json()["status"] == "ACCEPTED"
+    assert response.json()["status"] == "SUCCESS"
+    assert response.json()["swipes_attempted"] == 50
+
+
+@respx.mock
+def test_generate_fails_without_active_cards_in_deployed_mode(monkeypatch):
+    monkeypatch.setenv("K_SERVICE", "data-generator")
+    respx.get(f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards").mock(
+        return_value=httpx.Response(503, json={"detail": "unavailable"})
+    )
+
+    response = client.post("/generate")
+
+    assert response.status_code == 502
+    assert "refusing to use static fallback" in response.json()["detail"]
 
 @pytest.mark.asyncio
 @respx.mock

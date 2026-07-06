@@ -302,6 +302,16 @@ export async function getGlobalStream() {
   return res.data;
 }
 
+export async function getLakehouseStream() {
+  const res = await api.get('/v1/simulation/lakehouse-stream');
+  return res.data;
+}
+
+export async function getCdcStatus() {
+  const res = await api.get('/v1/simulation/cdc-status');
+  return res.data;
+}
+
 export async function getAccountsSummary() {
   const res = await api.get('/v1/accounts/summary');
   return res.data;
@@ -318,4 +328,3 @@ export async function getDepositTransactions(accountId) {
 }
 
 export default api;
-

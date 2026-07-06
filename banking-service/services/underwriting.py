@@ -21,9 +21,10 @@ from pathlib import Path
 from google.cloud import bigquery
 from sqlalchemy.orm import Session
 from models.underwriting import UnderwritingOverrideRequest, DocumentSummaryResponse, UnderwritingDecision
+from utils.lazy_clients import LazyClient
 
 logger = logging.getLogger(__name__)
-bq_client = bigquery.Client()
+bq_client = LazyClient(bigquery.Client)
 
 SQL_DIR = Path(__file__).resolve().parent.parent / "resources" / "sql"
 
@@ -182,4 +183,3 @@ def get_artifact_gcs_path(table_ref: str, artifact_id: str, db: Optional[Session
     finally:
         if close_db and db:
             db.close()
-

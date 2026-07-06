@@ -15,6 +15,7 @@
 import pytest
 from fastapi import Header, HTTPException
 from httpx import AsyncClient, ASGITransport
+from unittest.mock import patch
 
 from main import app
 from models.authentication import ValidatedToken
@@ -42,10 +43,11 @@ def override_auth():
 @pytest.mark.asyncio
 async def test_chat_auth_token_success(async_client):
     # Pass the mock IAP header
-    response = await async_client.post(
-        "/ccai/auth/token",
-        headers={"x-goog-iap-jwt-assertion": "mock_token"}
-    )
+    with patch("routers.ccai_authentication.get_secret", return_value="test-secret"):
+        response = await async_client.post(
+            "/ccai/auth/token",
+            headers={"x-goog-iap-jwt-assertion": "mock_token"}
+        )
     assert response.status_code == 200
     resp_json = response.json()
     assert "token" in resp_json
@@ -56,10 +58,11 @@ async def test_chat_auth_token_success(async_client):
 async def test_chat_auth_token_with_user_info(async_client):
     # This test previously passed a JSON body, but the endpoint now ignores it
     # and uses IAP headers. We still pass the mock header to make it pass.
-    response = await async_client.post(
-        "/ccai/auth/token",
-        headers={"x-goog-iap-jwt-assertion": "mock_token"}
-    )
+    with patch("routers.ccai_authentication.get_secret", return_value="test-secret"):
+        response = await async_client.post(
+            "/ccai/auth/token",
+            headers={"x-goog-iap-jwt-assertion": "mock_token"}
+        )
     assert response.status_code == 200
     resp_json = response.json()
     assert "token" in resp_json

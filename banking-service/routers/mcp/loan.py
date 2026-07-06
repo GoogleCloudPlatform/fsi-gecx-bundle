@@ -19,6 +19,7 @@ import logging
 from fastmcp import Context
 from google.cloud import bigquery, storage
 from utils.gcp import get_project_id
+from utils.lazy_clients import LazyClient
 
 from .utils import (
     _extract_customer_identity, _mask_ssn, _mask_ein
@@ -26,7 +27,7 @@ from .utils import (
 from . import mcp  # Import the shared FastMCP server instance
 
 logger = logging.getLogger(__name__)
-bq_client = bigquery.Client()
+bq_client = LazyClient(bigquery.Client)
 
 @mcp.tool()
 async def get_loan_application_documents(application_id: str, ctx: Context) -> str:

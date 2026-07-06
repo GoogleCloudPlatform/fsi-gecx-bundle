@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import pytest
+import respx
+import httpx
 from fastapi import status
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy import create_engine
@@ -24,9 +26,8 @@ from utils.database import Base, get_db
 from utils.auth import get_current_user
 from models.authentication import ValidatedToken
 from models.identity import User
-from models.kyc import KYCRecord, UserCreditProfile
 from models.origination import Account
-from models.credit_card import CreditAccount, IssuedCard, PostedTransaction
+from models.credit_card import CreditAccount, PostedTransaction
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
 test_engine = create_engine(
@@ -169,9 +170,6 @@ async def test_reset_my_demo_not_found(async_client, db_session):
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert "No seeded demo profile found" in response.json()["detail"]
 
-import respx
-import httpx
-
 @pytest.mark.asyncio
 @respx.mock
 async def test_simulate_surge_success(async_client, db_session):
@@ -186,19 +184,34 @@ async def test_simulate_surge_success(async_client, db_session):
     # read DATA_GENERATOR_URL from routers.simulation
     from routers.simulation import DATA_GENERATOR_URL
     surge_route = respx.post(f"{DATA_GENERATOR_URL}/simulate-surge").mock(
-        return_value=httpx.Response(200, json={"status": "ACCEPTED", "message": "Simulation surge initiated in background."})
+        return_value=httpx.Response(
+            200,
+            json={
+                "status": "SUCCESS",
+                "message": "Simulation surge completed against active card pool.",
+                "active_cards_count": 1,
+                "swipes_attempted": 50,
+                "authorizations_created": 50,
+                "settlements_created": 40,
+                "reversals_created": 5,
+                "declines": 0,
+                "failures": 0,
+            },
+        )
     )
     
     # 3. Call surge proxy endpoint
     response = await async_client.post("/api/v1/simulation/surge")
     assert response.status_code == status.HTTP_200_OK
-    assert response.json()["status"] == "ACCEPTED"
+    assert response.json()["status"] == "SUCCESS"
     
-    # 4. Assert data-generator received the payload with our presenter card
+    # 4. Assert data-generator received the active-card payload
     assert surge_route.called
     payload = surge_route.calls.last.request.read().decode()
-    assert "active_cards" in payload
-    assert "tok_visa_presenter" in payload
+    data = httpx.Response(200, content=payload).json()
+    assert "active_cards" in data
+    assert len(data["active_cards"]) >= 1
+    assert data["active_cards"][0]["card_token"].startswith("tok_visa_presenter")
 
 @pytest.mark.asyncio
 async def test_inject_anomaly_success(async_client, db_session):
@@ -255,4 +268,3 @@ async def test_inject_late_fee_and_global_stream(async_client, db_session):
     assert len(data["stream"]) > 0
     merchant_names = [item["merchant_name"] for item in data["stream"]]
     assert "LATE_FEE" in merchant_names
-

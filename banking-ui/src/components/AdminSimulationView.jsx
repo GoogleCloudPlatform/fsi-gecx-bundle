@@ -19,7 +19,7 @@ import {
   ArrowLeft, CheckCircle2, AlertTriangle, TrendingUp, Globe, Clock, 
   Layers, ChevronRight, Play, Info, ExternalLink
 } from 'lucide-react';
-import { triggerSpendSurge, injectFraudAnomaly, injectLateFee, getGlobalStream } from '../utils/api.js';
+import { triggerSpendSurge, injectFraudAnomaly, injectLateFee, getGlobalStream, getLakehouseStream, getCdcStatus } from '../utils/api.js';
 import GoogleCloudIcon from './GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { showInfoModals } from '../utils/constants.js';
@@ -32,11 +32,14 @@ function AdminSimulationView() {
   const [isStreamLoading, setIsStreamLoading] = useState(false);
   const [isGcpInfoModalOpen, setIsGcpInfoModalOpen] = useState(false);
   const [streamData, setStreamData] = useState([]);
+  const [lakehouseData, setLakehouseData] = useState([]);
+  const [cdcStatus, setCdcStatus] = useState(null);
+  const [lakehouseError, setLakehouseError] = useState('');
   const [feedback, setFeedback] = useState({ type: '', title: '', message: '', data: null });
   const [cdcStats, setCdcStats] = useState({
-    walLatencyMs: 312,
-    syncUptime: "99.99%",
-    eventsProcessed: 14892,
+    walLatencyMs: 0,
+    syncUptime: "Live",
+    eventsProcessed: 0,
     activeAnomalies: 0,
     lastSyncTime: new Date().toLocaleTimeString()
   });
@@ -44,9 +47,26 @@ function AdminSimulationView() {
   const fetchGlobalStream = async () => {
     setIsStreamLoading(true);
     try {
-      const res = await getGlobalStream();
-      if (res && res.stream) {
-        setStreamData(res.stream);
+      const [operationalRes, lakehouseRes, statusRes] = await Promise.all([
+        getGlobalStream(),
+        getLakehouseStream(),
+        getCdcStatus(),
+      ]);
+      if (operationalRes && operationalRes.stream) {
+        setStreamData(operationalRes.stream);
+      }
+      if (lakehouseRes && lakehouseRes.stream) {
+        setLakehouseData(lakehouseRes.stream);
+        setLakehouseError(lakehouseRes.bigquery_error || '');
+      }
+      if (statusRes) {
+        setCdcStatus(statusRes);
+        setCdcStats(prev => ({
+          ...prev,
+          walLatencyMs: statusRes.replication_lag_seconds ?? prev.walLatencyMs,
+          eventsProcessed: statusRes.lakehouse_row_count ?? prev.eventsProcessed,
+          lastSyncTime: new Date().toLocaleTimeString()
+        }));
       }
     } catch (e) {
       console.error("Failed to fetch global stream:", e);
@@ -57,20 +77,8 @@ function AdminSimulationView() {
 
   useEffect(() => {
     fetchGlobalStream();
-    const eventSource = new EventSource('/v1/simulation/stream-sse');
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data && data.stream) {
-          setStreamData(data.stream);
-        }
-      } catch (err) {
-        console.error("SSE stream parse error:", err);
-      }
-    };
-    return () => {
-      eventSource.close();
-    };
+    const interval = setInterval(fetchGlobalStream, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -82,18 +90,6 @@ function AdminSimulationView() {
     }
   }, [feedback]);
 
-  // Update latency and sync timestamp periodically without faking processed event increments
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCdcStats(prev => ({
-        ...prev,
-        walLatencyMs: Math.floor(280 + Math.random() * 60),
-        lastSyncTime: new Date().toLocaleTimeString()
-      }));
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
-
   const handleSpendSurge = async () => {
     setIsSurgeLoading(true);
     setFeedback({ type: '', title: '', message: '', data: null });
@@ -102,7 +98,7 @@ function AdminSimulationView() {
       setFeedback({
         type: 'success',
         title: 'Spend Surge Dispatch Initiated',
-        message: res.message || 'Successfully triggered 50 rapid-fire swipes across 200 mock personas in the background.',
+        message: res.message || 'Successfully triggered 50 rapid-fire swipes across the active card pool.',
         data: res
       });
       fetchGlobalStream();
@@ -227,13 +223,13 @@ function AdminSimulationView() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>WAL CDC Latency</span>
+              <span>CDC Lag</span>
               <Clock className="w-4 h-4 text-cyan-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {cdcStats.walLatencyMs} <span className="text-sm font-normal text-slate-500">ms</span>
+              {cdcStats.walLatencyMs} <span className="text-sm font-normal text-slate-500">sec</span>
             </div>
-            <div className="text-[10px] text-emerald-500 font-medium mt-1">&uarr; Sub-second sync tier</div>
+            <div className="text-[10px] text-emerald-500 font-medium mt-1">Operational latest vs BigQuery latest</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
@@ -298,7 +294,7 @@ function AdminSimulationView() {
               </div>
             </div>
             <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-6">
-              Triggers a rapid-fire synthetic activity surge across the pool of 200 mock personas. Simulates realistic domestic purchases across coffee shops, restaurants, grocers, and airlines to hydrate BigQuery real-time spend velocity views.
+              Triggers a rapid-fire synthetic activity surge across the active card pool. Simulates realistic domestic purchases across coffee shops, restaurants, grocers, and airlines to hydrate BigQuery real-time spend velocity views.
             </p>
           </div>
 
@@ -435,21 +431,26 @@ function AdminSimulationView() {
         </div>
       )}
 
-      {/* Section 3: Live Global Lakehouse Activity Stream */}
+      {/* Section 3: Live Transaction Activity Streams */}
       <div className="p-7 rounded-3xl bg-slate-900 text-slate-300 border border-slate-800 shadow-2xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
             <h4 className="text-white font-extrabold text-lg flex items-center gap-2 flex-wrap">
               <Database className="w-5 h-5 text-cyan-400 animate-pulse" />
-              Live Lakehouse CDC Replication Feed (Global Ledger)
+              Live Transaction Replication Monitor
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                LIVE PUSH ACTIVE
+                AUTH POLLING ACTIVE
               </span>
             </h4>
             <p className="text-xs text-slate-400 mt-1">
-              Real-time stream of authoritative card network events replicating through Datastream into Looker semantic models and AI Data Canvas.
+              Authenticated monitor comparing operational card-network writes with BigQuery lakehouse rows replicated by Datastream.
             </p>
+            {cdcStatus && (
+              <p className="text-[11px] text-slate-500 mt-1">
+                Operational latest: {cdcStatus.operational_latest_timestamp || 'N/A'} | Lakehouse latest: {cdcStatus.lakehouse_latest_timestamp || 'N/A'}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-3 self-start md:self-auto">
@@ -474,7 +475,8 @@ function AdminSimulationView() {
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/70">
+        <h5 className="text-xs uppercase tracking-wider text-slate-500 font-bold mb-3">Operational Source of Truth</h5>
+        <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/70 mb-7">
           <table className="w-full text-left border-collapse font-mono text-xs">
             <thead>
               <tr className="border-b border-slate-800 text-slate-400 bg-slate-900/50">
@@ -489,7 +491,7 @@ function AdminSimulationView() {
               {streamData.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="p-8 text-center text-slate-500 font-sans">
-                    Waiting for live transaction activity... Trigger a surge, anomaly, or late fee above to see CDC events flow!
+                    Waiting for operational transaction activity... Trigger a surge, anomaly, or late fee above.
                   </td>
                 </tr>
               ) : (
@@ -524,6 +526,60 @@ function AdminSimulationView() {
             </tbody>
           </table>
         </div>
+
+        <div className="flex items-center justify-between mb-3">
+          <h5 className="text-xs uppercase tracking-wider text-slate-500 font-bold">BigQuery Lakehouse CDC Destination</h5>
+          {lakehouseError && <span className="text-[10px] text-amber-400 font-mono">BigQuery degraded</span>}
+        </div>
+        {lakehouseError && (
+          <div className="mb-3 p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 text-xs font-mono overflow-x-auto">
+            {lakehouseError}
+          </div>
+        )}
+        <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/70">
+          <table className="w-full text-left border-collapse font-mono text-xs">
+            <thead>
+              <tr className="border-b border-slate-800 text-slate-400 bg-slate-900/50">
+                <th className="p-3.5 font-semibold">Timestamp</th>
+                <th className="p-3.5 font-semibold">RRN / Event ID</th>
+                <th className="p-3.5 font-semibold">Merchant / Descriptor</th>
+                <th className="p-3.5 font-semibold text-right">Amount</th>
+                <th className="p-3.5 font-semibold">Status / Source Table</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60">
+              {lakehouseData.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="p-8 text-center text-slate-500 font-sans">
+                    Waiting for replicated BigQuery rows from Datastream.
+                  </td>
+                </tr>
+              ) : (
+                lakehouseData.map((item, idx) => (
+                  <tr key={item.id + idx} className="hover:bg-slate-900/60 transition-colors">
+                    <td className="p-3.5 text-slate-400 whitespace-nowrap flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
+                      {item.timestamp}
+                    </td>
+                    <td className="p-3.5 text-slate-300 font-bold whitespace-nowrap">{item.rrn}</td>
+                    <td className="p-3.5 text-white font-sans font-medium truncate max-w-xs">{item.merchant_name}</td>
+                    <td className="p-3.5 text-right font-bold whitespace-nowrap">
+                      ${(Math.abs(item.amount_cents || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-3.5 whitespace-nowrap">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                          {item.status}
+                        </span>
+                        <span className="text-[10px] text-slate-500">{item.bq_view}</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <GcpInfoModal
@@ -533,7 +589,7 @@ function AdminSimulationView() {
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            The <strong>Global Ledger Feed</strong> receives real-time transaction authorizations and settlements directly from the card network processing engine via Server-Sent Events (SSE).
+            The <strong>Transaction Replication Monitor</strong> compares recent operational card-network writes with BigQuery rows replicated by Datastream.
           </p>
           <p>
             Each event is simultaneously recorded in an append-only PostgreSQL outbox table and streamed through Google Cloud Datastream and Pub/Sub into BigQuery lakehouse tables. Looker semantic models structure this data into specialized real-time views:

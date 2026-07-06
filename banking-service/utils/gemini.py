@@ -29,13 +29,14 @@ from google.genai.types import ThinkingConfig
 from pydantic import BaseModel
 
 from utils.env import is_env_flag_enabled
+from utils.lazy_clients import LazyClient
 
 logger = logging.getLogger(__name__)
 
 os.environ.setdefault("SHOW_THOUGHTS", "True")
 
 
-storage_client = storage.Client()
+storage_client = LazyClient(storage.Client)
 
 extractor_agent = Agent(
     name="extractor_agent",
@@ -159,4 +160,3 @@ async def geocode_address(address: str) -> tuple[float, float] | None:
     except Exception as e:
         logger.error(f"Geocoding address '{address}' failed: {e}")
         return None
-

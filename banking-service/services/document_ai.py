@@ -21,6 +21,7 @@ from google.cloud import documentai, storage, bigquery
 from google.api_core.client_options import ClientOptions
 from google.api_core.retry import Retry
 from utils.gcp import get_project_id
+from utils.lazy_clients import LazyClient
 
 logger = logging.getLogger(__name__)
 
@@ -87,8 +88,8 @@ def _audit_extraction_confidence(extracted_payloads: dict) -> list[str]:
                 flagged_fields.append(f"{doc_type.lower().strip()}.{field_enum.value}")
     return flagged_fields
 
-storage_client = storage.Client()
-bq_client = bigquery.Client()
+storage_client = LazyClient(storage.Client)
+bq_client = LazyClient(bigquery.Client)
 
 SQL_DIR = Path(__file__).resolve().parent.parent / "resources" / "sql"
 

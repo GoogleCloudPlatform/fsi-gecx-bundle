@@ -14,8 +14,13 @@
 
 """Test configuration module."""
 
+import pytest
 import sqlalchemy as _sa
+from fastapi import Header, HTTPException
+
 _orig_create_engine = _sa.create_engine
+
+
 def _patched_create_engine(*args, **kwargs):
     if args and str(args[0]).startswith("sqlite"):
         exec_opts = kwargs.get("execution_options", {}).copy()
@@ -28,25 +33,20 @@ def _patched_create_engine(*args, **kwargs):
             exec_opts["schema_translate_map"] = {"merchants": "ref_data"}
         kwargs["execution_options"] = exec_opts
     return _orig_create_engine(*args, **kwargs)
+
+
 _sa.create_engine = _patched_create_engine
 
-from fastapi import Header, HTTPException
-import pytest
-
-from main import app
-from utils.auth import get_current_user
-from models.authentication import ValidatedToken
-
-
-
-
+from main import app  # noqa: E402
+from models.authentication import ValidatedToken  # noqa: E402
+from utils.auth import get_current_user  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def override_test_auth():
     def mock_get_current_user(
-            x_forwarded_user_context: str = Header(None),
-            authorization: str = Header(None)
+        x_forwarded_user_context: str = Header(None),
+        authorization: str = Header(None),
     ):
         token_str = None
         if authorization and authorization.startswith("Bearer "):
@@ -60,6 +60,10 @@ def override_test_auth():
             return ValidatedToken(claims={"sub": token_str, "email": f"{token_str}@example.com"})
         return ValidatedToken(claims={"sub": "mock_user_sub", "email": "mockuser@example.com"})
 
+    previous_override = app.dependency_overrides.get(get_current_user)
     app.dependency_overrides[get_current_user] = mock_get_current_user
     yield
-    app.dependency_overrides.clear()
+    if previous_override is None:
+        app.dependency_overrides.pop(get_current_user, None)
+    else:
+        app.dependency_overrides[get_current_user] = previous_override

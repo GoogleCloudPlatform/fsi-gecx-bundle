@@ -22,9 +22,10 @@ from fastapi.concurrency import run_in_threadpool
 from google.cloud import bigquery
 from pydantic import BaseModel, Field
 from utils.auth import verify_eventarc_oidc_token
+from utils.lazy_clients import LazyClient
 
 logger = logging.getLogger(__name__)
-bq_client = bigquery.Client()
+bq_client = LazyClient(bigquery.Client)
 router = APIRouter(prefix="/internal", tags=["internal"])
 
 class EventarcPayload(BaseModel):
@@ -203,4 +204,3 @@ def reset_database(purge_audit_logs: bool = False, purge_data_lake: bool = False
         raise HTTPException(status_code=500, detail=f"Database reset failed: {e}")
     finally:
         db.close()
-

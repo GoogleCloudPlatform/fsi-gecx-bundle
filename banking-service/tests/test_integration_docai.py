@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import patch
 from google.cloud import storage, bigquery
 from utils.gcp import get_project_id
+from utils.lazy_clients import LazyClient
 from services.document_ai import ProcessingStatus, DocumentType
 
 # 1. Gate Guard: Run ONLY when manually triggered via environment CLI flag
@@ -31,8 +32,8 @@ pytestmark = pytest.mark.skipif(
 )
 
 logger = logging.getLogger(__name__)
-storage_client = storage.Client()
-bq_client = bigquery.Client()
+storage_client = LazyClient(storage.Client)
+bq_client = LazyClient(bigquery.Client)
 
 # Resolve path coordinates
 BASE_DIR = Path(__file__).resolve().parent.parent

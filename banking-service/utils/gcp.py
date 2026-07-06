@@ -22,11 +22,18 @@ from google.cloud import secretmanager
 
 logger = logging.getLogger(__name__)
 
-# Create the Secret Manager client
-client = secretmanager.SecretManagerServiceClient()
 secret_cache = TTLCache(maxsize=100, ttl=3600)
 
 _cached_project_id = None
+_secret_manager_client = None
+
+
+def get_secret_manager_client():
+    """Lazily creates the Secret Manager client so importing modules does not require ADC."""
+    global _secret_manager_client
+    if _secret_manager_client is None:
+        _secret_manager_client = secretmanager.SecretManagerServiceClient()
+    return _secret_manager_client
 
 
 def get_project_id():
@@ -47,6 +54,10 @@ def get_project_id():
             _cached_project_id = project_id
             return project_id
     except DefaultCredentialsError:
+        if os.getenv("ROOT_PATH") is None:
+            _cached_project_id = "local-test-project"
+            logger.info("Using local-test-project because no Google Cloud project is configured locally.")
+            return _cached_project_id
         logger.error("🚨 Could not determine credentials.")
         logger.error(
             "Please run 'gcloud auth application-default login' "
@@ -68,6 +79,7 @@ def get_secret(
     if not project_id:
         project_id = get_project_id()
 
+    client = get_secret_manager_client()
     name = client.secret_version_path(
         project=project_id, secret=secret_id, secret_version=version_id)
 

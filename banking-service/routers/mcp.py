@@ -20,9 +20,10 @@ from pathlib import Path
 from fastmcp import Context, FastMCP
 from google.cloud import bigquery, storage
 from utils.gcp import get_project_id
+from utils.lazy_clients import LazyClient
 
 logger = logging.getLogger(__name__)
-bq_client = bigquery.Client()
+bq_client = LazyClient(bigquery.Client)
 
 SQL_DIR = Path(__file__).resolve().parent.parent / "resources" / "sql"
 

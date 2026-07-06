@@ -14,13 +14,17 @@
 
 import asyncio
 import csv
-import json
 import logging
 import os
 import random
 import sys
 from typing import List, Dict, Any, Optional
+
+import httpx
+from fastapi import FastAPI, HTTPException, status, Header, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
 
 class CardPayload(BaseModel):
     card_token: str
@@ -30,17 +34,15 @@ class CardPayload(BaseModel):
     amount_min: int
     amount_max: int
 
+
 class SurgeRequest(BaseModel):
     active_cards: Optional[List[CardPayload]] = None
+
 
 class AnomalyRequest(BaseModel):
     card_token: Optional[str] = None
     user_id: Optional[str] = None
     email: Optional[str] = None
-
-import httpx
-from fastapi import FastAPI, BackgroundTasks, HTTPException, status, Header, Depends
-from fastapi.middleware.cors import CORSMiddleware
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("data-generator")
@@ -59,12 +61,15 @@ app.add_middleware(
 BANKING_SERVICE_URL = os.getenv("BANKING_SERVICE_URL", "http://localhost:8000")
 CARD_NETWORK_TOKEN = os.getenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")
 
+def is_local_mode() -> bool:
+    return os.getenv("ENV", "local") == "local" and not os.getenv("K_SERVICE")
+
 def verify_switch_or_presenter_token(
     x_card_network_token: Optional[str] = Header(None, alias="X-Card-Network-Token")
 ):
     if x_card_network_token and x_card_network_token == CARD_NETWORK_TOKEN:
         return True
-    if os.getenv("ENV", "local") == "local" or not x_card_network_token:
+    if is_local_mode():
         return True
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized access to data generator.")
 
@@ -233,13 +238,19 @@ def get_active_cards() -> List[Dict[str, Any]]:
                 if cards:
                     logger.info(f"Retrieved {len(cards)} active card tokens via HTTP from banking-service.")
                     return cards
+            logger.warning(f"Active card discovery failed. HTTP {res.status_code}: {res.text}")
     except Exception as e:
         logger.warning(f"Could not fetch active cards via HTTP from {BANKING_SERVICE_URL}: {e}")
 
-    logger.info("Using static DEFAULT_PERSONAS fallback for active cards.")
-    return DEFAULT_PERSONAS
+    if is_local_mode():
+        logger.info("Using static DEFAULT_PERSONAS fallback for local active-card simulation.")
+        return DEFAULT_PERSONAS
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Unable to resolve active cards from banking-service; refusing to use static fallback in deployed mode."
+    )
 
-async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) -> None:
+async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) -> Dict[str, Any]:
     """Simulates a single credit card auth/settle/reverse workflow against the issuing bank gateway."""
     merchants = get_merchants()
     mccs = card.get("mccs", ["5310", "5411", "5541", "4121"])
@@ -303,12 +314,28 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
         auth_resp = await client.post(auth_url, json=auth_payload, headers=headers, timeout=5.0)
         if auth_resp.status_code != 200:
             logger.warning(f"Auth request failed. HTTP {auth_resp.status_code}: {auth_resp.text}")
-            return
+            return {
+                "card_token": card.get("card_token"),
+                "rrn": rrn,
+                "authorized": False,
+                "settled": False,
+                "reversed": False,
+                "decline_reason": f"HTTP_{auth_resp.status_code}",
+                "error": auth_resp.text,
+            }
             
         auth_data = auth_resp.json()
         if auth_data.get("action_code") != "00":
             logger.info(f"Swipe declined by gateway: card={card.get('cardholder_name')}, reason={auth_data.get('decline_reason')}")
-            return
+            return {
+                "card_token": card.get("card_token"),
+                "rrn": rrn,
+                "authorized": False,
+                "settled": False,
+                "reversed": False,
+                "decline_reason": auth_data.get("decline_reason"),
+                "error": None,
+            }
             
         resolution = random.choices(["SETTLE", "REVERSE", "PENDING"], weights=[80, 10, 10], k=1)[0]
         
@@ -327,8 +354,26 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
             settle_resp = await client.post(settle_url, json=settle_payload, headers=headers, timeout=5.0)
             if settle_resp.status_code == 200:
                 logger.info(f"Swipe settled successfully. Card: {card.get('cardholder_name')}, Merchant: {merchant.get('merchant')}, Amount: ${final_amount/100:.2f} (Hold: ${amount_cents/100:.2f})")
+                return {
+                    "card_token": card.get("card_token"),
+                    "rrn": rrn,
+                    "authorized": True,
+                    "settled": True,
+                    "reversed": False,
+                    "decline_reason": None,
+                    "error": None,
+                }
             else:
                 logger.error(f"Settlement failed. HTTP {settle_resp.status_code}: {settle_resp.text}")
+                return {
+                    "card_token": card.get("card_token"),
+                    "rrn": rrn,
+                    "authorized": True,
+                    "settled": False,
+                    "reversed": False,
+                    "decline_reason": None,
+                    "error": f"SETTLE_HTTP_{settle_resp.status_code}: {settle_resp.text}",
+                }
                 
         elif resolution == "REVERSE":
             rev_payload = {"retrieval_reference_number": rrn}
@@ -336,22 +381,69 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
             rev_resp = await client.post(reverse_url, json=rev_payload, headers=headers, timeout=5.0)
             if rev_resp.status_code == 200:
                 logger.info(f"Swipe hold reversed successfully. Card: {card.get('cardholder_name')}, RRN: {rrn}")
+                return {
+                    "card_token": card.get("card_token"),
+                    "rrn": rrn,
+                    "authorized": True,
+                    "settled": False,
+                    "reversed": True,
+                    "decline_reason": None,
+                    "error": None,
+                }
             else:
                 logger.error(f"Reversal failed. HTTP {rev_resp.status_code}: {rev_resp.text}")
+                return {
+                    "card_token": card.get("card_token"),
+                    "rrn": rrn,
+                    "authorized": True,
+                    "settled": False,
+                    "reversed": False,
+                    "decline_reason": None,
+                    "error": f"REVERSE_HTTP_{rev_resp.status_code}: {rev_resp.text}",
+                }
                 
         else:
             logger.info(f"Swipe hold left PENDING (active hold). Card: {card.get('cardholder_name')}, Amount: ${amount_cents/100:.2f}")
+            return {
+                "card_token": card.get("card_token"),
+                "rrn": rrn,
+                "authorized": True,
+                "settled": False,
+                "reversed": False,
+                "decline_reason": None,
+                "error": None,
+            }
             
     except Exception as exc:
         logger.error(f"Failed to execute simulation cycle for card {card.get('cardholder_name')}: {repr(exc)}")
+        return {
+            "card_token": card.get("card_token"),
+            "rrn": rrn,
+            "authorized": False,
+            "settled": False,
+            "reversed": False,
+            "decline_reason": None,
+            "error": repr(exc),
+        }
 
-async def run_activity_surge_task(active_cards: Optional[List[Dict[str, Any]]] = None) -> None:
+
+def summarize_swipe_results(results: List[Dict[str, Any]]) -> Dict[str, int]:
+    return {
+        "swipes_attempted": len(results),
+        "authorizations_created": sum(1 for r in results if r.get("authorized")),
+        "settlements_created": sum(1 for r in results if r.get("settled")),
+        "reversals_created": sum(1 for r in results if r.get("reversed")),
+        "declines": sum(1 for r in results if r.get("decline_reason")),
+        "failures": sum(1 for r in results if r.get("error")),
+    }
+
+async def run_activity_surge_task(active_cards: Optional[List[Dict[str, Any]]] = None) -> Dict[str, int]:
     """Fires 50 rapid-fire swipes staggered over 10 seconds."""
     logger.info("Starting activity surge simulation (50 swipes over 10s)...")
     cards = active_cards or get_active_cards()
     if not cards:
         logger.warning("No cards resolved. Surge aborted.")
-        return
+        raise HTTPException(status_code=400, detail="No active cards resolved. Surge aborted.")
         
     async with httpx.AsyncClient() as client:
         tasks = []
@@ -359,8 +451,10 @@ async def run_activity_surge_task(active_cards: Optional[List[Dict[str, Any]]] =
             card = random.choice(cards)
             tasks.append(simulate_swipe_event(client, card))
             await asyncio.sleep(0.2)
-        await asyncio.gather(*tasks, return_exceptions=True)
-    logger.info("Activity surge simulation completed successfully.")
+        results = await asyncio.gather(*tasks, return_exceptions=False)
+    summary = summarize_swipe_results(results)
+    logger.info(f"Activity surge simulation completed: {summary}")
+    return summary
 
 @app.get("/health")
 def health():
@@ -380,16 +474,30 @@ async def simulate_pulse():
     
     async with httpx.AsyncClient() as client:
         tasks = [simulate_swipe_event(client, card) for card in swipes_to_run]
-        await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=False)
         
-    return {"status": "SUCCESS", "swipes_attempted": batch_size}
+    summary = summarize_swipe_results(results)
+    if summary["authorizations_created"] == 0:
+        raise HTTPException(status_code=502, detail={"message": "No transaction authorizations were created.", **summary})
+    return {"status": "SUCCESS", **summary, "active_cards_count": len(cards)}
 
 @app.post("/simulate-surge", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
-def simulate_surge(payload: SurgeRequest, background_tasks: BackgroundTasks):
+async def simulate_surge(payload: SurgeRequest):
     """Triggers an async rapid-fire activity surge of 50 swipes."""
     active_cards = [c.model_dump() for c in payload.active_cards] if payload.active_cards else None
-    background_tasks.add_task(run_activity_surge_task, active_cards)
-    return {"status": "ACCEPTED", "message": "Simulation surge initiated in background."}
+    if not active_cards:
+        active_cards = get_active_cards()
+    if not active_cards:
+        raise HTTPException(status_code=400, detail="No active cards supplied or discovered for surge.")
+    summary = await run_activity_surge_task(active_cards)
+    if summary["authorizations_created"] == 0:
+        raise HTTPException(status_code=502, detail={"message": "No transaction authorizations were created.", **summary})
+    return {
+        "status": "SUCCESS",
+        "message": "Simulation surge completed against active card pool.",
+        "active_cards_count": len(active_cards),
+        **summary,
+    }
 
 @app.post("/inject-anomaly", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
 async def inject_anomaly(req: Optional[AnomalyRequest] = None):

@@ -17,11 +17,11 @@ import logging
 from datetime import datetime, timezone
 from google.cloud import pubsub_v1
 from utils.gcp import get_project_id
+from utils.lazy_clients import LazyClient
 
 logger = logging.getLogger(__name__)
 
-# Initialize thread-safe Pub/Sub Publisher Client globally
-publisher_client = pubsub_v1.PublisherClient()
+publisher_client = LazyClient(pubsub_v1.PublisherClient)
 
 def publish_underwriting_exception(
     artifact_id: str,

@@ -27,8 +27,9 @@ from models.authentication import ValidatedToken
 from utils.auth import get_current_user
 from utils.database import get_db
 from services.seeding_service import provision_user_suite, reset_user_suite
+from services.cdc_monitoring import CdcMonitoringService
 from models.identity import User
-from models.credit_card import IssuedCard, CreditAccount, TransactionAuthorization
+from models.credit_card import IssuedCard, CreditAccount, TransactionAuthorization, PostedTransaction
 from utils.audit import record_audit_event
 
 logger = logging.getLogger(__name__)
@@ -130,9 +131,6 @@ def reset_my_demo(
         )
 
 
-import httpx
-import os
-
 DATA_GENERATOR_URL = os.getenv("DATA_GENERATOR_URL", "http://localhost:8001")
 
 @router.post("/surge", status_code=status.HTTP_200_OK)
@@ -144,9 +142,8 @@ async def simulate_activity_surge(
 ):
     """
     Commands the simulation client to immediately fire 50 rapid-fire card swipes over 10 seconds,
-    passing the active presenter's card token to ensure visual feedback.
+    passing the full active card pool to hydrate the CDC transaction pipeline.
     """
-    email = token.email
     uid = token.user_id
     if not uid:
         raise HTTPException(
@@ -154,37 +151,18 @@ async def simulate_activity_surge(
             detail="Authenticated user ID not found in token claims."
         )
 
-    # 1. Fetch user from DB (bypass RBAC)
     db.connection().info["_ignore_rbac"] = True
-    user = db.query(User).filter((User.auth_provider_uid == uid) | (User.email == email)).first()
-    if not user:
+    from routers.credit_card import list_active_cards_for_simulation
+    active_cards = list_active_cards_for_simulation(db)
+    card_payloads = active_cards.get("active_cards", [])
+    if not card_payloads:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No seeded demo profile found. Please provision a profile first."
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No active cards are available for spend surge simulation."
         )
 
-    # 2. Fetch the user's active card details
-    from models.credit_card import CreditAccount, IssuedCard
-    card_info = db.query(IssuedCard, CreditAccount).join(
-        CreditAccount, IssuedCard.account_id == CreditAccount.id
-    ).filter(CreditAccount.customer_id == user.id, IssuedCard.status == "ACTIVE").first()
-
-    card_payloads = []
-    if card_info:
-        card, cred_acc = card_info
-        card_payloads.append({
-            "card_token": card.card_token,
-            "cardholder_name": card.cardholder_name,
-            "persona": "PRIME",
-            "mccs": ["5411", "5541", "5310", "4121"],
-            "amount_min": 1500,
-            "amount_max": 15000
-        })
-    else:
-        logger.warning(f"No active credit card found for user={user.id}. Data-generator will use default persona list.")
-
     target_url = f"{DATA_GENERATOR_URL}/simulate-surge"
-    logger.info(f"Forwarding surge request to data-generator at: {target_url} with {len(card_payloads)} presenter cards.")
+    logger.info(f"Forwarding surge request to data-generator at: {target_url} with {len(card_payloads)} active cards.")
     
     switch_token = os.getenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")
     headers = {"X-Card-Network-Token": switch_token}
@@ -205,9 +183,9 @@ async def simulate_activity_surge(
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 target_url,
-                json={"active_cards": card_payloads if card_payloads else None},
+                json={"active_cards": card_payloads},
                 headers=headers,
-                timeout=15.0
+                timeout=45.0
             )
             if response.status_code != 200:
                 raise HTTPException(
@@ -417,6 +395,32 @@ def get_global_stream(
 
     stream_items.sort(key=lambda x: x["raw_time"], reverse=True)
     return {"status": "SUCCESS", "stream": stream_items[:20]}
+
+
+@router.get("/cdc-status", status_code=status.HTTP_200_OK)
+@v1_router.get("/cdc-status", status_code=status.HTTP_200_OK)
+@alias_router.get("/cdc-status", status_code=status.HTTP_200_OK)
+def get_cdc_status(
+    token: ValidatedToken = Depends(verify_presenter_domain),
+    db: Session = Depends(get_db)
+):
+    """
+    Compares the latest operational card write to the latest replicated BigQuery lakehouse row.
+    """
+    return CdcMonitoringService(db).get_cdc_status()
+
+
+@router.get("/lakehouse-stream", status_code=status.HTTP_200_OK)
+@v1_router.get("/lakehouse-stream", status_code=status.HTTP_200_OK)
+@alias_router.get("/lakehouse-stream", status_code=status.HTTP_200_OK)
+def get_lakehouse_stream(
+    token: ValidatedToken = Depends(verify_presenter_domain),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns recent transactions from the BigQuery lakehouse CDC destination.
+    """
+    return CdcMonitoringService(db).get_lakehouse_stream()
 
 @router.get("/stream-sse")
 @v1_router.get("/stream-sse")
