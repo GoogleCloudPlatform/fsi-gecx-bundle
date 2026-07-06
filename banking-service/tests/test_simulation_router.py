@@ -95,20 +95,18 @@ async def test_provision_my_demo_success(async_client, db_session):
     cred_acc = db_session.query(CreditAccount).filter(CreditAccount.customer_id == user.id).first()
     assert cred_acc is not None
     assert cred_acc.cleared_balance_cents > 0
-    assert cred_acc.available_credit_cents == cred_acc.credit_limit_cents - cred_acc.cleared_balance_cents - 3500
-    
-    # Check historical swipes (should have exactly 12 posted transactions, plus 2 pending authorization holds)
-    swipes = db_session.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).all()
-    assert len(swipes) == 13
-
     from models.credit_card import TransactionAuthorization
     holds = db_session.query(TransactionAuthorization).filter(
         TransactionAuthorization.account_id == cred_acc.id,
         TransactionAuthorization.status == "PENDING"
     ).all()
+    pending_sum = sum(h.transaction_amount_cents for h in holds)
+    assert cred_acc.available_credit_cents == cred_acc.credit_limit_cents - cred_acc.cleared_balance_cents - pending_sum
+    
+    # Check historical swipes (should have exactly 10 posted retail transactions + 1 overdraft fee = 11 posted transactions)
+    swipes = db_session.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).all()
+    assert len(swipes) == 11
     assert len(holds) == 2
-    merchant_names = {h.merchant_name for h in holds}
-    assert "LATE_FEE" in merchant_names
 
 @pytest.mark.asyncio
 async def test_provision_my_demo_conflict(async_client, db_session):
@@ -143,10 +141,16 @@ async def test_reset_my_demo_success(async_client, db_session):
     # Verify balances reset to harmonized suite defaults with active transactions
     cred_acc = db_session.query(CreditAccount).filter(CreditAccount.customer_id == user_id).first()
     assert cred_acc.cleared_balance_cents > 0
-    assert cred_acc.available_credit_cents == cred_acc.credit_limit_cents - cred_acc.cleared_balance_cents - 3500
+    from models.credit_card import TransactionAuthorization
+    holds = db_session.query(TransactionAuthorization).filter(
+        TransactionAuthorization.account_id == cred_acc.id,
+        TransactionAuthorization.status == "PENDING"
+    ).all()
+    pending_sum = sum(h.transaction_amount_cents for h in holds)
+    assert cred_acc.available_credit_cents == cred_acc.credit_limit_cents - cred_acc.cleared_balance_cents - pending_sum
     
     swipes_count = db_session.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).count()
-    assert swipes_count == 13
+    assert swipes_count == 11
     
     accounts = db_session.query(Account).filter(Account.user_id == user_id).all()
     for acc in accounts:
@@ -226,4 +230,29 @@ async def test_get_active_cards_success(async_client, db_session):
     data = res.json()
     assert "active_cards" in data
     assert "count" in data
+
+@pytest.mark.asyncio
+async def test_inject_late_fee_and_global_stream(async_client, db_session):
+    global mock_claims
+    mock_claims = {"sub": "stream-uid", "email": "stream.presenter@google.com"}
+    
+    # Provision demo
+    resp = await async_client.post("/api/v1/simulation/provision-my-demo")
+    assert resp.status_code == status.HTTP_201_CREATED
+    
+    # Inject late fee
+    resp_fee = await async_client.post("/api/v1/simulation/inject-late-fee")
+    assert resp_fee.status_code == status.HTTP_200_OK
+    assert resp_fee.json()["status"] == "LATE_FEE_INJECTED"
+    assert resp_fee.json()["amount_cents"] == 3500
+    
+    # Check global stream
+    resp_stream = await async_client.get("/api/v1/simulation/global-stream")
+    assert resp_stream.status_code == status.HTTP_200_OK
+    data = resp_stream.json()
+    assert data["status"] == "SUCCESS"
+    assert "stream" in data
+    assert len(data["stream"]) > 0
+    merchant_names = [item["merchant_name"] for item in data["stream"]]
+    assert "LATE_FEE" in merchant_names
 

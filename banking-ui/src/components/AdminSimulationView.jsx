@@ -19,12 +19,14 @@ import {
   ArrowLeft, CheckCircle2, AlertTriangle, TrendingUp, Globe, Clock, 
   Layers, ChevronRight, Play
 } from 'lucide-react';
-import { triggerSpendSurge, injectFraudAnomaly } from '../utils/api.js';
+import { triggerSpendSurge, injectFraudAnomaly, injectLateFee, getGlobalStream } from '../utils/api.js';
 
 function AdminSimulationView() {
   const navigate = useNavigate();
   const [isSurgeLoading, setIsSurgeLoading] = useState(false);
   const [isAnomalyLoading, setIsAnomalyLoading] = useState(false);
+  const [isFeeLoading, setIsFeeLoading] = useState(false);
+  const [streamData, setStreamData] = useState([]);
   const [feedback, setFeedback] = useState({ type: '', title: '', message: '', data: null });
   const [cdcStats, setCdcStats] = useState({
     walLatencyMs: 312,
@@ -33,6 +35,23 @@ function AdminSimulationView() {
     activeAnomalies: 0,
     lastSyncTime: new Date().toLocaleTimeString()
   });
+
+  const fetchGlobalStream = async () => {
+    try {
+      const res = await getGlobalStream();
+      if (res && res.stream) {
+        setStreamData(res.stream);
+      }
+    } catch (e) {
+      console.error("Failed to fetch global stream:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchGlobalStream();
+    const interval = setInterval(fetchGlobalStream, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Simulate subtle real-time CDC fluctuations for dynamic feel
   useEffect(() => {
@@ -59,6 +78,7 @@ function AdminSimulationView() {
         data: res
       });
       setCdcStats(prev => ({ ...prev, eventsProcessed: prev.eventsProcessed + 50 }));
+      fetchGlobalStream();
     } catch (err) {
       setFeedback({
         type: 'error',
@@ -87,6 +107,7 @@ function AdminSimulationView() {
         eventsProcessed: prev.eventsProcessed + (res.injected_swipes_count || 4),
         activeAnomalies: prev.activeAnomalies + (res.injected_swipes_count || 4)
       }));
+      fetchGlobalStream();
     } catch (err) {
       setFeedback({
         type: 'error',
@@ -96,6 +117,34 @@ function AdminSimulationView() {
       });
     } finally {
       setIsAnomalyLoading(false);
+    }
+  };
+
+  const handleLateFee = async () => {
+    setIsFeeLoading(true);
+    setFeedback({ type: '', title: '', message: '', data: null });
+    try {
+      const res = await injectLateFee();
+      setFeedback({
+        type: 'warning',
+        title: 'Late Fee Injected',
+        message: res.message || 'Injected $35.00 Late Fee against presenter card.',
+        data: res
+      });
+      setCdcStats(prev => ({
+        ...prev,
+        eventsProcessed: prev.eventsProcessed + 1
+      }));
+      fetchGlobalStream();
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        title: 'Late Fee Injection Failed',
+        message: err.response?.data?.detail || err.message || 'Unable to execute late fee injection.',
+        data: null
+      });
+    } finally {
+      setIsFeeLoading(false);
     }
   };
 
@@ -232,7 +281,7 @@ function AdminSimulationView() {
         Simulation Event Command Center
       </h3>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
         
         {/* Card 1: Spend Surge */}
         <div className="relative group p-7 rounded-3xl bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 border border-slate-200 dark:border-slate-800 hover:border-cyan-500/50 dark:hover:border-cyan-500/50 transition-all duration-300 shadow-xl hover:shadow-2xl hover:shadow-cyan-500/10 flex flex-col justify-between overflow-hidden">
@@ -290,12 +339,12 @@ function AdminSimulationView() {
                   Targeted Fraud Anomaly
                 </h4>
                 <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">
-                  CANCUN MEXICO HIGH-RISK SWIPES
+                  RIVIERA MAYA HIGH-RISK SWIPES
                 </span>
               </div>
             </div>
             <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-6">
-              Injects 4 rapid-fire card-present transactions in Cancun, Mexico against the presenter card. Instantly flags foreign anomaly alerts (`risk_score &gt; 20`) in BigQuery `v_international_fraud_anomalies` to demonstrate real-time fraud intervention.
+              Injects 4 rapid-fire card-present transactions in Riviera Maya, Mexico against the presenter card. Instantly flags foreign anomaly alerts (`risk_score &gt; 20`) in BigQuery `v_international_fraud_anomalies` to demonstrate real-time fraud intervention.
             </p>
           </div>
 
@@ -317,30 +366,120 @@ function AdminSimulationView() {
             )}
           </button>
         </div>
+
+        {/* Card 3: Inject Late Fee */}
+        <div className="relative group p-7 rounded-3xl bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 border border-slate-200 dark:border-slate-800 hover:border-amber-500/50 dark:hover:border-amber-500/50 transition-all duration-300 shadow-xl hover:shadow-2xl hover:shadow-amber-500/10 flex flex-col justify-between overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" />
+          
+          <div>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400">
+                <Clock className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="text-lg font-bold text-slate-900 dark:text-white">
+                  Inject Late Fee
+                </h4>
+                <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                  $35.00 POSTED CHARGE
+                </span>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-6">
+              Posts a standalone $35.00 Late Fee to the presenter card ledger. Enables live voice demos or standalone script executions of automated fee waiver and reversal workflows.
+            </p>
+          </div>
+
+          <button
+            onClick={handleLateFee}
+            disabled={isFeeLoading}
+            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {isFeeLoading ? (
+              <>
+                <RefreshCw className="w-5 h-5 animate-spin" />
+                Injecting Fee...
+              </>
+            ) : (
+              <>
+                <Zap className="w-5 h-5" />
+                Inject Late Fee
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* Section 3: Live Lakehouse View Definitions Info */}
-      <div className="p-6 rounded-3xl bg-slate-900 text-slate-300 border border-slate-800 shadow-xl">
-        <h4 className="text-white font-bold text-base flex items-center gap-2 mb-3">
-          <Database className="w-5 h-5 text-cyan-400" />
-          Pre-Canned BigQuery Views Active
-        </h4>
-        <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-          The simulation studio feeds authoritative card gateway events through Datastream directly into BigQuery views optimized for Looker semantic models and AI Data Canvas exploration:
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs">
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-            <span className="text-cyan-400 font-bold">fsi_lakehouse.v_realtime_spend_velocity</span>
-            <p className="text-[11px] text-slate-500 font-sans mt-1">
-              Aggregates CDC transaction volume and ticket size by FDX spend category and home metro area.
+      {/* Section 3: Live Global Lakehouse Activity Stream */}
+      <div className="p-7 rounded-3xl bg-slate-900 text-slate-300 border border-slate-800 shadow-2xl">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <div>
+            <h4 className="text-white font-extrabold text-lg flex items-center gap-2">
+              <Database className="w-5 h-5 text-cyan-400 animate-pulse" />
+              Live Lakehouse CDC Replication Feed (Global Ledger)
+            </h4>
+            <p className="text-xs text-slate-400 mt-1">
+              Real-time stream of authoritative card network events replicating into BigQuery views (<span className="text-cyan-400 font-mono">v_realtime_spend_velocity</span> &amp; <span className="text-rose-400 font-mono">v_international_fraud_anomalies</span>).
             </p>
           </div>
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-            <span className="text-rose-400 font-bold">fsi_lakehouse.v_international_fraud_anomalies</span>
-            <p className="text-[11px] text-slate-500 font-sans mt-1">
-              Isolates foreign card-present transactions where risk_score &gt; 20 for immediate intervention.
-            </p>
-          </div>
+          <button
+            onClick={fetchGlobalStream}
+            className="self-start md:self-auto py-2 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-2 transition-colors border border-slate-700"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Refresh Stream
+          </button>
+        </div>
+
+        <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/70">
+          <table className="w-full text-left border-collapse font-mono text-xs">
+            <thead>
+              <tr className="border-b border-slate-800 text-slate-400 bg-slate-900/50">
+                <th className="p-3.5 font-semibold">Timestamp</th>
+                <th className="p-3.5 font-semibold">RRN / Event ID</th>
+                <th className="p-3.5 font-semibold">Merchant / Descriptor</th>
+                <th className="p-3.5 font-semibold text-right">Amount</th>
+                <th className="p-3.5 font-semibold">Status / Replication Target</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60">
+              {streamData.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="p-8 text-center text-slate-500 font-sans">
+                    Waiting for live transaction activity... Trigger a surge, anomaly, or late fee above to see CDC events flow!
+                  </td>
+                </tr>
+              ) : (
+                streamData.map((item, idx) => (
+                  <tr key={item.id + idx} className="hover:bg-slate-900/60 transition-colors">
+                    <td className="p-3.5 text-slate-400 whitespace-nowrap flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      {item.timestamp}
+                    </td>
+                    <td className="p-3.5 text-slate-300 font-bold whitespace-nowrap">{item.rrn}</td>
+                    <td className="p-3.5 text-white font-sans font-medium truncate max-w-xs">{item.merchant_name}</td>
+                    <td className="p-3.5 text-right font-bold whitespace-nowrap">
+                      ${(item.amount_cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-3.5 whitespace-nowrap">
+                      <div className="flex flex-col gap-0.5">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit ${
+                          item.status.includes('FLAGGED') 
+                            ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' 
+                            : item.status.includes('HOLD') 
+                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' 
+                            : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        }`}>
+                          {item.status}
+                        </span>
+                        <span className="text-[10px] text-slate-500">{item.bq_view}</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 

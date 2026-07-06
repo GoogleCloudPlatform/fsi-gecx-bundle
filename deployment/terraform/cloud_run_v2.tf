@@ -138,6 +138,11 @@ resource "google_cloud_run_v2_service" "banking_service" {
       }
 
       env {
+        name  = "DATA_GENERATOR_URL"
+        value = var.deploy_cloud_run_services ? google_cloud_run_v2_service.data_generator[0].uri : "http://localhost:8001"
+      }
+
+      env {
         name  = "GECX_APP_ID"
         value = var.cx_agent_studio_voice_agent_deployment_name
       }

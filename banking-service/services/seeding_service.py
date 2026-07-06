@@ -633,16 +633,6 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
 
     # 4. Credit Card Seeding (Pending Authorizations & Posted Transactions via Gateway)
     if cred_acc and card:
-        fee_rrn = f"FEE_{str(user_uuid)[:8]}"
-        process_authorization(db, {
-            "card_token": card.card_token,
-            "amount_cents": 3500,
-            "retrieval_reference_number": fee_rrn,
-            "merchant_category_code": "FEE",
-            "merchant_name": "LATE_FEE",
-            "card_network": "VISA",
-            "created_at": now - datetime.timedelta(days=5)
-        })
         ovr_rrn = f"OVR_{str(user_uuid)[:8]}"
         auth_ovr = process_authorization(db, {
             "card_token": card.card_token,
@@ -660,16 +650,6 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
                 "description": "Overdraft Fee",
                 "posted_at": now - datetime.timedelta(days=3)
             })
-        tax_rrn = f"TAX_{str(user_uuid)[:8]}"
-        process_authorization(db, {
-            "card_token": card.card_token,
-            "amount_cents": 0,
-            "retrieval_reference_number": tax_rrn,
-            "merchant_category_code": "4121",
-            "merchant_name": "CURB CHI TAXI",
-            "card_network": "VISA",
-            "created_at": now - datetime.timedelta(hours=6)
-        })
 
         # Assign a consistent geographical home metro and international travel trip for this customer's demo card
         from models.identity import User
@@ -677,7 +657,7 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
         is_googler = user_obj and ("GOOGLE" in str(user_obj.email).upper() or "PRESENTER" in str(user_obj.last_name).upper() or "NOVA.HORIZON" in str(user_obj.email).upper())
         if is_googler:
             user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA"])
-            user_travel_country = random.choice(["MEX", "BHS", "DOM"])
+            user_travel_country = "MEX"
         else:
             user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA", "ATLANTA GA", "MIAMI FL"])
             user_travel_country = None
@@ -689,24 +669,41 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
                 mex_charges = json.load(f).get("mexico_travel_charges", [])
 
         for i in range(12):
-            # VIP Googler Mexico Exclusivity Rule: ONLY Googlers get international vacation swipes!
-            is_intl = is_googler and (i in [2, 7, 10])
-            target_country = user_travel_country if is_intl else None
-            mch, store_desc = MerchantEnrichmentService.get_random_merchant(
-                db, 
-                is_international=is_intl, 
-                country=target_country, 
-                home_metro=user_home_metro
-            )
-            if is_intl and mex_charges:
-                charge_item = random.choice(mex_charges)
-                store_desc = charge_item["merchant_name"]
-                mcc_val = charge_item["mcc"]
-                amount_cents = random.randint(charge_item["min_amount_cents"], charge_item["max_amount_cents"])
+            is_pending = (i >= 10)
+            if is_googler and i == 8:
+                store_desc = "AEROMEXICO AIRLINES RIVIERA MAYA [MEX]"
+                mcc_val = "3000"
+                amount_cents = 65000
+                posted_date = now - datetime.timedelta(days=3)
+            elif is_googler and i == 9:
+                store_desc = "LA CASA DE LA PLAYA RIVIERA MAYA [MEX]"
+                mcc_val = "7011"
+                amount_cents = 95000
+                posted_date = now - datetime.timedelta(days=2)
+            elif is_googler and i == 10:
+                store_desc = "ESTERO RESTAURANTE RIVIERA MAYA [MEX]"
+                mcc_val = "5812"
+                amount_cents = 16500
+                posted_date = now - datetime.timedelta(hours=8)
+            elif is_googler and i == 11:
+                store_desc = "SENSE SPA MAYAKOBA PLAYA DEL CARMEN [MEX]"
+                mcc_val = "7298"
+                amount_cents = 22000
+                posted_date = now - datetime.timedelta(hours=2)
             else:
+                mch, store_desc = MerchantEnrichmentService.get_random_merchant(
+                    db, 
+                    is_international=False, 
+                    country=None, 
+                    home_metro=user_home_metro
+                )
                 mcc_val = mch.mcc if mch else "5310"
                 amount_cents = random.randint(1250, 45000)
-            posted_date = now - datetime.timedelta(days=(14 - i), hours=random.randint(0, 12))
+                if is_pending:
+                    posted_date = now - datetime.timedelta(hours=(12 - i) * 2)
+                else:
+                    posted_date = now - datetime.timedelta(days=(14 - i), hours=random.randint(0, 12))
+
             rrn = f"REF_{str(user_uuid)[:5]}_{i:02d}"
             
             auth_res = process_authorization(db, {
@@ -718,7 +715,7 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
                 "card_network": "VISA",
                 "created_at": posted_date - datetime.timedelta(hours=2)
             })
-            if auth_res.get("action_code") == "00":
+            if auth_res.get("action_code") == "00" and not is_pending:
                 process_settlement(db, {
                     "retrieval_reference_number": rrn,
                     "amount_cents": amount_cents,

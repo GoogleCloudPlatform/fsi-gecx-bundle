@@ -292,6 +292,16 @@ export async function injectFraudAnomaly() {
   return res.data;
 }
 
+export async function injectLateFee() {
+  const res = await api.post('/v1/simulation/inject-late-fee');
+  return res.data;
+}
+
+export async function getGlobalStream() {
+  const res = await api.get('/v1/simulation/global-stream');
+  return res.data;
+}
+
 export async function getAccountsSummary() {
   const res = await api.get('/v1/accounts/summary');
   return res.data;

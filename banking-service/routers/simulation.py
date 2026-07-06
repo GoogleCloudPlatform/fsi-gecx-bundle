@@ -287,3 +287,108 @@ def inject_targeted_fraud(
         "total_fraud_cents": sum(amt for _, amt, _, _, _ in swipes),
         "message": "Fraud surge successfully injected into cards.transaction_authorizations."
     }
+
+@router.post("/inject-late-fee", status_code=status.HTTP_200_OK)
+@v1_router.post("/inject-late-fee", status_code=status.HTTP_200_OK)
+@alias_router.post("/inject-late-fee", status_code=status.HTTP_200_OK)
+def inject_late_fee(
+    token: ValidatedToken = Depends(verify_presenter_domain),
+    db: Session = Depends(get_db)
+):
+    """
+    Injects a posted Late Fee transaction ($35.00) against the presenter's active credit card
+    to enable standalone late fee reversal scripts or live voice demos.
+    """
+    email = token.email
+    uid = token.user_id
+    if not uid:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User ID missing in claims.")
+
+    db.connection().info["_ignore_rbac"] = True
+    user = db.query(User).filter((User.auth_provider_uid == uid) | (User.email == email)).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo profile not found.")
+
+    card_info = db.query(IssuedCard, CreditAccount).join(
+        CreditAccount, IssuedCard.account_id == CreditAccount.id
+    ).filter(CreditAccount.customer_id == user.id, IssuedCard.status == "ACTIVE").first()
+
+    if not card_info:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active credit card found for user.")
+
+    card, cred_acc = card_info
+    now = datetime.datetime.now(datetime.timezone.utc)
+    rrn = f"FEE_{str(user.id)[:5]}_{random.randint(10, 99)}"
+
+    from services.card_network import process_authorization, process_settlement
+    auth_res = process_authorization(db, {
+        "card_token": card.card_token,
+        "amount_cents": 3500,
+        "retrieval_reference_number": rrn,
+        "merchant_category_code": "FEE",
+        "merchant_name": "LATE_FEE",
+        "card_network": "VISA",
+        "created_at": now - datetime.timedelta(hours=2)
+    })
+    if auth_res.get("action_code") == "00":
+        process_settlement(db, {
+            "retrieval_reference_number": rrn,
+            "amount_cents": 3500,
+            "description": "LATE_FEE",
+            "posted_at": now - datetime.timedelta(minutes=30)
+        })
+
+    logger.info(f"Injected $35.00 Late Fee for user={user.id} ({email}).")
+    return {
+        "status": "LATE_FEE_INJECTED",
+        "user_id": str(user.id),
+        "card_token": card.card_token,
+        "amount_cents": 3500,
+        "retrieval_reference_number": rrn,
+        "message": "Late fee ($35.00) successfully posted to ledger."
+    }
+
+@router.get("/global-stream", status_code=status.HTTP_200_OK)
+@v1_router.get("/global-stream", status_code=status.HTTP_200_OK)
+@alias_router.get("/global-stream", status_code=status.HTTP_200_OK)
+def get_global_stream(
+    token: ValidatedToken = Depends(verify_presenter_domain),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns a global real-time stream of recent card authorizations and settlements
+    to animate the Admin Simulation Lakehouse CDC replication monitor.
+    """
+    from models.credit_card import TransactionAuthorization, PostedTransaction
+    auths = db.query(TransactionAuthorization).order_by(TransactionAuthorization.created_at.desc()).limit(15).all()
+    posteds = db.query(PostedTransaction).order_by(PostedTransaction.posted_at.desc()).limit(15).all()
+
+    stream_items = []
+    for a in auths:
+        is_mex = "[MEX]" in str(a.merchant_name) or str(a.merchant_category_code) == "7011"
+        stream_items.append({
+            "id": f"AUTH_{str(a.id)[:8]}",
+            "rrn": a.retrieval_reference_number or "N/A",
+            "timestamp": a.created_at.strftime("%H:%M:%S") if a.created_at else "Just now",
+            "merchant_name": a.merchant_name,
+            "amount_cents": a.transaction_amount_cents,
+            "status": "FLAGGED (RISK > 20)" if is_mex and a.status == "PENDING" else f"HOLD ({a.status})",
+            "bq_view": "fsi_lakehouse.v_international_fraud_anomalies" if is_mex else "fsi_lakehouse.v_realtime_spend_velocity",
+            "raw_time": a.created_at.timestamp() if a.created_at else 0
+        })
+
+    for p in posteds:
+        is_mex = "[MEX]" in str(p.description)
+        stream_items.append({
+            "id": f"POST_{str(p.id)[:8]}",
+            "rrn": p.retrieval_reference_number or "N/A",
+            "timestamp": p.posted_at.strftime("%H:%M:%S") if p.posted_at else "Just now",
+            "merchant_name": p.description,
+            "amount_cents": p.amount_cents,
+            "status": "SETTLE (POSTED)",
+            "bq_view": "fsi_lakehouse.v_international_fraud_anomalies" if is_mex else "fsi_lakehouse.v_realtime_spend_velocity",
+            "raw_time": p.posted_at.timestamp() if p.posted_at else 0
+        })
+
+    stream_items.sort(key=lambda x: x["raw_time"], reverse=True)
+    return {"status": "SUCCESS", "stream": stream_items[:20]}
