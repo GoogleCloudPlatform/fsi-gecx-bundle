@@ -18,7 +18,10 @@ import datetime
 import random
 import os
 import httpx
+import asyncio
+import json
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from models.authentication import ValidatedToken
 from utils.auth import get_current_user
@@ -360,19 +363,25 @@ def get_global_stream(
     to animate the Admin Simulation Lakehouse CDC replication monitor.
     """
     from models.credit_card import TransactionAuthorization, PostedTransaction
-    auths = db.query(TransactionAuthorization).filter(TransactionAuthorization.status != "DECLINED").order_by(TransactionAuthorization.created_at.desc()).limit(15).all()
+    auths = db.query(TransactionAuthorization).order_by(TransactionAuthorization.created_at.desc()).limit(15).all()
     posteds = db.query(PostedTransaction).order_by(PostedTransaction.posted_at.desc()).limit(15).all()
 
     stream_items = []
     for a in auths:
         is_mex = "[MEX]" in str(a.merchant_name) or str(a.merchant_category_code) == "7011"
+        if is_mex and a.status == "PENDING":
+            status_str = "FLAGGED (RISK > 20)"
+        elif a.status == "DECLINED":
+            status_str = f"DECLINED ({a.decline_reason or 'GATEWAY'})"
+        else:
+            status_str = f"HOLD ({a.status})"
         stream_items.append({
             "id": f"AUTH_{str(a.id)[:8]}",
             "rrn": a.retrieval_reference_number or "N/A",
             "timestamp": a.created_at.strftime("%H:%M:%S") if a.created_at else "Just now",
             "merchant_name": a.merchant_name,
             "amount_cents": a.transaction_amount_cents,
-            "status": "FLAGGED (RISK > 20)" if is_mex and a.status == "PENDING" else f"HOLD ({a.status})",
+            "status": status_str,
             "bq_view": "fsi_lakehouse.v_international_fraud_anomalies" if is_mex else "fsi_lakehouse.v_realtime_spend_velocity",
             "raw_time": a.created_at.timestamp() if a.created_at else 0
         })
@@ -392,3 +401,64 @@ def get_global_stream(
 
     stream_items.sort(key=lambda x: x["raw_time"], reverse=True)
     return {"status": "SUCCESS", "stream": stream_items[:20]}
+
+@router.get("/stream-sse")
+@v1_router.get("/stream-sse")
+@alias_router.get("/stream-sse")
+async def stream_sse(
+    token: ValidatedToken = Depends(verify_presenter_domain),
+    db: Session = Depends(get_db)
+):
+    """
+    Push-based Server-Sent Events (SSE) stream delivering real-time CDC lakehouse transactions
+    directly to the Admin Simulation UI without requiring manual refreshes or client-side polling.
+    """
+    async def event_generator():
+        while True:
+            try:
+                db.expire_all()
+                auths = db.query(TransactionAuthorization).order_by(TransactionAuthorization.created_at.desc()).limit(15).all()
+                posteds = db.query(PostedTransaction).order_by(PostedTransaction.posted_at.desc()).limit(15).all()
+                stream_items = []
+                for a in auths:
+                    is_mex = "[MEX]" in str(a.merchant_name) or str(a.merchant_category_code) == "7011"
+                    if is_mex and a.status == "PENDING":
+                        status_str = "FLAGGED (RISK > 20)"
+                    elif a.status == "DECLINED":
+                        status_str = f"DECLINED ({a.decline_reason or 'GATEWAY'})"
+                    else:
+                        status_str = f"HOLD ({a.status})"
+                    stream_items.append({
+                        "id": f"AUTH_{str(a.id)[:8]}",
+                        "rrn": a.retrieval_reference_number or "N/A",
+                        "timestamp": a.created_at.strftime("%H:%M:%S") if a.created_at else "Just now",
+                        "merchant_name": a.merchant_name,
+                        "amount_cents": a.transaction_amount_cents,
+                        "status": status_str,
+                        "bq_view": "fsi_lakehouse.v_international_fraud_anomalies" if is_mex else "fsi_lakehouse.v_realtime_spend_velocity",
+                        "raw_time": a.created_at.timestamp() if a.created_at else 0
+                    })
+                for p in posteds:
+                    is_mex = "[MEX]" in str(p.description)
+                    stream_items.append({
+                        "id": f"POST_{str(p.id)[:8]}",
+                        "rrn": p.retrieval_reference_number or "N/A",
+                        "timestamp": p.posted_at.strftime("%H:%M:%S") if p.posted_at else "Just now",
+                        "merchant_name": p.description,
+                        "amount_cents": p.amount_cents,
+                        "status": "SETTLE (POSTED)",
+                        "bq_view": "fsi_lakehouse.v_international_fraud_anomalies" if is_mex else "fsi_lakehouse.v_realtime_spend_velocity",
+                        "raw_time": p.posted_at.timestamp() if p.posted_at else 0
+                    })
+                stream_items.sort(key=lambda x: x["raw_time"], reverse=True)
+                payload = json.dumps({"status": "SUCCESS", "stream": stream_items[:20]})
+                yield f"data: {payload}\n\n"
+            except Exception as e:
+                logger.error(f"Error generating SSE stream: {e}")
+            await asyncio.sleep(1.5)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no"
+    })

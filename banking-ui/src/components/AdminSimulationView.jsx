@@ -54,8 +54,20 @@ function AdminSimulationView() {
 
   useEffect(() => {
     fetchGlobalStream();
-    const interval = setInterval(fetchGlobalStream, 5000);
-    return () => clearInterval(interval);
+    const eventSource = new EventSource('/v1/simulation/stream-sse');
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data && data.stream) {
+          setStreamData(data.stream);
+        }
+      } catch (err) {
+        console.error("SSE stream parse error:", err);
+      }
+    };
+    return () => {
+      eventSource.close();
+    };
   }, []);
 
   // Simulate subtle real-time CDC fluctuations for dynamic feel
@@ -419,9 +431,13 @@ function AdminSimulationView() {
       <div className="p-7 rounded-3xl bg-slate-900 text-slate-300 border border-slate-800 shadow-2xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
-            <h4 className="text-white font-extrabold text-lg flex items-center gap-2">
+            <h4 className="text-white font-extrabold text-lg flex items-center gap-2 flex-wrap">
               <Database className="w-5 h-5 text-cyan-400 animate-pulse" />
               Live Lakehouse CDC Replication Feed (Global Ledger)
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                LIVE PUSH ACTIVE
+              </span>
             </h4>
             <p className="text-xs text-slate-400 mt-1">
               Real-time stream of authoritative card network events replicating through Datastream into Looker semantic models and AI Data Canvas.
