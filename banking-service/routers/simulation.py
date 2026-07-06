@@ -189,6 +189,18 @@ async def simulate_activity_surge(
     switch_token = os.getenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")
     headers = {"X-Card-Network-Token": switch_token}
     
+    if DATA_GENERATOR_URL and "localhost" not in DATA_GENERATOR_URL and "127.0.0.1" not in DATA_GENERATOR_URL:
+        try:
+            import google.auth
+            import google.auth.transport.requests
+            from google.oauth2 import id_token
+            auth_req = google.auth.transport.requests.Request()
+            oidc_token = id_token.fetch_id_token(auth_req, DATA_GENERATOR_URL)
+            if oidc_token:
+                headers["Authorization"] = f"Bearer {oidc_token}"
+        except Exception as auth_err:
+            logger.warning(f"Could not fetch Google OIDC ID token for {DATA_GENERATOR_URL}: {auth_err}")
+    
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -323,7 +335,7 @@ def inject_late_fee(
     now = datetime.datetime.now(datetime.timezone.utc)
     rrn = f"FEE_{str(user.id)[:5]}_{random.randint(10, 99)}"
 
-    from services.card_network import process_authorization, process_settlement
+    from services.card_network import process_authorization
     auth_res = process_authorization(db, {
         "card_token": card.card_token,
         "amount_cents": 3500,
@@ -331,24 +343,28 @@ def inject_late_fee(
         "merchant_category_code": "FEE",
         "merchant_name": "LATE_FEE",
         "card_network": "VISA",
-        "created_at": now - datetime.timedelta(hours=2)
+        "created_at": now
     })
     if auth_res.get("action_code") == "00":
-        process_settlement(db, {
-            "retrieval_reference_number": rrn,
-            "amount_cents": 3500,
-            "description": "LATE_FEE",
-            "posted_at": now - datetime.timedelta(minutes=30)
-        })
+        record_audit_event(
+            db,
+            "CREDIT_TRANSACTION_AUTHORIZED",
+            {
+                "account_id": str(cred_acc.id),
+                "amount_cents": 3500,
+                "merchant_name": "LATE_FEE",
+                "is_late_fee_simulation": True
+            },
+        )
 
-    logger.info(f"Injected $35.00 Late Fee for user={user.id} ({email}).")
+    logger.info(f"Injected $35.00 Late Fee hold for user={user.id} ({email}).")
     return {
         "status": "LATE_FEE_INJECTED",
         "user_id": str(user.id),
         "card_token": card.card_token,
         "amount_cents": 3500,
         "retrieval_reference_number": rrn,
-        "message": "Late fee ($35.00) successfully posted to ledger."
+        "message": "Late fee ($35.00) hold successfully authorized on ledger."
     }
 
 @router.get("/global-stream", status_code=status.HTTP_200_OK)

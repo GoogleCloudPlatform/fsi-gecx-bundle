@@ -17,9 +17,12 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Sparkles, Activity, ShieldAlert, Zap, Database, RefreshCw, 
   ArrowLeft, CheckCircle2, AlertTriangle, TrendingUp, Globe, Clock, 
-  Layers, ChevronRight, Play, Info
+  Layers, ChevronRight, Play, Info, ExternalLink
 } from 'lucide-react';
 import { triggerSpendSurge, injectFraudAnomaly, injectLateFee, getGlobalStream } from '../utils/api.js';
+import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GcpInfoModal from './GcpInfoModal.jsx';
+import { showInfoModals } from '../utils/constants.js';
 
 function AdminSimulationView() {
   const navigate = useNavigate();
@@ -27,7 +30,7 @@ function AdminSimulationView() {
   const [isAnomalyLoading, setIsAnomalyLoading] = useState(false);
   const [isFeeLoading, setIsFeeLoading] = useState(false);
   const [isStreamLoading, setIsStreamLoading] = useState(false);
-  const [showTooltip, setShowTooltip] = useState(false);
+  const [isGcpInfoModalOpen, setIsGcpInfoModalOpen] = useState(false);
   const [streamData, setStreamData] = useState([]);
   const [feedback, setFeedback] = useState({ type: '', title: '', message: '', data: null });
   const [cdcStats, setCdcStats] = useState({
@@ -454,41 +457,15 @@ function AdminSimulationView() {
               {isStreamLoading ? 'Refreshing...' : 'Refresh Stream'}
             </button>
 
-            <div className="relative inline-block">
+            {showInfoModals() && (
               <button
-                onMouseEnter={() => setShowTooltip(true)}
-                onMouseLeave={() => setShowTooltip(false)}
-                onClick={() => setShowTooltip(!showTooltip)}
-                className="p-2 rounded-xl bg-slate-800 hover:bg-cyan-500/20 text-slate-400 hover:text-cyan-400 border border-slate-700 transition-colors flex items-center justify-center"
-                title="GCP BigQuery Target Views Info"
+                onClick={() => setIsGcpInfoModalOpen(true)}
+                className="p-2.5 rounded-2xl hover:bg-slate-800 border border-slate-700 bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+                title="GCP Admin Integration Info"
               >
-                <Info className="w-4 h-4" />
+                <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
               </button>
-
-              {showTooltip && (
-                <div className="absolute right-0 bottom-full mb-3 w-80 p-4 rounded-2xl bg-slate-950 text-slate-300 border border-slate-700 shadow-2xl z-50 text-xs font-sans">
-                  <div className="font-bold text-white mb-2 flex items-center gap-1.5">
-                    <Database className="w-4 h-4 text-cyan-400" />
-                    Target BigQuery View Definitions
-                  </div>
-                  <div className="space-y-2.5 font-mono text-[11px]">
-                    <div className="p-2 rounded bg-slate-900 border border-slate-800">
-                      <div className="text-cyan-400 font-bold">fsi_lakehouse.v_realtime_spend_velocity</div>
-                      <div className="text-slate-400 font-sans mt-0.5 text-[10px]">
-                        Aggregates CDC transaction volume and ticket size by FDX category &amp; home metro.
-                      </div>
-                    </div>
-                    <div className="p-2 rounded bg-slate-900 border border-slate-800">
-                      <div className="text-rose-400 font-bold">fsi_lakehouse.v_international_fraud_anomalies</div>
-                      <div className="text-slate-400 font-sans mt-0.5 text-[10px]">
-                        Isolates foreign card-present transactions where risk_score &gt; 20 for intervention.
-                      </div>
-                    </div>
-                  </div>
-                  <div className="absolute -bottom-1.5 right-3 w-3 h-3 bg-slate-950 border-r border-b border-slate-700 transform rotate-45" />
-                </div>
-              )}
-            </div>
+            )}
           </div>
         </div>
 
@@ -543,6 +520,64 @@ function AdminSimulationView() {
           </table>
         </div>
       </div>
+
+      <GcpInfoModal
+        isOpen={isGcpInfoModalOpen}
+        onClose={() => setIsGcpInfoModalOpen(false)}
+        title="Lakehouse CDC Replication & Global Ledger"
+      >
+        <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+          <p>
+            The <strong>Global Ledger Feed</strong> receives real-time transaction authorizations and settlements directly from the card network processing engine via Server-Sent Events (SSE).
+          </p>
+          <p>
+            Each event is simultaneously recorded in an append-only PostgreSQL outbox table and streamed through Google Cloud Datastream and Pub/Sub into BigQuery lakehouse tables. Looker semantic models structure this data into specialized real-time views:
+          </p>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-cyan-500 dark:text-cyan-400 font-mono font-bold">fsi_lakehouse.v_realtime_spend_velocity</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Aggregates CDC transaction volume and ticket size by FDX spend category &amp; home metro area in real time.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">fsi_lakehouse.v_international_fraud_anomalies</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Isolates foreign card-present transactions where risk_score &gt; 20 for immediate automated intervention and Looker alerts.</p>
+            </div>
+          </div>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">BigQuery Studio Console</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Query streaming Datastream tables, examine CDC latency, and inspect SQL view schemas.</p>
+              </div>
+              <a
+                href="https://console.cloud.google.com/bigquery"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View BigQuery</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <hr className="border-slate-100 dark:border-slate-800" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Cloud Run Architecture</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Monitor microservice telemetry, SSE stream connections, and automated scaling.</p>
+              </div>
+              <a
+                href="https://console.cloud.google.com/run"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Cloud Run</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </GcpInfoModal>
 
     </section>
   );
