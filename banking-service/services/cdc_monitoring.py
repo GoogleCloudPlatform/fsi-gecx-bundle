@@ -17,7 +17,6 @@ import logging
 import os
 import time
 import json
-import redis
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -29,25 +28,7 @@ from utils.gcp import get_project_id
 
 logger = logging.getLogger(__name__)
 
-def get_redis_client():
-    redis_host = os.getenv("REDIS_HOST")
-    redis_port = os.getenv("REDIS_PORT", "6379")
-    redis_password = os.getenv("REDIS_PASSWORD")
-    if not redis_host:
-        return None
-    try:
-        return redis.Redis(
-            host=redis_host, 
-            port=int(redis_port), 
-            password=redis_password,
-            ssl=True,
-            ssl_cert_reqs="none",
-            decode_responses=True
-        )
-    except Exception as e:
-        logger.warning(f"Failed to connect to redis: {e}")
-        return None
-
+from utils.redis_client import get_redis_client
 _cache = get_redis_client()
 
 class CdcMonitoringService:

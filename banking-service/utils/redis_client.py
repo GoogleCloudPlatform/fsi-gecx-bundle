@@ -18,7 +18,12 @@ def get_redis_client() -> redis.Redis:
                 host=host,
                 port=port,
                 password=password,
-                decode_responses=True
+                decode_responses=True,
+                ssl=(port == 6378),
+                ssl_cert_reqs="none",
+                health_check_interval=30,
+                socket_keepalive=True,
+                retry_on_timeout=True
             )
             # Test connection
             _redis_client.ping()
