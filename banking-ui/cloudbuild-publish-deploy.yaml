@@ -13,7 +13,7 @@
 # limitations under the License.
 
 steps:
-  - name: "ghcr.io/github/linguist"
+  - name: "decidim/github-linguist:latest"
     id: "run-linguist"
     entrypoint: "sh"
     args:
