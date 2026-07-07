@@ -21,5 +21,7 @@ window.env = {
   CX_AGENT_STUDIO_DEPLOYMENT_NAME: "projects/fsi-gecx-2000/locations/us/apps/e0b952c1-280d-41d0-8da5-46db4b0e6ad9/deployments/ca77d6f4-b7c2-4007-b6c0-51d905132e41",
   CX_AGENT_STUDIO_UPLOAD_TOOL_NAME: "projects/fsi-gecx-2000/locations/us/apps/e0b952c1-280d-41d0-8da5-46db4b0e6ad9/tools/7d1d2879-9909-42a5-a39b-4ac6370980d3",
   CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME: "projects/fsi-gecx-2000/locations/us/apps/e0b952c1-280d-41d0-8da5-46db4b0e6ad9/tools/8e42a29a-d20e-4aba-8ea9-beecb68c6a60",
-  CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME: "projects/fsi-gecx-2000/locations/us/apps/e0b952c1-280d-41d0-8da5-46db4b0e6ad9/tools/692fbf88-0560-4a43-a700-ebb82122cd85"
+  CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME: "projects/fsi-gecx-2000/locations/us/apps/e0b952c1-280d-41d0-8da5-46db4b0e6ad9/tools/692fbf88-0560-4a43-a700-ebb82122cd85",
+  BUILD_VERSION: "local-dev",
+  BUILD_COMMIT_ID: "ABCDEFG"
 };

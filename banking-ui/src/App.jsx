@@ -1692,6 +1692,11 @@ function AppContent() {
             <p className="text-xs text-slate-500 leading-relaxed">
               {footerText}
             </p>
+            {(window.env?.BUILD_VERSION || window.env?.BUILD_COMMIT_ID) && (
+              <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                Version: {window.env?.BUILD_VERSION || 'unknown'} ({window.env?.BUILD_COMMIT_ID || 'unknown'})
+              </div>
+            )}
           </div>
 
           <div>
