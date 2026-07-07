@@ -15,7 +15,7 @@ dependencies = [
     "httpx==0.28.1",
     "python-dotenv==1.2.2",
     "google-adk==2.3.0",
-    "joserfc==1.6.4",
+    "joserfc==1.6.7",
     "google-cloud-secret-manager==2.27.0",
     "fastmcp==3.2.4",
     "cachetools==7.0.6",
@@ -32,7 +32,7 @@ dependencies = [
     "alembic>=1.18.4",
     "google-cloud-discoveryengine>=0.13.12",
     "google-cloud-kms>=3.2.0",
-    "cryptography>=44.0.0",
+    "cryptography>=48.0.1",
     "redis>=8.0.1",
     "google-cloud-monitoring>=2.31.0",
 ]

@@ -114,3 +114,4 @@ resource "google_pubsub_subscription" "audit_events_bq_sub" {
     google_bigquery_dataset_iam_member.pubsub_bq_metadata_viewer
   ]
 }
+

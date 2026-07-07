@@ -69,6 +69,7 @@ resource "google_cloudbuild_trigger" "service_deploy_trigger" {
 
   service_account    = google_service_account.cloudbuild_service_account.id
   included_files     = ["banking-service/**"]
+  ignored_files      = ["banking-service/cloudbuild-db-migrate.yaml"]
   filename           = "banking-service/cloudbuild-publish-deploy.yaml"
   include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
 
@@ -203,3 +204,23 @@ resource "google_cloudbuild_trigger" "data_generator_deploy_trigger" {
     _TRIGGER_DEPLOY = "true"
   }
 }
+
+resource "google_cloudbuild_trigger" "db_migration_manual_trigger" {
+  count    = var.deploy_cloud_build_triggers ? 1 : 0
+  name     = "run-db-migration"
+  location = var.region
+  tags     = ["banking-db-migration", "manual"]
+
+  repository_event_config {
+    repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
+  }
+
+  service_account    = google_service_account.cloudbuild_service_account.id
+  filename           = "banking-service/cloudbuild-db-migrate.yaml"
+  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
+
+  substitutions = {
+    _REGION = var.region
+  }
+}
+

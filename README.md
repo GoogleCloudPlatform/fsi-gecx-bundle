@@ -42,8 +42,8 @@ This repository is a collection of resources for the Financial Services Industry
 | `custom_domain` | The custom domain for the Load Balancer. | No | |
 | `set_cloud_run_audiences` | Whether to set the Cloud Run audiences env variable. | Yes | `false` |
 | `github_app_installation_id` | GitHub App Installation ID (required if `deploy_cloud_build_triggers` is true). | Yes | `null` |
-| `github_repo_remote_uri` | GitHub Repository Remote URI (required if `deploy_cloud_build_triggers` is true). | Yes | `"https://github.com/cloud-gtm/fsi-gecx-bundle.git"` |
-| `github_connection_name` | GitHub connection name. | Yes | `"cloud-gtm"` |
+| `github_repo_remote_uri` | GitHub Repository Remote URI (required if `deploy_cloud_build_triggers` is true). | Yes | `"https://github.com/GoogleCloudPlatform/fsi-gecx-bundle.git"` |
+| `github_connection_name` | GitHub connection name. | Yes | `"GoogleCloudPlatform"` |
 | `github_oauth_token_secret_name` | GitHub OAuth token secret name (required if `deploy_cloud_build_triggers` is true). | Yes | |
 | `manage_github_connection` | Whether to manage the GitHub connection. | Yes | `false` |
 | `cx_agent_studio_deployment_name` | CX Agent Studio Web Widget deployment name. | Yes | `null` |
@@ -185,11 +185,11 @@ gcloud secrets create ccai-company-secret \
     echo https://console.cloud.google.com/cloud-build/repositories/2nd-gen?project=${PROJECT_ID}
     ```
 
-2. Select a region (e.g., us-central1), enter a name (e.g., cloud-gtm).
+2. Select a region (e.g., us-central1), enter a name (e.g., GoogleCloudPlatform).
 3. Click "Connect".
 4. A window will pop up in GitHub asking for authorization with a message like:
 
-   `Project xxx is requesting your GitHub OAuth token. If you continue, the token will be stored in Secret Manager for use with Cloud Build GitHub Connection cloud-gtm`
+   `Project xxx is requesting your GitHub OAuth token. If you continue, the token will be stored in Secret Manager for use with Cloud Build GitHub Connection GoogleCloudPlatform`
 
 5. Click "Continue".
 6. Click "Install in a new account" on the bottom right of the dialog.
@@ -202,8 +202,10 @@ gcloud secrets create ccai-company-secret \
     echo https://console.cloud.google.com/security/secret-manager?project=${PROJECT_ID}
     ```
 
-11. Copy the name of the secret that was created by the Cloud Build GitHub Connection (it should be in the format of cloud-gtm-github-token-xxxxxx).
+11. Copy the name of the secret that was created by the Cloud Build GitHub Connection (it should be in the format of GoogleCloudPlatform-github-token-xxxxxx).
 12. Paste this value into the `github_oauth_token_secret_name` variable in the `terraform.tfvars` file of the deployment/terraform directory. Only paste the name, not the fully qualified resource name.
+13. Also take note of the app installation ID for the GitHub App (it should be in the format of xxxxxxx), by clicking the ellipsis to the right of the connection name and then clicking on "Manage installation". The last part of the url path is the app installation ID.
+14. Paste this value into the `github_app_installation_id` variable in the `terraform.tfvars` file of the deployment/terraform directory.
 
 ### Infrastructure Deployment
 Update the terraform.tfvars file with the following values:
