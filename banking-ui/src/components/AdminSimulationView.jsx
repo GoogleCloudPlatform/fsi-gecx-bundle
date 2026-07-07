@@ -604,30 +604,30 @@ function AdminSimulationView() {
       )}
 
       {/* Section 3: Live Transaction Activity Streams */}
-      <div className="p-7 rounded-3xl bg-slate-900 text-slate-300 border border-slate-800 shadow-2xl">
+      <div className="p-7 rounded-3xl bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-2xl shadow-slate-950/5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
-            <h4 className="text-white font-extrabold text-lg flex items-center gap-2 flex-wrap">
-              <Database className="w-5 h-5 text-cyan-400 animate-pulse" />
+            <h4 className="text-slate-900 dark:text-white font-extrabold text-lg flex items-center gap-2 flex-wrap">
+              <Database className="w-5 h-5 text-cyan-500 dark:text-cyan-400 animate-pulse" />
               Live Transaction Replication Monitor
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border shadow-sm ${
                 streamConnection.state === 'live'
-                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
                   : streamConnection.state === 'error'
-                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                  : 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20'
+                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                  : 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 border-cyan-500/20'
               }`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${
                   streamConnection.state === 'live'
                     ? 'bg-emerald-500 animate-ping'
-                    : streamConnection.state === 'error'
-                    ? 'bg-amber-400'
-                    : 'bg-cyan-300 animate-pulse'
+                  : streamConnection.state === 'error'
+                    ? 'bg-amber-500'
+                    : 'bg-cyan-500 dark:bg-cyan-300 animate-pulse'
                 }`} />
                 {streamConnection.state === 'live' ? 'AUTHENTICATED SSE LIVE' : streamConnection.state === 'error' ? 'STREAM RETRYING' : 'CONNECTING'}
               </span>
             </h4>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
               Shows the newest transaction activity as it is published by the banking service, streamed through Redis, and delivered to this view over authenticated server-sent events.
             </p>
           </div>
@@ -636,7 +636,7 @@ function AdminSimulationView() {
             <button
               onClick={fetchGlobalStream}
               disabled={isStreamLoading}
-              className="py-2 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-2 transition-all border border-slate-700 disabled:opacity-50"
+              className="py-2 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-semibold flex items-center gap-2 transition-all border border-slate-200 dark:border-slate-700 disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isStreamLoading ? 'animate-spin' : ''}`} />
               {isStreamLoading ? 'Refreshing...' : 'Refresh Stream'}
@@ -645,7 +645,7 @@ function AdminSimulationView() {
             {showInfoModals() && (
               <button
                 onClick={() => setInfoModal('monitor')}
-                className="p-2.5 rounded-2xl hover:bg-slate-800 border border-slate-700 bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+                className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
                 title="Live monitor info"
               >
                 <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
@@ -654,11 +654,11 @@ function AdminSimulationView() {
           </div>
         </div>
 
-        <h5 className="text-xs uppercase tracking-wider text-slate-500 font-bold mb-3">Live Unified Event Stream (Redis Bus)</h5>
-        <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/70 mb-7">
+        <h5 className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-500 font-bold mb-3">Live Unified Event Stream (Redis Bus)</h5>
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/70 mb-7">
           <table className="w-full text-left border-collapse font-mono text-xs">
             <thead>
-              <tr className="border-b border-slate-800 text-slate-400 bg-slate-900/50">
+              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 bg-white/80 dark:bg-slate-900/50">
                 <th className="p-3.5 font-semibold">Timestamp</th>
                 <th className="p-3.5 font-semibold">RRN / Event ID</th>
                 <th className="p-3.5 font-semibold">Merchant / Descriptor</th>
@@ -666,37 +666,37 @@ function AdminSimulationView() {
                 <th className="p-3.5 font-semibold">Status / Replication Target</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
               {streamData.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="p-8 text-center text-slate-500 font-sans">
+                  <td colSpan="5" className="p-8 text-center text-slate-500 dark:text-slate-500 font-sans">
                     Waiting for operational transaction activity... Trigger a surge, anomaly, or late fee above.
                   </td>
                 </tr>
               ) : (
                 streamData.map((item, idx) => (
-                  <tr key={item.id + idx} className="hover:bg-slate-900/60 transition-colors">
-                    <td className="p-3.5 text-slate-400 whitespace-nowrap flex items-center gap-2">
+                  <tr key={item.id + idx} className="hover:bg-slate-100 dark:hover:bg-slate-900/60 transition-colors">
+                    <td className="p-3.5 text-slate-500 dark:text-slate-400 whitespace-nowrap flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                       {item.timestamp}
                     </td>
-                    <td className="p-3.5 text-slate-300 font-bold whitespace-nowrap">{item.rrn}</td>
-                    <td className="p-3.5 text-white font-sans font-medium truncate max-w-xs">{item.merchant_name}</td>
-                    <td className="p-3.5 text-right font-bold whitespace-nowrap">
+                    <td className="p-3.5 text-slate-800 dark:text-slate-300 font-bold whitespace-nowrap">{item.rrn}</td>
+                    <td className="p-3.5 text-slate-900 dark:text-white font-sans font-medium truncate max-w-xs">{item.merchant_name}</td>
+                    <td className="p-3.5 text-right text-slate-900 dark:text-slate-100 font-bold whitespace-nowrap">
                       ${(item.amount_cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="p-3.5 whitespace-nowrap">
                       <div className="flex flex-col gap-0.5">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit ${
                           item.status.includes('FLAGGED') 
-                            ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' 
+                            ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30' 
                             : item.status.includes('HOLD') 
-                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' 
-                            : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30' 
+                            : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
                         }`}>
                           {item.status}
                         </span>
-                        <span className="text-[10px] text-slate-500">{item.bq_view}</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-500">{item.bq_view}</span>
                       </div>
                     </td>
                   </tr>

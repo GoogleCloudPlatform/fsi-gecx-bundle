@@ -25,6 +25,8 @@ from utils.internal_execution import InternalServiceContext, apply_internal_db_a
 logger = logging.getLogger(__name__)
 
 DATA_GENERATOR_URL = os.getenv("DATA_GENERATOR_URL", "http://localhost:8001")
+SURGE_DISPATCH_CONNECT_TIMEOUT_SECONDS = float(os.getenv("SURGE_DISPATCH_CONNECT_TIMEOUT_SECONDS", "5"))
+SURGE_DISPATCH_READ_TIMEOUT_SECONDS = float(os.getenv("SURGE_DISPATCH_READ_TIMEOUT_SECONDS", "8"))
 
 
 class SimulationService:
@@ -150,10 +152,31 @@ class SimulationService:
         headers = self._build_service_headers(DATA_GENERATOR_URL)
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(target_url, json={"active_cards": card_payloads}, headers=headers, timeout=45.0)
+                response = await client.post(
+                    target_url,
+                    json={"active_cards": card_payloads},
+                    headers=headers,
+                    timeout=httpx.Timeout(
+                        connect=SURGE_DISPATCH_CONNECT_TIMEOUT_SECONDS,
+                        read=SURGE_DISPATCH_READ_TIMEOUT_SECONDS,
+                        write=10.0,
+                        pool=5.0,
+                    ),
+                )
                 if response.status_code != 200:
                     raise HTTPException(status_code=response.status_code, detail=f"Data generator surge request failed: {response.text}")
                 return response.json()
+        except (httpx.ReadTimeout, httpx.RemoteProtocolError, httpx.ReadError) as exc:
+            logger.warning(
+                "Surge dispatch response from data-generator was interrupted after submission; treating request as accepted. target=%s error=%s",
+                target_url,
+                exc,
+            )
+            return {
+                "status": "ACCEPTED",
+                "message": "Spend surge dispatch was accepted. Downstream execution is still in progress; monitor the live transaction stream for results.",
+                "active_cards_count": len(card_payloads),
+            }
         except httpx.RequestError as exc:
             logger.error("Network error trying to connect to data generator at %s: %s", target_url, exc)
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Could not connect to synthetic data generator: {exc}") from exc

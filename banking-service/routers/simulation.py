@@ -14,7 +14,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -74,6 +74,7 @@ def reset_my_demo(
 @v1_router.post("/surge", status_code=status.HTTP_200_OK)
 @alias_router.post("/surge", status_code=status.HTTP_200_OK)
 async def simulate_activity_surge(
+    response: Response,
     token: ValidatedToken = Depends(verify_presenter_domain),
     db: Session = Depends(get_db)
 ):
@@ -82,7 +83,10 @@ async def simulate_activity_surge(
     passing the full active card pool to hydrate the CDC transaction pipeline.
     """
     del token
-    return await SimulationService(db).dispatch_spend_surge()
+    result = await SimulationService(db).dispatch_spend_surge()
+    if result.get("status") == "ACCEPTED":
+        response.status_code = status.HTTP_202_ACCEPTED
+    return result
 
 @router.post("/inject-anomaly", status_code=status.HTTP_200_OK)
 @v1_router.post("/inject-anomaly", status_code=status.HTTP_200_OK)

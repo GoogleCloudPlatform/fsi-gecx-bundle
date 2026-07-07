@@ -69,6 +69,7 @@ SURGE_TOTAL_EVENTS = int(os.getenv("SURGE_TOTAL_EVENTS", "50"))
 SURGE_STAGGER_SECONDS = float(os.getenv("SURGE_STAGGER_SECONDS", "0.2"))
 ACTIVE_CARD_FETCH_TIMEOUT_SECONDS = float(os.getenv("ACTIVE_CARD_FETCH_TIMEOUT_SECONDS", "10"))
 AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE = int(os.getenv("AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE", "6"))
+SWIPE_REQUEST_TIMEOUT_SECONDS = float(os.getenv("SWIPE_REQUEST_TIMEOUT_SECONDS", "10"))
 
 _pulse_lock = asyncio.Lock()
 
@@ -481,7 +482,7 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
     auth_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
     
     try:
-        auth_resp = await client.post(auth_url, json=auth_payload, headers=headers, timeout=5.0)
+        auth_resp = await client.post(auth_url, json=auth_payload, headers=headers, timeout=SWIPE_REQUEST_TIMEOUT_SECONDS)
         if _is_maintenance_response(auth_resp):
             logger.info("Skipping swipe because banking-service is in maintenance mode.")
             return {
@@ -532,7 +533,7 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
                 "description": f"{merchant.get('merchant', 'Store')} Capture"
             }
             settle_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/settle"
-            settle_resp = await client.post(settle_url, json=settle_payload, headers=headers, timeout=5.0)
+            settle_resp = await client.post(settle_url, json=settle_payload, headers=headers, timeout=SWIPE_REQUEST_TIMEOUT_SECONDS)
             if _is_maintenance_response(settle_resp):
                 logger.info("Skipping settlement because banking-service entered maintenance mode.")
                 return {
@@ -570,7 +571,7 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
         elif resolution == "REVERSE":
             rev_payload = {"retrieval_reference_number": rrn}
             reverse_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse"
-            rev_resp = await client.post(reverse_url, json=rev_payload, headers=headers, timeout=5.0)
+            rev_resp = await client.post(reverse_url, json=rev_payload, headers=headers, timeout=SWIPE_REQUEST_TIMEOUT_SECONDS)
             if _is_maintenance_response(rev_resp):
                 logger.info("Skipping reversal because banking-service entered maintenance mode.")
                 return {

@@ -213,6 +213,26 @@ async def test_simulate_surge_success(async_client, db_session):
     assert len(data["active_cards"]) >= 1
     assert data["active_cards"][0]["card_token"].startswith("tok_visa_")
 
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_simulate_surge_returns_accepted_when_generator_response_times_out(async_client, db_session):
+    global mock_claims
+    mock_claims = {"sub": "presenter-accepted", "email": "presenter.accepted@google.com"}
+
+    prov_resp = await async_client.post("/api/v1/simulation/provision-my-demo")
+    assert prov_resp.status_code == status.HTTP_201_CREATED
+
+    from services.simulation import DATA_GENERATOR_URL
+    respx.post(f"{DATA_GENERATOR_URL}/simulate-surge").mock(side_effect=httpx.ReadTimeout("timed out"))
+
+    response = await async_client.post("/api/v1/simulation/surge")
+
+    assert response.status_code == status.HTTP_202_ACCEPTED
+    data = response.json()
+    assert data["status"] == "ACCEPTED"
+    assert "accepted" in data["message"].lower()
+
 @pytest.mark.asyncio
 async def test_inject_anomaly_success(async_client, db_session):
     global mock_claims
