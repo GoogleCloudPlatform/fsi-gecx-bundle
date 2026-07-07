@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
 from utils.database import get_db
+from utils.maintenance import ensure_system_writable
 from services.card_network import process_authorization, process_settlement, process_reversal
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ def card_network_authorize(
     """
     Simulates real-time merchant swipe hold authorization requests from network switch.
     """
+    ensure_system_writable("card authorization")
     res = process_authorization(db, request.model_dump())
     return res
 
@@ -74,6 +76,7 @@ def card_network_settle(
     """
     Simulates clearing card swipes and posting transactions from network switch.
     """
+    ensure_system_writable("card settlement")
     try:
         return process_settlement(db, request.model_dump())
     except ValueError as val_err:
@@ -97,6 +100,7 @@ def card_network_reverse(
     """
     Simulates hold voids / reversal clearing.
     """
+    ensure_system_writable("card reversal")
     try:
         return process_reversal(db, request.model_dump())
     except ValueError as val_err:

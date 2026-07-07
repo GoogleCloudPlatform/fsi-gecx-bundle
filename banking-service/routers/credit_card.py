@@ -37,6 +37,7 @@ from services.simulation import SimulationService
 from utils.auth import get_current_user, is_support_staff
 from utils.database import get_db
 from utils.internal_execution import InternalServiceContext, require_internal_simulation_context
+from utils.maintenance import ensure_system_writable
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/credit-card", tags=["Credit Card Support"])
@@ -114,6 +115,7 @@ def get_active_cards(
     _auth: bool = Depends(verify_admin_or_internal_secret)
 ):
     """Returns all active credit card tokens and basic persona metadata for synthetic data simulation."""
+    ensure_system_writable("active card discovery")
     return SimulationService(db).list_active_cards_for_simulation()
 
 
@@ -402,6 +404,7 @@ def auto_paydown_credit_card(
     Executes an internal auto-paydown from the target customer's checking or savings account
     to reduce credit-card utilization for continuous simulation traffic.
     """
+    ensure_system_writable("automatic credit-card paydown")
     service = SimulationService(db)
     return service.execute_internal_auto_paydown(
         context=internal_context,

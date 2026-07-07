@@ -70,6 +70,10 @@ SURGE_STAGGER_SECONDS = float(os.getenv("SURGE_STAGGER_SECONDS", "0.2"))
 
 _pulse_lock = asyncio.Lock()
 
+
+class MaintenanceModeError(RuntimeError):
+    """Raised when banking-service has temporarily paused writes for maintenance/reset."""
+
 def is_local_mode() -> bool:
     return os.getenv("ENV", "local") == "local" and not os.getenv("K_SERVICE")
 
@@ -154,6 +158,16 @@ def get_spendable_cards(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return spendable_cards
 
 
+def _is_maintenance_response(response: httpx.Response) -> bool:
+    if response.status_code != status.HTTP_503_SERVICE_UNAVAILABLE:
+        return False
+    try:
+        detail = response.json().get("detail")
+    except ValueError:
+        return False
+    return isinstance(detail, dict) and detail.get("status") == "MAINTENANCE"
+
+
 async def auto_paydown_high_utilization_cards(
     client: httpx.AsyncClient,
     cards: List[Dict[str, Any]],
@@ -188,6 +202,18 @@ async def auto_paydown_high_utilization_cards(
             headers=headers,
             timeout=10.0,
         )
+
+        if _is_maintenance_response(response):
+            logger.info("Skipping auto-paydown during banking-service maintenance for credit account %s.", credit_account_id)
+            results.append(
+                {
+                    "credit_account_id": credit_account_id,
+                    "customer_id": customer_id,
+                    "status": "SKIPPED",
+                    "reason": "MAINTENANCE",
+                }
+            )
+            continue
 
         if response.status_code != 200:
             logger.warning(
@@ -327,8 +353,12 @@ def get_active_cards() -> List[Dict[str, Any]]:
                 if cards:
                     logger.info(f"Retrieved {len(cards)} active card tokens via HTTP from banking-service.")
                     return cards
+            if _is_maintenance_response(res):
+                raise MaintenanceModeError("banking-service reset is in progress")
             logger.warning(f"Active card discovery failed. HTTP {res.status_code}: {res.text}")
     except Exception as e:
+        if isinstance(e, MaintenanceModeError):
+            raise
         logger.warning(f"Could not fetch active cards via HTTP from {BANKING_SERVICE_URL}: {e}")
 
     if is_local_mode():
@@ -420,6 +450,17 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
     
     try:
         auth_resp = await client.post(auth_url, json=auth_payload, headers=headers, timeout=5.0)
+        if _is_maintenance_response(auth_resp):
+            logger.info("Skipping swipe because banking-service is in maintenance mode.")
+            return {
+                "card_token": card.get("card_token"),
+                "rrn": rrn,
+                "authorized": False,
+                "settled": False,
+                "reversed": False,
+                "decline_reason": "MAINTENANCE",
+                "error": None,
+            }
         if auth_resp.status_code != 200:
             logger.warning(f"Auth request failed. HTTP {auth_resp.status_code}: {auth_resp.text}")
             return {
@@ -460,6 +501,17 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
             }
             settle_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/settle"
             settle_resp = await client.post(settle_url, json=settle_payload, headers=headers, timeout=5.0)
+            if _is_maintenance_response(settle_resp):
+                logger.info("Skipping settlement because banking-service entered maintenance mode.")
+                return {
+                    "card_token": card.get("card_token"),
+                    "rrn": rrn,
+                    "authorized": True,
+                    "settled": False,
+                    "reversed": False,
+                    "decline_reason": "MAINTENANCE",
+                    "error": None,
+                }
             if settle_resp.status_code == 200:
                 logger.info(f"Swipe settled successfully. Card: {card.get('cardholder_name')}, Merchant: {merchant.get('merchant')}, Amount: ${final_amount/100:.2f} (Hold: ${amount_cents/100:.2f})")
                 return {
@@ -487,6 +539,17 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
             rev_payload = {"retrieval_reference_number": rrn}
             reverse_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse"
             rev_resp = await client.post(reverse_url, json=rev_payload, headers=headers, timeout=5.0)
+            if _is_maintenance_response(rev_resp):
+                logger.info("Skipping reversal because banking-service entered maintenance mode.")
+                return {
+                    "card_token": card.get("card_token"),
+                    "rrn": rrn,
+                    "authorized": True,
+                    "settled": False,
+                    "reversed": False,
+                    "decline_reason": "MAINTENANCE",
+                    "error": None,
+                }
             if rev_resp.status_code == 200:
                 logger.info(f"Swipe hold reversed successfully. Card: {card.get('cardholder_name')}, RRN: {rrn}")
                 return {
@@ -597,7 +660,14 @@ async def simulate_pulse():
 
     async with _pulse_lock:
         logger.info("Triggered randomized simulation pulse for the next %s seconds.", PULSE_WINDOW_SECONDS)
-        cards = get_spendable_cards(get_active_cards())
+        try:
+            cards = get_spendable_cards(get_active_cards())
+        except MaintenanceModeError:
+            return {
+                "status": "SKIPPED",
+                "message": "banking-service reset is in progress.",
+                "active_cards_count": 0,
+            }
         if not cards:
             return {
                 "status": "SKIPPED",
@@ -644,7 +714,13 @@ async def simulate_surge(payload: SurgeRequest):
     """Triggers an async rapid-fire activity surge of 50 swipes."""
     active_cards = [c.model_dump() for c in payload.active_cards] if payload.active_cards else None
     if not active_cards:
-        active_cards = get_active_cards()
+        try:
+            active_cards = get_active_cards()
+        except MaintenanceModeError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="banking-service reset is in progress.",
+            )
     active_cards = get_spendable_cards(active_cards)
     if not active_cards:
         raise HTTPException(status_code=409, detail="No spendable active cards supplied or discovered for surge.")
@@ -666,7 +742,13 @@ async def inject_anomaly(req: Optional[AnomalyRequest] = None):
     """
     target_token = req.card_token if req and req.card_token else None
     if not target_token:
-        cards = get_active_cards()
+        try:
+            cards = get_active_cards()
+        except MaintenanceModeError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="banking-service reset is in progress.",
+            )
         if not cards:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active cards found to target for anomaly.")
         for c in cards:

@@ -67,6 +67,13 @@ except Exception as e:
 
 import asyncio
 
+def should_run_startup_seeding() -> bool:
+    configured = os.getenv("ENABLE_STARTUP_DB_SEEDING")
+    if configured is not None:
+        return configured.lower() == "true"
+    return not os.getenv("K_SERVICE")
+
+
 async def run_db_seeding():
     logging.info("Starting background database verification and seeding...")
     try:
@@ -87,9 +94,11 @@ async def run_db_seeding():
 @asynccontextmanager
 async def combined_lifespan(app_inst: FastAPI):
     import sys
-    if "pytest" not in sys.modules:
+    if "pytest" not in sys.modules and should_run_startup_seeding():
         logging.info("Scheduling background database seeding task on lifespan startup...")
         asyncio.create_task(run_db_seeding())
+    elif "pytest" not in sys.modules:
+        logging.info("Startup database seeding disabled for this environment.")
     else:
         logging.info("Test environment detected. Skipping background database seeding task.")
     async with mcp_app.lifespan(app_inst):

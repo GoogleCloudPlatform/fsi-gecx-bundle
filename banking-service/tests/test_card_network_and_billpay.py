@@ -14,6 +14,7 @@
 
 import pytest
 import uuid
+from unittest.mock import patch
 from fastapi import status
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy import create_engine
@@ -146,6 +147,25 @@ async def test_card_network_authorize_success(async_client, db_session):
     assert auth is not None
     assert auth.status == "PENDING"
     assert auth.transaction_amount_cents == 1500
+
+@pytest.mark.asyncio
+async def test_card_network_authorize_returns_503_during_maintenance(async_client, db_session):
+    setup_test_cardholder_suite(db_session)
+
+    headers = {"X-Card-Network-Token": "switch-secret-key-12345"}
+    payload = {
+        "card_token": "tok_visa_swipe_tester",
+        "amount_cents": 1500,
+        "retrieval_reference_number": "123456789099",
+        "merchant_category_code": "5812",
+        "merchant_name": "Local Restaurant",
+    }
+
+    with patch("utils.maintenance.get_maintenance_state", return_value={"active": True, "message": "Reset in progress"}):
+        response = await async_client.post("/api/v1/card-network/authorize", json=payload, headers=headers)
+
+    assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert response.json()["detail"]["status"] == "MAINTENANCE"
 
 @pytest.mark.asyncio
 async def test_card_network_authorize_unauthorized(async_client):

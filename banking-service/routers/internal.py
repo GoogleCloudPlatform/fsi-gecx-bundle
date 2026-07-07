@@ -23,6 +23,7 @@ from google.cloud import bigquery
 from pydantic import BaseModel, Field
 from utils.auth import verify_eventarc_oidc_token
 from utils.lazy_clients import LazyClient
+from utils.maintenance import maintenance_window
 
 logger = logging.getLogger(__name__)
 bq_client = LazyClient(bigquery.Client)
@@ -166,32 +167,40 @@ def reset_database(purge_audit_logs: bool = False, purge_data_lake: bool = False
     db = SessionLocal()
     try:
         db.connection().info["_ignore_rbac"] = True
-        
-        # Seed and clean databases using the Seeding Service
-        perform_algorithmic_seeding(db)
-        
-        if purge_audit_logs:
-            db.query(AuditOutbox).delete()
-            logger.info("Purging PostgreSQL audit outbox...")
-            try:
-                project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
-                for tbl in ["origination_audit_log", "financial_ledger_audit_log", "identity_access_audit_log"]:
-                    bq_client.query(f"DELETE FROM `{project_id}.compliance_audit.{tbl}` WHERE true").result()
-                logger.info("Purged BigQuery compliance_audit tables.")
-            except Exception as bq_ex:
-                logger.warning(f"Could not purge BigQuery audit logs: {bq_ex}")
 
-        if purge_data_lake:
-            logger.info("Purging BigLake Apache Iceberg catalog tables...")
-            try:
-                project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
-                for lake_tbl in ["posted_transactions", "applications_lake", "users_lake"]:
-                    bq_client.query(f"DELETE FROM `{project_id}.iceberg_catalog.{lake_tbl}` WHERE true").result()
-                logger.info("Purged BigLake Apache Iceberg catalog tables.")
-            except Exception as lake_ex:
-                logger.warning(f"Could not purge BigLake Iceberg tables: {lake_ex}")
+        with maintenance_window(
+            reason="database_reset",
+            message="Admin reset in progress. Transaction traffic is temporarily paused.",
+            ttl_seconds=300,
+            drain_seconds=2.0,
+        ):
+            logger.info("Maintenance mode enabled for admin database reset.")
 
-        db.commit()
+            # Seed and clean databases using the Seeding Service
+            perform_algorithmic_seeding(db)
+
+            if purge_audit_logs:
+                db.query(AuditOutbox).delete()
+                logger.info("Purging PostgreSQL audit outbox...")
+                try:
+                    project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
+                    for tbl in ["origination_audit_log", "financial_ledger_audit_log", "identity_access_audit_log"]:
+                        bq_client.query(f"DELETE FROM `{project_id}.compliance_audit.{tbl}` WHERE true").result()
+                    logger.info("Purged BigQuery compliance_audit tables.")
+                except Exception as bq_ex:
+                    logger.warning(f"Could not purge BigQuery audit logs: {bq_ex}")
+
+            if purge_data_lake:
+                logger.info("Purging BigLake Apache Iceberg catalog tables...")
+                try:
+                    project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
+                    for lake_tbl in ["posted_transactions", "applications_lake", "users_lake"]:
+                        bq_client.query(f"DELETE FROM `{project_id}.iceberg_catalog.{lake_tbl}` WHERE true").result()
+                    logger.info("Purged BigLake Apache Iceberg catalog tables.")
+                except Exception as lake_ex:
+                    logger.warning(f"Could not purge BigLake Iceberg tables: {lake_ex}")
+
+            db.commit()
         msg = "Database reset and re-seeded successfully."
         if purge_audit_logs:
             msg += " (Audit logs purged)"

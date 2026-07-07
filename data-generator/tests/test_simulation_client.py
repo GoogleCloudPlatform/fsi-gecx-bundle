@@ -147,13 +147,27 @@ def test_simulate_surge_fails_without_spendable_cards():
 def test_generate_fails_without_active_cards_in_deployed_mode(monkeypatch):
     monkeypatch.setenv("K_SERVICE", "data-generator")
     respx.get(f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards").mock(
-        return_value=httpx.Response(503, json={"detail": "unavailable"})
+        return_value=httpx.Response(503, json={"detail": {"status": "MAINTENANCE"}})
     )
 
     response = client.post("/generate")
 
-    assert response.status_code == 502
-    assert "refusing to use static fallback" in response.json()["detail"]
+    assert response.status_code == 200
+    assert response.json()["status"] == "SKIPPED"
+    assert "reset is in progress" in response.json()["message"]
+
+
+@respx.mock
+def test_simulate_surge_returns_503_during_maintenance(monkeypatch):
+    monkeypatch.setenv("K_SERVICE", "data-generator")
+    respx.get(f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards").mock(
+        return_value=httpx.Response(503, json={"detail": {"status": "MAINTENANCE"}})
+    )
+
+    response = client.post("/simulate-surge", json={}, headers={"X-Card-Network-Token": CARD_NETWORK_TOKEN})
+
+    assert response.status_code == 503
+    assert "reset is in progress" in response.json()["detail"]
 
 
 def test_get_spendable_cards_filters_exhausted_cards():

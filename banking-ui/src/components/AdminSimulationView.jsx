@@ -18,14 +18,13 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Sparkles, Activity, ShieldAlert, Zap, Database, RefreshCw, 
   ArrowLeft, CheckCircle2, AlertTriangle, TrendingUp, Globe, Clock,
-  Layers, ChevronRight, Play, Info, ExternalLink
+  Layers, ChevronRight, Play, ExternalLink
 } from 'lucide-react';
 import {
   triggerSpendSurge,
   injectFraudAnomaly,
   injectLateFee,
   getGlobalStream,
-  getCdcStatus,
   getBackendApiUrl,
   getBackendAuthHeaders,
 } from '../utils/api.js';
@@ -52,9 +51,8 @@ function AdminSimulationView() {
   const [isAnomalyLoading, setIsAnomalyLoading] = useState(false);
   const [isFeeLoading, setIsFeeLoading] = useState(false);
   const [isStreamLoading, setIsStreamLoading] = useState(false);
-  const [isGcpInfoModalOpen, setIsGcpInfoModalOpen] = useState(false);
+  const [infoModal, setInfoModal] = useState(null);
   const [streamData, setStreamData] = useState([]);
-  const [cdcStatus, setCdcStatus] = useState(null);
   const [feedback, setFeedback] = useState({ type: '', title: '', message: '', data: null });
   const [streamConnection, setStreamConnection] = useState({ state: 'connecting', message: 'Negotiating secure stream...' });
   const [cdcStats, setCdcStats] = useState({
@@ -70,15 +68,9 @@ function AdminSimulationView() {
     lastSyncTime: new Date().toLocaleTimeString()
   });
 
-  const applyMonitorSnapshot = (streamSnapshot, statusSnapshot = null) => {
+  const applyMonitorSnapshot = (streamSnapshot) => {
     if (streamSnapshot?.stream) {
       setStreamData(streamSnapshot.stream);
-    }
-
-    if (statusSnapshot) {
-      setCdcStatus(statusSnapshot);
-    } else if (streamSnapshot?.cdc_status) {
-      setCdcStatus(streamSnapshot.cdc_status);
     }
 
     if (streamSnapshot?.cdc_metrics || streamSnapshot?.stream_metrics) {
@@ -100,11 +92,8 @@ function AdminSimulationView() {
   const fetchGlobalStream = async () => {
     setIsStreamLoading(true);
     try {
-      const [streamRes, statusRes] = await Promise.all([
-        getGlobalStream(),
-        getCdcStatus(),
-      ]);
-      applyMonitorSnapshot(streamRes, statusRes);
+      const streamRes = await getGlobalStream();
+      applyMonitorSnapshot(streamRes);
     } catch (e) {
       console.error("Failed to fetch global stream:", e);
     } finally {
@@ -115,11 +104,8 @@ function AdminSimulationView() {
   useEffect(() => {
     const loadInitialSnapshot = async () => {
       try {
-        const [streamRes, statusRes] = await Promise.all([
-          getGlobalStream(),
-          getCdcStatus(),
-        ]);
-        applyMonitorSnapshot(streamRes, statusRes);
+        const streamRes = await getGlobalStream();
+        applyMonitorSnapshot(streamRes);
       } catch (error) {
         console.error('Failed to fetch initial simulation snapshot:', error);
       }
@@ -337,10 +323,21 @@ function AdminSimulationView() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-            <span className="w-2 h-2 rounded-full bg-emerald-500 -ml-4" />
-            STREAMING ACTIVE
+          <div className="flex items-center gap-3">
+            {showInfoModals() && (
+              <button
+                onClick={() => setInfoModal('wal')}
+                className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+                title="Datastream replication info"
+              >
+                <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
+              </button>
+            )}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+              <span className="w-2 h-2 rounded-full bg-emerald-500 -ml-4" />
+              STREAMING ACTIVE
+            </div>
           </div>
         </div>
 
@@ -603,13 +600,8 @@ function AdminSimulationView() {
               </span>
             </h4>
             <p className="text-xs text-slate-400 mt-1">
-              Authenticated monitor displaying live card-network writes pushed through Redis and delivered over server-sent events.
+              Shows the newest transaction activity as it is published by the banking service, streamed through Redis, and delivered to this view over authenticated server-sent events.
             </p>
-            {cdcStatus && (
-              <p className="text-[11px] text-slate-500 mt-1">
-                Operational latest: {cdcStatus.operational_latest_timestamp || 'N/A'} | Lakehouse latest: {cdcStatus.lakehouse_latest_timestamp || 'N/A'}
-              </p>
-            )}
           </div>
 
           <div className="flex items-center gap-3 self-start md:self-auto">
@@ -624,9 +616,9 @@ function AdminSimulationView() {
 
             {showInfoModals() && (
               <button
-                onClick={() => setIsGcpInfoModalOpen(true)}
+                onClick={() => setInfoModal('monitor')}
                 className="p-2.5 rounded-2xl hover:bg-slate-800 border border-slate-700 bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
-                title="GCP Admin Integration Info"
+                title="Live monitor info"
               >
                 <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
               </button>
@@ -689,16 +681,16 @@ function AdminSimulationView() {
       </div>
 
       <GcpInfoModal
-        isOpen={isGcpInfoModalOpen}
-        onClose={() => setIsGcpInfoModalOpen(false)}
-        title="Redis Event Bus & CDC Monitor"
+        isOpen={infoModal === 'monitor'}
+        onClose={() => setInfoModal(null)}
+        title="Live Transaction Monitor"
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            The <strong>Transaction Replication Monitor</strong> now has a single live view. Operational card events are published into Redis, pushed to the admin GUI over authenticated SSE, and compared against Datastream health signals for replication visibility.
+            The <strong>Live Transaction Replication Monitor</strong> shows recent card activity as it is created by the banking service. Authorizations, settlements, reversals, and flagged events are published to Redis and streamed directly into the admin UI over authenticated server-sent events.
           </p>
           <p>
-            We no longer query BigQuery to animate the live wall. BigQuery remains the analytical destination and long-term CDC sink, while the wall itself is fed by the Redis event bus so every connected admin session sees the same recent operational events immediately.
+            This panel is meant to answer a simple operational question: what is happening right now in the transaction flow? It is a live event wall, ordered with the newest activity first, and every connected admin session sees the same shared stream.
           </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
@@ -731,6 +723,64 @@ function AdminSimulationView() {
               <div>
                 <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Cloud Run + Memorystore</h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Track the banking-service SSE connections, the data-generator pulse worker, and the Redis event bus that powers the live wall.</p>
+              </div>
+              <a
+                href="https://console.cloud.google.com/run"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View Cloud Run</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </GcpInfoModal>
+
+      <GcpInfoModal
+        isOpen={infoModal === 'wal'}
+        onClose={() => setInfoModal(null)}
+        title="Datastream Replication Engine"
+      >
+        <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+          <p>
+            The <strong>Datastream WAL Replication Engine</strong> panel summarizes downstream replication health for the operational transaction pipeline. It tracks the live stream connection, recent event age, event throughput, and managed Datastream freshness signals.
+          </p>
+          <p>
+            In practical terms, this panel helps confirm that transaction writes are still moving through the system, that the event stream is active, and that the managed replication path into the analytical lakehouse is staying current.
+          </p>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-cyan-500 dark:text-cyan-400 font-mono font-bold">Operational stream health</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">The UI listens to Redis-backed transaction events and reports how fresh the latest activity is and how many events are arriving per minute.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">Managed replication health</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">System lag, freshness, and anomaly counts come from managed cloud metrics so you can distinguish a quiet system from a replication problem.</p>
+            </div>
+          </div>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">BigQuery Studio Console</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Inspect the analytical lakehouse destination, CDC-derived views, and anomaly datasets after replication lands.</p>
+              </div>
+              <a
+                href="https://console.cloud.google.com/bigquery"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+              >
+                <span>View BigQuery</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <hr className="border-slate-100 dark:border-slate-800" />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Cloud Run + Memorystore</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Track the banking-service stream endpoints, the data-generator worker, and the Redis event bus that feeds the monitor.</p>
               </div>
               <a
                 href="https://console.cloud.google.com/run"

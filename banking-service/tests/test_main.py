@@ -61,6 +61,15 @@ async def test_health_endpoint(async_client):
     assert response.json() == {"status": "ok"}
 
 
+def test_should_run_startup_seeding_disabled_on_cloud_run_by_default(monkeypatch):
+    monkeypatch.setenv("K_SERVICE", "banking-service")
+    monkeypatch.delenv("ENABLE_STARTUP_DB_SEEDING", raising=False)
+
+    assert app.router.lifespan_context is not None
+    import main as main_module
+    assert main_module.should_run_startup_seeding() is False
+
+
 @pytest.mark.asyncio
 async def test_upload_artifact_success(async_client):
     # Create a valid application first
