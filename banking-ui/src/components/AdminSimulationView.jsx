@@ -683,7 +683,9 @@ function AdminSimulationView() {
                     <td className="p-3.5 text-slate-800 dark:text-slate-300 font-bold whitespace-nowrap">{item.rrn}</td>
                     <td className="p-3.5 text-slate-900 dark:text-white font-sans font-medium truncate max-w-xs">{item.merchant_name}</td>
                     <td className="p-3.5 text-right text-slate-900 dark:text-slate-100 font-bold whitespace-nowrap">
-                      ${(item.amount_cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ${(
+                        Math.abs(item.amount_cents ?? 0) / 100
+                      ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="p-3.5 whitespace-nowrap">
                       <div className="flex flex-col gap-0.5">
