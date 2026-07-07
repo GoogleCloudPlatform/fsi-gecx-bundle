@@ -51,3 +51,18 @@ class FraudAlertRepository:
         else:
             return None
         return query.order_by(FraudAlert.created_at.desc()).first()
+
+    def get_open_alert_for_account(
+        self,
+        *,
+        credit_account_id,
+    ) -> FraudAlert | None:
+        return (
+            self.db.query(FraudAlert)
+            .filter(
+                FraudAlert.credit_account_id == credit_account_id,
+                FraudAlert.status == "OPEN",
+            )
+            .order_by(FraudAlert.created_at.desc())
+            .first()
+        )

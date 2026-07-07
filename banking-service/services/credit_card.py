@@ -43,6 +43,7 @@ def queue_wallet_provisioning(
     card_token: str,
     wallet_provider: str = "GOOGLE_WALLET",
     initiated_by: str = "CUSTOMER_VOICE_SUPPORT",
+    fraud_alert_id: str | None = None,
 ) -> dict:
     """
     Records a mocked wallet-provisioning request for an issued card.
@@ -77,6 +78,8 @@ def queue_wallet_provisioning(
                 "wallet_provider": wallet_provider,
                 "status": "QUEUED",
                 "initiated_by": initiated_by,
+                "fraud_alert_id": fraud_alert_id,
+                "correlation_id": fraud_alert_id or card.card_token,
             },
         )
         db.commit()
@@ -85,6 +88,7 @@ def queue_wallet_provisioning(
             "card_token": card.card_token,
             "wallet_provider": wallet_provider,
             "wallet_provisioning_status": "QUEUED",
+            "fraud_alert_id": fraud_alert_id,
             "message": "Digital wallet provisioning queued successfully.",
         }
     except Exception as e:
@@ -149,6 +153,7 @@ def issue_replacement_card(
     *,
     wallet_provider: str = "GOOGLE_WALLET",
     issue_virtual_card: bool = True,
+    fraud_alert_id: str | None = None,
 ) -> dict:
     """
     Issues a replacement card for an account after fraud or loss workflows.
@@ -207,6 +212,8 @@ def issue_replacement_card(
                 "new_last_four": replacement_card.last_four,
                 "reason": reason,
                 "is_virtual": issue_virtual_card,
+                "fraud_alert_id": fraud_alert_id,
+                "correlation_id": fraud_alert_id or replacement_card.card_token,
             },
         )
         db.commit()
@@ -219,6 +226,7 @@ def issue_replacement_card(
             "wallet_provider": wallet_provider,
             "wallet_provisioning_status": "QUEUED",
             "is_virtual": replacement_card.is_virtual,
+            "fraud_alert_id": fraud_alert_id,
             "message": "Replacement virtual card issued and wallet provisioning queued.",
         }
     except Exception as e:

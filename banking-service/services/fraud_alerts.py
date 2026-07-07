@@ -53,6 +53,7 @@ class FraudAlertService:
             "FRAUD_ALERT_CREATED",
             {
                 "fraud_alert_id": str(alert.id),
+                "correlation_id": str(alert.id),
                 "customer_id": str(customer.id),
                 "credit_account_id": str(credit_account.id),
                 "card_last_four": card.last_four,
@@ -75,6 +76,7 @@ class FraudAlertService:
             "FRAUD_ALERT_CUSTOMER_NOTIFIED",
             {
                 "fraud_alert_id": str(alert.id),
+                "correlation_id": str(alert.id),
                 "customer_id": str(customer.id),
                 "message_id": message.message_id,
                 "thread_id": message.thread_id,
@@ -136,6 +138,18 @@ class FraudAlertService:
             "success": True,
             "message": "Open fraud alert retrieved successfully.",
             "fraud_alert": context["fraud_alert"],
+        }
+
+    def get_open_alert_for_account(self, *, credit_account_id) -> dict | None:
+        alert = self.repo.get_open_alert_for_account(credit_account_id=credit_account_id)
+        if not alert:
+            return None
+        return {
+            "fraud_alert_id": str(alert.id),
+            "status": alert.status,
+            "source": alert.source,
+            "card_last_four": alert.card_last_four,
+            "message_thread_id": alert.message_thread_id,
         }
 
     @staticmethod

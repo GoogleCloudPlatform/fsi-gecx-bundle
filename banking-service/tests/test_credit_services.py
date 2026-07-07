@@ -14,11 +14,23 @@
 
 import pytest
 import datetime
+import json
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+import models.audit  # noqa: F401
+import models.fraud  # noqa: F401
+from models.audit import AuditOutbox
 from models.credit_card import Base, FinancialAccount, IssuedCard, AccountLedger, CreditProduct
 from models.identity import User
-from services.credit_card import apply_limit_increase, freeze_card, issue_replacement_card, reverse_posted_fee, unfreeze_card
+from repositories.fraud import FraudAlertRepository
+from services.credit_card import (
+    apply_limit_increase,
+    freeze_card,
+    issue_replacement_card,
+    queue_wallet_provisioning,
+    reverse_posted_fee,
+    unfreeze_card,
+)
 
 # Use an isolated, in-memory SQLite database for sub-second, side-effect-free testing
 DATABASE_URL = "sqlite:///:memory:"
@@ -141,6 +153,63 @@ def test_issue_replacement_card_success(db_session):
     assert active_cards[0].last_four == result["new_last_four"]
     old_card = next(card for card in cards if card.card_token == "tok_test_john_doe")
     assert old_card.is_active is False
+
+
+def test_issue_replacement_card_records_fraud_alert_correlation(db_session):
+    """Verify replacement audit events can be tied back to the originating fraud alert."""
+    alert = FraudAlertRepository(db_session).create_alert(
+        customer_id="88888888-8888-4888-8888-222222222222",
+        auth_provider_uid="cust-test-xyz",
+        credit_account_id="12300000-0000-4000-8000-000000000123",
+        card_id="99900000-0000-4000-8000-000000000999",
+        card_last_four="1234",
+        message_thread_id="thread-fraud-1",
+        suspicious_authorization_ids=["auth-1"],
+        suspicious_transactions=[{"merchant_name": "Fraud Test", "amount_cents": 1000}],
+    )
+    db_session.commit()
+
+    freeze_card(db_session, card_token="tok_test_john_doe", reason="LOST")
+    result = issue_replacement_card(
+        db_session,
+        account_id="12300000-0000-4000-8000-000000000123",
+        reason="CUSTOMER_FRAUD_REISSUE",
+        fraud_alert_id=str(alert.id),
+    )
+
+    event = db_session.query(AuditOutbox).filter_by(event_type="CARD_REPLACED").order_by(AuditOutbox.created_at.desc()).first()
+    payload = json.loads(event.payload)
+    assert result["fraud_alert_id"] == str(alert.id)
+    assert payload["fraud_alert_id"] == str(alert.id)
+    assert payload["correlation_id"] == str(alert.id)
+
+
+def test_queue_wallet_provisioning_records_fraud_alert_correlation(db_session):
+    """Verify wallet provisioning audit events include the fraud correlation identifier."""
+    alert = FraudAlertRepository(db_session).create_alert(
+        customer_id="88888888-8888-4888-8888-222222222222",
+        auth_provider_uid="cust-test-xyz",
+        credit_account_id="12300000-0000-4000-8000-000000000123",
+        card_id="99900000-0000-4000-8000-000000000999",
+        card_last_four="1234",
+        message_thread_id="thread-fraud-2",
+        suspicious_authorization_ids=["auth-2"],
+        suspicious_transactions=[{"merchant_name": "Fraud Test 2", "amount_cents": 2000}],
+    )
+    db_session.commit()
+
+    result = queue_wallet_provisioning(
+        db_session,
+        account_id="12300000-0000-4000-8000-000000000123",
+        card_token="tok_test_john_doe",
+        fraud_alert_id=str(alert.id),
+    )
+
+    event = db_session.query(AuditOutbox).filter_by(event_type="WALLET_PROVISIONING_QUEUED").order_by(AuditOutbox.created_at.desc()).first()
+    payload = json.loads(event.payload)
+    assert result["fraud_alert_id"] == str(alert.id)
+    assert payload["fraud_alert_id"] == str(alert.id)
+    assert payload["correlation_id"] == str(alert.id)
 
 
 def test_freeze_card_not_found(db_session):

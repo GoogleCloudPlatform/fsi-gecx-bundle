@@ -27,6 +27,7 @@ from utils.database import Base, get_db
 from utils.auth import get_current_user
 from models.authentication import ValidatedToken
 from models.fraud import FraudAlert
+from models.audit import AuditOutbox
 from models.identity import User
 from models.origination import Account
 from models.credit_card import CreditAccount, PostedTransaction
@@ -276,6 +277,13 @@ async def test_inject_anomaly_success(mock_get_tokens, mock_send_multicast, mock
     assert fraud_alert.status == "OPEN"
     assert fraud_alert.auth_provider_uid == "presenter-2"
     assert len(fraud_alert.suspicious_authorization_ids) == 4
+
+    fraud_created_event = db_session.query(AuditOutbox).filter(AuditOutbox.event_type == "FRAUD_ALERT_CREATED").order_by(AuditOutbox.created_at.desc()).first()
+    fraud_notified_event = db_session.query(AuditOutbox).filter(AuditOutbox.event_type == "FRAUD_ALERT_CUSTOMER_NOTIFIED").order_by(AuditOutbox.created_at.desc()).first()
+    assert fraud_created_event is not None
+    assert fraud_notified_event is not None
+    assert data["fraud_alert_id"] in fraud_created_event.payload
+    assert data["fraud_alert_id"] in fraud_notified_event.payload
 
     user = db_session.query(User).filter(User.auth_provider_uid == "presenter-2").first()
     secure_messages = db_session.query(UserSecureMessage).filter(

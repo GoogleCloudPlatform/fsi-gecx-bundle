@@ -599,6 +599,14 @@ export default function VoiceSupportView() {
                 text: `ACCOUNT UPDATE: Replacement ${event.is_virtual ? 'virtual ' : ''}card ending in ${event.new_last_four} is ready.`,
               },
             ]);
+          } else if (event.type === DataChannelEvent.WALLET_PROVISIONING_QUEUED) {
+            setTranscripts(prev => [
+              ...prev,
+              {
+                author: 'system',
+                text: `ACCOUNT UPDATE: Virtual card provisioning to ${event.wallet_provider || 'Google Wallet'} is queued.`,
+              },
+            ]);
           } else if (event.type === DataChannelEvent.LIMIT_UPDATED) {
             setCreditLimit(event.credit_limit_cents / 100);
             setAvailableCredit(event.available_credit_cents / 100);

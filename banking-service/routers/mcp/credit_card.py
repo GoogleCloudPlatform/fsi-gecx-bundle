@@ -212,12 +212,14 @@ async def issue_replacement_card_tool(
             )
             return {"success": False, "message": "Account not found or unauthorized."}
 
+        open_alert = FraudAlertService(db).get_open_alert_for_account(credit_account_id=account.id)
         result = issue_replacement_card(
             db,
             account_id=str(account.id),
             reason="CUSTOMER_FRAUD_REISSUE",
             wallet_provider=wallet_provider,
             issue_virtual_card=True,
+            fraud_alert_id=open_alert["fraud_alert_id"] if open_alert else None,
         )
 
         session_id = f"session-{verified_customer_id}"
@@ -231,6 +233,7 @@ async def issue_replacement_card_tool(
                 "wallet_provider": result["wallet_provider"],
                 "wallet_provisioning_status": result["wallet_provisioning_status"],
                 "is_virtual": result["is_virtual"],
+                "fraud_alert_id": result.get("fraud_alert_id"),
             },
         )
 
@@ -241,6 +244,7 @@ async def issue_replacement_card_tool(
             "wallet_provider": result["wallet_provider"],
             "wallet_provisioning_status": result["wallet_provisioning_status"],
             "is_virtual": result["is_virtual"],
+            "fraud_alert_id": result.get("fraud_alert_id"),
         }
     except Exception as e:
         logger.error(f"Error in FastMCP issue_replacement_card_tool: {e}")
@@ -300,12 +304,14 @@ async def push_card_to_google_wallet(
                 return {"success": False, "message": "No active card found for wallet provisioning."}
             card_token = active_card.card_token
 
+        open_alert = FraudAlertService(db).get_open_alert_for_account(credit_account_id=account.id)
         result = queue_wallet_provisioning(
             db,
             account_id=str(account.id),
             card_token=card_token,
             wallet_provider=wallet_provider,
             initiated_by="CUSTOMER_VOICE_SUPPORT",
+            fraud_alert_id=open_alert["fraud_alert_id"] if open_alert else None,
         )
         return {
             "success": True,
@@ -313,6 +319,7 @@ async def push_card_to_google_wallet(
             "card_token": result["card_token"],
             "wallet_provider": result["wallet_provider"],
             "wallet_provisioning_status": result["wallet_provisioning_status"],
+            "fraud_alert_id": result.get("fraud_alert_id"),
         }
     except Exception as e:
         logger.error(f"Error in FastMCP push_card_to_google_wallet: {e}")

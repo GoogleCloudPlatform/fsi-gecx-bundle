@@ -183,6 +183,15 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
                     "card_token": first_card.get("card_token"),
                     "is_virtual": first_card.get("is_virtual", True),
                 })
+            elif tool_name == "push_card_to_google_wallet":
+                logger.info("[CALLBACK] WALLET_PROVISIONING_QUEUED event broadcasted")
+                notify_event({
+                    "type": DataChannelEvent.WALLET_PROVISIONING_QUEUED.value,
+                    "wallet_provider": structured.get("wallet_provider", "GOOGLE_WALLET"),
+                    "wallet_provisioning_status": structured.get("wallet_provisioning_status", "QUEUED"),
+                    "card_token": structured.get("card_token"),
+                    "fraud_alert_id": structured.get("fraud_alert_id"),
+                })
     return None
 
 NAME = "credit_card_support_voice_assistant"
