@@ -56,6 +56,28 @@ class MerchantEnrichmentService:
     _domestic_merchants: List[MerchantDTO] = []
     _international_merchants: List[MerchantDTO] = []
 
+    @staticmethod
+    def _build_generic_merchant(
+        mcc: str = "5311",
+        country_code: str = "USA",
+        is_international: bool = False,
+    ) -> MerchantDTO:
+        return MerchantDTO(
+            id="generic-merchant",
+            merchant_id=f"generic-{mcc.lower()}",
+            clean_name="Generic Merchant",
+            location_name="Generic Merchant",
+            raw_descriptor_pattern="GENERIC MERCHANT",
+            mcc=mcc,
+            category="MERCHANDISE",
+            country_code=country_code,
+            logo_url=None,
+            merchant_domain=None,
+            is_subscription=False,
+            is_international=is_international,
+            risk_score=30 if is_international else 0,
+        )
+
     @classmethod
     def invalidate_cache(cls) -> None:
         """Clears in-memory merchant catalog cache."""
@@ -270,6 +292,15 @@ class MerchantEnrichmentService:
 
         if not pool:
             pool = cls._stores_list or list(cls._merchants_by_id.values())
+        if not pool:
+            generic_country = country.upper() if country else ("MEX" if is_international else "USA")
+            generic_mcc = "7011" if is_international else "5311"
+            generic = cls._build_generic_merchant(
+                mcc=generic_mcc,
+                country_code=generic_country,
+                is_international=is_international,
+            )
+            return generic, generic.raw_descriptor_pattern
 
         dto = random.choice(pool)
         return dto, dto.raw_descriptor_pattern

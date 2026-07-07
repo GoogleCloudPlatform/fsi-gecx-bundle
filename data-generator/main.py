@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import asyncio
-import csv
 import logging
 import os
 import random
@@ -103,9 +102,9 @@ CATEGORY_MCC_MAP = {
     "Groceries & Retail": "5411",
     "Wholesale Clubs": "5411",
     "Gas Stations": "5541",
-    "Streaming & Entertainment": "7841",
-    "Electronics & Software": "5310",
-    "Electronics": "5310",
+    "Streaming & Entertainment": "4899",
+    "Electronics & Software": "5311",
+    "Electronics": "5311",
     "Home Improvement": "5200",
     "Pharmacies & Health": "5912",
     "Rideshare & Transport": "4121",
@@ -115,6 +114,18 @@ merchants_list: List[Dict[str, Any]] = []
 
 _cached_oidc_token = None
 _cached_token_time = 0
+
+
+def build_generic_merchant(mcc: str = "5311", country_code: str = "USA", is_international: bool = False) -> Dict[str, Any]:
+    return {
+        "merchant": "Generic Merchant",
+        "descriptor": "GENERIC MERCHANT",
+        "category": "Retail",
+        "mcc": mcc,
+        "country_code": country_code,
+        "is_international": is_international,
+        "risk_score": 20 if is_international else 0,
+    }
 
 def get_service_headers() -> Dict[str, str]:
     """
@@ -284,70 +295,57 @@ async def auto_paydown_high_utilization_cards(
     return results
 
 def get_merchants() -> List[Dict[str, Any]]:
-    """Fetches merchant catalog via HTTP from banking-service, falling back to local resources or static defaults."""
+    """Fetches merchant catalog from banking-service and uses a single generic fallback only for local dev."""
     global merchants_list
     if merchants_list:
         return merchants_list
-        
+
+    merchant_endpoints = [
+        f"{BANKING_SERVICE_URL}/api/v1/merchants",
+        f"{BANKING_SERVICE_URL}/merchants",
+    ]
+
     try:
         with httpx.Client(timeout=5.0) as client:
-            res = client.get(f"{BANKING_SERVICE_URL}/api/v1/merchants", headers=get_service_headers())
-            if res.status_code == 200:
+            for endpoint in merchant_endpoints:
+                res = client.get(endpoint, headers=get_service_headers())
+                if res.status_code != 200:
+                    continue
+
                 data = res.json()
                 loaded = []
                 for item in data:
+                    clean_name = item.get("clean_name", "Unknown")
                     loaded.append({
-                        "merchant": item.get("clean_name", "Unknown"),
-                        "descriptor": item.get("raw_descriptor", item.get("clean_name", "Unknown")),
+                        "merchant": clean_name,
+                        "descriptor": item.get(
+                            "raw_descriptor_pattern",
+                            item.get("raw_descriptor", clean_name),
+                        ),
                         "category": item.get("category", "Retail"),
-                        "mcc": item.get("default_mcc", "5310"),
+                        "mcc": item.get("mcc", item.get("default_mcc", "5311")),
                         "country_code": item.get("country_code", "USA"),
                         "is_international": item.get("is_international", False),
-                        "risk_score": item.get("risk_score", 0)
+                        "risk_score": item.get("risk_score", 0),
                     })
                 if loaded:
                     merchants_list = loaded
-                    logger.info(f"Retrieved {len(merchants_list)} merchants via HTTP from {BANKING_SERVICE_URL}/api/v1/merchants.")
+                    logger.info("Retrieved %s merchants via HTTP from %s.", len(merchants_list), endpoint)
                     return merchants_list
     except Exception as e:
         logger.warning(f"Could not fetch merchants via HTTP from {BANKING_SERVICE_URL}: {e}")
 
-    # Fallback to local CSV in data-generator/resources/merchants.csv if present
-    csv_path = os.path.join(os.path.dirname(__file__), "resources", "merchants.csv")
-    if os.path.exists(csv_path):
-        try:
-            with open(csv_path, mode="r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                loaded = []
-                for row in reader:
-                    cat = row.get("Category", "Retail")
-                    mcc = CATEGORY_MCC_MAP.get(cat, "5310")
-                    loaded.append({
-                        "merchant": row.get("Merchant", "Unknown"),
-                        "descriptor": row.get("Merchant", "Unknown"),
-                        "category": cat,
-                        "mcc": mcc,
-                        "country_code": "USA",
-                        "is_international": False,
-                        "risk_score": 0
-                    })
-                if loaded:
-                    merchants_list = loaded
-                    logger.info(f"Loaded {len(merchants_list)} merchants from local CSV.")
-                    return merchants_list
-        except Exception as e:
-            logger.error(f"Error reading local CSV: {e}")
+    if is_local_dev():
+        merchants_list = [build_generic_merchant()]
+        logger.info("Using single generic local merchant fallback because banking-service catalog is unavailable.")
+        return merchants_list
 
-    # Minimal fallback list
-    merchants_list = [
-        {"merchant": "Amazon", "descriptor": "AMAZON.COM*MKTPLACE", "category": "Retail", "mcc": "5310", "country_code": "USA", "is_international": False, "risk_score": 0},
-        {"merchant": "Starbucks", "descriptor": "STARBUCKS - MOUNTAIN VIEW CA", "category": "Coffee Shops & Dining", "mcc": "5814", "country_code": "USA", "is_international": False, "risk_score": 0},
-        {"merchant": "Delta Air Lines", "descriptor": "DELTA AIR LINES", "category": "Airlines & Travel", "mcc": "4511", "country_code": "USA", "is_international": False, "risk_score": 0},
-        {"merchant": "Coco Bongo", "descriptor": "COCO BONGO CANCUN [MEX]", "category": "Fast Food & Dining", "mcc": "5812", "country_code": "MEX", "is_international": True, "risk_score": 25},
-    ]
-    return merchants_list
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Unable to resolve merchant catalog from banking-service.",
+    )
 
-# Static Fallback Personas
+# Static local-only personas for offline development.
 DEFAULT_PERSONAS = [
     {
         "card_token": "tok_visa_erik_voit",
@@ -361,7 +359,7 @@ DEFAULT_PERSONAS = [
         "card_token": "tok_visa_mark_servedio",
         "cardholder_name": "Mark Servedio",
         "persona": "PRIME",
-        "mccs": ["5411", "5541", "5310", "4121"],
+        "mccs": ["5411", "5541", "5311", "4121"],
         "amount_min": 1500,
         "amount_max": 15000,
     },
@@ -369,7 +367,7 @@ DEFAULT_PERSONAS = [
         "card_token": "tok_visa_marcus_vance",
         "cardholder_name": "Marcus Vance",
         "persona": "PRIME",
-        "mccs": ["5411", "5541", "5310", "4121"],
+        "mccs": ["5411", "5541", "5311", "4121"],
         "amount_min": 1500,
         "amount_max": 15000,
     },
@@ -377,7 +375,7 @@ DEFAULT_PERSONAS = [
         "card_token": "tok_visa_chloe_gomez",
         "cardholder_name": "Chloe Gomez",
         "persona": "YPRO",
-        "mccs": ["5814", "7841", "5812"],
+        "mccs": ["5814", "4899", "5812"],
         "amount_min": 400,
         "amount_max": 3500,
     }
@@ -416,10 +414,11 @@ def get_active_cards() -> List[Dict[str, Any]]:
 async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) -> Dict[str, Any]:
     """Simulates a single credit card auth/settle/reverse workflow against the issuing bank gateway."""
     merchants = get_merchants()
-    mccs = card.get("mccs", ["5310", "5411", "5541", "4121"])
+    mccs = card.get("mccs", ["5311", "5411", "5541", "4121"])
+    default_mcc = next((mcc for mcc in mccs if mcc), "5311")
     matching_merchants = [m for m in merchants if m.get("mcc") in mccs]
     if not matching_merchants:
-        matching_merchants = merchants
+        matching_merchants = [build_generic_merchant(mcc=default_mcc)]
         
     is_googler = "GOOGLE" in str(card.get("cardholder_name", "")).upper() or "PRESENTER" in str(card.get("cardholder_name", "")).upper() or "DEMO" in str(card.get("cardholder_name", "")).upper()
     metros = ["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA"]
@@ -438,7 +437,16 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
         if not region_merchants:
             region_merchants = [m for m in merchants if not m.get("is_international")]
 
-    matching_merchants = region_merchants if region_merchants else merchants
+    matching_merchants = region_merchants if region_merchants else matching_merchants
+    if not matching_merchants:
+        fallback_country = "MEX" if is_intl_swipe else "USA"
+        matching_merchants = [
+            build_generic_merchant(
+                mcc=default_mcc,
+                country_code=fallback_country,
+                is_international=is_intl_swipe,
+            )
+        ]
     merchant = random.choice(matching_merchants)
     available_credit = card.get("available_credit_cents")
     amount_min = card.get("amount_min", 1500)
@@ -485,7 +493,7 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
         "card_token": card["card_token"],
         "amount_cents": amount_cents,
         "retrieval_reference_number": rrn,
-        "merchant_category_code": merchant.get("mcc", "5310"),
+        "merchant_category_code": merchant.get("mcc", "5311"),
         "merchant_name": formatted_merchant,
         "card_network": "VISA"
     }
@@ -812,9 +820,9 @@ async def inject_anomaly(req: Optional[AnomalyRequest] = None):
 
     swipes = [
         ("GAME*TEST TOKEN ONLINE", 499, "5814", "USA", 0),
-        ("APPLE.COM*ONLINE", 149900, "5310", "USA", 0),
-        ("BEST BUY*MKTPLACE", 215000, "5310", "USA", 0),
-        ("LUXURY BOUTIQUE CANCUN [MEX]", 320000, "5310", "MEX", 30),
+        ("APPLE.COM*ONLINE", 149900, "4899", "USA", 0),
+        ("BEST BUY*MKTPLACE", 215000, "5311", "USA", 0),
+        ("LUXURY BOUTIQUE CANCUN [MEX]", 320000, "5311", "MEX", 30),
     ]
 
     injected_auths = []

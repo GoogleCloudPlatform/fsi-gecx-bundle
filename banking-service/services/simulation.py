@@ -18,7 +18,11 @@ from repositories.accounts import AccountsRepository
 from repositories.credit_card import CreditCardRepository
 from services.accounts import AccountsService
 from services.cdc_monitoring import CdcMonitoringService
-from services.seeding_service import provision_user_suite, reset_user_suite
+from services.seeding_service import (
+    is_demo_script_user_email,
+    provision_user_suite,
+    reset_user_suite,
+)
 from utils.audit import record_audit_event
 from utils.database import enable_session_rbac_override
 from utils.internal_auth import get_internal_switch_token
@@ -119,18 +123,19 @@ class SimulationService:
         for card, acc, user in cards:
             name_lower = card.cardholder_name.lower() if card.cardholder_name else ""
             email_lower = (user.email or "").lower() if user and user.email else ""
+            is_demo_script_account = is_demo_script_user_email(email_lower)
             is_presenter_account = email_lower.endswith("@google.com") or email_lower.endswith("@gcp.solutions") or email_lower.endswith("@altostrat.com")
-            is_vip_demo_account = email_lower.endswith("@nova.horizon.test") and acc.credit_limit_cents > 2_000_000
-            generator_eligible = not is_presenter_account and not is_vip_demo_account
+            is_vip_demo_account = email_lower.endswith("@nova.horizon.test")
+            generator_eligible = not is_demo_script_account
             if "erik" in name_lower or acc.credit_limit_cents > 2_000_000:
                 persona = "HNW"
                 mccs, a_min, a_max = ["4511", "7011", "5812"], 50_000, 400_000
             elif "servedio" in name_lower or "marcus" in name_lower or acc.credit_limit_cents >= 1_000_000:
                 persona = "PRIME"
-                mccs, a_min, a_max = ["5411", "5541", "5310", "4121"], 1_500, 15_000
+                mccs, a_min, a_max = ["5411", "5541", "5311", "4121"], 1_500, 15_000
             else:
                 persona = "YPRO"
-                mccs, a_min, a_max = ["5814", "7841", "5812"], 400, 3_500
+                mccs, a_min, a_max = ["5814", "4899", "5812"], 400, 3_500
 
             results.append(
                 {
@@ -145,6 +150,7 @@ class SimulationService:
                     "credit_limit_cents": acc.credit_limit_cents,
                     "available_credit_cents": acc.available_credit_cents,
                     "generator_eligible": generator_eligible,
+                    "is_demo_script_account": is_demo_script_account,
                     "is_presenter_account": is_presenter_account,
                     "is_vip_demo_account": is_vip_demo_account,
                 }
@@ -215,9 +221,9 @@ class SimulationService:
         now = datetime.datetime.now(datetime.timezone.utc)
         swipes = [
             ("GAME*TEST TOKEN ONLINE", 499, "5814", "USA", 0),
-            ("APPLE.COM*ONLINE", 149900, "5310", "USA", 0),
-            ("BEST BUY*MKTPLACE", 215000, "5310", "USA", 0),
-            ("LUXURY BOUTIQUE RIVIERA MAYA [MEX]", 320000, "5310", "MEX", 30),
+            ("APPLE.COM*ONLINE", 149900, "4899", "USA", 0),
+            ("BEST BUY*MKTPLACE", 215000, "5311", "USA", 0),
+            ("LUXURY BOUTIQUE RIVIERA MAYA [MEX]", 320000, "5311", "MEX", 30),
         ]
 
         injected_auths = []

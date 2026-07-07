@@ -18,7 +18,7 @@ import respx
 from fastapi.testclient import TestClient
 
 import main
-from main import app, BANKING_SERVICE_URL, CARD_NETWORK_TOKEN
+from main import app, BANKING_SERVICE_URL
 
 client = TestClient(app)
 
@@ -26,6 +26,79 @@ def test_health():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "service": "data-generator"}
+
+
+@respx.mock
+def test_get_merchants_prefers_canonical_api_shape(monkeypatch):
+    monkeypatch.setattr(main, "merchants_list", [])
+    respx.get(f"{BANKING_SERVICE_URL}/api/v1/merchants").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "clean_name": "Canonical Merchant",
+                    "raw_descriptor_pattern": "CANONICAL MERCHANT%",
+                    "category": "Retail",
+                    "mcc": "5311",
+                    "country_code": "USA",
+                    "is_international": False,
+                    "risk_score": 1,
+                }
+            ],
+        )
+    )
+
+    merchants = main.get_merchants()
+
+    assert merchants == [
+        {
+            "merchant": "Canonical Merchant",
+            "descriptor": "CANONICAL MERCHANT%",
+            "category": "Retail",
+            "mcc": "5311",
+            "country_code": "USA",
+            "is_international": False,
+            "risk_score": 1,
+        }
+    ]
+
+
+@respx.mock
+def test_get_merchants_falls_back_to_legacy_route_shape(monkeypatch):
+    monkeypatch.setattr(main, "merchants_list", [])
+    respx.get(f"{BANKING_SERVICE_URL}/api/v1/merchants").mock(
+        return_value=httpx.Response(404, json={"detail": "Not Found"})
+    )
+    respx.get(f"{BANKING_SERVICE_URL}/merchants").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "clean_name": "Legacy Merchant",
+                    "raw_descriptor": "LEGACY MERCHANT%",
+                    "category": "Dining",
+                    "default_mcc": "5812",
+                    "country_code": "MEX",
+                    "is_international": True,
+                    "risk_score": 9,
+                }
+            ],
+        )
+    )
+
+    merchants = main.get_merchants()
+
+    assert merchants == [
+        {
+            "merchant": "Legacy Merchant",
+            "descriptor": "LEGACY MERCHANT%",
+            "category": "Dining",
+            "mcc": "5812",
+            "country_code": "MEX",
+            "is_international": True,
+            "risk_score": 9,
+        }
+    ]
 
 @pytest.mark.asyncio
 @respx.mock
@@ -67,7 +140,7 @@ async def test_simulate_pulse_success():
     # Assert auth requests were sent with the correct headers
     assert auth_route.called
     for request in auth_route.calls:
-        assert request[0].headers.get("X-Card-Network-Token") == CARD_NETWORK_TOKEN
+        assert request[0].headers.get("X-Card-Network-Token") == main.get_card_network_token()
         payload = request[0].read().decode()
         assert "card_token" in payload
         assert "amount_cents" in payload
@@ -146,6 +219,7 @@ def test_simulate_surge_fails_without_spendable_cards():
 @respx.mock
 def test_generate_fails_without_active_cards_in_deployed_mode(monkeypatch):
     monkeypatch.setenv("K_SERVICE", "data-generator")
+    monkeypatch.setenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")
     respx.get(f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards").mock(
         return_value=httpx.Response(503, json={"detail": {"status": "MAINTENANCE"}})
     )
@@ -160,6 +234,7 @@ def test_generate_fails_without_active_cards_in_deployed_mode(monkeypatch):
 @respx.mock
 def test_generate_skips_without_retry_when_active_card_discovery_times_out(monkeypatch):
     monkeypatch.setenv("K_SERVICE", "data-generator")
+    monkeypatch.setenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")
     respx.get(f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards").mock(
         side_effect=httpx.ReadTimeout("timed out")
     )
@@ -174,11 +249,12 @@ def test_generate_skips_without_retry_when_active_card_discovery_times_out(monke
 @respx.mock
 def test_simulate_surge_returns_503_during_maintenance(monkeypatch):
     monkeypatch.setenv("K_SERVICE", "data-generator")
+    monkeypatch.setenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")
     respx.get(f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards").mock(
         return_value=httpx.Response(503, json={"detail": {"status": "MAINTENANCE"}})
     )
 
-    response = client.post("/simulate-surge", json={}, headers={"X-Card-Network-Token": CARD_NETWORK_TOKEN})
+    response = client.post("/simulate-surge", json={}, headers={"X-Card-Network-Token": main.get_card_network_token()})
 
     assert response.status_code == 503
     assert "reset is in progress" in response.json()["detail"]

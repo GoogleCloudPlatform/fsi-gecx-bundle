@@ -20,7 +20,9 @@ from utils.database import get_db
 from models.merchant import MerchantMaster
 from services.merchant_service import MerchantEnrichmentService
 
-router = APIRouter(prefix="/merchants", tags=["Merchant Intelligence & Enrichment"])
+router = APIRouter(prefix="/api/v1/merchants", tags=["Merchant Intelligence & Enrichment"])
+v1_router = APIRouter(prefix="/v1/merchants", tags=["Merchant Intelligence & Enrichment"])
+alias_router = APIRouter(prefix="/merchants", tags=["Merchant Intelligence & Enrichment"])
 
 
 class MerchantResponse(BaseModel):
@@ -61,6 +63,8 @@ class CreateMerchantRequest(BaseModel):
 
 
 @router.get("", response_model=List[MerchantResponse], summary="List Master Merchant Catalog")
+@v1_router.get("", response_model=List[MerchantResponse], summary="List Master Merchant Catalog")
+@alias_router.get("", response_model=List[MerchantResponse], summary="List Master Merchant Catalog")
 def list_merchants(
     category: Optional[str] = Query(None, description="Filter by spend category"),
     country: Optional[str] = Query(None, description="Filter by ISO country code"),
@@ -75,6 +79,8 @@ def list_merchants(
 
 
 @router.get("/{merchant_id}", response_model=MerchantResponse, summary="Get Single Merchant Details")
+@v1_router.get("/{merchant_id}", response_model=MerchantResponse, summary="Get Single Merchant Details")
+@alias_router.get("/{merchant_id}", response_model=MerchantResponse, summary="Get Single Merchant Details")
 def get_merchant(merchant_id: str, db: Session = Depends(get_db)):
     """Retrieves authoritative brand intelligence and CDN logo mapping for a specific MID."""
     MerchantEnrichmentService.load_cache_if_needed(db)
@@ -85,6 +91,8 @@ def get_merchant(merchant_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/enrich", response_model=Dict[str, Any], summary="Simulate Real-Time Transaction Enrichment")
+@v1_router.post("/enrich", response_model=Dict[str, Any], summary="Simulate Real-Time Transaction Enrichment")
+@alias_router.post("/enrich", response_model=Dict[str, Any], summary="Simulate Real-Time Transaction Enrichment")
 def enrich_transaction(req: EnrichRequest, db: Session = Depends(get_db)):
     """
     Simulates a live Tier-1 enrichment API lookup (e.g. MX Atrium / Plaid Enrich / Visa VMDS).
@@ -96,6 +104,8 @@ def enrich_transaction(req: EnrichRequest, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=MerchantResponse, status_code=201, summary="Add Custom Demo Merchant")
+@v1_router.post("", response_model=MerchantResponse, status_code=201, summary="Add Custom Demo Merchant")
+@alias_router.post("", response_model=MerchantResponse, status_code=201, summary="Add Custom Demo Merchant")
 def create_custom_merchant(req: CreateMerchantRequest, db: Session = Depends(get_db)):
     """
     Dynamically registers a custom brand entity in the Master Merchant Database.

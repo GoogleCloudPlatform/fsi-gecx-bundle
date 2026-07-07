@@ -18,6 +18,8 @@ import random
 import datetime
 import logging
 import json
+import hashlib
+from pathlib import Path
 from email.utils import parseaddr
 from typing import Dict, Any
 from sqlalchemy.orm import Session
@@ -28,17 +30,18 @@ from utils.encryption import encrypt_pii
 from utils.audit import record_audit_event
 
 # Models
-from models.identity import User, UserAddress
+from models.identity import User, UserAddress, RetailLocation
 from models.kyc import KYCRecord, UserCreditProfile
 from models.origination import Account, AccountLedgerEntry, Transaction
 from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, CreditProduct, TransactionAuthorization
 from models.origination import DepositProduct
 from models.settings import SystemSetting
 from models.reference import MerchantCategoryCode
-from services.taxonomy_service import DEFAULT_TAXONOMY_MAP, TaxonomyService
+from services.taxonomy_service import TaxonomyService
 from services.merchant_service import MerchantEnrichmentService
 logger = logging.getLogger(__name__)
 RESOURCE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "data")
+DEMO_SCRIPT_DOMAINS = {"google.com", "gcp.solutions", "altostrat.com", "nova.horizon.test"}
 
 
 def _generate_demo_card_token() -> str:
@@ -55,7 +58,69 @@ def _is_presenter_email(email: str | None) -> bool:
     if "@" not in parsed:
         return False
     domain = parsed.rsplit("@", 1)[-1].lower()
-    return domain == "google.com"
+    return domain in DEMO_SCRIPT_DOMAINS
+
+
+def is_demo_script_user_email(email: str | None) -> bool:
+    return _is_presenter_email(email)
+
+
+def _get_demo_script_travel_charges() -> list[dict[str, Any]]:
+    metadata = _load_json_resource("seeding_metadata.json")
+    return metadata.get("mexico_travel_charges", [])
+
+
+def _stable_demo_index(seed_value: str, modulo: int) -> int:
+    if modulo <= 1:
+        return 0
+    digest = hashlib.sha256(seed_value.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big") % modulo
+
+
+def _resolve_demo_script_charge(
+    *,
+    user_key: str,
+    slot_index: int,
+    charge_template: dict[str, Any],
+) -> dict[str, Any]:
+    resolved = dict(charge_template)
+    variant_seed = f"{user_key}:{slot_index}"
+
+    merchant_options = resolved.get("merchant_options")
+    if merchant_options:
+        resolved["merchant_name"] = merchant_options[
+            _stable_demo_index(f"{variant_seed}:merchant", len(merchant_options))
+        ]
+
+    posted_days_range = resolved.get("posted_days_ago_range")
+    if posted_days_range and len(posted_days_range) == 2:
+        low, high = sorted(int(value) for value in posted_days_range)
+        span = (high - low) + 1
+        resolved["posted_days_ago"] = low + _stable_demo_index(
+            f"{variant_seed}:posted_days", span
+        )
+
+    pending_hours_range = resolved.get("pending_hours_ago_range")
+    if pending_hours_range and len(pending_hours_range) == 2:
+        low, high = sorted(int(value) for value in pending_hours_range)
+        span = (high - low) + 1
+        resolved["pending_hours_ago"] = low + _stable_demo_index(
+            f"{variant_seed}:pending_hours", span
+        )
+
+    return resolved
+
+
+def _load_json_resource(filename: str) -> Any:
+    path = Path(RESOURCE_DIR) / filename
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _load_jsonl_resource(filename: str) -> list[dict[str, Any]]:
+    path = Path(RESOURCE_DIR) / filename
+    with path.open("r", encoding="utf-8") as handle:
+        return [json.loads(line) for line in handle if line.strip()]
 
 def get_base_personas():
     path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "static_personas.json")
@@ -279,29 +344,26 @@ def seed_catalogs_if_missing(db: Session) -> None:
     """Ensures CreditProduct and DepositProduct catalogs are seeded in the database."""
     if db.query(CreditProduct).count() == 0:
         logger.info("Seeding CreditProduct catalog...")
-        path = os.path.join(RESOURCE_DIR, "credit_products.json")
-        with open(path, "r") as f:
-            data = json.load(f)
+        data = _load_json_resource("credit_products.json")
         products = [CreditProduct(**item) for item in data]
         db.add_all(products)
 
     if db.query(DepositProduct).count() == 0:
         logger.info("Seeding DepositProduct catalog...")
-        path = os.path.join(RESOURCE_DIR, "deposit_products.json")
-        with open(path, "r") as f:
-            data = json.load(f)
+        data = _load_json_resource("deposit_products.json")
         deposits = [DepositProduct(**item) for item in data]
         db.add_all(deposits)
         
     if db.query(MerchantCategoryCode).count() == 0:
         logger.info("Seeding MerchantCategoryCode merchants catalog...")
+        mcc_seed_data = _load_json_resource("merchant_category_codes.json")
         mcc_records = [
             MerchantCategoryCode(
-                mcc=code,
-                primary_category=data["primary"],
-                detailed_category=data["detailed"]
+                mcc=item["mcc"],
+                primary_category=item["primary_category"],
+                detailed_category=item["detailed_category"]
             )
-            for code, data in DEFAULT_TAXONOMY_MAP.items()
+            for item in mcc_seed_data
         ]
         db.add_all(mcc_records)
         db.flush()
@@ -310,16 +372,46 @@ def seed_catalogs_if_missing(db: Session) -> None:
     MerchantEnrichmentService.seed_merchant_catalog(db)
     db.flush()
 
+
+def seed_retail_locations_if_missing(db: Session) -> None:
+    """Seeds branch and ATM locations from JSONL if the operations table is empty."""
+    if db.query(RetailLocation).count() > 0:
+        return
+
+    logger.info("Seeding retail locations catalog...")
+    records = _load_jsonl_resource("retail_locations.jsonl")
+    db.add_all(
+        [
+            RetailLocation(
+                id=uuid.uuid5(uuid.NAMESPACE_DNS, item["id"]),
+                name=item["name"],
+                type=item["type"],
+                address=item["address"],
+                latitude=item["latitude"],
+                longitude=item["longitude"],
+                hours=item.get("hours"),
+                phone_number=item.get("phone_number"),
+            )
+            for item in records
+        ]
+    )
+    db.flush()
+
 def seed_system_settings_if_missing(db: Session) -> None:
     """Ensures default voice and live avatar system settings are seeded."""
-    path = os.path.join(RESOURCE_DIR, "system_settings.json")
-    with open(path, "r") as f:
-        default_keys = json.load(f)
+    default_keys = _load_json_resource("system_settings.json")
     for k, v in default_keys.items():
         existing = db.query(SystemSetting).filter(SystemSetting.key == k).first()
         if not existing:
             db.add(SystemSetting(key=k, value=v))
     db.flush()
+
+
+def seed_reference_data_if_missing(db: Session) -> None:
+    """Ensures shared reference tables exist before demo provisioning or resets."""
+    seed_catalogs_if_missing(db)
+    seed_system_settings_if_missing(db)
+    seed_retail_locations_if_missing(db)
 
 def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
     """Generates user profiles, deposit accounts, credit lines, and cards from persona config."""
@@ -328,8 +420,7 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
     
     try:
         clean_database(db)
-        seed_catalogs_if_missing(db)
-        seed_system_settings_if_missing(db)
+        seed_reference_data_if_missing(db)
         
         seeding_personas = get_seeding_personas()
         cards_manifest = {}
@@ -652,8 +743,8 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
         # Assign a consistent geographical home metro and international travel trip for this customer's demo card
         from models.identity import User
         user_obj = db.query(User).filter(User.id == user_uuid).first()
-        is_googler = user_obj and ("GOOGLE" in str(user_obj.email).upper() or "PRESENTER" in str(user_obj.last_name).upper() or "NOVA.HORIZON" in str(user_obj.email).upper())
-        if is_googler:
+        is_demo_script_user = bool(user_obj and is_demo_script_user_email(user_obj.email))
+        if is_demo_script_user:
             user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA"])
         else:
             user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA", "ATLANTA GA", "MIAMI FL"])
@@ -661,7 +752,7 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
         cleared_balance_cents = max(0, cred_acc.cleared_balance_cents or 0)
         pending_balance_cents = 0
 
-        if not is_googler:
+        if not is_demo_script_user:
             ovr_created_at = now - datetime.timedelta(days=4, hours=2)
             ovr_posted_at = now - datetime.timedelta(days=3)
             ovr_auth = TransactionAuthorization(
@@ -696,33 +787,37 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
             )
             cleared_balance_cents += 3500
 
-        meta_path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "seeding_metadata.json")
-        if os.path.exists(meta_path):
-            with open(meta_path, "r", encoding="utf-8") as f:
-                json.load(f).get("mexico_travel_charges", [])
+        demo_trip_charges = _get_demo_script_travel_charges()
+        demo_user_key = (user_obj.email.lower() if user_obj and user_obj.email else str(user_uuid))
+        demo_trip_by_index = {
+            index + 8: _resolve_demo_script_charge(
+                user_key=demo_user_key,
+                slot_index=index,
+                charge_template=charge,
+            )
+            for index, charge in enumerate(demo_trip_charges)
+        }
 
         for i in range(12):
             is_pending = (i >= 10)
-            if is_googler and i == 8:
-                store_desc = "AEROMEXICO AIRLINES RIVIERA MAYA [MEX]"
-                mcc_val = "3000"
-                amount_cents = 65000
-                posted_date = now - datetime.timedelta(days=3)
-            elif is_googler and i == 9:
-                store_desc = "LA CASA DE LA PLAYA RIVIERA MAYA [MEX]"
-                mcc_val = "7011"
-                amount_cents = 95000
-                posted_date = now - datetime.timedelta(days=2)
-            elif is_googler and i == 10:
-                store_desc = "ESTERO RESTAURANTE RIVIERA MAYA [MEX]"
-                mcc_val = "5812"
-                amount_cents = 16500
-                posted_date = now - datetime.timedelta(hours=8)
-            elif is_googler and i == 11:
-                store_desc = "SENSE SPA MAYAKOBA PLAYA DEL CARMEN [MEX]"
-                mcc_val = "7298"
-                amount_cents = 22000
-                posted_date = now - datetime.timedelta(hours=2)
+            demo_charge = demo_trip_by_index.get(i) if is_demo_script_user else None
+            if demo_charge:
+                store_desc = demo_charge["merchant_name"]
+                mcc_val = demo_charge["mcc"]
+                amount_cents = random.randint(
+                    demo_charge["min_amount_cents"],
+                    demo_charge["max_amount_cents"],
+                )
+                if demo_charge.get("status", "SETTLED") == "PENDING":
+                    is_pending = True
+                    posted_date = now - datetime.timedelta(
+                        hours=demo_charge.get("pending_hours_ago", 2)
+                    )
+                else:
+                    is_pending = False
+                    posted_date = now - datetime.timedelta(
+                        days=demo_charge.get("posted_days_ago", 2)
+                    )
             else:
                 mch, store_desc = MerchantEnrichmentService.get_random_merchant(
                     db, 
@@ -730,7 +825,7 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
                     country=None, 
                     home_metro=user_home_metro
                 )
-                mcc_val = mch.mcc if mch else "5310"
+                mcc_val = mch.mcc if mch else "5311"
                 amount_cents = random.randint(1250, 45000)
                 if is_pending:
                     posted_date = now - datetime.timedelta(hours=(12 - i) * 2)
@@ -789,6 +884,8 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
     enable_session_rbac_override(db)
 
     try:
+        seed_reference_data_if_missing(db)
+
         # 1. Check if user already exists
         existing_user = db.query(User).filter((User.email == email) | (User.auth_provider_uid == firebase_uid)).first()
         if existing_user:
