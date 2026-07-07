@@ -15,23 +15,25 @@
 import pytest
 from fastapi.testclient import TestClient
 from main import app
+from importlib import import_module
 from models.authentication import ValidatedToken
 from utils.auth import get_current_user
 from utils.database import SessionLocal
 from services.seeding_service import perform_algorithmic_seeding
-
 client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
 def setup_db():
     from utils.database import Base
-    import models.merchant
-    import models.identity
-    import models.kyc
-    import models.origination
-    import models.credit_card
-    import models.settings
+    for module_name in (
+        "models.merchant",
+        "models.identity",
+        "models.kyc",
+        "models.origination",
+        "models.credit_card",
+    ):
+        import_module(module_name)
     db = SessionLocal()
     try:
         Base.metadata.create_all(bind=db.get_bind())

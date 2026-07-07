@@ -18,6 +18,7 @@ import random
 import datetime
 import logging
 import json
+from email.utils import parseaddr
 from typing import Dict, Any
 from sqlalchemy.orm import Session
 
@@ -47,6 +48,14 @@ def _generate_demo_card_token() -> str:
 
 def _seed_auth_code() -> str:
     return f"{random.randint(100000, 999999)}"
+
+
+def _is_presenter_email(email: str | None) -> bool:
+    _, parsed = parseaddr(email or "")
+    if "@" not in parsed:
+        return False
+    domain = parsed.rsplit("@", 1)[-1].lower()
+    return domain == "google.com"
 
 def get_base_personas():
     path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "static_personas.json")
@@ -825,7 +834,7 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
                 },
             )
 
-            is_googler_email = "google.com" in email.lower() or "presenter" in email.lower()
+            is_googler_email = _is_presenter_email(email)
             user_addr = UserAddress(
                 id=uuid.uuid4(),
                 user_id=user_uuid,

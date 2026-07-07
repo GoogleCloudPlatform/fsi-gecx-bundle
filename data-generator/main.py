@@ -64,7 +64,6 @@ app.add_middleware(
 
 # Configs
 BANKING_SERVICE_URL = os.getenv("BANKING_SERVICE_URL", "http://localhost:8000")
-CARD_NETWORK_TOKEN = get_internal_switch_token()
 PULSE_WINDOW_SECONDS = int(os.getenv("PULSE_WINDOW_SECONDS", "58"))
 PULSE_MIN_EVENTS = int(os.getenv("PULSE_MIN_EVENTS", "8"))
 PULSE_MAX_EVENTS = int(os.getenv("PULSE_MAX_EVENTS", "12"))
@@ -81,10 +80,16 @@ _pulse_lock = asyncio.Lock()
 class MaintenanceModeError(RuntimeError):
     """Raised when banking-service has temporarily paused writes for maintenance/reset."""
 
+
+def get_card_network_token() -> str:
+    """Resolve the internal switch token lazily so the container can still boot and report health."""
+    return get_internal_switch_token()
+
+
 def verify_switch_or_presenter_token(
     x_card_network_token: Optional[str] = Header(None, alias="X-Card-Network-Token")
 ):
-    if x_card_network_token and x_card_network_token == CARD_NETWORK_TOKEN:
+    if x_card_network_token and x_card_network_token == get_card_network_token():
         return True
     if is_local_dev():
         return True
@@ -120,7 +125,7 @@ def get_service_headers() -> Dict[str, str]:
     global _cached_oidc_token, _cached_token_time
     import time
     
-    headers = {"X-Card-Network-Token": CARD_NETWORK_TOKEN}
+    headers = {"X-Card-Network-Token": get_card_network_token()}
     if BANKING_SERVICE_URL and "localhost" not in BANKING_SERVICE_URL and "127.0.0.1" not in BANKING_SERVICE_URL:
         # Cache token for 50 minutes (expires in 60 min)
         if _cached_oidc_token and (time.time() - _cached_token_time) < 3000:

@@ -13,12 +13,10 @@ import {
   TrendingUp,
   AlertCircle
 } from 'lucide-react';
-import { useSettings } from '../context/SettingsContext.jsx';
 import { 
   getAccountsSummary, 
   getDepositTransactions, 
   getCreditCardTransactions,
-  payCreditCard,
   provisionMyDemo
 } from '../utils/api.js';
 import BillPayModal from './BillPayModal.jsx';
@@ -27,7 +25,6 @@ import SpendAnalyzerModal from './SpendAnalyzerModal.jsx';
 function AccountsView({ fbUser, customerProfile }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { bankName, brandColorFrom, brandColorTo } = useSettings();
 
   const [accountsData, setAccountsData] = useState(null);
   const [selectedAccountId, setSelectedAccountId] = useState(null);

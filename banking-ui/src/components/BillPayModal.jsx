@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, CheckCircle2, AlertCircle } from 'lucide-react';
 import { payCreditCard } from '../utils/api.js';
 
@@ -25,10 +25,14 @@ export default function BillPayModal({
   onPaymentSuccess,
   onSuccess 
 }) {
-  if (!isOpen) return null;
-
-  const depositAccounts = directDepositAccounts || accountsData?.deposit_accounts || [];
-  const creditAccounts = directCreditAccounts || accountsData?.credit_accounts || [];
+  const depositAccounts = useMemo(
+    () => directDepositAccounts || accountsData?.deposit_accounts || [],
+    [accountsData?.deposit_accounts, directDepositAccounts]
+  );
+  const creditAccounts = useMemo(
+    () => directCreditAccounts || accountsData?.credit_accounts || [],
+    [accountsData?.credit_accounts, directCreditAccounts]
+  );
   const handleSuccess = onPaymentSuccess || onSuccess || (() => {});
 
   const [selectedSourceId, setSelectedSourceId] = useState(depositAccounts[0]?.account_id || '');
@@ -53,6 +57,8 @@ export default function BillPayModal({
 
   const sourceAccount = depositAccounts.find(a => a.account_id === selectedSourceId);
   const creditAccount = creditAccounts.find(a => a.account_id === selectedCreditId);
+
+  if (!isOpen) return null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();

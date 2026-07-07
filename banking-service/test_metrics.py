@@ -1,7 +1,9 @@
 import logging
-logging.basicConfig(level=logging.INFO)
+
 from utils.database import SessionLocal
 from services.cdc_monitoring import CdcMonitoringService
+
+logging.basicConfig(level=logging.INFO)
 
 db = SessionLocal()
 service = CdcMonitoringService(db)

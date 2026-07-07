@@ -17,7 +17,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from utils.database import Base
 from models.audit import AuditOutbox
-from utils.audit import record_audit_event, publish_pending_audit_events
+from utils.audit import record_audit_event
 
 
 @pytest.fixture(scope="function")

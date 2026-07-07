@@ -13,11 +13,10 @@
 # limitations under the License.
 
 import pytest
-from unittest.mock import patch, MagicMock
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models.audit import AuditOutbox, Base
-from utils.audit import record_audit_event, publish_pending_audit_events, process_dlq_audit_events, MAX_RETRIES
+from utils.audit import record_audit_event, process_dlq_audit_events
 
 
 @pytest.fixture

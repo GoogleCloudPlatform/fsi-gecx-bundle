@@ -19,7 +19,7 @@ import logging
 from typing import List, Dict, Any, Optional, Tuple, Union
 from dataclasses import dataclass
 from sqlalchemy.orm import Session
-from models.merchant import MerchantMaster, MerchantStore, Merchant
+from models.merchant import MerchantMaster, MerchantStore
 
 logger = logging.getLogger("banking_service.merchants")
 

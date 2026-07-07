@@ -65,9 +65,10 @@ class SimulationService:
                     raise RuntimeError("OIDC token fetch returned an empty token.")
                 headers["Authorization"] = f"Bearer {oidc_token}"
             except Exception as auth_err:
+                logger.exception("Failed to fetch OIDC token for simulation dependency target=%s", target_url)
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=f"Could not authenticate to simulation dependency at {target_url}: {auth_err}",
+                    detail="Could not authenticate to simulation dependency.",
                 ) from auth_err
 
         return headers
@@ -83,7 +84,10 @@ class SimulationService:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(val_err)) from val_err
         except Exception as exc:
             logger.error("Failed to provision demo profile for email=%s: %s", token.email, exc)
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to provision demo profile: {exc}") from exc
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to provision demo profile.",
+            ) from exc
 
     def reset_my_demo(self, token: ValidatedToken) -> dict:
         if not token.user_id:
@@ -102,7 +106,10 @@ class SimulationService:
             raise
         except Exception as exc:
             logger.error("Failed to reset demo profile for user_id=%s: %s", user.id, exc)
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to reset demo profile: {exc}") from exc
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to reset demo profile.",
+            ) from exc
 
     def list_active_cards_for_simulation(self) -> dict:
         self._enable_simulation_db_access()
@@ -169,7 +176,15 @@ class SimulationService:
                     ),
                 )
                 if response.status_code != 200:
-                    raise HTTPException(status_code=response.status_code, detail=f"Data generator surge request failed: {response.text}")
+                    logger.warning(
+                        "Data generator surge request failed. status=%s body=%s",
+                        response.status_code,
+                        response.text,
+                    )
+                    raise HTTPException(
+                        status_code=response.status_code,
+                        detail="Data generator surge request failed.",
+                    )
                 return response.json()
         except (httpx.ReadTimeout, httpx.RemoteProtocolError, httpx.ReadError) as exc:
             logger.warning(
@@ -184,7 +199,10 @@ class SimulationService:
             }
         except httpx.RequestError as exc:
             logger.error("Network error trying to connect to data generator at %s: %s", target_url, exc)
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Could not connect to synthetic data generator: {exc}") from exc
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Could not connect to synthetic data generator.",
+            ) from exc
 
     def inject_targeted_fraud(self, token: ValidatedToken) -> dict:
         user = self._resolve_demo_user(token)

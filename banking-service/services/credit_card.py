@@ -16,8 +16,7 @@ import logging
 import datetime
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
-from models.credit_card import FinancialAccount, IssuedCard, AccountLedger
-from models.settings import SystemSetting
+from models.credit_card import AccountLedger
 from utils.audit import record_audit_event
 from models.fdx import (
     RealTimeBalanceResponse, PaginatedTransactionsResult, FDXTransaction,

@@ -14,7 +14,7 @@
 
 import uuid
 import datetime
-from sqlalchemy import Column, String, Text, DateTime, Integer, Index
+from sqlalchemy import Column, String, Text, DateTime, Index
 from utils.database import UniversalUUID as UUID, generate_uuid
 from utils.database import Base
 

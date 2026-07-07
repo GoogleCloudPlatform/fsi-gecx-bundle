@@ -40,7 +40,7 @@ function HomeView({
   const navigate = useNavigate();
 
   const [accountsData, setAccountsData] = useState(null);
-  const [transactions, setTransactions] = useState([]);
+  const [, setTransactions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isBillPayOpen, setIsBillPayOpen] = useState(false);
   const [isProvisioning, setIsProvisioning] = useState(false);
