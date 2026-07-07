@@ -31,7 +31,7 @@ steps:
         LINGUIST_RESULT=$$(jq @json /workspace/linguist.json)
         bq query --use_legacy_sql=false --format=csv "CALL \`$PROJECT_ID.ci.get_build_version\`('banking-ui', 'ci', '0.0.0', 'fsi-gecx-bundle', '$COMMIT_SHA', false, $$LINGUIST_RESULT)" > raw_output.txt
         cat raw_output.txt
-        VERSION=$$(grep -o 'BUILD_VERSION=[0-9.]*' raw_output.txt | cut -d= -f2)
+        VERSION=$$(grep -o 'BUILD_VERSION=[0-9.]*' raw_output.txt | cut -d= -f2 | head -n 1 | tr -d '\r\n ')
         if [ -z "$$VERSION" ]; then
           echo "Error: Failed to retrieve build version from BigQuery." >&2
           exit 1
