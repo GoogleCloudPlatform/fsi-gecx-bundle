@@ -173,10 +173,20 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
                     "type": DataChannelEvent.CARD_STATUS_LOCK.value,
                     "status": "BLOCKED"
                 })
+            elif tool_name == "issue_replacement_card_tool":
+                logger.info("[CALLBACK] CARD_REPLACED event broadcasted")
+                first_card = (account_data.get("cards") or [{}])[0]
+                notify_event({
+                    "type": DataChannelEvent.CARD_REPLACED.value,
+                    "status": first_card.get("status", "ACTIVE"),
+                    "new_last_four": first_card.get("last_four"),
+                    "card_token": first_card.get("card_token"),
+                    "is_virtual": first_card.get("is_virtual", True),
+                })
     return None
 
 NAME = "credit_card_support_voice_assistant"
-DESCRIPTION = "A voice assistant that helps customers freeze cards, request limit increases, and reverse late fees."
+DESCRIPTION = "A voice assistant that helps customers freeze cards, issue replacement cards, request limit increases, and reverse late fees."
 
 INSTRUCTION_PATH = os.path.join(os.path.dirname(__file__), "resources", "instruction.txt")
 with open(INSTRUCTION_PATH, "r", encoding="utf-8") as f:

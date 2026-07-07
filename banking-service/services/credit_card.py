@@ -14,9 +14,10 @@
 
 import logging
 import datetime
+import secrets
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
-from models.credit_card import AccountLedger
+from models.credit_card import AccountLedger, IssuedCard
 from utils.audit import record_audit_event
 from models.fdx import (
     RealTimeBalanceResponse, PaginatedTransactionsResult, FDXTransaction,
@@ -25,6 +26,14 @@ from models.fdx import (
 from services.taxonomy_service import TaxonomyService
 
 logger = logging.getLogger(__name__)
+
+
+def _generate_card_token() -> str:
+    return f"tok_visa_reissue_{secrets.token_hex(8)}"
+
+
+def _generate_last_four() -> str:
+    return f"{secrets.randbelow(10_000):04d}"
 
 def freeze_card(db: Session, card_token: str, reason: str) -> dict:
     """
@@ -73,6 +82,101 @@ def unfreeze_card(db: Session, card_token: str, reason: str) -> dict:
     except Exception as e:
         db.rollback()
         logger.error(f"Error unfreezing card: {e}")
+        raise e
+
+
+def issue_replacement_card(
+    db: Session,
+    account_id: str,
+    reason: str,
+    *,
+    wallet_provider: str = "GOOGLE_WALLET",
+    issue_virtual_card: bool = True,
+) -> dict:
+    """
+    Issues a replacement card for an account after fraud or loss workflows.
+    The current active card, if any, is deactivated and a new virtual card is created.
+    """
+    logger.info(
+        "Issuing replacement card for account=%s reason=%s wallet_provider=%s",
+        account_id,
+        reason,
+        wallet_provider,
+    )
+    try:
+        from repositories.credit_card import CreditCardRepository
+
+        repo = CreditCardRepository(db)
+        account = repo.get_account_by_id(account_id, lock=True)
+        if not account:
+            raise ValueError(f"Account '{account_id}' not found.")
+
+        cards = repo.list_cards_by_account(account.id)
+        current_card = next((card for card in cards if card.is_active), None)
+        if not current_card:
+            current_card = next((card for card in cards if card.status in {"BLOCKED", "REPORTED_STOLEN"}), None)
+        if not current_card:
+            raise ValueError("No existing card found for replacement.")
+
+        for card in cards:
+            if card.is_active:
+                card.is_active = False
+                if card.status == "ACTIVE":
+                    card.status = "BLOCKED"
+                repo.save_card(card)
+
+        exp_month = current_card.exp_month
+        exp_year = max(current_card.exp_year, datetime.datetime.now(datetime.timezone.utc).year + 4)
+        replacement_card = IssuedCard(
+            account_id=account.id,
+            cardholder_name=current_card.cardholder_name,
+            card_token=_generate_card_token(),
+            last_four=_generate_last_four(),
+            exp_month=exp_month,
+            exp_year=exp_year,
+            status="ACTIVE",
+            is_active=True,
+            is_virtual=issue_virtual_card,
+        )
+        repo.save_card(replacement_card)
+
+        record_audit_event(
+            db,
+            "CARD_REPLACED",
+            {
+                "account_id": str(account.id),
+                "old_card_token": current_card.card_token,
+                "new_card_token": replacement_card.card_token,
+                "new_last_four": replacement_card.last_four,
+                "reason": reason,
+                "is_virtual": issue_virtual_card,
+            },
+        )
+        record_audit_event(
+            db,
+            "WALLET_PROVISIONING_QUEUED",
+            {
+                "account_id": str(account.id),
+                "card_token": replacement_card.card_token,
+                "wallet_provider": wallet_provider,
+                "status": "QUEUED",
+            },
+        )
+        db.commit()
+        return {
+            "account_id": str(account.id),
+            "old_card_token": current_card.card_token,
+            "new_card_token": replacement_card.card_token,
+            "new_last_four": replacement_card.last_four,
+            "status": replacement_card.status,
+            "wallet_provider": wallet_provider,
+            "wallet_provisioning_status": "QUEUED",
+            "is_virtual": replacement_card.is_virtual,
+            "message": "Replacement virtual card issued and wallet provisioning queued.",
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error issuing replacement card: {e}")
         raise e
 
 

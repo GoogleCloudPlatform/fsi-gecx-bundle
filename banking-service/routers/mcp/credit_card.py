@@ -22,7 +22,7 @@ from . import mcp  # Import shared FastMCP server instance
 from routers.mcp.utils import requires_user_assertion, verified_customer_id_var
 from utils.database import SessionLocal
 from repositories.credit_card import CreditCardRepository
-from services.credit_card import freeze_card, apply_limit_increase, reverse_posted_fee
+from services.credit_card import apply_limit_increase, freeze_card, issue_replacement_card, reverse_posted_fee
 from services.voice_bidi import send_session_event
 
 logger = logging.getLogger(__name__)
@@ -158,6 +158,85 @@ async def unfreeze_card(
         }
     except Exception as e:
         logger.error(f"Error in FastMCP unfreeze_card: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def issue_replacement_card_tool(
+    account_id: str = None,
+    wallet_provider: str = "GOOGLE_WALLET",
+    ctx: Context = None,
+) -> dict:
+    """
+    Issues a replacement virtual card for the verified customer and queues wallet provisioning.
+
+    Args:
+        account_id: Optional unique identifier for the credit card account.
+        wallet_provider: Optional wallet target for digital card provisioning.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    logger.info(
+        "FastMCP issue_replacement_card_tool invoked for account: %s (Customer: %s)",
+        account_id,
+        verified_customer_id,
+    )
+
+    db = SessionLocal()
+    repo = CreditCardRepository(db)
+    try:
+        if not account_id:
+            account = repo.get_account_by_customer(verified_customer_id)
+            if not account:
+                return {"success": False, "message": "No credit card account found for the user."}
+            account_id = str(account.id)
+
+        if not re.match(r"^[a-zA-Z0-9_-]{4,64}$", str(account_id)):
+            return {"success": False, "message": "Access Denied: Invalid account ID format."}
+
+        account = repo.get_account_by_customer(verified_customer_id)
+        if not account or str(account.id) != str(account_id):
+            logger.error(
+                "Security Alert: BOLA/IDOR attempt or account not found for %s by %s",
+                account_id,
+                verified_customer_id,
+            )
+            return {"success": False, "message": "Account not found or unauthorized."}
+
+        result = issue_replacement_card(
+            db,
+            account_id=str(account.id),
+            reason="CUSTOMER_FRAUD_REISSUE",
+            wallet_provider=wallet_provider,
+            issue_virtual_card=True,
+        )
+
+        session_id = f"session-{verified_customer_id}"
+        await send_session_event(
+            session_id,
+            {
+                "type": "CARD_REPLACED",
+                "status": result["status"],
+                "new_last_four": result["new_last_four"],
+                "new_card_token": result["new_card_token"],
+                "wallet_provider": result["wallet_provider"],
+                "wallet_provisioning_status": result["wallet_provisioning_status"],
+                "is_virtual": result["is_virtual"],
+            },
+        )
+
+        return {
+            "success": True,
+            "message": "Replacement virtual card issued. Google Wallet provisioning is queued.",
+            "new_last_four": result["new_last_four"],
+            "wallet_provider": result["wallet_provider"],
+            "wallet_provisioning_status": result["wallet_provisioning_status"],
+            "is_virtual": result["is_virtual"],
+        }
+    except Exception as e:
+        logger.error(f"Error in FastMCP issue_replacement_card_tool: {e}")
         return {"success": False, "message": f"Internal error: {str(e)}"}
     finally:
         db.close()

@@ -576,6 +576,29 @@ export default function VoiceSupportView() {
           } else if (event.type === DataChannelEvent.CARD_STATUS_LOCK) {
             setCardStatus(event.status);
             setTranscripts(prev => [...prev, { author: 'system', text: `SECURITY ALERT: Card status updated to ${event.status}.` }]);
+          } else if (event.type === DataChannelEvent.CARD_REPLACED) {
+            setCardStatus(event.status || 'ACTIVE');
+            setAccount(prev => {
+              if (!prev) return prev;
+              const cards = [...(prev.cards || [])];
+              if (cards.length > 0) {
+                cards[0] = {
+                  ...cards[0],
+                  last_four: event.new_last_four || cards[0].last_four,
+                  card_token: event.card_token || cards[0].card_token,
+                  status: event.status || cards[0].status,
+                  is_virtual: event.is_virtual ?? cards[0].is_virtual,
+                };
+              }
+              return { ...prev, cards };
+            });
+            setTranscripts(prev => [
+              ...prev,
+              {
+                author: 'system',
+                text: `ACCOUNT UPDATE: Replacement ${event.is_virtual ? 'virtual ' : ''}card ending in ${event.new_last_four} is ready.`,
+              },
+            ]);
           } else if (event.type === DataChannelEvent.LIMIT_UPDATED) {
             setCreditLimit(event.credit_limit_cents / 100);
             setAvailableCredit(event.available_credit_cents / 100);

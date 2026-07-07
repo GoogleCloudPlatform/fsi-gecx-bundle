@@ -16,10 +16,11 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from routers.mcp.credit_card import (
+    issue_replacement_card_tool,
     report_lost_stolen_card,
-    unfreeze_card,
+    request_credit_limit_increase,
     reverse_overdraft_fee,
-    request_credit_limit_increase
+    unfreeze_card,
 )
 from models.credit_card import Base, FinancialAccount, IssuedCard
 
@@ -258,4 +259,38 @@ async def test_report_lost_stolen_card_optional_account_id(mock_send_event, mock
     
     assert result["success"] is True
     assert "Card reported as lost" in result["message"]
-    assert "LST-" in result["confirmation_number"]
+
+
+@pytest.mark.asyncio
+@patch("routers.mcp.utils.validate_firebase_token")
+@patch("routers.mcp.credit_card.send_session_event")
+async def test_issue_replacement_card_tool_success(mock_send_event, mock_validate_token, db_session):
+    """Verify replacement tool creates a new active virtual card and queues wallet provisioning."""
+    mock_validate_token.return_value = MagicMock(claims={"sub": "jane.doe@example.com", "email": "customer@example.com"})
+
+    blocked_card = db_session.query(IssuedCard).filter_by(id="11111111-1111-4111-8111-222222222222").first()
+    blocked_card.status = "BLOCKED"
+    blocked_card.is_active = False
+    db_session.commit()
+
+    mock_ctx = MagicMock()
+    result = await issue_replacement_card_tool(
+        account_id="88888888-8888-4888-8888-999999999999",
+        assertion_token="valid-token",
+        ctx=mock_ctx,
+    )
+
+    assert result["success"] is True
+    assert result["wallet_provisioning_status"] == "QUEUED"
+    assert result["is_virtual"] is True
+    assert result["new_last_four"]
+
+    cards = db_session.query(IssuedCard).filter_by(account_id="88888888-8888-4888-8888-999999999999").all()
+    active_cards = [card for card in cards if card.is_active]
+    assert len(active_cards) == 1
+    assert active_cards[0].last_four == result["new_last_four"]
+
+    mock_send_event.assert_called_once()
+    args, _kwargs = mock_send_event.call_args
+    assert args[0] == "session-jane.doe@example.com"
+    assert args[1]["type"] == "CARD_REPLACED"

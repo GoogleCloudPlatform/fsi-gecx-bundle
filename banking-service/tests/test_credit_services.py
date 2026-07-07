@@ -18,7 +18,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models.credit_card import Base, FinancialAccount, IssuedCard, AccountLedger, CreditProduct
 from models.identity import User
-from services.credit_card import freeze_card, unfreeze_card, apply_limit_increase, reverse_posted_fee
+from services.credit_card import apply_limit_increase, freeze_card, issue_replacement_card, reverse_posted_fee, unfreeze_card
 
 # Use an isolated, in-memory SQLite database for sub-second, side-effect-free testing
 DATABASE_URL = "sqlite:///:memory:"
@@ -117,6 +117,30 @@ def test_unfreeze_card_success(db_session):
     
     card = db_session.query(IssuedCard).filter_by(card_token="tok_test_john_doe").first()
     assert card.status == "ACTIVE"
+
+
+def test_issue_replacement_card_success(db_session):
+    """Verify replacement issuance deactivates the prior card and creates a new active virtual card."""
+    freeze_card(db_session, card_token="tok_test_john_doe", reason="LOST")
+
+    result = issue_replacement_card(
+        db_session,
+        account_id="12300000-0000-4000-8000-000000000123",
+        reason="CUSTOMER_FRAUD_REISSUE",
+    )
+
+    assert result["status"] == "ACTIVE"
+    assert result["wallet_provisioning_status"] == "QUEUED"
+    assert result["is_virtual"] is True
+    assert result["new_last_four"] != "1234"
+
+    cards = db_session.query(IssuedCard).filter_by(account_id="12300000-0000-4000-8000-000000000123").all()
+    assert len(cards) == 2
+    active_cards = [card for card in cards if card.is_active]
+    assert len(active_cards) == 1
+    assert active_cards[0].last_four == result["new_last_four"]
+    old_card = next(card for card in cards if card.card_token == "tok_test_john_doe")
+    assert old_card.is_active is False
 
 
 def test_freeze_card_not_found(db_session):
