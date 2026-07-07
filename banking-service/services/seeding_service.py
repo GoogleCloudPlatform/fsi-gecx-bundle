@@ -534,6 +534,7 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
 def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Account, savings_acc: Account, cred_acc: CreditAccount, card: IssuedCard, first_name: str, last_name: str) -> None:
     """Seeds consistent pending and posted transactions across checking, savings, and credit card accounts."""
     now = datetime.datetime.now(datetime.timezone.utc)
+    card_token = card.card_token if card else None
 
     # 1. Clear any existing transactions for these accounts
     if checking_acc:
@@ -632,7 +633,7 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
             db.add_all([tx, entry])
 
     # 4. Credit Card Seeding (Pending Authorizations & Posted Transactions via Gateway)
-    if cred_acc and card:
+    if cred_acc and card_token:
         # Assign a consistent geographical home metro and international travel trip for this customer's demo card
         from models.identity import User
         user_obj = db.query(User).filter(User.id == user_uuid).first()
@@ -647,7 +648,7 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
         if not is_googler:
             ovr_rrn = f"OVR_{str(user_uuid)[:8]}"
             auth_ovr = process_authorization(db, {
-                "card_token": card.card_token,
+                "card_token": card_token,
                 "amount_cents": 3500,
                 "retrieval_reference_number": ovr_rrn,
                 "merchant_category_code": "FEE",
@@ -708,7 +709,7 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
             rrn = f"REF_{str(user_uuid)[:5]}_{i:02d}"
             
             auth_res = process_authorization(db, {
-                "card_token": card.card_token,
+                "card_token": card_token,
                 "amount_cents": amount_cents,
                 "retrieval_reference_number": rrn,
                 "merchant_category_code": mcc_val,

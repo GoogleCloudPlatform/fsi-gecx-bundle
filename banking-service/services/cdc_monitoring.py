@@ -13,23 +13,23 @@
 # limitations under the License.
 
 import datetime
-import logging
-import os
-import time
 import json
+import logging
+import time
 
+from google.cloud import monitoring_v3
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from google.cloud import monitoring_v3
 
 from models.credit_card import PostedTransaction, TransactionAuthorization
 from repositories.cdc_lakehouse import CdcLakehouseRepository
 from utils.gcp import get_project_id
+from utils.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 
-from utils.redis_client import get_redis_client
 _cache = get_redis_client()
+
 
 class CdcMonitoringService:
     """Service layer for operational-to-lakehouse CDC monitoring."""
@@ -45,11 +45,82 @@ class CdcMonitoringService:
             return value.replace(tzinfo=datetime.timezone.utc)
         return value
 
+    @staticmethod
+    def _format_stream_row(row: dict) -> dict:
+        event_time = row.get("event_time")
+        event_time = CdcMonitoringService._ensure_aware(event_time)
+        raw_time = event_time.timestamp() if event_time else None
+        return {
+            "id": row.get("id"),
+            "rrn": row.get("rrn"),
+            "timestamp": event_time.strftime("%H:%M:%S") if event_time else "N/A",
+            "merchant_name": row.get("merchant_name"),
+            "amount_cents": row.get("amount_cents"),
+            "status": row.get("status"),
+            "bq_view": row.get("source"),
+            "raw_time": raw_time,
+        }
+
+    @staticmethod
+    def _deserialize_event(value: str) -> dict | None:
+        try:
+            return json.loads(value)
+        except (TypeError, json.JSONDecodeError):
+            return None
+
+    def _get_recent_operational_events(self, limit: int = 20) -> list[dict]:
+        redis_client = get_redis_client()
+        if not redis_client:
+            return []
+
+        try:
+            recent_values = redis_client.lrange("recent_transactions", 0, max(0, limit - 1))
+        except Exception as exc:
+            logger.warning(f"Redis event bus read failed: {exc}")
+            return []
+
+        events = []
+        for value in recent_values:
+            event = self._deserialize_event(value)
+            if event:
+                events.append(event)
+        return events
+
     def get_operational_latest_timestamp(self):
         self.db.connection().info["_ignore_rbac"] = True
         latest_auth = self.db.query(func.max(TransactionAuthorization.created_at)).scalar()
         latest_posted = self.db.query(func.max(PostedTransaction.posted_at)).scalar()
         return max([dt for dt in [latest_auth, latest_posted] if dt], default=None)
+
+    def get_operational_stream(self, limit: int = 20) -> dict:
+        return {"status": "SUCCESS", "stream": self._get_recent_operational_events(limit=limit)}
+
+    def get_operational_stream_metrics(self, limit: int = 100) -> dict:
+        now = time.time()
+        events = self._get_recent_operational_events(limit=limit)
+        raw_times = [float(event["raw_time"]) for event in events if event.get("raw_time") is not None]
+        recent_events = [event for event in events if event.get("raw_time") is not None and (now - float(event["raw_time"])) <= 60]
+
+        auth_count = sum(1 for event in recent_events if "HOLD" in str(event.get("status", "")) or "FLAGGED" in str(event.get("status", "")))
+        posted_count = sum(1 for event in recent_events if "SETTLE" in str(event.get("status", "")))
+        anomaly_count = sum(1 for event in recent_events if "FLAGGED" in str(event.get("status", "")))
+
+        latest_event_ts = max(raw_times) if raw_times else None
+        latest_event_dt = (
+            datetime.datetime.fromtimestamp(latest_event_ts, tz=datetime.timezone.utc)
+            if latest_event_ts
+            else None
+        )
+
+        return {
+            "events_per_minute": len(recent_events),
+            "authorization_events_per_minute": auth_count,
+            "posted_events_per_minute": posted_count,
+            "flagged_events_per_minute": anomaly_count,
+            "latest_event_age_ms": None if latest_event_ts is None else max(0, int((now - latest_event_ts) * 1000)),
+            "latest_event_timestamp": latest_event_dt.isoformat() if latest_event_dt else None,
+            "recent_buffered_events": len(events),
+        }
 
     def get_cdc_status(self) -> dict:
         operational_latest = self.get_operational_latest_timestamp()
@@ -67,21 +138,31 @@ class CdcMonitoringService:
             bq_error = str(exc)
 
         lag_seconds = None
+        lag_ms = None
         operational_latest = self._ensure_aware(operational_latest)
         lakehouse_latest = self._ensure_aware(lakehouse_latest)
         if operational_latest and lakehouse_latest:
-            lag_seconds = max(0, int((operational_latest - lakehouse_latest).total_seconds()))
+            delta_seconds = max(0.0, (operational_latest - lakehouse_latest).total_seconds())
+            lag_seconds = int(delta_seconds)
+            lag_ms = int(delta_seconds * 1000)
 
         return {
             "status": "SUCCESS" if not bq_error else "DEGRADED",
             "operational_latest_timestamp": operational_latest.isoformat() if operational_latest else None,
             "lakehouse_latest_timestamp": lakehouse_latest.isoformat() if lakehouse_latest else None,
             "replication_lag_seconds": lag_seconds,
+            "replication_lag_ms": lag_ms,
             "lakehouse_row_count": lakehouse_count,
             "bigquery_dataset": self.lakehouse_repo.dataset,
             "bigquery_error": bq_error,
         }
 
+    def get_lakehouse_stream(self, limit: int = 20) -> dict:
+        rows = self.lakehouse_repo.list_recent_transactions(limit=limit)
+        return {
+            "status": "SUCCESS",
+            "stream": [self._format_stream_row(row) for row in rows],
+        }
 
     def get_cached_datastream_metrics(self) -> dict:
         global _cache
@@ -90,63 +171,64 @@ class CdcMonitoringService:
                 cached = _cache.get("datastream_metrics")
                 if cached:
                     return json.loads(cached)
-            except Exception as e:
-                logger.warning(f"Redis cache error: {e}")
+            except Exception as exc:
+                logger.warning(f"Redis cache error: {exc}")
 
         metrics = {
-            "system_lag": None,
-            "data_freshness": None,
+            "system_lag_ms": None,
+            "data_freshness_ms": None,
             "total_bytes_processed": None,
             "active_anomalies": 0,
-            "status": "SUCCESS"
+            "status": "SUCCESS",
         }
 
-        # Fetch active anomalies directly from BigQuery
         try:
             metrics["active_anomalies"] = self.lakehouse_repo.get_anomalies_count()
-        except Exception as e:
-            logger.warning(f"Error fetching anomalies count: {e}")
+        except Exception as exc:
+            logger.warning(f"Error fetching anomalies count: {exc}")
             metrics["status"] = "DEGRADED"
 
-        # Fetch Cloud Monitoring metrics
         try:
             client = monitoring_v3.MetricServiceClient()
             project_name = f"projects/{self.project_id}"
-            
             now = time.time()
             seconds = int(now)
-            nanos = int((now - seconds) * 10 ** 9)
-            # Look back up to 5 minutes to find the latest datapoint
-            interval = monitoring_v3.TimeInterval({
-                "end_time": {"seconds": seconds, "nanos": nanos},
-                "start_time": {"seconds": seconds - 300, "nanos": nanos},
-            })
+            nanos = int((now - seconds) * 10**9)
+            interval = monitoring_v3.TimeInterval(
+                {
+                    "end_time": {"seconds": seconds, "nanos": nanos},
+                    "start_time": {"seconds": seconds - 300, "nanos": nanos},
+                }
+            )
 
             metric_types = [
-                ("system_lag", "datastream.googleapis.com/stream/system_latencies"),
-                ("data_freshness", "datastream.googleapis.com/stream/freshness"),
-                ("total_bytes_processed", "datastream.googleapis.com/stream/bytes_count")
+                ("system_lag_ms", "datastream.googleapis.com/stream/system_latencies"),
+                ("data_freshness_ms", "datastream.googleapis.com/stream/freshness"),
+                ("total_bytes_processed", "datastream.googleapis.com/stream/bytes_count"),
             ]
-            
-            for key, mtype in metric_types:
-                results = client.list_time_series(request={
-                    "name": project_name,
-                    "filter": f'metric.type = "{mtype}"',
-                    "interval": interval,
-                })
+
+            for key, metric_type in metric_types:
+                results = client.list_time_series(
+                    request={
+                        "name": project_name,
+                        "filter": f'metric.type = "{metric_type}"',
+                        "interval": interval,
+                    }
+                )
                 for result in results:
-                    if result.points:
-                        val = result.points[0].value
-                        oneof_field = val._pb.WhichOneof("value")
-                        if oneof_field == "int64_value":
-                            metrics[key] = val.int64_value
-                        elif oneof_field == "double_value":
-                            metrics[key] = val.double_value
-                        elif oneof_field == "distribution_value":
-                            metrics[key] = int(val.distribution_value.mean)
-                        break
-        except Exception as e:
-            logger.warning(f"Error fetching cloud monitoring metrics: {e}")
+                    if not result.points:
+                        continue
+                    value = result.points[0].value
+                    oneof_field = value._pb.WhichOneof("value")
+                    if oneof_field == "int64_value":
+                        metrics[key] = int(value.int64_value)
+                    elif oneof_field == "double_value":
+                        metrics[key] = int(round(value.double_value))
+                    elif oneof_field == "distribution_value":
+                        metrics[key] = int(round(value.distribution_value.mean))
+                    break
+        except Exception as exc:
+            logger.warning(f"Error fetching cloud monitoring metrics: {exc}")
             metrics["status"] = "DEGRADED"
 
         if _cache:
@@ -156,5 +238,3 @@ class CdcMonitoringService:
                 pass
 
         return metrics
-
-

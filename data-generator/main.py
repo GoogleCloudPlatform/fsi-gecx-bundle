@@ -437,6 +437,13 @@ def summarize_swipe_results(results: List[Dict[str, Any]]) -> Dict[str, int]:
         "failures": sum(1 for r in results if r.get("error")),
     }
 
+
+def build_randomized_pulse_plan(total_events: int, window_seconds: int = 58) -> List[float]:
+    """Distributes swipe events across the minute using randomized offsets."""
+    if total_events <= 0:
+        return []
+    return sorted(random.uniform(0, window_seconds) for _ in range(total_events))
+
 async def run_activity_surge_task(active_cards: Optional[List[Dict[str, Any]]] = None) -> Dict[str, int]:
     """Fires 50 rapid-fire swipes staggered over 10 seconds."""
     logger.info("Starting activity surge simulation (50 swipes over 10s)...")
@@ -463,28 +470,36 @@ def health():
 @app.post("/generate", status_code=status.HTTP_200_OK)
 @app.post("/simulate-pulse", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
 async def simulate_pulse():
-    """Wakes up and fires a randomized batch of 3-5 swipes every 10 seconds for a full minute."""
-    logger.info("Triggered simulated activity pulse (6 bursts over 60s)...")
+    """Wakes up once a minute and fans transactions across the next 58 seconds."""
+    logger.info("Triggered randomized simulation pulse for the next 58 seconds.")
     cards = get_active_cards()
     if not cards:
         raise HTTPException(status_code=400, detail="No active cards found to swipe.")
-        
-    all_results = []
-    
+
+    total_events = random.randint(18, 36)
+    event_offsets = build_randomized_pulse_plan(total_events=total_events, window_seconds=58)
+
+    async def dispatch_after_offset(client: httpx.AsyncClient, offset_seconds: float, card: Dict[str, Any]) -> Dict[str, Any]:
+        await asyncio.sleep(offset_seconds)
+        return await simulate_swipe_event(client, card)
+
     async with httpx.AsyncClient() as client:
-        for _ in range(6):
-            batch_size = random.randint(3, 5)
-            swipes_to_run = [random.choice(cards) for _ in range(batch_size)]
-            
-            tasks = [simulate_swipe_event(client, card) for card in swipes_to_run]
-            results = await asyncio.gather(*tasks, return_exceptions=False)
-            all_results.extend(results)
-            await asyncio.sleep(10)
-        
+        tasks = [
+            dispatch_after_offset(client, offset, random.choice(cards))
+            for offset in event_offsets
+        ]
+        all_results = await asyncio.gather(*tasks, return_exceptions=False)
+
     summary = summarize_swipe_results(all_results)
     if summary["authorizations_created"] == 0:
         raise HTTPException(status_code=502, detail={"message": "No transaction authorizations were created.", **summary})
-    return {"status": "SUCCESS", **summary, "active_cards_count": len(cards)}
+    return {
+        "status": "SUCCESS",
+        "distribution_window_seconds": 58,
+        "scheduled_events": total_events,
+        **summary,
+        "active_cards_count": len(cards),
+    }
 
 @app.post("/simulate-surge", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
 async def simulate_surge(payload: SurgeRequest):

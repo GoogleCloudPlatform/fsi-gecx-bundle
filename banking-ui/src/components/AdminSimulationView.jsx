@@ -13,16 +13,38 @@
 // limitations under the License.
 
 import React, { useState, useEffect } from 'react';
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { useNavigate } from 'react-router-dom';
 import { 
   Sparkles, Activity, ShieldAlert, Zap, Database, RefreshCw, 
-  ArrowLeft, CheckCircle2, AlertTriangle, TrendingUp, Globe, Clock, 
+  ArrowLeft, CheckCircle2, AlertTriangle, TrendingUp, Globe, Clock,
   Layers, ChevronRight, Play, Info, ExternalLink
 } from 'lucide-react';
-import { triggerSpendSurge, injectFraudAnomaly, injectLateFee, getGlobalStream, getCdcStatus } from '../utils/api.js';
+import {
+  triggerSpendSurge,
+  injectFraudAnomaly,
+  injectLateFee,
+  getGlobalStream,
+  getCdcStatus,
+  getBackendApiUrl,
+  getBackendAuthHeaders,
+} from '../utils/api.js';
 import GoogleCloudIcon from './GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { showInfoModals } from '../utils/constants.js';
+
+function formatLatency(ms) {
+  if (ms == null) return 'N/A';
+  if (ms < 1000) return `${ms} ms`;
+  return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`;
+}
+
+function formatEventAge(ms) {
+  if (ms == null) return 'Awaiting events';
+  if (ms < 1000) return `${ms} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
+  return `${Math.round(ms / 60_000)} min`;
+}
 
 function AdminSimulationView() {
   const navigate = useNavigate();
@@ -34,27 +56,55 @@ function AdminSimulationView() {
   const [streamData, setStreamData] = useState([]);
   const [cdcStatus, setCdcStatus] = useState(null);
   const [feedback, setFeedback] = useState({ type: '', title: '', message: '', data: null });
+  const [streamConnection, setStreamConnection] = useState({ state: 'connecting', message: 'Negotiating secure stream...' });
   const [cdcStats, setCdcStats] = useState({
-    systemLag: 0,
-    dataFreshness: 0,
-    totalThroughputMb: 0,
+    systemLagMs: null,
+    dataFreshnessMs: null,
     activeAnomalies: 0,
+    eventsPerMinute: 0,
+    authorizationEventsPerMinute: 0,
+    postedEventsPerMinute: 0,
+    flaggedEventsPerMinute: 0,
+    latestEventAgeMs: null,
+    recentBufferedEvents: 0,
     lastSyncTime: new Date().toLocaleTimeString()
   });
+
+  const applyMonitorSnapshot = (streamSnapshot, statusSnapshot = null) => {
+    if (streamSnapshot?.stream) {
+      setStreamData(streamSnapshot.stream);
+    }
+
+    if (statusSnapshot) {
+      setCdcStatus(statusSnapshot);
+    } else if (streamSnapshot?.cdc_status) {
+      setCdcStatus(streamSnapshot.cdc_status);
+    }
+
+    if (streamSnapshot?.cdc_metrics || streamSnapshot?.stream_metrics) {
+      setCdcStats({
+        systemLagMs: streamSnapshot.cdc_metrics?.system_lag_ms ?? null,
+        dataFreshnessMs: streamSnapshot.cdc_metrics?.data_freshness_ms ?? null,
+        activeAnomalies: streamSnapshot.cdc_metrics?.active_anomalies ?? 0,
+        eventsPerMinute: streamSnapshot.stream_metrics?.events_per_minute ?? 0,
+        authorizationEventsPerMinute: streamSnapshot.stream_metrics?.authorization_events_per_minute ?? 0,
+        postedEventsPerMinute: streamSnapshot.stream_metrics?.posted_events_per_minute ?? 0,
+        flaggedEventsPerMinute: streamSnapshot.stream_metrics?.flagged_events_per_minute ?? 0,
+        latestEventAgeMs: streamSnapshot.stream_metrics?.latest_event_age_ms ?? null,
+        recentBufferedEvents: streamSnapshot.stream_metrics?.recent_buffered_events ?? 0,
+        lastSyncTime: new Date().toLocaleTimeString(),
+      });
+    }
+  };
 
   const fetchGlobalStream = async () => {
     setIsStreamLoading(true);
     try {
-      const [operationalRes, statusRes] = await Promise.all([
+      const [streamRes, statusRes] = await Promise.all([
         getGlobalStream(),
         getCdcStatus(),
       ]);
-      if (operationalRes && operationalRes.stream) {
-        setStreamData(operationalRes.stream);
-      }
-      if (statusRes) {
-        setCdcStatus(statusRes);
-      }
+      applyMonitorSnapshot(streamRes, statusRes);
     } catch (e) {
       console.error("Failed to fetch global stream:", e);
     } finally {
@@ -63,39 +113,95 @@ function AdminSimulationView() {
   };
 
   useEffect(() => {
-    fetchGlobalStream();
-    
-    // Replace manual polling with SSE Push
-    const eventSource = new EventSource('/api/v1/simulation/stream-sse', { withCredentials: true });
-    
-    eventSource.onmessage = (event) => {
+    const loadInitialSnapshot = async () => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.status === 'SUCCESS') {
-          if (data.operational_stream) setStreamData(data.operational_stream);
-          
-          if (data.cdc_metrics) {
-            setCdcStats({
-              systemLag: data.cdc_metrics.system_lag ?? 0,
-              dataFreshness: data.cdc_metrics.data_freshness ?? 0,
-              totalThroughputMb: data.cdc_metrics.total_bytes_processed 
-                ? (data.cdc_metrics.total_bytes_processed / (1024 * 1024)).toFixed(2)
-                : 0,
-              activeAnomalies: data.cdc_metrics.active_anomalies ?? 0,
-              lastSyncTime: new Date().toLocaleTimeString()
-            });
-            setCdcStatus(prev => ({
-               ...prev, 
-               lakehouse_error: data.cdc_metrics.status === 'DEGRADED' ? 'Monitoring degraded' : '' 
-            }));
-          }
-        }
-      } catch (err) {
-        console.error("Error parsing SSE data", err);
+        const [streamRes, statusRes] = await Promise.all([
+          getGlobalStream(),
+          getCdcStatus(),
+        ]);
+        applyMonitorSnapshot(streamRes, statusRes);
+      } catch (error) {
+        console.error('Failed to fetch initial simulation snapshot:', error);
       }
     };
 
-    return () => eventSource.close();
+    loadInitialSnapshot();
+
+    const controller = new AbortController();
+    let isMounted = true;
+
+    const reconnectDelay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    const startStream = async () => {
+      while (!controller.signal.aborted) {
+        try {
+          const headers = await getBackendAuthHeaders({ Accept: 'text/event-stream' });
+          await fetchEventSource(`${getBackendApiUrl()}/v1/simulation/stream-sse`, {
+            method: 'GET',
+            headers,
+            signal: controller.signal,
+            openWhenHidden: true,
+            async onopen(response) {
+              if (!response.ok) {
+                const detail = await response.text();
+                throw new Error(`SSE auth failed (${response.status}): ${detail}`);
+              }
+              if (isMounted) {
+                setStreamConnection({ state: 'live', message: 'Authenticated SSE stream active.' });
+              }
+            },
+            onmessage(event) {
+              try {
+                const data = JSON.parse(event.data);
+                if (data.status === 'SUCCESS') {
+                  applyMonitorSnapshot(
+                    {
+                      stream: data.operational_stream,
+                      stream_metrics: data.stream_metrics,
+                      cdc_metrics: data.cdc_metrics,
+                      cdc_status: data.cdc_status,
+                    },
+                  );
+                  if (isMounted) {
+                    setStreamConnection({
+                      state: 'live',
+                      message: data.event_kind === 'heartbeat' ? 'Heartbeat received.' : 'Event stream flowing.',
+                    });
+                  }
+                }
+              } catch (err) {
+                console.error('Error parsing SSE data', err);
+              }
+            },
+            onclose() {
+              throw new Error('SSE connection closed.');
+            },
+            onerror(error) {
+              throw error;
+            },
+          });
+        } catch (error) {
+          if (controller.signal.aborted) {
+            return;
+          }
+          console.error('Simulation stream error', error);
+          if (isMounted) {
+            setStreamConnection({
+              state: 'error',
+              message: 'Secure stream interrupted. Retrying with a fresh token...',
+            });
+          }
+          await reconnectDelay(2000);
+        }
+      }
+    };
+
+    startStream();
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -139,7 +245,7 @@ function AdminSimulationView() {
       setFeedback({
         type: 'warning',
         title: 'Targeted Fraud Anomaly Injected',
-        message: res.message || `Injected ${res.injected_swipes_count || 4} high-risk Mexico/Cancun transactions against presenter card.`,
+        message: res.message || `Injected ${res.injected_swipes_count || 4} high-risk Mexico/Cancun transactions against the active demo card.`,
         data: res
       });
       setCdcStats(prev => ({
@@ -167,7 +273,7 @@ function AdminSimulationView() {
       setFeedback({
         type: 'warning',
         title: 'Late Fee Injected',
-        message: res.message || 'Injected $35.00 Late Fee against presenter card.',
+        message: res.message || 'Injected $35.00 Late Fee against the active demo card.',
         data: res
       });
       fetchGlobalStream();
@@ -206,10 +312,10 @@ function AdminSimulationView() {
             </div>
             <div>
               <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
-                Active Lakehouse & Simulation Studio
+                Replication Monitor & Simulation Studio
               </h1>
               <p className="text-sm text-slate-500 mt-1">
-                Real-time WAL Change Data Capture replication monitor and synthetic event injection controller.
+                Live Redis event streaming, Datastream health, and synthetic transaction controls for the banking service.
               </p>
             </div>
           </div>
@@ -240,47 +346,70 @@ function AdminSimulationView() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>System Lag</span>
+              <span>Stream Status</span>
               <Clock className="w-4 h-4 text-cyan-500" />
             </div>
-            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {cdcStats.systemLag} <span className="text-sm font-normal text-slate-500">sec</span>
+            <div className={`text-2xl font-black font-mono ${
+              streamConnection.state === 'live'
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : streamConnection.state === 'error'
+                ? 'text-amber-600 dark:text-amber-400'
+                : 'text-slate-900 dark:text-white'
+            }`}>
+              {streamConnection.state === 'live' ? 'LIVE' : streamConnection.state === 'error' ? 'RETRY' : 'SYNC'}
             </div>
-            <div className="text-[10px] text-emerald-500 font-medium mt-1">Datastream ingestion delay</div>
+            <div className="text-[10px] text-slate-500 mt-1">{streamConnection.message}</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Data Freshness</span>
+              <span>Last Event Age</span>
               <Activity className="w-4 h-4 text-emerald-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {cdcStats.dataFreshness} <span className="text-sm font-normal text-slate-500">sec</span>
+              {formatEventAge(cdcStats.latestEventAgeMs)}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">End-to-end CDC latency</div>
+            <div className="text-[10px] text-slate-400 mt-1">Age of the newest Redis event</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Total Throughput</span>
+              <span>Event Throughput</span>
               <Layers className="w-4 h-4 text-blue-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {cdcStats.totalThroughputMb} <span className="text-sm font-normal text-slate-500">MB</span>
+              {cdcStats.eventsPerMinute} <span className="text-sm font-normal text-slate-500">/ min</span>
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">Bytes processed via Datastream</div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              {cdcStats.authorizationEventsPerMinute} auth, {cdcStats.postedEventsPerMinute} posted, {cdcStats.flaggedEventsPerMinute} flagged
+            </div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Active Anomalies</span>
+              <span>Replication Freshness</span>
               <ShieldAlert className="w-4 h-4 text-rose-500" />
             </div>
-            <div className="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono">
-              {cdcStats.activeAnomalies}
+            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+              {formatLatency(cdcStats.dataFreshnessMs)}
             </div>
-            <div className="text-[10px] text-rose-500 font-medium mt-1">Risk score &gt; 20 flagged</div>
+            <div className="text-[10px] text-slate-400 mt-1">Datastream freshness from Cloud Monitoring</div>
           </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-slate-500">
+          <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            System lag: <span className="font-mono text-slate-700 dark:text-slate-300">{formatLatency(cdcStats.systemLagMs)}</span>
+          </span>
+          <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            Active anomalies: <span className="font-mono text-slate-700 dark:text-slate-300">{cdcStats.activeAnomalies}</span>
+          </span>
+          <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            Buffered events: <span className="font-mono text-slate-700 dark:text-slate-300">{cdcStats.recentBufferedEvents}</span>
+          </span>
+          <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            Last sync: <span className="font-mono text-slate-700 dark:text-slate-300">{cdcStats.lastSyncTime}</span>
+          </span>
         </div>
       </div>
 
@@ -311,7 +440,7 @@ function AdminSimulationView() {
               </div>
             </div>
             <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-6">
-              Triggers a rapid-fire synthetic activity surge across the active card pool. Simulates realistic domestic purchases across coffee shops, restaurants, grocers, and airlines to hydrate BigQuery real-time spend velocity views.
+              Triggers a rapid-fire synthetic activity surge across the active card pool. Simulates realistic domestic purchases across coffee shops, restaurants, grocers, and airlines to exercise the banking service and push live events through the replication pipeline.
             </p>
           </div>
 
@@ -353,7 +482,7 @@ function AdminSimulationView() {
               </div>
             </div>
             <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-6">
-              Injects 4 rapid-fire card-present transactions in Riviera Maya, Mexico against the presenter card. Instantly flags foreign anomaly alerts (`risk_score &gt; 20`) in BigQuery `v_international_fraud_anomalies` to demonstrate real-time fraud intervention.
+              Injects 4 rapid-fire card-present transactions in Riviera Maya, Mexico against the active demo card. Useful for verifying that live authorizations, anomaly enrichment, and downstream CDC replication stay aligned.
             </p>
           </div>
 
@@ -395,7 +524,7 @@ function AdminSimulationView() {
               </div>
             </div>
             <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-6">
-              Posts a standalone $35.00 Late Fee to the presenter card ledger. Enables live voice demos or standalone script executions of automated fee waiver and reversal workflows.
+              Posts a standalone $35.00 late fee to the active demo card ledger. Useful for voice-agent demos and for confirming that posted ledger activity appears on the live wall and continues through replication.
             </p>
           </div>
 
@@ -455,13 +584,25 @@ function AdminSimulationView() {
             <h4 className="text-white font-extrabold text-lg flex items-center gap-2 flex-wrap">
               <Database className="w-5 h-5 text-cyan-400 animate-pulse" />
               Live Transaction Replication Monitor
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                AUTH POLLING ACTIVE
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border shadow-sm ${
+                streamConnection.state === 'live'
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : streamConnection.state === 'error'
+                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                  : 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  streamConnection.state === 'live'
+                    ? 'bg-emerald-500 animate-ping'
+                    : streamConnection.state === 'error'
+                    ? 'bg-amber-400'
+                    : 'bg-cyan-300 animate-pulse'
+                }`} />
+                {streamConnection.state === 'live' ? 'AUTHENTICATED SSE LIVE' : streamConnection.state === 'error' ? 'STREAM RETRYING' : 'CONNECTING'}
               </span>
             </h4>
             <p className="text-xs text-slate-400 mt-1">
-              Authenticated monitor displaying live operational card-network writes pushed through the Redis event bus.
+              Authenticated monitor displaying live card-network writes pushed through Redis and delivered over server-sent events.
             </p>
             {cdcStatus && (
               <p className="text-[11px] text-slate-500 mt-1">
@@ -549,30 +690,30 @@ function AdminSimulationView() {
       <GcpInfoModal
         isOpen={isGcpInfoModalOpen}
         onClose={() => setIsGcpInfoModalOpen(false)}
-        title="Lakehouse CDC Replication & Global Ledger"
+        title="Redis Event Bus & CDC Monitor"
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            The <strong>Transaction Replication Monitor</strong> compares recent operational card-network writes with BigQuery rows replicated by Datastream.
+            The <strong>Transaction Replication Monitor</strong> now has a single live view. Operational card events are published into Redis, pushed to the admin GUI over authenticated SSE, and compared against Datastream health signals for replication visibility.
           </p>
           <p>
-            Each event is simultaneously recorded in an append-only PostgreSQL outbox table and streamed through Google Cloud Datastream and Pub/Sub into BigQuery lakehouse tables. Looker semantic models structure this data into specialized real-time views:
+            We no longer query BigQuery to animate the live wall. BigQuery remains the analytical destination and long-term CDC sink, while the wall itself is fed by the Redis event bus so every connected admin session sees the same recent operational events immediately.
           </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-cyan-500 dark:text-cyan-400 font-mono font-bold">fsi_lakehouse.v_realtime_spend_velocity</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Aggregates CDC transaction volume and ticket size by FDX spend category &amp; home metro area in real time.</p>
+              <div className="text-cyan-500 dark:text-cyan-400 font-mono font-bold">Redis recent_transactions + channel:transactions:live</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Card authorizations and settlements are published once and fanned out to every connected admin GUI without consumers competing for events.</p>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">fsi_lakehouse.v_international_fraud_anomalies</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Isolates foreign card-present transactions where risk_score &gt; 20 for immediate automated intervention and Looker alerts.</p>
+              <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">Cloud Monitoring Datastream metrics</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">System lag and freshness are still sourced from managed Datastream metrics so the page can distinguish live event flow from downstream replication health.</p>
             </div>
           </div>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">BigQuery Studio Console</h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">Query streaming Datastream tables, examine CDC latency, and inspect SQL view schemas.</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Inspect the analytical lakehouse destination, CDC-derived views, and anomaly datasets after replication lands.</p>
               </div>
               <a
                 href="https://console.cloud.google.com/bigquery"
@@ -587,8 +728,8 @@ function AdminSimulationView() {
             <hr className="border-slate-100 dark:border-slate-800" />
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Cloud Run Architecture</h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">Monitor microservice telemetry, SSE stream connections, and automated scaling.</p>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Cloud Run + Memorystore</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Track the banking-service SSE connections, the data-generator pulse worker, and the Redis event bus that powers the live wall.</p>
               </div>
               <a
                 href="https://console.cloud.google.com/run"
