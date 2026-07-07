@@ -28,16 +28,6 @@ resource "google_bigquery_connection" "banking_data_postgres_connection" {
   }
 }
 
-resource "google_bigquery_connection" "banking_data_spanner_connection" {
-  connection_id = "banking-spanner-connection"
-  friendly_name = "banking-spanner-connection"
-  description   = "Banking Data connection with Spanner"
-  location      = "US"
-  cloud_spanner {
-    database = "projects/${var.project_id}/instances/${google_spanner_instance.banking_data.name}/databases/${google_spanner_database.banking.name}"
-  }
-}
-
 resource "google_bigquery_dataset" "compliance_audit" {
   dataset_id                  = "compliance_audit"
   friendly_name               = "Compliance Audit Dataset"

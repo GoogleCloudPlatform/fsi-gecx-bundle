@@ -633,18 +633,6 @@ resource "google_cloud_run_v2_service" "data_generator" {
       image = local.data_generator_image_url
 
       env {
-        name  = "SPANNER_INSTANCE"
-        value = google_spanner_instance.banking_data.name
-      }
-      env {
-        name  = "SPANNER_DATABASE"
-        value = google_spanner_database.banking.name
-      }
-      env {
-        name  = "SPANNER_DISABLE_BUILTIN_METRICS"
-        value = "true"
-      }
-      env {
         name  = "BANKING_SERVICE_URL"
         value = "https://banking-service-${data.google_project.project.number}.${var.region}.run.app"
       }
