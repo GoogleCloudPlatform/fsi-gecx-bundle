@@ -148,7 +148,16 @@ resource "google_sql_user" "kyc_service_iam_user" {
 
 locals {
   db_iam_support_members = {
-    for member in concat(var.database_iam_support_users, var.database_iam_viewer_users, ["user:${data.google_client_openid_userinfo.me.email}"]) :
+    for member in concat(var.database_iam_support_users, ["user:${data.google_client_openid_userinfo.me.email}"]) :
+    member => {
+      name = split(":", member)[1]
+      type = split(":", member)[0] == "user" ? "CLOUD_IAM_USER" : (
+        split(":", member)[0] == "group" ? "CLOUD_IAM_GROUP" : "CLOUD_IAM_SERVICE_ACCOUNT"
+      )
+    }
+  }
+  db_iam_viewer_members = {
+    for member in var.database_iam_viewer_users :
     member => {
       name = split(":", member)[1]
       type = split(":", member)[0] == "user" ? "CLOUD_IAM_USER" : (

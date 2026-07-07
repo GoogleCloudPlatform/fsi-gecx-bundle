@@ -623,7 +623,7 @@ resource "google_cloud_run_v2_service" "data_generator" {
 
 # Isolated Cloud Run Job tasked with executing alembic database schema migrations
 resource "google_cloud_run_v2_job" "db_migration_job" {
-  count               = var.deploy_cloud_run_services ? 1 : 0
+  count    = var.deploy_cloud_run_services ? 1 : 0
   name     = "banking-db-migrate"
   location = var.region
 
