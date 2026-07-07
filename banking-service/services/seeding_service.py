@@ -35,8 +35,6 @@ from models.settings import SystemSetting
 from models.reference import MerchantCategoryCode
 from services.taxonomy_service import DEFAULT_TAXONOMY_MAP, TaxonomyService
 from services.merchant_service import MerchantEnrichmentService
-from services.card_network import process_authorization, process_settlement
-
 logger = logging.getLogger(__name__)
 RESOURCE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "data")
 
@@ -44,6 +42,10 @@ RESOURCE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resourc
 def _generate_demo_card_token() -> str:
     """Return an opaque token for demo cards without presenter-name collisions."""
     return f"tok_visa_{uuid.uuid4().hex[:24]}"
+
+
+def _seed_auth_code() -> str:
+    return f"{random.randint(100000, 999999)}"
 
 def get_base_personas():
     path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "static_personas.json")
@@ -639,7 +641,7 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
             )
             db.add_all([tx, entry])
 
-    # 4. Credit Card Seeding (Pending Authorizations & Posted Transactions via Gateway)
+    # 4. Credit Card Seeding (Pending Authorizations & Posted Transactions inserted as historical state)
     if cred_acc and card_token:
         # Assign a consistent geographical home metro and international travel trip for this customer's demo card
         from models.identity import User
@@ -650,24 +652,43 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
         else:
             user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA", "ATLANTA GA", "MIAMI FL"])
 
+        cleared_balance_cents = max(0, cred_acc.cleared_balance_cents or 0)
+        pending_balance_cents = 0
+
         if not is_googler:
-            ovr_rrn = f"OVR_{str(user_uuid)[:8]}"
-            auth_ovr = process_authorization(db, {
-                "card_token": card_token,
-                "amount_cents": 3500,
-                "retrieval_reference_number": ovr_rrn,
-                "merchant_category_code": "FEE",
-                "merchant_name": "Overdraft Fee",
-                "card_network": "VISA",
-                "created_at": now - datetime.timedelta(days=4)
-            })
-            if auth_ovr.get("action_code") == "00":
-                process_settlement(db, {
-                    "retrieval_reference_number": ovr_rrn,
-                    "amount_cents": 3500,
-                    "description": "Overdraft Fee",
-                    "posted_at": now - datetime.timedelta(days=3)
-                })
+            ovr_created_at = now - datetime.timedelta(days=4, hours=2)
+            ovr_posted_at = now - datetime.timedelta(days=3)
+            ovr_auth = TransactionAuthorization(
+                id=uuid.uuid4(),
+                card_id=card.id,
+                account_id=cred_acc.id,
+                transaction_amount_cents=3500,
+                billing_amount_cents=3500,
+                status="SETTLED",
+                decline_reason="NONE",
+                auth_code=_seed_auth_code(),
+                retrieval_reference_number=f"OVR_{str(user_uuid)[:8]}",
+                card_network="VISA",
+                merchant_category_code="FEE",
+                merchant_name="Overdraft Fee",
+                fraud_risk_score=0,
+                created_at=ovr_created_at,
+                expires_at=ovr_created_at + datetime.timedelta(days=7),
+            )
+            db.add(ovr_auth)
+            db.add(
+                PostedTransaction(
+                    id=uuid.uuid4(),
+                    account_id=cred_acc.id,
+                    authorization_id=ovr_auth.id,
+                    auth_code=ovr_auth.auth_code,
+                    retrieval_reference_number=ovr_auth.retrieval_reference_number,
+                    amount_cents=-3500,
+                    description="Overdraft Fee",
+                    posted_at=ovr_posted_at,
+                )
+            )
+            cleared_balance_cents += 3500
 
         meta_path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "seeding_metadata.json")
         if os.path.exists(meta_path):
@@ -712,22 +733,49 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
 
             rrn = f"REF_{str(user_uuid)[:5]}_{i:02d}"
             
-            auth_res = process_authorization(db, {
-                "card_token": card_token,
-                "amount_cents": amount_cents,
-                "retrieval_reference_number": rrn,
-                "merchant_category_code": mcc_val,
-                "merchant_name": store_desc,
-                "card_network": "VISA",
-                "created_at": posted_date - datetime.timedelta(hours=2)
-            })
-            if auth_res.get("action_code") == "00" and not is_pending:
-                process_settlement(db, {
-                    "retrieval_reference_number": rrn,
-                    "amount_cents": amount_cents,
-                    "description": store_desc,
-                    "posted_at": posted_date
-                })
+            created_at = posted_date - datetime.timedelta(hours=2)
+            auth = TransactionAuthorization(
+                id=uuid.uuid4(),
+                card_id=card.id,
+                account_id=cred_acc.id,
+                transaction_amount_cents=amount_cents,
+                billing_amount_cents=amount_cents,
+                status="PENDING" if is_pending else "SETTLED",
+                decline_reason="NONE",
+                auth_code=_seed_auth_code(),
+                retrieval_reference_number=rrn,
+                card_network="VISA",
+                merchant_category_code=mcc_val,
+                merchant_name=store_desc,
+                fraud_risk_score=0,
+                created_at=created_at,
+                expires_at=created_at + datetime.timedelta(days=7),
+            )
+            db.add(auth)
+
+            if is_pending:
+                pending_balance_cents += amount_cents
+                continue
+
+            db.add(
+                PostedTransaction(
+                    id=uuid.uuid4(),
+                    account_id=cred_acc.id,
+                    authorization_id=auth.id,
+                    auth_code=auth.auth_code,
+                    retrieval_reference_number=rrn,
+                    amount_cents=-amount_cents,
+                    description=store_desc,
+                    posted_at=posted_date,
+                )
+            )
+            cleared_balance_cents += amount_cents
+
+        cred_acc.cleared_balance_cents = cleared_balance_cents
+        cred_acc.available_credit_cents = max(
+            0,
+            cred_acc.credit_limit_cents - cleared_balance_cents - pending_balance_cents,
+        )
 
 
 def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str, Any]:

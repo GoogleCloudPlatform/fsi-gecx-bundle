@@ -117,7 +117,13 @@ function AdminDashboardView() {
     setNotice({ type: '', text: '' });
     try {
       const res = await resetDatabase(purgeAuditLogs, purgeDataLake);
-      setNotice({ type: 'success', text: res.message || 'Database successfully reset and re-seeded!' });
+      const warningText = Array.isArray(res.warnings) && res.warnings.length > 0
+        ? ` Warnings: ${res.warnings.join(' ')}`
+        : '';
+      setNotice({
+        type: res.status === 'PARTIAL_SUCCESS' ? 'warning' : 'success',
+        text: `${res.message || 'Database successfully reset and re-seeded!'}${warningText}`,
+      });
       setTimeout(() => setNotice({ type: '', text: '' }), 5000);
     } catch (err) {
       setNotice({ type: 'error', text: err.response?.data?.detail || 'Failed to reset database.' });
@@ -470,6 +476,8 @@ function AdminDashboardView() {
         <div className={`mt-4 p-4 rounded-2xl border flex items-center gap-3 text-xs font-semibold animate-fade-in ${
           notice.type === 'success'
             ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/30 text-emerald-700 dark:text-emerald-400'
+            : notice.type === 'warning'
+            ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/30 text-amber-700 dark:text-amber-400'
             : 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/30 text-rose-700 dark:text-rose-400'
         }`}>
           {notice.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}

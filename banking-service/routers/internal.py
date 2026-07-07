@@ -24,10 +24,22 @@ from pydantic import BaseModel, Field
 from utils.auth import verify_eventarc_oidc_token
 from utils.lazy_clients import LazyClient
 from utils.maintenance import maintenance_window
+from utils.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 bq_client = LazyClient(bigquery.Client)
 router = APIRouter(prefix="/internal", tags=["internal"])
+
+
+def clear_operational_transaction_stream() -> None:
+    redis_client = get_redis_client()
+    if not redis_client:
+        return
+
+    try:
+        redis_client.delete("recent_transactions")
+    except Exception as exc:
+        logger.warning("Could not clear Redis recent transaction buffer during reset: %s", exc)
 
 class EventarcPayload(BaseModel):
     name: str = Field(..., description="GCS object name.")
@@ -165,6 +177,7 @@ def reset_database(purge_audit_logs: bool = False, purge_data_lake: bool = False
     from models.audit import AuditOutbox
     
     db = SessionLocal()
+    warnings: list[str] = []
     try:
         db.connection().info["_ignore_rbac"] = True
 
@@ -175,9 +188,11 @@ def reset_database(purge_audit_logs: bool = False, purge_data_lake: bool = False
             drain_seconds=2.0,
         ):
             logger.info("Maintenance mode enabled for admin database reset.")
+            clear_operational_transaction_stream()
 
             # Seed and clean databases using the Seeding Service
             perform_algorithmic_seeding(db)
+            clear_operational_transaction_stream()
 
             if purge_audit_logs:
                 db.query(AuditOutbox).delete()
@@ -189,6 +204,7 @@ def reset_database(purge_audit_logs: bool = False, purge_data_lake: bool = False
                     logger.info("Purged BigQuery compliance_audit tables.")
                 except Exception as bq_ex:
                     logger.warning(f"Could not purge BigQuery audit logs: {bq_ex}")
+                    warnings.append(f"BigQuery audit purge skipped: {bq_ex}")
 
             if purge_data_lake:
                 logger.info("Purging BigLake Apache Iceberg catalog tables...")
@@ -199,6 +215,7 @@ def reset_database(purge_audit_logs: bool = False, purge_data_lake: bool = False
                     logger.info("Purged BigLake Apache Iceberg catalog tables.")
                 except Exception as lake_ex:
                     logger.warning(f"Could not purge BigLake Iceberg tables: {lake_ex}")
+                    warnings.append(f"BigLake purge skipped: {lake_ex}")
 
             db.commit()
         msg = "Database reset and re-seeded successfully."
@@ -206,7 +223,11 @@ def reset_database(purge_audit_logs: bool = False, purge_data_lake: bool = False
             msg += " (Audit logs purged)"
         if purge_data_lake:
             msg += " (Data Lake purged)"
-        return {"status": "SUCCESS", "message": msg}
+        return {
+            "status": "SUCCESS" if not warnings else "PARTIAL_SUCCESS",
+            "message": msg if not warnings else f"{msg} Completed with warnings.",
+            "warnings": warnings,
+        }
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to reset database: {e}")
