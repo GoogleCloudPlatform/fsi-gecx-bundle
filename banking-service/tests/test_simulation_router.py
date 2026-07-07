@@ -15,6 +15,7 @@
 import pytest
 import respx
 import httpx
+from unittest.mock import patch
 from fastapi import status
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy import create_engine
@@ -260,7 +261,42 @@ async def test_inject_late_fee_and_global_stream(async_client, db_session):
     assert resp_fee.json()["amount_cents"] == 3500
     
     # Check global stream
-    resp_stream = await async_client.get("/api/v1/simulation/global-stream")
+    mocked_stream = {
+        "status": "SUCCESS",
+        "stream": [
+            {
+                "id": "AUTH_fee_001",
+                "rrn": "FEE_0376d_57",
+                "timestamp": "12:00:00",
+                "merchant_name": "LATE_FEE",
+                "amount_cents": 3500,
+                "status": "HOLD (PENDING)",
+                "bq_view": "fsi_lakehouse.v_realtime_spend_velocity",
+                "raw_time": 1_720_000_000.0,
+            }
+        ],
+    }
+    mocked_metrics = {
+        "events_per_minute": 1,
+        "authorization_events_per_minute": 1,
+        "posted_events_per_minute": 0,
+        "flagged_events_per_minute": 0,
+        "latest_event_age_ms": 250,
+        "latest_event_timestamp": "2026-07-06T12:00:00+00:00",
+        "recent_buffered_events": 1,
+    }
+    mocked_cdc_metrics = {
+        "system_lag_ms": 0,
+        "data_freshness_ms": 0,
+        "total_bytes_processed": 0,
+        "active_anomalies": 0,
+        "status": "SUCCESS",
+    }
+
+    with patch("routers.simulation.CdcMonitoringService.get_operational_stream", return_value=mocked_stream), \
+         patch("routers.simulation.CdcMonitoringService.get_operational_stream_metrics", return_value=mocked_metrics), \
+         patch("routers.simulation.CdcMonitoringService.get_cached_datastream_metrics", return_value=mocked_cdc_metrics):
+        resp_stream = await async_client.get("/api/v1/simulation/global-stream")
     assert resp_stream.status_code == status.HTTP_200_OK
     data = resp_stream.json()
     assert data["status"] == "SUCCESS"

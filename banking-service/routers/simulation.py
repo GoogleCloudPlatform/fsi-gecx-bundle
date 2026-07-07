@@ -29,7 +29,7 @@ from utils.database import get_db
 from services.seeding_service import provision_user_suite, reset_user_suite
 from services.cdc_monitoring import CdcMonitoringService
 from models.identity import User
-from models.credit_card import IssuedCard, CreditAccount, TransactionAuthorization, PostedTransaction
+from models.credit_card import IssuedCard, CreditAccount, TransactionAuthorization
 from utils.audit import record_audit_event
 
 logger = logging.getLogger(__name__)
@@ -356,15 +356,12 @@ def get_global_stream(
     Returns a global real-time stream of recent card authorizations and settlements
     to animate the Admin Simulation Lakehouse CDC replication monitor.
     """
-    from utils.redis_client import get_redis_client
-    import json
-    r = get_redis_client()
-    if r:
-        recent_strs = r.lrange("recent_transactions", 0, 19)
-        stream_items = [json.loads(s) for s in recent_strs]
-    else:
-        stream_items = []
-    return {"status": "SUCCESS", "stream": stream_items}
+    service = CdcMonitoringService(db)
+    return {
+        **service.get_operational_stream(limit=20),
+        "stream_metrics": service.get_operational_stream_metrics(),
+        "cdc_metrics": service.get_cached_datastream_metrics(),
+    }
 
 
 @router.get("/cdc-status", status_code=status.HTTP_200_OK)
@@ -395,39 +392,63 @@ async def stream_sse(
     """
     async def event_generator():
         from utils.redis_client import get_redis_client
-        import json
-        
+
         cdc_service = CdcMonitoringService(db)
-        r = get_redis_client()
-        pubsub = r.pubsub() if r else None
+        redis_client = get_redis_client()
+        pubsub = redis_client.pubsub() if redis_client else None
+        last_heartbeat = 0.0
+
+        def build_payload(kind: str) -> str:
+            return json.dumps(
+                {
+                    "status": "SUCCESS",
+                    "event_kind": kind,
+                    "operational_stream": cdc_service.get_operational_stream(limit=20)["stream"],
+                    "stream_metrics": cdc_service.get_operational_stream_metrics(),
+                    "cdc_metrics": cdc_service.get_cached_datastream_metrics(),
+                    "cdc_status": cdc_service.get_cdc_status(),
+                }
+            )
+
         if pubsub:
             pubsub.subscribe("channel:transactions:live")
-            
-        while True:
-            try:
-                # Drain any immediate events to clear the buffer
-                if pubsub:
-                    while pubsub.get_message(ignore_subscribe_messages=True):
-                        pass
 
-                if r:
-                    recent_strs = r.lrange("recent_transactions", 0, 19)
-                    stream_items = [json.loads(s) for s in recent_strs]
-                else:
-                    # Fallback if Redis is down
-                    stream_items = []
-                
-                metrics = cdc_service.get_cached_datastream_metrics()
-                
-                payload = json.dumps({
-                    "status": "SUCCESS", 
-                    "operational_stream": stream_items,
-                    "cdc_metrics": metrics
-                })
-                yield f"data: {payload}\n\n"
-            except Exception as e:
-                logger.error(f"Error generating SSE stream: {e}")
-            await asyncio.sleep(1.5)
+        try:
+            yield f"data: {build_payload('snapshot')}\n\n"
+            last_heartbeat = asyncio.get_running_loop().time()
+
+            while True:
+                try:
+                    message = None
+                    if pubsub:
+                        message = await asyncio.to_thread(
+                            pubsub.get_message,
+                            ignore_subscribe_messages=True,
+                            timeout=5.0,
+                        )
+
+                    now = asyncio.get_running_loop().time()
+                    if message and message.get("data"):
+                        yield f"data: {build_payload('event')}\n\n"
+                        last_heartbeat = now
+                        continue
+
+                    if now - last_heartbeat >= 10:
+                        yield f"data: {build_payload('heartbeat')}\n\n"
+                        last_heartbeat = now
+
+                    if not pubsub:
+                        await asyncio.sleep(1)
+                except Exception as exc:
+                    logger.error(f"Error generating SSE stream: {exc}")
+                    await asyncio.sleep(2)
+        finally:
+            if pubsub:
+                try:
+                    pubsub.unsubscribe("channel:transactions:live")
+                    pubsub.close()
+                except Exception:
+                    pass
 
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache",

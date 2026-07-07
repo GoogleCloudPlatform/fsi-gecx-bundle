@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
-from fastapi.testclient import TestClient
-import respx
 import httpx
+import pytest
+import respx
+from fastapi.testclient import TestClient
 
+import main
 from main import app, BANKING_SERVICE_URL, CARD_NETWORK_TOKEN
 
 client = TestClient(app)
@@ -29,6 +30,11 @@ def test_health():
 @pytest.mark.asyncio
 @respx.mock
 async def test_simulate_pulse_success():
+    original_plan_builder = main.build_randomized_pulse_plan
+    original_randint = main.random.randint
+    main.build_randomized_pulse_plan = lambda total_events, window_seconds=58: [0.0, 0.0, 0.0, 0.0]
+    main.random.randint = lambda a, b: 4 if (a, b) == (18, 36) else original_randint(a, b)
+
     # Mock Gateway Endpoints
     auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
         return_value=httpx.Response(200, json={"action_code": "00", "auth_code": "123456", "status": "PENDING"})
@@ -41,11 +47,17 @@ async def test_simulate_pulse_success():
     )
     
     # Trigger simulation pulse
-    response = client.post("/simulate-pulse")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "SUCCESS"
-    assert 3 <= data["swipes_attempted"] <= 5
+    try:
+        response = client.post("/simulate-pulse")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "SUCCESS"
+        assert data["swipes_attempted"] == 4
+        assert data["scheduled_events"] == 4
+        assert data["distribution_window_seconds"] == 58
+    finally:
+        main.build_randomized_pulse_plan = original_plan_builder
+        main.random.randint = original_randint
     
     # Assert auth requests were sent with the correct headers
     assert auth_route.called
@@ -59,6 +71,11 @@ async def test_simulate_pulse_success():
 @pytest.mark.asyncio
 @respx.mock
 async def test_simulate_pulse_declined():
+    original_plan_builder = main.build_randomized_pulse_plan
+    original_randint = main.random.randint
+    main.build_randomized_pulse_plan = lambda total_events, window_seconds=58: [0.0, 0.0, 0.0, 0.0]
+    main.random.randint = lambda a, b: 4 if (a, b) == (18, 36) else original_randint(a, b)
+
     # Mock Gateway declines swipes (action_code = 51)
     auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
         return_value=httpx.Response(200, json={"action_code": "51", "auth_code": "000000", "status": "DECLINED", "decline_reason": "INSUFFICIENT_FUNDS"})
@@ -67,12 +84,16 @@ async def test_simulate_pulse_declined():
         return_value=httpx.Response(200, json={"status": "SETTLED"})
     )
     
-    response = client.post("/simulate-pulse")
-    assert response.status_code == 502
-    
-    # Assert auth was called, but settle was NOT called since it was declined
-    assert auth_route.called
-    assert not settle_route.called
+    try:
+        response = client.post("/simulate-pulse")
+        assert response.status_code == 502
+
+        # Assert auth was called, but settle was NOT called since it was declined
+        assert auth_route.called
+        assert not settle_route.called
+    finally:
+        main.build_randomized_pulse_plan = original_plan_builder
+        main.random.randint = original_randint
 
 @respx.mock
 def test_simulate_surge_success():

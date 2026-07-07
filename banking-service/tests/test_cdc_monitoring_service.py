@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import datetime
+from unittest.mock import patch
 
 from services.cdc_monitoring import CdcMonitoringService
 
@@ -91,3 +92,25 @@ def test_lakehouse_stream_normalizes_rows():
     assert result["status"] == "SUCCESS"
     assert result["stream"][0]["timestamp"] == "12:00:00"
     assert result["stream"][0]["bq_view"] == "lakehouse.transaction_authorization"
+
+
+def test_operational_stream_metrics_derive_event_rate():
+    service = CdcMonitoringService(FakeSession(), FakeLakehouseRepository())
+    now = datetime.datetime(2026, 7, 6, 12, 0, 0, tzinfo=datetime.timezone.utc).timestamp()
+
+    with patch.object(
+        service,
+        "_get_recent_operational_events",
+        return_value=[
+            {"status": "HOLD (PENDING)", "raw_time": now - 4},
+            {"status": "SETTLE (POSTED)", "raw_time": now - 2},
+            {"status": "FLAGGED (RISK 30)", "raw_time": now - 1},
+        ],
+    ), patch("services.cdc_monitoring.time.time", return_value=now):
+        result = service.get_operational_stream_metrics()
+
+    assert result["events_per_minute"] == 3
+    assert result["authorization_events_per_minute"] == 2
+    assert result["posted_events_per_minute"] == 1
+    assert result["flagged_events_per_minute"] == 1
+    assert result["latest_event_age_ms"] == 1000

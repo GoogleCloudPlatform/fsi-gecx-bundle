@@ -46,6 +46,26 @@ api.interceptors.request.use(
   }
 );
 
+export function getBackendApiUrl() {
+  return backendUrl;
+}
+
+export async function getBackendAuthHeaders(initialHeaders = {}) {
+  const headers = { ...initialHeaders };
+  if (window.firebaseAuth && typeof window.firebaseAuth.getCurrentUser === 'function') {
+    const user = window.firebaseAuth.getCurrentUser();
+    if (user) {
+      try {
+        const token = await user.getIdToken();
+        headers.Authorization = `Bearer ${token}`;
+      } catch (error) {
+        console.error('Error getting Firebase ID token:', error);
+      }
+    }
+  }
+  return headers;
+}
+
 // ---------------- API Operations ----------------
 
 // Profile

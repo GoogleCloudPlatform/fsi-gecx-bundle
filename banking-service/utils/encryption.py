@@ -31,12 +31,24 @@ KMS_KEY_NAME = os.getenv(
 
 # Mock KEK for local testing when KMS is unreachable or disabled
 _MOCK_LOCAL_KEK = b"0123456789abcdef0123456789abcdef"
+_kms_client = None
+_kms_client_initialized = False
 
-try:
-    _kms_client = kms.KeyManagementServiceClient()
-except Exception as e:
-    logger.warning(f"Could not initialize KeyManagementServiceClient: {e}")
-    _kms_client = None
+
+def get_kms_client():
+    global _kms_client
+    global _kms_client_initialized
+
+    if _kms_client_initialized:
+        return _kms_client
+
+    _kms_client_initialized = True
+    try:
+        _kms_client = kms.KeyManagementServiceClient()
+    except Exception as e:
+        logger.warning(f"Could not initialize KeyManagementServiceClient: {e}")
+        _kms_client = None
+    return _kms_client
 
 
 def zeroize(buffer: bytearray) -> None:
@@ -54,9 +66,10 @@ def generate_dek() -> bytearray:
 def wrap_dek(dek: bytes | bytearray, kek_name: str | None = None, mock_kek: bytes | None = None) -> bytes:
     """Wraps (encrypts) the ephemeral DEK using Google Cloud KMS KEK."""
     key_to_use = kek_name or KMS_KEY_NAME
-    if _kms_client and os.getenv("USE_REAL_KMS") == "true" and not mock_kek:
+    kms_client = get_kms_client() if os.getenv("USE_REAL_KMS") == "true" and not mock_kek else None
+    if kms_client:
         try:
-            response = _kms_client.encrypt(
+            response = kms_client.encrypt(
                 request={"name": key_to_use, "plaintext": bytes(dek)}
             )
             return response.ciphertext
@@ -74,9 +87,10 @@ def wrap_dek(dek: bytes | bytearray, kek_name: str | None = None, mock_kek: byte
 def unwrap_dek(wrapped_dek: bytes, kek_name: str | None = None, mock_kek: bytes | None = None) -> bytearray:
     """Unwraps (decrypts) the wrapped DEK using Google Cloud KMS KEK."""
     key_to_use = kek_name or KMS_KEY_NAME
-    if _kms_client and os.getenv("USE_REAL_KMS") == "true" and not mock_kek:
+    kms_client = get_kms_client() if os.getenv("USE_REAL_KMS") == "true" and not mock_kek else None
+    if kms_client:
         try:
-            response = _kms_client.decrypt(
+            response = kms_client.decrypt(
                 request={"name": key_to_use, "ciphertext": wrapped_dek}
             )
             return bytearray(response.plaintext)
