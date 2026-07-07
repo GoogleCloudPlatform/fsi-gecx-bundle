@@ -17,7 +17,7 @@ import json
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from utils.database import Base
-from services.seeding_service import perform_algorithmic_seeding
+from services.seeding_service import perform_algorithmic_seeding, provision_user_suite
 from models.identity import User, UserAddress
 from models.kyc import KYCRecord, UserCreditProfile
 from models.origination import Account
@@ -67,3 +67,24 @@ def test_perform_algorithmic_seeding_success(db_session):
     loaded_manifest = json.loads(setting.value)
     assert loaded_manifest["marcus"]["cardholder_name"] == "Marcus Vance"
     assert loaded_manifest["jane"]["token"] == "tok_visa_jane_doe"
+
+
+def test_perform_algorithmic_seeding_can_reset_existing_card_data(db_session):
+    first_manifest = perform_algorithmic_seeding(db_session)
+    second_manifest = perform_algorithmic_seeding(db_session)
+
+    assert len(first_manifest) >= 19
+    assert len(second_manifest) >= 19
+    assert db_session.query(User).count() >= 19
+    assert db_session.query(IssuedCard).count() >= 19
+
+
+def test_provision_user_suite_generates_unique_card_tokens_for_same_name(db_session):
+    first = provision_user_suite(db_session, "erikvoit@google.com", "uid-erik-one")
+    second = provision_user_suite(db_session, "erikvoit@gcp.solutions", "uid-erik-two")
+
+    assert first["first_name"] == "Erikvoit"
+    assert second["first_name"] == "Erikvoit"
+    assert first["card_token"].startswith("tok_visa_")
+    assert second["card_token"].startswith("tok_visa_")
+    assert first["card_token"] != second["card_token"]

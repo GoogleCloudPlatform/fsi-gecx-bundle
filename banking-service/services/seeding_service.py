@@ -21,8 +21,6 @@ import json
 from typing import Dict, Any
 from sqlalchemy.orm import Session
 
-RESOURCE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "data")
-
 from utils.database import SessionLocal
 from utils.encryption import encrypt_pii
 from utils.audit import record_audit_event
@@ -40,8 +38,12 @@ from services.merchant_service import MerchantEnrichmentService
 from services.card_network import process_authorization, process_settlement
 
 logger = logging.getLogger(__name__)
+RESOURCE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "data")
 
-import os
+
+def _generate_demo_card_token() -> str:
+    """Return an opaque token for demo cards without presenter-name collisions."""
+    return f"tok_visa_{uuid.uuid4().hex[:24]}"
 
 def get_base_personas():
     path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "static_personas.json")
@@ -238,26 +240,31 @@ def clean_database(db: Session) -> None:
     from models.support import Escalation
     from models.origination import Application, MortgageApplication, CreditCardApplication, DepositApplication, ApplicationArtifact
 
-    db.query(Escalation).delete()
-    db.query(PostedTransaction).delete()
-    db.query(TransactionAuthorization).delete()
-    db.query(IssuedCard).delete()
-    db.query(CreditAccount).delete()
-    
-    db.query(AccountLedgerEntry).delete()
-    db.query(Transaction).delete()
-    db.query(Account).delete()
-    
-    db.query(ApplicationArtifact).delete()
-    db.query(MortgageApplication).delete()
-    db.query(CreditCardApplication).delete()
-    db.query(DepositApplication).delete()
-    db.query(Application).delete()
-    
-    db.query(UserCreditProfile).delete()
-    db.query(KYCRecord).delete()
-    db.query(User).delete()
-    
+    db.query(Escalation).delete(synchronize_session=False)
+
+    db.query(PostedTransaction).delete(synchronize_session=False)
+    db.query(TransactionAuthorization).delete(synchronize_session=False)
+    db.flush()
+
+    db.query(IssuedCard).delete(synchronize_session=False)
+    db.flush()
+    db.query(CreditAccount).delete(synchronize_session=False)
+
+    db.query(AccountLedgerEntry).delete(synchronize_session=False)
+    db.query(Transaction).delete(synchronize_session=False)
+    db.query(Account).delete(synchronize_session=False)
+
+    db.query(ApplicationArtifact).delete(synchronize_session=False)
+    db.query(MortgageApplication).delete(synchronize_session=False)
+    db.query(CreditCardApplication).delete(synchronize_session=False)
+    db.query(DepositApplication).delete(synchronize_session=False)
+    db.query(Application).delete(synchronize_session=False)
+
+    db.query(UserCreditProfile).delete(synchronize_session=False)
+    db.query(KYCRecord).delete(synchronize_session=False)
+    db.query(UserAddress).delete(synchronize_session=False)
+    db.query(User).delete(synchronize_session=False)
+
     db.flush()
 
 def seed_catalogs_if_missing(db: Session) -> None:
@@ -640,10 +647,8 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
         is_googler = user_obj and ("GOOGLE" in str(user_obj.email).upper() or "PRESENTER" in str(user_obj.last_name).upper() or "NOVA.HORIZON" in str(user_obj.email).upper())
         if is_googler:
             user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA"])
-            user_travel_country = "MEX"
         else:
             user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA", "ATLANTA GA", "MIAMI FL"])
-            user_travel_country = None
 
         if not is_googler:
             ovr_rrn = f"OVR_{str(user_uuid)[:8]}"
@@ -665,10 +670,9 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
                 })
 
         meta_path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "seeding_metadata.json")
-        mex_charges = []
         if os.path.exists(meta_path):
             with open(meta_path, "r", encoding="utf-8") as f:
-                mex_charges = json.load(f).get("mexico_travel_charges", [])
+                json.load(f).get("mexico_travel_charges", [])
 
         for i in range(12):
             is_pending = (i >= 10)
@@ -918,7 +922,7 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
         # 8. Issue Card
         card_id = uuid.uuid4()
         card_num = generate_luhn_card_number(prefix="4111", length=16)
-        card_token = f"tok_visa_{first_name.lower()}_{last_name.lower()}"
+        card_token = _generate_demo_card_token()
         cvv = str(random.randint(100, 999))
         exp_month = datetime.datetime.now(datetime.timezone.utc).month
         exp_year = datetime.datetime.now(datetime.timezone.utc).year + 3
@@ -979,21 +983,27 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
     else:
         db.bind._ignore_rbac = True
 
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise ValueError(f"User {user_id} was not found.")
+
     # 1. Fetch all checking/savings accounts belonging to user
     accounts = db.query(Account).filter(Account.user_id == user_id).all()
+    checking_acc = None
+    savings_acc = None
     for acc in accounts:
-        db.query(AccountLedgerEntry).filter(AccountLedgerEntry.account_id == acc.id).delete()
+        db.query(AccountLedgerEntry).filter(AccountLedgerEntry.account_id == acc.id).delete(synchronize_session=False)
         if acc.account_type == "CHECKING":
-            user = db.query(User).filter(User.id == user_id).first()
-            if user and user.email == "erikvoit@google.com":
+            checking_acc = acc
+            if user.email == "erikvoit@google.com":
                 acc.cleared_balance_cents = 4500000
-            elif user and user.email == "mservedio@google.com":
+            elif user.email == "mservedio@google.com":
                 acc.cleared_balance_cents = 6000000
             else:
                 acc.cleared_balance_cents = 1000000
         elif acc.account_type == "SAVINGS":
-            user = db.query(User).filter(User.id == user_id).first()
-            if user and user.email == "erikvoit@google.com":
+            savings_acc = acc
+            if user.email == "erikvoit@google.com":
                 acc.cleared_balance_cents = 15000000
             else:
                 acc.cleared_balance_cents = 2000000
@@ -1005,9 +1015,11 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
     cred_acc = credit_accounts[0] if credit_accounts else None
     card = db.query(IssuedCard).filter(IssuedCard.account_id == cred_acc.id).first() if cred_acc else None
     
-    user = db.query(User).filter(User.id == user_id).first()
-    checking_acc = db.query(Account).filter(Account.user_id == user_id, Account.account_type == "CHECKING").first()
-    savings_acc = db.query(Account).filter(Account.user_id == user_id, Account.account_type == "SAVINGS").first()
+    if not checking_acc or not savings_acc or not cred_acc or not card:
+        raise ValueError(
+            f"Demo suite is incomplete for user {user_id}. "
+            "Expected checking, savings, credit account, and active card."
+        )
     
     _seed_user_transactions(
         db, 
@@ -1016,8 +1028,8 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
         savings_acc=savings_acc, 
         cred_acc=cred_acc, 
         card=card, 
-        first_name=user.first_name if user else "Erik", 
-        last_name=user.last_name if user else "Vance"
+        first_name=user.first_name,
+        last_name=user.last_name
     )
         
     db.commit()

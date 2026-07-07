@@ -211,7 +211,7 @@ async def test_simulate_surge_success(async_client, db_session):
     data = httpx.Response(200, content=payload).json()
     assert "active_cards" in data
     assert len(data["active_cards"]) >= 1
-    assert data["active_cards"][0]["card_token"].startswith("tok_visa_presenter")
+    assert data["active_cards"][0]["card_token"].startswith("tok_visa_")
 
 @pytest.mark.asyncio
 async def test_inject_anomaly_success(async_client, db_session):
