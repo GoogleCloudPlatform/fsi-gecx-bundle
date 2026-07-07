@@ -38,6 +38,39 @@ class User(Base):
     # Relationships
     devices = relationship("UserDevice", back_populates="user", cascade="all, delete-orphan")
     secure_messages = relationship("UserSecureMessage", back_populates="user", cascade="all, delete-orphan")
+    addresses = relationship("UserAddress", back_populates="user", cascade="all, delete-orphan")
+
+
+class UserAddress(Base):
+    """
+    3NF Normalized Address table inside the identity schema.
+    Supports residential, mailing, work, and historical address tracking.
+    """
+    __tablename__ = "user_addresses"
+    __table_args__ = (
+        Index("idx_user_addresses_user_id", "user_id"),
+        {'schema': 'identity'},
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="CASCADE"), nullable=False)
+    
+    address_type = Column(String(50), nullable=False)  # 'RESIDENTIAL', 'MAILING', 'BILLING', 'WORK', 'PREVIOUS'
+    is_primary = Column(Boolean, default=False, nullable=False)
+    
+    street_line_1 = Column(String(255), nullable=False)
+    street_line_2 = Column(String(255), nullable=True)
+    city = Column(String(100), nullable=False, index=True)
+    state = Column(String(50), nullable=False)
+    postal_code = Column(String(20), nullable=False)
+    country_code = Column(String(3), default="USA", nullable=False)
+    
+    verified_by_doc_ai = Column(Boolean, default=False, nullable=False)
+    
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    # Relationships
+    user = relationship("User", back_populates="addresses")
 
 
 class UserDevice(Base):

@@ -30,6 +30,8 @@ import models.identity  # noqa: E402, F401
 import models.origination  # noqa: E402, F401
 import models.audit  # noqa: E402, F401
 import models.kyc  # noqa: E402, F401
+import models.reference  # noqa: E402, F401
+import models.merchant  # noqa: E402, F401
 
 # Set target metadata for alembic schema scanning
 target_metadata = Base.metadata
@@ -117,6 +119,9 @@ def run_migrations_offline() -> None:
             context.execute("CREATE SCHEMA IF NOT EXISTS origination;")
             context.execute("CREATE SCHEMA IF NOT EXISTS audit;")
             context.execute("CREATE SCHEMA IF NOT EXISTS admin;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS catalog;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS ref_data;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS merchants;")
         context.run_migrations()
 
 
@@ -144,6 +149,9 @@ def run_migrations_online() -> None:
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS origination;"))
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS audit;"))
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS admin;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS catalog;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS ref_data;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS merchants;"))
             connection.execute(sa.text("ALTER TABLE IF EXISTS public.alembic_version SET SCHEMA admin;"))
             connection.commit()
 
@@ -172,13 +180,17 @@ def run_migrations_online() -> None:
                 except Exception:
                     project_id = os.getenv("PROJECT_ID")
 
-                schemas = ["identity", "kyc", "ledger", "cards", "operations", "origination", "audit", "admin"]
+                schemas = ["identity", "kyc", "ledger", "cards", "operations", "origination", "audit", "admin", "catalog", "ref_data", "merchants"]
                 sa_names = ["banking-service-sa", "kyc-service-sa", "ledger-service-sa"]
                 roles = [f"{sa}@{project_id}.iam" if project_id and str(project_id) != "None" else sa for sa in sa_names]
                 if os.getenv("IAM_DBA_USERS"):
                     roles.extend([u.strip() for u in os.getenv("IAM_DBA_USERS").split(",") if u.strip()])
 
-                for role in roles:
+                viewer_roles = []
+                if os.getenv("IAM_DB_VIEWER_USERS"):
+                    viewer_roles.extend([u.strip() for u in os.getenv("IAM_DB_VIEWER_USERS").split(",") if u.strip()])
+
+                for role in roles + viewer_roles:
                     try:
                         with connection.begin_nested():
                             stmt = f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = \'{role}\') THEN CREATE ROLE "{role}" NOLOGIN; END IF; END $$;'
@@ -188,11 +200,11 @@ def run_migrations_online() -> None:
 
                 for role in roles:
                     if role.startswith("kyc-service-sa"):
-                        allowed_schemas = ["kyc", "identity"]
+                        allowed_schemas = ["kyc", "identity", "ref_data", "merchants"]
                     elif role.startswith("ledger-service-sa"):
-                        allowed_schemas = ["ledger", "audit"]
+                        allowed_schemas = ["ledger", "audit", "catalog", "ref_data", "merchants"]
                     elif role.startswith("banking-service-sa"):
-                        allowed_schemas = ["identity", "cards", "operations", "origination", "audit", "admin"]
+                        allowed_schemas = ["identity", "cards", "operations", "origination", "audit", "admin", "catalog", "ref_data", "merchants"]
                     else:
                         allowed_schemas = schemas
 
@@ -204,6 +216,16 @@ def run_migrations_online() -> None:
                                 connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{role}";'))
                         except Exception as grant_err:
                             logger.debug(f"Notice: Could not grant permissions on {s} to {role}: {grant_err}")
+
+                for role in viewer_roles:
+                    for s in schemas:
+                        try:
+                            with connection.begin_nested():
+                                connection.execute(sa.text(f'GRANT USAGE ON SCHEMA {s} TO "{role}";'))
+                                connection.execute(sa.text(f'GRANT SELECT ON ALL TABLES IN SCHEMA {s} TO "{role}";'))
+                                connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT ON TABLES TO "{role}";'))
+                        except Exception as grant_err:
+                            logger.debug(f"Notice: Could not grant viewer permissions on {s} to {role}: {grant_err}")
 
                     if "ledger" in allowed_schemas:
                         try:

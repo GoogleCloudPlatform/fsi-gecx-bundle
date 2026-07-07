@@ -1,0 +1,46 @@
+[
+  {
+    "product_code": "PLATINUM_TRAVEL_REWARDS",
+    "product_name": "Nova Platinum Travel",
+    "min_credit_limit_cents": 1500000,
+    "max_credit_limit_cents": 10000000,
+    "purchase_apr": 0.1899,
+    "cashback_rate": 0.0000,
+    "travel_multiplier": 3,
+    "dining_multiplier": 3,
+    "annual_fee_cents": 9500
+  },
+  {
+    "product_code": "CASHBACK_EVERYDAY",
+    "product_name": "Nova Cashback Everyday",
+    "min_credit_limit_cents": 300000,
+    "max_credit_limit_cents": 1500000,
+    "purchase_apr": 0.2199,
+    "cashback_rate": 0.0150,
+    "travel_multiplier": 1,
+    "dining_multiplier": 1,
+    "annual_fee_cents": 0
+  },
+  {
+    "product_code": "BUSINESS_ADVANTAGE",
+    "product_name": "Executive Business Advantage",
+    "min_credit_limit_cents": 2000000,
+    "max_credit_limit_cents": 15000000,
+    "purchase_apr": 0.1799,
+    "cashback_rate": 0.0200,
+    "travel_multiplier": 2,
+    "dining_multiplier": 2,
+    "annual_fee_cents": 0
+  },
+  {
+    "product_code": "SECURED_STARTER",
+    "product_name": "Nova Secured Starter",
+    "min_credit_limit_cents": 50000,
+    "max_credit_limit_cents": 250000,
+    "purchase_apr": 0.2799,
+    "cashback_rate": 0.0100,
+    "travel_multiplier": 1,
+    "dining_multiplier": 1,
+    "annual_fee_cents": 0
+  }
+]

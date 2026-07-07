@@ -35,14 +35,18 @@ from routers.health import router as health_router
 from routers.search import router as search_router
 from routers.secure_messaging import router as secure_messaging_router
 from routers.underwriting import router as underwriting_router
-from routers.credit_card import router as credit_card_router
+from routers.credit_card import router as credit_card_router, apiv1_router as credit_card_apiv1_router, v1_router as credit_card_v1_router
 from routers.support import router as support_router
 from routers.settings import router as settings_router
 from models.authentication import ValidatedToken
 from utils.auth import get_current_user
+from utils.env import get_cors_origins, is_cloud_run
 from routers.locator import router as locator_router
-from routers.accounts import router as accounts_router, alias_router as accounts_alias_router
+from routers.accounts import router as accounts_router, v1_router as accounts_v1_router, alias_router as accounts_alias_router
 from routers.fdx import router as fdx_router
+from routers.simulation import router as simulation_router, v1_router as simulation_v1_router, alias_router as simulation_alias_router
+from routers.card_network import router as card_network_router, v1_router as card_network_v1_router
+from routers.merchants import router as merchants_router
 
 # Import and register FastMCP tools and ASGI app from the isolated mcp router module
 from routers.mcp import mcp_app
@@ -62,20 +66,43 @@ except Exception as e:
     logging.error(f"Failed to initialize Firebase Admin SDK: {e}")
 
 
-@asynccontextmanager
-async def combined_lifespan(app_inst: FastAPI):
-    logging.info("Executing combined lifespan startup: verifying and seeding database...")
+import asyncio
+
+
+def should_run_startup_seeding() -> bool:
+    configured = os.getenv("ENABLE_STARTUP_DB_SEEDING")
+    if configured is not None:
+        return configured.lower() == "true"
+    return not is_cloud_run()
+
+
+async def run_db_seeding():
+    logging.info("Starting background database verification and seeding...")
     try:
         from utils.database import SessionLocal
-        from services.credit_card import initialize_db_and_seed
+        from services.seeding_service import perform_algorithmic_seeding
         db = SessionLocal()
         try:
-            initialize_db_and_seed(db)
+            # Execute seeding in thread pool to prevent blocking main event loop
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, perform_algorithmic_seeding, db)
+            logging.info("Background database seeding completed successfully.")
         finally:
             db.close()
     except Exception as e:
-        logging.error(f"Error during startup database seeding: {e}")
-    
+        logging.error(f"Error during background database seeding: {e}")
+
+
+@asynccontextmanager
+async def combined_lifespan(app_inst: FastAPI):
+    import sys
+    if "pytest" not in sys.modules and should_run_startup_seeding():
+        logging.info("Scheduling background database seeding task on lifespan startup...")
+        asyncio.create_task(run_db_seeding())
+    elif "pytest" not in sys.modules:
+        logging.info("Startup database seeding disabled for this environment.")
+    else:
+        logging.info("Test environment detected. Skipping background database seeding task.")
     async with mcp_app.lifespan(app_inst):
         yield
 
@@ -100,7 +127,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -124,12 +151,21 @@ app.include_router(search_router)
 app.include_router(secure_messaging_router)
 app.include_router(underwriting_router)
 app.include_router(credit_card_router)
+app.include_router(credit_card_apiv1_router)
+app.include_router(credit_card_v1_router)
+app.include_router(card_network_router)
+app.include_router(card_network_v1_router)
 app.include_router(support_router)
 app.include_router(settings_router)
 app.include_router(voice_bidi_router)
 app.include_router(accounts_router)
+app.include_router(accounts_v1_router)
 app.include_router(accounts_alias_router)
 app.include_router(fdx_router)
+app.include_router(simulation_router)
+app.include_router(simulation_v1_router)
+app.include_router(simulation_alias_router)
+app.include_router(merchants_router)
 
 
 def custom_openapi():

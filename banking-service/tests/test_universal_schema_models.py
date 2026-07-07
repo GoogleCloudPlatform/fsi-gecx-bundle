@@ -38,6 +38,8 @@ def test_db():
             "ATTACH DATABASE 'file:origination_test?mode=memory&cache=shared' AS origination;",
             "ATTACH DATABASE 'file:audit_test?mode=memory&cache=shared' AS audit;",
             "ATTACH DATABASE 'file:admin_test?mode=memory&cache=shared' AS admin;",
+            "ATTACH DATABASE 'file:catalog_test?mode=memory&cache=shared' AS catalog;",
+            "ATTACH DATABASE 'file:ref_data_test?mode=memory&cache=shared' AS ref_data;",
         ]:
             try:
                 cursor.execute(stmt)
@@ -90,6 +92,24 @@ def test_identity_models_creation(test_db):
     test_db.commit()
     test_db.refresh(msg)
     assert msg.message == "Hello support"
+
+    address = identity_models.UserAddress(
+        user_id=user.id,
+        address_type="RESIDENTIAL",
+        is_primary=True,
+        street_line_1="1600 Amphitheatre Pkwy",
+        city="Mountain View",
+        state="CA",
+        postal_code="94043",
+        country_code="USA"
+    )
+    test_db.add(address)
+    test_db.commit()
+    test_db.refresh(address)
+    assert address.user_id == user.id
+    assert address.city == "Mountain View"
+    assert len(user.addresses) == 1
+
 
 
 def test_origination_and_ledger_models(test_db):

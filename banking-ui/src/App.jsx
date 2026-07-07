@@ -42,7 +42,8 @@ import {
   uploadAndValidateArtifact,
   getCxasAuthToken,
   getCustomerProfile,
-  getCcaiAuthToken
+  getCcaiAuthToken,
+  getAccountsSummary
 } from './utils/api.js';
 import GoogleCloudIcon from './components/GoogleCloudIcon.jsx';
 import GcpInfoModal from './components/GcpInfoModal.jsx';
@@ -232,6 +233,26 @@ function AppContent() {
     window.addEventListener('refresh-unread-count', handleRefreshUnread);
     return () => window.removeEventListener('refresh-unread-count', handleRefreshUnread);
   }, [fetchUnreadCount]);
+
+  const [accountsSummary, setAccountsSummary] = useState(null);
+
+  const fetchAccountsSummary = useCallback(async () => {
+    if (!window.firebaseAuth?.getCurrentUser()) return;
+    try {
+      const summary = await getAccountsSummary();
+      setAccountsSummary(summary);
+    } catch (err) {
+      console.error("Failed to load accounts summary for navigation dropdown:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (fbUser) {
+      fetchAccountsSummary();
+    } else {
+      setAccountsSummary(null);
+    }
+  }, [fbUser, location.pathname, fetchAccountsSummary]);
 
   useEffect(() => {
     const handleNotification = (e) => {
@@ -920,6 +941,10 @@ function AppContent() {
 
   const resolvedIconUrl = customLogoUrl || (logoIcon ? `https://unpkg.com/lucide-static@latest/icons/${kebabCase(logoIcon)}.svg` : "/favicon.svg");
 
+  const checkingAccs = accountsSummary?.deposit_accounts?.filter(a => a.account_type === 'CHECKING') || [];
+  const savingsAccs = accountsSummary?.deposit_accounts?.filter(a => a.account_type === 'SAVINGS') || [];
+  const creditAccs = accountsSummary?.credit_accounts || [];
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-[Outfit] antialiased overflow-x-hidden">
       {/* Navigation */}
@@ -948,6 +973,65 @@ function AppContent() {
             
             <div className="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-600 dark:text-slate-300">
               <Link to="/" className={`hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer ${location.pathname === '/' ? 'text-slate-900 dark:text-white font-bold' : ''}`}>Home</Link>
+              
+              {fbUser && (
+                <div className="relative group py-2">
+                  <Link to="/accounts" className={`hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${location.pathname === '/accounts' ? 'text-emerald-600 dark:text-emerald-400 font-bold' : ''}`}>
+                    <span>Accounts</span>
+                    <ChevronDown className="w-3.5 h-3.5 transition-transform duration-300 group-hover:rotate-180" />
+                  </Link>
+
+                  {/* Dropdown panel */}
+                  {accountsSummary && (checkingAccs.length > 0 || savingsAccs.length > 0 || creditAccs.length > 0) && (
+                    <div className="absolute left-0 top-full mt-1 w-64 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 shadow-2xl opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 translate-y-2 group-hover:translate-y-0 z-50">
+                      {checkingAccs.length > 0 && (
+                        <>
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5">Checking</div>
+                          {checkingAccs.map(acc => (
+                            <Link 
+                              key={acc.account_id}
+                              to={`/accounts?id=${acc.account_id}&type=checking`} 
+                              className="w-full text-left px-3 py-2 rounded-xl text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold block truncate"
+                            >
+                              {acc.product_name}
+                            </Link>
+                          ))}
+                        </>
+                      )}
+                      
+                      {savingsAccs.length > 0 && (
+                        <>
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800/60 pt-2">Savings</div>
+                          {savingsAccs.map(acc => (
+                            <Link 
+                              key={acc.account_id}
+                              to={`/accounts?id=${acc.account_id}&type=savings`} 
+                              className="w-full text-left px-3 py-2 rounded-xl text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold block truncate"
+                            >
+                              {acc.product_name}
+                            </Link>
+                          ))}
+                        </>
+                      )}
+
+                      {creditAccs.length > 0 && (
+                        <>
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800/60 pt-2">Credit Cards</div>
+                          {creditAccs.map(acc => (
+                            <Link 
+                              key={acc.account_id}
+                              to={`/accounts?id=${acc.account_id}&type=credit`} 
+                              className="w-full text-left px-3 py-2 rounded-xl text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold block truncate"
+                            >
+                              {acc.product_name || "Nova Everyday Visa"}
+                            </Link>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
               
               {/* Consolidated Products Menu with Mouseover Dropdown */}
               <div className="relative group py-2">
@@ -1055,8 +1139,8 @@ function AppContent() {
 
           {/* Header Search Input centered in middle */}
           {fbUser && (
-            <div className="relative hidden md:block flex-1 max-w-xs mx-6">
-              <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
+            <div className="relative hidden md:block flex-1 max-w-lg mx-6">
+              <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search site..."
@@ -1237,12 +1321,6 @@ function AppContent() {
               </div>
             )}
 
-            <button 
-              className="hidden sm:flex px-5 rounded-full text-slate-950 font-semibold text-sm shadow-lg hover:scale-105 transition-all duration-300 h-9 items-center justify-center"
-              style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 10px 15px -3px ${brandColorFrom}20` }}
-            >
-              Open Account
-            </button>
             <button
               onClick={() => setIsMobileMenuOpen(true)}
               className="md:hidden w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer flex items-center justify-center shrink-0"
@@ -1256,7 +1334,7 @@ function AppContent() {
                 const nextIndex = (themes.indexOf(theme) + 1) % themes.length;
                 setTheme(themes[nextIndex]);
               }}
-              className="hidden md:block p-2.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+              className="hidden md:block p-2.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-650 dark:text-slate-350 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
               title={`Current theme: ${theme}. Click to change.`}
             >
               {theme === 'light' && <Sun className="w-5 h-5" />}
@@ -1265,7 +1343,7 @@ function AppContent() {
             </button>
             <Link
               to="/settings"
-              className="hidden md:block p-2.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+              className="hidden md:block p-2.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-650 dark:text-slate-350 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
               title="Settings"
             >
               <Settings className="w-5 h-5" />
@@ -1614,6 +1692,24 @@ function AppContent() {
             <p className="text-xs text-slate-500 leading-relaxed">
               {footerText}
             </p>
+            {(window.env?.BUILD_VERSION || window.env?.BUILD_COMMIT_ID) && (
+              <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                Version: {window.env?.BUILD_VERSION || 'unknown'} (
+                {window.env?.BUILD_COMMIT_ID ? (
+                  <a 
+                    href={`https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/commit/${window.env.BUILD_COMMIT_ID}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="hover:underline text-slate-500 dark:text-slate-400"
+                  >
+                    {window.env.BUILD_COMMIT_ID}
+                  </a>
+                ) : (
+                  'unknown'
+                )}
+                )
+              </div>
+            )}
           </div>
 
           <div>

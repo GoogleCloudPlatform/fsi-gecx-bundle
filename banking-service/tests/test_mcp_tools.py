@@ -159,12 +159,14 @@ async def test_generate_upload_session_url_success(mock_storage, mock_identity, 
     
     # Trigger tool
     mock_ctx = MagicMock()
-    result = await generate_upload_session_url(
-        application_id="app-999",
-        claimed_artifact_type="W2",
-        session_id="session-xyz-789",
-        ctx=mock_ctx
-    )
+    with patch("google.auth.default", return_value=(MagicMock(), "local-test-project")), \
+         patch("google.auth.impersonated_credentials.Credentials", return_value=MagicMock()):
+        result = await generate_upload_session_url(
+            application_id="app-999",
+            claimed_artifact_type="W2",
+            session_id="session-xyz-789",
+            ctx=mock_ctx
+        )
     
     assert "🔒 Secure Document Upload Session Generated" in result
     assert "Document Type requested: W2" in result
@@ -227,13 +229,15 @@ async def test_generate_upload_session_url_image_success(mock_storage, mock_iden
     mock_storage.return_value = storage_client
     
     mock_ctx = MagicMock()
-    result = await generate_upload_session_url(
-        application_id="app-999",
-        claimed_artifact_type="W2",
-        session_id="session-xyz-789",
-        content_type="image/png",
-        ctx=mock_ctx
-    )
+    with patch("google.auth.default", return_value=(MagicMock(), "local-test-project")), \
+         patch("google.auth.impersonated_credentials.Credentials", return_value=MagicMock()):
+        result = await generate_upload_session_url(
+            application_id="app-999",
+            claimed_artifact_type="W2",
+            session_id="session-xyz-789",
+            content_type="image/png",
+            ctx=mock_ctx
+        )
     
     assert "🔒 Secure Document Upload Session Generated" in result
     assert "https://storage.googleapis.com/mock-png-signed-url" in result

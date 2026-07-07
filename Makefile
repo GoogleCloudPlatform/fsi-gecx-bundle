@@ -74,7 +74,7 @@ run-data-generator: ## Run the FastAPI synthetic data generator locally
 run: ## Concurrently run both backend and frontend servers locally
 	@echo "Starting backend and frontend concurrently... Press Ctrl+C to stop."
 	@trap 'kill 0' SIGINT; \
-	$(MAKE) run-backend & \
+	$(MAKE) run-backend-iam & \
 	$(MAKE) run-frontend & \
 	wait
 
@@ -105,7 +105,6 @@ deploy: ## Safely apply the incremental Terraform deployment changes
 deploy-voice-agent: ## Submit Cloud Build job to deploy ADK credit-support-agent (voice agent) to Cloud Run
 	@echo "Submitting Cloud Build job for credit-support-agent deployment..."
 	gcloud builds submit --config adk-agent/credit-support-agent/cloudbuild-deploy.yaml --substitutions=_TRIGGER_DEPLOY=true
-
 
 .PHONY: deploy-target
 deploy-target: ## Deploy an isolated Terraform resource/module (usage: make deploy-target TARGET=module.foo)
@@ -233,6 +232,22 @@ run-triggers: ## Run Cloud Build triggers for a specific branch (usage: make run
 
 	# Create banking UI artifact
 	BUILD_ID=$$(gcloud builds triggers run banking-ui-deployment \
+		--region=$(REGION) \
+		--branch=$(BRANCH) \
+		--substitutions=_TRIGGER_DEPLOY=false \
+		--format="value(metadata.build.id)") && \
+	gcloud builds log $$BUILD_ID --region=$(REGION) --stream
+
+	# Create credit support agent artifact
+	BUILD_ID=$$(gcloud builds triggers run credit-support-agent-deployment \
+		--region=$(REGION) \
+		--branch=$(BRANCH) \
+		--substitutions=_TRIGGER_DEPLOY=false \
+		--format="value(metadata.build.id)") && \
+	gcloud builds log $$BUILD_ID --region=$(REGION) --stream
+
+	# Create data-generator artifact
+	BUILD_ID=$$(gcloud builds triggers run data-generator-deployment \
 		--region=$(REGION) \
 		--branch=$(BRANCH) \
 		--substitutions=_TRIGGER_DEPLOY=false \

@@ -1,0 +1,44 @@
+[
+  {
+    "name": "id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unique UUID of the KYC record."
+  },
+  {
+    "name": "user_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Foreign key reference linking to users.id."
+  },
+  {
+    "name": "encrypted_pii",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Envelope-encrypted sensitive PII bytes (base64 encoded)."
+  },
+  {
+    "name": "wrapped_dek",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Wrapped Data Encryption Key (DEK)."
+  },
+  {
+    "name": "encryption_iv",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Initialization vector used during AES-GCM encryption."
+  },
+  {
+    "name": "auth_tag",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Authentication tag verifying payload integrity."
+  },
+  {
+    "name": "created_at",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE",
+    "description": "Record creation timestamp."
+  }
+]

@@ -206,3 +206,57 @@ variable "database_iam_support_users" {
   description = "List of IAM user or group strings (e.g. user:email@domain.com, group:email@domain.com) to grant database Cloud SQL access."
   default     = []
 }
+
+variable "database_iam_viewer_users" {
+  type        = list(string)
+  description = "List of IAM user or group strings (e.g. user:email@domain.com, group:email@domain.com) to grant database Cloud SQL viewer access."
+  default     = []
+}
+
+variable "banking_service_db_pool_size" {
+  type        = number
+  description = "Steady-state SQLAlchemy pool size per banking-service instance."
+  default     = 24
+}
+
+variable "banking_service_db_max_overflow" {
+  type        = number
+  description = "Additional SQLAlchemy overflow connections allowed per banking-service instance."
+  default     = 16
+}
+
+variable "banking_service_db_pool_timeout" {
+  type        = number
+  description = "Seconds to wait for a DB connection before failing fast."
+  default     = 5
+}
+
+variable "banking_service_max_instance_request_concurrency" {
+  type        = number
+  description = "Maximum concurrent requests per banking-service Cloud Run instance."
+  default     = 32
+}
+
+variable "data_generator_max_instance_request_concurrency" {
+  type        = number
+  description = "Maximum concurrent requests per data-generator Cloud Run instance."
+  default     = 8
+}
+
+variable "data_generator_request_timeout" {
+  type        = string
+  description = "Timeout for a data-generator request."
+  default     = "120s"
+}
+
+variable "data_generator_swipe_workflow_concurrency" {
+  type        = number
+  description = "Maximum number of concurrent swipe workflows dispatched by data-generator."
+  default     = 4
+}
+
+variable "additional_cors_allowed_origins" {
+  type        = list(string)
+  description = "Additional allowed browser origins for Cloud Run CORS configuration."
+  default     = []
+}

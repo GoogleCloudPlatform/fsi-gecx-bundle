@@ -166,6 +166,7 @@ dependencies = [
     { name = "google-cloud-discoveryengine" },
     { name = "google-cloud-documentai" },
     { name = "google-cloud-kms" },
+    { name = "google-cloud-monitoring" },
     { name = "google-cloud-pubsub" },
     { name = "google-cloud-secret-manager" },
     { name = "google-cloud-storage" },
@@ -178,6 +179,7 @@ dependencies = [
     { name = "psycopg2-binary" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
+    { name = "redis" },
     { name = "secretstorage" },
     { name = "sqlalchemy" },
     { name = "uvicorn" },
@@ -187,6 +189,7 @@ dependencies = [
 dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "respx" },
     { name = "ruff" },
 ]
 
@@ -203,6 +206,7 @@ requires-dist = [
     { name = "google-cloud-discoveryengine", specifier = ">=0.13.12" },
     { name = "google-cloud-documentai", specifier = ">=3.13.0" },
     { name = "google-cloud-kms", specifier = ">=3.2.0" },
+    { name = "google-cloud-monitoring", specifier = ">=2.31.0" },
     { name = "google-cloud-pubsub", specifier = ">=2.27.1" },
     { name = "google-cloud-secret-manager", specifier = "==2.27.0" },
     { name = "google-cloud-storage", specifier = "==3.10.1" },
@@ -215,6 +219,7 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = "==2.9.10" },
     { name = "python-dotenv", specifier = "==1.2.2" },
     { name = "python-multipart", specifier = "==0.0.31" },
+    { name = "redis", specifier = ">=8.0.1" },
     { name = "secretstorage", specifier = ">=3.2" },
     { name = "sqlalchemy", specifier = "==2.0.50" },
     { name = "uvicorn", specifier = "==0.44.0" },
@@ -224,6 +229,7 @@ requires-dist = [
 dev = [
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
+    { name = "respx", specifier = "==0.22.0" },
     { name = "ruff", specifier = ">=0.15.0" },
 ]
 
@@ -732,6 +738,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b8/ad/c9ddb19282c0a83324300c124de126d28e38c6a584541a31a2533fab103b/google_cloud_kms-3.14.0.tar.gz", hash = "sha256:421a18b9844e5e2448fc931aa60990e181a0de9202cdbcebe10b9a2bf6eb9b33", size = 439164, upload-time = "2026-06-22T23:21:36.432Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f7/58/8712d5d10cacd0f5a5f804691479bd2cd9ab23100386051c3bdf016b2570/google_cloud_kms-3.14.0-py3-none-any.whl", hash = "sha256:7d9df2296aef4b42241132dfb7111826baffd9752dc4defbf145033e200bebb6", size = 353798, upload-time = "2026-06-22T23:19:22.647Z" },
+]
+
+[[package]]
+name = "google-cloud-monitoring"
+version = "2.31.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/84/9d/9522e169db3887e7f354bb9aa544a6e26c435ce19337e32432598db18c6f/google_cloud_monitoring-2.31.0.tar.gz", hash = "sha256:b4c9d3528c8643d4eb4b9d688cbb3c5914bc5f69b314ff7c5e1b47bdc073a9ae", size = 404747, upload-time = "2026-06-03T15:28:24.938Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/55/30/aa6635296da9c1c14d2e64f64e1cacd4f4debf8ab7e646c0559545f0f70d/google_cloud_monitoring-2.31.0-py3-none-any.whl", hash = "sha256:64f3d56ead48f0a0674f650cb2828c47b936582a02a27c55f2836681a86281c3", size = 391010, upload-time = "2026-06-03T15:27:39.536Z" },
 ]
 
 [[package]]
@@ -1796,6 +1818,15 @@ wheels = [
 ]
 
 [[package]]
+name = "redis"
+version = "8.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/cc/c3/928b290c2c0ca99ab96eea5b4ff8f30be8112b075301a7d3ba214a3c8c12/redis-8.0.1.tar.gz", hash = "sha256:afc5a7a2f5a084f5b1880dec548dd45be17db7e43c82a30d84f952aefb05cfb0", size = 5114170, upload-time = "2026-06-23T14:52:37.728Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fd/0a/c2345ebf1ebe70840ce3f6c6ee612f8fa749cfbd1b03069c53bf0c62aaad/redis-8.0.1-py3-none-any.whl", hash = "sha256:47daa35a058c23468d6437f17a8c76882cb316b838ef763036af99b96cedd743", size = 502406, upload-time = "2026-06-23T14:52:36.137Z" },
+]
+
+[[package]]
 name = "referencing"
 version = "0.37.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1821,6 +1852,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ac/c3/e2a2b89f2d3e2179abd6d00ebd70bff6273f37fb3e0cc209f48b39d00cbf/requests-2.34.2.tar.gz", hash = "sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed", size = 142856, upload-time = "2026-05-14T19:25:27.735Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl", hash = "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0", size = 73075, upload-time = "2026-05-14T19:25:26.443Z" },
+]
+
+[[package]]
+name = "respx"
+version = "0.22.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f4/7c/96bd0bc759cf009675ad1ee1f96535edcb11e9666b985717eb8c87192a95/respx-0.22.0.tar.gz", hash = "sha256:3c8924caa2a50bd71aefc07aa812f2466ff489f1848c96e954a5362d17095d91", size = 28439, upload-time = "2024-12-19T22:33:59.374Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8e/67/afbb0978d5399bc9ea200f1d4489a23c9a1dad4eee6376242b8182389c79/respx-0.22.0-py2.py3-none-any.whl", hash = "sha256:631128d4c9aba15e56903fb5f66fb1eff412ce28dd387ca3a81339e52dbd3ad0", size = 25127, upload-time = "2024-12-19T22:33:57.837Z" },
 ]
 
 [[package]]

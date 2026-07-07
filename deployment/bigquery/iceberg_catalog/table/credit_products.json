@@ -1,0 +1,68 @@
+[
+  {
+    "name": "product_code",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Catalog code name of the credit card product."
+  },
+  {
+    "name": "product_name",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Friendly name of the credit card product."
+  },
+  {
+    "name": "min_credit_limit_cents",
+    "type": "INTEGER",
+    "mode": "REQUIRED",
+    "description": "Minimum allowed credit limit."
+  },
+  {
+    "name": "max_credit_limit_cents",
+    "type": "INTEGER",
+    "mode": "REQUIRED",
+    "description": "Maximum allowed credit limit."
+  },
+  {
+    "name": "purchase_apr",
+    "type": "NUMERIC",
+    "mode": "REQUIRED",
+    "description": "Annual Percentage Rate for purchases."
+  },
+  {
+    "name": "cashback_rate",
+    "type": "NUMERIC",
+    "mode": "REQUIRED",
+    "description": "Baseline rewards cashback rate percentage."
+  },
+  {
+    "name": "travel_multiplier",
+    "type": "INTEGER",
+    "mode": "REQUIRED",
+    "description": "Rewards points multiplier for travel spending."
+  },
+  {
+    "name": "dining_multiplier",
+    "type": "INTEGER",
+    "mode": "REQUIRED",
+    "description": "Rewards points multiplier for dining spending."
+  },
+  {
+    "name": "annual_fee_cents",
+    "type": "INTEGER",
+    "mode": "REQUIRED",
+    "description": "Annual fee charged on the credit line."
+  },
+  {
+    "name": "is_active",
+    "type": "BOOLEAN",
+    "mode": "REQUIRED",
+    "description": "Whether the credit product is active for new issuances."
+  },
+  {
+    "name": "created_at",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE",
+    "description": "Catalog record creation timestamp."
+  }
+]

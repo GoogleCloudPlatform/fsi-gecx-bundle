@@ -73,7 +73,7 @@ steps:
             --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
             --command "alembic" \
             --args "upgrade,head" \
-            --update-env-vars "^|^IAM_DBA_USERS=${_IAM_DBA_USERS}" \
+            --update-env-vars "^|^IAM_DBA_USERS=${_IAM_DBA_USERS}|IAM_DB_VIEWER_USERS=${_IAM_DB_VIEWER_USERS}" \
             --region "${_REGION}"
           echo "Executing pre-deployment database schema migrations..."
           gcloud run jobs execute banking-db-migrate \
@@ -108,4 +108,5 @@ substitutions:
   _REGION: "us-central1"
   _TRIGGER_DEPLOY: "false"
   _IAM_DBA_USERS: ""
+  _IAM_DB_VIEWER_USERS: ""
 

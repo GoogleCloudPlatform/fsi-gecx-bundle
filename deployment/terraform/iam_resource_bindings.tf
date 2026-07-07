@@ -65,6 +65,22 @@ resource "google_cloud_run_service_iam_member" "banking_service_invokes_voice_ag
   member   = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
+resource "google_cloud_run_service_iam_member" "banking_service_invokes_data_generator" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  service  = google_cloud_run_v2_service.data_generator[0].name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
+resource "google_cloud_run_service_iam_member" "data_generator_invokes_banking_service" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  service  = google_cloud_run_v2_service.banking_service[0].name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.data_generator_service_account.email}"
+}
+
 resource "google_cloud_run_service_iam_member" "voice_agent_invokes_banking_service" {
   count    = var.deploy_cloud_run_services ? 1 : 0
   service  = google_cloud_run_v2_service.banking_service[0].name
@@ -148,6 +164,18 @@ resource "google_secret_manager_secret_iam_member" "banking_service_iap_client_i
   member    = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "banking_service_card_network_switch_token_accessor" {
+  secret_id = google_secret_manager_secret.card_network_switch_token.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "data_generator_card_network_switch_token_accessor" {
+  secret_id = google_secret_manager_secret.card_network_switch_token.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.data_generator_service_account.email}"
+}
+
 resource "google_secret_manager_secret_iam_member" "ces_secret_accessor" {
   secret_id = "iap-client-secret"
   role      = "roles/secretmanager.secretAccessor"
@@ -224,11 +252,24 @@ resource "google_bigquery_connection_iam_member" "reporting_iceberg_connection_u
   member        = "serviceAccount:${google_service_account.reporting_service_account.email}"
 }
 
+resource "google_bigquery_connection_iam_member" "banking_service_iceberg_connection_user" {
+  location      = google_bigquery_connection.iceberg.location
+  connection_id = google_bigquery_connection.iceberg.id
+  role          = "roles/bigquery.connectionUser"
+  member        = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
 # Security Finding 1.2: Use additive member instead of authoritative binding with least privilege
 resource "google_bigquery_dataset_iam_member" "reporting_iceberg_data_editor" {
   dataset_id = google_bigquery_dataset.iceberg_catalog.dataset_id
   role       = "roles/bigquery.dataEditor"
   member     = "serviceAccount:${google_service_account.reporting_service_account.email}"
+}
+
+resource "google_bigquery_dataset_iam_member" "banking_service_iceberg_data_viewer" {
+  dataset_id = google_bigquery_dataset.iceberg_catalog.dataset_id
+  role       = "roles/bigquery.dataViewer"
+  member     = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
 # Grant Pub/Sub Service Identity permission to write messages to BigQuery
@@ -246,3 +287,9 @@ resource "google_bigquery_dataset_iam_member" "pubsub_bq_metadata_viewer" {
   member     = "serviceAccount:${google_project_service_identity.pubsub_sa.email}"
 }
 
+resource "google_bigquery_dataset_iam_member" "cloudbuild_sa_ci_bq_data_editor" {
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.ci.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+}

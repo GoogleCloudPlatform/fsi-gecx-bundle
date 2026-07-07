@@ -25,6 +25,7 @@ from utils.idempotency import check_idempotency_header
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/accounts", tags=["Deposit Accounts"], dependencies=[Depends(get_current_user)])
+v1_router = APIRouter(prefix="/v1/accounts", tags=["Deposit Accounts"], dependencies=[Depends(get_current_user)])
 alias_router = APIRouter(prefix="/accounts", tags=["Deposit Accounts"], dependencies=[Depends(get_current_user)])
 
 
@@ -33,6 +34,7 @@ def get_accounts_service(db: Session = Depends(get_db)) -> AccountsService:
 
 
 @router.post("/deposit", status_code=status.HTTP_201_CREATED)
+@v1_router.post("/deposit", status_code=status.HTTP_201_CREATED)
 @alias_router.post("/deposit", status_code=status.HTTP_201_CREATED)
 async def create_deposit_account(
     request: DepositAccountCreateRequest,
@@ -47,3 +49,30 @@ async def create_deposit_account(
         return cached_payload
 
     return service.create_deposit_account(request, token, idempotency_key=x_idempotency_key)
+
+
+@router.get("/summary", status_code=status.HTTP_200_OK)
+@v1_router.get("/summary", status_code=status.HTTP_200_OK)
+@alias_router.get("/summary", status_code=status.HTTP_200_OK)
+async def get_accounts_summary(
+    service: AccountsService = Depends(get_accounts_service),
+    token: ValidatedToken = Depends(get_current_user)
+):
+    """
+    Retrieves all checking, savings, and credit accounts summary for the authenticated user context.
+    """
+    return service.get_user_accounts_summary(token)
+
+
+@router.get("/{account_id}/transactions", status_code=status.HTTP_200_OK)
+@v1_router.get("/{account_id}/transactions", status_code=status.HTTP_200_OK)
+async def get_deposit_transactions(
+    account_id: str,
+    service: AccountsService = Depends(get_accounts_service),
+    token: ValidatedToken = Depends(get_current_user)
+):
+    """
+    Retrieves deposit ledger splits and history for checking or savings accounts.
+    """
+    return service.get_deposit_transactions(token, account_id)
+

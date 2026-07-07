@@ -15,7 +15,7 @@
 import json
 import uuid
 import pytest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
@@ -39,6 +39,13 @@ def test_db():
             "ATTACH DATABASE 'file:identity_repo_uw?mode=memory&cache=shared' AS identity;",
             "ATTACH DATABASE 'file:origination_repo_uw?mode=memory&cache=shared' AS origination;",
             "ATTACH DATABASE 'file:audit_repo_uw?mode=memory&cache=shared' AS audit;",
+            "ATTACH DATABASE 'file:kyc_repo_uw?mode=memory&cache=shared' AS kyc;",
+            "ATTACH DATABASE 'file:ledger_repo_uw?mode=memory&cache=shared' AS ledger;",
+            "ATTACH DATABASE 'file:cards_repo_uw?mode=memory&cache=shared' AS cards;",
+            "ATTACH DATABASE 'file:operations_repo_uw?mode=memory&cache=shared' AS operations;",
+            "ATTACH DATABASE 'file:admin_repo_uw?mode=memory&cache=shared' AS admin;",
+            "ATTACH DATABASE 'file:catalog_repo_uw?mode=memory&cache=shared' AS catalog;",
+            "ATTACH DATABASE 'file:ref_data_repo_uw?mode=memory&cache=shared' AS ref_data;",
         ]:
             try:
                 cursor.execute(stmt)
@@ -189,8 +196,15 @@ def test_underwriting_endpoints_routing(test_db):
     assert "already in state: PROCESSED" in response.json()["detail"]
 
     # 4. Test GET /artifacts/{artifact_id}/view (Success)
-    with patch("google.cloud.storage.blob.Blob.generate_signed_url") as mock_sign:
-        mock_sign.return_value = "https://fake-gcs-signed-url.com/file.pdf?token=xyz"
+    mock_blob = MagicMock()
+    mock_blob.generate_signed_url.return_value = "https://fake-gcs-signed-url.com/file.pdf?token=xyz"
+    mock_bucket = MagicMock()
+    mock_bucket.blob.return_value = mock_blob
+    mock_storage_client = MagicMock()
+    mock_storage_client.bucket.return_value = mock_bucket
+    with patch("routers.underwriting.storage_client", mock_storage_client), \
+         patch("routers.underwriting.default", return_value=(MagicMock(), "local-test-project")), \
+         patch("routers.underwriting.ImpersonatedCredentials", return_value=MagicMock()):
         response = client.get("/underwriting/artifacts/art-1/view")
         assert response.status_code == 200
         assert response.json()["signed_url"] == "https://fake-gcs-signed-url.com/file.pdf?token=xyz"

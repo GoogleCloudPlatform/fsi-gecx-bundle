@@ -33,6 +33,7 @@ from services.underwriting_callback import trigger_session_propagation_flow
 from utils.gcp import get_project_id
 from utils.auth import get_current_user
 from models.authentication import ValidatedToken
+from utils.lazy_clients import LazyClient
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/underwriting", tags=["underwriting"])
@@ -40,8 +41,8 @@ router = APIRouter(prefix="/underwriting", tags=["underwriting"])
 PROJECT_ID = get_project_id()
 SERVICE_ACCOUNT_EMAIL = f"banking-service-sa@{PROJECT_ID}.iam.gserviceaccount.com"
 
-storage_client = storage.Client()
-bq_client = bigquery.Client()
+storage_client = LazyClient(storage.Client)
+bq_client = LazyClient(bigquery.Client)
 
 def _get_table_ref() -> str:
     """Constructs the fully qualified application_artifacts BigQuery path."""
@@ -163,5 +164,4 @@ async def get_artifact_view_url(
     except Exception as ex:
         logger.error(f"Failed to generate GCS signed URL for {artifact_id}: {ex}")
         raise HTTPException(status_code=500, detail="Failed to initialize secure document viewer session.")
-
 

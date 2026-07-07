@@ -21,11 +21,26 @@ from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from fastapi.concurrency import run_in_threadpool
 from google.cloud import bigquery
 from pydantic import BaseModel, Field
-from utils.auth import verify_eventarc_oidc_token
+from utils.auth import require_admin_user, verify_eventarc_oidc_token
+from utils.database import enable_session_rbac_override
+from utils.lazy_clients import LazyClient
+from utils.maintenance import maintenance_window
+from utils.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
-bq_client = bigquery.Client()
+bq_client = LazyClient(bigquery.Client)
 router = APIRouter(prefix="/internal", tags=["internal"])
+
+
+def clear_operational_transaction_stream() -> None:
+    redis_client = get_redis_client()
+    if not redis_client:
+        return
+
+    try:
+        redis_client.delete("recent_transactions")
+    except Exception as exc:
+        logger.warning("Could not clear Redis recent transaction buffer during reset: %s", exc)
 
 class EventarcPayload(BaseModel):
     name: str = Field(..., description="GCS object name.")
@@ -136,22 +151,26 @@ async def process_document(
         raise HTTPException(status_code=500, detail=f"Document processing pipeline failed: {str(pipeline_ex)}")
 
 @router.post("/process-outbox")
-def process_outbox(batch_size: int = 50):
+def process_outbox(batch_size: int = 50, _admin=Depends(require_admin_user)):
     """
-    Drains the transactional audit outbox, publishing pending events to Google Cloud Pub/Sub
-    for immediate streaming into BigQuery compliance audit tables.
+    In our WAL CDC architecture (Architecture Two), outbox ingestion occurs via zero-load Datastream WAL streaming.
+    Returns operational metrics for recent append-only outbox records.
     """
     from utils.database import SessionLocal
     from utils.audit import publish_pending_audit_events
     db = SessionLocal()
     try:
         count = publish_pending_audit_events(db, batch_size=batch_size)
-        return {"status": "SUCCESS", "published_count": count}
+        return {"status": "SUCCESS", "message": "Outbox is managed via real-time WAL CDC streaming.", "recorded_count": count}
     finally:
         db.close()
 
 @router.post("/debug/reset-db")
-def reset_database(purge_audit_logs: bool = False, purge_data_lake: bool = False):
+def reset_database(
+    purge_audit_logs: bool = False,
+    purge_data_lake: bool = False,
+    _admin=Depends(require_admin_user),
+):
     """
     Deletes all rows in the database and re-seeds it with baseline cardholder data.
     Optionally purges PostgreSQL and BigQuery compliance audit logs if purge_audit_logs=True.
@@ -159,62 +178,64 @@ def reset_database(purge_audit_logs: bool = False, purge_data_lake: bool = False
     """
     logger.info(f"Internal Debug request: Resetting database (purge_audit_logs={purge_audit_logs}, purge_data_lake={purge_data_lake})...")
     from utils.database import SessionLocal
-    from models.credit_card import FinancialAccount, IssuedCard, TransactionAuthorization, AccountLedger
-    from models.support import Escalation
-    from models.origination import Application, MortgageApplication, CreditCardApplication, DepositApplication, ApplicationArtifact
+    from services.seeding_service import perform_algorithmic_seeding
     from models.audit import AuditOutbox
-    from services.credit_card import initialize_db_and_seed
     
     db = SessionLocal()
+    warnings: list[str] = []
     try:
-        db.connection().info["_ignore_rbac"] = True
-        db.query(TransactionAuthorization).delete()
-        db.query(AccountLedger).delete()
-        db.query(IssuedCard).delete()
-        db.query(Escalation).delete()
-        db.query(FinancialAccount).delete()
-        db.query(ApplicationArtifact).delete()
-        db.query(MortgageApplication).delete()
-        db.query(CreditCardApplication).delete()
-        db.query(DepositApplication).delete()
-        db.query(Application).delete()
-        
-        if purge_audit_logs:
-            db.query(AuditOutbox).delete()
-            logger.info("Purging PostgreSQL audit outbox...")
-            try:
-                project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
-                for tbl in ["origination_audit_log", "financial_ledger_audit_log", "identity_access_audit_log"]:
-                    bq_client.query(f"DELETE FROM `{project_id}.compliance_audit.{tbl}` WHERE true").result()
-                logger.info("Purged BigQuery compliance_audit tables.")
-            except Exception as bq_ex:
-                logger.warning(f"Could not purge BigQuery audit logs: {bq_ex}")
+        enable_session_rbac_override(db)
 
-        if purge_data_lake:
-            logger.info("Purging BigLake Apache Iceberg catalog tables...")
-            try:
-                project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
-                for lake_tbl in ["posted_transactions", "applications_lake", "users_lake"]:
-                    bq_client.query(f"DELETE FROM `{project_id}.iceberg_catalog.{lake_tbl}` WHERE true").result()
-                logger.info("Purged BigLake Apache Iceberg catalog tables.")
-            except Exception as lake_ex:
-                logger.warning(f"Could not purge BigLake Iceberg tables: {lake_ex}")
+        with maintenance_window(
+            reason="database_reset",
+            message="Admin reset in progress. Transaction traffic is temporarily paused.",
+            ttl_seconds=300,
+            drain_seconds=2.0,
+        ):
+            logger.info("Maintenance mode enabled for admin database reset.")
+            clear_operational_transaction_stream()
 
-        db.commit()
-        logger.info("Database tables cleared.")
-        
-        initialize_db_and_seed(db)
-        logger.info("Database re-seeded.")
+            # Seed and clean databases using the Seeding Service
+            perform_algorithmic_seeding(db)
+            clear_operational_transaction_stream()
+
+            if purge_audit_logs:
+                db.query(AuditOutbox).delete()
+                logger.info("Purging PostgreSQL audit outbox...")
+                try:
+                    project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
+                    for tbl in ["origination_audit_log", "financial_ledger_audit_log", "identity_access_audit_log"]:
+                        bq_client.query(f"DELETE FROM `{project_id}.compliance_audit.{tbl}` WHERE true").result()
+                    logger.info("Purged BigQuery compliance_audit tables.")
+                except Exception as bq_ex:
+                    logger.warning(f"Could not purge BigQuery audit logs: {bq_ex}")
+                    warnings.append(f"BigQuery audit purge skipped: {bq_ex}")
+
+            if purge_data_lake:
+                logger.info("Purging BigLake Apache Iceberg catalog tables...")
+                try:
+                    project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
+                    for lake_tbl in ["posted_transactions", "applications_lake", "users_lake"]:
+                        bq_client.query(f"DELETE FROM `{project_id}.iceberg_catalog.{lake_tbl}` WHERE true").result()
+                    logger.info("Purged BigLake Apache Iceberg catalog tables.")
+                except Exception as lake_ex:
+                    logger.warning(f"Could not purge BigLake Iceberg tables: {lake_ex}")
+                    warnings.append(f"BigLake purge skipped: {lake_ex}")
+
+            db.commit()
         msg = "Database reset and re-seeded successfully."
         if purge_audit_logs:
             msg += " (Audit logs purged)"
         if purge_data_lake:
             msg += " (Data Lake purged)"
-        return {"status": "SUCCESS", "message": msg}
+        return {
+            "status": "SUCCESS" if not warnings else "PARTIAL_SUCCESS",
+            "message": msg if not warnings else f"{msg} Completed with warnings.",
+            "warnings": warnings,
+        }
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to reset database: {e}")
         raise HTTPException(status_code=500, detail=f"Database reset failed: {e}")
     finally:
         db.close()
-

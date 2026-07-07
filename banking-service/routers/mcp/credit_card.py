@@ -99,6 +99,72 @@ async def report_lost_stolen_card(
 
 @mcp.tool()
 @requires_user_assertion
+async def unfreeze_card(
+    account_id: str = None,
+    ctx: Context = None,
+) -> dict:
+    """
+    Unblocks and reactivates a previously frozen or blocked credit card.
+    
+    Args:
+        account_id: Optional unique identifier for the credit card account.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    logger.info(f"FastMCP unfreeze_card invoked for account: {account_id} (Customer: {verified_customer_id})")
+    
+    db = SessionLocal()
+    repo = CreditCardRepository(db)
+    try:
+        if not account_id:
+            account = repo.get_account_by_customer(verified_customer_id)
+            if not account:
+                return {"success": False, "message": "No credit card account found for the user."}
+            account_id = str(account.id)
+
+        if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", str(account_id)):
+            return {"success": False, "message": "Access Denied: Invalid account ID format."}
+            
+        # Enforce BOLA/IDOR check: verify account belongs to verified_customer_id
+        account = repo.get_account_by_customer(verified_customer_id)
+        if not account or account.id != account_id:
+            logger.error(f"Security Alert: BOLA/IDOR attempt or account not found for {account_id} by {verified_customer_id}")
+            return {"success": False, "message": "Account not found or unauthorized."}
+
+        # Find the blocked card linked to this account
+        cards = repo.list_cards_by_account(account.id)
+        card = next((c for c in cards if c.status == "BLOCKED"), None)
+        if not card:
+            active_card = next((c for c in cards if c.status == "ACTIVE"), None)
+            if active_card:
+                return {"success": False, "message": "Card is already active."}
+            return {"success": False, "message": "No blocked card found linked to this account."}
+
+        # Call service
+        from services.credit_card import unfreeze_card as svc_unfreeze
+        svc_unfreeze(db, card_token=card.card_token, reason="CUSTOMER_VOICE_REQUEST")
+        
+        # Out-of-band push to client WebSocket to sync UI
+        session_id = f"session-{verified_customer_id}"
+        await send_session_event(session_id, {
+            "type": "CARD_STATUS",
+            "card_id": card.id,
+            "status": "ACTIVE"
+        })
+        
+        return {
+            "success": True,
+            "message": "Card successfully unblocked and reactivated.",
+            "card_token": card.card_token
+        }
+    except Exception as e:
+        logger.error(f"Error in FastMCP unfreeze_card: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
 async def reverse_overdraft_fee(
     account_id: str = None,
     fee_date: str = None,
@@ -135,7 +201,45 @@ async def reverse_overdraft_fee(
         # Concurrency Locking: lock account row for balance updates
         account = repo.get_account_by_id(account_id, lock=True)
 
-        # Find the target fee transaction in the ledger (negative amount with "LATE_FEE" or similar)
+        # 1. Search pending authorizations for an active fee hold
+        pending_auths = repo.list_pending_authorizations(account.id)
+        pending_fee = next((
+            auth for auth in pending_auths
+            if auth.merchant_name in ["OVERDRAFT_HOLD", "OVERDRAFT", "Overdraft Hold"]
+        ), None)
+
+        if pending_fee:
+            current_year = datetime.datetime.now(datetime.timezone.utc).year
+            year_start = datetime.datetime(current_year, 1, 1, tzinfo=datetime.timezone.utc)
+            prior_reversal = repo.get_annual_reversal_entry(account.id, year_start)
+            if prior_reversal:
+                return {"success": False, "message": "Already used annual reversal limit."}
+
+            pending_fee.status = "VOIDED"
+            account.available_credit_cents += pending_fee.transaction_amount_cents
+
+            from utils.audit import record_audit_event
+            record_audit_event(
+                db,
+                "FEE_REVERSED",
+                {
+                    "account_id": str(account.id),
+                    "authorization_id": str(pending_fee.id),
+                    "amount_cents": pending_fee.transaction_amount_cents,
+                    "description": "FEE_REVERSAL"
+                }
+            )
+            db.commit()
+
+            session_id = f"session-{verified_customer_id}"
+            await send_session_event(session_id, {
+                "type": "FEE_REVERSED",
+                "cleared_balance_cents": account.cleared_balance_cents,
+                "available_credit_cents": account.available_credit_cents
+            })
+            return {"success": True, "message": "Pending late fee successfully voided."}
+
+        # 2. Otherwise fall back to posted ledger entries
         ledger = repo.list_ledger_entries(account.id)
         original_tx = next((
             entry for entry in ledger
@@ -183,6 +287,8 @@ async def reverse_overdraft_fee(
 async def request_credit_limit_increase(
     account_id: str = None,
     requested_limit: float = None,
+    limit: float = None,
+    amount: float = None,
     ctx: Context = None,
 ) -> dict:
     """
@@ -191,6 +297,8 @@ async def request_credit_limit_increase(
     Args:
         account_id: Optional unique identifier for the credit card account.
         requested_limit: Optional desired new credit limit amount (in dollars).
+        limit: Desired new credit limit amount (alias in dollars).
+        amount: Desired new credit limit amount (alias in dollars).
     """
     verified_customer_id = verified_customer_id_var.get()
     logger.info(f"FastMCP request_credit_limit_increase invoked for account: {account_id} (Customer: {verified_customer_id})")
@@ -217,11 +325,12 @@ async def request_credit_limit_increase(
         account = repo.get_account_by_id(account_id, lock=True)
 
         # Check requested limit
-        if not requested_limit:
+        target_limit = requested_limit or limit or amount
+        if not target_limit:
             current_limit = account.credit_limit_cents / 100
-            requested_limit = current_limit * 1.2
+            target_limit = current_limit * 1.2
             
-        requested_limit_cents = int(requested_limit * 100)
+        requested_limit_cents = int(target_limit * 100)
 
         # Underwriting rule check: reject if increase is > 2x current limit
         limit_ceiling_cents = account.credit_limit_cents * 2
@@ -242,7 +351,7 @@ async def request_credit_limit_increase(
         return {
             "success": True,
             "message": "Credit limit increase approved.",
-            "new_limit": requested_limit
+            "new_limit": target_limit
         }
     except Exception as e:
         logger.error(f"Error in FastMCP request_credit_limit_increase: {e}")

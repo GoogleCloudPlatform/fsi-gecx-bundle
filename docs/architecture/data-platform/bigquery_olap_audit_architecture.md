@@ -44,44 +44,48 @@ graph TD
 * **Core Events**: `USER_CREATED`, `DEVICE_REGISTERED`, `MESSAGE_SENT`.
 * **Partitioning & Clustering**: Partitioned by `DAY` on `created_at`. Clustered by `[user_id, event_type]`.
 
+### D. `system_config_audit_log` (System Pricing & Catalog Policies)
+* **Regulatory Regime**: Truth in Lending (TILA), Truth in Savings (TISA), SOX internal control guidelines. Requires preserving pricing rate updates and limits policies modification history.
+* **Core Events**: `CREDIT_PRODUCT_CATALOG_UPDATED`, `DEPOSIT_PRODUCT_CATALOG_UPDATED`, `SYSTEM_FEATURE_FLAG_MODIFIED`.
+* **Partitioning & Clustering**: Partitioned by `MONTH` on `created_at`. Clustered by `[product_code, event_type]`.
+
 ---
 
-## ⚙️ 3. Transactional Outbox Pipeline & Ingestion Architecture
+## ⚙️ 3. Append-Only WAL CDC Pipeline & Lakehouse Materialized Views
 
-To guarantee zero loss of compliance audit events without introducing network latency or locks into real-time customer banking workflows, we implement the **Transactional Outbox Pattern** across a 3-phase lifecycle:
+To guarantee zero loss of compliance audit events without introducing network latency, database polling overhead, or locks into real-time customer banking workflows, we implement an **Append-Only WAL CDC Architecture** across a 3-phase lifecycle:
 
 ```mermaid
 sequenceDiagram
     participant App as Banking Service (OLTP)
     participant PG as Cloud SQL (PostgreSQL)
-    participant Endpoint as POST /internal/process-outbox
-    participant PubSub as Pub/Sub (audit-events)
-    participant BQ as BigQuery (compliance_audit)
+    participant DS as Google Cloud Datastream (CDC)
+    participant BQ as BigQuery Bronze (raw_audit_outbox_cdc)
+    participant MV as BigQuery Silver (Materialized Views)
 
-    Note over App,PG: Phase 1: ACID Transaction Boundary
+    Note over App,PG: Phase 1: ACID Transaction Boundary (Append-Only Log)
     App->>PG: BEGIN TRANSACTION
-    App->>PG: Execute Domain Mutation (e.g. Application / Override)
-    App->>PG: INSERT audit.audit_outbox (status = 'PENDING')
-    App->>PG: COMMIT TRANSACTION
+    App->>PG: Execute Domain Mutation (e.g. Card Frozen / Limit Increase)
+    App->>PG: INSERT audit.audit_outbox (event_type, payload, created_at)
+    App->>PG: COMMIT TRANSACTION (Row appended to WAL)
 
-    Note over Endpoint,PubSub: Phase 2: Outbox Draining Worker
-    Endpoint->>PG: SELECT * FROM audit.audit_outbox WHERE status = 'PENDING'
-    Endpoint->>PubSub: Publish JSON Message structured for BigQuery Schema
-    PubSub-->>Endpoint: ACK (Message ID)
-    Endpoint->>PG: UPDATE audit.audit_outbox SET status = 'PUBLISHED'
+    Note over DS,BQ: Phase 2: Zero-Load WAL Streaming
+    DS->>PG: Reads PostgreSQL WAL non-invasively (pgoutput plugin)
+    DS->>BQ: Streams raw JSON records to compliance_audit.raw_audit_outbox_cdc
 
-    Note over PubSub,BQ: Phase 3: Serverless OLAP Streaming
-    PubSub->>BQ: Direct Subscription streams JSON via Storage Write API
+    Note over BQ,MV: Phase 3: Serverless Medallion Materialized Views
+    BQ->>MV: Auto-refreshes domain materialized views (origination, financial_ledger, etc.)
 ```
 
-### A. Phase 1: ACID Transaction Boundary (`record_audit_event`)
-When a state mutation occurs, the backend application writes the event into the PostgreSQL `audit.audit_outbox` table with `status = 'PENDING'` inside the exact same database transaction. This guarantees atomicity: if the transaction rolls back, the outbox record rolls back as well. No external network API calls are made during this synchronous phase.
+### A. Phase 1: ACID Append-Only Recording (`record_audit_event`)
+When a state mutation occurs, the backend application writes an immutable record into the PostgreSQL `audit.audit_outbox` table inside the exact same database transaction. Notice there are no `status` mutation columns (`PENDING`, `PUBLISHED`, `DLQ`) or `UPDATE` queries. This guarantees atomicity: if the transaction rolls back, the outbox record rolls back as well. No external network API calls or database updates occur after commit.
 
-### B. Phase 2: Outbox Draining Worker (`POST /internal/process-outbox`)
-An asynchronous poller or scheduled trigger periodically invokes the draining endpoint. The worker queries pending records, formats each payload dictionary into top-level keys matching the regulatory schema (`event_id`, `event_type`, `created_at`, `payload`, `application_id`, `underwriter_id`), and dispatches them concurrently to the Google Cloud Pub/Sub topic `audit-events`. To prevent database connection pool starvation during network I/O, publish calls are dispatched non-blockingly in parallel; returned future objects are collected and resolved together prior to updating database rows to `status = 'PUBLISHED'`. Failed deliveries automatically retry and eventually transition to `DLQ` state after exceeding maximum retry attempts.
+### B. Phase 2: Zero-Load WAL Streaming (`raw_audit_outbox_cdc`)
+Google Cloud Datastream non-invasively monitors PostgreSQL Write-Ahead Log (WAL) insertions on `audit.audit_outbox`. It streams each appended record in sub-second time directly into our BigQuery bronze landing table: `compliance_audit.raw_audit_outbox_cdc` (partitioned by day on `created_at` and clustered by `event_type`). This eliminates database polling queries, connection pool starvation, and thundering herds across API replicas.
 
-### C. Phase 3: Serverless OLAP Streaming (`audit-events-bq-sub`)
-Google Cloud’s native **Pub/Sub BigQuery Subscription** ingests messages from `audit-events` directly into BigQuery (`compliance_audit.origination_audit_log`) via the high-throughput BigQuery Storage Write API. Configured with `--use-table-schema = true`, serverless GCP infrastructure maps JSON message attributes directly to BigQuery columns, consuming zero container CPU cycles.
+### C. Phase 3: Serverless Medallion Materialized Views
+Over our bronze landing table, we define our domain-segmented regulatory tables as **BigQuery Materialized Views** (`origination_audit_log`, `financial_ledger_audit_log`, `identity_access_audit_log`, `system_config_audit_log`). BigQuery's serverless engine automatically maintains these views in the background, extracting JSON attributes (e.g., `account_id`, `application_id`, `amount_cents`) with instant analytical query performance and proper clustering per regulatory regime.
+
 
 ---
 

@@ -105,7 +105,7 @@ resource "google_pubsub_subscription" "audit_events_bq_sub" {
   project = var.project_id
 
   bigquery_config {
-    table            = "${var.project_id}.compliance_audit.origination_audit_log"
+    table            = "${var.project_id}.compliance_audit.raw_audit_outbox_cdc"
     use_table_schema = true
   }
 

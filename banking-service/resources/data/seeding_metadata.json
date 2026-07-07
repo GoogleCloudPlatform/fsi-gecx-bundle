@@ -1,0 +1,119 @@
+{
+  "first_names": [
+    "Alex", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Jamie", "Avery", "Peyton", "Cameron",
+    "Devon", "Logan", "Jesse", "Reese", "Quinn", "Skyler", "Dakota", "Kendall", "Harley", "Drew",
+    "Finley", "Hayden", "Rowan", "Sawyer", "Teagan", "Emerson", "Lennon", "Parker", "Phoenix", "River",
+    "Marcus", "Chloe", "David", "Jane", "Elena", "Liam", "Noah", "Emma", "Olivia", "Ava",
+    "Sophia", "Isabella", "Mia", "Evelyn", "Harper", "Camila", "Gianna", "Abigail", "Luna", "Ella",
+    "Elizabeth", "Sofia", "Emily", "Avery", "Mila", "aria", "Scarlett", "Penelope", "Layla", "Chloe",
+    "Victoria", "Madison", "Eleanor", "Grace", "Nora", "Riley", "Zoey", "Hannah", "Hazel", "Lily",
+    "Oliver", "Elijah", "James", "William", "Benjamin", "Lucas", "Henry", "Theodore", "Jack", "Levi",
+    "Alexander", "Jackson", "Mateo", "Daniel", "Michael", "Mason", "Sebastian", "Ethan", "John", "Owen",
+    "Samuel", "Jacob", "Asher", "Aiden", "Joseph", "David", "Leo", "Luke", "Julian", "Hudson"
+  ],
+  "last_names": [
+    "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez",
+    "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin",
+    "Lee", "Perez", "Thompson", "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson",
+    "Walker", "Young", "Allen", "King", "Wright", "Scott", "Torres", "Nguyen", "Hill", "Flores",
+    "Green", "Adams", "Nelson", "Baker", "Hall", "Rivera", "Campbell", "Mitchell", "Carter", "Roberts",
+    "Gomez", "Phillips", "Evans", "Turner", "Diaz", "Parker", "Cruz", "Edwards", "Collins", "Reyes",
+    "Stewart", "Morris", "Morales", "Murphy", "Cook", "Rogers", "Gutierrez", "Ortiz", "Morgan", "Cooper",
+    "Peterson", "Bailey", "Reed", "Kelly", "Howard", "Ramos", "Kim", "Cox", "Ward", "Richardson",
+    "Watson", "Brooks", "Chavez", "Wood", "James", "Bennett", "Gray", "Mendoza", "Ruiz", "Hughes",
+    "Price", "Alvarez", "Castillo", "Sanders", "Patel", "Myers", "Long", "Ross", "Foster", "Jimenez"
+  ],
+  "metros": [
+    {"name": "NEW YORK NY", "city": "New York", "state": "NY", "zips": ["10001", "10011", "10022", "10036"]},
+    {"name": "CHICAGO IL", "city": "Chicago", "state": "IL", "zips": ["60601", "60611", "60614", "60654"]},
+    {"name": "LOS ANGELES CA", "city": "Los Angeles", "state": "CA", "zips": ["90001", "90015", "90028", "90045"]},
+    {"name": "SAN FRANCISCO CA", "city": "San Francisco", "state": "CA", "zips": ["94105", "94107", "94111", "94133"]},
+    {"name": "SEATTLE WA", "city": "Seattle", "state": "WA", "zips": ["98101", "98104", "98109", "98121"]},
+    {"name": "DALLAS TX", "city": "Dallas", "state": "TX", "zips": ["75201", "75204", "75219", "75225"]},
+    {"name": "HOUSTON TX", "city": "Houston", "state": "TX", "zips": ["77002", "77007", "77019", "77056"]},
+    {"name": "ATLANTA GA", "city": "Atlanta", "state": "GA", "zips": ["30301", "30308", "30309", "30324"]},
+    {"name": "MIAMI FL", "city": "Miami", "state": "FL", "zips": ["33101", "33129", "33131", "33139"]}
+  ],
+  "street_names": [
+    "Main St", "High St", "Market St", "Broadway", "Washington St", "Franklin Ave",
+    "Park Ave", "Oak St", "Pine St", "Maple Ave", "Cedar St", "Elm St",
+    "Walnut St", "Chestnut St", "Church St", "Spring St", "Court St", "Center St",
+    "Water St", "Prospect Ave", "Front St", "School St", "Lincoln Ave", "Adams St",
+    "Jefferson St", "Madison Ave", "Jackson St", "Taylor St", "Wilson Ave", "Harrison St",
+    "1st Ave", "2nd St", "3rd Ave", "4th St", "5th Ave", "10th St", "14th St", "35th St"
+  ],
+  "underwriting_tiers": [
+    {
+      "tier": "PRIME_EXCELLENT",
+      "weight_percentage": 30,
+      "fico_min": 750,
+      "fico_max": 850,
+      "limit_min_cents": 1500000,
+      "limit_max_cents": 2500000,
+      "income_min_cents": 10000000,
+      "income_max_cents": 25000000
+    },
+    {
+      "tier": "PRIME",
+      "weight_percentage": 40,
+      "fico_min": 680,
+      "fico_max": 749,
+      "limit_min_cents": 1000000,
+      "limit_max_cents": 1500000,
+      "income_min_cents": 7000000,
+      "income_max_cents": 12000000
+    },
+    {
+      "tier": "NEAR_PRIME",
+      "weight_percentage": 20,
+      "fico_min": 620,
+      "fico_max": 679,
+      "limit_min_cents": 500000,
+      "limit_max_cents": 1000000,
+      "income_min_cents": 5000000,
+      "income_max_cents": 8000000
+    },
+    {
+      "tier": "SUBPRIME",
+      "weight_percentage": 10,
+      "fico_min": 550,
+      "fico_max": 619,
+      "limit_min_cents": 150000,
+      "limit_max_cents": 500000,
+      "income_min_cents": 3500000,
+      "income_max_cents": 6000000
+    }
+  ],
+  "mexico_travel_charges": [
+    {
+      "merchant_name": "LA CASA DE LA PLAYA RIVIERA MAYA [MEX]",
+      "mcc": "7011",
+      "min_amount_cents": 45000,
+      "max_amount_cents": 120000
+    },
+    {
+      "merchant_name": "ROSEWOOD MAYAKOBA PLAYA DEL CARMEN [MEX]",
+      "mcc": "7011",
+      "min_amount_cents": 40000,
+      "max_amount_cents": 95000
+    },
+    {
+      "merchant_name": "ESTERO RESTAURANTE RIVIERA MAYA [MEX]",
+      "mcc": "5812",
+      "min_amount_cents": 6500,
+      "max_amount_cents": 18000
+    },
+    {
+      "merchant_name": "SENSE SPA MAYAKOBA PLAYA DEL CARMEN [MEX]",
+      "mcc": "7298",
+      "min_amount_cents": 8500,
+      "max_amount_cents": 25000
+    },
+    {
+      "merchant_name": "AGAVE AZUL RESTAURANT MAYAKOBA [MEX]",
+      "mcc": "5812",
+      "min_amount_cents": 4500,
+      "max_amount_cents": 15000
+    }
+  ]
+}

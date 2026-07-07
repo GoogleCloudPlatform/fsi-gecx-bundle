@@ -101,11 +101,13 @@ class VoiceBidiSession:
         from repositories.credit_card import CreditCardRepository
         db = SessionLocal()
         repo = CreditCardRepository(db)
-        customer_id = "cust-123"
+        customer_id = self.user_id
         try:
             account = repo.get_account_by_customer(self.user_id)
-            if account:
-                customer_id = self.user_id
+            if not account:
+                accounts = repo.get_all_accounts()
+                if accounts:
+                    customer_id = str(accounts[0].customer_id)
         except Exception as e:
             logger.warning(f"Error resolving customer ID for active sessions: {e}")
         finally:

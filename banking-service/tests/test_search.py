@@ -36,7 +36,7 @@ def override_auth():
 
     app.dependency_overrides[get_current_user] = mock_get_current_user
     yield
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.mark.asyncio
@@ -65,10 +65,8 @@ async def test_search_endpoint_success(async_client, monkeypatch):
         def __iter__(self):
             return iter(self.results)
 
-    monkeypatch.setattr(
-        "google.cloud.discoveryengine_v1.SearchServiceClient.search",
-        lambda self, request: MockSearchPager()
-    )
+    mock_client = type("MockSearchClient", (), {"search": lambda self, request: MockSearchPager()})()
+    monkeypatch.setattr("services.search._get_search_client", lambda: mock_client)
 
     # Call /search
     response = await async_client.post(
@@ -100,10 +98,12 @@ async def test_answers_endpoint_success(async_client, monkeypatch):
                 name="projects/fsi-gecx-2000/locations/global/collections/default_collection/engines/test_1778802748392/sessions/mock-session-id"
             )
 
-    monkeypatch.setattr(
-        "google.cloud.discoveryengine_v1.ConversationalSearchServiceClient.answer_query",
-        lambda self, request: MockAnswerQueryResponse()
-    )
+    mock_client = type(
+        "MockConversationalSearchClient",
+        (),
+        {"answer_query": lambda self, request: MockAnswerQueryResponse()},
+    )()
+    monkeypatch.setattr("services.search._get_conversational_client", lambda: mock_client)
 
     # Call /answers
     response = await async_client.post(

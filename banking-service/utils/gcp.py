@@ -14,6 +14,7 @@
 
 import logging
 import os
+from pathlib import Path
 
 import google.auth
 from cachetools import cached, TTLCache
@@ -22,11 +23,42 @@ from google.cloud import secretmanager
 
 logger = logging.getLogger(__name__)
 
-# Create the Secret Manager client
-client = secretmanager.SecretManagerServiceClient()
 secret_cache = TTLCache(maxsize=100, ttl=3600)
 
 _cached_project_id = None
+_secret_manager_client = None
+
+
+def _has_local_adc() -> bool:
+    creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    if creds_path:
+        return Path(creds_path).expanduser().exists()
+
+    adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
+    return adc_path.exists()
+
+
+def _is_gcp_runtime() -> bool:
+    return any(
+        os.getenv(var)
+        for var in (
+            "K_SERVICE",
+            "K_REVISION",
+            "GAE_ENV",
+            "FUNCTION_TARGET",
+            "CLOUD_RUN_JOB",
+            "GOOGLE_CLOUD_PROJECT",
+            "GCP_PROJECT",
+        )
+    )
+
+
+def get_secret_manager_client():
+    """Lazily creates the Secret Manager client so importing modules does not require ADC."""
+    global _secret_manager_client
+    if _secret_manager_client is None:
+        _secret_manager_client = secretmanager.SecretManagerServiceClient()
+    return _secret_manager_client
 
 
 def get_project_id():
@@ -35,10 +67,15 @@ def get_project_id():
         return _cached_project_id
 
     # Try environment variable first
-    project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+    project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
     if project_id:
         _cached_project_id = project_id
         return project_id
+
+    if not _has_local_adc() and not _is_gcp_runtime():
+        _cached_project_id = "local-test-project"
+        logger.info("Using local-test-project because no Google Cloud project is configured locally.")
+        return _cached_project_id
 
     # Try google auth
     try:
@@ -47,6 +84,10 @@ def get_project_id():
             _cached_project_id = project_id
             return project_id
     except DefaultCredentialsError:
+        if os.getenv("ROOT_PATH") is None:
+            _cached_project_id = "local-test-project"
+            logger.info("Using local-test-project because no Google Cloud project is configured locally.")
+            return _cached_project_id
         logger.error("🚨 Could not determine credentials.")
         logger.error(
             "Please run 'gcloud auth application-default login' "
@@ -68,6 +109,7 @@ def get_secret(
     if not project_id:
         project_id = get_project_id()
 
+    client = get_secret_manager_client()
     name = client.secret_version_path(
         project=project_id, secret=secret_id, secret_version=version_id)
 

@@ -17,6 +17,7 @@ locals {
   banking_ui_image_url     = var.banking_ui_image_url != null ? var.banking_ui_image_url : "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/banking-ui:latest"
   iap_login_ui_image_url   = var.iap_login_ui_image_url != null ? var.iap_login_ui_image_url : "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/iap-login-ui:latest"
   data_generator_image_url = "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/data-generator:latest"
+  cors_allowed_origins     = join(",", distinct(concat(["https://${var.custom_domain}"], var.additional_cors_allowed_origins)))
 }
 
 resource "google_cloud_run_v2_service" "banking_service" {
@@ -34,7 +35,8 @@ resource "google_cloud_run_v2_service" "banking_service" {
   iap_enabled = false
 
   template {
-    service_account = google_service_account.banking_service_account.email
+    service_account                  = google_service_account.banking_service_account.email
+    max_instance_request_concurrency = var.banking_service_max_instance_request_concurrency
 
     vpc_access {
       network_interfaces {
@@ -80,6 +82,21 @@ resource "google_cloud_run_v2_service" "banking_service" {
       env {
         name  = "DB_IAM_AUTH"
         value = "true"
+      }
+
+      env {
+        name  = "DB_POOL_SIZE"
+        value = tostring(var.banking_service_db_pool_size)
+      }
+
+      env {
+        name  = "DB_MAX_OVERFLOW"
+        value = tostring(var.banking_service_db_max_overflow)
+      }
+
+      env {
+        name  = "DB_POOL_TIMEOUT"
+        value = tostring(var.banking_service_db_pool_timeout)
       }
 
       env {
@@ -138,6 +155,56 @@ resource "google_cloud_run_v2_service" "banking_service" {
       }
 
       env {
+        name  = "DATA_GENERATOR_URL"
+        value = var.deploy_cloud_run_services ? google_cloud_run_v2_service.data_generator[0].uri : "http://localhost:8001"
+      }
+
+      env {
+        name  = "CORS_ALLOWED_ORIGINS"
+        value = local.cors_allowed_origins
+      }
+
+      env {
+        name = "CARD_NETWORK_SWITCH_TOKEN"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.card_network_switch_token.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name  = "CDC_BIGQUERY_AUTH_TABLE"
+        value = "cards_transaction_authorization"
+      }
+
+      env {
+        name  = "CDC_BIGQUERY_POSTED_TABLE"
+        value = "cards_posted_transactions"
+      }
+
+      env {
+        name  = "REDIS_HOST"
+        value = google_redis_instance.banking.host
+      }
+
+      env {
+        name  = "REDIS_PORT"
+        value = google_redis_instance.banking.port
+      }
+
+      env {
+        name = "REDIS_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.redis_password.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
         name  = "GECX_APP_ID"
         value = var.cx_agent_studio_voice_agent_deployment_name
       }
@@ -165,7 +232,10 @@ resource "google_cloud_run_v2_service" "banking_service" {
     ]
   }
 
-  depends_on = [google_project_service.run_googleapis_com]
+  depends_on = [
+    google_project_service.run_googleapis_com,
+    google_secret_manager_secret_iam_member.banking_service_card_network_switch_token_accessor,
+  ]
 }
 
 data "google_compute_backend_service" "ui_backend" {
@@ -551,7 +621,9 @@ resource "google_cloud_run_v2_service" "data_generator" {
   }
 
   template {
-    service_account = google_service_account.data_generator_service_account.email
+    service_account                  = google_service_account.data_generator_service_account.email
+    max_instance_request_concurrency = var.data_generator_max_instance_request_concurrency
+    timeout                          = var.data_generator_request_timeout
 
     containers {
       image = local.data_generator_image_url
@@ -568,6 +640,30 @@ resource "google_cloud_run_v2_service" "data_generator" {
         name  = "SPANNER_DISABLE_BUILTIN_METRICS"
         value = "true"
       }
+      env {
+        name  = "BANKING_SERVICE_URL"
+        value = "https://banking-service-${data.google_project.project.number}.${var.region}.run.app"
+      }
+
+      env {
+        name  = "CORS_ALLOWED_ORIGINS"
+        value = local.cors_allowed_origins
+      }
+
+      env {
+        name = "CARD_NETWORK_SWITCH_TOKEN"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.card_network_switch_token.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name  = "SWIPE_WORKFLOW_CONCURRENCY"
+        value = tostring(var.data_generator_swipe_workflow_concurrency)
+      }
     }
   }
 
@@ -579,11 +675,15 @@ resource "google_cloud_run_v2_service" "data_generator" {
     ]
   }
 
-  depends_on = [google_project_service.run_googleapis_com]
+  depends_on = [
+    google_project_service.run_googleapis_com,
+    google_secret_manager_secret_iam_member.data_generator_card_network_switch_token_accessor,
+  ]
 }
 
 # Isolated Cloud Run Job tasked with executing alembic database schema migrations
 resource "google_cloud_run_v2_job" "db_migration_job" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
   name     = "banking-db-migrate"
   location = var.region
 
@@ -632,6 +732,11 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
         env {
           name  = "IAM_DBA_USERS"
           value = join(",", [for k, v in local.db_iam_support_members : v.name])
+        }
+
+        env {
+          name  = "IAM_DB_VIEWER_USERS"
+          value = join(",", [for k, v in local.db_iam_viewer_members : v.name])
         }
       }
 

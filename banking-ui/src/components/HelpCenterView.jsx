@@ -248,10 +248,10 @@ function HelpCenterView({ activeBot, setActiveBot }) {
                 <button
                   key={idx}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 cursor-pointer ${
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 cursor-pointer border ${
                     isSelected
-                      ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-md scale-105'
-                      : 'bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white border-slate-900 dark:border-slate-800 shadow-md scale-105'
+                      : 'bg-slate-100 dark:bg-slate-900 border-transparent hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-550 dark:text-slate-400'
                   }`}
                 >
                   {cat}
@@ -285,8 +285,7 @@ function HelpCenterView({ activeBot, setActiveBot }) {
                 <div
                   key={art.id}
                   onClick={() => setViewingArticle(art)}
-                  className="card-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800/60 shadow-lg hover:border-emerald-500/40 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-4 group cursor-pointer"
-                  style={{ backgroundColor: 'var(--card-bg-color, #0f172a)' }}
+                  className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/60 rounded-3xl p-8 shadow-sm dark:shadow-none hover:border-emerald-500/40 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-4 group cursor-pointer"
                 >
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-2">
@@ -321,13 +320,13 @@ function HelpCenterView({ activeBot, setActiveBot }) {
 
       {/* Direct Concierge & Help Hooks Callout */}
       <section className="px-6">
-        <div className="max-w-5xl mx-auto bg-slate-900 rounded-3xl p-8 md:p-12 border border-slate-800 shadow-2xl text-white text-center relative overflow-hidden" style={{ backgroundColor: 'var(--card-bg-color, #0f172a)' }}>
+        <div className="max-w-5xl mx-auto bg-slate-50 dark:bg-slate-905 rounded-3xl p-8 md:p-12 border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-2xl text-center relative overflow-hidden">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl"></div>
           
           <div className="relative z-10 max-w-xl mx-auto space-y-4">
-            <Sparkles className="w-8 h-8 text-emerald-400 mx-auto" />
-            <h3 className="text-xl md:text-2xl font-bold tracking-tight">Need Live Customized Direction?</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
+            <Sparkles className="w-8 h-8 text-emerald-500 dark:text-emerald-400 mx-auto" />
+            <h3 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Need Live Customized Direction?</h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
               Launch our highly capable context bots at any time from the floating primary desktop module, or directly connect with specialized regional consumer loan and security staff.
             </p>
             
@@ -338,7 +337,7 @@ function HelpCenterView({ activeBot, setActiveBot }) {
                     setActiveBot('Security & Fraud Bot');
                     setTimeout(() => setActiveBot(null), 4000);
                   }}
-                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 transition-colors"
+                  className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
                 >
                   Launch Security Advisor
                 </button>

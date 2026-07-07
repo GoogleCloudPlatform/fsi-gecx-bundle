@@ -24,7 +24,10 @@ from sqlalchemy.orm import Session
 from models.identity import User
 from models.origination import Account, Application, DepositApplication, Transaction, AccountLedgerEntry
 from models.authentication import ValidatedToken
+from repositories.accounts import AccountsRepository
 from services.profile import ProfileService
+from utils.database import enable_session_rbac_override
+from utils.internal_execution import InternalServiceContext, apply_internal_db_access
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,87 @@ class DepositAccountCreateRequest(BaseModel):
 class AccountsService:
     def __init__(self, db: Session):
         self.db = db
+        self.accounts_repo = AccountsRepository(db)
+
+    def execute_bill_payment_for_user(
+        self,
+        user: User,
+        source_account_id: str,
+        credit_account_id: str,
+        amount_cents: int,
+        internal_context: InternalServiceContext | None = None,
+    ) -> Dict[str, Any]:
+        if internal_context is not None:
+            apply_internal_db_access(self.db, internal_context, "simulation:autopaydown")
+
+        # 1. Lookup deposit account
+        deposit_acc = self.accounts_repo.get_deposit_account_for_user(user.id, source_account_id)
+        if not deposit_acc:
+            raise HTTPException(status_code=404, detail="Source deposit account not found.")
+
+        # 2. Check sufficient funds
+        if deposit_acc.cleared_balance_cents < amount_cents:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient funds in source account. Available: {deposit_acc.cleared_balance_cents} cents."
+            )
+
+        # 3. Lookup credit account
+        from models.credit_card import PostedTransaction
+        credit_acc = self.accounts_repo.get_credit_account_for_user(user.id, credit_account_id)
+        if not credit_acc:
+            raise HTTPException(status_code=404, detail="Target credit account not found.")
+
+        # 4. Perform atomic double-entry ledger update on checking/savings
+        tx = Transaction(
+            idempotency_key=f"IDEMP-PAY-{uuid.uuid4().hex}",
+            user_id=user.id,
+            status="COMPLETED",
+            description=f"Credit Card Bill Payment to Account ending in {str(credit_acc.id)[-4:]}"
+        )
+        self.accounts_repo.add_transaction(tx)
+
+        debit_split = AccountLedgerEntry(
+            transaction_id=tx.id,
+            account_id=deposit_acc.id,
+            amount_cents=-amount_cents,
+            entry_type="CREDIT"
+        )
+        self.accounts_repo.add_account_ledger_entry(debit_split)
+        deposit_acc.cleared_balance_cents -= amount_cents
+
+        # 5. Decrement debt on credit card account and restore available credit
+        credit_acc.cleared_balance_cents -= amount_cents
+        from services.card_network import recalculate_available_credit
+        recalculate_available_credit(self.db, credit_acc)
+
+        card_payment_tx = PostedTransaction(
+            account_id=credit_acc.id,
+            amount_cents=amount_cents,
+            description="Bill Payment Received - Thank You"
+        )
+        self.accounts_repo.add_posted_transaction(card_payment_tx)
+
+        from utils.audit import record_audit_event
+        record_audit_event(
+            self.db,
+            "BILL_PAYMENT_EXECUTED",
+            {
+                "source_account_id": source_account_id,
+                "credit_account_id": credit_account_id,
+                "amount_cents": amount_cents
+            }
+        )
+
+        self.db.commit()
+
+        return {
+            "status": "SUCCESS",
+            "message": "Bill payment successfully processed.",
+            "source_cleared_balance_cents": deposit_acc.cleared_balance_cents,
+            "credit_cleared_balance_cents": credit_acc.cleared_balance_cents,
+            "credit_available_credit_cents": credit_acc.available_credit_cents
+        }
 
     def create_deposit_account(
         self,
@@ -152,3 +236,135 @@ class AccountsService:
             "status": new_acc.status,
             "opened_at": new_acc.opened_at.isoformat() if new_acc.opened_at else datetime.datetime.now(datetime.timezone.utc).isoformat()
         }
+
+    def get_user_accounts_summary(self, token: ValidatedToken) -> Dict[str, Any]:
+        """
+        Retrieves checking, savings, and credit accounts for the authenticated user context.
+        """
+        # Resolve internal User entity
+        user = self.db.query(User).filter(User.auth_provider_uid == token.user_id).first()
+        if not user:
+            ProfileService(self.db).get_or_provision_profile(token)
+            self.db.commit()
+            user = self.db.query(User).filter(User.auth_provider_uid == token.user_id).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="User profile could not be resolved.")
+
+        enable_session_rbac_override(self.db)
+
+        # Fetch checking/savings accounts
+        deposit_accounts = self.db.query(Account).filter(Account.user_id == user.id).all()
+
+        # Fetch credit accounts
+        from models.credit_card import CreditAccount
+        credit_accounts = self.db.query(CreditAccount).filter(CreditAccount.customer_id == user.id).all()
+
+        # Auto-provision sandbox for mock user when running locally to speed up local dev onboarding!
+        from utils.env import is_running_locally
+        if is_running_locally() and not deposit_accounts and not credit_accounts:
+            user_email = user.email
+            user_uid = user.auth_provider_uid
+            user_id = user.id
+            logger.info(f"Auto-provisioning local sandbox for user: {user_email}")
+            from services.seeding_service import provision_user_suite
+            try:
+                provision_user_suite(self.db, user_email, user_uid)
+                self.db.commit()
+                # Fetch accounts again
+                deposit_accounts = self.db.query(Account).filter(Account.user_id == user_id).all()
+                credit_accounts = self.db.query(CreditAccount).filter(CreditAccount.customer_id == user_id).all()
+            except Exception as e:
+                logger.error(f"Failed to auto-provision local sandbox for user: {user_email}. Error: {e}")
+                self.db.rollback()
+
+        return {
+            "deposit_accounts": [
+                {
+                    "account_id": str(acc.id),
+                    "account_number": acc.account_number,
+                    "account_type": acc.account_type,
+                    "product_name": acc.product_name,
+                    "product_code": acc.product_code,
+                    "cleared_balance_cents": acc.cleared_balance_cents,
+                    "routing_number": acc.routing_number,
+                    "status": acc.status
+                } for acc in deposit_accounts
+            ],
+            "credit_accounts": [
+                {
+                    "account_id": str(cred_acc.id),
+                    "product_code": cred_acc.product_code,
+                    "status": cred_acc.status,
+                    "credit_limit_cents": cred_acc.credit_limit_cents,
+                    "cleared_balance_cents": cred_acc.cleared_balance_cents,
+                    "available_credit_cents": cred_acc.available_credit_cents,
+                    "payment_due_date": cred_acc.payment_due_date.isoformat() if cred_acc.payment_due_date else None,
+                    "cards": [
+                        {
+                            "card_id": str(card.id),
+                            "cardholder_name": card.cardholder_name,
+                            "last_four": card.last_four,
+                            "card_token": card.card_token,
+                            "status": card.status
+                        } for card in cred_acc.cards
+                    ]
+                } for cred_acc in credit_accounts
+            ]
+        }
+
+    def execute_bill_payment(
+        self,
+        token: ValidatedToken,
+        source_account_id: str,
+        credit_account_id: str,
+        amount_cents: int
+    ) -> Dict[str, Any]:
+        """
+        Executes a credit card bill payment from a checking or savings deposit account.
+        Subtracts from deposit balance, reduces credit account cleared debt balance, and restores available credit.
+        """
+        # Resolve internal User entity
+        user = self.accounts_repo.get_user_by_auth_provider_uid(token.user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User profile not resolved.")
+
+        try:
+            return self.execute_bill_payment_for_user(user, source_account_id, credit_account_id, amount_cents)
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error during bill payment transaction: {e}")
+            raise e
+
+    def get_deposit_transactions(self, token: ValidatedToken, account_id: str) -> list[Dict[str, Any]]:
+        # Resolve internal User entity
+        user = self.db.query(User).filter(User.auth_provider_uid == token.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User profile not found.")
+            
+        # Ensure account belongs to user
+        account = self.db.query(Account).filter(Account.id == account_id, Account.user_id == user.id).first()
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found.")
+            
+        # Fetch ledger entries
+        entries = self.db.query(AccountLedgerEntry).filter(AccountLedgerEntry.account_id == account.id).order_by(AccountLedgerEntry.posted_at.desc()).all()
+        
+        results = []
+        running_bal = account.cleared_balance_cents
+        for entry in entries:
+            is_pending = entry.transaction.status == "PENDING" if entry.transaction else False
+            results.append({
+                "entry_id": str(entry.entry_id),
+                "transaction_id": str(entry.transaction_id),
+                "amount_cents": entry.amount_cents,
+                "amount": abs(entry.amount_cents) / 100.0,
+                "entry_type": entry.entry_type, # 'DEBIT', 'CREDIT'
+                "description": entry.transaction.description if entry.transaction else "Posted Transaction",
+                "posted_at": entry.posted_at.isoformat() if entry.posted_at else "",
+                "running_balance_cents": running_bal,
+                "pending": is_pending
+            })
+            if not is_pending:
+                running_bal -= entry.amount_cents # Move balance backward
+            
+        return results

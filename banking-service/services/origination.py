@@ -30,6 +30,7 @@ from models.origination import ApplicationArtifact
 from repositories import origination as origination_repo
 from utils.gcp import get_project_id
 from utils.gemini import extract_data
+from utils.lazy_clients import LazyClient
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ PROJECT_ID = get_project_id()
 BUCKET_NAME = f"{PROJECT_ID}_banking-interaction-artifacts"
 SERVICE_ACCOUNT_EMAIL = f"banking-service-sa@{PROJECT_ID}.iam.gserviceaccount.com"
 
-storage_client = storage.Client()
+storage_client = LazyClient(storage.Client)
 
 
 class OriginationService:

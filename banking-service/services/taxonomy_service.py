@@ -12,40 +12,84 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import threading
-from typing import Dict
+from typing import Dict, Optional
 from cachetools import TTLCache
 from models.fdx import PersonalFinanceCategory
+from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TAXONOMY_MAP: Dict[str, Dict[str, str]] = {
-    "5411": {"primary": "GENERAL_MERCHANDISE", "detailed": "GENERAL_MERCHANDISE_SUPERSTORES"},
-    "5814": {"primary": "FOOD_AND_DRINK", "detailed": "FOOD_AND_DRINK_FAST_FOOD"},
-    "5812": {"primary": "FOOD_AND_DRINK", "detailed": "FOOD_AND_DRINK_RESTAURANTS"},
-    "4511": {"primary": "TRAVEL", "detailed": "TRAVEL_FLIGHTS"},
-    "7011": {"primary": "TRAVEL", "detailed": "TRAVEL_LODGING"},
-    "4814": {"primary": "GENERAL_SERVICES", "detailed": "GENERAL_SERVICES_TELECOMMUNICATIONS"},
+    "5311": {"primary": "MERCHANDISE", "detailed": "MERCHANDISE_DEPARTMENT_STORES"},
+    "5411": {"primary": "GROCERY", "detailed": "GROCERY_SUPERMARKETS"},
+    "5814": {"primary": "DINING", "detailed": "DINING_FAST_FOOD"},
+    "5812": {"primary": "DINING", "detailed": "DINING_RESTAURANTS"},
+    "4511": {"primary": "OTHER_TRAVEL", "detailed": "OTHER_TRAVEL_FLIGHTS"},
+    "7011": {"primary": "OTHER_TRAVEL", "detailed": "OTHER_TRAVEL_LODGING"},
+    "4121": {"primary": "OTHER_TRAVEL", "detailed": "OTHER_TRAVEL_TAXI"},
+    "8011": {"primary": "HEALTHCARE", "detailed": "HEALTHCARE_MEDICAL"},
+    "5541": {"primary": "GAS_AUTOMOTIVE", "detailed": "GAS_AUTOMOTIVE_FUEL"},
+    "4814": {"primary": "OTHER", "detailed": "OTHER_TELECOMMUNICATIONS"},
+    "4899": {"primary": "OTHER", "detailed": "OTHER_ENTERTAINMENT"},
+    "FEE": {"primary": "FEES", "detailed": "FEES_LATE"},
 }
 
 
 class TaxonomyService:
-    """Thread-safe cached taxonomy lookup service mapping MCCs to FDX PersonalFinanceCategory objects."""
+    """Thread-safe cached taxonomy lookup service mapping MCCs to FDX PersonalFinanceCategory objects backed by ref_data."""
     _cache: TTLCache = TTLCache(maxsize=1, ttl=3600)
     _lock: threading.Lock = threading.Lock()
 
     @classmethod
-    def get_taxonomy_map(cls) -> Dict[str, Dict[str, str]]:
+    def invalidate_cache(cls) -> None:
+        with cls._lock:
+            cls._cache.clear()
+
+    @classmethod
+    def get_taxonomy_map(cls, db: Optional[Session] = None) -> Dict[str, Dict[str, str]]:
         if "map" in cls._cache:
             return cls._cache["map"]
         with cls._lock:
             if "map" in cls._cache:
                 return cls._cache["map"]
-            cls._cache["map"] = DEFAULT_TAXONOMY_MAP
-            return cls._cache["map"]
+            
+            close_db = False
+            if db is None:
+                try:
+                    from utils.database import SessionLocal
+                    db = SessionLocal()
+                    close_db = True
+                except Exception as e:
+                    logger.warning(f"Could not connect to DB for taxonomy lookup: {e}")
+                    cls._cache["map"] = DEFAULT_TAXONOMY_MAP
+                    return cls._cache["map"]
+            
+            try:
+                from models.reference import MerchantCategoryCode
+                records = db.query(MerchantCategoryCode).all()
+                if records:
+                    mapping = {
+                        r.mcc: {"primary": r.primary_category, "detailed": r.detailed_category}
+                        for r in records
+                    }
+                    cls._cache["map"] = mapping
+                    return mapping
+                else:
+                    cls._cache["map"] = DEFAULT_TAXONOMY_MAP
+                    return cls._cache["map"]
+            except Exception as e:
+                logger.warning(f"Could not load taxonomy from ref_data database: {e}. Falling back to default map.")
+                return DEFAULT_TAXONOMY_MAP
+            finally:
+                if close_db and db:
+                    db.close()
 
     @classmethod
-    def get_category(cls, mcc: str) -> PersonalFinanceCategory:
-        mapping = cls.get_taxonomy_map()
-        cat_data = mapping.get(str(mcc), {"primary": "GENERAL_MERCHANDISE", "detailed": "GENERAL_MERCHANDISE_OTHER"})
+    def get_category(cls, mcc: str, db: Optional[Session] = None) -> PersonalFinanceCategory:
+        mapping = cls.get_taxonomy_map(db=db)
+        cat_data = mapping.get(str(mcc), {"primary": "MERCHANDISE", "detailed": "MERCHANDISE_OTHER"})
         return PersonalFinanceCategory(
             primary=cat_data["primary"],
             detailed=cat_data["detailed"],

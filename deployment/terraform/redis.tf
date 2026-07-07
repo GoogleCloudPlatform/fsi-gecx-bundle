@@ -58,6 +58,12 @@ resource "google_secret_manager_secret" "redis_password" {
   depends_on = [google_project_service.secretmanager_googleapis_com]
 }
 
+resource "google_secret_manager_secret_iam_member" "redis_password_accessor" {
+  secret_id = google_secret_manager_secret.redis_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
 resource "google_secret_manager_secret_version" "redis_password_version" {
   secret      = google_secret_manager_secret.redis_password.id
   secret_data = google_redis_instance.banking.auth_string

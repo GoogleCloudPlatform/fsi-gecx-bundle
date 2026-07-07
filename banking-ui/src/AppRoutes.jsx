@@ -16,6 +16,7 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 
 import HomeView from './components/HomeView.jsx';
+import AccountsView from './components/AccountsView.jsx';
 import SettingsView from './components/SettingsView.jsx';
 import CreditCardsView from './components/CreditCardsView.jsx';
 import CheckingAccountsView from './components/CheckingAccountsView.jsx';
@@ -34,6 +35,7 @@ import AdminMessagingView from './components/AdminMessagingView.jsx';
 import ApplyCreditCardView from './components/ApplyCreditCardView.jsx';
 import AdminUnderwritingView from './components/AdminUnderwritingView.jsx';
 import AdminDashboardView from './components/AdminDashboardView.jsx';
+import AdminSimulationView from './components/AdminSimulationView.jsx';
 import VoiceSupportView from './components/VoiceSupportView.jsx';
 import AgentSupportDashboard from './components/AgentSupportDashboard.jsx';
 import LocatorView from './components/LocatorView.jsx';
@@ -64,6 +66,8 @@ export default function AppRoutes({
     <Routes>
       <Route path="/" element={
         <HomeView
+          fbUser={fbUser}
+          customerProfile={customerProfile}
           loanAmount={loanAmount}
           setLoanAmount={setLoanAmount}
           loanTerm={loanTerm}
@@ -76,6 +80,9 @@ export default function AppRoutes({
       } />
       <Route path="/checking-accounts" element={
         <CheckingAccountsView activeBot={activeBot} setActiveBot={setActiveBot} />
+      } />
+      <Route path="/accounts" element={
+        <AccountsView fbUser={fbUser} customerProfile={customerProfile} />
       } />
       <Route path="/savings-accounts" element={
         <SavingsAccountsView />
@@ -159,6 +166,11 @@ export default function AppRoutes({
           <AdminUnderwritingView
             fbUser={fbUser}
           />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/simulation" element={
+        <ProtectedRoute isReady={isReady} fbUser={fbUser}>
+          <AdminSimulationView />
         </ProtectedRoute>
       } />
       <Route path="/search" element={

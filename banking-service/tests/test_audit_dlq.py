@@ -13,11 +13,10 @@
 # limitations under the License.
 
 import pytest
-from unittest.mock import patch, MagicMock
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models.audit import AuditOutbox, Base
-from utils.audit import record_audit_event, publish_pending_audit_events, process_dlq_audit_events, MAX_RETRIES
+from utils.audit import record_audit_event, process_dlq_audit_events
 
 
 @pytest.fixture
@@ -30,26 +29,14 @@ def audit_db():
     session.close()
 
 
-@patch("utils.audit.get_publisher_client")
-def test_outbox_publish_failure_to_dlq(mock_get_pub, audit_db, monkeypatch):
-    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-proj")
-    monkeypatch.setenv("PUBSUB_TOPIC_AUDIT", "test-topic")
-
-    mock_pub = MagicMock()
-    mock_pub.topic_path.return_value = "projects/test-proj/topics/test-topic"
-    mock_pub.publish.side_effect = Exception("PubSub Network Timeout")
-    mock_get_pub.return_value = mock_pub
-
+def test_outbox_cdc_append_only_log_and_monitoring(audit_db):
     rec = record_audit_event(audit_db, "TEST_EVENT", {"data": "foo"})
     audit_db.commit()
 
-    # Trigger publish multiple times until max retries reached
-    for _ in range(MAX_RETRIES):
-        publish_pending_audit_events(audit_db)
-
     updated = audit_db.query(AuditOutbox).filter_by(event_id=rec.event_id).first()
-    assert updated.status == "DLQ"
-    assert updated.retry_count == MAX_RETRIES
+    assert updated is not None
+    assert updated.event_type == "TEST_EVENT"
 
+    # In WAL CDC architecture, process_dlq_audit_events is a no-op monitoring stub
     dlq_ids = process_dlq_audit_events(audit_db)
-    assert rec.event_id in dlq_ids
+    assert len(dlq_ids) == 0

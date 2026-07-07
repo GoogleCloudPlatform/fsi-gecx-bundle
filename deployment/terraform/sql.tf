@@ -156,10 +156,26 @@ locals {
       )
     }
   }
+  db_iam_viewer_members = {
+    for member in var.database_iam_viewer_users :
+    member => {
+      name = split(":", member)[1]
+      type = split(":", member)[0] == "user" ? "CLOUD_IAM_USER" : (
+        split(":", member)[0] == "group" ? "CLOUD_IAM_GROUP" : "CLOUD_IAM_SERVICE_ACCOUNT"
+      )
+    }
+  }
 }
 
 resource "google_sql_user" "database_iam_support_users" {
   for_each = local.db_iam_support_members
+  name     = each.value.name
+  instance = google_sql_database_instance.banking_data.name
+  type     = each.value.type
+}
+
+resource "google_sql_user" "database_iam_viewer_users" {
+  for_each = local.db_iam_viewer_members
   name     = each.value.name
   instance = google_sql_database_instance.banking_data.name
   type     = each.value.type

@@ -33,6 +33,8 @@ dependencies = [
     "google-cloud-discoveryengine>=0.13.12",
     "google-cloud-kms>=3.2.0",
     "cryptography>=48.0.1",
+    "redis>=8.0.1",
+    "google-cloud-monitoring>=2.31.0",
 ]
 
 [dependency-groups]
@@ -40,6 +42,7 @@ dev = [
     "pytest==9.0.3",
     "pytest-asyncio==1.3.0",
     "ruff>=0.15.0",
+    "respx==0.22.0",
 ]
 
 [tool.pytest.ini_options]

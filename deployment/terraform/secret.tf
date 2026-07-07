@@ -90,3 +90,20 @@ resource "google_secret_manager_secret_version" "livekit_api_secret_version" {
   secret      = google_secret_manager_secret.livekit_api_secret.id
   secret_data = random_password.livekit_api_secret.result
 }
+
+resource "google_secret_manager_secret" "card_network_switch_token" {
+  secret_id = "card-network-switch-token"
+  replication {
+    auto {}
+  }
+}
+
+resource "random_password" "card_network_switch_token" {
+  length  = 32
+  special = false
+}
+
+resource "google_secret_manager_secret_version" "card_network_switch_token_version" {
+  secret      = google_secret_manager_secret.card_network_switch_token.id
+  secret_data = random_password.card_network_switch_token.result
+}

@@ -13,9 +13,12 @@
 # limitations under the License.
 
 import datetime
-from typing import Optional, List
+from typing import Optional, List, Any
 from sqlalchemy.orm import Session
 from models.credit_card import FinancialAccount, IssuedCard, AccountLedger, TransactionAuthorization
+
+from models.identity import User
+import uuid
 
 class CreditCardRepository:
     """
@@ -24,6 +27,24 @@ class CreditCardRepository:
     """
     def __init__(self, db: Session):
         self.db = db
+
+    def _resolve_user_id(self, customer_id: str) -> str:
+        """Resolves an auth_provider_uid or raw string to a database user UUID."""
+        # If it's already a valid UUID format, check if we can query it directly
+        try:
+            uuid_val = uuid.UUID(customer_id)
+            user_exists = self.db.query(User).filter(User.id == uuid_val).first()
+            if user_exists:
+                return str(uuid_val)
+        except ValueError:
+            pass
+
+        # Otherwise, look up by auth_provider_uid
+        user = self.db.query(User).filter(User.auth_provider_uid == customer_id).first()
+        if user:
+            return str(user.id)
+        # Return a dummy valid UUID instead of raw string to prevent SQLAlchemy StatementError coercion failures
+        return "00000000-0000-0000-0000-000000000000"
 
     # --- Financial Account Queries ---
     def get_account_by_id(self, account_id: str, lock: bool = False) -> Optional[FinancialAccount]:
@@ -35,7 +56,8 @@ class CreditCardRepository:
 
     def get_account_by_customer(self, customer_id: str) -> Optional[FinancialAccount]:
         """Retrieves a Financial Account matching the specified customer ID."""
-        return self.db.query(FinancialAccount).filter(FinancialAccount.customer_id == customer_id).first()
+        resolved_uid = self._resolve_user_id(customer_id)
+        return self.db.query(FinancialAccount).filter(FinancialAccount.customer_id == resolved_uid).first()
 
     def save_account(self, account: FinancialAccount) -> FinancialAccount:
         """Saves a Financial Account instance to the session."""
@@ -58,16 +80,18 @@ class CreditCardRepository:
 
     def get_card_by_customer_secured(self, card_id: str, customer_id: str) -> Optional[IssuedCard]:
         """Secured retrieval verifying the card belongs to the active customer context."""
+        resolved_uid = self._resolve_user_id(customer_id)
         return self.db.query(IssuedCard).join(FinancialAccount).filter(
             IssuedCard.id == card_id,
-            FinancialAccount.customer_id == customer_id
+            FinancialAccount.customer_id == resolved_uid
         ).first()
 
     def get_card_by_token_secured(self, card_token: str, customer_id: str) -> Optional[IssuedCard]:
         """Secured token retrieval verifying the card belongs to the active customer context."""
+        resolved_uid = self._resolve_user_id(customer_id)
         return self.db.query(IssuedCard).join(FinancialAccount).filter(
             IssuedCard.card_token == card_token,
-            FinancialAccount.customer_id == customer_id
+            FinancialAccount.customer_id == resolved_uid
         ).first()
 
     def save_card(self, card: IssuedCard) -> IssuedCard:
@@ -83,6 +107,13 @@ class CreditCardRepository:
         if limit:
             query = query.limit(limit)
         return query.all()
+
+    def list_authorizations(self, account_id: str, status: Optional[str] = "PENDING") -> List[TransactionAuthorization]:
+        """Retrieves authorization holds for an account."""
+        query = self.db.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == account_id)
+        if status:
+            query = query.filter(TransactionAuthorization.status == status)
+        return query.order_by(TransactionAuthorization.created_at.desc()).all()
 
     def get_ledger_entry_by_id(self, entry_id: str) -> Optional[AccountLedger]:
         """Retrieves a single ledger entry transaction by its unique ID."""
@@ -129,3 +160,52 @@ class CreditCardRepository:
             TransactionAuthorization.account_id == account_id,
             TransactionAuthorization.status == "PENDING"
         ).order_by(TransactionAuthorization.created_at.desc()).all()
+
+    def get_all_accounts(self) -> List[FinancialAccount]:
+        """Retrieves all Financial Accounts registered in the database."""
+        return self.db.query(FinancialAccount).all()
+
+    def get_pending_auth_total(self, account_id: str) -> int:
+        """Calculates the sum of all pending authorization holds for an account."""
+        from sqlalchemy import func
+        res = self.db.query(func.sum(TransactionAuthorization.transaction_amount_cents)).filter(
+            TransactionAuthorization.account_id == account_id,
+            TransactionAuthorization.status == "PENDING"
+        ).scalar()
+        return int(res or 0)
+
+    def get_authorization_by_rrn(self, rrn: str, status: Optional[str] = None) -> Optional[TransactionAuthorization]:
+        """Retrieves a transaction authorization by its retrieval reference number and optional status."""
+        query = self.db.query(TransactionAuthorization).filter(TransactionAuthorization.retrieval_reference_number == rrn)
+        if status:
+            query = query.filter(TransactionAuthorization.status == status)
+        return query.first()
+
+    def get_credit_product(self, product_code: str) -> Optional[Any]:
+        """Retrieves a CreditProduct catalog entity by its product code."""
+        from models.credit_card import CreditProduct
+        return self.db.query(CreditProduct).filter(CreditProduct.product_code == product_code).first()
+
+    def list_active_cards_for_simulation(self) -> List[tuple[IssuedCard, FinancialAccount, User | None]]:
+        """Returns active cards joined with their backing credit accounts and owning users for simulation tooling."""
+        return (
+            self.db.query(IssuedCard, FinancialAccount, User)
+            .join(FinancialAccount, IssuedCard.account_id == FinancialAccount.id)
+            .outerjoin(User, FinancialAccount.customer_id == User.id)
+            .filter(IssuedCard.status == "ACTIVE", IssuedCard.is_active)
+            .all()
+        )
+
+    def get_active_card_for_customer(self, customer_id: str) -> tuple[IssuedCard, FinancialAccount] | None:
+        """Returns one active card for the specified customer UUID or auth-provider UID."""
+        resolved_uid = self._resolve_user_id(customer_id)
+        return (
+            self.db.query(IssuedCard, FinancialAccount)
+            .join(FinancialAccount, IssuedCard.account_id == FinancialAccount.id)
+            .filter(
+                FinancialAccount.customer_id == resolved_uid,
+                IssuedCard.status == "ACTIVE",
+                IssuedCard.is_active,
+            )
+            .first()
+        )

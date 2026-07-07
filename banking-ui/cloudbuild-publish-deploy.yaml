@@ -13,6 +13,60 @@
 # limitations under the License.
 
 steps:
+  - name: "ghcr.io/github-linguist/linguist:latest"
+    id: "run-linguist"
+    entrypoint: "sh"
+    args:
+      - "-c"
+      - |
+        github-linguist /workspace --json > /workspace/linguist.json
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "get-version"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        apt-get update -qq && apt-get install -y -qq jq
+        LINGUIST_RESULT=$$(jq @json /workspace/linguist.json)
+        bq query --use_legacy_sql=false --format=csv "CALL \`$PROJECT_ID.ci.get_build_version\`('banking-ui', 'ci', '0.0.0', 'fsi-gecx-bundle', '$COMMIT_SHA', false, $$LINGUIST_RESULT)" > raw_output.txt
+        cat raw_output.txt
+        VERSION=$$(grep -o 'BUILD_VERSION=[0-9][0-9.]*' raw_output.txt | cut -d= -f2 | head -n 1 | tr -d '\r\n ')
+        if [ -z "$$VERSION" ]; then
+          echo "Error: Failed to retrieve build version from BigQuery." >&2
+          exit 1
+        fi
+        echo "$$VERSION" > build_version.txt
+        echo "Build Version is: $$VERSION"
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "update-configs"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        VERSION=$$(cat build_version.txt)
+        COMMIT_SHA="$SHORT_SHA"
+        if [ -z "$$COMMIT_SHA" ]; then
+          COMMIT_SHA="local"
+        fi
+        echo "Updating config files with version: $$VERSION and commit: $$COMMIT_SHA"
+        
+        # Update config.js
+        sed -i 's/BUILD_VERSION: "[^"]*"/BUILD_VERSION: "'"$${VERSION}"'"/g' banking-ui/public/config.js
+        sed -i 's/BUILD_COMMIT_ID: "[^"]*"/BUILD_COMMIT_ID: "'"$${COMMIT_SHA}"'"/g' banking-ui/public/config.js
+        
+        # Update config.template.js
+        sed -i 's/BUILD_VERSION: "[^"]*"/BUILD_VERSION: "'"$${VERSION}"'"/g' banking-ui/public/config.template.js
+        sed -i 's/BUILD_COMMIT_ID: "[^"]*"/BUILD_COMMIT_ID: "'"$${COMMIT_SHA}"'"/g' banking-ui/public/config.template.js
+        
+        echo "--- Updated config.js ---"
+        cat banking-ui/public/config.js
+        echo "-------------------------"
+        echo "--- Updated config.template.js ---"
+        cat banking-ui/public/config.template.js
+        echo "----------------------------------"
+
   - name: "gcr.io/cloud-builders/docker"
     id: "build-image"
     entrypoint: "bash"

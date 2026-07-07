@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import json
 import logging
 import datetime
@@ -38,99 +37,41 @@ def get_publisher_client():
 
 def record_audit_event(db: Session, event_type: str, payload: dict) -> AuditOutbox:
     """
-    Records an audit event inside the active database session transaction.
-    Guarantees that the event is committed atomically with the state mutation.
+    Records an immutable append-only audit event inside the active database session transaction.
+    Guarantees that the event is committed atomically with the state mutation for WAL CDC ingestion.
     """
     outbox_entry = AuditOutbox(
         event_type=event_type,
         payload=json.dumps(payload),
-        status="PENDING",
-        retry_count=0,
     )
     db.add(outbox_entry)
     db.flush()  # Flush to populate default IDs without committing the transaction
-    logger.info(f"Recorded outbox audit event {outbox_entry.event_id} ({event_type}) inside active transaction.")
+    logger.info(f"Recorded append-only outbox audit event {outbox_entry.event_id} ({event_type}) inside active transaction.")
     return outbox_entry
 
 
 def publish_pending_audit_events(db: Session, batch_size: int = 50) -> int:
     """
-    Queries pending outbox records and publishes them to Google Cloud Pub/Sub.
-    Should be called asynchronously or via a background polling worker.
+    In our WAL CDC architecture (Architecture Two), outbox ingestion occurs via zero-load WAL streaming without database polling.
+    Returns the count of recent audit events in the append-only operational log.
     """
-    pending_records = db.query(AuditOutbox).filter(AuditOutbox.status == "PENDING").limit(batch_size).all()
-    if not pending_records:
-        return 0
-
-    publisher = get_publisher_client()
-    project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
-    topic_name = os.getenv("PUBSUB_TOPIC_AUDIT")
-    
-    topic_path = None
-    if publisher and project_id and topic_name:
-        topic_path = publisher.topic_path(project_id, topic_name)
-
-    published_count = 0
-    futures = []
-    for record in pending_records:
-        if topic_path:
-            try:
-                raw_p = json.loads(record.payload) if isinstance(record.payload, str) else record.payload
-                message_dict = {
-                    "event_id": str(record.event_id),
-                    "event_type": record.event_type,
-                    "created_at": record.created_at.isoformat() if record.created_at else datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    "payload": raw_p if isinstance(raw_p, (dict, list)) else {"raw": str(raw_p)},
-                }
-                if isinstance(raw_p, dict):
-                    for k in ["application_id", "artifact_id", "underwriter_id", "decision", "account_id", "user_id"]:
-                        if k in raw_p and raw_p[k] is not None:
-                            message_dict[k] = str(raw_p[k])
-                data_bytes = json.dumps(message_dict).encode("utf-8")
-                future = publisher.publish(
-                    topic_path,
-                    data_bytes,
-                    event_id=record.event_id,
-                    event_type=record.event_type,
-                )
-                futures.append((record, future))
-            except Exception as e:
-                record.retry_count += 1
-                logger.error(f"Failed to initiate publish for audit event {record.event_id} (attempt {record.retry_count}): {e}")
-                if record.retry_count >= MAX_RETRIES:
-                    record.status = "DLQ"
-                    logger.critical(f"Audit event {record.event_id} exceeded max retries ({MAX_RETRIES}) and moved to DLQ state.")
-        else:
-            logger.debug(f"Simulating publish for audit event {record.event_id} (Pub/Sub topic unconfigured).")
-            record.status = "PUBLISHED"
-            record.published_at = datetime.datetime.now(datetime.timezone.utc)
-            published_count += 1
-
-    for record, future in futures:
-        try:
-            future.result(timeout=5.0)
-            record.status = "PUBLISHED"
-            record.published_at = datetime.datetime.now(datetime.timezone.utc)
-            published_count += 1
-        except Exception as e:
-            record.retry_count += 1
-            logger.error(f"Failed to complete publish for audit event {record.event_id} (attempt {record.retry_count}): {e}")
-            if record.retry_count >= MAX_RETRIES:
-                record.status = "DLQ"
-                logger.critical(f"Audit event {record.event_id} exceeded max retries ({MAX_RETRIES}) and moved to DLQ state.")
-
-    db.commit()
-    return published_count
+    logger.info("Outbox ingestion is managed via zero-load Datastream WAL CDC streaming.")
+    return db.query(AuditOutbox).count()
 
 
 def process_dlq_audit_events(db: Session, batch_size: int = 50) -> list[str]:
     """
-    Sweeps dead-letter queue (DLQ/FAILED) outbox records, emits alert monitoring metrics,
-    and returns a list of dead-lettered event IDs requiring intervention.
+    In our WAL CDC architecture, replication latency and DLQs are monitored at the infrastructure WAL stream level.
     """
-    dlq_records = db.query(AuditOutbox).filter(AuditOutbox.status.in_(["DLQ", "FAILED"])).limit(batch_size).all()
-    event_ids = []
-    for rec in dlq_records:
-        logger.warning(f"DLQ Monitoring Alert: Event ID {rec.event_id} ({rec.event_type}) in state {rec.status} with {rec.retry_count} retries.")
-        event_ids.append(rec.event_id)
-    return event_ids
+    return []
+
+
+def prune_historical_audit_events(db: Session, retention_days: int = 30) -> int:
+    """
+    Prunes historical append-only audit events older than retention_days from the operational database buffer.
+    Long-term regulatory retention (7-10 years) is maintained in BigQuery compliance datasets via Datastream WAL CDC.
+    """
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=retention_days)
+    deleted_count = db.query(AuditOutbox).filter(AuditOutbox.created_at < cutoff).delete()
+    db.commit()
+    return deleted_count

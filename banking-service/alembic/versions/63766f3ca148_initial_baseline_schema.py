@@ -140,6 +140,20 @@ def upgrade() -> None:
                 op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{user}";')
             except Exception as e:
                 print(f"Notice: Could not grant permissions on public to {user}: {e}")
+
+        viewer_users = []
+        iam_viewer_users_env = os.getenv("IAM_DB_VIEWER_USERS")
+        if iam_viewer_users_env:
+            viewer_users.extend([u.strip() for u in iam_viewer_users_env.split(",") if u.strip()])
+            
+        for user in viewer_users:
+            try:
+                op.execute(f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = \'{user}\') THEN CREATE ROLE "{user}" NOLOGIN; END IF; END $$;')
+                op.execute(f'GRANT USAGE ON SCHEMA public TO "{user}";')
+                op.execute(f'GRANT SELECT ON ALL TABLES IN SCHEMA public TO "{user}";')
+                op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO "{user}";')
+            except Exception as e:
+                print(f"Notice: Could not grant viewer permissions on public to {user}: {e}")
     # ### end Alembic commands ###
 
 
