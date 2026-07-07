@@ -6,8 +6,11 @@ Create Date: 2026-07-07 09:36:38.513747
 
 """
 from typing import Sequence, Union
+from pathlib import Path
+import datetime
 import os
-import logging
+import json
+import uuid
 
 from alembic import op
 import sqlalchemy as sa
@@ -20,6 +23,233 @@ revision: str = '9e8f66b3e48e'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
+
+
+RESOURCE_DATA_DIR = Path(__file__).resolve().parents[2] / "resources" / "data"
+
+
+def _load_json_resource(filename: str):
+    with (RESOURCE_DATA_DIR / filename).open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _load_jsonl_resource(filename: str) -> list[dict]:
+    with (RESOURCE_DATA_DIR / filename).open("r", encoding="utf-8") as handle:
+        return [json.loads(line) for line in handle if line.strip()]
+
+
+def _seed_reference_tables() -> None:
+    credit_products = sa.table(
+        "credit_products",
+        sa.column("product_code", sa.String),
+        sa.column("product_name", sa.String),
+        sa.column("min_credit_limit_cents", sa.BigInteger),
+        sa.column("max_credit_limit_cents", sa.BigInteger),
+        sa.column("purchase_apr", sa.Numeric),
+        sa.column("cashback_rate", sa.Numeric),
+        sa.column("travel_multiplier", sa.Integer),
+        sa.column("dining_multiplier", sa.Integer),
+        sa.column("annual_fee_cents", sa.BigInteger),
+        sa.column("is_active", sa.Boolean),
+        sa.column("created_at", sa.DateTime),
+        schema="catalog",
+    )
+    deposit_products = sa.table(
+        "deposit_products",
+        sa.column("product_code", sa.String),
+        sa.column("product_name", sa.String),
+        sa.column("annual_percentage_yield", sa.Numeric),
+        sa.column("monthly_maintenance_fee_cents", sa.BigInteger),
+        sa.column("is_active", sa.Boolean),
+        sa.column("created_at", sa.DateTime),
+        schema="catalog",
+    )
+    merchant_category_codes = sa.table(
+        "merchant_category_codes",
+        sa.column("mcc", sa.String),
+        sa.column("primary_category", sa.String),
+        sa.column("detailed_category", sa.String),
+        sa.column("updated_at", sa.DateTime),
+        schema="merchants",
+    )
+    merchant_master = sa.table(
+        "merchant_master",
+        sa.column("id", utils.database.UniversalUUID()),
+        sa.column("merchant_id", sa.String),
+        sa.column("clean_name", sa.String),
+        sa.column("default_mcc", sa.String),
+        sa.column("merchant_domain", sa.String),
+        sa.column("logo_url", sa.String),
+        sa.column("is_subscription", sa.Boolean),
+        sa.column("created_at", sa.DateTime),
+        sa.column("updated_at", sa.DateTime),
+        schema="merchants",
+    )
+    merchant_stores = sa.table(
+        "merchant_stores",
+        sa.column("id", utils.database.UniversalUUID()),
+        sa.column("merchant_id", sa.String),
+        sa.column("location_name", sa.String),
+        sa.column("raw_descriptor", sa.String),
+        sa.column("country_code", sa.String),
+        sa.column("is_international", sa.Boolean),
+        sa.column("risk_score", sa.Integer),
+        sa.column("created_at", sa.DateTime),
+        sa.column("updated_at", sa.DateTime),
+        schema="merchants",
+    )
+    system_settings = sa.table(
+        "system_settings",
+        sa.column("key", sa.String),
+        sa.column("value", sa.String),
+        schema="admin",
+    )
+    retail_locations = sa.table(
+        "retail_locations",
+        sa.column("id", utils.database.UniversalUUID()),
+        sa.column("name", sa.String),
+        sa.column("type", sa.String),
+        sa.column("address", sa.String),
+        sa.column("latitude", sa.Float),
+        sa.column("longitude", sa.Float),
+        sa.column("hours", sa.String),
+        sa.column("phone_number", sa.String),
+        schema="operations",
+    )
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    op.bulk_insert(
+        credit_products,
+        [
+            {
+                **item,
+                "is_active": item.get("is_active", True),
+                "created_at": now,
+            }
+            for item in _load_json_resource("credit_products.json")
+        ],
+    )
+    op.bulk_insert(
+        deposit_products,
+        [
+            {
+                **item,
+                "is_active": item.get("is_active", True),
+                "created_at": now,
+            }
+            for item in _load_json_resource("deposit_products.json")
+        ],
+    )
+    op.bulk_insert(
+        merchant_category_codes,
+        [
+            {
+                **item,
+                "updated_at": now,
+            }
+            for item in _load_json_resource("merchant_category_codes.json")
+        ],
+    )
+
+    merchant_catalog = _load_json_resource("merchant_catalog.json")
+    op.bulk_insert(
+        merchant_master,
+        [
+            {
+                "id": uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-master:{item['merchant_id']}"),
+                "merchant_id": item["merchant_id"],
+                "clean_name": item["clean_name"],
+                "default_mcc": item["default_mcc"],
+                "merchant_domain": item.get("merchant_domain"),
+                "logo_url": item.get("logo_url"),
+                "is_subscription": item.get("is_subscription", False),
+                "created_at": now,
+                "updated_at": now,
+            }
+            for item in merchant_catalog
+        ],
+    )
+
+    store_rows = []
+    for item in merchant_catalog:
+        stores = item.get("stores", [])
+        legacy_vars = item.get("store_variations", [])
+        if stores:
+            for store in stores:
+                store_rows.append(
+                    {
+                        "id": uuid.uuid5(
+                            uuid.NAMESPACE_DNS,
+                            f"merchant-store:{item['merchant_id']}:{store['raw_descriptor']}",
+                        ),
+                        "merchant_id": item["merchant_id"],
+                        "location_name": store["location_name"],
+                        "raw_descriptor": store["raw_descriptor"],
+                        "country_code": store.get("country_code", "USA"),
+                        "is_international": store.get("is_international", False),
+                        "risk_score": store.get("risk_score", 0),
+                        "created_at": now,
+                        "updated_at": now,
+                    }
+                )
+        elif legacy_vars:
+            for idx, descriptor in enumerate(legacy_vars, start=1):
+                store_rows.append(
+                    {
+                        "id": uuid.uuid5(
+                            uuid.NAMESPACE_DNS,
+                            f"merchant-store:{item['merchant_id']}:{descriptor}",
+                        ),
+                        "merchant_id": item["merchant_id"],
+                        "location_name": f"{item['clean_name']} #{idx}",
+                        "raw_descriptor": descriptor,
+                        "country_code": "USA",
+                        "is_international": False,
+                        "risk_score": 0,
+                        "created_at": now,
+                        "updated_at": now,
+                    }
+                )
+        else:
+            store_rows.append(
+                {
+                    "id": uuid.uuid5(
+                        uuid.NAMESPACE_DNS,
+                        f"merchant-store:{item['merchant_id']}:{item['clean_name'].upper()}",
+                    ),
+                    "merchant_id": item["merchant_id"],
+                    "location_name": item["clean_name"],
+                    "raw_descriptor": item["clean_name"].upper(),
+                    "country_code": "USA",
+                    "is_international": False,
+                    "risk_score": 0,
+                    "created_at": now,
+                    "updated_at": now,
+                }
+            )
+    op.bulk_insert(merchant_stores, store_rows)
+
+    op.bulk_insert(
+        system_settings,
+        [{"key": key, "value": value} for key, value in _load_json_resource("system_settings.json").items()],
+    )
+    op.bulk_insert(
+        retail_locations,
+        [
+            {
+                "id": uuid.uuid5(uuid.NAMESPACE_DNS, f"retail-location:{item['id']}"),
+                "name": item["name"],
+                "type": item["type"],
+                "address": item["address"],
+                "latitude": item["latitude"],
+                "longitude": item["longitude"],
+                "hours": item.get("hours"),
+                "phone_number": item.get("phone_number"),
+            }
+            for item in _load_jsonl_resource("retail_locations.jsonl")
+        ],
+    )
 
 
 def upgrade() -> None:
@@ -433,6 +663,8 @@ def upgrade() -> None:
     op.create_index('idx_ledger_account', 'posted_transactions', ['account_id'], unique=False, schema='cards')
     op.create_index('idx_ledger_account_posted', 'posted_transactions', ['account_id', 'posted_at'], unique=False, schema='cards')
     # ### end Alembic commands ###
+
+    _seed_reference_tables()
 
     if op.get_bind().dialect.name == "postgresql" and os.getenv("SKIP_IAM_GRANTS") != "true":
         try:

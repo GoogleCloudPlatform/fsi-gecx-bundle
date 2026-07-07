@@ -127,10 +127,10 @@ class SimulationService:
                 mccs, a_min, a_max = ["4511", "7011", "5812"], 50_000, 400_000
             elif "servedio" in name_lower or "marcus" in name_lower or acc.credit_limit_cents >= 1_000_000:
                 persona = "PRIME"
-                mccs, a_min, a_max = ["5411", "5541", "5310", "4121"], 1_500, 15_000
+                mccs, a_min, a_max = ["5411", "5541", "5311", "4121"], 1_500, 15_000
             else:
                 persona = "YPRO"
-                mccs, a_min, a_max = ["5814", "7841", "5812"], 400, 3_500
+                mccs, a_min, a_max = ["5814", "4899", "5812"], 400, 3_500
 
             results.append(
                 {
@@ -215,9 +215,9 @@ class SimulationService:
         now = datetime.datetime.now(datetime.timezone.utc)
         swipes = [
             ("GAME*TEST TOKEN ONLINE", 499, "5814", "USA", 0),
-            ("APPLE.COM*ONLINE", 149900, "5310", "USA", 0),
-            ("BEST BUY*MKTPLACE", 215000, "5310", "USA", 0),
-            ("LUXURY BOUTIQUE RIVIERA MAYA [MEX]", 320000, "5310", "MEX", 30),
+            ("APPLE.COM*ONLINE", 149900, "4899", "USA", 0),
+            ("BEST BUY*MKTPLACE", 215000, "5311", "USA", 0),
+            ("LUXURY BOUTIQUE RIVIERA MAYA [MEX]", 320000, "5311", "MEX", 30),
         ]
 
         injected_auths = []

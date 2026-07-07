@@ -18,6 +18,7 @@ import random
 import datetime
 import logging
 import json
+from pathlib import Path
 from email.utils import parseaddr
 from typing import Dict, Any
 from sqlalchemy.orm import Session
@@ -28,14 +29,14 @@ from utils.encryption import encrypt_pii
 from utils.audit import record_audit_event
 
 # Models
-from models.identity import User, UserAddress
+from models.identity import User, UserAddress, RetailLocation
 from models.kyc import KYCRecord, UserCreditProfile
 from models.origination import Account, AccountLedgerEntry, Transaction
 from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, CreditProduct, TransactionAuthorization
 from models.origination import DepositProduct
 from models.settings import SystemSetting
 from models.reference import MerchantCategoryCode
-from services.taxonomy_service import DEFAULT_TAXONOMY_MAP, TaxonomyService
+from services.taxonomy_service import TaxonomyService
 from services.merchant_service import MerchantEnrichmentService
 logger = logging.getLogger(__name__)
 RESOURCE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "data")
@@ -56,6 +57,18 @@ def _is_presenter_email(email: str | None) -> bool:
         return False
     domain = parsed.rsplit("@", 1)[-1].lower()
     return domain == "google.com"
+
+
+def _load_json_resource(filename: str) -> Any:
+    path = Path(RESOURCE_DIR) / filename
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _load_jsonl_resource(filename: str) -> list[dict[str, Any]]:
+    path = Path(RESOURCE_DIR) / filename
+    with path.open("r", encoding="utf-8") as handle:
+        return [json.loads(line) for line in handle if line.strip()]
 
 def get_base_personas():
     path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "static_personas.json")
@@ -279,29 +292,26 @@ def seed_catalogs_if_missing(db: Session) -> None:
     """Ensures CreditProduct and DepositProduct catalogs are seeded in the database."""
     if db.query(CreditProduct).count() == 0:
         logger.info("Seeding CreditProduct catalog...")
-        path = os.path.join(RESOURCE_DIR, "credit_products.json")
-        with open(path, "r") as f:
-            data = json.load(f)
+        data = _load_json_resource("credit_products.json")
         products = [CreditProduct(**item) for item in data]
         db.add_all(products)
 
     if db.query(DepositProduct).count() == 0:
         logger.info("Seeding DepositProduct catalog...")
-        path = os.path.join(RESOURCE_DIR, "deposit_products.json")
-        with open(path, "r") as f:
-            data = json.load(f)
+        data = _load_json_resource("deposit_products.json")
         deposits = [DepositProduct(**item) for item in data]
         db.add_all(deposits)
         
     if db.query(MerchantCategoryCode).count() == 0:
         logger.info("Seeding MerchantCategoryCode merchants catalog...")
+        mcc_seed_data = _load_json_resource("merchant_category_codes.json")
         mcc_records = [
             MerchantCategoryCode(
-                mcc=code,
-                primary_category=data["primary"],
-                detailed_category=data["detailed"]
+                mcc=item["mcc"],
+                primary_category=item["primary_category"],
+                detailed_category=item["detailed_category"]
             )
-            for code, data in DEFAULT_TAXONOMY_MAP.items()
+            for item in mcc_seed_data
         ]
         db.add_all(mcc_records)
         db.flush()
@@ -310,16 +320,46 @@ def seed_catalogs_if_missing(db: Session) -> None:
     MerchantEnrichmentService.seed_merchant_catalog(db)
     db.flush()
 
+
+def seed_retail_locations_if_missing(db: Session) -> None:
+    """Seeds branch and ATM locations from JSONL if the operations table is empty."""
+    if db.query(RetailLocation).count() > 0:
+        return
+
+    logger.info("Seeding retail locations catalog...")
+    records = _load_jsonl_resource("retail_locations.jsonl")
+    db.add_all(
+        [
+            RetailLocation(
+                id=uuid.uuid5(uuid.NAMESPACE_DNS, item["id"]),
+                name=item["name"],
+                type=item["type"],
+                address=item["address"],
+                latitude=item["latitude"],
+                longitude=item["longitude"],
+                hours=item.get("hours"),
+                phone_number=item.get("phone_number"),
+            )
+            for item in records
+        ]
+    )
+    db.flush()
+
 def seed_system_settings_if_missing(db: Session) -> None:
     """Ensures default voice and live avatar system settings are seeded."""
-    path = os.path.join(RESOURCE_DIR, "system_settings.json")
-    with open(path, "r") as f:
-        default_keys = json.load(f)
+    default_keys = _load_json_resource("system_settings.json")
     for k, v in default_keys.items():
         existing = db.query(SystemSetting).filter(SystemSetting.key == k).first()
         if not existing:
             db.add(SystemSetting(key=k, value=v))
     db.flush()
+
+
+def seed_reference_data_if_missing(db: Session) -> None:
+    """Ensures shared reference tables exist before demo provisioning or resets."""
+    seed_catalogs_if_missing(db)
+    seed_system_settings_if_missing(db)
+    seed_retail_locations_if_missing(db)
 
 def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
     """Generates user profiles, deposit accounts, credit lines, and cards from persona config."""
@@ -328,8 +368,7 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
     
     try:
         clean_database(db)
-        seed_catalogs_if_missing(db)
-        seed_system_settings_if_missing(db)
+        seed_reference_data_if_missing(db)
         
         seeding_personas = get_seeding_personas()
         cards_manifest = {}
@@ -705,7 +744,7 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
             is_pending = (i >= 10)
             if is_googler and i == 8:
                 store_desc = "AEROMEXICO AIRLINES RIVIERA MAYA [MEX]"
-                mcc_val = "3000"
+                mcc_val = "4511"
                 amount_cents = 65000
                 posted_date = now - datetime.timedelta(days=3)
             elif is_googler and i == 9:
@@ -730,7 +769,7 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
                     country=None, 
                     home_metro=user_home_metro
                 )
-                mcc_val = mch.mcc if mch else "5310"
+                mcc_val = mch.mcc if mch else "5311"
                 amount_cents = random.randint(1250, 45000)
                 if is_pending:
                     posted_date = now - datetime.timedelta(hours=(12 - i) * 2)
@@ -789,6 +828,8 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
     enable_session_rbac_override(db)
 
     try:
+        seed_reference_data_if_missing(db)
+
         # 1. Check if user already exists
         existing_user = db.query(User).filter((User.email == email) | (User.auth_provider_uid == firebase_uid)).first()
         if existing_user:

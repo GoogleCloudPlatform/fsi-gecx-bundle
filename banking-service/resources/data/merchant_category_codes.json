@@ -1,0 +1,77 @@
+[
+  {
+    "mcc": "5311",
+    "primary_category": "MERCHANDISE",
+    "detailed_category": "MERCHANDISE_DEPARTMENT_STORES"
+  },
+  {
+    "mcc": "5411",
+    "primary_category": "GROCERY",
+    "detailed_category": "GROCERY_SUPERMARKETS"
+  },
+  {
+    "mcc": "5814",
+    "primary_category": "DINING",
+    "detailed_category": "DINING_FAST_FOOD"
+  },
+  {
+    "mcc": "5812",
+    "primary_category": "DINING",
+    "detailed_category": "DINING_RESTAURANTS"
+  },
+  {
+    "mcc": "4511",
+    "primary_category": "OTHER_TRAVEL",
+    "detailed_category": "OTHER_TRAVEL_FLIGHTS"
+  },
+  {
+    "mcc": "7011",
+    "primary_category": "OTHER_TRAVEL",
+    "detailed_category": "OTHER_TRAVEL_LODGING"
+  },
+  {
+    "mcc": "4121",
+    "primary_category": "OTHER_TRAVEL",
+    "detailed_category": "OTHER_TRAVEL_TAXI"
+  },
+  {
+    "mcc": "8011",
+    "primary_category": "HEALTHCARE",
+    "detailed_category": "HEALTHCARE_MEDICAL"
+  },
+  {
+    "mcc": "5541",
+    "primary_category": "GAS_AUTOMOTIVE",
+    "detailed_category": "GAS_AUTOMOTIVE_FUEL"
+  },
+  {
+    "mcc": "5200",
+    "primary_category": "HOME_IMPROVEMENT",
+    "detailed_category": "HOME_IMPROVEMENT_HARDWARE"
+  },
+  {
+    "mcc": "5912",
+    "primary_category": "HEALTHCARE",
+    "detailed_category": "HEALTHCARE_PHARMACIES"
+  },
+  {
+    "mcc": "7298",
+    "primary_category": "PERSONAL_CARE",
+    "detailed_category": "PERSONAL_CARE_SPAS"
+  },
+  {
+    "mcc": "4814",
+    "primary_category": "OTHER",
+    "detailed_category": "OTHER_TELECOMMUNICATIONS"
+  },
+  {
+    "mcc": "4899",
+    "primary_category": "OTHER",
+    "detailed_category": "OTHER_ENTERTAINMENT"
+  },
+  {
+    "mcc": "FEE",
+    "primary_category": "FEES",
+    "detailed_category": "FEES_LATE"
+  }
+]
