@@ -34,6 +34,7 @@ export default function VoiceSupportView() {
   const [clearedBalance, setClearedBalance] = useState(0);
   const [transactions, setTransactions] = useState([]);
   const [transcripts, setTranscripts] = useState([]);
+  const [fraudContext, setFraudContext] = useState(null);
   
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -516,8 +517,9 @@ export default function VoiceSupportView() {
 
     try {
       // 1. Fetch token and room name from server
-      const { token, room_name } = await getCreditCardVoiceToken(mode);
+      const { token, room_name, fraud_context } = await getCreditCardVoiceToken(mode);
       console.log(`LiveKit token received. Room: ${room_name}`);
+      setFraudContext(fraud_context || null);
 
       // 2. Initialize LiveKit Room
       const room = new Room({
@@ -728,6 +730,19 @@ export default function VoiceSupportView() {
         
         {/* Left Side: Credit Card Mockup & Account details */}
         <div className="flex flex-col gap-6 bg-white dark:bg-slate-900/50 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-3xl p-8 justify-between shadow-sm dark:shadow-none">
+          {fraudContext?.has_active_fraud_alert && fraudContext.fraud_alert && (
+            <div className="rounded-2xl border border-amber-300/70 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Active fraud case</p>
+                  <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+                    {fraudContext.fraud_alert.summary}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* Card Mockup */}
           <div className="relative aspect-[1.586/1] w-full rounded-2xl overflow-hidden bg-gradient-to-tr from-slate-900 via-indigo-950 to-indigo-900 p-6 shadow-2xl flex flex-col justify-between border border-slate-700/50">

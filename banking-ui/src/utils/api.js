@@ -208,6 +208,11 @@ export async function getCreditCardVoiceToken(mode = 'audio') {
   return res.data;
 }
 
+export async function getCreditCardVoiceContext() {
+  const res = await api.get('credit-card/voice/context');
+  return res.data;
+}
+
 // Support Handoff Escalations
 export async function getPendingEscalations() {
   const res = await api.get('support/escalations');

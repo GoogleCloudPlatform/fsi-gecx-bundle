@@ -36,3 +36,18 @@ class FraudAlertRepository:
         self.db.add(alert)
         self.db.flush()
         return alert
+
+    def get_latest_open_alert_for_customer(
+        self,
+        *,
+        customer_id=None,
+        auth_provider_uid: str | None = None,
+    ) -> FraudAlert | None:
+        query = self.db.query(FraudAlert).filter(FraudAlert.status == "OPEN")
+        if customer_id is not None:
+            query = query.filter(FraudAlert.customer_id == customer_id)
+        elif auth_provider_uid:
+            query = query.filter(FraudAlert.auth_provider_uid == auth_provider_uid)
+        else:
+            return None
+        return query.order_by(FraudAlert.created_at.desc()).first()

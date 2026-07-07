@@ -33,6 +33,7 @@ from services.credit_card import (
     reverse_posted_fee,
     unfreeze_card,
 )
+from services.fraud_alerts import FraudAlertService
 from services.taxonomy_service import TaxonomyService
 from services.simulation import SimulationService
 from utils.auth import get_current_user, is_support_staff
@@ -343,6 +344,7 @@ async def trigger_voice_agent_session_async(room_name: str, customer_id: str, se
 def get_voice_room_token(
     background_tasks: BackgroundTasks,
     mode: str = "audio",
+    db: Session = Depends(get_db),
     customer_id: str = Depends(_get_active_customer_id)
 ):
     """
@@ -365,12 +367,26 @@ def get_voice_room_token(
             can_publish=True,
             can_subscribe=True
         ))
-        
+        fraud_context = FraudAlertService(db).get_active_voice_context(auth_provider_uid=customer_id)
         background_tasks.add_task(trigger_voice_agent_session_async, room_name, customer_id, session_id, mode)
-        return {"token": token.to_jwt(), "room_name": room_name, "session_id": session_id}
+        return {
+            "token": token.to_jwt(),
+            "room_name": room_name,
+            "session_id": session_id,
+            "fraud_context": fraud_context,
+        }
     except Exception as e:
         logger.error(f"Failed to generate LiveKit token: {e}")
         raise HTTPException(status_code=500, detail="LiveKit token creation error.")
+
+
+@router.get("/voice/context")
+def get_voice_session_context(
+    db: Session = Depends(get_db),
+    customer_id: str = Depends(_get_active_customer_id),
+):
+    """Returns customer-specific fraud or support context that should be available at voice-session start."""
+    return FraudAlertService(db).get_active_voice_context(auth_provider_uid=customer_id)
 class BillPaymentRequest(BaseModel):
     source_account_id: str = Field(..., description="Deposit account UUID to debit")
     credit_account_id: str = Field(..., description="Credit account UUID to credit")

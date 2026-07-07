@@ -181,6 +181,9 @@ async def run_stt_worker(client, audio_queue: asyncio.Queue, sample_rate: int, a
 
 async def run_voice_agent_session(room_name: str, customer_id: str, session_id: str, mode: str = "audio"):
     logger.info(f"Initializing voice agent session for room: {room_name} (customer: {customer_id}, mode: {mode})")
+    import agent.agent as agent_module
+    agent_module.active_customer_id_var.set(customer_id)
+    logger.info(f"Set active customer ID for database tools: {agent_module.active_customer_id_var.get()}")
 
     # Load active configurations from banking-service
     mock_avatar_enabled = False
@@ -188,10 +191,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     max_duration = 300
     warning_duration = 240
     hard_timeout_enabled = False
+    voice_context = {"has_active_fraud_alert": False, "fraud_alert": None}
 
     try:
         import httpx
-        import agent.agent as agent_module
         headers = agent_module.get_auth_headers()
         async with httpx.AsyncClient(timeout=10.0) as client:
             settings_url = f"{agent_module.BANKING_SERVICE_URL}/api/settings"
@@ -212,13 +215,16 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 logger.info(f"Loaded voice agent settings via API: mock={mock_avatar_enabled}, avatar={avatar_name}, max_duration={max_duration}, warning={warning_duration}, hard={hard_timeout_enabled}")
             else:
                 logger.error(f"Failed to fetch system settings from API: {resp.text}")
+
+            context_url = f"{agent_module.BANKING_SERVICE_URL}/credit-card/voice/context"
+            context_resp = await client.get(context_url, headers=headers)
+            if context_resp.status_code == 200:
+                voice_context = context_resp.json()
+                logger.info("Loaded customer voice context for customer=%s active_fraud=%s", customer_id, voice_context.get("has_active_fraud_alert"))
+            else:
+                logger.error(f"Failed to fetch voice-session context from API: {context_resp.text}")
     except Exception as e:
         logger.error(f"Failed to query system settings from API: {e}")
-
-    # Set active customer ID for database tools dynamically
-    import agent.agent as agent_module
-    agent_module.active_customer_id_var.set(customer_id)
-    logger.info(f"Set active customer ID for database tools: {agent_module.active_customer_id_var.get()}")
 
     active_escalation_id = None
     audio_server = None
@@ -236,6 +242,22 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         session_agent.instruction = session_agent.instruction.replace("{{avatar_name}}", avatar_name)
     else:
         session_agent.instruction = session_agent.instruction.replace("{{avatar_name}}", "Nova")
+    if voice_context.get("has_active_fraud_alert") and voice_context.get("fraud_alert"):
+        fraud_alert = voice_context["fraud_alert"]
+        suspicious_lines = "\n".join(
+            f"- {txn['merchant_name']}: ${txn['amount_cents'] / 100:,.2f}"
+            for txn in fraud_alert.get("suspicious_transactions", [])
+        )
+        session_agent.instruction = (
+            f"{session_agent.instruction}\n\n"
+            "Session-specific customer context:\n"
+            f"- The customer has an active fraud alert on card ending in {fraud_alert['card_last_four']}.\n"
+            f"- Fraud alert thread id: {fraud_alert['message_thread_id']}.\n"
+            "- Start the conversation ready to help with suspicious transactions, card blocking, and card replacement next steps.\n"
+            "- If the customer asks what looked suspicious, reference these flagged transactions:\n"
+            f"{suspicious_lines or '- No suspicious transaction details were provided.'}\n"
+            "- Treat this as trusted session context rather than something the customer needs to restate."
+        )
     if mode == "video":
         model_name = os.getenv("VOICE_AGENT_VIDEO_MODEL")
         if not model_name:
@@ -995,4 +1017,3 @@ if __name__ == "__main__":
     logger.info(f"Starting Credit Support Voice Agent version: {app_version}")
     port = int(os.getenv("PORT", "8080"))
     uvicorn.run(app, host="0.0.0.0", port=port)
-

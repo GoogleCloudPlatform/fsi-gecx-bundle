@@ -88,6 +88,34 @@ class FraudAlertService:
             "message_id": message.message_id,
         }
 
+    def get_active_voice_context(
+        self,
+        *,
+        customer_id=None,
+        auth_provider_uid: str | None = None,
+    ) -> dict:
+        alert = self.repo.get_latest_open_alert_for_customer(
+            customer_id=customer_id,
+            auth_provider_uid=auth_provider_uid,
+        )
+        if not alert:
+            return {"has_active_fraud_alert": False, "fraud_alert": None}
+
+        suspicious_transactions = alert.suspicious_transactions or []
+        return {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {
+                "fraud_alert_id": str(alert.id),
+                "status": alert.status,
+                "source": alert.source,
+                "card_last_four": alert.card_last_four,
+                "message_thread_id": alert.message_thread_id,
+                "suspicious_transactions": suspicious_transactions,
+                "created_at": alert.created_at.isoformat() if alert.created_at else None,
+                "summary": self._build_voice_context_summary(alert.card_last_four, suspicious_transactions),
+            },
+        }
+
     @staticmethod
     def _build_customer_message(card_last_four: str, suspicious_transactions: list[dict]) -> str:
         lines = [
@@ -99,3 +127,13 @@ class FraudAlertService:
             lines.append(f"- {txn['merchant_name']}: ${amount:,.2f}")
         lines.append("If you did not make these purchases, chat now with a credit card support agent at /support/voice.")
         return "\n".join(lines)
+
+    @staticmethod
+    def _build_voice_context_summary(card_last_four: str, suspicious_transactions: list[dict]) -> str:
+        if not suspicious_transactions:
+            return f"Customer has an active fraud alert on card ending in {card_last_four}."
+        top_merchants = ", ".join(txn["merchant_name"] for txn in suspicious_transactions[:3])
+        return (
+            f"Customer has an active fraud alert on card ending in {card_last_four}. "
+            f"Recent suspicious transactions include {top_merchants}."
+        )

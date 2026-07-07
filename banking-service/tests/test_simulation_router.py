@@ -286,6 +286,14 @@ async def test_inject_anomaly_success(mock_get_tokens, mock_send_multicast, mock
     assert "credit card ending in" in secure_messages[0].message.lower()
     assert "/support/voice" in secure_messages[0].message
 
+    voice_context_response = await async_client.get("/credit-card/voice/context")
+    assert voice_context_response.status_code == status.HTTP_200_OK
+    voice_context = voice_context_response.json()
+    assert voice_context["has_active_fraud_alert"] is True
+    assert voice_context["fraud_alert"]["fraud_alert_id"] == data["fraud_alert_id"]
+    assert voice_context["fraud_alert"]["card_last_four"]
+    assert "active fraud alert" in voice_context["fraud_alert"]["summary"].lower()
+
 @pytest.mark.asyncio
 async def test_get_active_cards_success(async_client, db_session):
     headers = {"X-Card-Network-Token": "switch-secret-key-12345"}
