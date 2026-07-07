@@ -1694,7 +1694,20 @@ function AppContent() {
             </p>
             {(window.env?.BUILD_VERSION || window.env?.BUILD_COMMIT_ID) && (
               <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-                Version: {window.env?.BUILD_VERSION || 'unknown'} ({window.env?.BUILD_COMMIT_ID || 'unknown'})
+                Version: {window.env?.BUILD_VERSION || 'unknown'} (
+                {window.env?.BUILD_COMMIT_ID ? (
+                  <a 
+                    href={`https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/commit/${window.env.BUILD_COMMIT_ID}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="hover:underline text-slate-500 dark:text-slate-400"
+                  >
+                    {window.env.BUILD_COMMIT_ID}
+                  </a>
+                ) : (
+                  'unknown'
+                )}
+                )
               </div>
             )}
           </div>
