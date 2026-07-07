@@ -16,6 +16,7 @@
 
 window.env = {
   BANKING_API_URL: "http://localhost:8080",
+  ENABLE_CCAI: false,
   CCAI_COMPANY_ID: "17762261086439462b8f0b64f6cd0d5e3",
   CCAI_HOST: "https://fsi-test-4000-jz3ioz1.uc1.ccaiplatform.com",
   CX_AGENT_STUDIO_DEPLOYMENT_NAME: "projects/fsi-gecx-2000/locations/us/apps/e0b952c1-280d-41d0-8da5-46db4b0e6ad9/deployments/ca77d6f4-b7c2-4007-b6c0-51d905132e41",

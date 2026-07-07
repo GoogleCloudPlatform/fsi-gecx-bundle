@@ -63,12 +63,19 @@ variable "additional_cloud_run_iap_members" {
   default     = []
 }
 
+variable "enable_ccai" {
+  type    = bool
+  default = false
+}
+
 variable "ccai_company_id" {
-  type = string
+  type    = string
+  default = null
 }
 
 variable "ccai_host" {
-  type = string
+  type    = string
+  default = null
 }
 
 variable "custom_domain" {
@@ -187,6 +194,15 @@ resource "terraform_data" "validate_blocking_functions" {
     precondition {
       condition     = !var.enable_blocking_functions || var.use_external_identities
       error_message = "enable_blocking_functions can only be set to true if use_external_identities is set to true."
+    }
+  }
+}
+
+resource "terraform_data" "validate_ccai" {
+  lifecycle {
+    precondition {
+      condition     = !var.enable_ccai || (var.ccai_company_id != null && var.ccai_company_id != "" && var.ccai_host != null && var.ccai_host != "")
+      error_message = "ccai_company_id and ccai_host must be provided when enable_ccai is true."
     }
   }
 }
