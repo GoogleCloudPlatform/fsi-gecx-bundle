@@ -108,4 +108,9 @@ resource "google_pubsub_subscription" "audit_events_bq_sub" {
     table            = "${var.project_id}.compliance_audit.raw_audit_outbox_cdc"
     use_table_schema = true
   }
+
+  depends_on = [
+    google_bigquery_dataset_iam_member.pubsub_bq_data_editor,
+    google_bigquery_dataset_iam_member.pubsub_bq_metadata_viewer
+  ]
 }

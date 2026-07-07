@@ -259,3 +259,18 @@ resource "google_bigquery_dataset_iam_member" "banking_service_iceberg_data_view
   role       = "roles/bigquery.dataViewer"
   member     = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
+
+# Grant Pub/Sub Service Account access to BigQuery dataset to allow BQ Pub/Sub subscription creation
+resource "google_bigquery_dataset_iam_member" "pubsub_bq_data_editor" {
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.compliance_audit.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
+
+resource "google_bigquery_dataset_iam_member" "pubsub_bq_metadata_viewer" {
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.compliance_audit.dataset_id
+  role       = "roles/bigquery.metadataViewer"
+  member     = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
