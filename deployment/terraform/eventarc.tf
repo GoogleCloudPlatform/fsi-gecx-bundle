@@ -66,6 +66,7 @@ resource "time_sleep" "wait_for_pubsub_propagation" {
 }
 
 resource "google_eventarc_trigger" "artifact_finalized_trigger" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
   name     = "banking-artifact-finalized-trigger"
   location = var.region
 
