@@ -15,7 +15,7 @@ dependencies = [
     "httpx==0.28.1",
     "python-dotenv==1.2.2",
     "google-adk==2.3.0",
-    "joserfc==1.6.7",
+    "joserfc==1.6.8",
     "google-cloud-secret-manager==2.27.0",
     "fastmcp==3.2.4",
     "cachetools==7.0.6",
