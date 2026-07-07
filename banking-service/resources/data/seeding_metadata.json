@@ -86,34 +86,56 @@
   ],
   "mexico_travel_charges": [
     {
-      "merchant_name": "LA CASA DE LA PLAYA RIVIERA MAYA [MEX]",
+      "merchant_options": [
+        "AEROMEXICO AIRLINES RIVIERA MAYA [MEX]",
+        "DELTA AIR LINES CUN [MEX]",
+        "UNITED AIRLINES CANCUN ARRIVAL [MEX]",
+        "AMERICAN AIRLINES PLAYA DEL CARMEN [MEX]"
+      ],
+      "mcc": "4511",
+      "min_amount_cents": 55000,
+      "max_amount_cents": 85000,
+      "status": "SETTLED",
+      "posted_days_ago_range": [3, 5]
+    },
+    {
+      "merchant_options": [
+        "LA CASA DE LA PLAYA RIVIERA MAYA [MEX]",
+        "ROSEWOOD MAYAKOBA PLAYA DEL CARMEN [MEX]",
+        "ANDAZ MAYAKOBA RESORT RIVIERA MAYA [MEX]",
+        "FAIRMONT MAYAKOBA RESORT [MEX]"
+      ],
       "mcc": "7011",
       "min_amount_cents": 45000,
-      "max_amount_cents": 120000
+      "max_amount_cents": 120000,
+      "status": "SETTLED",
+      "posted_days_ago_range": [2, 4]
     },
     {
-      "merchant_name": "ROSEWOOD MAYAKOBA PLAYA DEL CARMEN [MEX]",
-      "mcc": "7011",
-      "min_amount_cents": 40000,
-      "max_amount_cents": 95000
-    },
-    {
-      "merchant_name": "ESTERO RESTAURANTE RIVIERA MAYA [MEX]",
+      "merchant_options": [
+        "ESTERO RESTAURANTE RIVIERA MAYA [MEX]",
+        "CASA AMATE TULUM DINNER [MEX]",
+        "AGAVE AZUL PLAYA DEL CARMEN [MEX]",
+        "PUJOL POP-UP RIVIERA MAYA [MEX]"
+      ],
       "mcc": "5812",
       "min_amount_cents": 6500,
-      "max_amount_cents": 18000
+      "max_amount_cents": 18000,
+      "status": "PENDING",
+      "pending_hours_ago_range": [6, 10]
     },
     {
-      "merchant_name": "SENSE SPA MAYAKOBA PLAYA DEL CARMEN [MEX]",
+      "merchant_options": [
+        "SENSE SPA MAYAKOBA PLAYA DEL CARMEN [MEX]",
+        "MAROMA SPA BY GUERLAIN [MEX]",
+        "NIZUC SPA CANCUN [MEX]",
+        "CHI WELLNESS LAGUNA MAYA [MEX]"
+      ],
       "mcc": "7298",
       "min_amount_cents": 8500,
-      "max_amount_cents": 25000
-    },
-    {
-      "merchant_name": "AGAVE AZUL RESTAURANT MAYAKOBA [MEX]",
-      "mcc": "5812",
-      "min_amount_cents": 4500,
-      "max_amount_cents": 15000
+      "max_amount_cents": 25000,
+      "status": "PENDING",
+      "pending_hours_ago_range": [1, 4]
     }
   ]
 }

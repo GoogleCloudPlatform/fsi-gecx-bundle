@@ -18,6 +18,7 @@ import random
 import datetime
 import logging
 import json
+import hashlib
 from pathlib import Path
 from email.utils import parseaddr
 from typing import Dict, Any
@@ -40,6 +41,7 @@ from services.taxonomy_service import TaxonomyService
 from services.merchant_service import MerchantEnrichmentService
 logger = logging.getLogger(__name__)
 RESOURCE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "data")
+DEMO_SCRIPT_DOMAINS = {"google.com", "gcp.solutions", "altostrat.com", "nova.horizon.test"}
 
 
 def _generate_demo_card_token() -> str:
@@ -56,7 +58,57 @@ def _is_presenter_email(email: str | None) -> bool:
     if "@" not in parsed:
         return False
     domain = parsed.rsplit("@", 1)[-1].lower()
-    return domain == "google.com"
+    return domain in DEMO_SCRIPT_DOMAINS
+
+
+def _is_demo_script_user(email: str | None) -> bool:
+    return _is_presenter_email(email)
+
+
+def _get_demo_script_travel_charges() -> list[dict[str, Any]]:
+    metadata = _load_json_resource("seeding_metadata.json")
+    return metadata.get("mexico_travel_charges", [])
+
+
+def _stable_demo_index(seed_value: str, modulo: int) -> int:
+    if modulo <= 1:
+        return 0
+    digest = hashlib.sha256(seed_value.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big") % modulo
+
+
+def _resolve_demo_script_charge(
+    *,
+    user_key: str,
+    slot_index: int,
+    charge_template: dict[str, Any],
+) -> dict[str, Any]:
+    resolved = dict(charge_template)
+    variant_seed = f"{user_key}:{slot_index}"
+
+    merchant_options = resolved.get("merchant_options")
+    if merchant_options:
+        resolved["merchant_name"] = merchant_options[
+            _stable_demo_index(f"{variant_seed}:merchant", len(merchant_options))
+        ]
+
+    posted_days_range = resolved.get("posted_days_ago_range")
+    if posted_days_range and len(posted_days_range) == 2:
+        low, high = sorted(int(value) for value in posted_days_range)
+        span = (high - low) + 1
+        resolved["posted_days_ago"] = low + _stable_demo_index(
+            f"{variant_seed}:posted_days", span
+        )
+
+    pending_hours_range = resolved.get("pending_hours_ago_range")
+    if pending_hours_range and len(pending_hours_range) == 2:
+        low, high = sorted(int(value) for value in pending_hours_range)
+        span = (high - low) + 1
+        resolved["pending_hours_ago"] = low + _stable_demo_index(
+            f"{variant_seed}:pending_hours", span
+        )
+
+    return resolved
 
 
 def _load_json_resource(filename: str) -> Any:
@@ -691,8 +743,8 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
         # Assign a consistent geographical home metro and international travel trip for this customer's demo card
         from models.identity import User
         user_obj = db.query(User).filter(User.id == user_uuid).first()
-        is_googler = user_obj and ("GOOGLE" in str(user_obj.email).upper() or "PRESENTER" in str(user_obj.last_name).upper() or "NOVA.HORIZON" in str(user_obj.email).upper())
-        if is_googler:
+        is_demo_script_user = bool(user_obj and _is_demo_script_user(user_obj.email))
+        if is_demo_script_user:
             user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA"])
         else:
             user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA", "ATLANTA GA", "MIAMI FL"])
@@ -700,7 +752,7 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
         cleared_balance_cents = max(0, cred_acc.cleared_balance_cents or 0)
         pending_balance_cents = 0
 
-        if not is_googler:
+        if not is_demo_script_user:
             ovr_created_at = now - datetime.timedelta(days=4, hours=2)
             ovr_posted_at = now - datetime.timedelta(days=3)
             ovr_auth = TransactionAuthorization(
@@ -735,33 +787,37 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
             )
             cleared_balance_cents += 3500
 
-        meta_path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "seeding_metadata.json")
-        if os.path.exists(meta_path):
-            with open(meta_path, "r", encoding="utf-8") as f:
-                json.load(f).get("mexico_travel_charges", [])
+        demo_trip_charges = _get_demo_script_travel_charges()
+        demo_user_key = (user_obj.email.lower() if user_obj and user_obj.email else str(user_uuid))
+        demo_trip_by_index = {
+            index + 8: _resolve_demo_script_charge(
+                user_key=demo_user_key,
+                slot_index=index,
+                charge_template=charge,
+            )
+            for index, charge in enumerate(demo_trip_charges)
+        }
 
         for i in range(12):
             is_pending = (i >= 10)
-            if is_googler and i == 8:
-                store_desc = "AEROMEXICO AIRLINES RIVIERA MAYA [MEX]"
-                mcc_val = "4511"
-                amount_cents = 65000
-                posted_date = now - datetime.timedelta(days=3)
-            elif is_googler and i == 9:
-                store_desc = "LA CASA DE LA PLAYA RIVIERA MAYA [MEX]"
-                mcc_val = "7011"
-                amount_cents = 95000
-                posted_date = now - datetime.timedelta(days=2)
-            elif is_googler and i == 10:
-                store_desc = "ESTERO RESTAURANTE RIVIERA MAYA [MEX]"
-                mcc_val = "5812"
-                amount_cents = 16500
-                posted_date = now - datetime.timedelta(hours=8)
-            elif is_googler and i == 11:
-                store_desc = "SENSE SPA MAYAKOBA PLAYA DEL CARMEN [MEX]"
-                mcc_val = "7298"
-                amount_cents = 22000
-                posted_date = now - datetime.timedelta(hours=2)
+            demo_charge = demo_trip_by_index.get(i) if is_demo_script_user else None
+            if demo_charge:
+                store_desc = demo_charge["merchant_name"]
+                mcc_val = demo_charge["mcc"]
+                amount_cents = random.randint(
+                    demo_charge["min_amount_cents"],
+                    demo_charge["max_amount_cents"],
+                )
+                if demo_charge.get("status", "SETTLED") == "PENDING":
+                    is_pending = True
+                    posted_date = now - datetime.timedelta(
+                        hours=demo_charge.get("pending_hours_ago", 2)
+                    )
+                else:
+                    is_pending = False
+                    posted_date = now - datetime.timedelta(
+                        days=demo_charge.get("posted_days_ago", 2)
+                    )
             else:
                 mch, store_desc = MerchantEnrichmentService.get_random_merchant(
                     db, 

@@ -109,6 +109,9 @@ async def test_provision_my_demo_success(async_client, db_session):
     swipes = db_session.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).all()
     assert len(swipes) == 10
     assert len(holds) == 2
+    assert all(swipe.description != "Overdraft Fee" for swipe in swipes)
+    assert sum("[MEX]" in swipe.description for swipe in swipes) >= 2
+    assert sum("[MEX]" in hold.merchant_name for hold in holds) == 2
 
 @pytest.mark.asyncio
 async def test_provision_my_demo_conflict(async_client, db_session):
