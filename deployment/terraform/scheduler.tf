@@ -17,7 +17,7 @@ resource "google_cloud_scheduler_job" "data_generator_cron" {
   description      = "Trigger synthetic data generation every 1 minute"
   schedule         = "*/1 * * * *"
   time_zone        = "Etc/UTC"
-  attempt_deadline = "320s"
+  attempt_deadline = "120s"
   region           = var.region
 
   pubsub_target {

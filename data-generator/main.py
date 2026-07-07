@@ -61,6 +61,14 @@ app.add_middleware(
 # Configs
 BANKING_SERVICE_URL = os.getenv("BANKING_SERVICE_URL", "http://localhost:8000")
 CARD_NETWORK_TOKEN = os.getenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")
+PULSE_WINDOW_SECONDS = int(os.getenv("PULSE_WINDOW_SECONDS", "58"))
+PULSE_MIN_EVENTS = int(os.getenv("PULSE_MIN_EVENTS", "8"))
+PULSE_MAX_EVENTS = int(os.getenv("PULSE_MAX_EVENTS", "12"))
+SWIPE_WORKFLOW_CONCURRENCY = int(os.getenv("SWIPE_WORKFLOW_CONCURRENCY", "4"))
+SURGE_TOTAL_EVENTS = int(os.getenv("SURGE_TOTAL_EVENTS", "50"))
+SURGE_STAGGER_SECONDS = float(os.getenv("SURGE_STAGGER_SECONDS", "0.2"))
+
+_pulse_lock = asyncio.Lock()
 
 def is_local_mode() -> bool:
     return os.getenv("ENV", "local") == "local" and not os.getenv("K_SERVICE")
@@ -546,19 +554,25 @@ def build_randomized_pulse_plan(total_events: int, window_seconds: int = 58) -> 
 
 async def run_activity_surge_task(active_cards: Optional[List[Dict[str, Any]]] = None) -> Dict[str, int]:
     """Fires 50 rapid-fire swipes staggered over 10 seconds."""
-    logger.info("Starting activity surge simulation (50 swipes over 10s)...")
+    logger.info("Starting activity surge simulation (%s swipes over staggered intervals)...", SURGE_TOTAL_EVENTS)
     cards = active_cards or get_active_cards()
     cards = get_spendable_cards(cards)
     if not cards:
         logger.warning("No spendable cards resolved. Surge aborted.")
         raise HTTPException(status_code=409, detail="No spendable active cards resolved. Surge aborted.")
-        
+
+    semaphore = asyncio.Semaphore(SWIPE_WORKFLOW_CONCURRENCY)
+
+    async def bounded_swipe(client: httpx.AsyncClient, card: Dict[str, Any]) -> Dict[str, Any]:
+        async with semaphore:
+            return await simulate_swipe_event(client, card)
+
     async with httpx.AsyncClient() as client:
         tasks = []
-        for _ in range(50):
+        for _ in range(SURGE_TOTAL_EVENTS):
             card = random.choice(cards)
-            tasks.append(simulate_swipe_event(client, card))
-            await asyncio.sleep(0.2)
+            tasks.append(bounded_swipe(client, card))
+            await asyncio.sleep(SURGE_STAGGER_SECONDS)
         results = await asyncio.gather(*tasks, return_exceptions=False)
         paydown_results = await auto_paydown_high_utilization_cards(client, cards)
     summary = summarize_swipe_results(results)
@@ -574,37 +588,56 @@ def health():
 @app.post("/simulate-pulse", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
 async def simulate_pulse():
     """Wakes up once a minute and fans transactions across the next 58 seconds."""
-    logger.info("Triggered randomized simulation pulse for the next 58 seconds.")
-    cards = get_spendable_cards(get_active_cards())
-    if not cards:
-        raise HTTPException(status_code=409, detail="No spendable active cards found to swipe.")
+    if _pulse_lock.locked():
+        logger.info("Skipping pulse because another simulation pulse is already running.")
+        return {
+            "status": "SKIPPED",
+            "message": "Another simulation pulse is already in progress.",
+        }
 
-    total_events = random.randint(8, 12)
-    event_offsets = build_randomized_pulse_plan(total_events=total_events, window_seconds=58)
+    async with _pulse_lock:
+        logger.info("Triggered randomized simulation pulse for the next %s seconds.", PULSE_WINDOW_SECONDS)
+        cards = get_spendable_cards(get_active_cards())
+        if not cards:
+            return {
+                "status": "SKIPPED",
+                "message": "No spendable active cards found to swipe.",
+                "active_cards_count": 0,
+            }
 
-    async def dispatch_after_offset(client: httpx.AsyncClient, offset_seconds: float, card: Dict[str, Any]) -> Dict[str, Any]:
-        await asyncio.sleep(offset_seconds)
-        return await simulate_swipe_event(client, card)
+        total_events = random.randint(PULSE_MIN_EVENTS, PULSE_MAX_EVENTS)
+        event_offsets = build_randomized_pulse_plan(total_events=total_events, window_seconds=PULSE_WINDOW_SECONDS)
+        semaphore = asyncio.Semaphore(SWIPE_WORKFLOW_CONCURRENCY)
 
-    async with httpx.AsyncClient() as client:
-        tasks = [
-            dispatch_after_offset(client, offset, random.choice(cards))
-            for offset in event_offsets
-        ]
-        all_results = await asyncio.gather(*tasks, return_exceptions=False)
-        paydown_results = await auto_paydown_high_utilization_cards(client, cards)
+        async def dispatch_after_offset(client: httpx.AsyncClient, offset_seconds: float, card: Dict[str, Any]) -> Dict[str, Any]:
+            await asyncio.sleep(offset_seconds)
+            async with semaphore:
+                return await simulate_swipe_event(client, card)
 
-    summary = summarize_swipe_results(all_results)
-    summary["auto_paydowns_processed"] = sum(1 for result in paydown_results if result.get("status") == "SUCCESS")
-    if summary["authorizations_created"] == 0:
-        raise HTTPException(status_code=502, detail={"message": "No transaction authorizations were created.", **summary})
-    return {
-        "status": "SUCCESS",
-        "distribution_window_seconds": 58,
-        "scheduled_events": total_events,
-        **summary,
-        "active_cards_count": len(cards),
-    }
+        async with httpx.AsyncClient() as client:
+            tasks = [
+                dispatch_after_offset(client, offset, random.choice(cards))
+                for offset in event_offsets
+            ]
+            all_results = await asyncio.gather(*tasks, return_exceptions=False)
+            paydown_results = await auto_paydown_high_utilization_cards(client, cards)
+
+        summary = summarize_swipe_results(all_results)
+        summary["auto_paydowns_processed"] = sum(1 for result in paydown_results if result.get("status") == "SUCCESS")
+        status_label = "SUCCESS" if summary["authorizations_created"] > 0 else "NOOP"
+        message = (
+            "Simulation pulse completed."
+            if summary["authorizations_created"] > 0
+            else "Simulation pulse completed without creating new authorizations."
+        )
+        return {
+            "status": status_label,
+            "message": message,
+            "distribution_window_seconds": PULSE_WINDOW_SECONDS,
+            "scheduled_events": total_events,
+            **summary,
+            "active_cards_count": len(cards),
+        }
 
 @app.post("/simulate-surge", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
 async def simulate_surge(payload: SurgeRequest):

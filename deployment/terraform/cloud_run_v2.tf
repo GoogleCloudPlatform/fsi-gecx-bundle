@@ -35,6 +35,7 @@ resource "google_cloud_run_v2_service" "banking_service" {
 
   template {
     service_account = google_service_account.banking_service_account.email
+    max_instance_request_concurrency = var.banking_service_max_instance_request_concurrency
 
     vpc_access {
       network_interfaces {
@@ -80,6 +81,21 @@ resource "google_cloud_run_v2_service" "banking_service" {
       env {
         name  = "DB_IAM_AUTH"
         value = "true"
+      }
+
+      env {
+        name  = "DB_POOL_SIZE"
+        value = tostring(var.banking_service_db_pool_size)
+      }
+
+      env {
+        name  = "DB_MAX_OVERFLOW"
+        value = tostring(var.banking_service_db_max_overflow)
+      }
+
+      env {
+        name  = "DB_POOL_TIMEOUT"
+        value = tostring(var.banking_service_db_pool_timeout)
       }
 
       env {
@@ -587,6 +603,8 @@ resource "google_cloud_run_v2_service" "data_generator" {
 
   template {
     service_account = google_service_account.data_generator_service_account.email
+    max_instance_request_concurrency = var.data_generator_max_instance_request_concurrency
+    timeout = var.data_generator_request_timeout
 
     containers {
       image = local.data_generator_image_url
@@ -606,6 +624,11 @@ resource "google_cloud_run_v2_service" "data_generator" {
       env {
         name  = "BANKING_SERVICE_URL"
         value = "https://banking-service-${data.google_project.project.number}.${var.region}.run.app"
+      }
+
+      env {
+        name  = "SWIPE_WORKFLOW_CONCURRENCY"
+        value = tostring(var.data_generator_swipe_workflow_concurrency)
       }
     }
   }

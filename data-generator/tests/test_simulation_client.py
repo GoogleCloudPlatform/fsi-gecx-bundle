@@ -95,7 +95,9 @@ async def test_simulate_pulse_declined():
     
     try:
         response = client.post("/simulate-pulse")
-        assert response.status_code == 502
+        assert response.status_code == 200
+        assert response.json()["status"] == "NOOP"
+        assert response.json()["authorizations_created"] == 0
 
         # Assert auth was called, but settle was NOT called since it was declined
         assert auth_route.called

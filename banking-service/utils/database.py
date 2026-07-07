@@ -132,10 +132,11 @@ def create_db_engine(url_str=DATABASE_URL, **kwargs):
         engine_args["execution_options"] = exec_opts
     elif url_str.startswith("postgresql"):
         if "pool_size" not in engine_args and "poolclass" not in engine_args:
-            engine_args["pool_size"] = 10
-            engine_args["max_overflow"] = 20
-            engine_args["pool_recycle"] = 900
-            engine_args["pool_pre_ping"] = True
+            engine_args["pool_size"] = int(os.getenv("DB_POOL_SIZE", "10"))
+            engine_args["max_overflow"] = int(os.getenv("DB_MAX_OVERFLOW", "20"))
+            engine_args["pool_timeout"] = int(os.getenv("DB_POOL_TIMEOUT", "30"))
+            engine_args["pool_recycle"] = int(os.getenv("DB_POOL_RECYCLE", "900"))
+            engine_args["pool_pre_ping"] = os.getenv("DB_POOL_PRE_PING", "true").lower() == "true"
             
         if os.getenv("DB_IAM_AUTH") == "true":
             logger.info("Using GCP IAM authentication for Cloud SQL PostgreSQL connection.")
