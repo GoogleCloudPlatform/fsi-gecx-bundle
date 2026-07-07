@@ -274,3 +274,10 @@ resource "google_bigquery_dataset_iam_member" "pubsub_bq_metadata_viewer" {
   role       = "roles/bigquery.metadataViewer"
   member     = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
 }
+
+resource "google_bigquery_dataset_iam_member" "cloudbuild_sa_ci_data_editor" {
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.ci.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+}

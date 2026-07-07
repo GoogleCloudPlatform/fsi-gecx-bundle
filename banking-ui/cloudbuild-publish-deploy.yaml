@@ -27,6 +27,7 @@ steps:
     args:
       - "-c"
       - |
+        apt-get update -qq && apt-get install -y -qq jq
         LINGUIST_RESULT=$$(jq @json /workspace/linguist.json)
         bq query --use_legacy_sql=false --format=csv "CALL \`$PROJECT_ID.ci.get_build_version\`('banking-ui', 'ci', '0.0.0', 'fsi-gecx-bundle', '$COMMIT_SHA', false, $$LINGUIST_RESULT)" > raw_output.txt
         cat raw_output.txt
