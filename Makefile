@@ -140,10 +140,10 @@ publish-images-cloud: ## Submit Cloud Build jobs using official publish/deploy Y
 	gcloud builds submit --config adk-agent/credit-support-agent/cloudbuild-deploy.yaml --substitutions=_TRIGGER_DEPLOY=false
 
 .PHONY: zip-mortgage-agent
-zip-mortgage-agent: ## Package the GECX Mortgage_Preapproval bundle into a ready-to-upload zip archive
+zip-mortgage-agent: ## Package the GECX Nova_Horizon_Bot_v2 bundle into a ready-to-upload zip archive
 	@echo "Packaging Mortgage Preapproval agent bundle..."
-	cd gecx/Mortgage_Preapproval && zip -r ../../Mortgage_Preapproval.zip .
-	@echo "Success: Created Mortgage_Preapproval.zip!"
+	cd gecx/Nova_Horizon_Bot_v2 && zip -r ../../Nova_Horizon_Bot_v2.zip .
+	@echo "Success: Created Nova_Horizon_Bot_v2.zip!"
 
 .PHONY: zip-credit-agent
 zip-credit-agent: ## Package the GECX Credit_Support_Voice_Agent bundle into a ready-to-upload zip archive
@@ -154,7 +154,7 @@ zip-credit-agent: ## Package the GECX Credit_Support_Voice_Agent bundle into a r
 .PHONY: upload-mortgage-agent
 upload-mortgage-agent: ## Execute the REST API script to package and import the Mortgage Preapproval agent directly into CES
 	@echo "Uploading Mortgage Preapproval Agent to GECX..."
-	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) AGENT_FOLDER=Mortgage_Preapproval bash deploy_mortgage_agent.sh
+	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) AGENT_FOLDER=Nova_Horizon_Bot_v2 bash deploy_mortgage_agent.sh
 
 .PHONY: upload-credit-agent
 upload-credit-agent: ## Execute the REST API script to package and import the Credit Support Voice Agent directly into CES
@@ -282,7 +282,7 @@ clean: ## Clean up cached artifacts, dist folders, local dependency directories,
 	@echo "Cleaning cached files, local dependency directories, and top-level archives..."
 	rm -rf banking-service/.venv banking-service/__pycache__ banking-service/.pytest_cache
 	rm -rf banking-ui/node_modules banking-ui/dist
-	rm -f Mortgage_Preapproval.zip
+	rm -f Nova_Horizon_Bot_v2.zip
 	@echo "Clean complete."
 
 .PHONY: docker-run-banking-ui
