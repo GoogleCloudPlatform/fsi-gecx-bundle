@@ -32,8 +32,12 @@ def test_health():
 async def test_simulate_pulse_success():
     original_plan_builder = main.build_randomized_pulse_plan
     original_randint = main.random.randint
+    original_auto_paydown = main.auto_paydown_high_utilization_cards
     main.build_randomized_pulse_plan = lambda total_events, window_seconds=58: [0.0, 0.0, 0.0, 0.0]
-    main.random.randint = lambda a, b: 4 if (a, b) == (18, 36) else original_randint(a, b)
+    main.random.randint = lambda a, b: 4 if (a, b) == (8, 12) else original_randint(a, b)
+    async def noop_auto_paydown(client, cards, trigger_utilization=0.65, target_utilization=0.35):
+        return []
+    main.auto_paydown_high_utilization_cards = noop_auto_paydown
 
     # Mock Gateway Endpoints
     auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
@@ -58,6 +62,7 @@ async def test_simulate_pulse_success():
     finally:
         main.build_randomized_pulse_plan = original_plan_builder
         main.random.randint = original_randint
+        main.auto_paydown_high_utilization_cards = original_auto_paydown
     
     # Assert auth requests were sent with the correct headers
     assert auth_route.called
@@ -73,8 +78,12 @@ async def test_simulate_pulse_success():
 async def test_simulate_pulse_declined():
     original_plan_builder = main.build_randomized_pulse_plan
     original_randint = main.random.randint
+    original_auto_paydown = main.auto_paydown_high_utilization_cards
     main.build_randomized_pulse_plan = lambda total_events, window_seconds=58: [0.0, 0.0, 0.0, 0.0]
-    main.random.randint = lambda a, b: 4 if (a, b) == (18, 36) else original_randint(a, b)
+    main.random.randint = lambda a, b: 4 if (a, b) == (8, 12) else original_randint(a, b)
+    async def noop_auto_paydown(client, cards, trigger_utilization=0.65, target_utilization=0.35):
+        return []
+    main.auto_paydown_high_utilization_cards = noop_auto_paydown
 
     # Mock Gateway declines swipes (action_code = 51)
     auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
@@ -94,6 +103,7 @@ async def test_simulate_pulse_declined():
     finally:
         main.build_randomized_pulse_plan = original_plan_builder
         main.random.randint = original_randint
+        main.auto_paydown_high_utilization_cards = original_auto_paydown
 
 @respx.mock
 def test_simulate_surge_success():
@@ -112,6 +122,25 @@ def test_simulate_surge_success():
     assert response.json()["swipes_attempted"] == 50
 
 
+def test_simulate_surge_fails_without_spendable_cards():
+    response = client.post("/simulate-surge", json={
+        "active_cards": [
+            {
+                "card_token": "tok_dead",
+                "cardholder_name": "Declined User",
+                "persona": "PRIME",
+                "mccs": ["5411"],
+                "amount_min": 1500,
+                "amount_max": 15000,
+                "available_credit_cents": 0,
+            }
+        ]
+    })
+
+    assert response.status_code == 409
+    assert "No spendable active cards" in response.json()["detail"]
+
+
 @respx.mock
 def test_generate_fails_without_active_cards_in_deployed_mode(monkeypatch):
     monkeypatch.setenv("K_SERVICE", "data-generator")
@@ -123,6 +152,51 @@ def test_generate_fails_without_active_cards_in_deployed_mode(monkeypatch):
 
     assert response.status_code == 502
     assert "refusing to use static fallback" in response.json()["detail"]
+
+
+def test_get_spendable_cards_filters_exhausted_cards():
+    cards = [
+        {"card_token": "tok_1", "available_credit_cents": 0},
+        {"card_token": "tok_2", "available_credit_cents": 99},
+        {"card_token": "tok_3", "available_credit_cents": 100},
+        {"card_token": "tok_4"},
+    ]
+
+    spendable = main.get_spendable_cards(cards)
+
+    assert [card["card_token"] for card in spendable] == ["tok_3", "tok_4"]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_auto_paydown_high_utilization_cards_calls_internal_endpoint():
+    route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/credit-card/internal/auto-paydown").mock(
+        return_value=httpx.Response(200, json={"status": "SUCCESS", "paid_amount_cents": 25000})
+    )
+
+    async with httpx.AsyncClient() as async_client:
+        results = await main.auto_paydown_high_utilization_cards(
+            async_client,
+            [
+                {
+                    "customer_id": "cust-1",
+                    "credit_account_id": "cred-1",
+                    "credit_limit_cents": 100000,
+                    "available_credit_cents": 20000,
+                },
+                {
+                    "customer_id": "cust-2",
+                    "credit_account_id": "cred-2",
+                    "credit_limit_cents": 100000,
+                    "available_credit_cents": 50000,
+                },
+            ],
+        )
+
+    assert route.called
+    assert route.call_count == 1
+    assert results[0]["status"] == "SUCCESS"
+    assert results[0]["credit_account_id"] == "cred-1"
 
 @pytest.mark.asyncio
 @respx.mock

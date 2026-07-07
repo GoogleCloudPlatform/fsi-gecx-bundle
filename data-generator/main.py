@@ -33,6 +33,7 @@ class CardPayload(BaseModel):
     mccs: List[str]
     amount_min: int
     amount_max: int
+    available_credit_cents: Optional[int] = None
 
 
 class SurgeRequest(BaseModel):
@@ -121,8 +122,88 @@ def get_service_headers() -> Dict[str, str]:
                 _cached_token_time = time.time()
                 headers["Authorization"] = f"Bearer {oidc_token}"
         except Exception as auth_err:
-            logger.warning(f"Could not fetch Google OIDC ID token for {BANKING_SERVICE_URL}: {auth_err}")
+            raise RuntimeError(
+                f"Could not fetch Google OIDC ID token for banking-service at {BANKING_SERVICE_URL}: {auth_err}"
+            ) from auth_err
+
+        if "Authorization" not in headers:
+            raise RuntimeError(
+                f"Missing OIDC authorization header for remote banking-service at {BANKING_SERVICE_URL}."
+            )
     return headers
+
+
+def get_spendable_cards(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Filters the active card pool down to cards that still have spendable credit."""
+    spendable_cards = []
+    for card in cards:
+        available_credit = card.get("available_credit_cents")
+        if available_credit is None:
+            spendable_cards.append(card)
+            continue
+        if available_credit >= 100:
+            spendable_cards.append(card)
+    return spendable_cards
+
+
+async def auto_paydown_high_utilization_cards(
+    client: httpx.AsyncClient,
+    cards: List[Dict[str, Any]],
+    trigger_utilization: float = 0.65,
+    target_utilization: float = 0.35,
+) -> List[Dict[str, Any]]:
+    """Pays down highly utilized mock credit cards from checking first, then savings."""
+    results = []
+    headers = get_service_headers()
+
+    for card in cards:
+        credit_limit_cents = card.get("credit_limit_cents") or 0
+        available_credit_cents = card.get("available_credit_cents")
+        customer_id = card.get("customer_id")
+        credit_account_id = card.get("credit_account_id")
+
+        if not credit_limit_cents or available_credit_cents is None or not customer_id or not credit_account_id:
+            continue
+
+        utilization = 1 - (available_credit_cents / credit_limit_cents)
+        if utilization < trigger_utilization:
+            continue
+
+        response = await client.post(
+            f"{BANKING_SERVICE_URL}/api/v1/credit-card/internal/auto-paydown",
+            json={
+                "customer_id": customer_id,
+                "credit_account_id": credit_account_id,
+                "target_utilization": target_utilization,
+                "trigger_utilization": trigger_utilization,
+            },
+            headers=headers,
+            timeout=10.0,
+        )
+
+        if response.status_code != 200:
+            logger.warning(
+                "Auto-paydown failed for credit account %s. HTTP %s: %s",
+                credit_account_id,
+                response.status_code,
+                response.text,
+            )
+            results.append(
+                {
+                    "credit_account_id": credit_account_id,
+                    "customer_id": customer_id,
+                    "status": "FAILED",
+                    "error": response.text,
+                }
+            )
+            continue
+
+        result = response.json()
+        result["credit_account_id"] = credit_account_id
+        result["customer_id"] = customer_id
+        results.append(result)
+
+    return results
 
 def get_merchants() -> List[Dict[str, Any]]:
     """Fetches merchant catalog via HTTP from banking-service, falling back to local resources or static defaults."""
@@ -277,9 +358,28 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
 
     matching_merchants = region_merchants if region_merchants else merchants
     merchant = random.choice(matching_merchants)
+    available_credit = card.get("available_credit_cents")
     amount_min = card.get("amount_min", 1500)
     amount_max = card.get("amount_max", 15000)
-    amount_cents = random.randint(amount_min, amount_max)
+
+    if available_credit is not None:
+        amount_max = min(amount_max, int(available_credit))
+        amount_min = min(amount_min, amount_max)
+        if amount_max < 100:
+            return {
+                "card_token": card.get("card_token"),
+                "rrn": None,
+                "authorized": False,
+                "settled": False,
+                "reversed": False,
+                "decline_reason": "INSUFFICIENT_AVAILABLE_CREDIT",
+                "error": None,
+            }
+
+    amount_floor = max(100, amount_min)
+    if amount_max < amount_floor:
+        amount_floor = amount_max
+    amount_cents = random.randint(amount_floor, amount_max)
     
     if merchant.get("mcc") == "5814": # Coffee
         amount_cents = min(amount_cents, 5000)
@@ -448,9 +548,10 @@ async def run_activity_surge_task(active_cards: Optional[List[Dict[str, Any]]] =
     """Fires 50 rapid-fire swipes staggered over 10 seconds."""
     logger.info("Starting activity surge simulation (50 swipes over 10s)...")
     cards = active_cards or get_active_cards()
+    cards = get_spendable_cards(cards)
     if not cards:
-        logger.warning("No cards resolved. Surge aborted.")
-        raise HTTPException(status_code=400, detail="No active cards resolved. Surge aborted.")
+        logger.warning("No spendable cards resolved. Surge aborted.")
+        raise HTTPException(status_code=409, detail="No spendable active cards resolved. Surge aborted.")
         
     async with httpx.AsyncClient() as client:
         tasks = []
@@ -459,7 +560,9 @@ async def run_activity_surge_task(active_cards: Optional[List[Dict[str, Any]]] =
             tasks.append(simulate_swipe_event(client, card))
             await asyncio.sleep(0.2)
         results = await asyncio.gather(*tasks, return_exceptions=False)
+        paydown_results = await auto_paydown_high_utilization_cards(client, cards)
     summary = summarize_swipe_results(results)
+    summary["auto_paydowns_processed"] = sum(1 for result in paydown_results if result.get("status") == "SUCCESS")
     logger.info(f"Activity surge simulation completed: {summary}")
     return summary
 
@@ -472,11 +575,11 @@ def health():
 async def simulate_pulse():
     """Wakes up once a minute and fans transactions across the next 58 seconds."""
     logger.info("Triggered randomized simulation pulse for the next 58 seconds.")
-    cards = get_active_cards()
+    cards = get_spendable_cards(get_active_cards())
     if not cards:
-        raise HTTPException(status_code=400, detail="No active cards found to swipe.")
+        raise HTTPException(status_code=409, detail="No spendable active cards found to swipe.")
 
-    total_events = random.randint(18, 36)
+    total_events = random.randint(8, 12)
     event_offsets = build_randomized_pulse_plan(total_events=total_events, window_seconds=58)
 
     async def dispatch_after_offset(client: httpx.AsyncClient, offset_seconds: float, card: Dict[str, Any]) -> Dict[str, Any]:
@@ -489,8 +592,10 @@ async def simulate_pulse():
             for offset in event_offsets
         ]
         all_results = await asyncio.gather(*tasks, return_exceptions=False)
+        paydown_results = await auto_paydown_high_utilization_cards(client, cards)
 
     summary = summarize_swipe_results(all_results)
+    summary["auto_paydowns_processed"] = sum(1 for result in paydown_results if result.get("status") == "SUCCESS")
     if summary["authorizations_created"] == 0:
         raise HTTPException(status_code=502, detail={"message": "No transaction authorizations were created.", **summary})
     return {
@@ -507,8 +612,9 @@ async def simulate_surge(payload: SurgeRequest):
     active_cards = [c.model_dump() for c in payload.active_cards] if payload.active_cards else None
     if not active_cards:
         active_cards = get_active_cards()
+    active_cards = get_spendable_cards(active_cards)
     if not active_cards:
-        raise HTTPException(status_code=400, detail="No active cards supplied or discovered for surge.")
+        raise HTTPException(status_code=409, detail="No spendable active cards supplied or discovered for surge.")
     summary = await run_activity_surge_task(active_cards)
     if summary["authorizations_created"] == 0:
         raise HTTPException(status_code=502, detail={"message": "No transaction authorizations were created.", **summary})

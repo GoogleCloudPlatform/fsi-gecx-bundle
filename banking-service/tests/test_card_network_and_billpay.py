@@ -25,8 +25,7 @@ from utils.database import Base, get_db
 from utils.auth import get_current_user
 from models.authentication import ValidatedToken
 from models.identity import User
-from models.kyc import KYCRecord, UserCreditProfile
-from models.origination import Account, Transaction, AccountLedgerEntry
+from models.origination import Account
 from models.credit_card import CreditAccount, IssuedCard, TransactionAuthorization, PostedTransaction
 from models.audit import AuditOutbox
 
@@ -291,3 +290,48 @@ async def test_accounts_summary_and_pay_success(async_client, db_session):
     # Verify audit log recorded in outbox
     audit = db_session.query(AuditOutbox).filter_by(event_type="BILL_PAYMENT_EXECUTED").first()
     assert audit is not None
+
+
+@pytest.mark.asyncio
+async def test_internal_auto_paydown_uses_checking_then_savings(async_client, db_session):
+    user, checking, credit_acc, card = setup_test_cardholder_suite(db_session)
+
+    savings = Account(
+        user_id=user.id,
+        account_number="SAV-10020034",
+        account_type="SAVINGS",
+        product_name="Nova High Yield Savings",
+        cleared_balance_cents=20000,
+        routing_number="021000021",
+        status="ACTIVE"
+    )
+    db_session.add(savings)
+
+    credit_acc.cleared_balance_cents = 80000
+    credit_acc.available_credit_cents = 20000
+    checking.cleared_balance_cents = 15000
+    db_session.commit()
+
+    headers = {"X-Card-Network-Token": "switch-secret-key-12345"}
+    payload = {
+        "customer_id": str(user.id),
+        "credit_account_id": str(credit_acc.id),
+        "target_utilization": 0.35,
+        "trigger_utilization": 0.65,
+    }
+
+    response = await async_client.post("/api/v1/credit-card/internal/auto-paydown", json=payload, headers=headers)
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["status"] == "SUCCESS"
+    assert data["paid_amount_cents"] == 35000
+    assert len(data["payments"]) == 2
+    assert data["payments"][0]["source_account_type"] == "CHECKING"
+    assert data["payments"][1]["source_account_type"] == "SAVINGS"
+
+    db_session.refresh(checking)
+    db_session.refresh(savings)
+    db_session.refresh(credit_acc)
+    assert checking.cleared_balance_cents == 0
+    assert savings.cleared_balance_cents == 0
+    assert credit_acc.cleared_balance_cents == 45000

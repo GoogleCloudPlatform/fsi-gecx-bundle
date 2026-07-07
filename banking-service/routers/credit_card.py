@@ -12,24 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import logging
+import os
 from typing import Dict
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header, Request
-from sqlalchemy.orm import Session
-from livekit import api as lk_api
 
-from utils.database import get_db
-from utils.auth import get_current_user, is_support_staff
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
+from livekit import api as lk_api
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
 from models.authentication import ValidatedToken
 from models.fdx import PersonalFinanceCategory
-from models.credit_card import IssuedCard, CreditAccount
 from repositories.credit_card import CreditCardRepository
 from services.credit_card import (
-    freeze_card, unfreeze_card, apply_limit_increase, reverse_posted_fee,
-    get_account_summary_dto, get_transaction_history_dto
+    apply_limit_increase,
+    freeze_card,
+    get_account_summary_dto,
+    get_transaction_history_dto,
+    reverse_posted_fee,
+    unfreeze_card,
 )
 from services.taxonomy_service import TaxonomyService
+from services.simulation import SimulationService
+from utils.auth import get_current_user, is_support_staff
+from utils.database import get_db
+from utils.internal_execution import InternalServiceContext, require_internal_simulation_context
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/credit-card", tags=["Credit Card Support"])
@@ -75,7 +82,7 @@ def resolve_effective_id(target_id: str | None, current_id: str, token: Validate
     return current_id
 
 
-def verify_admin_or_internal_secret(
+async def verify_admin_or_internal_secret(
     request: Request,
     x_card_network_token: str | None = Header(None, alias="X-Card-Network-Token")
 ):
@@ -84,8 +91,10 @@ def verify_admin_or_internal_secret(
         return True
         
     try:
-        from utils.auth import get_current_user
-        token = get_current_user(request=request, x_forwarded_authorization=request.headers.get("X-Forwarded-Authorization"))
+        token = await get_current_user(
+            request=request,
+            x_forwarded_authorization=request.headers.get("X-Forwarded-Authorization"),
+        )
         if token and token.email:
             email_lower = token.email.lower()
             allowed_domains = ["google.com", "gcp.solutions", "altostrat.com"]
@@ -105,41 +114,12 @@ def get_active_cards(
     _auth: bool = Depends(verify_admin_or_internal_secret)
 ):
     """Returns all active credit card tokens and basic persona metadata for synthetic data simulation."""
-    return list_active_cards_for_simulation(db)
+    return SimulationService(db).list_active_cards_for_simulation()
 
 
 def list_active_cards_for_simulation(db: Session) -> dict:
-    """Returns active card payloads used by the synthetic transaction generator."""
-    cards = db.query(IssuedCard, CreditAccount).join(
-        CreditAccount, IssuedCard.account_id == CreditAccount.id
-    ).filter(IssuedCard.status == "ACTIVE", IssuedCard.is_active).all()
-    
-    results = []
-    for card, acc in cards:
-        name_lower = card.cardholder_name.lower() if card.cardholder_name else ""
-        if "erik" in name_lower or acc.credit_limit_cents > 2000000:
-            persona = "HNW"
-            mccs, a_min, a_max = ["4511", "7011", "5812"], 50000, 400000
-        elif "servedio" in name_lower or "marcus" in name_lower or acc.credit_limit_cents >= 1000000:
-            persona = "PRIME"
-            mccs, a_min, a_max = ["5411", "5541", "5310", "4121"], 1500, 15000
-        else:
-            persona = "YPRO"
-            mccs, a_min, a_max = ["5814", "7841", "5812"], 400, 3500
-            
-        results.append({
-            "card_token": card.card_token,
-            "cardholder_name": card.cardholder_name,
-            "credit_account_id": str(acc.id),
-            "customer_id": str(acc.customer_id),
-            "persona": persona,
-            "mccs": mccs,
-            "amount_min": a_min,
-            "amount_max": a_max,
-            "credit_limit_cents": acc.credit_limit_cents
-        })
-        
-    return {"active_cards": results, "count": len(results)}
+    """Compatibility wrapper for synthetic transaction tooling."""
+    return SimulationService(db).list_active_cards_for_simulation()
 
 
 
@@ -377,17 +357,17 @@ def get_voice_room_token(
     except Exception as e:
         logger.error(f"Failed to generate LiveKit token: {e}")
         raise HTTPException(status_code=500, detail="LiveKit token creation error.")
-
-
-from pydantic import BaseModel, Field
-
 class BillPaymentRequest(BaseModel):
     source_account_id: str = Field(..., description="Deposit account UUID to debit")
     credit_account_id: str = Field(..., description="Credit account UUID to credit")
     amount_cents: int = Field(..., gt=0, description="Amount in cents")
 
 
-from fastapi import status
+class AutoPaydownRequest(BaseModel):
+    customer_id: str = Field(..., description="Target customer UUID")
+    credit_account_id: str = Field(..., description="Target credit account UUID")
+    target_utilization: float = Field(0.35, gt=0, lt=1, description="Desired post-payment utilization ratio")
+    trigger_utilization: float = Field(0.65, gt=0, lt=1, description="Utilization ratio that triggers auto-paydown")
 
 @router.post("/pay", status_code=status.HTTP_200_OK)
 @apiv1_router.post("/pay", status_code=status.HTTP_200_OK)
@@ -407,4 +387,26 @@ def pay_credit_card(
         source_account_id=request.source_account_id,
         credit_account_id=request.credit_account_id,
         amount_cents=request.amount_cents
+    )
+
+
+@router.post("/internal/auto-paydown", status_code=status.HTTP_200_OK)
+@apiv1_router.post("/internal/auto-paydown", status_code=status.HTTP_200_OK)
+@v1_router.post("/internal/auto-paydown", status_code=status.HTTP_200_OK)
+def auto_paydown_credit_card(
+    request: AutoPaydownRequest,
+    db: Session = Depends(get_db),
+    internal_context: InternalServiceContext = Depends(require_internal_simulation_context),
+):
+    """
+    Executes an internal auto-paydown from the target customer's checking or savings account
+    to reduce credit-card utilization for continuous simulation traffic.
+    """
+    service = SimulationService(db)
+    return service.execute_internal_auto_paydown(
+        context=internal_context,
+        customer_id=request.customer_id,
+        credit_account_id=request.credit_account_id,
+        target_utilization=request.target_utilization,
+        trigger_utilization=request.trigger_utilization,
     )

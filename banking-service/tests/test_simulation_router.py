@@ -182,8 +182,7 @@ async def test_simulate_surge_success(async_client, db_session):
     assert prov_resp.status_code == status.HTTP_201_CREATED
     
     # 2. Mock the data-generator surge route
-    # read DATA_GENERATOR_URL from routers.simulation
-    from routers.simulation import DATA_GENERATOR_URL
+    from services.simulation import DATA_GENERATOR_URL
     surge_route = respx.post(f"{DATA_GENERATOR_URL}/simulate-surge").mock(
         return_value=httpx.Response(
             200,
@@ -293,9 +292,9 @@ async def test_inject_late_fee_and_global_stream(async_client, db_session):
         "status": "SUCCESS",
     }
 
-    with patch("routers.simulation.CdcMonitoringService.get_operational_stream", return_value=mocked_stream), \
-         patch("routers.simulation.CdcMonitoringService.get_operational_stream_metrics", return_value=mocked_metrics), \
-         patch("routers.simulation.CdcMonitoringService.get_cached_datastream_metrics", return_value=mocked_cdc_metrics):
+    with patch("services.simulation.CdcMonitoringService.get_operational_stream", return_value=mocked_stream), \
+         patch("services.simulation.CdcMonitoringService.get_operational_stream_metrics", return_value=mocked_metrics), \
+         patch("services.simulation.CdcMonitoringService.get_cached_datastream_metrics", return_value=mocked_cdc_metrics):
         resp_stream = await async_client.get("/api/v1/simulation/global-stream")
     assert resp_stream.status_code == status.HTTP_200_OK
     data = resp_stream.json()
