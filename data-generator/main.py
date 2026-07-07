@@ -67,6 +67,8 @@ PULSE_MAX_EVENTS = int(os.getenv("PULSE_MAX_EVENTS", "12"))
 SWIPE_WORKFLOW_CONCURRENCY = int(os.getenv("SWIPE_WORKFLOW_CONCURRENCY", "4"))
 SURGE_TOTAL_EVENTS = int(os.getenv("SURGE_TOTAL_EVENTS", "50"))
 SURGE_STAGGER_SECONDS = float(os.getenv("SURGE_STAGGER_SECONDS", "0.2"))
+ACTIVE_CARD_FETCH_TIMEOUT_SECONDS = float(os.getenv("ACTIVE_CARD_FETCH_TIMEOUT_SECONDS", "10"))
+AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE = int(os.getenv("AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE", "6"))
 
 _pulse_lock = asyncio.Lock()
 
@@ -177,6 +179,7 @@ async def auto_paydown_high_utilization_cards(
     """Pays down highly utilized mock credit cards from checking first, then savings."""
     results = []
     headers = get_service_headers()
+    eligible_cards = []
 
     for card in cards:
         credit_limit_cents = card.get("credit_limit_cents") or 0
@@ -191,17 +194,46 @@ async def auto_paydown_high_utilization_cards(
         if utilization < trigger_utilization:
             continue
 
-        response = await client.post(
-            f"{BANKING_SERVICE_URL}/api/v1/credit-card/internal/auto-paydown",
-            json={
-                "customer_id": customer_id,
-                "credit_account_id": credit_account_id,
-                "target_utilization": target_utilization,
-                "trigger_utilization": trigger_utilization,
-            },
-            headers=headers,
-            timeout=10.0,
-        )
+        eligible_cards.append(card)
+
+    if not eligible_cards:
+        return results
+
+    random.shuffle(eligible_cards)
+    if AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE > 0:
+        eligible_cards = eligible_cards[:AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE]
+
+    for card in eligible_cards:
+        customer_id = card.get("customer_id")
+        credit_account_id = card.get("credit_account_id")
+
+        try:
+            response = await client.post(
+                f"{BANKING_SERVICE_URL}/api/v1/credit-card/internal/auto-paydown",
+                json={
+                    "customer_id": customer_id,
+                    "credit_account_id": credit_account_id,
+                    "target_utilization": target_utilization,
+                    "trigger_utilization": trigger_utilization,
+                },
+                headers=headers,
+                timeout=10.0,
+            )
+        except httpx.RequestError as exc:
+            logger.warning(
+                "Auto-paydown request failed for credit account %s: %s",
+                credit_account_id,
+                exc,
+            )
+            results.append(
+                {
+                    "credit_account_id": credit_account_id,
+                    "customer_id": customer_id,
+                    "status": "FAILED",
+                    "error": str(exc),
+                }
+            )
+            continue
 
         if _is_maintenance_response(response):
             logger.info("Skipping auto-paydown during banking-service maintenance for credit account %s.", credit_account_id)
@@ -345,7 +377,7 @@ def get_active_cards() -> List[Dict[str, Any]]:
     Falls back to static DEFAULT_PERSONAS manifest.
     """
     try:
-        with httpx.Client(timeout=5.0) as client:
+        with httpx.Client(timeout=ACTIVE_CARD_FETCH_TIMEOUT_SECONDS) as client:
             res = client.get(f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards", headers=get_service_headers())
             if res.status_code == 200:
                 data = res.json()
@@ -666,6 +698,14 @@ async def simulate_pulse():
             return {
                 "status": "SKIPPED",
                 "message": "banking-service reset is in progress.",
+                "active_cards_count": 0,
+            }
+        except HTTPException as exc:
+            logger.warning("Skipping simulation pulse because active card discovery is unavailable: %s", exc.detail)
+            return {
+                "status": "SKIPPED",
+                "message": "Active card discovery is temporarily unavailable.",
+                "reason": exc.detail,
                 "active_cards_count": 0,
             }
         if not cards:

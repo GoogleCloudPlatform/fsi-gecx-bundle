@@ -158,6 +158,20 @@ def test_generate_fails_without_active_cards_in_deployed_mode(monkeypatch):
 
 
 @respx.mock
+def test_generate_skips_without_retry_when_active_card_discovery_times_out(monkeypatch):
+    monkeypatch.setenv("K_SERVICE", "data-generator")
+    respx.get(f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards").mock(
+        side_effect=httpx.ReadTimeout("timed out")
+    )
+
+    response = client.post("/generate")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "SKIPPED"
+    assert "temporarily unavailable" in response.json()["message"]
+
+
+@respx.mock
 def test_simulate_surge_returns_503_during_maintenance(monkeypatch):
     monkeypatch.setenv("K_SERVICE", "data-generator")
     respx.get(f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards").mock(
@@ -213,6 +227,32 @@ async def test_auto_paydown_high_utilization_cards_calls_internal_endpoint():
     assert route.call_count == 1
     assert results[0]["status"] == "SUCCESS"
     assert results[0]["credit_account_id"] == "cred-1"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_auto_paydown_high_utilization_cards_caps_accounts_per_pulse(monkeypatch):
+    monkeypatch.setattr(main, "AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE", 2)
+    monkeypatch.setattr(main.random, "shuffle", lambda items: None)
+    route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/credit-card/internal/auto-paydown").mock(
+        return_value=httpx.Response(200, json={"status": "SUCCESS", "paid_amount_cents": 25000})
+    )
+
+    cards = [
+        {
+            "customer_id": f"cust-{idx}",
+            "credit_account_id": f"cred-{idx}",
+            "credit_limit_cents": 100000,
+            "available_credit_cents": 10000,
+        }
+        for idx in range(4)
+    ]
+
+    async with httpx.AsyncClient() as async_client:
+        results = await main.auto_paydown_high_utilization_cards(async_client, cards)
+
+    assert route.call_count == 2
+    assert len(results) == 2
 
 @pytest.mark.asyncio
 @respx.mock

@@ -68,6 +68,34 @@ function AdminSimulationView() {
     lastSyncTime: new Date().toLocaleTimeString()
   });
 
+  const walStatus = streamConnection.state === 'error'
+    ? {
+        label: 'STREAM RETRYING',
+        className: 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400',
+        dotClassName: 'bg-amber-500',
+        animate: false,
+      }
+    : streamConnection.state === 'live' && cdcStats.latestEventAgeMs != null && cdcStats.latestEventAgeMs > 120000
+    ? {
+        label: 'STREAM STALE',
+        className: 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400',
+        dotClassName: 'bg-amber-500',
+        animate: false,
+      }
+    : streamConnection.state === 'live'
+    ? {
+        label: 'STREAMING ACTIVE',
+        className: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400',
+        dotClassName: 'bg-emerald-500',
+        animate: true,
+      }
+    : {
+        label: 'CONNECTING',
+        className: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-600 dark:text-cyan-400',
+        dotClassName: 'bg-cyan-500',
+        animate: true,
+      };
+
   const applyMonitorSnapshot = (streamSnapshot) => {
     if (streamSnapshot?.stream) {
       setStreamData(streamSnapshot.stream);
@@ -324,6 +352,11 @@ function AdminSimulationView() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold ${walStatus.className}`}>
+              <span className={`w-2 h-2 rounded-full ${walStatus.dotClassName} ${walStatus.animate ? 'animate-ping' : ''}`} />
+              <span className={`w-2 h-2 rounded-full ${walStatus.dotClassName} ${walStatus.animate ? '-ml-4' : ''}`} />
+              {walStatus.label}
+            </div>
             {showInfoModals() && (
               <button
                 onClick={() => setInfoModal('wal')}
@@ -333,11 +366,6 @@ function AdminSimulationView() {
                 <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
               </button>
             )}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-              <span className="w-2 h-2 rounded-full bg-emerald-500 -ml-4" />
-              STREAMING ACTIVE
-            </div>
           </div>
         </div>
 
