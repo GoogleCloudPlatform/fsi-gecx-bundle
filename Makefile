@@ -106,7 +106,6 @@ deploy-voice-agent: ## Submit Cloud Build job to deploy ADK credit-support-agent
 	@echo "Submitting Cloud Build job for credit-support-agent deployment..."
 	gcloud builds submit --config adk-agent/credit-support-agent/cloudbuild-deploy.yaml --substitutions=_TRIGGER_DEPLOY=true
 
-
 .PHONY: deploy-target
 deploy-target: ## Deploy an isolated Terraform resource/module (usage: make deploy-target TARGET=module.foo)
 	@if [ -z "$(TARGET)" ]; then echo "Error: TARGET is required. Usage: make deploy-target TARGET=module.foo"; exit 1; fi
