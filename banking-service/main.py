@@ -41,6 +41,7 @@ from routers.settings import router as settings_router
 from models.authentication import ValidatedToken
 from utils.auth import get_current_user
 from utils.env import get_cors_origins, is_cloud_run
+from utils.version import BUILD_VERSION, BUILD_COMMIT_ID
 from routers.locator import router as locator_router
 from routers.accounts import router as accounts_router, v1_router as accounts_v1_router, alias_router as accounts_alias_router
 from routers.fdx import router as fdx_router
@@ -111,13 +112,15 @@ async def combined_lifespan(app_inst: FastAPI):
         yield
 
 
+app_version = f"{BUILD_VERSION} ({BUILD_COMMIT_ID})"
+
 app = FastAPI(
     lifespan=combined_lifespan,
     title="Banking Service API",
     description=(
         "Banking Service API for managing interactions."
     ),
-    version="0.0.1",
+    version=app_version,
     root_path=os.getenv("ROOT_PATH", ""),
     servers=[
         {

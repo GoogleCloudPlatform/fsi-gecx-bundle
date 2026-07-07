@@ -12,17 +12,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fastapi import APIRouter
-
-from utils.version import BUILD_VERSION, BUILD_COMMIT_ID
-
-router = APIRouter(tags=["system"])
-
-
-@router.get("/health", summary="Health check", description="Health check.")
-async def health_check():
-    return {
-        "status": "ok",
-        "version": BUILD_VERSION,
-        "commit": BUILD_COMMIT_ID
-    }
+BUILD_VERSION = "local-dev"
+BUILD_COMMIT_ID = "ABCDEFG"
