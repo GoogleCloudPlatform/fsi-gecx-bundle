@@ -31,12 +31,12 @@ steps:
         bq query --use_legacy_sql=false --format=csv "CALL \`$PROJECT_ID.ci.get_build_version\`('banking-ui', 'ci', '0.0.0', 'fsi-gecx-bundle', '$COMMIT_SHA', false, $$LINGUIST_RESULT)" > raw_output.txt
         cat raw_output.txt
         VERSION=$$(grep -o 'BUILD_VERSION=[0-9.]*' raw_output.txt | cut -d= -f2)
-        if [ -z "$VERSION" ]; then
+        if [ -z "$$VERSION" ]; then
           echo "Error: Failed to retrieve build version from BigQuery." >&2
           exit 1
         fi
-        echo "$VERSION" > build_version.txt
-        echo "Build Version is: $VERSION"
+        echo "$$VERSION" > build_version.txt
+        echo "Build Version is: $$VERSION"
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     id: "update-configs"
@@ -46,10 +46,10 @@ steps:
       - |
         VERSION=$$(cat build_version.txt)
         COMMIT_SHA="$SHORT_SHA"
-        if [ -z "$COMMIT_SHA" ]; then
+        if [ -z "$$COMMIT_SHA" ]; then
           COMMIT_SHA="local"
         fi
-        echo "Updating config files with version: $VERSION and commit: $COMMIT_SHA"
+        echo "Updating config files with version: $$VERSION and commit: $$COMMIT_SHA"
         
         # Update config.js
         sed -i 's/BUILD_VERSION: "[^"]*"/BUILD_VERSION: "'"$${VERSION}"'"/g' banking-ui/public/config.js
