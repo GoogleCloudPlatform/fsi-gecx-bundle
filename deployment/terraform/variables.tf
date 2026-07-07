@@ -159,10 +159,27 @@ variable "enable_blocking_functions" {
   description = "Whether to enable the blocking functions in the agent."
 }
 
-variable "github_branch" {
+variable "repo_branch_expression" {
   type        = string
   description = "The target branch filter for Cloud Build triggers (e.g., ^main$ or ^feature/.*$)"
   default     = "^main$"
+}
+
+variable "repo_tag_expression" {
+  type        = string
+  description = "The target tag filter for Cloud Build triggers (e.g., ^v.*$)"
+  default     = "^(\\d+)\\.(\\d+)\\.(\\d+)$"
+}
+
+variable "cloud_build_trigger_event" {
+  type        = string
+  description = "The event type to trigger Cloud Build runs. Allowed values: push_to_branch, push_to_tag"
+  default     = "push_to_branch"
+
+  validation {
+    condition     = contains(["push_to_branch", "push_to_tag"], var.cloud_build_trigger_event)
+    error_message = "The cloud_build_trigger_event variable must be either 'push_to_branch' or 'push_to_tag'."
+  }
 }
 
 resource "terraform_data" "validate_blocking_functions" {

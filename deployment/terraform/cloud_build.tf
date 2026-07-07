@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+locals {
+  trigger_by_branch = var.cloud_build_trigger_event == "push_to_branch"
+  trigger_by_tag    = var.cloud_build_trigger_event == "push_to_tag"
+}
+
 resource "google_cloudbuild_worker_pool" "pool" {
   name     = "build-pool"
   location = var.region
@@ -63,7 +68,8 @@ resource "google_cloudbuild_trigger" "service_deploy_trigger" {
   repository_event_config {
     repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
     push {
-      branch = var.github_branch
+      branch = local.trigger_by_branch ? var.repo_branch_expression : null
+      tag    = local.trigger_by_tag ? var.repo_tag_expression : null
     }
   }
 
@@ -90,7 +96,8 @@ resource "google_cloudbuild_trigger" "banking_ui_deploy_trigger" {
   repository_event_config {
     repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
     push {
-      branch = var.github_branch
+      branch = local.trigger_by_branch ? var.repo_branch_expression : null
+      tag    = local.trigger_by_tag ? var.repo_tag_expression : null
     }
   }
 
@@ -114,7 +121,8 @@ resource "google_cloudbuild_trigger" "iap_login_ui_deploy_trigger" {
   repository_event_config {
     repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
     push {
-      branch = var.github_branch
+      branch = local.trigger_by_branch ? var.repo_branch_expression : null
+      tag    = local.trigger_by_tag ? var.repo_tag_expression : null
     }
   }
 
@@ -138,7 +146,8 @@ resource "google_cloudbuild_trigger" "banking_ui_crawl_trigger" {
   repository_event_config {
     repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
     push {
-      branch = var.github_branch
+      branch = local.trigger_by_branch ? var.repo_branch_expression : null
+      tag    = local.trigger_by_tag ? var.repo_tag_expression : null
     }
   }
 
@@ -166,7 +175,8 @@ resource "google_cloudbuild_trigger" "credit_support_agent_deploy_trigger" {
   repository_event_config {
     repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
     push {
-      branch = var.github_branch
+      branch = local.trigger_by_branch ? var.repo_branch_expression : null
+      tag    = local.trigger_by_tag ? var.repo_tag_expression : null
     }
   }
 
@@ -190,7 +200,8 @@ resource "google_cloudbuild_trigger" "data_generator_deploy_trigger" {
   repository_event_config {
     repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
     push {
-      branch = var.github_branch
+      branch = local.trigger_by_branch ? var.repo_branch_expression : null
+      tag    = local.trigger_by_tag ? var.repo_tag_expression : null
     }
   }
 
