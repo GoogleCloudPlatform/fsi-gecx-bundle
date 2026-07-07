@@ -241,7 +241,7 @@ Base = declarative_base()
 
 @event.listens_for(Engine, "before_cursor_execute")
 def enforce_least_privilege_rbac(conn, cursor, statement, parameters, context, executemany):
-    if conn.info.get("_ignore_rbac") or getattr(conn.engine, "_ignore_rbac", False):
+    if conn.info.get("_ignore_rbac"):
         return
     role = getattr(conn.engine, "_rbac_role", None)
     if role in ("ledger_service_role", "kyc_service_role"):
@@ -273,6 +273,11 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def enable_session_rbac_override(db):
+    """Scope RBAC bypass to the current session/connection only."""
+    db.connection().info["_ignore_rbac"] = True
 
 
 def get_kyc_db():

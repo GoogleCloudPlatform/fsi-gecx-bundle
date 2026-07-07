@@ -40,6 +40,7 @@ from routers.support import router as support_router
 from routers.settings import router as settings_router
 from models.authentication import ValidatedToken
 from utils.auth import get_current_user
+from utils.env import get_cors_origins, is_cloud_run
 from routers.locator import router as locator_router
 from routers.accounts import router as accounts_router, v1_router as accounts_v1_router, alias_router as accounts_alias_router
 from routers.fdx import router as fdx_router
@@ -67,11 +68,12 @@ except Exception as e:
 
 import asyncio
 
+
 def should_run_startup_seeding() -> bool:
     configured = os.getenv("ENABLE_STARTUP_DB_SEEDING")
     if configured is not None:
         return configured.lower() == "true"
-    return not os.getenv("K_SERVICE")
+    return not is_cloud_run()
 
 
 async def run_db_seeding():
@@ -125,7 +127,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

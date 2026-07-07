@@ -39,3 +39,4 @@ banking_service_max_instance_request_concurrency = 32
 data_generator_max_instance_request_concurrency  = 8
 data_generator_request_timeout                   = "120s"
 data_generator_swipe_workflow_concurrency       = 4
+additional_cors_allowed_origins                 = []

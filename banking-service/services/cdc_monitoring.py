@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from models.credit_card import PostedTransaction, TransactionAuthorization
 from repositories.cdc_lakehouse import CdcLakehouseRepository
+from utils.database import enable_session_rbac_override
 from utils.gcp import get_project_id
 from utils.redis_client import get_redis_client
 
@@ -87,7 +88,7 @@ class CdcMonitoringService:
         return events
 
     def get_operational_latest_timestamp(self):
-        self.db.connection().info["_ignore_rbac"] = True
+        enable_session_rbac_override(self.db)
         latest_auth = self.db.query(func.max(TransactionAuthorization.created_at)).scalar()
         latest_posted = self.db.query(func.max(PostedTransaction.posted_at)).scalar()
         return max([dt for dt in [latest_auth, latest_posted] if dt], default=None)

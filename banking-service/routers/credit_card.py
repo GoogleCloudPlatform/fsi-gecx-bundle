@@ -17,6 +17,7 @@ import os
 from typing import Dict
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials
 from livekit import api as lk_api
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -36,6 +37,7 @@ from services.taxonomy_service import TaxonomyService
 from services.simulation import SimulationService
 from utils.auth import get_current_user, is_support_staff
 from utils.database import get_db
+from utils.internal_auth import is_valid_internal_switch_token
 from utils.internal_execution import InternalServiceContext, require_internal_simulation_context
 from utils.maintenance import ensure_system_writable
 
@@ -87,18 +89,28 @@ async def verify_admin_or_internal_secret(
     request: Request,
     x_card_network_token: str | None = Header(None, alias="X-Card-Network-Token")
 ):
-    switch_token = os.getenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")
-    if x_card_network_token and x_card_network_token == switch_token:
+    if is_valid_internal_switch_token(x_card_network_token):
         return True
         
     try:
+        auth_header = request.headers.get("Authorization")
+        forwarded_header = request.headers.get("X-Forwarded-Authorization")
         token = await get_current_user(
             request=request,
-            x_forwarded_authorization=request.headers.get("X-Forwarded-Authorization"),
+            auth=HTTPAuthorizationCredentials(scheme="Bearer", credentials=auth_header.split(" ", 1)[1])
+            if auth_header and auth_header.startswith("Bearer ")
+            else None,
+            forwarded_auth=HTTPAuthorizationCredentials(scheme="Bearer", credentials=forwarded_header.split(" ", 1)[1])
+            if forwarded_header and forwarded_header.startswith("Bearer ")
+            else None,
         )
         if token and token.email:
             email_lower = token.email.lower()
-            allowed_domains = ["google.com", "gcp.solutions", "altostrat.com"]
+            allowed_domains = [
+                domain.strip().lower()
+                for domain in os.getenv("ADMIN_EMAIL_DOMAINS", "google.com,gcp.solutions,altostrat.com").split(",")
+                if domain.strip()
+            ]
             if any(email_lower.endswith(f"@{domain}") for domain in allowed_domains):
                 return True
     except Exception as e:

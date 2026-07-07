@@ -40,6 +40,7 @@ forwarded_bearer_scheme = HTTPForwardedBearer(auto_error=False)
 
 SERVICE_NAME = "banking-service"
 SUPPORT_DOMAINS = os.getenv("SUPPORT_EMAIL_DOMAINS", "google.com,novahorizon.com").split(",")
+ADMIN_EMAIL_DOMAINS = os.getenv("ADMIN_EMAIL_DOMAINS", "google.com,gcp.solutions,altostrat.com").split(",")
 
 def is_support_staff(token: ValidatedToken) -> bool:
     if not token or not hasattr(token, "claims"):
@@ -209,7 +210,7 @@ def validate_firebase_token(jwt_token: str) -> ValidatedToken:
         }
         return ValidatedToken(claims=claims)
     except Exception as e:
-        logger.warning(f"Firebase ID token validation failed: {e}. Token len: {len(jwt_token) if jwt_token else 0}. Start: {jwt_token[:15] if jwt_token else ''}, End: {jwt_token[-15:] if jwt_token else ''}")
+        logger.warning("Firebase ID token validation failed: %s", e)
         raise HTTPException(status_code=401, detail="Invalid or expired authentication credentials.")
 
 
@@ -328,6 +329,15 @@ async def get_current_user(
         return ValidatedToken.get_mock_token()
 
     raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+async def require_admin_user(token: ValidatedToken = Depends(get_current_user)) -> ValidatedToken:
+    if is_running_locally():
+        return token
+    email = (token.email or "").lower()
+    if email and any(email.endswith(f"@{domain.strip().lower()}") for domain in ADMIN_EMAIL_DOMAINS):
+        return token
+    raise HTTPException(status_code=403, detail="Admin access is required for this operation.")
 
 
 async def verify_eventarc_oidc_token(

@@ -20,6 +20,8 @@ from services.accounts import AccountsService
 from services.cdc_monitoring import CdcMonitoringService
 from services.seeding_service import provision_user_suite, reset_user_suite
 from utils.audit import record_audit_event
+from utils.database import enable_session_rbac_override
+from utils.internal_auth import get_internal_switch_token
 from utils.internal_execution import InternalServiceContext, apply_internal_db_access
 
 logger = logging.getLogger(__name__)
@@ -36,11 +38,7 @@ class SimulationService:
         self.credit_repo = CreditCardRepository(db)
 
     def _enable_simulation_db_access(self) -> None:
-        if hasattr(self.db.bind, "engine"):
-            self.db.bind.engine._ignore_rbac = True
-        else:
-            self.db.bind._ignore_rbac = True
-        self.db.connection().info["_ignore_rbac"] = True
+        enable_session_rbac_override(self.db)
 
     def _resolve_demo_user(self, token: ValidatedToken):
         self._enable_simulation_db_access()
@@ -53,7 +51,7 @@ class SimulationService:
 
     @staticmethod
     def _build_service_headers(target_url: str) -> dict[str, str]:
-        headers = {"X-Card-Network-Token": os.getenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")}
+        headers = {"X-Card-Network-Token": get_internal_switch_token()}
 
         if target_url and "localhost" not in target_url and "127.0.0.1" not in target_url:
             try:

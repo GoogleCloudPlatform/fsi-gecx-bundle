@@ -25,6 +25,9 @@ from fastapi import FastAPI, HTTPException, status, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from utils.internal_auth import get_internal_switch_token
+from utils.runtime import get_cors_origins, is_local_dev
+
 
 class CardPayload(BaseModel):
     card_token: str
@@ -52,7 +55,7 @@ app = FastAPI(title="Modernized Synthetic Transaction Data Generator")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -60,7 +63,7 @@ app.add_middleware(
 
 # Configs
 BANKING_SERVICE_URL = os.getenv("BANKING_SERVICE_URL", "http://localhost:8000")
-CARD_NETWORK_TOKEN = os.getenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")
+CARD_NETWORK_TOKEN = get_internal_switch_token()
 PULSE_WINDOW_SECONDS = int(os.getenv("PULSE_WINDOW_SECONDS", "58"))
 PULSE_MIN_EVENTS = int(os.getenv("PULSE_MIN_EVENTS", "8"))
 PULSE_MAX_EVENTS = int(os.getenv("PULSE_MAX_EVENTS", "12"))
@@ -77,15 +80,12 @@ _pulse_lock = asyncio.Lock()
 class MaintenanceModeError(RuntimeError):
     """Raised when banking-service has temporarily paused writes for maintenance/reset."""
 
-def is_local_mode() -> bool:
-    return os.getenv("ENV", "local") == "local" and not os.getenv("K_SERVICE")
-
 def verify_switch_or_presenter_token(
     x_card_network_token: Optional[str] = Header(None, alias="X-Card-Network-Token")
 ):
     if x_card_network_token and x_card_network_token == CARD_NETWORK_TOKEN:
         return True
-    if is_local_mode():
+    if is_local_dev():
         return True
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized access to data generator.")
 
@@ -394,7 +394,7 @@ def get_active_cards() -> List[Dict[str, Any]]:
             raise
         logger.warning(f"Could not fetch active cards via HTTP from {BANKING_SERVICE_URL}: {e}")
 
-    if is_local_mode():
+    if is_local_dev():
         logger.info("Using static DEFAULT_PERSONAS fallback for local active-card simulation.")
         return DEFAULT_PERSONAS
     raise HTTPException(

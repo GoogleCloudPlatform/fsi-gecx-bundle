@@ -17,6 +17,7 @@ locals {
   banking_ui_image_url     = var.banking_ui_image_url != null ? var.banking_ui_image_url : "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/banking-ui:latest"
   iap_login_ui_image_url   = var.iap_login_ui_image_url != null ? var.iap_login_ui_image_url : "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/iap-login-ui:latest"
   data_generator_image_url = "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/data-generator:latest"
+  cors_allowed_origins     = join(",", distinct(concat(["https://${var.custom_domain}"], var.additional_cors_allowed_origins)))
 }
 
 resource "google_cloud_run_v2_service" "banking_service" {
@@ -34,7 +35,7 @@ resource "google_cloud_run_v2_service" "banking_service" {
   iap_enabled = false
 
   template {
-    service_account = google_service_account.banking_service_account.email
+    service_account                  = google_service_account.banking_service_account.email
     max_instance_request_concurrency = var.banking_service_max_instance_request_concurrency
 
     vpc_access {
@@ -159,6 +160,21 @@ resource "google_cloud_run_v2_service" "banking_service" {
       }
 
       env {
+        name  = "CORS_ALLOWED_ORIGINS"
+        value = local.cors_allowed_origins
+      }
+
+      env {
+        name = "CARD_NETWORK_SWITCH_TOKEN"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.card_network_switch_token.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
         name  = "CDC_BIGQUERY_AUTH_TABLE"
         value = "cards_transaction_authorization"
       }
@@ -216,7 +232,10 @@ resource "google_cloud_run_v2_service" "banking_service" {
     ]
   }
 
-  depends_on = [google_project_service.run_googleapis_com]
+  depends_on = [
+    google_project_service.run_googleapis_com,
+    google_secret_manager_secret_iam_member.banking_service_card_network_switch_token_accessor,
+  ]
 }
 
 data "google_compute_backend_service" "ui_backend" {
@@ -602,9 +621,9 @@ resource "google_cloud_run_v2_service" "data_generator" {
   }
 
   template {
-    service_account = google_service_account.data_generator_service_account.email
+    service_account                  = google_service_account.data_generator_service_account.email
     max_instance_request_concurrency = var.data_generator_max_instance_request_concurrency
-    timeout = var.data_generator_request_timeout
+    timeout                          = var.data_generator_request_timeout
 
     containers {
       image = local.data_generator_image_url
@@ -627,6 +646,21 @@ resource "google_cloud_run_v2_service" "data_generator" {
       }
 
       env {
+        name  = "CORS_ALLOWED_ORIGINS"
+        value = local.cors_allowed_origins
+      }
+
+      env {
+        name = "CARD_NETWORK_SWITCH_TOKEN"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.card_network_switch_token.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
         name  = "SWIPE_WORKFLOW_CONCURRENCY"
         value = tostring(var.data_generator_swipe_workflow_concurrency)
       }
@@ -641,7 +675,10 @@ resource "google_cloud_run_v2_service" "data_generator" {
     ]
   }
 
-  depends_on = [google_project_service.run_googleapis_com]
+  depends_on = [
+    google_project_service.run_googleapis_com,
+    google_secret_manager_secret_iam_member.data_generator_card_network_switch_token_accessor,
+  ]
 }
 
 # Isolated Cloud Run Job tasked with executing alembic database schema migrations

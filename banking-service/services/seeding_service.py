@@ -22,6 +22,7 @@ from typing import Dict, Any
 from sqlalchemy.orm import Session
 
 from utils.database import SessionLocal
+from utils.database import enable_session_rbac_override
 from utils.encryption import encrypt_pii
 from utils.audit import record_audit_event
 
@@ -80,7 +81,7 @@ def get_seeding_personas():
         name_parts = vip["name"].split(maxsplit=1)
         first_name = name_parts[0]
         last_name = name_parts[1] if len(name_parts) > 1 else "Googler"
-        token = f"tok_visa_{first_name.lower()}_{last_name.lower()}"
+        token = _generate_demo_card_token()
         vip_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, vip["email"]))
         score = vip["fico_score"]
         
@@ -180,7 +181,7 @@ def get_seeding_personas():
             "first_name": fn,
             "last_name": ln,
             "cardholder_name": f"{fn} {ln}",
-            "card_token": f"tok_visa_{fn.lower()}_{ln.lower()}",
+            "card_token": _generate_demo_card_token(),
             "email": email,
             "phone_number": f"555-100-{i:04d}",
             "ssn": f"900-{rng.randint(10, 99)}-{rng.randint(1000, 9999)}",
@@ -232,11 +233,7 @@ def clean_database(db: Session) -> None:
     """Removes all transactional and customer-related tables while preserving catalogs."""
     logger.info("Purging transactional and profile database tables...")
     
-    # Bypass engine RBAC constraints during schema cleanup
-    if hasattr(db.bind, "engine"):
-        db.bind.engine._ignore_rbac = True
-    else:
-        db.bind._ignore_rbac = True
+    enable_session_rbac_override(db)
         
     # Order matters due to foreign key constraints!
     from models.support import Escalation
@@ -780,11 +777,7 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
 
 def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str, Any]:
     """Dynamically provisions a new user, kyc profile, deposit accounts, credit cards, and historical swipes."""
-    # Bypass RBAC
-    if hasattr(db.bind, "engine"):
-        db.bind.engine._ignore_rbac = True
-    else:
-        db.bind._ignore_rbac = True
+    enable_session_rbac_override(db)
 
     try:
         # 1. Check if user already exists
@@ -1025,11 +1018,7 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
 
 def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
     """Resets the user's personal checking/savings balances to default and clears credit card transactions."""
-    # Bypass RBAC
-    if hasattr(db.bind, "engine"):
-        db.bind.engine._ignore_rbac = True
-    else:
-        db.bind._ignore_rbac = True
+    enable_session_rbac_override(db)
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:

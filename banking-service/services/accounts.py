@@ -26,6 +26,7 @@ from models.origination import Account, Application, DepositApplication, Transac
 from models.authentication import ValidatedToken
 from repositories.accounts import AccountsRepository
 from services.profile import ProfileService
+from utils.database import enable_session_rbac_override
 from utils.internal_execution import InternalServiceContext, apply_internal_db_access
 
 logger = logging.getLogger(__name__)
@@ -249,11 +250,7 @@ class AccountsService:
             if not user:
                 raise HTTPException(status_code=404, detail="User profile could not be resolved.")
 
-        # Bypass RBAC
-        if hasattr(self.db.bind, "engine"):
-            self.db.bind.engine._ignore_rbac = True
-        else:
-            self.db.bind._ignore_rbac = True
+        enable_session_rbac_override(self.db)
 
         # Fetch checking/savings accounts
         deposit_accounts = self.db.query(Account).filter(Account.user_id == user.id).all()

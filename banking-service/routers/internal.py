@@ -21,7 +21,8 @@ from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from fastapi.concurrency import run_in_threadpool
 from google.cloud import bigquery
 from pydantic import BaseModel, Field
-from utils.auth import verify_eventarc_oidc_token
+from utils.auth import require_admin_user, verify_eventarc_oidc_token
+from utils.database import enable_session_rbac_override
 from utils.lazy_clients import LazyClient
 from utils.maintenance import maintenance_window
 from utils.redis_client import get_redis_client
@@ -150,7 +151,7 @@ async def process_document(
         raise HTTPException(status_code=500, detail=f"Document processing pipeline failed: {str(pipeline_ex)}")
 
 @router.post("/process-outbox")
-def process_outbox(batch_size: int = 50):
+def process_outbox(batch_size: int = 50, _admin=Depends(require_admin_user)):
     """
     In our WAL CDC architecture (Architecture Two), outbox ingestion occurs via zero-load Datastream WAL streaming.
     Returns operational metrics for recent append-only outbox records.
@@ -165,7 +166,11 @@ def process_outbox(batch_size: int = 50):
         db.close()
 
 @router.post("/debug/reset-db")
-def reset_database(purge_audit_logs: bool = False, purge_data_lake: bool = False):
+def reset_database(
+    purge_audit_logs: bool = False,
+    purge_data_lake: bool = False,
+    _admin=Depends(require_admin_user),
+):
     """
     Deletes all rows in the database and re-seeds it with baseline cardholder data.
     Optionally purges PostgreSQL and BigQuery compliance audit logs if purge_audit_logs=True.
@@ -179,7 +184,7 @@ def reset_database(purge_audit_logs: bool = False, purge_data_lake: bool = False
     db = SessionLocal()
     warnings: list[str] = []
     try:
-        db.connection().info["_ignore_rbac"] = True
+        enable_session_rbac_override(db)
 
         with maintenance_window(
             reason="database_reset",

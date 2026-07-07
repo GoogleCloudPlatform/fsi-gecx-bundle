@@ -18,10 +18,11 @@ import random
 from typing import Dict, Any
 from sqlalchemy.orm import Session
 
-from models.credit_card import CreditAccount, IssuedCard, TransactionAuthorization, PostedTransaction
+from models.credit_card import CreditAccount, TransactionAuthorization, PostedTransaction
 from repositories.credit_card import CreditCardRepository
 from services.fraud_scoring import FraudScoringService
 import json
+from utils.database import enable_session_rbac_override
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +54,7 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
     '83' - Account Frozen / Blocked
     '75' - Card Status Inactive / Blocked
     """
-    # Bypass RBAC
-    if hasattr(db.bind, "engine"):
-        db.bind.engine._ignore_rbac = True
-    else:
-        db.bind._ignore_rbac = True
+    enable_session_rbac_override(db)
 
     card_token = payload.get("card_token")
     amount_cents = payload.get("amount_cents", 0)
@@ -211,11 +208,7 @@ def process_settlement(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     Clears / captures a pending card swipe hold and posts a final PostedTransaction.
     """
-    # Bypass RBAC
-    if hasattr(db.bind, "engine"):
-        db.bind.engine._ignore_rbac = True
-    else:
-        db.bind._ignore_rbac = True
+    enable_session_rbac_override(db)
 
     try:
         repo = CreditCardRepository(db)
@@ -289,11 +282,7 @@ def process_reversal(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     Voids/reverses an active pending hold and releases available credit.
     """
-    # Bypass RBAC
-    if hasattr(db.bind, "engine"):
-        db.bind.engine._ignore_rbac = True
-    else:
-        db.bind._ignore_rbac = True
+    enable_session_rbac_override(db)
 
     try:
         repo = CreditCardRepository(db)

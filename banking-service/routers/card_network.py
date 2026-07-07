@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
 from utils.database import get_db
+from utils.internal_auth import get_internal_switch_token, is_valid_internal_switch_token
 from utils.maintenance import ensure_system_writable
 from services.card_network import process_authorization, process_settlement, process_reversal
 
@@ -27,11 +27,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/card-network", tags=["Card Network Switch"])
 v1_router = APIRouter(prefix="/v1/card-network", tags=["Card Network Switch"])
 
-CARD_NETWORK_TOKEN = os.getenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")
-
 def verify_network_switch_secret(x_card_network_token: str = Header(None, alias="X-Card-Network-Token")):
-    if not x_card_network_token or x_card_network_token != CARD_NETWORK_TOKEN:
-        logger.warning(f"Unauthorized switch access attempt with token: {x_card_network_token}")
+    try:
+        get_internal_switch_token()
+    except HTTPException as exc:
+        logger.error("CARD_NETWORK_SWITCH_TOKEN is not configured for card-network routes.")
+        raise HTTPException(status_code=exc.status_code, detail="Card network switch credentials are not configured.") from exc
+
+    if not is_valid_internal_switch_token(x_card_network_token):
+        logger.warning("Unauthorized switch access attempt.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized card network switch credentials."

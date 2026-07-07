@@ -164,6 +164,18 @@ resource "google_secret_manager_secret_iam_member" "banking_service_iap_client_i
   member    = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "banking_service_card_network_switch_token_accessor" {
+  secret_id = google_secret_manager_secret.card_network_switch_token.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "data_generator_card_network_switch_token_accessor" {
+  secret_id = google_secret_manager_secret.card_network_switch_token.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.data_generator_service_account.email}"
+}
+
 resource "google_secret_manager_secret_iam_member" "ces_secret_accessor" {
   secret_id = "iap-client-secret"
   role      = "roles/secretmanager.secretAccessor"

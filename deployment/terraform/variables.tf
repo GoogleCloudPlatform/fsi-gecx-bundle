@@ -254,3 +254,9 @@ variable "data_generator_swipe_workflow_concurrency" {
   description = "Maximum number of concurrent swipe workflows dispatched by data-generator."
   default     = 4
 }
+
+variable "additional_cors_allowed_origins" {
+  type        = list(string)
+  description = "Additional allowed browser origins for Cloud Run CORS configuration."
+  default     = []
+}
