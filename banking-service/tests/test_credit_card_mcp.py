@@ -16,13 +16,17 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from routers.mcp.credit_card import (
+    get_open_fraud_alert,
     issue_replacement_card_tool,
+    push_card_to_google_wallet,
     report_lost_stolen_card,
     request_credit_limit_increase,
     reverse_overdraft_fee,
     unfreeze_card,
 )
 from models.credit_card import Base, FinancialAccount, IssuedCard
+from models.identity import User
+from services.fraud_alerts import FraudAlertService
 
 @pytest.fixture(autouse=True)
 def run_locally_env(monkeypatch):
@@ -294,3 +298,54 @@ async def test_issue_replacement_card_tool_success(mock_send_event, mock_validat
     args, _kwargs = mock_send_event.call_args
     assert args[0] == "session-jane.doe@example.com"
     assert args[1]["type"] == "CARD_REPLACED"
+
+
+@pytest.mark.asyncio
+@patch("routers.mcp.utils.validate_firebase_token")
+async def test_get_open_fraud_alert_success(mock_validate_token, db_session):
+    """Verify the MCP tool returns the current customer's open fraud alert details."""
+    mock_validate_token.return_value = MagicMock(claims={"sub": "jane.doe@example.com", "email": "customer@example.com"})
+
+    seeded_card = db_session.query(IssuedCard).filter_by(id="11111111-1111-4111-8111-222222222222").first()
+    seeded_account = db_session.query(FinancialAccount).filter_by(id="88888888-8888-4888-8888-999999999999").first()
+    customer = db_session.query(User).filter_by(id=seeded_account.customer_id).first()
+
+    suspicious_auth = MagicMock(
+        id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        merchant_name="TEST FRAUD MERCHANT",
+        transaction_amount_cents=12345,
+        merchant_category_code="5311",
+        card_network="VISA",
+        created_at=None,
+    )
+    FraudAlertService(db_session).create_alert_from_simulation(
+        auth_token=MagicMock(user_id="jane.doe@example.com"),
+        customer=customer,
+        card=seeded_card,
+        credit_account=seeded_account,
+        suspicious_authorizations=[suspicious_auth],
+    )
+    db_session.commit()
+
+    result = await get_open_fraud_alert(assertion_token="valid-token", ctx=MagicMock())
+
+    assert result["success"] is True
+    assert result["fraud_alert"]["card_last_four"] == seeded_card.last_four
+    assert result["fraud_alert"]["suspicious_transactions"][0]["merchant_name"] == "TEST FRAUD MERCHANT"
+
+
+@pytest.mark.asyncio
+@patch("routers.mcp.utils.validate_firebase_token")
+async def test_push_card_to_google_wallet_success(mock_validate_token, db_session):
+    """Verify wallet provisioning can be queued for the verified customer's active card."""
+    mock_validate_token.return_value = MagicMock(claims={"sub": "jane.doe@example.com", "email": "customer@example.com"})
+
+    result = await push_card_to_google_wallet(
+        account_id="88888888-8888-4888-8888-999999999999",
+        assertion_token="valid-token",
+        ctx=MagicMock(),
+    )
+
+    assert result["success"] is True
+    assert result["wallet_provider"] == "GOOGLE_WALLET"
+    assert result["wallet_provisioning_status"] == "QUEUED"

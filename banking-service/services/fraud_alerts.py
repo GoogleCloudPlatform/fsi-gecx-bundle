@@ -116,6 +116,28 @@ class FraudAlertService:
             },
         }
 
+    def get_open_alert_details(
+        self,
+        *,
+        customer_id=None,
+        auth_provider_uid: str | None = None,
+    ) -> dict:
+        context = self.get_active_voice_context(
+            customer_id=customer_id,
+            auth_provider_uid=auth_provider_uid,
+        )
+        if not context["has_active_fraud_alert"]:
+            return {
+                "success": False,
+                "message": "No open fraud alert found for the customer.",
+                "fraud_alert": None,
+            }
+        return {
+            "success": True,
+            "message": "Open fraud alert retrieved successfully.",
+            "fraud_alert": context["fraud_alert"],
+        }
+
     @staticmethod
     def _build_customer_message(card_last_four: str, suspicious_transactions: list[dict]) -> str:
         lines = [

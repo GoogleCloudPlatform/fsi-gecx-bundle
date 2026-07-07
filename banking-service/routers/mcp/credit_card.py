@@ -22,7 +22,14 @@ from . import mcp  # Import shared FastMCP server instance
 from routers.mcp.utils import requires_user_assertion, verified_customer_id_var
 from utils.database import SessionLocal
 from repositories.credit_card import CreditCardRepository
-from services.credit_card import apply_limit_increase, freeze_card, issue_replacement_card, reverse_posted_fee
+from services.credit_card import (
+    apply_limit_increase,
+    freeze_card,
+    issue_replacement_card,
+    queue_wallet_provisioning,
+    reverse_posted_fee,
+)
+from services.fraud_alerts import FraudAlertService
 from services.voice_bidi import send_session_event
 
 logger = logging.getLogger(__name__)
@@ -238,6 +245,100 @@ async def issue_replacement_card_tool(
     except Exception as e:
         logger.error(f"Error in FastMCP issue_replacement_card_tool: {e}")
         return {"success": False, "message": f"Internal error: {str(e)}"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def push_card_to_google_wallet(
+    account_id: str = None,
+    card_token: str = None,
+    wallet_provider: str = "GOOGLE_WALLET",
+    ctx: Context = None,
+) -> dict:
+    """
+    Queues a mocked digital-wallet push for the verified customer's active card.
+
+    Args:
+        account_id: Optional unique identifier for the credit card account.
+        card_token: Optional card token. Defaults to the account's active card.
+        wallet_provider: Optional wallet target for digital card provisioning.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    logger.info(
+        "FastMCP push_card_to_google_wallet invoked for account: %s (Customer: %s)",
+        account_id,
+        verified_customer_id,
+    )
+
+    db = SessionLocal()
+    repo = CreditCardRepository(db)
+    try:
+        if not account_id:
+            account = repo.get_account_by_customer(verified_customer_id)
+            if not account:
+                return {"success": False, "message": "No credit card account found for the user."}
+            account_id = str(account.id)
+
+        if not re.match(r"^[a-zA-Z0-9_-]{4,64}$", str(account_id)):
+            return {"success": False, "message": "Access Denied: Invalid account ID format."}
+
+        account = repo.get_account_by_customer(verified_customer_id)
+        if not account or str(account.id) != str(account_id):
+            logger.error(
+                "Security Alert: BOLA/IDOR attempt or account not found for %s by %s",
+                account_id,
+                verified_customer_id,
+            )
+            return {"success": False, "message": "Account not found or unauthorized."}
+
+        if not card_token:
+            cards = repo.list_cards_by_account(account.id)
+            active_card = next((card for card in cards if card.is_active and card.status == "ACTIVE"), None)
+            if not active_card:
+                return {"success": False, "message": "No active card found for wallet provisioning."}
+            card_token = active_card.card_token
+
+        result = queue_wallet_provisioning(
+            db,
+            account_id=str(account.id),
+            card_token=card_token,
+            wallet_provider=wallet_provider,
+            initiated_by="CUSTOMER_VOICE_SUPPORT",
+        )
+        return {
+            "success": True,
+            "message": result["message"],
+            "card_token": result["card_token"],
+            "wallet_provider": result["wallet_provider"],
+            "wallet_provisioning_status": result["wallet_provisioning_status"],
+        }
+    except Exception as e:
+        logger.error(f"Error in FastMCP push_card_to_google_wallet: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def get_open_fraud_alert(
+    ctx: Context = None,
+) -> dict:
+    """
+    Retrieves the latest open fraud alert for the verified customer.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    logger.info("FastMCP get_open_fraud_alert invoked for customer: %s", verified_customer_id)
+
+    db = SessionLocal()
+    try:
+        service = FraudAlertService(db)
+        return service.get_open_alert_details(auth_provider_uid=verified_customer_id)
+    except Exception as e:
+        logger.error(f"Error in FastMCP get_open_fraud_alert: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}", "fraud_alert": None}
     finally:
         db.close()
 

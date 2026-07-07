@@ -35,6 +35,63 @@ def _generate_card_token() -> str:
 def _generate_last_four() -> str:
     return f"{secrets.randbelow(10_000):04d}"
 
+
+def queue_wallet_provisioning(
+    db: Session,
+    *,
+    account_id: str,
+    card_token: str,
+    wallet_provider: str = "GOOGLE_WALLET",
+    initiated_by: str = "CUSTOMER_VOICE_SUPPORT",
+) -> dict:
+    """
+    Records a mocked wallet-provisioning request for an issued card.
+    """
+    logger.info(
+        "Queueing wallet provisioning for account=%s card_token=%s wallet_provider=%s",
+        account_id,
+        card_token,
+        wallet_provider,
+    )
+    try:
+        from repositories.credit_card import CreditCardRepository
+
+        repo = CreditCardRepository(db)
+        account = repo.get_account_by_id(account_id, lock=True)
+        if not account:
+            raise ValueError(f"Account '{account_id}' not found.")
+
+        card = repo.get_card_by_token(card_token)
+        if not card or str(card.account_id) != str(account.id):
+            raise ValueError("Card not found for the specified account.")
+
+        if not card.is_active or card.status != "ACTIVE":
+            raise ValueError("Only active cards can be provisioned to a wallet.")
+
+        record_audit_event(
+            db,
+            "WALLET_PROVISIONING_QUEUED",
+            {
+                "account_id": str(account.id),
+                "card_token": card.card_token,
+                "wallet_provider": wallet_provider,
+                "status": "QUEUED",
+                "initiated_by": initiated_by,
+            },
+        )
+        db.commit()
+        return {
+            "account_id": str(account.id),
+            "card_token": card.card_token,
+            "wallet_provider": wallet_provider,
+            "wallet_provisioning_status": "QUEUED",
+            "message": "Digital wallet provisioning queued successfully.",
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error queueing wallet provisioning: {e}")
+        raise e
+
 def freeze_card(db: Session, card_token: str, reason: str) -> dict:
     """
     Locates the card by token and sets its status to 'BLOCKED' to freeze auth checks.
@@ -150,16 +207,6 @@ def issue_replacement_card(
                 "new_last_four": replacement_card.last_four,
                 "reason": reason,
                 "is_virtual": issue_virtual_card,
-            },
-        )
-        record_audit_event(
-            db,
-            "WALLET_PROVISIONING_QUEUED",
-            {
-                "account_id": str(account.id),
-                "card_token": replacement_card.card_token,
-                "wallet_provider": wallet_provider,
-                "status": "QUEUED",
             },
         )
         db.commit()
