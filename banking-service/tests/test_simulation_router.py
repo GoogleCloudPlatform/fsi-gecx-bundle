@@ -15,7 +15,7 @@
 import pytest
 import respx
 import httpx
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from fastapi import status
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy import create_engine
@@ -26,6 +26,7 @@ from main import app
 from utils.database import Base, get_db
 from utils.auth import get_current_user
 from models.authentication import ValidatedToken
+from models.fraud import FraudAlert
 from models.identity import User
 from models.origination import Account
 from models.credit_card import CreditAccount, PostedTransaction
@@ -238,9 +239,18 @@ async def test_simulate_surge_returns_accepted_when_generator_response_times_out
     assert "accepted" in data["message"].lower()
 
 @pytest.mark.asyncio
-async def test_inject_anomaly_success(async_client, db_session):
+@patch("services.messaging.messaging.send")
+@patch("services.messaging.messaging.send_each_for_multicast")
+@patch("services.messaging.identity_repo.get_device_tokens_for_customer")
+async def test_inject_anomaly_success(mock_get_tokens, mock_send_multicast, mock_send, async_client, db_session):
     global mock_claims
     mock_claims = {"sub": "presenter-2", "email": "presenter.two@google.com"}
+    mock_get_tokens.return_value = ["device_token_xyz"]
+    mock_send.return_value = "topic-message-id"
+    mock_batch = MagicMock()
+    mock_batch.success_count = 1
+    mock_batch.failure_count = 0
+    mock_send_multicast.return_value = mock_batch
     
     # 1. Provision profile first
     prov_resp = await async_client.post("/api/v1/simulation/provision-my-demo")
@@ -253,11 +263,28 @@ async def test_inject_anomaly_success(async_client, db_session):
     assert data["status"] == "ANOMALY_INJECTED"
     assert data["injected_swipes_count"] == 4
     assert data["total_fraud_cents"] == 685399
+    assert data["fraud_alert_id"]
+    assert data["secure_message_thread_id"]
     
     # 3. Verify in database
     from models.credit_card import TransactionAuthorization
+    from models.identity import UserSecureMessage
     auths = db_session.query(TransactionAuthorization).filter(TransactionAuthorization.merchant_name == "LUXURY BOUTIQUE RIVIERA MAYA [MEX]").all()
     assert len(auths) == 1
+    fraud_alert = db_session.query(FraudAlert).filter(FraudAlert.id == data["fraud_alert_id"]).first()
+    assert fraud_alert is not None
+    assert fraud_alert.status == "OPEN"
+    assert fraud_alert.auth_provider_uid == "presenter-2"
+    assert len(fraud_alert.suspicious_authorization_ids) == 4
+
+    user = db_session.query(User).filter(User.auth_provider_uid == "presenter-2").first()
+    secure_messages = db_session.query(UserSecureMessage).filter(
+        UserSecureMessage.user_id == user.id,
+        UserSecureMessage.thread_id == data["secure_message_thread_id"],
+    ).all()
+    assert len(secure_messages) == 1
+    assert "credit card ending in" in secure_messages[0].message.lower()
+    assert "/support/voice" in secure_messages[0].message
 
 @pytest.mark.asyncio
 async def test_get_active_cards_success(async_client, db_session):

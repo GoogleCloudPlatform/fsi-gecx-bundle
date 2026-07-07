@@ -307,3 +307,34 @@ To test the voice support assistant locally in your developer workspace:
    *(Note: The agent automatically connects to the local LiveKit server using default development keys. Ensure you have activated your python environment and installed dependencies).*
 
 Navigate to `http://localhost:5173/` in your browser to access your local FSI banking workspace.
+
+### 5. Local-Only Alembic Shadow Database
+For schema autogenerate and migration verification, use the checked-in local shadow Postgres service instead of Terraform or deployed GCP resources. This workflow is local-only and is not referenced by Cloud Build or Terraform.
+
+The repo supports either Docker or Podman:
+- set `CONTAINER_RUNTIME=docker` or `CONTAINER_RUNTIME=podman` to force one
+- otherwise the helper prefers `docker` when present and falls back to `podman`
+
+Start the disposable shadow database:
+```bash
+make shadow-db-up
+```
+
+Preferred end-to-end revision flow:
+```bash
+make db-revision MESSAGE="add fraud alerts"
+```
+
+Generate an Alembic revision using the lower-level target:
+```bash
+make alembic-shadow-revision MESSAGE="add fraud alerts"
+```
+
+Useful follow-ups:
+```bash
+make alembic-shadow-current
+make alembic-shadow-upgrade
+make shadow-db-down
+```
+
+The shadow DB definition lives in `compose.shadowdb.yaml`, and the helper scripts live under `scripts/dev/`. They are intended only for local development.

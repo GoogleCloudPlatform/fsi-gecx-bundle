@@ -23,6 +23,7 @@ from services.seeding_service import (
     provision_user_suite,
     reset_user_suite,
 )
+from services.fraud_alerts import FraudAlertService
 from utils.audit import record_audit_event
 from utils.database import enable_session_rbac_override
 from utils.internal_auth import get_internal_switch_token
@@ -258,6 +259,13 @@ class SimulationService:
                 },
             )
 
+        fraud_alert = FraudAlertService(self.db).create_alert_from_simulation(
+            auth_token=token,
+            customer=user,
+            card=card,
+            credit_account=cred_acc,
+            suspicious_authorizations=injected_auths,
+        )
         self.db.commit()
         logger.info("Injected 4 targeted fraud anomaly swipes for user=%s (%s).", user.id, token.email)
         return {
@@ -266,6 +274,8 @@ class SimulationService:
             "card_token": card.card_token,
             "injected_swipes_count": len(injected_auths),
             "total_fraud_cents": sum(amt for _, amt, _, _, _ in swipes),
+            "fraud_alert_id": fraud_alert["fraud_alert_id"],
+            "secure_message_thread_id": fraud_alert["thread_id"],
             "message": "Fraud surge successfully injected into cards.transaction_authorizations.",
         }
 

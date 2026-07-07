@@ -5,6 +5,7 @@ PROJECT_ID ?= $(shell gcloud config get-value project 2>/dev/null || echo "YOUR_
 PROJECT_NUMBER ?= $(shell gcloud projects describe $(PROJECT_ID) --format="value(projectNumber)" 2>/dev/null || echo "YOUR_PROJECT_NUMBER")
 REGION ?= us-central1
 DOCKER ?= podman
+CONTAINER_RUNTIME ?=
 TF_VARS ?= ./environment/$(PROJECT_ID)/terraform.tfvars
 TF_BACKEND ?= ./environment/$(PROJECT_ID)/gcs.tfbackend
 CUSTOM_DOMAIN ?= $(shell grep -E '^[[:space:]]*custom_domain[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]' || echo "banking.erikvoit.demo.altostrat.com")
@@ -45,6 +46,36 @@ build: ## Build the banking-ui production bundle
 test: ## Run backend unit tests via pytest
 	@echo "Running banking-service tests..."
 	cd banking-service && uv run pytest
+
+.PHONY: shadow-db-up
+shadow-db-up: ## Start the local-only PostgreSQL shadow DB for Alembic work
+	@CONTAINER_RUNTIME="$(CONTAINER_RUNTIME)" bash scripts/dev/alembic-shadow.sh up
+
+.PHONY: shadow-db-down
+shadow-db-down: ## Stop the local-only PostgreSQL shadow DB
+	@CONTAINER_RUNTIME="$(CONTAINER_RUNTIME)" bash scripts/dev/alembic-shadow.sh down
+
+.PHONY: shadow-db-logs
+shadow-db-logs: ## Tail logs for the local-only PostgreSQL shadow DB
+	@CONTAINER_RUNTIME="$(CONTAINER_RUNTIME)" bash scripts/dev/alembic-shadow.sh logs
+
+.PHONY: alembic-shadow-current
+alembic-shadow-current: ## Show Alembic current revision against the local shadow DB
+	@CONTAINER_RUNTIME="$(CONTAINER_RUNTIME)" bash scripts/dev/alembic-shadow.sh current
+
+.PHONY: alembic-shadow-upgrade
+alembic-shadow-upgrade: ## Run alembic upgrade head against the local shadow DB
+	@CONTAINER_RUNTIME="$(CONTAINER_RUNTIME)" bash scripts/dev/alembic-shadow.sh upgrade
+
+.PHONY: alembic-shadow-revision
+alembic-shadow-revision: ## Autogenerate an Alembic revision against the local shadow DB (usage: make alembic-shadow-revision MESSAGE="add foo")
+	@if [ -z "$(MESSAGE)" ]; then echo "Error: MESSAGE is required. Usage: make alembic-shadow-revision MESSAGE=\"add foo\""; exit 1; fi
+	@CONTAINER_RUNTIME="$(CONTAINER_RUNTIME)" bash scripts/dev/alembic-shadow.sh revision "$(MESSAGE)"
+
+.PHONY: db-revision
+db-revision: ## Preferred local flow: start shadow DB, upgrade head, and autogenerate a revision (usage: make db-revision MESSAGE="add foo")
+	@if [ -z "$(MESSAGE)" ]; then echo "Error: MESSAGE is required. Usage: make db-revision MESSAGE=\"add foo\""; exit 1; fi
+	@CONTAINER_RUNTIME="$(CONTAINER_RUNTIME)" bash scripts/dev/alembic-shadow.sh revision "$(MESSAGE)"
 
 .PHONY: test-integration
 test-integration: ## Execute live GCP sandbox Document AI integration tests (manually triggered)

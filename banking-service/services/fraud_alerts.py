@@ -1,0 +1,101 @@
+import uuid
+from typing import Iterable
+
+from models.authentication import ValidatedToken
+from models.credit_card import CreditAccount, IssuedCard, TransactionAuthorization
+from models.secure_messaging import SecureMessageCreateRequest, SENDER_TYPE_BANK
+from repositories.fraud import FraudAlertRepository
+from services.messaging import MessagingService
+from utils.audit import record_audit_event
+
+
+class FraudAlertService:
+    def __init__(self, db):
+        self.db = db
+        self.repo = FraudAlertRepository(db)
+        self.messaging = MessagingService(db)
+
+    def create_alert_from_simulation(
+        self,
+        *,
+        auth_token: ValidatedToken,
+        customer,
+        card: IssuedCard,
+        credit_account: CreditAccount,
+        suspicious_authorizations: Iterable[TransactionAuthorization],
+    ) -> dict:
+        suspicious_authorizations = list(suspicious_authorizations)
+        thread_id = str(uuid.uuid4())
+        suspicious_transactions = [
+            {
+                "authorization_id": str(auth.id),
+                "merchant_name": auth.merchant_name,
+                "amount_cents": auth.transaction_amount_cents,
+                "merchant_category_code": auth.merchant_category_code,
+                "card_network": auth.card_network,
+                "created_at": auth.created_at.isoformat() if auth.created_at else None,
+            }
+            for auth in suspicious_authorizations
+        ]
+
+        alert = self.repo.create_alert(
+            customer_id=customer.id,
+            auth_provider_uid=customer.auth_provider_uid or auth_token.user_id,
+            credit_account_id=credit_account.id,
+            card_id=card.id,
+            card_last_four=card.last_four,
+            message_thread_id=thread_id,
+            suspicious_authorization_ids=[str(auth.id) for auth in suspicious_authorizations],
+            suspicious_transactions=suspicious_transactions,
+        )
+        record_audit_event(
+            self.db,
+            "FRAUD_ALERT_CREATED",
+            {
+                "fraud_alert_id": str(alert.id),
+                "customer_id": str(customer.id),
+                "credit_account_id": str(credit_account.id),
+                "card_last_four": card.last_four,
+                "authorization_ids": [str(auth.id) for auth in suspicious_authorizations],
+                "source": alert.source,
+            },
+        )
+
+        message_request = SecureMessageCreateRequest(
+            category="Fraud Alert",
+            message=self._build_customer_message(card.last_four, suspicious_transactions),
+            thread_id=thread_id,
+            user_id=customer.auth_provider_uid or auth_token.user_id,
+            sender=SENDER_TYPE_BANK,
+        )
+        message = self.messaging.create_message(message_request, auth_token)
+
+        record_audit_event(
+            self.db,
+            "FRAUD_ALERT_CUSTOMER_NOTIFIED",
+            {
+                "fraud_alert_id": str(alert.id),
+                "customer_id": str(customer.id),
+                "message_id": message.message_id,
+                "thread_id": message.thread_id,
+                "channel": "SECURE_MESSAGE_AND_PUSH",
+            },
+        )
+
+        return {
+            "fraud_alert_id": str(alert.id),
+            "thread_id": message.thread_id,
+            "message_id": message.message_id,
+        }
+
+    @staticmethod
+    def _build_customer_message(card_last_four: str, suspicious_transactions: list[dict]) -> str:
+        lines = [
+            f"We noticed suspicious transactions on your credit card ending in {card_last_four}.",
+            "Please review these recent purchases:",
+        ]
+        for txn in suspicious_transactions:
+            amount = txn["amount_cents"] / 100
+            lines.append(f"- {txn['merchant_name']}: ${amount:,.2f}")
+        lines.append("If you did not make these purchases, chat now with a credit card support agent at /support/voice.")
+        return "\n".join(lines)

@@ -1,0 +1,22 @@
+name: fsi-gecx-shadowdb
+
+services:
+  shadow-db:
+    image: mirror.gcr.io/library/postgres:16-alpine
+    container_name: fsi-gecx-shadow-db
+    environment:
+      POSTGRES_DB: ${SHADOW_DB_NAME:-banking_shadow}
+      POSTGRES_USER: ${SHADOW_DB_USER:-banking}
+      POSTGRES_PASSWORD: ${SHADOW_DB_PASSWORD:-banking}
+    ports:
+      - "${SHADOW_DB_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SHADOW_DB_USER:-banking} -d ${SHADOW_DB_NAME:-banking_shadow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - shadow-db-data:/var/lib/postgresql/data
+
+volumes:
+  shadow-db-data:
