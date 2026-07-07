@@ -32,6 +32,12 @@ resource "google_project_iam_member" "cloudbuild_sa_act_as" {
   member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
 
+resource "google_project_iam_member" "cloudbuild_sa_bq_job_user" {
+  project = data.google_project.project.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+}
+
 resource "google_project_iam_member" "ccai_virtual_agent_dialogflow_admin" {
   project = data.google_project.project.project_id
   role    = "roles/dialogflow.admin"

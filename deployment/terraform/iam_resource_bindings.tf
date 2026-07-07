@@ -185,6 +185,13 @@ resource "google_bigquery_dataset_iam_member" "banking_service_account_bq_data_e
   member     = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
+resource "google_bigquery_dataset_iam_member" "cloudbuild_sa_ci_bq_data_editor" {
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.ci.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+}
+
 resource "google_bigquery_dataset_iam_member" "datagen_sa_bq_data_viewer" {
   project    = data.google_project.project.project_id
   dataset_id = google_bigquery_dataset.compliance_audit.dataset_id
