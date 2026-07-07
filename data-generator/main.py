@@ -37,6 +37,7 @@ class CardPayload(BaseModel):
     amount_min: int
     amount_max: int
     available_credit_cents: Optional[int] = None
+    generator_eligible: bool = True
 
 
 class SurgeRequest(BaseModel):
@@ -159,6 +160,11 @@ def get_spendable_cards(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if available_credit >= 100:
             spendable_cards.append(card)
     return spendable_cards
+
+
+def get_generator_eligible_cards(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Excludes presenter and VIP/demo-script accounts from random generator traffic."""
+    return [card for card in cards if card.get("generator_eligible", True)]
 
 
 def _is_maintenance_response(response: httpx.Response) -> bool:
@@ -382,7 +388,7 @@ def get_active_cards() -> List[Dict[str, Any]]:
             res = client.get(f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards", headers=get_service_headers())
             if res.status_code == 200:
                 data = res.json()
-                cards = data.get("active_cards", [])
+                cards = get_generator_eligible_cards(data.get("active_cards", []))
                 if cards:
                     logger.info(f"Retrieved {len(cards)} active card tokens via HTTP from banking-service.")
                     return cards
@@ -396,7 +402,7 @@ def get_active_cards() -> List[Dict[str, Any]]:
 
     if is_local_dev():
         logger.info("Using static DEFAULT_PERSONAS fallback for local active-card simulation.")
-        return DEFAULT_PERSONAS
+        return get_generator_eligible_cards(DEFAULT_PERSONAS)
     raise HTTPException(
         status_code=status.HTTP_502_BAD_GATEWAY,
         detail="Unable to resolve active cards from banking-service; refusing to use static fallback in deployed mode."
@@ -762,7 +768,7 @@ async def simulate_surge(payload: SurgeRequest):
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="banking-service reset is in progress.",
             )
-    active_cards = get_spendable_cards(active_cards)
+    active_cards = get_spendable_cards(get_generator_eligible_cards(active_cards))
     if not active_cards:
         raise HTTPException(status_code=409, detail="No spendable active cards supplied or discovered for surge.")
     summary = await run_activity_surge_task(active_cards)

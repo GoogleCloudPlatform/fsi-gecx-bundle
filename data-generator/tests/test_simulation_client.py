@@ -197,6 +197,19 @@ def test_get_spendable_cards_filters_exhausted_cards():
     assert [card["card_token"] for card in spendable] == ["tok_3", "tok_4"]
 
 
+def test_get_generator_eligible_cards_excludes_presenter_and_vip_cards():
+    cards = [
+        {"card_token": "tok_presenter", "generator_eligible": False},
+        {"card_token": "tok_vip", "generator_eligible": False},
+        {"card_token": "tok_mock", "generator_eligible": True},
+        {"card_token": "tok_legacy"},
+    ]
+
+    eligible = main.get_generator_eligible_cards(cards)
+
+    assert [card["card_token"] for card in eligible] == ["tok_mock", "tok_legacy"]
+
+
 @pytest.mark.asyncio
 @respx.mock
 async def test_auto_paydown_high_utilization_cards_calls_internal_endpoint():

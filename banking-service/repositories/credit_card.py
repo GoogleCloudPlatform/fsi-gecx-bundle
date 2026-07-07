@@ -186,11 +186,12 @@ class CreditCardRepository:
         from models.credit_card import CreditProduct
         return self.db.query(CreditProduct).filter(CreditProduct.product_code == product_code).first()
 
-    def list_active_cards_for_simulation(self) -> List[tuple[IssuedCard, FinancialAccount]]:
-        """Returns active cards joined with their backing credit accounts for simulation tooling."""
+    def list_active_cards_for_simulation(self) -> List[tuple[IssuedCard, FinancialAccount, User | None]]:
+        """Returns active cards joined with their backing credit accounts and owning users for simulation tooling."""
         return (
-            self.db.query(IssuedCard, FinancialAccount)
+            self.db.query(IssuedCard, FinancialAccount, User)
             .join(FinancialAccount, IssuedCard.account_id == FinancialAccount.id)
+            .outerjoin(User, FinancialAccount.customer_id == User.id)
             .filter(IssuedCard.status == "ACTIVE", IssuedCard.is_active)
             .all()
         )

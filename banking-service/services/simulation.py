@@ -109,8 +109,12 @@ class SimulationService:
         cards = self.credit_repo.list_active_cards_for_simulation()
 
         results = []
-        for card, acc in cards:
+        for card, acc, user in cards:
             name_lower = card.cardholder_name.lower() if card.cardholder_name else ""
+            email_lower = (user.email or "").lower() if user and user.email else ""
+            is_presenter_account = email_lower.endswith("@google.com") or email_lower.endswith("@gcp.solutions") or email_lower.endswith("@altostrat.com")
+            is_vip_demo_account = email_lower.endswith("@nova.horizon.test") and acc.credit_limit_cents > 2_000_000
+            generator_eligible = not is_presenter_account and not is_vip_demo_account
             if "erik" in name_lower or acc.credit_limit_cents > 2_000_000:
                 persona = "HNW"
                 mccs, a_min, a_max = ["4511", "7011", "5812"], 50_000, 400_000
@@ -133,6 +137,9 @@ class SimulationService:
                     "amount_max": a_max,
                     "credit_limit_cents": acc.credit_limit_cents,
                     "available_credit_cents": acc.available_credit_cents,
+                    "generator_eligible": generator_eligible,
+                    "is_presenter_account": is_presenter_account,
+                    "is_vip_demo_account": is_vip_demo_account,
                 }
             )
 
