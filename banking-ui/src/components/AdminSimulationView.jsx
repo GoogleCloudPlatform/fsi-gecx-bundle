@@ -139,6 +139,7 @@ function AdminSimulationView() {
           await fetchEventSource(`${getBackendApiUrl()}/v1/simulation/stream-sse`, {
             method: 'GET',
             headers,
+            credentials: 'include',
             signal: controller.signal,
             openWhenHidden: true,
             async onopen(response) {
