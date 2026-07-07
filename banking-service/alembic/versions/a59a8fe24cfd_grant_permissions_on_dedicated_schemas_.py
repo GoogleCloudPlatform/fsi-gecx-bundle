@@ -60,7 +60,17 @@ def upgrade() -> None:
                 users_by_schema[s].append(user)
 
     all_users = set(u for u_list in users_by_schema.values() for u in u_list)
-    for user in all_users:
+
+    iam_viewer_users_env = os.getenv("IAM_DB_VIEWER_USERS")
+    viewer_users_by_schema = {s: [] for s in schemas}
+    if iam_viewer_users_env:
+        for user in [u.strip() for u in iam_viewer_users_env.split(",") if u.strip()]:
+            for s in schemas:
+                viewer_users_by_schema[s].append(user)
+
+    all_viewer_users = set(u for u_list in viewer_users_by_schema.values() for u in u_list)
+
+    for user in all_users | all_viewer_users:
         try:
             op.execute(f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = \'{user}\') THEN CREATE ROLE "{user}" NOLOGIN; END IF; END $$;')
         except Exception as e:
@@ -76,6 +86,15 @@ def upgrade() -> None:
                 op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {schema_name} GRANT ALL PRIVILEGES ON SEQUENCES TO "{user}";')
             except Exception as e:
                 print(f"Notice: Could not grant permissions on {schema_name} to {user}: {e}")
+
+    for schema_name, users in viewer_users_by_schema.items():
+        for user in users:
+            try:
+                op.execute(f'GRANT USAGE ON SCHEMA {schema_name} TO "{user}";')
+                op.execute(f'GRANT SELECT ON ALL TABLES IN SCHEMA {schema_name} TO "{user}";')
+                op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {schema_name} GRANT SELECT ON TABLES TO "{user}";')
+            except Exception as e:
+                print(f"Notice: Could not grant viewer permissions on {schema_name} to {user}: {e}")
 
 
 def downgrade() -> None:

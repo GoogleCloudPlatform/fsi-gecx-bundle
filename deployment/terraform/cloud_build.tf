@@ -76,6 +76,7 @@ resource "google_cloudbuild_trigger" "service_deploy_trigger" {
     _REGION         = var.region
     _TRIGGER_DEPLOY = "true"
     _IAM_DBA_USERS  = join(",", [for k, v in local.db_iam_support_members : v.name])
+    _IAM_DB_VIEWER_USERS = join(",", [for k, v in local.db_iam_viewer_members : v.name])
   }
 }
 

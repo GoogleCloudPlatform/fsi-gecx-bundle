@@ -101,6 +101,20 @@ def upgrade() -> None:
                 except Exception as e:
                     print(f"Notice: Could not grant {schema_name} permissions to {role}: {e}")
 
+        viewer_roles = []
+        if os.getenv("IAM_DB_VIEWER_USERS"):
+            viewer_roles.extend([u.strip() for u in os.getenv("IAM_DB_VIEWER_USERS").split(",") if u.strip()])
+
+        for role in set(viewer_roles):
+            for schema_name in ["ref_data", "merchants"]:
+                try:
+                    op.execute(f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = \'{role}\') THEN CREATE ROLE "{role}" NOLOGIN; END IF; END $$;')
+                    op.execute(f'GRANT USAGE ON SCHEMA {schema_name} TO "{role}";')
+                    op.execute(f'GRANT SELECT ON ALL TABLES IN SCHEMA {schema_name} TO "{role}";')
+                    op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {schema_name} GRANT SELECT ON TABLES TO "{role}";')
+                except Exception as e:
+                    print(f"Notice: Could not grant {schema_name} viewer permissions to {role}: {e}")
+
 
 def downgrade() -> None:
     op.drop_index('idx_stores_risk', table_name='merchant_stores', schema='merchants')

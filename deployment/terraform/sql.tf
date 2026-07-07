@@ -173,3 +173,10 @@ resource "google_sql_user" "database_iam_support_users" {
   instance = google_sql_database_instance.banking_data.name
   type     = each.value.type
 }
+
+resource "google_sql_user" "database_iam_viewer_users" {
+  for_each = local.db_iam_viewer_members
+  name     = each.value.name
+  instance = google_sql_database_instance.banking_data.name
+  type     = each.value.type
+}

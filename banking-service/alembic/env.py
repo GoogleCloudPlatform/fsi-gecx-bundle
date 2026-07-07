@@ -186,7 +186,11 @@ def run_migrations_online() -> None:
                 if os.getenv("IAM_DBA_USERS"):
                     roles.extend([u.strip() for u in os.getenv("IAM_DBA_USERS").split(",") if u.strip()])
 
-                for role in roles:
+                viewer_roles = []
+                if os.getenv("IAM_DB_VIEWER_USERS"):
+                    viewer_roles.extend([u.strip() for u in os.getenv("IAM_DB_VIEWER_USERS").split(",") if u.strip()])
+
+                for role in roles + viewer_roles:
                     try:
                         with connection.begin_nested():
                             stmt = f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = \'{role}\') THEN CREATE ROLE "{role}" NOLOGIN; END IF; END $$;'
@@ -212,6 +216,16 @@ def run_migrations_online() -> None:
                                 connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{role}";'))
                         except Exception as grant_err:
                             logger.debug(f"Notice: Could not grant permissions on {s} to {role}: {grant_err}")
+
+                for role in viewer_roles:
+                    for s in schemas:
+                        try:
+                            with connection.begin_nested():
+                                connection.execute(sa.text(f'GRANT USAGE ON SCHEMA {s} TO "{role}";'))
+                                connection.execute(sa.text(f'GRANT SELECT ON ALL TABLES IN SCHEMA {s} TO "{role}";'))
+                                connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT ON TABLES TO "{role}";'))
+                        except Exception as grant_err:
+                            logger.debug(f"Notice: Could not grant viewer permissions on {s} to {role}: {grant_err}")
 
                     if "ledger" in allowed_schemas:
                         try:
