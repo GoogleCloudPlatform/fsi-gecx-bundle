@@ -161,18 +161,6 @@ resource "google_project_iam_member" "jump_instance_metric_writer" {
   member  = "serviceAccount:${google_service_account.jump_instance_service_account.email}"
 }
 
-resource "google_project_iam_member" "banking_service_sa_spanner_user" {
-  project = data.google_project.project.project_id
-  role    = "roles/spanner.databaseUser"
-  member  = "serviceAccount:${google_service_account.banking_service_account.email}"
-}
-
-resource "google_project_iam_member" "datagen_sa_spanner_user" {
-  project = data.google_project.project.project_id
-  role    = "roles/spanner.databaseUser"
-  member  = "serviceAccount:${google_service_account.data_generator_service_account.email}"
-}
-
 resource "google_project_iam_member" "datagen_sa_bq_job_user" {
   project = data.google_project.project.project_id
   role    = "roles/bigquery.jobUser"
