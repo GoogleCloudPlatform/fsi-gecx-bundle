@@ -58,7 +58,10 @@ async def test_openapi_schema_generation(async_client):
 async def test_health_endpoint(async_client):
     response = await async_client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    data = response.json()
+    assert data.get("status") == "ok"
+    assert "version" in data
+    assert "commit" in data
 
 
 def test_should_run_startup_seeding_disabled_on_cloud_run_by_default(monkeypatch):

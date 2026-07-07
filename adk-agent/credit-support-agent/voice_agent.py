@@ -15,6 +15,7 @@ import uvicorn
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 from agent import root_agent, register_event_callback
+from agent.version import BUILD_VERSION, BUILD_COMMIT_ID
 from agent.events import DataChannelEvent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -935,14 +936,20 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         except Exception:
             pass
 
-app = FastAPI()
+app_version = f"{BUILD_VERSION} ({BUILD_COMMIT_ID})"
+app = FastAPI(title="Credit Support Voice Agent API", version=app_version)
 active_sessions = {}
 MAX_CONCURRENT_SESSIONS = 10
 
 @app.get("/healthz")
 @app.get("/")
 def health_check():
-    return {"status": "healthy", "active_sessions": len(active_sessions)}
+    return {
+        "status": "healthy",
+        "active_sessions": len(active_sessions),
+        "version": BUILD_VERSION,
+        "commit": BUILD_COMMIT_ID
+    }
 
 @app.post("/internal/comms/voice/start")
 async def start_session(room_name: str, customer_id: str, session_id: str, request: Request, mode: str = "audio"):
@@ -985,6 +992,7 @@ async def start_session(room_name: str, customer_id: str, session_id: str, reque
     return {"status": "LAUNCHED", "room_name": room_name}
 
 if __name__ == "__main__":
+    logger.info(f"Starting Credit Support Voice Agent version: {app_version}")
     port = int(os.getenv("PORT", "8080"))
     uvicorn.run(app, host="0.0.0.0", port=port)
 
