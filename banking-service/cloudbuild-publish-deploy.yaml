@@ -13,7 +13,7 @@
 # limitations under the License.
 
 steps:
-  - name: "ghcr.io/github-linguist/linguist:v7.30.0"
+  - name: "ghcr.io/github-linguist/linguist:latest"
     id: "run-linguist"
     entrypoint: "sh"
     args:
@@ -155,4 +155,3 @@ substitutions:
   _TRIGGER_DEPLOY: "false"
   _IAM_DBA_USERS: ""
   _IAM_DB_VIEWER_USERS: ""
-
