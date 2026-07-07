@@ -299,26 +299,38 @@ def get_merchants() -> List[Dict[str, Any]]:
     global merchants_list
     if merchants_list:
         return merchants_list
-        
+
+    merchant_endpoints = [
+        f"{BANKING_SERVICE_URL}/api/v1/merchants",
+        f"{BANKING_SERVICE_URL}/merchants",
+    ]
+
     try:
         with httpx.Client(timeout=5.0) as client:
-            res = client.get(f"{BANKING_SERVICE_URL}/api/v1/merchants", headers=get_service_headers())
-            if res.status_code == 200:
+            for endpoint in merchant_endpoints:
+                res = client.get(endpoint, headers=get_service_headers())
+                if res.status_code != 200:
+                    continue
+
                 data = res.json()
                 loaded = []
                 for item in data:
+                    clean_name = item.get("clean_name", "Unknown")
                     loaded.append({
-                        "merchant": item.get("clean_name", "Unknown"),
-                        "descriptor": item.get("raw_descriptor", item.get("clean_name", "Unknown")),
+                        "merchant": clean_name,
+                        "descriptor": item.get(
+                            "raw_descriptor_pattern",
+                            item.get("raw_descriptor", clean_name),
+                        ),
                         "category": item.get("category", "Retail"),
-                        "mcc": item.get("default_mcc", "5311"),
+                        "mcc": item.get("mcc", item.get("default_mcc", "5311")),
                         "country_code": item.get("country_code", "USA"),
                         "is_international": item.get("is_international", False),
-                        "risk_score": item.get("risk_score", 0)
+                        "risk_score": item.get("risk_score", 0),
                     })
                 if loaded:
                     merchants_list = loaded
-                    logger.info(f"Retrieved {len(merchants_list)} merchants via HTTP from {BANKING_SERVICE_URL}/api/v1/merchants.")
+                    logger.info("Retrieved %s merchants via HTTP from %s.", len(merchants_list), endpoint)
                     return merchants_list
     except Exception as e:
         logger.warning(f"Could not fetch merchants via HTTP from {BANKING_SERVICE_URL}: {e}")
