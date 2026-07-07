@@ -29,6 +29,7 @@ from models.authentication import ValidatedToken
 from models.identity import User
 from models.origination import Account
 from models.credit_card import CreditAccount, PostedTransaction
+from services.seeding_service import provision_user_suite
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
 test_engine = create_engine(
@@ -266,6 +267,38 @@ async def test_get_active_cards_success(async_client, db_session):
     data = res.json()
     assert "active_cards" in data
     assert "count" in data
+
+
+@pytest.mark.asyncio
+async def test_get_active_cards_marks_demo_script_accounts_ineligible_for_generator(async_client, db_session):
+    global mock_claims
+
+    mock_claims = {"sub": "presenter-uid", "email": "demo.presenter@gcp.solutions"}
+    presenter_resp = await async_client.post("/api/v1/simulation/provision-my-demo")
+    assert presenter_resp.status_code == status.HTTP_201_CREATED
+
+    provision_user_suite(db_session, "vip.persona@nova.horizon.test", "vip-uid")
+    provision_user_suite(db_session, "regular.customer@example.com", "customer-uid")
+
+    headers = {"X-Card-Network-Token": "switch-secret-key-12345"}
+    res = await async_client.get("/api/v1/credit-card/active-cards", headers=headers)
+    assert res.status_code == status.HTTP_200_OK
+
+    cards_by_name = {card["cardholder_name"]: card for card in res.json()["active_cards"]}
+
+    presenter_card = cards_by_name["Demo Presenter"]
+    assert presenter_card["is_presenter_account"] is True
+    assert presenter_card["is_demo_script_account"] is True
+    assert presenter_card["generator_eligible"] is False
+
+    vip_card = cards_by_name["Vip Persona"]
+    assert vip_card["is_vip_demo_account"] is True
+    assert vip_card["is_demo_script_account"] is True
+    assert vip_card["generator_eligible"] is False
+
+    regular_card = cards_by_name["Regular Customer"]
+    assert regular_card["is_demo_script_account"] is False
+    assert regular_card["generator_eligible"] is True
 
 @pytest.mark.asyncio
 async def test_inject_late_fee_and_global_stream(async_client, db_session):

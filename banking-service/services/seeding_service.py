@@ -61,7 +61,7 @@ def _is_presenter_email(email: str | None) -> bool:
     return domain in DEMO_SCRIPT_DOMAINS
 
 
-def _is_demo_script_user(email: str | None) -> bool:
+def is_demo_script_user_email(email: str | None) -> bool:
     return _is_presenter_email(email)
 
 
@@ -743,7 +743,7 @@ def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Acc
         # Assign a consistent geographical home metro and international travel trip for this customer's demo card
         from models.identity import User
         user_obj = db.query(User).filter(User.id == user_uuid).first()
-        is_demo_script_user = bool(user_obj and _is_demo_script_user(user_obj.email))
+        is_demo_script_user = bool(user_obj and is_demo_script_user_email(user_obj.email))
         if is_demo_script_user:
             user_home_metro = random.choice(["MOUNTAIN VIEW CA", "SAN FRANCISCO CA"])
         else:
