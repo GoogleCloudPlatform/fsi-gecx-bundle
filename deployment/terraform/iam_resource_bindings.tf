@@ -293,3 +293,35 @@ resource "google_bigquery_dataset_iam_member" "cloudbuild_sa_ci_bq_data_editor" 
   role       = "roles/bigquery.dataEditor"
   member     = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
+
+resource "google_bigquery_dataset_iam_member" "database_viewer_compliance_audit_data_viewer" {
+  for_each   = toset(var.database_iam_viewer_users)
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.compliance_audit.dataset_id
+  role       = "roles/bigquery.dataViewer"
+  member     = each.value
+}
+
+resource "google_bigquery_dataset_iam_member" "database_viewer_iceberg_catalog_data_viewer" {
+  for_each   = toset(var.database_iam_viewer_users)
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.iceberg_catalog.dataset_id
+  role       = "roles/bigquery.dataViewer"
+  member     = each.value
+}
+
+resource "google_bigquery_dataset_iam_member" "database_viewer_analytics_curated_data_viewer" {
+  for_each   = toset(var.database_iam_viewer_users)
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.analytics_curated.dataset_id
+  role       = "roles/bigquery.dataViewer"
+  member     = each.value
+}
+
+resource "google_bigquery_dataset_iam_member" "database_viewer_ci_data_viewer" {
+  for_each   = toset(var.database_iam_viewer_users)
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.ci.dataset_id
+  role       = "roles/bigquery.dataViewer"
+  member     = each.value
+}

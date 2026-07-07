@@ -252,3 +252,10 @@ resource "google_project_iam_member" "cloudbuild_sa_bq_job_user" {
   role    = "roles/bigquery.jobUser"
   member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
+
+resource "google_project_iam_member" "database_viewer_bq_job_user" {
+  for_each = toset(var.database_iam_viewer_users)
+  project  = data.google_project.project.project_id
+  role     = "roles/bigquery.jobUser"
+  member   = each.value
+}
