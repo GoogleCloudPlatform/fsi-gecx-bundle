@@ -536,7 +536,6 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
             settle_payload = {
                 "retrieval_reference_number": rrn,
                 "amount_cents": final_amount,
-                "description": f"{merchant.get('merchant', 'Store')} Capture"
             }
             settle_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/settle"
             settle_resp = await client.post(settle_url, json=settle_payload, headers=headers, timeout=SWIPE_REQUEST_TIMEOUT_SECONDS)

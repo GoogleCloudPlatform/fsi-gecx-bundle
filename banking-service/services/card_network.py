@@ -21,10 +21,29 @@ from sqlalchemy.orm import Session
 from models.credit_card import CreditAccount, TransactionAuthorization, PostedTransaction
 from repositories.credit_card import CreditCardRepository
 from services.fraud_scoring import FraudScoringService
+from services.merchant_service import MerchantEnrichmentService
 import json
 from utils.database import enable_session_rbac_override
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_posted_transaction_description(db: Session, auth: TransactionAuthorization) -> str:
+    raw_descriptor = (auth.merchant_name or "").strip()
+    if raw_descriptor:
+        try:
+            enriched = MerchantEnrichmentService.enrich_transaction(
+                db,
+                raw_descriptor=raw_descriptor,
+                mcc=auth.merchant_category_code,
+            )
+            clean_name = (enriched.get("clean_name") or "").strip()
+            if clean_name:
+                return clean_name
+        except Exception as exc:
+            logger.warning("Merchant enrichment failed during settlement for RRN=%s: %s", auth.retrieval_reference_number, exc)
+        return raw_descriptor
+    return "Card Purchase"
 
 def _publish_redis_event(event_type: str, item_dict: dict):
     """Helper to publish real-time events to the Redis bus for the UI stream."""
@@ -214,8 +233,6 @@ def process_settlement(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
         repo = CreditCardRepository(db)
         rrn = payload.get("retrieval_reference_number")
         settle_amount = payload.get("amount_cents")
-        description = payload.get("description")
-
         # Find active pending authorization hold
         auth = repo.get_authorization_by_rrn(rrn, status="PENDING")
 
@@ -232,13 +249,14 @@ def process_settlement(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
 
         # Add transaction charge to cleared debt (immutable statement record)
         posted_at_val = payload.get("posted_at") or datetime.datetime.now(datetime.timezone.utc)
+        posted_description = _resolve_posted_transaction_description(db, auth)
         posted_tx = PostedTransaction(
             account_id=account.id,
             authorization_id=auth.id,
             auth_code=auth.auth_code,
             retrieval_reference_number=rrn,
             amount_cents=-settle_amount, # posted card charges are negative
-            description=description or auth.merchant_name or "Card Purchase",
+            description=posted_description,
             posted_at=posted_at_val
         )
         db.add(posted_tx)

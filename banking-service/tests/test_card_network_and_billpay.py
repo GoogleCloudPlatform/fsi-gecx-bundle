@@ -221,10 +221,14 @@ async def test_card_network_settle_success(async_client, db_session):
         "amount_cents": 5500, # Final capture $55
         "description": "Grocery Store Capture"
     }
-    response = await async_client.post("/api/v1/card-network/settle", json=settle_payload, headers=headers)
-    assert response.status_code == status.HTTP_200_OK
-    data = response.json()
-    assert data["status"] == "SETTLED"
+    with patch(
+        "services.card_network.MerchantEnrichmentService.enrich_transaction",
+        return_value={"clean_name": "Grocery Store", "mcc": "5411"},
+    ):
+        response = await async_client.post("/api/v1/card-network/settle", json=settle_payload, headers=headers)
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["status"] == "SETTLED"
     
     # Check DB state
     db_session.refresh(credit_acc)
@@ -235,6 +239,7 @@ async def test_card_network_settle_success(async_client, db_session):
     posted = db_session.query(PostedTransaction).filter_by(retrieval_reference_number="999888777666").first()
     assert posted is not None
     assert posted.amount_cents == -5500 # Debit is negative
+    assert posted.description == "Grocery Store"
 
 @pytest.mark.asyncio
 async def test_card_network_reverse_success(async_client, db_session):
