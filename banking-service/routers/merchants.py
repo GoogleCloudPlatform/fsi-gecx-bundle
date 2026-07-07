@@ -20,7 +20,7 @@ from utils.database import get_db
 from models.merchant import MerchantMaster
 from services.merchant_service import MerchantEnrichmentService
 
-router = APIRouter(prefix="/merchants", tags=["Merchant Intelligence & Enrichment"])
+router = APIRouter(prefix="/api/v1/merchants", tags=["Merchant Intelligence & Enrichment"])
 
 
 class MerchantResponse(BaseModel):
