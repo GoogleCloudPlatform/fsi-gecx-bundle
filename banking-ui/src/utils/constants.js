@@ -41,3 +41,8 @@ export function showInfoModals() {
   const envVal = window.env?.SHOW_INFO_MODALS !== undefined ? window.env.SHOW_INFO_MODALS : import.meta.env.VITE_SHOW_INFO_MODALS;
   return envVal !== 'false' && envVal !== false;
 }
+
+export function enableCcai() {
+  const envVal = window.env?.ENABLE_CCAI !== undefined ? window.env.ENABLE_CCAI : import.meta.env.VITE_ENABLE_CCAI;
+  return envVal === 'true' || envVal === true;
+}

@@ -317,6 +317,10 @@ resource "google_cloud_run_v2_service" "banking_ui" {
         value = var.ccai_host
       }
       env {
+        name  = "VITE_ENABLE_CCAI"
+        value = tostring(var.enable_ccai)
+      }
+      env {
         name  = "LIVEKIT_URL"
         value = "wss://${var.custom_domain}"
       }

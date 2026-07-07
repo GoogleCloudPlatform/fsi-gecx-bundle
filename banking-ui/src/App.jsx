@@ -31,7 +31,7 @@ import {
 
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 
-import { HELP_CATEGORIES } from './utils/constants.js';
+import { HELP_CATEGORIES, enableCcai } from './utils/constants.js';
 import AppRoutes from './AppRoutes.jsx';
 import { SettingsProvider, useSettings } from './context/SettingsContext.jsx';
 import {
@@ -783,7 +783,7 @@ function AppContent() {
   useEffect(() => {
     const widget = document.getElementById('ccaas-widget');
     if (widget) {
-      widget.style.display = (isCcaiAgentEnabled && fbUser) ? 'block' : 'none';
+      widget.style.display = (isCcaiAgentEnabled && fbUser && enableCcai()) ? 'block' : 'none';
     }
   }, [isCcaiAgentEnabled, fbUser]);
 
@@ -811,7 +811,7 @@ function AppContent() {
       }
     };
 
-    if (!fbUser || !customerProfile || !isCcaiAgentEnabled) {
+    if (!fbUser || !customerProfile || !isCcaiAgentEnabled || !enableCcai()) {
       cleanUpUjet();
       return;
     }
