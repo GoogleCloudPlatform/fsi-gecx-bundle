@@ -694,7 +694,8 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
 
       containers {
         image   = "us-central1-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/banking-service:latest"
-        command = ["alembic", "upgrade", "head"]
+        command = ["alembic"]
+        args    = ["upgrade", "head"]
 
         volume_mounts {
           name       = "cloudsql"
