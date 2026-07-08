@@ -243,10 +243,6 @@ resource "google_cloudbuild_trigger" "terraform_apply_trigger" {
 
   repository_event_config {
     repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
-    push {
-      branch = local.trigger_by_branch ? var.repo_branch_expression : null
-      tag    = local.trigger_by_tag ? var.repo_tag_expression : null
-    }
   }
 
   approval_config {
@@ -271,10 +267,6 @@ resource "google_cloudbuild_trigger" "terraform_plan_trigger" {
 
   repository_event_config {
     repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
-    push {
-      branch = local.trigger_by_branch ? var.repo_branch_expression : null
-      tag    = local.trigger_by_tag ? var.repo_tag_expression : null
-    }
   }
 
   service_account    = google_service_account.cloudbuild_terraform_service_account.id
