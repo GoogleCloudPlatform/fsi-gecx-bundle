@@ -45,6 +45,10 @@ function formatEventAge(ms) {
   return `${Math.round(ms / 60_000)} min`;
 }
 
+function formatCurrencyFromCents(cents) {
+  return `$${(Math.abs(cents ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 function AdminSimulationView() {
   const navigate = useNavigate();
   const [isSurgeLoading, setIsSurgeLoading] = useState(false);
@@ -95,6 +99,34 @@ function AdminSimulationView() {
         dotClassName: 'bg-cyan-500',
         animate: true,
       };
+
+  const creditRiskMetrics = streamData.reduce(
+    (acc, item) => {
+      const status = String(item.status || '');
+      const amount = Math.abs(item.amount_cents ?? 0);
+      if (status.includes('FLAGGED')) {
+        acc.flaggedCount += 1;
+        acc.flaggedAmountCents += amount;
+      }
+      if (status.includes('HOLD') || status.includes('FLAGGED')) {
+        acc.pendingCount += 1;
+        acc.pendingAmountCents += amount;
+      }
+      if (status.includes('SETTLE')) {
+        acc.postedCount += 1;
+        acc.postedAmountCents += amount;
+      }
+      return acc;
+    },
+    {
+      flaggedCount: 0,
+      flaggedAmountCents: 0,
+      pendingCount: 0,
+      pendingAmountCents: 0,
+      postedCount: 0,
+      postedAmountCents: 0,
+    },
+  );
 
   const applyMonitorSnapshot = (streamSnapshot) => {
     if (streamSnapshot?.stream) {
@@ -337,17 +369,17 @@ function AdminSimulationView() {
         </div>
       </div>
 
-      {/* Section 1: Stream, Replication, and Credit Risk Metrics */}
+      {/* Section 1: Datastream & WAL CDC Replication Status */}
       <div className="mb-10 p-6 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5">
         <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200/60 dark:border-slate-800/60">
           <div className="flex items-center gap-3">
             <Database className="w-6 h-6 text-cyan-500" />
             <div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                Live Stream, WAL Replication & Credit Risk
+                Datastream WAL Replication Engine
               </h2>
               <p className="text-xs text-slate-500">
-                Separates browser SSE connectivity, managed Datastream freshness, and fraud-anomaly counters.
+                PostgreSQL Outbox WAL &rarr; Datastream CDC tables in `iceberg_catalog` &rarr; curated views in `analytics_curated`
               </p>
             </div>
           </div>
@@ -423,41 +455,90 @@ function AdminSimulationView() {
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Replication Metrics</div>
-                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
-                  <span>System lag: <span className="font-mono text-slate-700 dark:text-slate-300">{formatLatency(cdcStats.systemLagMs)}</span></span>
-                  <span>Buffered events: <span className="font-mono text-slate-700 dark:text-slate-300">{cdcStats.recentBufferedEvents}</span></span>
-                  <span>Last sync: <span className="font-mono text-slate-700 dark:text-slate-300">{cdcStats.lastSyncTime}</span></span>
-                </div>
-              </div>
+        <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-slate-500">
+          <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            System lag: <span className="font-mono text-slate-700 dark:text-slate-300">{formatLatency(cdcStats.systemLagMs)}</span>
+          </span>
+          <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            Buffered events: <span className="font-mono text-slate-700 dark:text-slate-300">{cdcStats.recentBufferedEvents}</span>
+          </span>
+          <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            Last sync: <span className="font-mono text-slate-700 dark:text-slate-300">{cdcStats.lastSyncTime}</span>
+          </span>
+        </div>
+      </div>
+
+      {/* Section 2: Credit Risk Metrics */}
+      <div className="mb-10 p-6 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5">
+        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200/60 dark:border-slate-800/60">
+          <div className="flex items-center gap-3">
+            <ShieldAlert className="w-6 h-6 text-rose-500" />
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                Credit Risk Metrics
+              </h2>
+              <p className="text-xs text-slate-500">
+                Fraud anomaly posture, pending exposure, and authorization-to-posting flow from the live card stream.
+              </p>
             </div>
           </div>
+          {showInfoModals() && (
+            <button
+              onClick={() => setInfoModal('credit-risk')}
+              className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+              title="Credit risk metrics info"
+            >
+              <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/10 border border-rose-100 dark:border-rose-900/40">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-xs font-bold text-rose-700 dark:text-rose-300 uppercase tracking-wider">Credit Risk Metrics</div>
-                <div className="mt-1 text-3xl font-black font-mono text-rose-700 dark:text-rose-300">{cdcStats.activeAnomalies}</div>
-                <div className="text-[11px] text-rose-700/70 dark:text-rose-300/70">Active fraud anomalies from curated credit-card analytics</div>
-              </div>
-              {showInfoModals() && (
-                <button
-                  onClick={() => setInfoModal('credit-risk')}
-                  className="p-2 rounded-xl hover:bg-white/70 dark:hover:bg-slate-900/70 border border-rose-200 dark:border-rose-900/50 text-slate-500 dark:text-slate-400 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
-                  title="Credit risk metrics info"
-                >
-                  <GoogleCloudIcon className="w-4 h-4 text-indigo-400" />
-                </button>
-              )}
+            <div className="flex items-center justify-between text-xs text-rose-700/70 dark:text-rose-300/70 mb-1">
+              <span>Active Fraud Anomalies</span>
+              <ShieldAlert className="w-4 h-4 text-rose-500" />
             </div>
+            <div className="text-2xl font-black font-mono text-rose-700 dark:text-rose-300">{cdcStats.activeAnomalies}</div>
+            <div className="text-[10px] text-rose-700/70 dark:text-rose-300/70 mt-1">Open anomalies in curated credit analytics</div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>Flagged Event Rate</span>
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+            </div>
+            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+              {cdcStats.flaggedEventsPerMinute} <span className="text-sm font-normal text-slate-500">/ min</span>
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">{creditRiskMetrics.flaggedCount} flagged in current wall</div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>Pending Exposure</span>
+              <Clock className="w-4 h-4 text-amber-500" />
+            </div>
+            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+              {formatCurrencyFromCents(creditRiskMetrics.pendingAmountCents)}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">{creditRiskMetrics.pendingCount} pending or flagged authorizations</div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>Auth vs Posted Flow</span>
+              <Layers className="w-4 h-4 text-blue-500" />
+            </div>
+            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+              {cdcStats.authorizationEventsPerMinute}:{cdcStats.postedEventsPerMinute}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">{creditRiskMetrics.postedCount} posted events in current wall</div>
           </div>
         </div>
       </div>
 
-      {/* Section 2: Interactive Simulation Command Center */}
+      {/* Section 3: Interactive Simulation Command Center */}
       <h3 className="text-xl font-extrabold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
         <Zap className="w-6 h-6 text-amber-500" />
         Simulation Event Command Center
@@ -621,7 +702,7 @@ function AdminSimulationView() {
         </div>
       )}
 
-      {/* Section 3: Live Transaction Activity Streams */}
+      {/* Section 4: Live Transaction Activity Streams */}
       <div className="p-7 rounded-3xl bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-2xl shadow-slate-950/5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
@@ -701,9 +782,7 @@ function AdminSimulationView() {
                     <td className="p-3.5 text-slate-800 dark:text-slate-300 font-bold whitespace-nowrap">{item.rrn}</td>
                     <td className="p-3.5 text-slate-900 dark:text-white font-sans font-medium truncate max-w-xs">{item.merchant_name}</td>
                     <td className="p-3.5 text-right text-slate-900 dark:text-slate-100 font-bold whitespace-nowrap">
-                      ${(
-                        Math.abs(item.amount_cents ?? 0) / 100
-                      ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {formatCurrencyFromCents(item.amount_cents)}
                     </td>
                     <td className="p-3.5 whitespace-nowrap">
                       <div className="flex flex-col gap-0.5">
@@ -793,12 +872,28 @@ function AdminSimulationView() {
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            The <strong>Datastream WAL Replication Engine</strong> panel summarizes downstream CDC health for operational transaction writes. It tracks Cloud Monitoring freshness and system lag separately from the browser's live SSE connection.
+            The <strong>Datastream WAL Replication Engine</strong> panel summarizes operational stream health and downstream CDC freshness for transaction writes.
           </p>
           <p>
-            In practical terms, this panel helps confirm that writes are moving from PostgreSQL WAL into Datastream CDC tables and curated analytical views without mixing replication health with credit-card risk counters.
+            In practical terms, this panel helps confirm that new transaction events are reaching the admin console and that writes are moving from PostgreSQL WAL into Datastream CDC tables and curated analytical views.
           </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-cyan-500 dark:text-cyan-400 font-mono font-bold">SSE Connection</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Shows whether this browser has an authenticated server-sent-events connection to the banking-service live stream. LIVE means the admin UI is connected; RETRY means the client is reconnecting.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-emerald-500 dark:text-emerald-400 font-mono font-bold">Last Event Age</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Measures how long it has been since the newest transaction event in the Redis-backed stream. A high value can mean the system is quiet or that live event publishing has stalled.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-blue-500 dark:text-blue-400 font-mono font-bold">Event Throughput</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Counts recent live events per minute and breaks them into authorization, posted, and flagged activity so the wall can distinguish holds from settled ledger events.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">Datastream Freshness</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Reports managed CDC freshness from Cloud Monitoring. This is downstream replication health, separate from the browser's live SSE connection.</p>
+            </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <div className="text-cyan-500 dark:text-cyan-400 font-mono font-bold">PostgreSQL WAL to Datastream</div>
               <p className="text-slate-500 dark:text-slate-400 mt-1">Operational writes are replicated into lakehouse CDC tables before curated analytics views consume them.</p>
@@ -851,12 +946,20 @@ function AdminSimulationView() {
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            The <strong>Credit Risk Metrics</strong> tile tracks fraud-anomaly outcomes from curated credit-card analytics, separate from transport health. A non-zero count means the demo has active suspicious card activity to review in secure messaging and the voice agent flow.
+            The <strong>Credit Risk Metrics</strong> tile tracks fraud-anomaly outcomes and live card exposure separately from replication transport health. A non-zero anomaly count means the demo has suspicious card activity available for secure-message review and the voice agent flow.
           </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">analytics_curated fraud views</div>
+              <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">Active Fraud Anomalies</div>
               <p className="text-slate-500 dark:text-slate-400 mt-1">Active anomalies represent suspicious credit-card authorizations that have been enriched and surfaced for customer mitigation.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-amber-500 dark:text-amber-400 font-mono font-bold">Flagged Event Rate + Pending Exposure</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Flagged rate shows suspicious live activity per minute. Pending exposure sums the current wall's outstanding holds and flagged authorizations so presenters can see unsettled card risk quickly.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-blue-500 dark:text-blue-400 font-mono font-bold">Auth vs Posted Flow</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Compares authorization events to posted events per minute. A surge of authorizations with few postings is expected during fraud simulation because those transactions are still pending review.</p>
             </div>
           </div>
         </div>
