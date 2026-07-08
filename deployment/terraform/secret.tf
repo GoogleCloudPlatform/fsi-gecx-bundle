@@ -106,28 +106,25 @@ resource "google_secret_manager_secret_version" "card_network_switch_token_versi
   secret_data = random_password.card_network_switch_token.result
 }
 
-data "google_secret_manager_secret_version_access" "database_iam_support_users" {
-  secret  = "database-iam-support-users"
-  version = "latest"
+data "external" "database_iam_support_users" {
+  program = ["bash", "${path.module}/scripts/get_secret_safe.sh", "database-iam-support-users", var.project_id]
 }
 
-data "google_secret_manager_secret_version_access" "database_iam_viewer_users" {
-  secret  = "database-iam-viewer-users"
-  version = "latest"
+data "external" "database_iam_viewer_users" {
+  program = ["bash", "${path.module}/scripts/get_secret_safe.sh", "database-iam-viewer-users", var.project_id]
 }
 
-data "google_secret_manager_secret_version_access" "additional_cloud_run_iap_members" {
-  secret  = "additional-cloud-run-iap-members"
-  version = "latest"
+data "external" "additional_cloud_run_iap_members" {
+  program = ["bash", "${path.module}/scripts/get_secret_safe.sh", "additional-cloud-run-iap-members", var.project_id]
 }
 
 locals {
-  database_iam_support_users_raw = nonsensitive(data.google_secret_manager_secret_version_access.database_iam_support_users.secret_data)
+  database_iam_support_users_raw = data.external.database_iam_support_users.result.secret_data
   database_iam_support_users     = compact([for s in split(",", local.database_iam_support_users_raw) : trimspace(s)])
 
-  database_iam_viewer_users_raw = nonsensitive(data.google_secret_manager_secret_version_access.database_iam_viewer_users.secret_data)
+  database_iam_viewer_users_raw = data.external.database_iam_viewer_users.result.secret_data
   database_iam_viewer_users     = compact([for s in split(",", local.database_iam_viewer_users_raw) : trimspace(s)])
 
-  additional_cloud_run_iap_members_raw = nonsensitive(data.google_secret_manager_secret_version_access.additional_cloud_run_iap_members.secret_data)
+  additional_cloud_run_iap_members_raw = data.external.additional_cloud_run_iap_members.result.secret_data
   additional_cloud_run_iap_members     = compact([for s in split(",", local.additional_cloud_run_iap_members_raw) : trimspace(s)])
 }
