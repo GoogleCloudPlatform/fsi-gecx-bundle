@@ -46,7 +46,8 @@ def get_banking_service_mcp_url() -> str:
     base_url = BANKING_SERVICE_URL.rstrip("/")
     if base_url.endswith("/api"):
         base_url = base_url[:-4]
-    root_path = os.getenv("BANKING_SERVICE_ROOT_PATH", "").strip("/")
+    default_root_path = "api" if ".run.app" in base_url else ""
+    root_path = os.getenv("BANKING_SERVICE_ROOT_PATH", default_root_path).strip("/")
     mcp_path = f"/{root_path}/mcp/" if root_path else "/mcp/"
     return f"{base_url}{mcp_path}"
 
