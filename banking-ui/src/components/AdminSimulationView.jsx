@@ -388,53 +388,6 @@ function AdminSimulationView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
-        <button
-          onClick={handleSpendSurge}
-          disabled={isSurgeLoading}
-          className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 hover:bg-slate-50 dark:hover:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 active:scale-[0.99] transition-all disabled:opacity-60 text-left flex items-start gap-3"
-        >
-          <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-600 dark:text-cyan-400 shrink-0">
-            {isSurgeLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <TrendingUp className="w-5 h-5" />}
-          </div>
-          <div className="min-w-0">
-            <div className="text-sm font-bold text-slate-900 dark:text-white">Spend Velocity Surge</div>
-            <div className="text-[11px] text-slate-500">50 synthetic swipes</div>
-            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">Rapid domestic card activity to exercise stream throughput and replication freshness.</div>
-          </div>
-        </button>
-
-        <button
-          onClick={handleFraudAnomaly}
-          disabled={isAnomalyLoading}
-          className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 hover:bg-slate-50 dark:hover:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 active:scale-[0.99] transition-all disabled:opacity-60 text-left flex items-start gap-3"
-        >
-          <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0">
-            {isAnomalyLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <ShieldAlert className="w-5 h-5" />}
-          </div>
-          <div className="min-w-0">
-            <div className="text-sm font-bold text-slate-900 dark:text-white">Targeted Fraud Anomaly</div>
-            <div className="text-[11px] text-slate-500">High-risk gift cards</div>
-            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">Creates a customer fraud alert, secure message, and flagged risk stream activity.</div>
-          </div>
-        </button>
-
-        <button
-          onClick={handleLateFee}
-          disabled={isFeeLoading}
-          className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 hover:bg-slate-50 dark:hover:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 active:scale-[0.99] transition-all disabled:opacity-60 text-left flex items-start gap-3"
-        >
-          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
-            {isFeeLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Zap className="w-5 h-5" />}
-          </div>
-          <div className="min-w-0">
-            <div className="text-sm font-bold text-slate-900 dark:text-white">Inject Late Fee</div>
-            <div className="text-[11px] text-slate-500">$35 posted charge flow</div>
-            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">Adds a standalone fee event for ledger, support, and voice-agent demonstrations.</div>
-          </div>
-        </button>
-      </div>
-
       {/* Section 1: Datastream & WAL CDC Replication Status */}
       <div className="mb-10 p-6 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5">
         <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200/60 dark:border-slate-800/60">
@@ -600,6 +553,77 @@ function AdminSimulationView() {
               {cdcStats.authorizationEventsPerMinute}:{cdcStats.postedEventsPerMinute}
             </div>
             <div className="text-[10px] text-slate-400 mt-1">{creditRiskMetrics.postedCount} posted events in current wall</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-10">
+        <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <Zap className="w-4 h-4 text-amber-500" />
+          Synthetic Transaction Controls
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-950/10">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-600 dark:text-cyan-400 shrink-0">
+                <TrendingUp className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-slate-900 dark:text-white">Spend Velocity Surge</div>
+                <div className="text-[11px] text-slate-500">50 synthetic swipes</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">Rapid domestic card activity to exercise stream throughput and replication freshness.</div>
+              </div>
+            </div>
+            <button
+              onClick={handleSpendSurge}
+              disabled={isSurgeLoading}
+              className="mt-4 w-full py-2.5 px-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-cyan-600"
+            >
+              {isSurgeLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+              {isSurgeLoading ? 'Injecting Surge...' : 'Run Surge'}
+            </button>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-950/10">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0">
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-slate-900 dark:text-white">Targeted Fraud Anomaly</div>
+                <div className="text-[11px] text-slate-500">High-risk gift cards</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">Creates a customer fraud alert, secure message, and flagged risk stream activity.</div>
+              </div>
+            </div>
+            <button
+              onClick={handleFraudAnomaly}
+              disabled={isAnomalyLoading}
+              className="mt-4 w-full py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-rose-600"
+            >
+              {isAnomalyLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldAlert className="w-4 h-4" />}
+              {isAnomalyLoading ? 'Creating Alert...' : 'Inject Anomaly'}
+            </button>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-950/10">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
+                <Zap className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-slate-900 dark:text-white">Inject Late Fee</div>
+                <div className="text-[11px] text-slate-500">$35 posted charge flow</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">Adds a standalone fee event for ledger, support, and voice-agent demonstrations.</div>
+              </div>
+            </div>
+            <button
+              onClick={handleLateFee}
+              disabled={isFeeLoading}
+              className="mt-4 w-full py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-amber-600"
+            >
+              {isFeeLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+              {isFeeLoading ? 'Injecting Fee...' : 'Inject Fee'}
+            </button>
           </div>
         </div>
       </div>

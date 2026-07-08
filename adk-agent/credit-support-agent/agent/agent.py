@@ -37,6 +37,17 @@ session_event_callback_var: contextvars.ContextVar = contextvars.ContextVar("ses
 session_should_end_var: contextvars.ContextVar[bool] = contextvars.ContextVar("session_should_end", default=False)
 is_processing_tool_var: contextvars.ContextVar[bool] = contextvars.ContextVar("is_processing_tool", default=False)
 
+
+def get_banking_service_mcp_url() -> str:
+    explicit_url = os.getenv("BANKING_SERVICE_MCP_URL")
+    if explicit_url:
+        return explicit_url.rstrip("/") + "/"
+
+    base_url = BANKING_SERVICE_URL.rstrip("/")
+    if base_url.endswith("/api"):
+        base_url = base_url[:-4]
+    return f"{base_url}/mcp/"
+
 def build_log_context(state: dict | None = None, **extra) -> dict:
     context = {
         "customer_id": active_customer_id_var.get(),
@@ -141,7 +152,7 @@ def custom_client_factory(headers=None, timeout=None, auth=None):
 # Initialize MCP Toolset using Streamable HTTP
 mcp_tools = McpToolset(
     connection_params=StreamableHTTPConnectionParams(
-        url=f"{BANKING_SERVICE_URL}/api/mcp/",
+        url=get_banking_service_mcp_url(),
         httpx_client_factory=custom_client_factory
     )
 )

@@ -602,6 +602,11 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
       }
 
       env {
+        name  = "BANKING_SERVICE_MCP_URL"
+        value = "https://banking-service-${data.google_project.project.number}.${var.region}.run.app/mcp/"
+      }
+
+      env {
         name  = "LIVEKIT_URL"
         value = "ws://${google_compute_instance.livekit_server.network_interface[0].network_ip}:7880"
       }
@@ -803,9 +808,9 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
 }
 
 resource "google_cloud_run_v2_job" "lakehouse_view_reconcile" {
-  count    = var.deploy_cloud_run_services ? 1 : 0
-  name     = "lakehouse-view-reconcile"
-  location = var.region
+  count               = var.deploy_cloud_run_services ? 1 : 0
+  name                = "lakehouse-view-reconcile"
+  location            = var.region
   deletion_protection = false
 
   template {
