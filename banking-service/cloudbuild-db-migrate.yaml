@@ -23,6 +23,17 @@ steps:
         gcloud run jobs execute banking-db-migrate \
           --region "${_REGION}" \
           --wait
+        if gcloud datastream streams describe banking-cdc-stream --location "${_REGION}" >/dev/null 2>&1; then
+          echo "Starting Datastream CDC stream after successful migrations..."
+          gcloud datastream streams update banking-cdc-stream \
+            --location "${_REGION}" \
+            --state=RUNNING \
+            --update-mask=state
+          echo "Bootstrapping curated BigQuery views from live CDC tables..."
+          PROJECT_ID="$PROJECT_ID" bash scripts/datastream/bootstrap_curated_views.sh
+        else
+          echo "Datastream stream banking-cdc-stream not found; skipping CDC bootstrap."
+        fi
 
 options:
   logging: CLOUD_LOGGING_ONLY
