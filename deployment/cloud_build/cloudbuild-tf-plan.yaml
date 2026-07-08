@@ -13,22 +13,33 @@
 # limitations under the License.
 
 steps:
-  - name: "hashicorp/terraform:1.15.7"
-    id: "tf-init"
-    entrypoint: "sh"
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "install-terraform"
+    entrypoint: "bash"
     args:
       - "-c"
       - |
-        terraform init -backend-config=./environment/${PROJECT_ID}/gcs.tfbackend
+        curl -sSL https://releases.hashicorp.com/terraform/1.15.7/terraform_1.15.7_linux_amd64.zip -o /workspace/terraform.zip
+        apt-get update -qq && apt-get install -y -qq unzip
+        unzip -o -q /workspace/terraform.zip -d /workspace
+        rm /workspace/terraform.zip
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "tf-init"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        /workspace/terraform init -backend-config=./environment/${PROJECT_ID}/gcs.tfbackend
     dir: "deployment/terraform"
 
-  - name: "hashicorp/terraform:1.15.7"
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     id: "tf-plan"
-    entrypoint: "sh"
+    entrypoint: "bash"
     args:
       - "-c"
       - |
-        terraform plan -var-file=./environment/${PROJECT_ID}/terraform.tfvars
+        /workspace/terraform plan -var-file=./environment/${PROJECT_ID}/terraform.tfvars
     dir: "deployment/terraform"
 
 options:
