@@ -95,7 +95,7 @@ class SupportService:
             self.db.rollback()
             raise HTTPException(status_code=500, detail="LiveKit token creation error.")
 
-    def complete_escalation(self, escalation_id: int) -> Dict[str, Any]:
+    def complete_escalation(self, escalation_id: str) -> Dict[str, Any]:
         logger.info(f"Completing escalation session: {escalation_id}")
         escalation = self.repo.get_by_id(escalation_id)
         if not escalation:
@@ -144,7 +144,7 @@ class SupportService:
             logger.error(f"Failed to handle escalation request: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
-    def abandon_escalation(self, escalation_id: int) -> Dict[str, Any]:
+    def abandon_escalation(self, escalation_id: str) -> Dict[str, Any]:
         logger.info(f"Abandoning escalation: {escalation_id}")
         escalation = self.repo.get_by_id(escalation_id)
         if not escalation:

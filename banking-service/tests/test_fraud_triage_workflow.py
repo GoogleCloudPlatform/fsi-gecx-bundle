@@ -230,6 +230,26 @@ def test_triage_fraud_case_is_idempotent(db_session, fraud_alert):
     assert len(workflow_actions) == 1
 
 
+def test_triage_idempotency_key_stays_within_schema_limit_for_many_disputes():
+    disputed_authorization_ids = [
+        "02000000-0000-4000-8000-000000000002",
+        "02000000-0000-4000-8000-000000000003",
+        "02000000-0000-4000-8000-000000000004",
+        "02000000-0000-4000-8000-000000000005",
+        "02000000-0000-4000-8000-000000000006",
+    ]
+
+    key = FraudAlertService._build_triage_idempotency_key(
+        disputed_authorization_ids=disputed_authorization_ids,
+        disputed_transaction_ids=[],
+        issue_replacement=True,
+        escalate=False,
+    )
+
+    assert key.startswith("triage:")
+    assert len(key) <= 128
+
+
 def test_triage_fraud_case_rejects_authorization_outside_alert(db_session, fraud_alert):
     with pytest.raises(ValueError, match="not part of this fraud alert"):
         FraudAlertService(db_session).triage_fraud_case(

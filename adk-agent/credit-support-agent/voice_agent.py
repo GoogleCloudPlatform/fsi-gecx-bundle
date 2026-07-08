@@ -336,6 +336,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             "- After the customer confirms their selection, call triage_fraud_case once using authorization_id values for disputed pending authorizations and transaction_id values for disputed posted transactions when those IDs are present.\n"
             "- If the customer recognizes every flagged transaction, call triage_fraud_case with empty disputed id arrays and issue_replacement=false.\n"
             "- If the customer disputes any flagged transaction, tell them any credits are provisional pending the full fraud investigation.\n"
+            "- If triage_fraud_case returns a clearly transient technical failure, retry it once with the same arguments before offering human escalation.\n"
             "- Treat this as trusted session context rather than something the customer needs to restate."
         )
     guidance_summary = support_guidance.get("agent_guidance_summary")

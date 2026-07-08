@@ -22,7 +22,7 @@ class EscalationPayload(BaseModel):
     customer_id: str
     reason: str
     transcript: list = Field(default_factory=list)
-    escalation_id: int | None = None
+    escalation_id: str | None = None
 
 
 @router.get("/escalations")
@@ -43,7 +43,7 @@ def get_human_agent_token(
 
 @router.post("/escalations/{escalation_id}/complete")
 def complete_escalation(
-    escalation_id: int,
+    escalation_id: str,
     service: SupportService = Depends(get_support_service)
 ):
     return service.complete_escalation(escalation_id)
@@ -59,7 +59,7 @@ def escalate_session(
 
 @router.post("/escalations/{escalation_id}/abandon")
 def abandon_escalation(
-    escalation_id: int,
+    escalation_id: str,
     service: SupportService = Depends(get_support_service)
 ):
     return service.abandon_escalation(escalation_id)

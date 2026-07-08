@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from typing import Iterable
 
@@ -500,7 +501,9 @@ class FraudAlertService:
         tx_part = ",".join(sorted(disputed_transaction_ids)) or "none"
         replacement_part = "replace" if issue_replacement else "no-replace"
         escalation_part = "escalate" if escalate else "no-escalate"
-        return f"triage:{auth_part}:{tx_part}:{replacement_part}:{escalation_part}"
+        key_material = f"{auth_part}:{tx_part}:{replacement_part}:{escalation_part}"
+        key_digest = hashlib.sha256(key_material.encode("utf-8")).hexdigest()[:32]
+        return f"triage:{key_digest}:{replacement_part}:{escalation_part}"
 
     @staticmethod
     def _format_cents(amount_cents: int) -> str:
