@@ -735,7 +735,21 @@ def upgrade() -> None:
         try:
             user_exists = conn.execute(text("SELECT 1 FROM pg_roles WHERE rolname = :username"), {"username": db_user}).scalar()
             if user_exists:
-                has_priv = conn.execute(text("""SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = CURRENT_USER AND (rolsuper = true OR rolreplication = true));""")).scalar()
+                has_priv = conn.execute(text("""
+                    SELECT EXISTS (
+                        SELECT 1 FROM pg_roles 
+                        WHERE rolname = CURRENT_USER 
+                          AND (
+                            rolsuper = true 
+                            OR rolreplication = true 
+                            OR EXISTS (
+                                SELECT 1 FROM pg_auth_members m 
+                                JOIN pg_roles r ON m.roleid = r.oid 
+                                WHERE m.member = pg_roles.oid AND r.rolname = 'cloudsqlsuperuser'
+                            )
+                          )
+                    );
+                """)).scalar()
                 if has_priv:
                     try:
                         with conn.begin_nested():
@@ -760,7 +774,21 @@ def upgrade() -> None:
             try:
                 wal_level = conn.execute(text("SHOW wal_level;")).scalar()
                 if wal_level == 'logical':
-                    has_priv = conn.execute(text("""SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = CURRENT_USER AND (rolsuper = true OR rolreplication = true));""")).scalar()
+                    has_priv = conn.execute(text("""
+                        SELECT EXISTS (
+                            SELECT 1 FROM pg_roles 
+                            WHERE rolname = CURRENT_USER 
+                              AND (
+                                rolsuper = true 
+                                OR rolreplication = true 
+                                OR EXISTS (
+                                    SELECT 1 FROM pg_auth_members m 
+                                    JOIN pg_roles r ON m.roleid = r.oid 
+                                    WHERE m.member = pg_roles.oid AND r.rolname = 'cloudsqlsuperuser'
+                                )
+                              )
+                        );
+                    """)).scalar()
                     if has_priv:
                         with conn.begin_nested():
                             slot_exists = conn.execute(text("SELECT 1 FROM pg_replication_slots WHERE slot_name = 'datastream_replication_slot'")).scalar()

@@ -7,7 +7,7 @@ BEGIN
  DECLARE v_result STRING;
  DECLARE v_count INT64;
  DECLARE v_linguist_result JSON;
-  SET v_id = GENERATE_UUID();
+ SET v_id = GENERATE_UUID();
  SET p_application = LOWER(p_application);
  SET p_environment = LOWER(p_environment);
  SET v_linguist_result = PARSE_JSON(p_linguist_result);
