@@ -742,8 +742,8 @@ def get_transaction_history_dto(repo: Any, customer_id: str) -> Optional[List[Di
                 "confidence_level": cat.confidence_level
             },
             "merchant_category_code": auth.merchant_category_code,
-            "cardholder_name": auth.card.cardholder_name if auth.card else "Erik V.",
-            "last_four": auth.card.last_four if auth.card else "2304"
+            "cardholder_name": auth.card.cardholder_name if auth.card else "Cardholder",
+            "last_four": auth.card.last_four if auth.card else None,
         })
         
     for entry in ledger:
@@ -763,8 +763,8 @@ def get_transaction_history_dto(repo: Any, customer_id: str) -> Optional[List[Di
                 "confidence_level": cat.confidence_level
             },
             "merchant_category_code": mcc,
-            "cardholder_name": entry.authorization.card.cardholder_name if entry.authorization and entry.authorization.card else "Erik V.",
-            "last_four": entry.authorization.card.last_four if entry.authorization and entry.authorization.card else "2304"
+            "cardholder_name": entry.authorization.card.cardholder_name if entry.authorization and entry.authorization.card else "Cardholder",
+            "last_four": entry.authorization.card.last_four if entry.authorization and entry.authorization.card else None,
         })
         
     return results

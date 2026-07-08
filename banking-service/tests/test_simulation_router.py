@@ -28,9 +28,9 @@ from utils.auth import get_current_user
 from models.authentication import ValidatedToken
 from models.fraud import FraudAlert, FraudCaseAction
 from models.audit import AuditOutbox
-from models.identity import User
+from models.identity import User, UserSecureMessage
 from models.origination import Account
-from models.credit_card import CreditAccount, IssuedCard, PostedTransaction
+from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, TransactionAuthorization
 from services.seeding_service import clean_database, provision_user_suite
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -221,6 +221,98 @@ async def test_reset_my_demo_success(async_client, db_session):
             assert acc.cleared_balance_cents == 1000000
         elif acc.account_type == "SAVINGS":
             assert acc.cleared_balance_cents == 2000000
+
+
+@pytest.mark.asyncio
+async def test_reset_my_demo_clears_fraud_state_and_restores_card_baseline(async_client, db_session):
+    global mock_claims
+    mock_claims = {"sub": "reset-fraud-uid", "email": "reset.fraud.presenter@google.com"}
+
+    provision_response = await async_client.post("/api/v1/simulation/provision-my-demo")
+    assert provision_response.status_code == status.HTTP_201_CREATED
+    user_id = provision_response.json()["summary"]["user_id"]
+
+    user = db_session.query(User).filter(User.id == user_id).first()
+    cred_acc = db_session.query(CreditAccount).filter(CreditAccount.customer_id == user_id).first()
+    original_card = db_session.query(IssuedCard).filter(IssuedCard.account_id == cred_acc.id).first()
+    original_last_four = original_card.last_four
+
+    original_card.status = "BLOCKED"
+    original_card.is_active = False
+    replacement = IssuedCard(
+        account_id=cred_acc.id,
+        cardholder_name=original_card.cardholder_name,
+        card_token="tok_reset_fraud_replacement",
+        last_four="5188",
+        exp_month=original_card.exp_month,
+        exp_year=original_card.exp_year + 1,
+        status="ACTIVE",
+        is_active=True,
+        is_virtual=True,
+    )
+    db_session.add(replacement)
+    db_session.flush()
+    fraud_alert = FraudAlert(
+        customer_id=user.id,
+        auth_provider_uid=user.auth_provider_uid,
+        credit_account_id=cred_acc.id,
+        card_id=original_card.id,
+        card_last_four=original_card.last_four,
+        message_thread_id="thread-reset-fraud",
+        suspicious_authorization_ids=[],
+        suspicious_transactions=[],
+        replacement_card_id=replacement.id,
+        triage_message_thread_id="thread-reset-fraud",
+        triage_message_id="message-reset-fraud",
+    )
+    db_session.add(fraud_alert)
+    db_session.flush()
+    db_session.add(
+        FraudCaseAction(
+            fraud_alert_id=fraud_alert.id,
+            action_type="FRAUD_CASE_TRIAGED",
+            status="SUCCEEDED",
+            idempotency_key="reset-fraud-flow",
+            request_payload={},
+            result_payload={},
+        )
+    )
+    db_session.add(
+        UserSecureMessage(
+            message_id="message-reset-fraud",
+            user_id=user.id,
+            sender="bank",
+            category="Fraud Alert",
+            message="Fraud case pending review.",
+            thread_id="thread-reset-fraud",
+        )
+    )
+    db_session.add(
+        UserSecureMessage(
+            message_id="message-reset-pending-support",
+            user_id=user.id,
+            sender="bank",
+            category="General",
+            message="Pending support reply.",
+            thread_id="thread-reset-support",
+            is_user_read=False,
+        )
+    )
+    db_session.commit()
+
+    reset_response = await async_client.post("/api/v1/simulation/reset-my-demo")
+
+    assert reset_response.status_code == status.HTTP_200_OK
+    cards = db_session.query(IssuedCard).filter(IssuedCard.account_id == cred_acc.id).all()
+    assert len(cards) == 1
+    assert cards[0].last_four == original_last_four
+    assert cards[0].status == "ACTIVE"
+    assert cards[0].is_active is True
+    assert db_session.query(FraudAlert).filter(FraudAlert.customer_id == user.id).count() == 0
+    assert db_session.query(FraudCaseAction).count() == 0
+    assert db_session.query(UserSecureMessage).filter(UserSecureMessage.thread_id == "thread-reset-fraud").count() == 0
+    assert db_session.query(UserSecureMessage).filter(UserSecureMessage.thread_id == "thread-reset-support").count() == 0
+    assert db_session.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == cred_acc.id).count() >= 2
 
 @pytest.mark.asyncio
 async def test_reset_my_demo_not_found(async_client, db_session):

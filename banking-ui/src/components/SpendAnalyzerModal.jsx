@@ -26,15 +26,79 @@ const CATEGORY_LABELS = {
   GENERAL: 'General Spending'
 };
 
-export default function SpendAnalyzerModal({ isOpen, onClose, transactions = [] }) {
+function getTransactionAmountCents(tx) {
+  if (tx.amount_cents !== undefined && tx.amount_cents !== null) return Number(tx.amount_cents);
+  if (tx.amount !== undefined && tx.amount !== null) return Math.round(Number(tx.amount) * -100);
+  return 0;
+}
+
+function getTransactionDate(tx) {
+  return tx.posted_at || tx.posted_timestamp || tx.created_at || tx.transaction_timestamp || null;
+}
+
+function getCardOptionId(card) {
+  return String(card.card_id || card.id || card.card_token || card.last_four || 'unknown');
+}
+
+function getTxCardOptionId(tx) {
+  return String(tx.card_id || tx.card_token || tx.last_four || tx.card_last_four || 'unknown');
+}
+
+function buildCardOptions(cards, transactions) {
+  const optionMap = new Map();
+  (cards || []).forEach((card) => {
+    const id = getCardOptionId(card);
+    optionMap.set(id, {
+      id,
+      lastFour: card.last_four,
+      label: `${card.cardholder_name || 'Cardholder'} ...${card.last_four}${card.is_virtual ? ' (Virtual Card)' : ' (Primary)'}`,
+    });
+  });
+  (transactions || []).forEach((tx) => {
+    const lastFour = tx.last_four || tx.card_last_four;
+    if (!lastFour) return;
+    const id = getTxCardOptionId(tx);
+    if (!optionMap.has(id)) {
+      optionMap.set(id, {
+        id,
+        lastFour,
+        label: `${tx.cardholder_name || 'Cardholder'} ...${lastFour}`,
+      });
+    }
+  });
+  return Array.from(optionMap.values()).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function dateRangeLabel(transactions) {
+  const dates = transactions
+    .map(getTransactionDate)
+    .filter(Boolean)
+    .map((value) => new Date(value))
+    .filter((date) => !Number.isNaN(date.getTime()))
+    .sort((a, b) => a - b);
+  if (dates.length === 0) return 'No posted date range';
+  const format = (date) => date.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit', year: 'numeric' });
+  return `${format(dates[0])} - ${format(dates[dates.length - 1])}`;
+}
+
+export default function SpendAnalyzerModal({ isOpen, onClose, transactions = [], cards = [], accountName = 'Credit Card Account' }) {
   const [dateRange, setDateRange] = useState('3 Months');
-  const [selectedUser, setSelectedUser] = useState('ALL');
+  const [selectedCard, setSelectedCard] = useState('ALL');
+  const cardOptions = useMemo(() => buildCardOptions(cards, transactions), [cards, transactions]);
 
   // Filter and calculate category spendings from real posted ledger transactions
-  const { totalSpending, categoryBreakdown, conicGradient } = useMemo(() => {
+  const { totalSpending, categoryBreakdown, conicGradient, postedCount, rangeLabel } = useMemo(() => {
     const validTxs = transactions.filter(tx => {
       if (tx.pending) return false;
-      const amountVal = tx.amount_cents !== undefined ? tx.amount_cents : (tx.amount ? -tx.amount * 100 : 0);
+      if (selectedCard !== 'ALL') {
+        const txCardId = getTxCardOptionId(tx);
+        const txLastFour = String(tx.last_four || tx.card_last_four || '');
+        const selected = cardOptions.find((option) => option.id === selectedCard);
+        if (txCardId !== selectedCard && (!selected?.lastFour || txLastFour !== String(selected.lastFour))) {
+          return false;
+        }
+      }
+      const amountVal = getTransactionAmountCents(tx);
       return amountVal < 0 && !tx.description?.toUpperCase().includes('PAYMENT');
     });
 
@@ -44,7 +108,7 @@ export default function SpendAnalyzerModal({ isOpen, onClose, transactions = [] 
     validTxs.forEach(tx => {
       const rawCat = tx.personal_finance_category?.primary || 'GENERAL';
       const catKey = rawCat.toUpperCase();
-      const amount = tx.amount_cents !== undefined ? Math.abs(tx.amount_cents) / 100 : Math.abs(tx.amount || 0);
+      const amount = Math.abs(getTransactionAmountCents(tx)) / 100;
       
       if (!catMap[catKey]) {
         catMap[catKey] = 0;
@@ -54,7 +118,13 @@ export default function SpendAnalyzerModal({ isOpen, onClose, transactions = [] 
     });
 
     if (total === 0) {
-      return { totalSpending: 0, categoryBreakdown: [], conicGradient: 'conic-gradient(#cbd5e1 0% 100%)' };
+      return {
+        totalSpending: 0,
+        categoryBreakdown: [],
+        conicGradient: 'conic-gradient(#cbd5e1 0% 100%)',
+        postedCount: validTxs.length,
+        rangeLabel: dateRangeLabel(validTxs),
+      };
     }
 
     const sortedCats = Object.keys(catMap)
@@ -78,9 +148,11 @@ export default function SpendAnalyzerModal({ isOpen, onClose, transactions = [] 
     return {
       totalSpending: total,
       categoryBreakdown: sortedCats,
-      conicGradient: `conic-gradient(${gradientStops.join(', ')})`
+      conicGradient: `conic-gradient(${gradientStops.join(', ')})`,
+      postedCount: validTxs.length,
+      rangeLabel: dateRangeLabel(validTxs),
     };
-  }, [transactions]);
+  }, [transactions, selectedCard, cardOptions]);
 
   if (!isOpen) return null;
 
@@ -99,7 +171,7 @@ export default function SpendAnalyzerModal({ isOpen, onClose, transactions = [] 
           </button>
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">
             <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>Nova Everyday Visa</span>
+            <span>{accountName}</span>
             <span>&bull;</span>
             <span>Spend Analyzer</span>
           </div>
@@ -117,7 +189,7 @@ export default function SpendAnalyzerModal({ isOpen, onClose, transactions = [] 
               <input
                 type="text"
                 readOnly
-                value="06/01/2026 - 06/30/2026"
+                value={rangeLabel}
                 className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-sm font-semibold text-slate-800 dark:text-slate-200 pr-9 shadow-sm"
               />
               <svg className="w-4 h-4 text-slate-400 absolute right-3.5 top-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -144,12 +216,14 @@ export default function SpendAnalyzerModal({ isOpen, onClose, transactions = [] 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Select account users</label>
             <select
-              value={selectedUser}
-              onChange={(e) => setSelectedUser(e.target.value)}
+              value={selectedCard}
+              onChange={(e) => setSelectedCard(e.target.value)}
               className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-sm font-semibold text-slate-800 dark:text-slate-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
             >
-              <option value="ALL">All account users</option>
-              <option value="ERIK">Erik V. ...2304</option>
+              <option value="ALL">All account cards</option>
+              {cardOptions.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -214,7 +288,7 @@ export default function SpendAnalyzerModal({ isOpen, onClose, transactions = [] 
         {/* Footer actions */}
         <div className="bg-slate-100 dark:bg-slate-800/90 px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
           <div className="text-xs text-slate-600 dark:text-slate-300">
-            Computed from <span className="font-bold text-slate-900 dark:text-white">{transactions.filter(t => !t.pending).length}</span> posted entries
+            Computed from <span className="font-bold text-slate-900 dark:text-white">{postedCount}</span> posted spending entries
           </div>
           <button
             onClick={onClose}

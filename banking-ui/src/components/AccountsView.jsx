@@ -103,6 +103,17 @@ function AccountsView({ fbUser, customerProfile }) {
     setSearchParams({ id: accountId, type: type });
   };
 
+  const checkingAccounts = accountsData?.deposit_accounts?.filter(a => a.account_type === 'CHECKING') || [];
+  const savingsAccounts = accountsData?.deposit_accounts?.filter(a => a.account_type === 'SAVINGS') || [];
+  const creditAccounts = accountsData?.credit_accounts || [];
+  const hasAccounts = checkingAccounts.length > 0 || savingsAccounts.length > 0 || creditAccounts.length > 0;
+  let activeAccountObj = null;
+  if (selectedAccountType === 'checking' || selectedAccountType === 'savings') {
+    activeAccountObj = accountsData?.deposit_accounts?.find(a => String(a.account_id) === String(selectedAccountId));
+  } else if (selectedAccountType === 'credit') {
+    activeAccountObj = accountsData?.credit_accounts?.find(a => String(a.account_id) === String(selectedAccountId));
+  }
+
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (filters.category !== 'ALL') count++;
@@ -122,6 +133,37 @@ function AccountsView({ fbUser, customerProfile }) {
       card: 'ALL',
       statement: 'ALL'
     });
+  };
+
+  const cardFilterOptions = useMemo(() => {
+    const optionMap = new Map();
+    (activeAccountObj?.cards || []).forEach((card) => {
+      const id = String(card.card_id || card.id || card.card_token || card.last_four);
+      optionMap.set(id, {
+        id,
+        lastFour: card.last_four,
+        label: `${card.cardholder_name || 'Cardholder'} ...${card.last_four}${card.is_virtual ? ' (Virtual Card)' : ' (Primary)'}`,
+      });
+    });
+    transactions.forEach((tx) => {
+      const lastFour = tx.last_four || tx.card_last_four;
+      if (!lastFour) return;
+      const id = String(tx.card_id || tx.card_token || lastFour);
+      if (!optionMap.has(id)) {
+        optionMap.set(id, {
+          id,
+          lastFour,
+          label: `${tx.cardholder_name || 'Cardholder'} ...${lastFour}`,
+        });
+      }
+    });
+    return Array.from(optionMap.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [activeAccountObj, transactions]);
+
+  const formatTransactionCardLabel = (tx) => {
+    const lastFour = tx.last_four || tx.card_last_four;
+    if (!lastFour) return 'Card unavailable';
+    return `${tx.cardholder_name || 'Cardholder'} ...${lastFour}`;
   };
 
   const filteredTransactions = useMemo(() => {
@@ -192,9 +234,10 @@ function AccountsView({ fbUser, customerProfile }) {
     // 5. Card Filter
     if (filters.card !== 'ALL') {
       result = result.filter(tx => {
-        const cardStr = tx.last_four ? `...${tx.last_four}` : (tx.card_last_four ? `...${tx.card_last_four}` : '');
-        if (!cardStr) return true;
-        return cardStr.includes(filters.card) || (filters.card === '2304' && cardStr.includes('2304')) || (filters.card === '2344' && cardStr.includes('2344'));
+        const selected = cardFilterOptions.find(option => option.id === filters.card);
+        const txCardId = String(tx.card_id || tx.card_token || tx.last_four || tx.card_last_four || '');
+        const txLastFour = String(tx.last_four || tx.card_last_four || '');
+        return txCardId === filters.card || Boolean(selected?.lastFour && txLastFour === String(selected.lastFour));
       });
     }
 
@@ -217,7 +260,7 @@ function AccountsView({ fbUser, customerProfile }) {
     }
 
     return result;
-  }, [transactions, searchQuery, filters]);
+  }, [transactions, searchQuery, filters, cardFilterOptions]);
 
   const handleBackToMaster = () => {
     setSearchParams({});
@@ -239,19 +282,6 @@ function AccountsView({ fbUser, customerProfile }) {
         </div>
       </div>
     );
-  }
-
-  const checkingAccounts = accountsData?.deposit_accounts?.filter(a => a.account_type === 'CHECKING') || [];
-  const savingsAccounts = accountsData?.deposit_accounts?.filter(a => a.account_type === 'SAVINGS') || [];
-  const creditAccounts = accountsData?.credit_accounts || [];
-  const hasAccounts = checkingAccounts.length > 0 || savingsAccounts.length > 0 || creditAccounts.length > 0;
-
-  // Find active account object for detail view
-  let activeAccountObj = null;
-  if (selectedAccountType === 'checking' || selectedAccountType === 'savings') {
-    activeAccountObj = accountsData?.deposit_accounts?.find(a => String(a.account_id) === String(selectedAccountId));
-  } else if (selectedAccountType === 'credit') {
-    activeAccountObj = accountsData?.credit_accounts?.find(a => String(a.account_id) === String(selectedAccountId));
   }
 
   return (
@@ -751,9 +781,7 @@ function AccountsView({ fbUser, customerProfile }) {
                         <div className="flex flex-wrap gap-2">
                           {[
                             { id: 'ALL', label: 'All Cards & Account Users' },
-                            { id: '2304', label: 'Erik V. ...2304 (Primary)' },
-                            { id: '2344', label: 'Erik V. ...2344 (Virtual Card)' },
-                            { id: '8234', label: 'Jane D. ...8234 (Authorized User)' }
+                            ...cardFilterOptions,
                           ].map(c => (
                             <button
                               key={c.id}
@@ -872,7 +900,7 @@ function AccountsView({ fbUser, customerProfile }) {
                                         </span>
                                       </td>
                                       <td className="py-3 text-xs text-slate-500 dark:text-slate-400 font-medium w-[18%]">
-                                        {tx.cardholder_name || "Erik V."} ...{tx.last_four || "2304"}
+                                        {formatTransactionCardLabel(tx)}
                                       </td>
                                       <td className={`py-3 text-right font-bold text-sm w-[14%] ${isCredit ? 'text-emerald-600 dark:text-emerald-400 italic' : isLateFee ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-300'}`}>
                                         {isCredit ? '-' : ''}${amountVal.toFixed(2)}
@@ -919,7 +947,7 @@ function AccountsView({ fbUser, customerProfile }) {
                                       </span>
                                     </td>
                                     <td className="py-4 text-xs text-slate-500 dark:text-slate-400 font-medium w-[18%]">
-                                      {tx.cardholder_name || "Erik V."} ...{tx.last_four || "2304"}
+                                      {formatTransactionCardLabel(tx)}
                                     </td>
                                     <td className={`py-4 text-right font-bold text-sm w-[14%] ${isPayment ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>
                                       {isPayment ? '-' : ''}${amountVal.toFixed(2)}
@@ -1033,6 +1061,8 @@ function AccountsView({ fbUser, customerProfile }) {
           isOpen={isSpendAnalyzerOpen}
           onClose={() => setIsSpendAnalyzerOpen(false)}
           transactions={transactions}
+          cards={activeAccountObj?.cards || []}
+          accountName="Nova Everyday Visa"
         />
       )}
 

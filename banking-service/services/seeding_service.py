@@ -30,7 +30,7 @@ from utils.encryption import encrypt_pii
 from utils.audit import record_audit_event
 
 # Models
-from models.identity import User, UserAddress, RetailLocation
+from models.identity import User, UserAddress, RetailLocation, UserSecureMessage
 from models.kyc import KYCRecord, UserCreditProfile
 from models.origination import Account, AccountLedgerEntry, Transaction
 from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, CreditProduct, TransactionAuthorization
@@ -1159,10 +1159,52 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
         else:
             acc.cleared_balance_cents = 1000000
 
-    # 2. Fetch credit accounts belonging to user
+    # 2. Clear fraud workflow residue and restore card/account baseline state.
+    fraud_alerts = db.query(FraudAlert).filter(FraudAlert.customer_id == user_id).all()
+    fraud_alert_ids = [alert.id for alert in fraud_alerts]
+    fraud_thread_ids = {
+        thread_id
+        for alert in fraud_alerts
+        for thread_id in (alert.message_thread_id, alert.triage_message_thread_id)
+        if thread_id
+    }
+    if fraud_alert_ids:
+        db.query(FraudCaseAction).filter(FraudCaseAction.fraud_alert_id.in_(fraud_alert_ids)).delete(synchronize_session=False)
+        db.query(FraudAlert).filter(FraudAlert.id.in_(fraud_alert_ids)).delete(synchronize_session=False)
+    if fraud_thread_ids:
+        db.query(UserSecureMessage).filter(
+            UserSecureMessage.user_id == user.id,
+            UserSecureMessage.thread_id.in_(fraud_thread_ids),
+        ).delete(synchronize_session=False)
+    db.query(UserSecureMessage).filter(
+        UserSecureMessage.user_id == user.id,
+        UserSecureMessage.sender != "user",
+        UserSecureMessage.is_user_read.is_(False),
+    ).delete(synchronize_session=False)
+
+    # 3. Fetch credit accounts belonging to user
     credit_accounts = db.query(CreditAccount).filter(CreditAccount.customer_id == user_id).all()
     cred_acc = credit_accounts[0] if credit_accounts else None
-    card = db.query(IssuedCard).filter(IssuedCard.account_id == cred_acc.id).first() if cred_acc else None
+    card = None
+    if cred_acc:
+        db.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).delete(synchronize_session=False)
+        db.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == cred_acc.id).delete(synchronize_session=False)
+        cred_acc.cleared_balance_cents = 0
+        cred_acc.available_credit_cents = cred_acc.credit_limit_cents
+        cards = (
+            db.query(IssuedCard)
+            .filter(IssuedCard.account_id == cred_acc.id)
+            .order_by(IssuedCard.created_at.asc(), IssuedCard.id.asc())
+            .all()
+        )
+        card = cards[0] if cards else None
+        for extra_card in cards[1:]:
+            db.delete(extra_card)
+        if card:
+            card.status = "ACTIVE"
+            card.is_active = True
+            card.is_virtual = bool(card.is_virtual)
+            card.pin_fail_count = 0
     
     if not checking_acc or not savings_acc or not cred_acc or not card:
         raise ValueError(
