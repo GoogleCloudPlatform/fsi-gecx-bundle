@@ -766,3 +766,63 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
     google_secret_manager_secret_iam_member.banking_db_migration_postgres_root_password_accessor
   ]
 }
+
+resource "google_cloud_run_v2_job" "lakehouse_view_reconcile" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  name     = "lakehouse-view-reconcile"
+  location = var.region
+
+  template {
+    template {
+      max_retries     = 0
+      timeout         = "600s"
+      service_account = google_service_account.lakehouse_reconcile_service_account.email
+
+      containers {
+        image = "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/lakehouse-reconcile:latest"
+
+        env {
+          name  = "PROJECT_ID"
+          value = data.google_project.project.project_id
+        }
+
+        env {
+          name  = "REGION"
+          value = var.region
+        }
+
+        env {
+          name  = "DATASTREAM_STREAM_ID"
+          value = google_datastream_stream.banking_cdc_stream.stream_id
+        }
+
+        env {
+          name  = "SOURCE_DATASET"
+          value = google_bigquery_dataset.iceberg_catalog.dataset_id
+        }
+
+        env {
+          name  = "CURATED_DATASET"
+          value = google_bigquery_dataset.analytics_curated.dataset_id
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version
+    ]
+  }
+
+  depends_on = [
+    google_project_service.run_googleapis_com,
+    google_datastream_stream.banking_cdc_stream,
+    google_bigquery_dataset_iam_member.lakehouse_reconcile_iceberg_data_viewer,
+    google_bigquery_dataset_iam_member.lakehouse_reconcile_analytics_curated_data_editor,
+    google_project_iam_member.lakehouse_reconcile_sa_bq_job_user,
+    google_project_iam_member.lakehouse_reconcile_sa_datastream_admin,
+  ]
+}
