@@ -107,15 +107,15 @@ resource "google_secret_manager_secret_version" "card_network_switch_token_versi
 }
 
 data "external" "database_iam_support_users" {
-  program = ["bash", "${path.module}/scripts/get_secret_safe.sh", "database-iam-support-users", var.project_id]
+  program = ["bash", "${path.module}/scripts/get_secret_safe.sh", "database-iam-support-users", var.project_id, "true"]
 }
 
 data "external" "database_iam_viewer_users" {
-  program = ["bash", "${path.module}/scripts/get_secret_safe.sh", "database-iam-viewer-users", var.project_id]
+  program = ["bash", "${path.module}/scripts/get_secret_safe.sh", "database-iam-viewer-users", var.project_id, "true"]
 }
 
 data "external" "additional_cloud_run_iap_members" {
-  program = ["bash", "${path.module}/scripts/get_secret_safe.sh", "additional-cloud-run-iap-members", var.project_id]
+  program = ["bash", "${path.module}/scripts/get_secret_safe.sh", "additional-cloud-run-iap-members", var.project_id, "true"]
 }
 
 locals {
