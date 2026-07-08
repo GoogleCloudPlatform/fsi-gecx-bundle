@@ -30,6 +30,12 @@ resource "google_project_iam_member" "cloudbuild_terraform_sa_act_as" {
   member  = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
 }
 
+resource "google_project_iam_member" "cloudbuild_terraform_sa_secret_accessor" {
+  project = data.google_project.project.project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
+}
+
 resource "google_project_iam_member" "cloudbuild_sa_run_admin" {
   project = var.project_id
   role    = "roles/run.admin"
