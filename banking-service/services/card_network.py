@@ -207,7 +207,7 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
             "merchant_name": merchant_name,
             "amount_cents": amount_cents,
             "status": f"FLAGGED (RISK {risk_score})" if auth_status == "FLAGGED" else f"HOLD ({auth_status})",
-            "bq_view": "fsi_lakehouse.v_international_fraud_anomalies" if risk_score > 20 else "fsi_lakehouse.v_realtime_spend_velocity",
+            "bq_view": "analytics_curated.international_fraud_anomalies" if risk_score > 20 else "analytics_curated.realtime_spend_velocity",
             "raw_time": now.timestamp()
         })
 
@@ -281,7 +281,7 @@ def process_settlement(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
             "merchant_name": posted_tx.description,
             "amount_cents": posted_tx.amount_cents,
             "status": "SETTLE (POSTED)",
-            "bq_view": "fsi_lakehouse.v_realtime_spend_velocity",
+            "bq_view": "analytics_curated.realtime_spend_velocity",
             "raw_time": posted_at_val.timestamp()
         })
 

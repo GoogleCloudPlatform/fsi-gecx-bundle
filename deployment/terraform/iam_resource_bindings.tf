@@ -272,6 +272,12 @@ resource "google_bigquery_dataset_iam_member" "banking_service_iceberg_data_view
   member     = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
+resource "google_bigquery_dataset_iam_member" "banking_service_analytics_curated_data_viewer" {
+  dataset_id = google_bigquery_dataset.analytics_curated.dataset_id
+  role       = "roles/bigquery.dataViewer"
+  member     = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
 # Grant Pub/Sub Service Identity permission to write messages to BigQuery
 resource "google_bigquery_dataset_iam_member" "pubsub_bq_data_editor" {
   project    = data.google_project.project.project_id

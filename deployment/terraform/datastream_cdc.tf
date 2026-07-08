@@ -123,12 +123,6 @@ resource "google_datastream_stream" "banking_cdc_stream" {
 
   depends_on = [
     google_project_service.datastream_googleapis_com,
-    google_bigquery_table.posted_transactions,
-    google_bigquery_table.issued_card,
-    google_bigquery_table.transaction_authorization,
-    google_bigquery_table.applications_lake,
-    google_bigquery_table.credit_card_applications,
-    google_bigquery_table.mortgage_applications,
-    google_bigquery_table.users_lake
+    google_bigquery_dataset.iceberg_catalog
   ]
 }

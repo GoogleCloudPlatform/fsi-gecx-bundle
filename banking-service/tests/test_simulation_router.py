@@ -326,7 +326,7 @@ async def test_inject_late_fee_and_global_stream(async_client, db_session):
                 "merchant_name": "LATE_FEE",
                 "amount_cents": 3500,
                 "status": "HOLD (PENDING)",
-                "bq_view": "fsi_lakehouse.v_realtime_spend_velocity",
+                "bq_view": "analytics_curated.realtime_spend_velocity",
                 "raw_time": 1_720_000_000.0,
             }
         ],

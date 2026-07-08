@@ -185,6 +185,11 @@ resource "google_cloud_run_v2_service" "banking_service" {
       }
 
       env {
+        name  = "CDC_BIGQUERY_CURATED_DATASET"
+        value = "analytics_curated"
+      }
+
+      env {
         name  = "REDIS_HOST"
         value = google_redis_instance.banking.host
       }

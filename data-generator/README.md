@@ -2,7 +2,7 @@
 
 An autonomous, cloud-native synthetic transaction data generator designed for the Nova Horizon Banking Demo suite. 
 
-The service simulates an external merchant point-of-sale (POS) terminal network and cardholder activity engine. It generates synthetic credit card authorization holds, captures, and reversals over HTTP against the authoritative issuing bank gateway in **`banking-service`**. These real-time transactions generate PostgreSQL Outbox events that stream via Google Cloud Datastream (WAL Change Data Capture) into Google Cloud Storage and BigQuery Active Lakehouse (`fsi_lakehouse`), powering live AI Data Canvas spend velocity visualizations and Looker semantic dashboards.
+The service simulates an external merchant point-of-sale (POS) terminal network and cardholder activity engine. It generates synthetic credit card authorization holds, captures, and reversals over HTTP against the authoritative issuing bank gateway in **`banking-service`**. These real-time transactions generate PostgreSQL Outbox events that stream via Google Cloud Datastream (WAL Change Data Capture) into the schema-prefixed BigQuery lakehouse dataset (`iceberg_catalog`) and curated analytical views in `analytics_curated`, powering live AI Data Canvas spend velocity visualizations and dashboards.
 
 ---
 
@@ -17,7 +17,7 @@ graph TD
     BS -->|Returns Cards & Merchants| DG
     DG -->|3. POST /api/v1/card-network/authorize<br/>4. POST /api/v1/card-network/settle<br/>5. POST /api/v1/card-network/reverse| BS
     BS -->|WAL CDC Outbox Events| DS[Google Cloud Datastream]
-    DS -->|Replication| BQ[BigQuery fsi_lakehouse]
+    DS -->|Replication| BQ[BigQuery iceberg_catalog + analytics_curated]
 ```
 
 ### Key Architectural Characteristics
@@ -81,7 +81,7 @@ All endpoints are protected by `verify_switch_or_presenter_token`, requiring the
 | `GET` | `/health` | Liveness check returning `{"status": "ok", "service": "data-generator"}`. |
 | `POST` | `/simulate-pulse` | Wakes up and synchronously fires a randomized batch of 3–5 swipes across active cards. Used for continuous background heartbeat traffic. |
 | `POST` | `/simulate-surge` | Accepts a `SurgeRequest` and initiates an asynchronous background task (`run_activity_surge_task`) firing 50 rapid-fire swipes over 10 seconds. |
-| `POST` | `/inject-anomaly` | Identifies the CE Presenter card (or accepts an `AnomalyRequest` token) and fires 4 rapid-fire high-risk card-present transactions at `LUXURY BOUTIQUE CANCUN [MEX]` (`risk_score = 30`). This immediately flags real-time fraud alerts in BigQuery view `fsi_lakehouse.v_international_fraud_anomalies`. |
+| `POST` | `/inject-anomaly` | Identifies the CE Presenter card (or accepts an `AnomalyRequest` token) and fires 4 rapid-fire high-risk card-present transactions at `LUXURY BOUTIQUE CANCUN [MEX]` (`risk_score = 30`). This immediately flags real-time fraud alerts in the curated BigQuery view `analytics_curated.international_fraud_anomalies`. |
 
 ---
 
@@ -124,6 +124,6 @@ uv run pytest
 ---
 
 ## 🔗 Integration with Active Lakehouse
-When transactions are dispatched from `data-generator` to `banking-service`, the resulting WAL CDC events populate two pre-canned BigQuery views used in demo stories:
-1. **`fsi_lakehouse.v_realtime_spend_velocity`**: Aggregates spend volume, swipe count, and average ticket size by FDX spend category and cardholder home metro area.
-2. **`fsi_lakehouse.v_international_fraud_anomalies`**: Isolates foreign card-present transactions where `risk_score > 20`, showcasing immediate W-2 / VIP fraud intervention via the Gemini Live voice avatar.
+When transactions are dispatched from `data-generator` to `banking-service`, the resulting WAL CDC events populate curated BigQuery views used in demo stories:
+1. **`analytics_curated.realtime_spend_velocity`**: Aggregates recent authorization volume, ticket size, and card-network activity from the live CDC stream.
+2. **`analytics_curated.international_fraud_anomalies`**: Isolates flagged or high-risk card-present authorizations, showcasing immediate fraud intervention via the voice support flow.

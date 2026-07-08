@@ -215,7 +215,24 @@ def reset_database(
                 logger.info("Purging BigLake Apache Iceberg catalog tables...")
                 try:
                     project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
-                    for lake_tbl in ["posted_transactions", "applications_lake", "users_lake"]:
+                    candidate_tables = {
+                        "cards_posted_transactions",
+                        "cards_transaction_authorization",
+                        "cards_issued_card",
+                        "origination_applications",
+                        "origination_credit_card_applications",
+                        "origination_mortgage_applications",
+                        "identity_users",
+                    }
+                    table_rows = bq_client.query(
+                        f"""
+                        SELECT table_name
+                        FROM `{project_id}.iceberg_catalog.INFORMATION_SCHEMA.TABLES`
+                        WHERE table_name IN ({", ".join(f"'{table}'" for table in sorted(candidate_tables))})
+                        """
+                    ).result()
+                    existing_tables = [row.table_name for row in table_rows]
+                    for lake_tbl in existing_tables:
                         bq_client.query(f"DELETE FROM `{project_id}.iceberg_catalog.{lake_tbl}` WHERE true").result()
                     logger.info("Purged BigLake Apache Iceberg catalog tables.")
                 except Exception as lake_ex:
