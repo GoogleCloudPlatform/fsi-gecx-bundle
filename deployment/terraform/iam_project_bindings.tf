@@ -18,15 +18,16 @@ resource "google_project_iam_member" "cloudbuild_sa_log_writer" {
   member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
 
-locals {
-  cloudbuild_terraform_roles = yamldecode(file("${path.module}/config/cloudbuild_terraform_roles.yaml")).roles
+resource "google_project_iam_member" "cloudbuild_terraform_sa_owner" {
+  project = data.google_project.project.project_id
+  role    = "roles/owner"
+  member  = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
 }
 
-resource "google_project_iam_member" "cloudbuild_terraform_sa_roles" {
-  for_each = toset(local.cloudbuild_terraform_roles)
-  project  = data.google_project.project.project_id
-  role     = each.key
-  member   = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
+resource "google_project_iam_member" "cloudbuild_terraform_sa_act_as" {
+  project = data.google_project.project.project_id
+  role    = "roles/iam.serviceAccountUser"
+  member  = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
 }
 
 resource "google_project_iam_member" "cloudbuild_sa_run_admin" {
