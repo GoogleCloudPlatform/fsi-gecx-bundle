@@ -33,8 +33,8 @@ resource "google_service_account" "cloudbuild_service_account" {
 }
 
 resource "google_service_account" "cloudbuild_terraform_service_account" {
-  account_id   = "cloudbuild-terraform-sa"
-  display_name = "Cloud Build Terraform Service Account"
+  account_id   = "cloudbuild-terraform-deployer-sa"
+  display_name = "Cloud Build Terraform Deployer Service Account"
 
   lifecycle {
     ignore_changes = [
