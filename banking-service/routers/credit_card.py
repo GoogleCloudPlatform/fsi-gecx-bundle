@@ -387,6 +387,22 @@ def get_voice_session_context(
 ):
     """Returns customer-specific fraud or support context that should be available at voice-session start."""
     return FraudAlertService(db).get_active_voice_context(auth_provider_uid=customer_id)
+
+
+@router.post("/fraud-alert/acknowledge")
+@apiv1_router.post("/fraud-alert/acknowledge")
+@v1_router.post("/fraud-alert/acknowledge")
+def acknowledge_fraud_alert_false_positive(
+    db: Session = Depends(get_db),
+    customer_id: str = Depends(_get_active_customer_id),
+):
+    """Resolves the customer's latest open fraud alert as recognized card activity."""
+    return FraudAlertService(db).resolve_open_alert_for_customer(
+        auth_provider_uid=customer_id,
+        resolution="CUSTOMER_RECOGNIZED",
+    )
+
+
 class BillPaymentRequest(BaseModel):
     source_account_id: str = Field(..., description="Deposit account UUID to debit")
     credit_account_id: str = Field(..., description="Credit account UUID to credit")

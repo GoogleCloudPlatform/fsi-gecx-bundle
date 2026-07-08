@@ -224,7 +224,8 @@ class SimulationService:
             ("GAME*TEST TOKEN ONLINE", 499, "5814", "USA", 0),
             ("APPLE.COM*ONLINE", 149900, "4899", "USA", 0),
             ("BEST BUY*MKTPLACE", 215000, "5311", "USA", 0),
-            ("LUXURY BOUTIQUE RIVIERA MAYA [MEX]", 320000, "5311", "MEX", 30),
+            ("RAZER GOLD GIFT CARD", 125000, "5947", "USA", 30),
+            ("TARGET.COM GIFT CARDS", 95000, "5311", "USA", 30),
         ]
 
         injected_auths = []
@@ -267,7 +268,7 @@ class SimulationService:
             suspicious_authorizations=injected_auths,
         )
         self.db.commit()
-        logger.info("Injected 4 targeted fraud anomaly swipes for user=%s (%s).", user.id, token.email)
+        logger.info("Injected %s targeted fraud anomaly swipes for user=%s (%s).", len(injected_auths), user.id, token.email)
         return {
             "status": "ANOMALY_INJECTED",
             "user_id": str(user.id),

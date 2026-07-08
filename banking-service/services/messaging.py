@@ -185,14 +185,17 @@ class MessagingService:
                     msg_body = request.message
                     if len(msg_body) > 100:
                         msg_body = msg_body[:97] + "..."
+                    is_fraud_alert = (request.category or "").lower() == "fraud alert"
                     message = messaging.MulticastMessage(
                         data={
-                            "title": f"New Support Message ({request.category})",
+                            "title": "Fraud alert: review recent card activity" if is_fraud_alert else f"New Support Message ({request.category})",
                             "body": msg_body,
                             "thread_id": str(thread_id),
                             "type": SUPPORT_MESSAGE_TYPE,
                             "category": str(request.category),
-                            "user_id": str(user_id)
+                            "user_id": str(user_id),
+                            "deep_link": "/secure-messaging",
+                            "entry": "fraud-alert" if is_fraud_alert else "secure-message",
                         },
                         tokens=tokens,
                     )

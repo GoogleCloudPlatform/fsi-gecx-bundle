@@ -203,6 +203,11 @@ export async function getCreditCardTransactions(targetCustomerId = null) {
   return res.data;
 }
 
+export async function acknowledgeFraudAlert() {
+  const res = await api.post('credit-card/fraud-alert/acknowledge');
+  return res.data;
+}
+
 export async function getCreditCardVoiceToken(mode = 'audio') {
   const res = await api.get('credit-card/voice/token', { params: { mode } });
   return res.data;

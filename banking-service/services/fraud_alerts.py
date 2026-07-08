@@ -214,7 +214,8 @@ class FraudAlertService:
         for txn in suspicious_transactions:
             amount = txn["amount_cents"] / 100
             lines.append(f"- {txn['merchant_name']}: ${amount:,.2f}")
-        lines.append("If you did not make these purchases, chat now with a credit card support agent at /support/voice.")
+        lines.append("If you did not make these purchases, chat now with a credit card support agent at /support/voice?entry=fraud-alert.")
+        lines.append("If you recognize these purchases, acknowledge them in secure messaging so we can close the fraud alert.")
         return "\n".join(lines)
 
     @staticmethod

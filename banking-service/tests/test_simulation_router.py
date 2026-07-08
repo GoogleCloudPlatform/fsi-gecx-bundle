@@ -262,21 +262,21 @@ async def test_inject_anomaly_success(mock_get_tokens, mock_send_multicast, mock
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["status"] == "ANOMALY_INJECTED"
-    assert data["injected_swipes_count"] == 4
-    assert data["total_fraud_cents"] == 685399
+    assert data["injected_swipes_count"] == 5
+    assert data["total_fraud_cents"] == 585399
     assert data["fraud_alert_id"]
     assert data["secure_message_thread_id"]
     
     # 3. Verify in database
     from models.credit_card import TransactionAuthorization
     from models.identity import UserSecureMessage
-    auths = db_session.query(TransactionAuthorization).filter(TransactionAuthorization.merchant_name == "LUXURY BOUTIQUE RIVIERA MAYA [MEX]").all()
+    auths = db_session.query(TransactionAuthorization).filter(TransactionAuthorization.merchant_name == "TARGET.COM GIFT CARDS").all()
     assert len(auths) == 1
     fraud_alert = db_session.query(FraudAlert).filter(FraudAlert.id == data["fraud_alert_id"]).first()
     assert fraud_alert is not None
     assert fraud_alert.status == "OPEN"
     assert fraud_alert.auth_provider_uid == "presenter-2"
-    assert len(fraud_alert.suspicious_authorization_ids) == 4
+    assert len(fraud_alert.suspicious_authorization_ids) == 5
 
     fraud_created_event = db_session.query(AuditOutbox).filter(AuditOutbox.event_type == "FRAUD_ALERT_CREATED").order_by(AuditOutbox.created_at.desc()).first()
     fraud_notified_event = db_session.query(AuditOutbox).filter(AuditOutbox.event_type == "FRAUD_ALERT_CUSTOMER_NOTIFIED").order_by(AuditOutbox.created_at.desc()).first()
@@ -292,7 +292,12 @@ async def test_inject_anomaly_success(mock_get_tokens, mock_send_multicast, mock
     ).all()
     assert len(secure_messages) == 1
     assert "credit card ending in" in secure_messages[0].message.lower()
-    assert "/support/voice" in secure_messages[0].message
+    assert "/support/voice?entry=fraud-alert" in secure_messages[0].message
+
+    push_message = mock_send_multicast.call_args.args[0]
+    assert push_message.data["title"] == "Fraud alert: review recent card activity"
+    assert push_message.data["thread_id"] == data["secure_message_thread_id"]
+    assert push_message.data["entry"] == "fraud-alert"
 
     voice_context_response = await async_client.get("/credit-card/voice/context")
     assert voice_context_response.status_code == status.HTTP_200_OK
@@ -301,6 +306,12 @@ async def test_inject_anomaly_success(mock_get_tokens, mock_send_multicast, mock
     assert voice_context["fraud_alert"]["fraud_alert_id"] == data["fraud_alert_id"]
     assert voice_context["fraud_alert"]["card_last_four"]
     assert "active fraud alert" in voice_context["fraud_alert"]["summary"].lower()
+
+    acknowledge_response = await async_client.post("/credit-card/fraud-alert/acknowledge")
+    assert acknowledge_response.status_code == status.HTTP_200_OK
+    acknowledged = acknowledge_response.json()
+    assert acknowledged["success"] is True
+    assert acknowledged["fraud_alert"]["status"] == "RESOLVED_CUSTOMER_RECOGNIZED"
 
 @pytest.mark.asyncio
 async def test_get_active_cards_success(async_client, db_session):

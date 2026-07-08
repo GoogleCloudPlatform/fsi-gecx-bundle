@@ -259,9 +259,12 @@ function AppContent() {
       console.log("Received custom push notification event:", e.detail);
       const payload = e.detail;
       if (payload && (payload.notification || payload.data)) {
+        const notificationUserId = payload.data?.user_id;
+        const currentUserId = customerProfile?.user_id || fbUser?.uid;
+        const isCurrentUserNotification = !notificationUserId || notificationUserId === currentUserId;
         const isSupportMessage = payload.data?.type === 'support_message'
           && payload.data.title && payload.data.body
-          && payload.data.user_id === customerProfile?.user_id;
+          && isCurrentUserNotification;
 
         const isBroadcastAnnoucement = payload.data?.type === 'broadcast_announcement'
           && payload.data.title && payload.data.body;
@@ -277,14 +280,14 @@ function AppContent() {
           console.log("Silent topic message or message without visual content received");
         }
         if (payload.data?.type === 'support_message' &&
-            (!payload.data?.user_id || payload.data.user_id === customerProfile?.user_id)) {
+            isCurrentUserNotification) {
           fetchUnreadCount();
         }
       }
     };
     window.addEventListener('firebase-push-notification', handleNotification);
     return () => window.removeEventListener('firebase-push-notification', handleNotification);
-  }, [fetchUnreadCount, customerProfile]);
+  }, [fetchUnreadCount, customerProfile, fbUser]);
 
 
 
@@ -1963,7 +1966,7 @@ function AppContent() {
                 Dismiss
               </button>
               {activeNotification.data?.type === 'support_message' && 
-               (!activeNotification.data?.user_id || activeNotification.data.user_id === customerProfile?.user_id) && (
+               (!activeNotification.data?.user_id || activeNotification.data.user_id === (customerProfile?.user_id || fbUser?.uid)) && (
                 <button 
                   onClick={() => {
                     setActiveNotification(null);
