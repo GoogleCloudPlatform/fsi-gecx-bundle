@@ -223,11 +223,10 @@ def issue_replacement_card(
             "new_card_token": replacement_card.card_token,
             "new_last_four": replacement_card.last_four,
             "status": replacement_card.status,
-            "wallet_provider": wallet_provider,
-            "wallet_provisioning_status": "QUEUED",
+            "replacement_status": "ISSUED",
             "is_virtual": replacement_card.is_virtual,
             "fraud_alert_id": fraud_alert_id,
-            "message": "Replacement virtual card issued and wallet provisioning queued.",
+            "message": "Replacement virtual card issued.",
         }
     except Exception as e:
         db.rollback()

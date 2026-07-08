@@ -36,6 +36,32 @@ session_event_callback_var: contextvars.ContextVar = contextvars.ContextVar("ses
 session_should_end_var: contextvars.ContextVar[bool] = contextvars.ContextVar("session_should_end", default=False)
 is_processing_tool_var: contextvars.ContextVar[bool] = contextvars.ContextVar("is_processing_tool", default=False)
 
+def build_log_context(state: dict | None = None, **extra) -> dict:
+    context = {
+        "customer_id": active_customer_id_var.get(),
+    }
+    if state:
+        context.update({
+            "room_name": state.get("room_name"),
+            "session_id": state.get("session_id"),
+            "mode": state.get("mode"),
+        })
+        fraud_context = state.get("fraud_context") or {}
+        fraud_playbook = state.get("fraud_playbook") or {}
+        context.update({
+            "fraud_alert_id": fraud_context.get("fraud_alert_id") or fraud_playbook.get("fraud_alert_id"),
+            "fraud_entry_mode": fraud_playbook.get("entry_mode"),
+            "fraud_alert_inspected": fraud_playbook.get("open_alert_inspected"),
+            "fraud_resolution_completed": fraud_playbook.get("resolution_completed"),
+        })
+    context.update({key: value for key, value in extra.items() if value is not None})
+    return context
+
+
+def format_log_context(state: dict | None = None, **extra) -> str:
+    context = build_log_context(state=state, **extra)
+    return " ".join(f"{key}={value}" for key, value in context.items())
+
 def register_event_callback(cb):
     session_event_callback_var.set(cb)
 
@@ -163,10 +189,17 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
     fraud_context = tool_context.state.get("fraud_context", {}) if hasattr(tool_context, "state") else {}
     fraud_playbook = tool_context.state.get("fraud_playbook", {}) if hasattr(tool_context, "state") else {}
     logger.info(
-        "[CALLBACK] before_tool_callback triggered: tool_name=%s args=%s fraud_alert_id=%s",
-        tool_name,
+        "[CALLBACK] before_tool_callback triggered %s args=%s",
+        format_log_context(
+            state=tool_context.state if hasattr(tool_context, "state") else None,
+            tool_name=tool_name,
+        ),
         args,
+    )
+    logger.debug(
+        "[CALLBACK] fraud callback raw context fraud_alert_id=%s fraud_playbook=%s",
         fraud_context.get("fraud_alert_id"),
+        fraud_playbook,
     )
     mitigation_tools = {
         "report_lost_stolen_card",
@@ -180,9 +213,12 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
         and tool_name in mitigation_tools
     ):
         logger.warning(
-            "[CALLBACK] fraud playbook drift: tool=%s invoked before open alert inspection (fraud_alert_id=%s)",
-            tool_name,
-            fraud_context.get("fraud_alert_id"),
+            "[CALLBACK] fraud playbook drift %s",
+            format_log_context(
+                state=tool_context.state if hasattr(tool_context, "state") else None,
+                tool_name=tool_name,
+                drift="invoked_before_open_alert_inspection",
+            ),
         )
     set_tool_processing(True)
     tool_context.state["is_processing_tool"] = True
@@ -192,12 +228,14 @@ async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> N
     tool_name = getattr(tool, "name", str(tool))
     import logging
     logger = logging.getLogger("voice_agent")
-    fraud_context = tool_context.state.get("fraud_context", {}) if hasattr(tool_context, "state") else {}
-    logger.info(
-        "[CALLBACK] on_tool_error_callback triggered: tool_name=%s error=%s fraud_alert_id=%s",
-        tool_name,
+    logger.error(
+        "[CALLBACK] on_tool_error_callback triggered %s error=%s args=%s",
+        format_log_context(
+            state=tool_context.state if hasattr(tool_context, "state") else None,
+            tool_name=tool_name,
+        ),
         error,
-        fraud_context.get("fraud_alert_id"),
+        args,
     )
     set_tool_processing(False)
     tool_context.state["is_processing_tool"] = False
@@ -207,11 +245,12 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
     tool_name = getattr(tool, "name", str(tool))
     import logging
     logger = logging.getLogger("voice_agent")
-    fraud_context = tool_context.state.get("fraud_context", {}) if hasattr(tool_context, "state") else {}
     logger.info(
-        "[CALLBACK] after_tool_callback triggered: tool_name=%s fraud_alert_id=%s result=%s",
-        tool_name,
-        fraud_context.get("fraud_alert_id"),
+        "[CALLBACK] after_tool_callback triggered %s result=%s",
+        format_log_context(
+            state=tool_context.state if hasattr(tool_context, "state") else None,
+            tool_name=tool_name,
+        ),
         tool_response,
     )
     set_tool_processing(False)
@@ -225,8 +264,12 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
             tool_context.state["fraud_playbook"] = fraud_playbook
             fraud_alert = structured.get("fraud_alert") or {}
             logger.info(
-                "[CALLBACK] fraud playbook inspection completed: fraud_alert_id=%s",
-                fraud_context.get("fraud_alert_id") or fraud_alert.get("fraud_alert_id"),
+                "[CALLBACK] fraud playbook inspection completed %s",
+                format_log_context(
+                    state=tool_context.state if hasattr(tool_context, "state") else None,
+                    tool_name=tool_name,
+                    suspicious_transactions_count=len(fraud_alert.get("suspicious_transactions") or []),
+                ),
             )
             notify_event({
                 "type": DataChannelEvent.FRAUD_ALERT_INSPECTED.value,
@@ -240,7 +283,14 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
             fraud_playbook = dict(tool_context.state.get("fraud_playbook", {}))
             fraud_playbook["resolution_completed"] = True
             tool_context.state["fraud_playbook"] = fraud_playbook
-            logger.info("[CALLBACK] FRAUD_ALERT_RESOLVED event broadcasted")
+            logger.info(
+                "[CALLBACK] FRAUD_ALERT_RESOLVED event broadcasted %s",
+                format_log_context(
+                    state=tool_context.state if hasattr(tool_context, "state") else None,
+                    tool_name=tool_name,
+                    resolution=(structured.get("fraud_alert") or {}).get("resolution"),
+                ),
+            )
             fraud_alert = structured.get("fraud_alert") or {}
             notify_event({
                 "type": DataChannelEvent.FRAUD_ALERT_RESOLVED.value,
@@ -252,40 +302,48 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
             return None
 
         account_data = await fetch_updated_account_details()
-        logger.info(f"[CALLBACK] fetch_updated_account_details returned: {account_data}")
+        logger.info(
+            "[CALLBACK] fetch_updated_account_details returned %s account_loaded=%s",
+            format_log_context(
+                state=tool_context.state if hasattr(tool_context, "state") else None,
+                tool_name=tool_name,
+            ),
+            bool(account_data),
+        )
         if account_data:
             if tool_name == "request_credit_limit_increase" or tool_name == "request_limit_increase":
-                logger.info("[CALLBACK] LIMIT_UPDATED event broadcasted")
+                logger.info("[CALLBACK] LIMIT_UPDATED event broadcasted %s", format_log_context(state=tool_context.state if hasattr(tool_context, "state") else None, tool_name=tool_name))
                 notify_event({
                     "type": DataChannelEvent.LIMIT_UPDATED.value,
                     "credit_limit_cents": account_data.get("credit_limit_cents"),
                     "available_credit_cents": account_data.get("available_credit_cents")
                 })
             elif tool_name == "reverse_overdraft_fee" or tool_name == "reverse_posted_fee":
-                logger.info("[CALLBACK] FEE_REVERSED event broadcasted")
+                logger.info("[CALLBACK] FEE_REVERSED event broadcasted %s", format_log_context(state=tool_context.state if hasattr(tool_context, "state") else None, tool_name=tool_name))
                 notify_event({
                     "type": DataChannelEvent.FEE_REVERSED.value,
                     "cleared_balance_cents": account_data.get("cleared_balance_cents"),
                     "available_credit_cents": account_data.get("available_credit_cents")
                 })
             elif tool_name == "report_lost_stolen_card" or tool_name == "block_card_instrument":
-                logger.info("[CALLBACK] CARD_STATUS_LOCK event broadcasted")
+                logger.info("[CALLBACK] CARD_STATUS_LOCK event broadcasted %s", format_log_context(state=tool_context.state if hasattr(tool_context, "state") else None, tool_name=tool_name))
                 notify_event({
                     "type": DataChannelEvent.CARD_STATUS_LOCK.value,
                     "status": "BLOCKED"
                 })
             elif tool_name == "issue_replacement_card_tool":
-                logger.info("[CALLBACK] CARD_REPLACED event broadcasted")
+                logger.info("[CALLBACK] CARD_REPLACED event broadcasted %s", format_log_context(state=tool_context.state if hasattr(tool_context, "state") else None, tool_name=tool_name))
                 first_card = (account_data.get("cards") or [{}])[0]
                 notify_event({
                     "type": DataChannelEvent.CARD_REPLACED.value,
+                    "replacement_status": structured.get("replacement_status", "ISSUED"),
                     "status": first_card.get("status", "ACTIVE"),
                     "new_last_four": first_card.get("last_four"),
                     "card_token": first_card.get("card_token"),
                     "is_virtual": first_card.get("is_virtual", True),
                 })
             elif tool_name == "push_card_to_google_wallet":
-                logger.info("[CALLBACK] WALLET_PROVISIONING_QUEUED event broadcasted")
+                logger.info("[CALLBACK] WALLET_PROVISIONING_QUEUED event broadcasted %s", format_log_context(state=tool_context.state if hasattr(tool_context, "state") else None, tool_name=tool_name))
                 notify_event({
                     "type": DataChannelEvent.WALLET_PROVISIONING_QUEUED.value,
                     "wallet_provider": structured.get("wallet_provider", "GOOGLE_WALLET"),

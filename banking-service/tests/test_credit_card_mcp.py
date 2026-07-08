@@ -286,7 +286,7 @@ async def test_issue_replacement_card_tool_success(mock_send_event, mock_validat
     )
 
     assert result["success"] is True
-    assert result["wallet_provisioning_status"] == "QUEUED"
+    assert result["replacement_status"] == "ISSUED"
     assert result["is_virtual"] is True
     assert result["new_last_four"]
 
@@ -299,6 +299,7 @@ async def test_issue_replacement_card_tool_success(mock_send_event, mock_validat
     args, _kwargs = mock_send_event.call_args
     assert args[0] == "session-jane.doe@example.com"
     assert args[1]["type"] == "CARD_REPLACED"
+    assert args[1]["replacement_status"] == "ISSUED"
 
 
 @pytest.mark.asyncio

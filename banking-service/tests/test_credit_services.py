@@ -142,7 +142,7 @@ def test_issue_replacement_card_success(db_session):
     )
 
     assert result["status"] == "ACTIVE"
-    assert result["wallet_provisioning_status"] == "QUEUED"
+    assert result["replacement_status"] == "ISSUED"
     assert result["is_virtual"] is True
     assert result["new_last_four"] != "1234"
 

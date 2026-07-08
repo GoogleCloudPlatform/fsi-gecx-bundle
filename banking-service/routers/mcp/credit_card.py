@@ -228,10 +228,9 @@ async def issue_replacement_card_tool(
             {
                 "type": "CARD_REPLACED",
                 "status": result["status"],
+                "replacement_status": result["replacement_status"],
                 "new_last_four": result["new_last_four"],
                 "new_card_token": result["new_card_token"],
-                "wallet_provider": result["wallet_provider"],
-                "wallet_provisioning_status": result["wallet_provisioning_status"],
                 "is_virtual": result["is_virtual"],
                 "fraud_alert_id": result.get("fraud_alert_id"),
             },
@@ -239,10 +238,9 @@ async def issue_replacement_card_tool(
 
         return {
             "success": True,
-            "message": "Replacement virtual card issued. Google Wallet provisioning is queued.",
+            "message": result["message"],
             "new_last_four": result["new_last_four"],
-            "wallet_provider": result["wallet_provider"],
-            "wallet_provisioning_status": result["wallet_provisioning_status"],
+            "replacement_status": result["replacement_status"],
             "is_virtual": result["is_virtual"],
             "fraud_alert_id": result.get("fraud_alert_id"),
         }
