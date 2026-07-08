@@ -188,7 +188,10 @@ def test_triage_fraud_case_disputed_activity_applies_remediation_and_message(db_
     assert original_card.status == "BLOCKED"
     assert len(messages) == 1
     assert "pending review" in messages[0].message
+    assert "Disputed transactions:" in messages[0].message
+    assert "TEST FRAUD MERCHANT: $42.00" in messages[0].message
     assert "provisional credits" in messages[0].message
+    assert "pending the full fraud investigation" in messages[0].message
     assert triage_event is not None
     assert message_event is not None
     assert str(fraud_alert.id) in triage_event.payload

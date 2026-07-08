@@ -35,6 +35,59 @@ function FraudStep({ label, complete }) {
   );
 }
 
+function normalizeCardId(cardId) {
+  return cardId == null ? null : String(cardId);
+}
+
+function formatCents(amountCents) {
+  return `$${Math.abs((amountCents || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function applyReplacementCardEvent(cards, replacement) {
+  if (!replacement) return cards || [];
+  const newCardId = normalizeCardId(replacement.new_card_id);
+  const compromisedCardId = normalizeCardId(replacement.compromised_card_id || replacement.old_card_id);
+  let replacementSeen = false;
+  const updatedCards = (cards || []).map((card) => {
+    const cardId = normalizeCardId(card.card_id || card.id);
+    if (cardId === newCardId) {
+      replacementSeen = true;
+      return {
+        ...card,
+        card_id: card.card_id || newCardId,
+        id: card.id || newCardId,
+        last_four: replacement.new_last_four || card.last_four,
+        card_token: replacement.new_card_token || replacement.card_token || card.card_token,
+        status: replacement.status || card.status || 'ACTIVE',
+        is_virtual: replacement.is_virtual ?? card.is_virtual ?? true,
+      };
+    }
+    if (compromisedCardId && cardId === compromisedCardId) {
+      return {
+        ...card,
+        status: card.status === 'REPORTED_STOLEN' ? card.status : 'BLOCKED',
+        is_active: false,
+      };
+    }
+    return card;
+  });
+  if (!replacementSeen && newCardId) {
+    updatedCards.push({
+      card_id: newCardId,
+      id: newCardId,
+      cardholder_name: replacement.cardholder_name || updatedCards[0]?.cardholder_name || 'Cardholder',
+      last_four: replacement.new_last_four,
+      card_token: replacement.new_card_token || replacement.card_token,
+      status: replacement.status || 'ACTIVE',
+      is_active: true,
+      is_virtual: replacement.is_virtual ?? true,
+      exp_month: replacement.exp_month || updatedCards[0]?.exp_month,
+      exp_year: replacement.exp_year || updatedCards[0]?.exp_year,
+    });
+  }
+  return updatedCards;
+}
+
 export default function VoiceSupportView() {
   const projectId = window.firebaseConfig?.projectId;
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
@@ -46,6 +99,15 @@ export default function VoiceSupportView() {
   const [transactions, setTransactions] = useState([]);
   const [transcripts, setTranscripts] = useState([]);
   const [fraudContext, setFraudContext] = useState(null);
+  const [fraudTriage, setFraudTriage] = useState({
+    outcome: null,
+    voided_authorizations: [],
+    provisional_credits: [],
+    replacement_card: null,
+    secure_message: null,
+    escalated: false,
+    walletQueued: false,
+  });
   
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -69,11 +131,19 @@ export default function VoiceSupportView() {
   const [volume, setVolume] = useState(0.8);
   const [latency, setLatency] = useState(0);
 
+  const affectedCardId = normalizeCardId(fraudContext?.fraud_alert?.card_id);
+  const cards = account?.cards || [];
+  const compromisedCard = cards.find((card) => normalizeCardId(card.card_id || card.id) === affectedCardId) || cards[0];
+  const replacementCardId = normalizeCardId(fraudTriage.replacement_card?.new_card_id);
+  const replacementCard = cards.find((card) => normalizeCardId(card.card_id || card.id) === replacementCardId);
+  const displayCard = replacementCard || compromisedCard || cards[0];
+
   const fraudProgress = {
     inspected: Boolean(fraudContext?.fraud_alert?.inspected),
-    blocked: cardStatus === 'BLOCKED',
-    replaced: Boolean(account?.cards?.[0]?.is_virtual && account?.cards?.[0]?.status === 'ACTIVE' && fraudContext?.fraud_alert?.inspected),
-    walletQueued: transcripts.some(t => t.author === 'system' && t.text.includes('Virtual card provisioning')),
+    blocked: compromisedCard?.status === 'BLOCKED' || cardStatus === 'BLOCKED',
+    triaged: Boolean(fraudTriage.outcome),
+    replaced: Boolean(fraudTriage.replacement_card || replacementCard),
+    walletQueued: Boolean(fraudTriage.walletQueued) || transcripts.some(t => t.author === 'system' && t.text.includes('Virtual card provisioning')),
     resolved: Boolean(fraudContext?.fraud_alert?.resolution || (fraudContext?.fraud_alert?.status || '').startsWith('RESOLVED_')),
   };
 
@@ -616,17 +686,10 @@ export default function VoiceSupportView() {
             setCardStatus(event.status || 'ACTIVE');
             setAccount(prev => {
               if (!prev) return prev;
-              const cards = [...(prev.cards || [])];
-              if (cards.length > 0) {
-                cards[0] = {
-                  ...cards[0],
-                  last_four: event.new_last_four || cards[0].last_four,
-                  card_token: event.card_token || cards[0].card_token,
-                  status: event.status || cards[0].status,
-                  is_virtual: event.is_virtual ?? cards[0].is_virtual,
-                };
-              }
-              return { ...prev, cards };
+              return {
+                ...prev,
+                cards: applyReplacementCardEvent(prev.cards, event),
+              };
             });
             setTranscripts(prev => [
               ...prev,
@@ -636,6 +699,7 @@ export default function VoiceSupportView() {
               },
             ]);
           } else if (event.type === DataChannelEvent.WALLET_PROVISIONING_QUEUED) {
+            setFraudTriage(prev => ({ ...prev, walletQueued: true }));
             setTranscripts(prev => [
               ...prev,
               {
@@ -643,7 +707,33 @@ export default function VoiceSupportView() {
                 text: `ACCOUNT UPDATE: Virtual card provisioning to ${event.wallet_provider || 'Google Wallet'} is queued.`,
               },
             ]);
-          } else if (event.type === DataChannelEvent.FRAUD_ALERT_RESOLVED) {
+          } else if (event.type === DataChannelEvent.FRAUD_ALERT_RESOLVED || event.type === DataChannelEvent.FRAUD_CASE_TRIAGED) {
+            const isRecognized = event.resolution === 'CUSTOMER_RECOGNIZED' || event.outcome === 'CUSTOMER_RECOGNIZED';
+            const replacement = event.replacement_card || null;
+            setFraudTriage(prev => ({
+              ...prev,
+              outcome: event.outcome || event.resolution || prev.outcome,
+              voided_authorizations: event.voided_authorizations || prev.voided_authorizations,
+              provisional_credits: event.provisional_credits || prev.provisional_credits,
+              replacement_card: replacement || prev.replacement_card,
+              secure_message: event.secure_message || prev.secure_message,
+              escalated: event.escalated ?? prev.escalated,
+            }));
+            if (replacement) {
+              setAccount(prev => prev ? {
+                ...prev,
+                cards: applyReplacementCardEvent(prev.cards, replacement),
+              } : prev);
+            }
+            if (event.secure_message) {
+              window.dispatchEvent(new CustomEvent('secure-message-created', {
+                detail: {
+                  thread_id: event.secure_message.thread_id,
+                  message_id: event.secure_message.message_id,
+                },
+              }));
+              window.dispatchEvent(new CustomEvent('refresh-unread-count'));
+            }
             setFraudContext(prev => prev ? {
               ...prev,
               has_active_fraud_alert: false,
@@ -657,7 +747,9 @@ export default function VoiceSupportView() {
               ...prev,
               {
                 author: 'system',
-                text: `CASE UPDATE: Fraud alert ${event.resolution === 'CUSTOMER_RECOGNIZED' ? 'reviewed as recognized activity' : 'resolved after card mitigation'}.`,
+                text: isRecognized
+                  ? 'CASE UPDATE: Fraud alert reviewed as recognized activity.'
+                  : `CASE UPDATE: Fraud case triaged. ${(event.voided_authorizations || []).length} pending hold${(event.voided_authorizations || []).length === 1 ? '' : 's'} released, ${(event.provisional_credits || []).length} provisional credit${(event.provisional_credits || []).length === 1 ? '' : 's'} applied.`,
               },
             ]);
           } else if (event.type === DataChannelEvent.LIMIT_UPDATED) {
@@ -814,7 +906,7 @@ export default function VoiceSupportView() {
         
         {/* Left Side: Credit Card Mockup & Account details */}
         <div className="flex flex-col gap-6 bg-white dark:bg-slate-900/50 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-3xl p-8 justify-between shadow-sm dark:shadow-none">
-          {fraudContext?.has_active_fraud_alert && fraudContext.fraud_alert && (
+          {fraudContext?.fraud_alert && (fraudContext.has_active_fraud_alert || fraudTriage.outcome) && (
             <div className="rounded-2xl border border-amber-300/70 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 p-4">
               <div className="flex items-start gap-3">
                 <AlertCircle className="mt-0.5 h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
@@ -826,10 +918,35 @@ export default function VoiceSupportView() {
                   <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
                     <FraudStep label="Alert reviewed" complete={fraudProgress.inspected} />
                     <FraudStep label="Card blocked" complete={fraudProgress.blocked} />
+                    <FraudStep label="Case triaged" complete={fraudProgress.triaged} />
                     <FraudStep label="Replacement issued" complete={fraudProgress.replaced} />
                     <FraudStep label="Wallet queued" complete={fraudProgress.walletQueued} />
                     <FraudStep label="Case resolved" complete={fraudProgress.resolved} />
                   </div>
+                  {fraudTriage.outcome && (
+                    <div className="mt-3 rounded-xl border border-amber-200 dark:border-amber-800/70 bg-white/70 dark:bg-slate-950/30 p-3 text-xs text-amber-900 dark:text-amber-200">
+                      <p className="font-bold uppercase tracking-wide">Fraud triage summary</p>
+                      <div className="mt-2 grid gap-1.5">
+                        <p>Outcome: <span className="font-semibold">{fraudTriage.outcome.replaceAll('_', ' ')}</span></p>
+                        <p>Pending holds released: <span className="font-semibold">{fraudTriage.voided_authorizations.length}</span></p>
+                        <p>Provisional credits: <span className="font-semibold">{fraudTriage.provisional_credits.length}</span></p>
+                        {fraudTriage.provisional_credits.length > 0 && (
+                          <p>
+                            Credit total:{' '}
+                            <span className="font-semibold">
+                              {formatCents(fraudTriage.provisional_credits.reduce((total, item) => total + (item.credited_amount_cents || 0), 0))}
+                            </span>
+                          </p>
+                        )}
+                        {fraudTriage.replacement_card && (
+                          <p>Replacement virtual card: <span className="font-semibold">ending in {fraudTriage.replacement_card.new_last_four}</span></p>
+                        )}
+                        {fraudTriage.secure_message && (
+                          <p>Secure message: <span className="font-semibold">sent to thread {fraudTriage.secure_message.thread_id}</span></p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -851,7 +968,7 @@ export default function VoiceSupportView() {
 
             <div className="my-auto">
               <p className="text-2xl font-mono tracking-widest text-slate-100 flex justify-between">
-                <span>••••</span> <span>••••</span> <span>••••</span> <span>{account?.cards?.[0]?.last_four || "8234"}</span>
+                <span>••••</span> <span>••••</span> <span>••••</span> <span>{displayCard?.last_four || "8234"}</span>
               </p>
             </div>
 
@@ -860,20 +977,20 @@ export default function VoiceSupportView() {
                 <p className="text-[9px] uppercase tracking-wider text-slate-400">Cardholder</p>
                 <p className="text-sm font-semibold tracking-wide text-slate-200 flex items-center gap-1.5">
                   <User size={13} className="text-slate-400" />
-                  {account?.cards?.[0]?.cardholder_name || "Jane Doe"}
+                  {displayCard?.cardholder_name || "Jane Doe"}
                 </p>
               </div>
               <div>
                 <p className="text-[9px] uppercase tracking-wider text-slate-400">Expires</p>
                 <p className="text-sm font-semibold tracking-wide text-slate-200 flex items-center gap-1">
                   <Calendar size={13} className="text-slate-400" />
-                  {account?.cards?.[0] ? `${account.cards[0].exp_month}/${account.cards[0].exp_year.toString().slice(-2)}` : "12/28"}
+                  {displayCard ? `${displayCard.exp_month}/${displayCard.exp_year?.toString().slice(-2)}` : "12/28"}
                 </p>
               </div>
             </div>
 
             {/* Card Status Locked Overlay */}
-            {cardStatus === 'BLOCKED' && (
+            {displayCard?.status === 'BLOCKED' && (
               <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2">
                 <div className="p-3 bg-red-500/20 rounded-full border border-red-500/30 text-red-400">
                   <Lock size={32} className="animate-pulse" />
@@ -882,6 +999,50 @@ export default function VoiceSupportView() {
               </div>
             )}
           </div>
+
+          {cards.length > 0 && (
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/30 p-4">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Card instruments</h3>
+              <div className="space-y-2">
+                {cards.map((card) => {
+                  const cardId = normalizeCardId(card.card_id || card.id);
+                  const isAffected = affectedCardId && cardId === affectedCardId;
+                  const isReplacement = replacementCardId && cardId === replacementCardId;
+                  return (
+                    <div
+                      key={cardId || card.card_token || card.last_four}
+                      className={`flex items-center justify-between rounded-xl border px-3 py-2 text-xs ${
+                        isAffected
+                          ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30'
+                          : isReplacement
+                            ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30'
+                            : 'border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CreditCard className="h-4 w-4 text-slate-500 dark:text-slate-400 flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-800 dark:text-slate-200">
+                            {card.is_virtual ? 'Virtual card' : 'Physical card'} ending in {card.last_four}
+                          </p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                            {isAffected ? 'Compromised card' : isReplacement ? 'Replacement card' : 'Unaffected active card'}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`ml-3 rounded-full px-2 py-1 font-bold ${
+                        card.status === 'ACTIVE'
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                          : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                      }`}>
+                        {card.status}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Account Balances Grid */}
           <div className="grid grid-cols-3 gap-4">

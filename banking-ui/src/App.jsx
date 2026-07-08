@@ -260,16 +260,19 @@ function AppContent() {
   }, [fbUser, location.pathname, fetchAccountsSummary]);
 
   useEffect(() => {
+    const isSupportMessageForCurrentUser = (data = {}) => {
+      const notificationUserId = data.user_id;
+      const currentUserId = customerProfile?.user_id || fbUser?.uid;
+      return data.type === 'support_message' && (!notificationUserId || notificationUserId === currentUserId);
+    };
+
     const handleNotification = (e) => {
       console.log("Received custom push notification event:", e.detail);
       const payload = e.detail;
       if (payload && (payload.notification || payload.data)) {
-        const notificationUserId = payload.data?.user_id;
-        const currentUserId = customerProfile?.user_id || fbUser?.uid;
-        const isCurrentUserNotification = !notificationUserId || notificationUserId === currentUserId;
-        const isSupportMessage = payload.data?.type === 'support_message'
-          && payload.data.title && payload.data.body
-          && isCurrentUserNotification;
+        const isSupportMessage = isSupportMessageForCurrentUser(payload.data)
+          && payload.data.title
+          && payload.data.body;
 
         const isBroadcastAnnoucement = payload.data?.type === 'broadcast_announcement'
           && payload.data.title && payload.data.body;
@@ -284,15 +287,24 @@ function AppContent() {
         } else {
           console.log("Silent topic message or message without visual content received");
         }
-        if (payload.data?.type === 'support_message' &&
-            isCurrentUserNotification) {
+        if (isSupportMessageForCurrentUser(payload.data)) {
           setUnreadCount(prev => prev + 1);
           fetchUnreadCount();
         }
       }
     };
+    const handleSecureMessageCreated = (e) => {
+      const data = e.detail || {};
+      if (isSupportMessageForCurrentUser({ type: 'support_message', user_id: data.user_id })) {
+        fetchUnreadCount();
+      }
+    };
     window.addEventListener('firebase-push-notification', handleNotification);
-    return () => window.removeEventListener('firebase-push-notification', handleNotification);
+    window.addEventListener('secure-message-created', handleSecureMessageCreated);
+    return () => {
+      window.removeEventListener('firebase-push-notification', handleNotification);
+      window.removeEventListener('secure-message-created', handleSecureMessageCreated);
+    };
   }, [fetchUnreadCount, customerProfile, fbUser]);
 
 

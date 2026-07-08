@@ -104,8 +104,13 @@ function SecureMessagingView({ fbUser, customerProfile }) {
         fetchMessages(true);
       }
     };
+    const handleSecureMessageCreated = () => fetchMessages(true);
     window.addEventListener('firebase-push-notification', handlePushNotification);
-    return () => window.removeEventListener('firebase-push-notification', handlePushNotification);
+    window.addEventListener('secure-message-created', handleSecureMessageCreated);
+    return () => {
+      window.removeEventListener('firebase-push-notification', handlePushNotification);
+      window.removeEventListener('secure-message-created', handleSecureMessageCreated);
+    };
   }, [fetchMessages, customerProfile, fbUser]);
 
   useEffect(() => {

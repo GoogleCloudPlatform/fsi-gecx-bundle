@@ -389,6 +389,8 @@ class FraudAlertService:
                 provisional_credits=provisional_credits,
                 replacement_result=replacement_result,
                 escalated=escalate,
+                disputed_authorization_ids=disputed_authorization_ids,
+                disputed_transaction_ids=disputed_transaction_ids,
             ),
         )
         triaged = self.repo.mark_triaged(
@@ -521,10 +523,24 @@ class FraudAlertService:
         provisional_credits: list[dict],
         replacement_result: dict | None,
         escalated: bool,
+        disputed_authorization_ids: list[str],
+        disputed_transaction_ids: list[str],
     ) -> str:
         lines = [
             f"Your fraud case for card ending in {alert.card_last_four} is now pending review by our fraud specialist team.",
         ]
+        suspicious_transactions = alert.suspicious_transactions or []
+        disputed_authorization_ids = set(disputed_authorization_ids or [])
+        disputed_transaction_ids = set(disputed_transaction_ids or [])
+        disputed_lines = [
+            f"- {txn.get('merchant_name', 'Unknown merchant')}: {self._format_cents(int(txn.get('amount_cents') or 0))}"
+            for txn in suspicious_transactions
+            if txn.get("authorization_id") in disputed_authorization_ids
+            or txn.get("transaction_id") in disputed_transaction_ids
+        ]
+        if disputed_lines:
+            lines.append("Disputed transactions:")
+            lines.extend(disputed_lines)
         if voided_authorizations:
             total = sum(item["voided_amount_cents"] for item in voided_authorizations)
             lines.append(f"We released pending authorization holds totaling {self._format_cents(total)}.")
