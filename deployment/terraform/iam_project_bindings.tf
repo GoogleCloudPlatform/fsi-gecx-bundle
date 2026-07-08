@@ -19,7 +19,7 @@ resource "google_project_iam_member" "cloudbuild_sa_log_writer" {
 }
 
 locals {
-  cloudbuild_terraform_roles = yamldecode(file("${path.module}/config/cloudbuild-tf-deployer-sa_roles.yaml")).roles
+  cloudbuild_terraform_roles = yamldecode(file("${path.module}/config/cloudbuild_terraform_roles.yaml")).roles
 }
 
 resource "google_project_iam_member" "cloudbuild_terraform_sa_roles" {
