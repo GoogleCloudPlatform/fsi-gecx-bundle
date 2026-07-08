@@ -23,6 +23,7 @@ from google.adk.tools.mcp_tool import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams, create_mcp_http_client
 
 from agent.events import DataChannelEvent
+from agent.fraud_voice import mark_fraud_tool_completed, validate_fraud_tool_sequence
 
 LOCATION = os.getenv("LOCATION", "us-central1")
 credentials, project_id = google.auth.default()
@@ -207,6 +208,17 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
         "push_card_to_google_wallet",
         "resolve_fraud_alert",
     }
+    sequencing_error = validate_fraud_tool_sequence(fraud_playbook, tool_name, args)
+    if sequencing_error:
+        logger.warning(
+            "[CALLBACK] fraud playbook drift %s",
+            format_log_context(
+                state=tool_context.state if hasattr(tool_context, "state") else None,
+                tool_name=tool_name,
+                drift=sequencing_error,
+            ),
+        )
+        raise ValueError(sequencing_error)
     if (
         fraud_playbook.get("must_inspect_open_alert_first")
         and not fraud_playbook.get("open_alert_inspected")
@@ -217,7 +229,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
             format_log_context(
                 state=tool_context.state if hasattr(tool_context, "state") else None,
                 tool_name=tool_name,
-                drift="invoked_before_open_alert_inspection",
+                drift="mitigation_tool_invoked_before_open_alert_inspection",
             ),
         )
     set_tool_processing(True)
@@ -258,10 +270,15 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
     # Check if the tool succeeded
     structured = tool_response.get("structuredContent") if isinstance(tool_response, dict) else None
     if structured and isinstance(structured, dict) and structured.get("success") is True:
+        updated_playbook = mark_fraud_tool_completed(
+            tool_context.state.get("fraud_playbook", {}),
+            tool_name,
+            structured,
+        )
+        if updated_playbook:
+            tool_context.state["fraud_playbook"] = updated_playbook
+
         if tool_name == "get_open_fraud_alert":
-            fraud_playbook = dict(tool_context.state.get("fraud_playbook", {}))
-            fraud_playbook["open_alert_inspected"] = True
-            tool_context.state["fraud_playbook"] = fraud_playbook
             fraud_alert = structured.get("fraud_alert") or {}
             logger.info(
                 "[CALLBACK] fraud playbook inspection completed %s",
@@ -280,9 +297,6 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
             })
 
         if tool_name == "resolve_fraud_alert":
-            fraud_playbook = dict(tool_context.state.get("fraud_playbook", {}))
-            fraud_playbook["resolution_completed"] = True
-            tool_context.state["fraud_playbook"] = fraud_playbook
             logger.info(
                 "[CALLBACK] FRAUD_ALERT_RESOLVED event broadcasted %s",
                 format_log_context(

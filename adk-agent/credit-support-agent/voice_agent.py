@@ -214,6 +214,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     fraud_alert_state = {}
     fraud_playbook = build_fraud_playbook(voice_context)
     support_guidance = {"source": "none", "topic_ids": [], "topics": [], "agent_guidance_summary": ""}
+    initial_greeting_prompt = build_initial_greeting(fraud_playbook)
 
     try:
         import httpx
@@ -252,6 +253,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 voice_context = context_resp.json()
                 fraud_playbook = build_fraud_playbook(voice_context)
                 support_guidance = voice_context.get("support_guidance") or support_guidance
+                initial_greeting_prompt = build_initial_greeting(fraud_playbook)
                 logger.info(
                     "Loaded customer voice context %s active_fraud=%s fraud_alert_id=%s guidance_source=%s",
                     session_log_context(room_name, customer_id, session_id, mode, fraud_alert_id=fraud_playbook.get("fraud_alert_id")),
@@ -277,9 +279,12 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         "session_id": session_id,
         "mode": mode,
         "has_active_fraud_alert": voice_context.get("has_active_fraud_alert", False),
+        "entry_reason": voice_context.get("entry_reason", "general_support"),
         "fraud_context": fraud_alert_state,
         "fraud_playbook": fraud_playbook,
         "support_guidance": support_guidance,
+        "guidance_source": support_guidance.get("source"),
+        "initial_greeting_prompt": initial_greeting_prompt,
     }
     # Create the session dynamically using the passed IDs
     user_id = f"user-{customer_id}"
@@ -528,7 +533,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                     async def send_delayed_greeting():
                         await asyncio.sleep(0.5)
                         logger.info("Media path is active. Triggering assistant greeting...")
-                        greeting_text = build_initial_greeting(fraud_playbook)
+                        greeting_text = initial_greeting_prompt
                         live_queue.send_content(
                             types.Content(
                                 parts=[types.Part(text=greeting_text)]
