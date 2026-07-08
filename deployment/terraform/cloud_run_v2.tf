@@ -736,6 +736,11 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
           name  = "IAM_DB_VIEWER_USERS"
           value = join(",", [for k, v in local.db_iam_viewer_members : v.name])
         }
+
+        env {
+          name  = "REQUIRE_CDC_BOOTSTRAP"
+          value = "true"
+        }
       }
 
       vpc_access {
