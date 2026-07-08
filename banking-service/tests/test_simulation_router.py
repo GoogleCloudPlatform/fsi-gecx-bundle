@@ -26,7 +26,7 @@ from main import app
 from utils.database import Base, get_db
 from utils.auth import get_current_user
 from models.authentication import ValidatedToken
-from models.fraud import FraudAlert
+from models.fraud import FraudAlert, FraudCaseAction
 from models.audit import AuditOutbox
 from models.identity import User
 from models.origination import Account
@@ -101,22 +101,33 @@ def test_clean_database_removes_fraud_alerts(db_session):
     )
     db_session.add(card)
     db_session.flush()
+    fraud_alert = FraudAlert(
+        customer_id=user.id,
+        auth_provider_uid=user.auth_provider_uid,
+        credit_account_id=credit_account.id,
+        card_id=card.id,
+        card_last_four=card.last_four,
+        message_thread_id="thread-fraud-reset",
+        suspicious_authorization_ids=[],
+        suspicious_transactions=[],
+    )
+    db_session.add(fraud_alert)
+    db_session.flush()
     db_session.add(
-        FraudAlert(
-            customer_id=user.id,
-            auth_provider_uid=user.auth_provider_uid,
-            credit_account_id=credit_account.id,
-            card_id=card.id,
-            card_last_four=card.last_four,
-            message_thread_id="thread-fraud-reset",
-            suspicious_authorization_ids=[],
-            suspicious_transactions=[],
+        FraudCaseAction(
+            fraud_alert_id=fraud_alert.id,
+            action_type="FRAUD_CASE_TRIAGED",
+            status="SUCCEEDED",
+            idempotency_key="reset-test",
+            request_payload={},
+            result_payload={},
         )
     )
     db_session.flush()
 
     clean_database(db_session)
 
+    assert db_session.query(FraudCaseAction).count() == 0
     assert db_session.query(FraudAlert).count() == 0
 
 @pytest.mark.asyncio

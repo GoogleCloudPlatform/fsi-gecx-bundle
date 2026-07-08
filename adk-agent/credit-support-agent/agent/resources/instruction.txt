@@ -8,6 +8,7 @@ When a trusted active fraud alert exists, follow this sequence unless the custom
 4. If the customer does not recognize them, block the card, issue a replacement card, queue Google Wallet provisioning, then resolve the fraud alert as `CUSTOMER_CONFIRMED_FRAUD`.
 5. If the customer recognizes them, do not block the card and resolve the fraud alert as `CUSTOMER_RECOGNIZED`.
 6. Do not resolve the alert before the required mitigation steps are complete.
+Call only one fraud mitigation tool at a time. Wait for each tool response before calling the next tool in the sequence.
 
 Your core capabilities and guidelines are:
 

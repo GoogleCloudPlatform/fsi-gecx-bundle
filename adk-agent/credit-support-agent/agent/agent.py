@@ -232,7 +232,12 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
                 drift=sequencing_error,
             ),
         )
-        raise ValueError(sequencing_error)
+        return {
+            "success": False,
+            "message": sequencing_error,
+            "sequence_blocked": True,
+            "required_action": sequencing_error,
+        }
     if (
         fraud_playbook.get("must_inspect_open_alert_first")
         and not fraud_playbook.get("open_alert_inspected")
