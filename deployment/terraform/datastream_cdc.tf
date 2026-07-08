@@ -123,6 +123,12 @@ resource "google_datastream_stream" "banking_cdc_stream" {
     }
   }
 
+  lifecycle {
+    ignore_changes = [
+      desired_state
+    ]
+  }
+
   depends_on = [
     google_project_service.datastream_googleapis_com,
     google_bigquery_dataset.iceberg_catalog
