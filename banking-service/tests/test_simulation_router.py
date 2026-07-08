@@ -351,6 +351,17 @@ async def test_inject_anomaly_success(mock_get_tokens, mock_send_multicast, mock
     assert voice_context["fraud_alert"]["card_last_four"]
     assert "active fraud alert" in voice_context["fraud_alert"]["summary"].lower()
 
+    mock_claims = {"sub": "voice-agent-sa", "email": "support.agent@google.com"}
+    support_context_response = await async_client.get(
+        "/credit-card/voice/context",
+        headers={"x-target-customer-id": "presenter-2"},
+    )
+    assert support_context_response.status_code == status.HTTP_200_OK
+    support_voice_context = support_context_response.json()
+    assert support_voice_context["has_active_fraud_alert"] is True
+    assert support_voice_context["fraud_alert"]["fraud_alert_id"] == data["fraud_alert_id"]
+
+    mock_claims = {"sub": "presenter-2", "email": "presenter.two@google.com"}
     acknowledge_response = await async_client.post("/credit-card/fraud-alert/acknowledge")
     assert acknowledge_response.status_code == status.HTTP_200_OK
     acknowledged = acknowledge_response.json()

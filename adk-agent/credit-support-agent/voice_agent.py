@@ -202,7 +202,7 @@ async def run_stt_worker(client, audio_queue: asyncio.Queue, sample_rate: int, a
 async def run_voice_agent_session(room_name: str, customer_id: str, session_id: str, mode: str = "audio"):
     logger.info("Initializing voice agent session %s", session_log_context(room_name, customer_id, session_id, mode))
     import agent.agent as agent_module
-    session_context_tokens = None
+    session_context_tokens = bind_session_context(customer_id, None)
 
     # Load active configurations from banking-service
     mock_avatar_enabled = False
@@ -425,7 +425,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 
             loop.call_soon_threadsafe(lambda: asyncio.create_task(sync_escalation()))
 
-    session_context_tokens = bind_session_context(customer_id, on_agent_event)
+    session_context_tokens["callback"] = agent_module.session_event_callback_var.set(on_agent_event)
     logger.info("Bound session context %s", session_log_context(room_name, customer_id, session_id, mode))
 
     user_stt_queue = None

@@ -46,7 +46,9 @@ def get_banking_service_mcp_url() -> str:
     base_url = BANKING_SERVICE_URL.rstrip("/")
     if base_url.endswith("/api"):
         base_url = base_url[:-4]
-    return f"{base_url}/mcp/"
+    root_path = os.getenv("BANKING_SERVICE_ROOT_PATH", "").strip("/")
+    mcp_path = f"/{root_path}/mcp/" if root_path else "/mcp/"
+    return f"{base_url}{mcp_path}"
 
 def build_log_context(state: dict | None = None, **extra) -> dict:
     context = {

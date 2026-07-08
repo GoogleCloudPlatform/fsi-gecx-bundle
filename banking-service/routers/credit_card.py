@@ -59,10 +59,14 @@ def get_credit_card_repo(db: Session = Depends(get_db)) -> CreditCardRepository:
 
 def _get_active_customer_id(
     token: ValidatedToken = Depends(get_current_user),
+    x_target_customer_id: str | None = Header(None),
     repo: CreditCardRepository = Depends(get_credit_card_repo),
     fallback: bool = False
 ) -> str:
     """Helper: Resolves active customer ID from validated Firebase token."""
+    if x_target_customer_id and is_support_staff(token):
+        return x_target_customer_id
+
     if token and hasattr(token, "claims"):
         user_id = token.user_id or token.claims.get("user_id") or token.claims.get("identifier") or token.claims.get("sub")
         if user_id:
