@@ -1,3 +1,5 @@
+import datetime
+
 from sqlalchemy.orm import Session
 
 from models.fraud import FraudAlert
@@ -66,3 +68,18 @@ class FraudAlertRepository:
             .order_by(FraudAlert.created_at.desc())
             .first()
         )
+
+    def resolve_alert(
+        self,
+        *,
+        fraud_alert_id,
+        resolved_status: str,
+    ) -> FraudAlert | None:
+        alert = self.db.query(FraudAlert).filter(FraudAlert.id == fraud_alert_id).first()
+        if not alert:
+            return None
+        alert.status = resolved_status
+        alert.resolved_at = datetime.datetime.now(datetime.timezone.utc)
+        self.db.add(alert)
+        self.db.flush()
+        return alert

@@ -607,6 +607,23 @@ export default function VoiceSupportView() {
                 text: `ACCOUNT UPDATE: Virtual card provisioning to ${event.wallet_provider || 'Google Wallet'} is queued.`,
               },
             ]);
+          } else if (event.type === DataChannelEvent.FRAUD_ALERT_RESOLVED) {
+            setFraudContext(prev => prev ? {
+              ...prev,
+              has_active_fraud_alert: false,
+              fraud_alert: prev.fraud_alert ? {
+                ...prev.fraud_alert,
+                status: event.status || prev.fraud_alert.status,
+                resolution: event.resolution || prev.fraud_alert.resolution,
+              } : prev.fraud_alert,
+            } : prev);
+            setTranscripts(prev => [
+              ...prev,
+              {
+                author: 'system',
+                text: `CASE UPDATE: Fraud alert ${event.resolution === 'CUSTOMER_RECOGNIZED' ? 'reviewed as recognized activity' : 'resolved after card mitigation'}.`,
+              },
+            ]);
           } else if (event.type === DataChannelEvent.LIMIT_UPDATED) {
             setCreditLimit(event.credit_limit_cents / 100);
             setAvailableCredit(event.available_credit_cents / 100);

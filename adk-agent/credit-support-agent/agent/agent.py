@@ -150,6 +150,18 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
     # Check if the tool succeeded
     structured = tool_response.get("structuredContent") if isinstance(tool_response, dict) else None
     if structured and isinstance(structured, dict) and structured.get("success") is True:
+        if tool_name == "resolve_fraud_alert":
+            logger.info("[CALLBACK] FRAUD_ALERT_RESOLVED event broadcasted")
+            fraud_alert = structured.get("fraud_alert") or {}
+            notify_event({
+                "type": DataChannelEvent.FRAUD_ALERT_RESOLVED.value,
+                "fraud_alert_id": fraud_alert.get("fraud_alert_id"),
+                "status": fraud_alert.get("status"),
+                "resolution": fraud_alert.get("resolution"),
+                "card_last_four": fraud_alert.get("card_last_four"),
+            })
+            return None
+
         account_data = await fetch_updated_account_details()
         logger.info(f"[CALLBACK] fetch_updated_account_details returned: {account_data}")
         if account_data:

@@ -440,9 +440,16 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                     async def send_delayed_greeting():
                         await asyncio.sleep(0.5)
                         logger.info("Media path is active. Triggering assistant greeting...")
+                        greeting_text = "Please introduce yourself as Nova Horizon Bank's Credit Card Support Voice Assistant and ask the customer how you can help them today."
+                        if voice_context.get("has_active_fraud_alert") and voice_context.get("fraud_alert"):
+                            card_last_four = voice_context["fraud_alert"].get("card_last_four", "their card")
+                            greeting_text = (
+                                "Please introduce yourself briefly, acknowledge that you can see a suspicious activity alert "
+                                f"on the customer's card ending in {card_last_four}, and offer to review the flagged charges immediately."
+                            )
                         live_queue.send_content(
                             types.Content(
-                                parts=[types.Part(text="Please introduce yourself as Nova Horizon Bank's Credit Card Support Voice Assistant and ask the customer how you can help them today.")]
+                                parts=[types.Part(text=greeting_text)]
                             )
                         )
                     asyncio.create_task(send_delayed_greeting())

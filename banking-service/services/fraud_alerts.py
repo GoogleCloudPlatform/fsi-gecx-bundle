@@ -152,6 +152,50 @@ class FraudAlertService:
             "message_thread_id": alert.message_thread_id,
         }
 
+    def resolve_open_alert_for_customer(
+        self,
+        *,
+        auth_provider_uid: str,
+        resolution: str,
+    ) -> dict:
+        alert = self.repo.get_latest_open_alert_for_customer(auth_provider_uid=auth_provider_uid)
+        if not alert:
+            return {
+                "success": False,
+                "message": "No open fraud alert found for the customer.",
+                "fraud_alert": None,
+            }
+
+        resolved_status = f"RESOLVED_{resolution.upper()}"
+        alert = self.repo.resolve_alert(
+            fraud_alert_id=alert.id,
+            resolved_status=resolved_status,
+        )
+        record_audit_event(
+            self.db,
+            "FRAUD_ALERT_RESOLVED",
+            {
+                "fraud_alert_id": str(alert.id),
+                "correlation_id": str(alert.id),
+                "customer_id": str(alert.customer_id),
+                "credit_account_id": str(alert.credit_account_id),
+                "resolution": resolution.upper(),
+                "status": alert.status,
+            },
+        )
+        self.db.commit()
+        return {
+            "success": True,
+            "message": "Fraud alert resolved successfully.",
+            "fraud_alert": {
+                "fraud_alert_id": str(alert.id),
+                "status": alert.status,
+                "resolved_at": alert.resolved_at.isoformat() if alert.resolved_at else None,
+                "resolution": resolution.upper(),
+                "card_last_four": alert.card_last_four,
+            },
+        }
+
     @staticmethod
     def _build_customer_message(card_last_four: str, suspicious_transactions: list[dict]) -> str:
         lines = [

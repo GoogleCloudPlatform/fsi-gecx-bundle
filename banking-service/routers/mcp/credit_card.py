@@ -352,6 +352,48 @@ async def get_open_fraud_alert(
 
 @mcp.tool()
 @requires_user_assertion
+async def resolve_fraud_alert(
+    resolution: str,
+    ctx: Context = None,
+) -> dict:
+    """
+    Resolves the latest open fraud alert for the verified customer.
+
+    Args:
+        resolution: Resolution code such as CUSTOMER_CONFIRMED_FRAUD or CUSTOMER_RECOGNIZED.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    logger.info(
+        "FastMCP resolve_fraud_alert invoked for customer: %s with resolution=%s",
+        verified_customer_id,
+        resolution,
+    )
+
+    allowed_resolutions = {"CUSTOMER_CONFIRMED_FRAUD", "CUSTOMER_RECOGNIZED"}
+    normalized_resolution = str(resolution or "").strip().upper()
+    if normalized_resolution not in allowed_resolutions:
+        return {
+            "success": False,
+            "message": "Invalid fraud alert resolution.",
+            "fraud_alert": None,
+        }
+
+    db = SessionLocal()
+    try:
+        service = FraudAlertService(db)
+        return service.resolve_open_alert_for_customer(
+            auth_provider_uid=verified_customer_id,
+            resolution=normalized_resolution,
+        )
+    except Exception as e:
+        logger.error(f"Error in FastMCP resolve_fraud_alert: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}", "fraud_alert": None}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
 async def reverse_overdraft_fee(
     account_id: str = None,
     fee_date: str = None,
