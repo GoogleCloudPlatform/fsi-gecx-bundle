@@ -24,8 +24,5 @@ override.tf.json
 # Terraform plan files
 tfplan
 
-# Exclude all local environment-specific configuration files
-environment/
-
 # Exclude dynamically generated archive files
 *.zip
