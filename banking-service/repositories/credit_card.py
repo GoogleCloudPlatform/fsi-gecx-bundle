@@ -70,6 +70,13 @@ class CreditCardRepository:
         """Retrieves an Issued Card by its primary card ID."""
         return self.db.query(IssuedCard).filter(IssuedCard.id == card_id).first()
 
+    def get_card_by_id_for_account(self, card_id: str, account_id: str) -> Optional[IssuedCard]:
+        """Retrieves an Issued Card by ID after verifying it belongs to the account."""
+        return self.db.query(IssuedCard).filter(
+            IssuedCard.id == card_id,
+            IssuedCard.account_id == account_id,
+        ).first()
+
     def get_card_by_token(self, card_token: str) -> Optional[IssuedCard]:
         """Retrieves an Issued Card by its unique token reference."""
         return self.db.query(IssuedCard).filter(IssuedCard.card_token == card_token).first()
@@ -78,10 +85,30 @@ class CreditCardRepository:
         """Retrieves all Issued Cards registered under the specified Financial Account."""
         return self.db.query(IssuedCard).filter(IssuedCard.account_id == account_id).all()
 
+    def list_active_cards_by_account(self, account_id: str) -> List[IssuedCard]:
+        """Retrieves active card instruments for the specified Financial Account."""
+        return self.db.query(IssuedCard).filter(
+            IssuedCard.account_id == account_id,
+            IssuedCard.status == "ACTIVE",
+            IssuedCard.is_active,
+        ).all()
+
     def get_card_by_customer_secured(self, card_id: str, customer_id: str) -> Optional[IssuedCard]:
         """Secured retrieval verifying the card belongs to the active customer context."""
         resolved_uid = self._resolve_user_id(customer_id)
         return self.db.query(IssuedCard).join(FinancialAccount).filter(
+            IssuedCard.id == card_id,
+            FinancialAccount.customer_id == resolved_uid
+        ).first()
+
+    def get_card_and_account_by_customer_secured(
+        self,
+        card_id: str,
+        customer_id: str,
+    ) -> tuple[IssuedCard, FinancialAccount] | None:
+        """Secured retrieval of a card and backing account for the active customer context."""
+        resolved_uid = self._resolve_user_id(customer_id)
+        return self.db.query(IssuedCard, FinancialAccount).join(FinancialAccount).filter(
             IssuedCard.id == card_id,
             FinancialAccount.customer_id == resolved_uid
         ).first()

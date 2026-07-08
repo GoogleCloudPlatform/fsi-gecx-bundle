@@ -157,6 +157,7 @@ class FraudAlertService:
             "fraud_alert_id": str(alert.id),
             "status": alert.status,
             "source": alert.source,
+            "card_id": str(alert.card_id),
             "card_last_four": alert.card_last_four,
             "message_thread_id": alert.message_thread_id,
         }

@@ -220,6 +220,7 @@ async def issue_replacement_card_tool(
             wallet_provider=wallet_provider,
             issue_virtual_card=True,
             fraud_alert_id=open_alert["fraud_alert_id"] if open_alert else None,
+            compromised_card_id=open_alert["card_id"] if open_alert else None,
         )
 
         session_id = f"session-{verified_customer_id}"
@@ -230,9 +231,11 @@ async def issue_replacement_card_tool(
                 "status": result["status"],
                 "replacement_status": result["replacement_status"],
                 "new_last_four": result["new_last_four"],
+                "new_card_id": result["new_card_id"],
                 "new_card_token": result["new_card_token"],
                 "is_virtual": result["is_virtual"],
                 "fraud_alert_id": result.get("fraud_alert_id"),
+                "compromised_card_id": result.get("compromised_card_id"),
             },
         )
 
@@ -240,9 +243,11 @@ async def issue_replacement_card_tool(
             "success": True,
             "message": result["message"],
             "new_last_four": result["new_last_four"],
+            "new_card_id": result["new_card_id"],
             "replacement_status": result["replacement_status"],
             "is_virtual": result["is_virtual"],
             "fraud_alert_id": result.get("fraud_alert_id"),
+            "compromised_card_id": result.get("compromised_card_id"),
         }
     except Exception as e:
         logger.error(f"Error in FastMCP issue_replacement_card_tool: {e}")

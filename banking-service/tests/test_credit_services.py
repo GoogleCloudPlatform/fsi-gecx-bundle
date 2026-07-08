@@ -22,6 +22,7 @@ import models.fraud  # noqa: F401
 from models.audit import AuditOutbox
 from models.credit_card import Base, FinancialAccount, IssuedCard, AccountLedger, CreditProduct
 from models.identity import User
+from repositories.credit_card import CreditCardRepository
 from repositories.fraud import FraudAlertRepository
 from services.credit_card import (
     apply_limit_increase,
@@ -182,6 +183,89 @@ def test_issue_replacement_card_records_fraud_alert_correlation(db_session):
     assert result["fraud_alert_id"] == str(alert.id)
     assert payload["fraud_alert_id"] == str(alert.id)
     assert payload["correlation_id"] == str(alert.id)
+
+
+def test_card_repository_retrieves_card_and_account_for_customer(db_session):
+    repo = CreditCardRepository(db_session)
+
+    result = repo.get_card_and_account_by_customer_secured(
+        card_id="99900000-0000-4000-8000-000000000999",
+        customer_id="cust-test-xyz",
+    )
+
+    assert result is not None
+    card, account = result
+    assert card.last_four == "1234"
+    assert account.customer_id == "88888888-8888-4888-8888-222222222222"
+
+
+def test_card_repository_rejects_card_for_wrong_customer(db_session):
+    other_user = User(
+        id="77777777-7777-4777-8777-777777777777",
+        auth_provider_uid="other-customer",
+        first_name="Other",
+        last_name="Customer",
+        email="other@example.com",
+    )
+    db_session.add(other_user)
+    db_session.commit()
+    repo = CreditCardRepository(db_session)
+
+    result = repo.get_card_and_account_by_customer_secured(
+        card_id="99900000-0000-4000-8000-000000000999",
+        customer_id="other-customer",
+    )
+
+    assert result is None
+
+
+def test_issue_replacement_card_with_compromised_card_preserves_other_active_cards(db_session):
+    other_card = IssuedCard(
+        id="22200000-0000-4000-8000-000000000222",
+        account_id="12300000-0000-4000-8000-000000000123",
+        cardholder_name="John Doe",
+        card_token="tok_test_backup_card",
+        last_four="2222",
+        exp_month=10,
+        exp_year=2028,
+        status="ACTIVE",
+        is_active=True,
+        is_virtual=False,
+    )
+    db_session.add(other_card)
+    db_session.commit()
+
+    result = issue_replacement_card(
+        db_session,
+        account_id="12300000-0000-4000-8000-000000000123",
+        reason="CUSTOMER_FRAUD_REISSUE",
+        compromised_card_id="99900000-0000-4000-8000-000000000999",
+        fraud_alert_id="fraud-alert-123",
+    )
+
+    compromised = db_session.query(IssuedCard).filter_by(id="99900000-0000-4000-8000-000000000999").first()
+    unaffected = db_session.query(IssuedCard).filter_by(id="22200000-0000-4000-8000-000000000222").first()
+    replacement = db_session.query(IssuedCard).filter_by(id=result["new_card_id"]).first()
+    active_cards = db_session.query(IssuedCard).filter_by(
+        account_id="12300000-0000-4000-8000-000000000123",
+        is_active=True,
+    ).all()
+
+    assert result["old_card_id"] == "99900000-0000-4000-8000-000000000999"
+    assert result["compromised_card_id"] == "99900000-0000-4000-8000-000000000999"
+    assert compromised.is_active is False
+    assert compromised.status == "BLOCKED"
+    assert unaffected.is_active is True
+    assert unaffected.status == "ACTIVE"
+    assert replacement is not None
+    assert replacement.is_virtual is True
+    assert {card.id for card in active_cards} == {unaffected.id, replacement.id}
+
+    event = db_session.query(AuditOutbox).filter_by(event_type="CARD_REPLACED").order_by(AuditOutbox.created_at.desc()).first()
+    payload = json.loads(event.payload)
+    assert payload["old_card_id"] == "99900000-0000-4000-8000-000000000999"
+    assert payload["new_card_id"] == result["new_card_id"]
+    assert payload["compromised_card_id"] == "99900000-0000-4000-8000-000000000999"
 
 
 def test_queue_wallet_provisioning_records_fraud_alert_correlation(db_session):

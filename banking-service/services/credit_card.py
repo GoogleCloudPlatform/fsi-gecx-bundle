@@ -154,10 +154,12 @@ def issue_replacement_card(
     wallet_provider: str = "GOOGLE_WALLET",
     issue_virtual_card: bool = True,
     fraud_alert_id: str | None = None,
+    compromised_card_id: str | None = None,
 ) -> dict:
     """
     Issues a replacement card for an account after fraud or loss workflows.
-    The current active card, if any, is deactivated and a new virtual card is created.
+    When compromised_card_id is supplied, only that card is deactivated.
+    Legacy callers without a card id keep the prior account-level replacement behavior.
     """
     logger.info(
         "Issuing replacement card for account=%s reason=%s wallet_provider=%s",
@@ -174,18 +176,25 @@ def issue_replacement_card(
             raise ValueError(f"Account '{account_id}' not found.")
 
         cards = repo.list_cards_by_account(account.id)
-        current_card = next((card for card in cards if card.is_active), None)
-        if not current_card:
-            current_card = next((card for card in cards if card.status in {"BLOCKED", "REPORTED_STOLEN"}), None)
+        if compromised_card_id:
+            current_card = repo.get_card_by_id_for_account(compromised_card_id, account.id)
+            if not current_card:
+                raise ValueError("Compromised card not found for the specified account.")
+            if current_card.status not in {"ACTIVE", "BLOCKED", "REPORTED_STOLEN"}:
+                raise ValueError(f"Card '{compromised_card_id}' is not eligible for replacement.")
+        else:
+            current_card = next((card for card in cards if card.is_active), None)
+            if not current_card:
+                current_card = next((card for card in cards if card.status in {"BLOCKED", "REPORTED_STOLEN"}), None)
         if not current_card:
             raise ValueError("No existing card found for replacement.")
 
-        for card in cards:
-            if card.is_active:
-                card.is_active = False
-                if card.status == "ACTIVE":
-                    card.status = "BLOCKED"
-                repo.save_card(card)
+        cards_to_deactivate = [current_card] if compromised_card_id else [card for card in cards if card.is_active]
+        for card in cards_to_deactivate:
+            card.is_active = False
+            if card.status == "ACTIVE":
+                card.status = "BLOCKED"
+            repo.save_card(card)
 
         exp_month = current_card.exp_month
         exp_year = max(current_card.exp_year, datetime.datetime.now(datetime.timezone.utc).year + 4)
@@ -207,25 +216,31 @@ def issue_replacement_card(
             "CARD_REPLACED",
             {
                 "account_id": str(account.id),
+                "old_card_id": str(current_card.id),
                 "old_card_token": current_card.card_token,
+                "new_card_id": str(replacement_card.id),
                 "new_card_token": replacement_card.card_token,
                 "new_last_four": replacement_card.last_four,
                 "reason": reason,
                 "is_virtual": issue_virtual_card,
                 "fraud_alert_id": fraud_alert_id,
+                "compromised_card_id": str(compromised_card_id) if compromised_card_id else None,
                 "correlation_id": fraud_alert_id or replacement_card.card_token,
             },
         )
         db.commit()
         return {
             "account_id": str(account.id),
+            "old_card_id": str(current_card.id),
             "old_card_token": current_card.card_token,
+            "new_card_id": str(replacement_card.id),
             "new_card_token": replacement_card.card_token,
             "new_last_four": replacement_card.last_four,
             "status": replacement_card.status,
             "replacement_status": "ISSUED",
             "is_virtual": replacement_card.is_virtual,
             "fraud_alert_id": fraud_alert_id,
+            "compromised_card_id": str(compromised_card_id) if compromised_card_id else None,
             "message": "Replacement virtual card issued.",
         }
     except Exception as e:
