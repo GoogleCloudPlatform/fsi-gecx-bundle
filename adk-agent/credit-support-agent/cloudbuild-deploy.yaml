@@ -87,12 +87,15 @@ steps:
     args:
       - "-c"
       - |
+        TAGS="-t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:$${COMMIT_SHA:-local} -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:latest"
+        if [ -n "$TAG_NAME" ]; then
+          TAGS="$$TAGS -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:$TAG_NAME"
+        fi
         DOCKER_BUILDKIT=1 docker build \
           --cache-from "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:latest" \
           --build-arg BUILDKIT_INLINE_CACHE=1 \
           -f adk-agent/credit-support-agent/Dockerfile \
-          -t "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:$${COMMIT_SHA:-local}" \
-          -t "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:latest" \
+          $$TAGS \
           .
 
   - name: "gcr.io/cloud-builders/docker"

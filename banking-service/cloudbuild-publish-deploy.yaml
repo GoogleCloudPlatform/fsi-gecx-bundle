@@ -87,11 +87,14 @@ steps:
     args:
       - "-c"
       - |
+        TAGS="-t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local} -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:latest"
+        if [ -n "$TAG_NAME" ]; then
+          TAGS="$$TAGS -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$TAG_NAME"
+        fi
         DOCKER_BUILDKIT=1 docker build \
           --cache-from "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:latest" \
           --build-arg BUILDKIT_INLINE_CACHE=1 \
-          -t "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
-          -t "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:latest" \
+          $$TAGS \
           .
     dir: "banking-service"
 

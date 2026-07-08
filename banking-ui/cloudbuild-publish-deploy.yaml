@@ -87,10 +87,11 @@ steps:
     args:
       - "-c"
       - |
-        docker build \
-          -t "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-ui:$${COMMIT_SHA:-local}" \
-          -t "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-ui:latest" \
-          .
+        TAGS="-t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-ui:$${COMMIT_SHA:-local} -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-ui:latest"
+        if [ -n "$TAG_NAME" ]; then
+          TAGS="$$TAGS -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-ui:$TAG_NAME"
+        fi
+        docker build $$TAGS .
     dir: "banking-ui"
 
   - name: "gcr.io/cloud-builders/docker"

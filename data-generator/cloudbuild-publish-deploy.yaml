@@ -79,10 +79,11 @@ steps:
     args:
       - "-c"
       - |
-        docker build \
-          -t "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:$${COMMIT_SHA:-local}" \
-          -t "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:latest" \
-          .
+        TAGS="-t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:$${COMMIT_SHA:-local} -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:latest"
+        if [ -n "$TAG_NAME" ]; then
+          TAGS="$$TAGS -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:$TAG_NAME"
+        fi
+        docker build $$TAGS .
     dir: "data-generator"
 
   - name: "gcr.io/cloud-builders/docker"
