@@ -1,0 +1,27 @@
+{
+  "views": [
+    {
+      "name": "enriched_posted_transactions",
+      "sql": "enriched_posted_transactions.sql",
+      "sources": [
+        "iceberg_catalog.cards_posted_transactions",
+        "iceberg_catalog.cards_transaction_authorization",
+        "iceberg_catalog.cards_issued_card"
+      ]
+    },
+    {
+      "name": "international_fraud_anomalies",
+      "sql": "international_fraud_anomalies.sql",
+      "sources": [
+        "iceberg_catalog.cards_transaction_authorization"
+      ]
+    },
+    {
+      "name": "realtime_spend_velocity",
+      "sql": "realtime_spend_velocity.sql",
+      "sources": [
+        "iceberg_catalog.cards_transaction_authorization"
+      ]
+    }
+  ]
+}

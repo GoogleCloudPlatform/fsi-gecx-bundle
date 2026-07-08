@@ -41,6 +41,13 @@ resource "google_artifact_registry_repository_iam_member" "cloudbuild_sa_fsi_gec
   member     = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
 
+resource "google_artifact_registry_repository_iam_member" "lakehouse_reconcile_sa_fsi_gecx_bundle_artifact_reader" {
+  repository = google_artifact_registry_repository.fsi_gecx_bundle.id
+  location   = var.region
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${google_service_account.lakehouse_reconcile_service_account.email}"
+}
+
 resource "google_cloud_run_service_iam_member" "banking_service_iap_invoker_role" {
   count    = var.deploy_cloud_run_services ? 1 : 0
   service  = google_cloud_run_v2_service.banking_service[0].name
@@ -276,6 +283,18 @@ resource "google_bigquery_dataset_iam_member" "banking_service_analytics_curated
   dataset_id = google_bigquery_dataset.analytics_curated.dataset_id
   role       = "roles/bigquery.dataViewer"
   member     = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
+resource "google_bigquery_dataset_iam_member" "lakehouse_reconcile_iceberg_data_viewer" {
+  dataset_id = google_bigquery_dataset.iceberg_catalog.dataset_id
+  role       = "roles/bigquery.dataViewer"
+  member     = "serviceAccount:${google_service_account.lakehouse_reconcile_service_account.email}"
+}
+
+resource "google_bigquery_dataset_iam_member" "lakehouse_reconcile_analytics_curated_data_editor" {
+  dataset_id = google_bigquery_dataset.analytics_curated.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${google_service_account.lakehouse_reconcile_service_account.email}"
 }
 
 # Grant Pub/Sub Service Identity permission to write messages to BigQuery

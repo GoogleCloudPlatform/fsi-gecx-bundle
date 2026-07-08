@@ -29,10 +29,16 @@ steps:
             --location "${_REGION}" \
             --state=RUNNING \
             --update-mask=state
-          echo "Bootstrapping curated BigQuery views from live CDC tables..."
-          PROJECT_ID="$PROJECT_ID" bash scripts/datastream/bootstrap_curated_views.sh
         else
           echo "Datastream stream banking-cdc-stream not found; skipping CDC bootstrap."
+        fi
+        if gcloud run jobs describe lakehouse-view-reconcile --region "${_REGION}" >/dev/null 2>&1; then
+          echo "Starting non-blocking lakehouse view reconciliation..."
+          gcloud run jobs execute lakehouse-view-reconcile \
+            --region "${_REGION}" \
+            --async || echo "Lakehouse reconcile job did not start; migration build remains successful."
+        else
+          echo "Lakehouse reconcile job not found; skipping non-blocking view reconciliation."
         fi
 
 options:

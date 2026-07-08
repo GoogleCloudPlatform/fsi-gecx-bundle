@@ -216,6 +216,34 @@ resource "google_cloudbuild_trigger" "data_generator_deploy_trigger" {
   }
 }
 
+resource "google_cloudbuild_trigger" "lakehouse_reconcile_image_trigger" {
+  count    = var.deploy_cloud_build_triggers ? 1 : 0
+  name     = "lakehouse-view-reconcile-image"
+  location = var.region
+  tags     = ["lakehouse", "bigquery", "deploy"]
+
+  repository_event_config {
+    repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
+    push {
+      branch = local.trigger_by_branch ? var.repo_branch_expression : null
+      tag    = local.trigger_by_tag ? var.repo_tag_expression : null
+    }
+  }
+
+  service_account = google_service_account.cloudbuild_service_account.id
+  included_files = [
+    "deployment/lakehouse-reconcile/**",
+    "deployment/bigquery/analytics_curated/**",
+    "scripts/datastream/reconcile_lakehouse_views.py",
+  ]
+  filename           = "deployment/lakehouse-reconcile/cloudbuild.yaml"
+  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
+
+  substitutions = {
+    _REGION = var.region
+  }
+}
+
 resource "google_cloudbuild_trigger" "db_migration_manual_trigger" {
   count    = var.deploy_cloud_build_triggers ? 1 : 0
   name     = "run-db-migration"

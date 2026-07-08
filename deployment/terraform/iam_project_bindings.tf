@@ -271,6 +271,24 @@ resource "google_project_iam_member" "cloudbuild_sa_bq_job_user" {
   member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
 
+resource "google_project_iam_member" "lakehouse_reconcile_sa_bq_job_user" {
+  project = data.google_project.project.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${google_service_account.lakehouse_reconcile_service_account.email}"
+}
+
+resource "google_project_iam_member" "lakehouse_reconcile_sa_datastream_admin" {
+  project = data.google_project.project.project_id
+  role    = "roles/datastream.admin"
+  member  = "serviceAccount:${google_service_account.lakehouse_reconcile_service_account.email}"
+}
+
+resource "google_project_iam_member" "lakehouse_reconcile_sa_run_developer" {
+  project = data.google_project.project.project_id
+  role    = "roles/run.developer"
+  member  = "serviceAccount:${google_service_account.lakehouse_reconcile_service_account.email}"
+}
+
 resource "google_project_iam_member" "database_viewer_bq_job_user" {
   for_each = toset(local.database_iam_viewer_users)
   project  = data.google_project.project.project_id
