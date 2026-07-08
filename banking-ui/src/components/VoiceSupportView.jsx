@@ -24,6 +24,17 @@ import { DataChannelEvent } from '../utils/constants.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './GoogleCloudIcon.jsx';
 
+function FraudStep({ label, complete }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className={`h-2.5 w-2.5 rounded-full ${complete ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'}`} />
+      <span className={`text-[11px] font-medium ${complete ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-400'}`}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export default function VoiceSupportView() {
   const projectId = window.firebaseConfig?.projectId;
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
@@ -57,6 +68,14 @@ export default function VoiceSupportView() {
   const [engine, setEngine] = useState('livekit'); // 'livekit' | 'gecx'
   const [volume, setVolume] = useState(0.8);
   const [latency, setLatency] = useState(0);
+
+  const fraudProgress = {
+    inspected: Boolean(fraudContext?.fraud_alert?.inspected),
+    blocked: cardStatus === 'BLOCKED',
+    replaced: Boolean(account?.cards?.[0]?.is_virtual && account?.cards?.[0]?.status === 'ACTIVE' && fraudContext?.fraud_alert?.inspected),
+    walletQueued: transcripts.some(t => t.author === 'system' && t.text.includes('Virtual card provisioning')),
+    resolved: Boolean(fraudContext?.fraud_alert?.resolution || (fraudContext?.fraud_alert?.status || '').startsWith('RESOLVED_')),
+  };
 
   const roomRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -804,6 +823,13 @@ export default function VoiceSupportView() {
                   <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
                     {fraudContext.fraud_alert.summary}
                   </p>
+                  <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
+                    <FraudStep label="Alert reviewed" complete={fraudProgress.inspected} />
+                    <FraudStep label="Card blocked" complete={fraudProgress.blocked} />
+                    <FraudStep label="Replacement issued" complete={fraudProgress.replaced} />
+                    <FraudStep label="Wallet queued" complete={fraudProgress.walletQueued} />
+                    <FraudStep label="Case resolved" complete={fraudProgress.resolved} />
+                  </div>
                 </div>
               </div>
             </div>
