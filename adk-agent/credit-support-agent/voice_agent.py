@@ -119,6 +119,31 @@ class SileroVADTracker:
 
         return speech_started, speech_ended
 
+
+def build_fraud_playbook(voice_context: dict) -> dict:
+    """Derive a compact fraud-session playbook from trusted voice context."""
+    fraud_alert = (voice_context or {}).get("fraud_alert") or {}
+    has_active_alert = bool((voice_context or {}).get("has_active_fraud_alert") and fraud_alert)
+    if not has_active_alert:
+        return {
+            "entry_mode": "GENERAL_SUPPORT",
+            "opening_style": "GENERIC_GREETING",
+            "must_inspect_open_alert_first": False,
+            "resolution_path": None,
+            "fraud_alert_id": None,
+            "card_last_four": None,
+        }
+
+    return {
+        "entry_mode": "FRAUD_ALERT",
+        "opening_style": "ACKNOWLEDGE_SUSPICIOUS_ACTIVITY",
+        "must_inspect_open_alert_first": True,
+        "resolution_path": "CONFIRM_RECOGNIZED_OR_CONFIRMED_FRAUD",
+        "fraud_alert_id": fraud_alert.get("fraud_alert_id"),
+        "card_last_four": fraud_alert.get("card_last_four"),
+        "suspicious_transactions_count": len(fraud_alert.get("suspicious_transactions") or []),
+    }
+
 async def run_stt_worker(client, audio_queue: asyncio.Queue, sample_rate: int, author: str, on_agent_event_fn):
     logger.info(f"Starting async Speech-to-Text worker for {author} (sample_rate={sample_rate}Hz)...")
     try:
@@ -199,6 +224,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     hard_timeout_enabled = False
     voice_context = {"has_active_fraud_alert": False, "fraud_alert": None}
     fraud_alert_state = {}
+    fraud_playbook = build_fraud_playbook(voice_context)
 
     try:
         import httpx
@@ -227,6 +253,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             context_resp = await client.get(context_url, headers=headers)
             if context_resp.status_code == 200:
                 voice_context = context_resp.json()
+                fraud_playbook = build_fraud_playbook(voice_context)
                 logger.info("Loaded customer voice context for customer=%s active_fraud=%s", customer_id, voice_context.get("has_active_fraud_alert"))
             else:
                 logger.error(f"Failed to fetch voice-session context from API: {context_resp.text}")
@@ -247,6 +274,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         "mode": mode,
         "has_active_fraud_alert": voice_context.get("has_active_fraud_alert", False),
         "fraud_context": fraud_alert_state,
+        "fraud_playbook": fraud_playbook,
     }
     # Create the session dynamically using the passed IDs
     user_id = f"user-{customer_id}"
@@ -261,7 +289,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         room_name,
         customer_id,
         mode,
-        fraud_alert_state.get("fraud_alert_id"),
+        fraud_playbook.get("fraud_alert_id"),
     )
     
     import copy
@@ -471,11 +499,12 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         await asyncio.sleep(0.5)
                         logger.info("Media path is active. Triggering assistant greeting...")
                         greeting_text = "Please introduce yourself as Nova Horizon Bank's Credit Card Support Voice Assistant and ask the customer how you can help them today."
-                        if voice_context.get("has_active_fraud_alert") and voice_context.get("fraud_alert"):
-                            card_last_four = voice_context["fraud_alert"].get("card_last_four", "their card")
+                        if fraud_playbook.get("entry_mode") == "FRAUD_ALERT":
+                            card_last_four = fraud_playbook.get("card_last_four", "their card")
                             greeting_text = (
                                 "Please introduce yourself briefly, acknowledge that you can see a suspicious activity alert "
-                                f"on the customer's card ending in {card_last_four}, and offer to review the flagged charges immediately."
+                                f"on the customer's card ending in {card_last_four}, state that you will review the flagged charges, "
+                                "and inspect the open fraud alert before recommending next steps."
                             )
                         live_queue.send_content(
                             types.Content(
