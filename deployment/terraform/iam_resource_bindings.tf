@@ -112,11 +112,11 @@ resource "google_cloud_run_service_iam_member" "iap_login_ui_public_invoker" {
   member   = "allUsers"
 }
 
-
 locals {
-  cloud_run_iap_members = concat([
-    "user:${data.google_client_openid_userinfo.me.email}"
-  ], local.additional_cloud_run_iap_members)
+  cloud_run_iap_members = concat(
+    var.enable_current_user_grants ? ["user:${data.google_client_openid_userinfo.me.email}"] : [],
+    local.additional_cloud_run_iap_members
+  )
 }
 
 resource "google_iap_web_backend_service_iam_member" "banking_service_access" {
