@@ -155,6 +155,41 @@ resource "google_cloud_run_v2_service" "banking_service" {
       }
 
       env {
+        name  = "KNOWLEDGE_CATALOG_ENABLED"
+        value = "true"
+      }
+
+      env {
+        name  = "KNOWLEDGE_CATALOG_PROJECT_ID"
+        value = var.project_id
+      }
+
+      env {
+        name  = "KNOWLEDGE_CATALOG_LOCATION"
+        value = var.region
+      }
+
+      env {
+        name  = "KNOWLEDGE_CATALOG_ENTRY_GROUP_ID"
+        value = google_dataplex_entry_group.fraud_support_guidance.entry_group_id
+      }
+
+      env {
+        name  = "KNOWLEDGE_CATALOG_ENTRY_TYPE_ID"
+        value = google_dataplex_entry_type.fraud_support_topic.entry_type_id
+      }
+
+      env {
+        name  = "KNOWLEDGE_CATALOG_POLICY_ASPECT_TYPE_ID"
+        value = google_dataplex_aspect_type.fraud_support_policy.aspect_type_id
+      }
+
+      env {
+        name  = "KNOWLEDGE_CATALOG_SUMMARY_ASPECT_TYPE_ID"
+        value = google_dataplex_aspect_type.fraud_customer_summary.aspect_type_id
+      }
+
+      env {
         name  = "DATA_GENERATOR_URL"
         value = var.deploy_cloud_run_services ? google_cloud_run_v2_service.data_generator[0].uri : "http://localhost:8001"
       }

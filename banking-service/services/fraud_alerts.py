@@ -5,6 +5,7 @@ from models.authentication import ValidatedToken
 from models.credit_card import CreditAccount, IssuedCard, TransactionAuthorization
 from models.secure_messaging import SecureMessageCreateRequest, SENDER_TYPE_BANK
 from repositories.fraud import FraudAlertRepository
+from services.knowledge_catalog import KnowledgeCatalogService
 from services.messaging import MessagingService
 from utils.audit import record_audit_event
 
@@ -101,10 +102,17 @@ class FraudAlertService:
             auth_provider_uid=auth_provider_uid,
         )
         if not alert:
-            return {"has_active_fraud_alert": False, "fraud_alert": None}
+            return {
+                "entry_reason": "general_support",
+                "has_active_fraud_alert": False,
+                "fraud_alert": None,
+                "support_guidance": {"source": "not_applicable", "topic_ids": [], "topics": [], "agent_guidance_summary": ""},
+            }
 
         suspicious_transactions = alert.suspicious_transactions or []
+        guidance = KnowledgeCatalogService().get_guidance_bundle_for_voice_fraud()
         return {
+            "entry_reason": "fraud_alert",
             "has_active_fraud_alert": True,
             "fraud_alert": {
                 "fraud_alert_id": str(alert.id),
@@ -116,6 +124,7 @@ class FraudAlertService:
                 "created_at": alert.created_at.isoformat() if alert.created_at else None,
                 "summary": self._build_voice_context_summary(alert.card_last_four, suspicious_transactions),
             },
+            "support_guidance": guidance,
         }
 
     def get_open_alert_details(

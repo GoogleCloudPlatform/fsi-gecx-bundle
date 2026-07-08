@@ -213,6 +213,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     voice_context = {"has_active_fraud_alert": False, "fraud_alert": None}
     fraud_alert_state = {}
     fraud_playbook = build_fraud_playbook(voice_context)
+    support_guidance = {"source": "none", "topic_ids": [], "topics": [], "agent_guidance_summary": ""}
 
     try:
         import httpx
@@ -250,11 +251,13 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             if context_resp.status_code == 200:
                 voice_context = context_resp.json()
                 fraud_playbook = build_fraud_playbook(voice_context)
+                support_guidance = voice_context.get("support_guidance") or support_guidance
                 logger.info(
-                    "Loaded customer voice context %s active_fraud=%s fraud_alert_id=%s",
+                    "Loaded customer voice context %s active_fraud=%s fraud_alert_id=%s guidance_source=%s",
                     session_log_context(room_name, customer_id, session_id, mode, fraud_alert_id=fraud_playbook.get("fraud_alert_id")),
                     voice_context.get("has_active_fraud_alert"),
                     fraud_playbook.get("fraud_alert_id"),
+                    support_guidance.get("source"),
                 )
             else:
                 logger.error("Failed to fetch voice-session context from API %s status=%s body=%s", session_log_context(room_name, customer_id, session_id, mode), context_resp.status_code, context_resp.text)
@@ -276,6 +279,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         "has_active_fraud_alert": voice_context.get("has_active_fraud_alert", False),
         "fraud_context": fraud_alert_state,
         "fraud_playbook": fraud_playbook,
+        "support_guidance": support_guidance,
     }
     # Create the session dynamically using the passed IDs
     user_id = f"user-{customer_id}"
@@ -324,6 +328,14 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             "- If the customer asks what looked suspicious, reference these flagged transactions:\n"
             f"{suspicious_lines or '- No suspicious transaction details were provided.'}\n"
             "- Treat this as trusted session context rather than something the customer needs to restate."
+        )
+    guidance_summary = support_guidance.get("agent_guidance_summary")
+    if guidance_summary:
+        session_agent.instruction = (
+            f"{session_agent.instruction}\n\n"
+            "Approved fraud support guidance:\n"
+            f"{guidance_summary}\n"
+            "- Use this guidance to shape phrasing and sequencing, but use live tools and session context for operational truth."
         )
     if mode == "video":
         model_name = os.getenv("VOICE_AGENT_VIDEO_MODEL")
