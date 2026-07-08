@@ -161,12 +161,29 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
     import logging
     logger = logging.getLogger("voice_agent")
     fraud_context = tool_context.state.get("fraud_context", {}) if hasattr(tool_context, "state") else {}
+    fraud_playbook = tool_context.state.get("fraud_playbook", {}) if hasattr(tool_context, "state") else {}
     logger.info(
         "[CALLBACK] before_tool_callback triggered: tool_name=%s args=%s fraud_alert_id=%s",
         tool_name,
         args,
         fraud_context.get("fraud_alert_id"),
     )
+    mitigation_tools = {
+        "report_lost_stolen_card",
+        "issue_replacement_card_tool",
+        "push_card_to_google_wallet",
+        "resolve_fraud_alert",
+    }
+    if (
+        fraud_playbook.get("must_inspect_open_alert_first")
+        and not fraud_playbook.get("open_alert_inspected")
+        and tool_name in mitigation_tools
+    ):
+        logger.warning(
+            "[CALLBACK] fraud playbook drift: tool=%s invoked before open alert inspection (fraud_alert_id=%s)",
+            tool_name,
+            fraud_context.get("fraud_alert_id"),
+        )
     set_tool_processing(True)
     tool_context.state["is_processing_tool"] = True
     return None
@@ -202,7 +219,27 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
     # Check if the tool succeeded
     structured = tool_response.get("structuredContent") if isinstance(tool_response, dict) else None
     if structured and isinstance(structured, dict) and structured.get("success") is True:
+        if tool_name == "get_open_fraud_alert":
+            fraud_playbook = dict(tool_context.state.get("fraud_playbook", {}))
+            fraud_playbook["open_alert_inspected"] = True
+            tool_context.state["fraud_playbook"] = fraud_playbook
+            fraud_alert = structured.get("fraud_alert") or {}
+            logger.info(
+                "[CALLBACK] fraud playbook inspection completed: fraud_alert_id=%s",
+                fraud_context.get("fraud_alert_id") or fraud_alert.get("fraud_alert_id"),
+            )
+            notify_event({
+                "type": DataChannelEvent.FRAUD_ALERT_INSPECTED.value,
+                "fraud_alert_id": fraud_alert.get("fraud_alert_id"),
+                "card_last_four": fraud_alert.get("card_last_four"),
+                "status": fraud_alert.get("status"),
+                "suspicious_transactions_count": len(fraud_alert.get("suspicious_transactions") or []),
+            })
+
         if tool_name == "resolve_fraud_alert":
+            fraud_playbook = dict(tool_context.state.get("fraud_playbook", {}))
+            fraud_playbook["resolution_completed"] = True
+            tool_context.state["fraud_playbook"] = fraud_playbook
             logger.info("[CALLBACK] FRAUD_ALERT_RESOLVED event broadcasted")
             fraud_alert = structured.get("fraud_alert") or {}
             notify_event({

@@ -573,6 +573,23 @@ export default function VoiceSupportView() {
           if (event.type === 'agent_mode') {
             console.log('Voice agent reported mode:', event.mode);
             setAgentMode(event.mode);
+          } else if (event.type === DataChannelEvent.FRAUD_ALERT_INSPECTED) {
+            setFraudContext(prev => prev ? {
+              ...prev,
+              has_active_fraud_alert: true,
+              fraud_alert: prev.fraud_alert ? {
+                ...prev.fraud_alert,
+                inspected: true,
+                status: event.status || prev.fraud_alert.status,
+              } : prev.fraud_alert,
+            } : prev);
+            setTranscripts(prev => [
+              ...prev,
+              {
+                author: 'system',
+                text: `CASE UPDATE: Fraud alert reviewed. ${event.suspicious_transactions_count || 0} suspicious charge${event.suspicious_transactions_count === 1 ? '' : 's'} ready for confirmation.`,
+              },
+            ]);
           } else if (event.type === DataChannelEvent.CARD_STATUS_LOCK) {
             setCardStatus(event.status);
             setTranscripts(prev => [...prev, { author: 'system', text: `SECURITY ALERT: Card status updated to ${event.status}.` }]);
