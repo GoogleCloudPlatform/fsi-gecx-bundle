@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Send, Trash2, Plus, MessageSquare, Shield, 
   AlertCircle, Loader2, Calendar, 
@@ -19,6 +20,7 @@ import {
 const CATEGORIES = ['General', 'Billing', 'Loans', 'Security'];
 
 function AdminMessagingView({ fbUser }) {
+  const navigate = useNavigate();
   const { brandColorFrom, brandColorTo } = useSettings();
   
   // Customer Directory State
@@ -334,13 +336,20 @@ function AdminMessagingView({ fbUser }) {
     .sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
 
   return (
-    <section className="relative pt-32 pb-24 md:pt-48 md:pb-32 px-6 max-w-7xl mx-auto min-h-[calc(100vh-80px)] flex flex-col">
+    <section className="relative pt-24 pb-16 md:pt-28 md:pb-24 px-6 max-w-7xl mx-auto min-h-[calc(100vh-80px)] flex flex-col">
       {/* Background Glow */}
       <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] rounded-full bg-emerald-500/5 dark:bg-emerald-500/5 blur-[120px] pointer-events-none -z-10" />
 
       {/* Header Info */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div className="text-left">
+          <button 
+            onClick={() => navigate('/admin')}
+            className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors mb-3 group"
+          >
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            Back to Admin Portal
+          </button>
           <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
             Support Agent Portal
           </h1>

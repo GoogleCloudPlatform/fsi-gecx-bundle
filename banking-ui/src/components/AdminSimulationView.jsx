@@ -305,7 +305,7 @@ function AdminSimulationView() {
   };
 
   return (
-    <section className="relative pt-32 pb-24 md:pt-40 md:pb-32 px-6 max-w-6xl mx-auto min-h-[calc(100vh-80px)] flex flex-col text-left">
+    <section className="relative pt-24 pb-16 md:pt-28 md:pb-24 px-6 max-w-6xl mx-auto min-h-[calc(100vh-80px)] flex flex-col text-left">
       
       {/* Background ambient lighting */}
       <div className="absolute top-1/3 left-1/4 w-[450px] h-[450px] rounded-full bg-cyan-500/10 blur-[120px] pointer-events-none -z-10 animate-pulse" />
