@@ -18,6 +18,18 @@ resource "google_project_iam_member" "cloudbuild_sa_log_writer" {
   member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
 
+resource "google_project_iam_member" "cloudbuild_terraform_sa_editor" {
+  project = data.google_project.project.project_id
+  role    = "roles/editor"
+  member  = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
+}
+
+resource "google_project_iam_member" "cloudbuild_terraform_sa_act_as" {
+  project = data.google_project.project.project_id
+  role    = "roles/iam.serviceAccountUser"
+  member  = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
+}
+
 resource "google_project_iam_member" "cloudbuild_sa_run_admin" {
   project = var.project_id
   role    = "roles/run.admin"

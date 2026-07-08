@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# WARNING: Do NOT place any secrets (passwords, private keys, API keys, OAuth tokens)
+# in this file. Secrets should be stored in Secret Manager and accessed dynamically.
+
 project_id                                  = "${PROJECT_ID}"
 deploy_cloud_build_triggers                 = true
 deploy_cloud_run_services                   = true

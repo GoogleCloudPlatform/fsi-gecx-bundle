@@ -235,3 +235,54 @@ resource "google_cloudbuild_trigger" "db_migration_manual_trigger" {
   }
 }
 
+resource "google_cloudbuild_trigger" "terraform_apply_trigger" {
+  count    = var.deploy_cloud_build_triggers ? 1 : 0
+  name     = "terraform-apply"
+  location = var.region
+  tags     = ["terraform", "apply"]
+
+  repository_event_config {
+    repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
+    push {
+      branch = local.trigger_by_branch ? var.repo_branch_expression : null
+      tag    = local.trigger_by_tag ? var.repo_tag_expression : null
+    }
+  }
+
+  approval_config {
+    approval_required = true
+  }
+
+  service_account    = google_service_account.cloudbuild_terraform_service_account.id
+  included_files     = ["deployment/terraform/**"]
+  filename           = "deployment/cloud_build/cloudbuild-tf-apply.yaml"
+  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
+
+  substitutions = {
+    _REGION = var.region
+  }
+}
+
+resource "google_cloudbuild_trigger" "terraform_plan_trigger" {
+  count    = var.deploy_cloud_build_triggers ? 1 : 0
+  name     = "terraform-plan"
+  location = var.region
+  tags     = ["terraform", "plan"]
+
+  repository_event_config {
+    repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
+    push {
+      branch = local.trigger_by_branch ? var.repo_branch_expression : null
+      tag    = local.trigger_by_tag ? var.repo_tag_expression : null
+    }
+  }
+
+  service_account    = google_service_account.cloudbuild_terraform_service_account.id
+  included_files     = ["deployment/terraform/**"]
+  filename           = "deployment/cloud_build/cloudbuild-tf-plan.yaml"
+  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
+
+  substitutions = {
+    _REGION = var.region
+  }
+}

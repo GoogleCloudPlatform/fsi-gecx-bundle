@@ -5,7 +5,8 @@ PROJECT_ID ?= $(shell gcloud config get-value project 2>/dev/null || echo "YOUR_
 PROJECT_NUMBER ?= $(shell gcloud projects describe $(PROJECT_ID) --format="value(projectNumber)" 2>/dev/null || echo "YOUR_PROJECT_NUMBER")
 REGION ?= us-central1
 DOCKER ?= podman
-TF_VARS ?= ./terraform.tfvars
+TF_VARS ?= ./environment/$(PROJECT_ID)/terraform.tfvars
+TF_BACKEND ?= ./environment/$(PROJECT_ID)/gcs.tfbackend
 CUSTOM_DOMAIN ?= $(shell grep -E '^[[:space:]]*custom_domain[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]' || echo "banking.erikvoit.demo.altostrat.com")
 DATA_STORE_ID ?= $(shell grep -E '^[[:space:]]*data_store_id[[:space:]]*=[[:space:]]*' deployment/terraform/discovery_engine.tf 2>/dev/null | cut -d'"' -f2 || echo "banking-site_1778875783412")
 GCP_ACCOUNT ?= $(shell ACCOUNT=$$(gcloud config get-value account 2>/dev/null); echo "$${ACCOUNT%.gserviceaccount.com}")
@@ -81,7 +82,7 @@ run: ## Concurrently run both backend and frontend servers locally
 .PHONY: tf-init
 tf-init: ## Initialize Terraform (accepts optional arguments, e.g., make tf-init ARGS="--reconfigure")
 	cd deployment/terraform && \
-	terraform init -backend-config=./environment/${PROJECT_ID}-tf-state.tfbackend $(ARGS)
+	terraform init -backend-config=$(TF_BACKEND) $(ARGS)
 
 .PHONY: tf-plan
 tf-plan: ## Compute and display the incremental Terraform deployment diff
@@ -300,6 +301,9 @@ docker-run-banking-ui: ## Run the banking-ui container locally
 	CX_AGENT_STUDIO_DEPLOYMENT_NAME=$$(grep CX_AGENT_STUDIO_DEPLOYMENT_NAME banking-ui/public/config.js 2>/dev/null | cut -d'"' -f2); \
 	CX_AGENT_STUDIO_UPLOAD_TOOL_NAME=$$(grep CX_AGENT_STUDIO_UPLOAD_TOOL_NAME banking-ui/public/config.js 2>/dev/null | cut -d'"' -f2); \
 	CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME=$$(grep CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME banking-ui/public/config.js 2>/dev/null | cut -d'"' -f2); \
+	CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME=$$(grep CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME banking-ui/public/config.js 2>/dev/null | cut -d'"' -f2); \
+	LIVEKIT_URL=$$(grep LIVEKIT_URL banking-ui/public/config.js 2>/dev/null | cut -d'"' -f2); \
+	SHOW_INFO_MODALS=$$(grep SHOW_INFO_MODALS banking-ui/public/config.js 2>/dev/null | cut -d'"' -f2); \
 	$(DOCKER) run -ti \
 	-e GOOGLE_CLOUD_PROJECT=$(PROJECT_ID) \
 	-e BASE_URL="http://localhost:5174" \
@@ -316,6 +320,9 @@ docker-run-banking-ui: ## Run the banking-ui container locally
 	-e VITE_CX_AGENT_STUDIO_DEPLOYMENT_NAME="$$CX_AGENT_STUDIO_DEPLOYMENT_NAME" \
 	-e VITE_CX_AGENT_STUDIO_UPLOAD_TOOL_NAME="$$CX_AGENT_STUDIO_UPLOAD_TOOL_NAME" \
 	-e VITE_CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME="$$CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME" \
+	-e VITE_CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME="$$CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME" \
+	-e VITE_LIVEKIT_URL="$$LIVEKIT_URL" \
+	-e VITE_SHOW_INFO_MODALS="$$SHOW_INFO_MODALS" \
 	-p 5174:8080 \
 	banking-ui-test
 

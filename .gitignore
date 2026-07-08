@@ -4,16 +4,12 @@
 *.zip
 *.db
 
-
 # Ignore implementation plans and temp folders
 docs/impl-plans/
 docs/temp/
 docs/notes-and-questions/
 docs/research/
 .jetskicli/
-
-# Ignore all local environment configuration folders
-environment/
 
 # Python caching and environment ignores
 __pycache__/
