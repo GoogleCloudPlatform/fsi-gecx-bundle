@@ -397,6 +397,78 @@ async def resolve_fraud_alert(
 
 @mcp.tool()
 @requires_user_assertion
+async def triage_fraud_case(
+    fraud_alert_id: str,
+    disputed_authorization_ids: list[str] = None,
+    disputed_transaction_ids: list[str] = None,
+    issue_replacement: bool = True,
+    escalate: bool = False,
+    idempotency_key: str = None,
+    ctx: Context = None,
+) -> dict:
+    """
+    Triages an active fraud case after customer confirmation.
+
+    Args:
+        fraud_alert_id: Fraud alert identifier returned by get_open_fraud_alert.
+        disputed_authorization_ids: Pending authorization ids the customer disputes.
+        disputed_transaction_ids: Posted transaction ids the customer disputes.
+        issue_replacement: Whether to issue a replacement virtual card for confirmed fraud.
+        escalate: Whether to mark the case for human fraud specialist review.
+        idempotency_key: Optional stable key for retrying the same voice workflow safely.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    logger.info(
+        "FastMCP triage_fraud_case invoked for customer=%s fraud_alert_id=%s",
+        verified_customer_id,
+        fraud_alert_id,
+    )
+
+    if not re.match(r"^[a-fA-F0-9-]{32,36}$", str(fraud_alert_id or "")):
+        return {"success": False, "message": "Invalid fraud alert id.", "fraud_alert": None}
+
+    db = SessionLocal()
+    try:
+        service = FraudAlertService(db)
+        result = service.triage_fraud_case(
+            auth_provider_uid=verified_customer_id,
+            fraud_alert_id=fraud_alert_id,
+            disputed_authorization_ids=disputed_authorization_ids or [],
+            disputed_transaction_ids=disputed_transaction_ids or [],
+            issue_replacement=issue_replacement,
+            escalate=escalate,
+            idempotency_key=idempotency_key,
+        )
+
+        if result.get("success"):
+            session_id = f"session-{verified_customer_id}"
+            await send_session_event(
+                session_id,
+                {
+                    "type": "FRAUD_CASE_TRIAGED",
+                    "fraud_alert_id": fraud_alert_id,
+                    "outcome": result.get("outcome"),
+                    "fraud_alert": result.get("fraud_alert"),
+                    "voided_authorizations": result.get("voided_authorizations", []),
+                    "provisional_credits": result.get("provisional_credits", []),
+                    "replacement_card": result.get("replacement_card"),
+                    "secure_message": result.get("secure_message"),
+                    "escalated": result.get("escalated", False),
+                },
+            )
+        return result
+    except ValueError as e:
+        logger.warning(f"Validation error in FastMCP triage_fraud_case: {e}")
+        return {"success": False, "message": str(e), "fraud_alert": None}
+    except Exception as e:
+        logger.error(f"Error in FastMCP triage_fraud_case: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}", "fraud_alert": None}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
 async def reverse_overdraft_fee(
     account_id: str = None,
     fee_date: str = None,
