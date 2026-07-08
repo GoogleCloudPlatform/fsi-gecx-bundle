@@ -20,7 +20,8 @@ roles:
   - roles/pubsub.admin
   - roles/eventarc.admin
   - roles/cloudscheduler.admin
-  - roles/cloudbuild.admin
+  - roles/cloudbuild.builds.editor
+  - roles/cloudbuild.connectionAdmin
   - roles/documentai.admin
   - roles/discoveryengine.admin
   - roles/firebase.admin
