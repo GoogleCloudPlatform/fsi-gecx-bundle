@@ -275,3 +275,9 @@ variable "additional_cors_allowed_origins" {
   description = "Additional allowed browser origins for Cloud Run CORS configuration."
   default     = []
 }
+
+variable "enable_current_user_grants" {
+  type        = bool
+  description = "Set to true to grant the current openid user IAP backend accessor role."
+  default     = false
+}

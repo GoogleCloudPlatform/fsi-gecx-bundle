@@ -18,21 +18,15 @@ resource "google_project_iam_member" "cloudbuild_sa_log_writer" {
   member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
 
-resource "google_project_iam_member" "cloudbuild_terraform_sa_editor" {
+resource "google_project_iam_member" "cloudbuild_terraform_sa_owner" {
   project = data.google_project.project.project_id
-  role    = "roles/editor"
+  role    = "roles/owner"
   member  = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
 }
 
 resource "google_project_iam_member" "cloudbuild_terraform_sa_act_as" {
   project = data.google_project.project.project_id
   role    = "roles/iam.serviceAccountUser"
-  member  = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
-}
-
-resource "google_project_iam_member" "cloudbuild_terraform_sa_secret_accessor" {
-  project = data.google_project.project.project_id
-  role    = "roles/secretmanager.secretAccessor"
   member  = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
 }
 
@@ -186,12 +180,14 @@ resource "google_project_iam_member" "datagen_sa_bq_job_user" {
 }
 
 resource "google_project_iam_member" "developer_cloudsql_client" {
+  count   = var.enable_current_user_grants ? 1 : 0
   project = data.google_project.project.project_id
   role    = "roles/cloudsql.client"
   member  = "user:${data.google_client_openid_userinfo.me.email}"
 }
 
 resource "google_project_iam_member" "developer_cloudsql_instance_user" {
+  count   = var.enable_current_user_grants ? 1 : 0
   project = data.google_project.project.project_id
   role    = "roles/cloudsql.instanceUser"
   member  = "user:${data.google_client_openid_userinfo.me.email}"
