@@ -122,12 +122,12 @@ data "google_secret_manager_secret_version_access" "additional_cloud_run_iap_mem
 }
 
 locals {
-  database_iam_support_users_raw = data.google_secret_manager_secret_version_access.database_iam_support_users.secret_data
+  database_iam_support_users_raw = nonsensitive(data.google_secret_manager_secret_version_access.database_iam_support_users.secret_data)
   database_iam_support_users     = compact([for s in split(",", local.database_iam_support_users_raw) : trimspace(s)])
 
-  database_iam_viewer_users_raw = data.google_secret_manager_secret_version_access.database_iam_viewer_users.secret_data
+  database_iam_viewer_users_raw = nonsensitive(data.google_secret_manager_secret_version_access.database_iam_viewer_users.secret_data)
   database_iam_viewer_users     = compact([for s in split(",", local.database_iam_viewer_users_raw) : trimspace(s)])
 
-  additional_cloud_run_iap_members_raw = data.google_secret_manager_secret_version_access.additional_cloud_run_iap_members.secret_data
+  additional_cloud_run_iap_members_raw = nonsensitive(data.google_secret_manager_secret_version_access.additional_cloud_run_iap_members.secret_data)
   additional_cloud_run_iap_members     = compact([for s in split(",", local.additional_cloud_run_iap_members_raw) : trimspace(s)])
 }
