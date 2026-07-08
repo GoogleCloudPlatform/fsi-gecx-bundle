@@ -157,7 +157,7 @@ resource "google_dataplex_entry_type" "fraud_support_topic" {
   entry_type_id = "fraud-support-topic"
   display_name  = "Fraud Support Topic"
   description   = "Custom Knowledge Catalog entry type for approved fraud support guidance topics."
-  type_aliases  = ["DOCUMENT"]
+  type_aliases  = ["TOPIC"]
   platform      = "BANKING_SUPPORT"
   system        = "NOVA_HORIZON"
 

@@ -806,6 +806,7 @@ resource "google_cloud_run_v2_job" "lakehouse_view_reconcile" {
   count    = var.deploy_cloud_run_services ? 1 : 0
   name     = "lakehouse-view-reconcile"
   location = var.region
+  deletion_protection = false
 
   template {
     template {
