@@ -359,6 +359,208 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
         raise e
 
 
+def void_fraud_authorization_hold(
+    db: Session,
+    *,
+    account_id: str,
+    authorization_id: str,
+    fraud_alert_id: str,
+    reason: str = "CUSTOMER_CONFIRMED_FRAUD",
+) -> dict:
+    """
+    Releases a disputed pending card authorization and records fraud-specific audit/action state.
+    """
+    logger.info(
+        "Voiding fraud authorization hold account=%s authorization=%s fraud_alert=%s",
+        account_id,
+        authorization_id,
+        fraud_alert_id,
+    )
+    try:
+        from repositories.credit_card import CreditCardRepository
+        from repositories.fraud import FraudAlertRepository
+
+        repo = CreditCardRepository(db)
+        fraud_repo = FraudAlertRepository(db)
+        idempotency_key = f"fraud-auth-void:{authorization_id}"
+        existing_action = fraud_repo.get_case_action_by_idempotency_key(
+            fraud_alert_id=fraud_alert_id,
+            idempotency_key=idempotency_key,
+        )
+        if existing_action and existing_action.status == "SUCCEEDED":
+            result = dict(existing_action.result_payload or {})
+            result["idempotent_replay"] = True
+            return result
+
+        account = repo.get_account_by_id(account_id, lock=True)
+        if not account:
+            raise ValueError(f"Account '{account_id}' not found.")
+
+        auth = repo.get_authorization_by_id_for_account(authorization_id, account.id)
+        if not auth:
+            raise ValueError(f"Authorization '{authorization_id}' not found for account.")
+        if auth.status != "PENDING":
+            raise ValueError(f"Authorization '{authorization_id}' is not pending and cannot be voided.")
+
+        action = fraud_repo.create_case_action(
+            fraud_alert_id=fraud_alert_id,
+            action_type="FRAUD_AUTHORIZATION_VOIDED",
+            status="PENDING",
+            idempotency_key=idempotency_key,
+            request_payload={
+                "account_id": str(account.id),
+                "authorization_id": str(auth.id),
+                "reason": reason,
+            },
+        )
+
+        release_amount = int(auth.billing_amount_cents or auth.transaction_amount_cents or 0)
+        auth.status = "REVERSED"
+        repo.save_authorization(auth)
+        account.available_credit_cents += release_amount
+        repo.save_account(account)
+
+        result = {
+            "account_id": str(account.id),
+            "authorization_id": str(auth.id),
+            "fraud_alert_id": fraud_alert_id,
+            "voided_amount_cents": release_amount,
+            "authorization_status": auth.status,
+            "available_credit_cents": account.available_credit_cents,
+            "message": "Pending fraud authorization reversed.",
+        }
+        record_audit_event(
+            db,
+            "FRAUD_AUTHORIZATION_VOIDED",
+            {
+                "fraud_alert_id": fraud_alert_id,
+                "correlation_id": fraud_alert_id,
+                "account_id": str(account.id),
+                "card_id": str(auth.card_id),
+                "authorization_id": str(auth.id),
+                "amount_cents": release_amount,
+                "reason": reason,
+            },
+        )
+        fraud_repo.complete_case_action(
+            action_id=action.id,
+            status="SUCCEEDED",
+            result_payload=result,
+        )
+        db.commit()
+        return result
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error voiding fraud authorization hold: {e}")
+        raise e
+
+
+def apply_fraud_provisional_credit(
+    db: Session,
+    *,
+    account_id: str,
+    transaction_id: str,
+    fraud_alert_id: str,
+    reason: str = "CUSTOMER_CONFIRMED_FRAUD",
+) -> dict:
+    """
+    Applies an offsetting provisional credit for a disputed posted debit transaction.
+    """
+    logger.info(
+        "Applying fraud provisional credit account=%s transaction=%s fraud_alert=%s",
+        account_id,
+        transaction_id,
+        fraud_alert_id,
+    )
+    try:
+        from repositories.credit_card import CreditCardRepository
+        from repositories.fraud import FraudAlertRepository
+
+        repo = CreditCardRepository(db)
+        fraud_repo = FraudAlertRepository(db)
+        idempotency_key = f"fraud-provisional-credit:{transaction_id}"
+        existing_action = fraud_repo.get_case_action_by_idempotency_key(
+            fraud_alert_id=fraud_alert_id,
+            idempotency_key=idempotency_key,
+        )
+        if existing_action and existing_action.status == "SUCCEEDED":
+            result = dict(existing_action.result_payload or {})
+            result["idempotent_replay"] = True
+            return result
+
+        account = repo.get_account_by_id(account_id, lock=True)
+        if not account:
+            raise ValueError(f"Account '{account_id}' not found.")
+
+        original_tx = repo.get_ledger_entry_by_id_for_account(transaction_id, account.id)
+        if not original_tx:
+            raise ValueError(f"Posted transaction '{transaction_id}' not found for account.")
+        if original_tx.amount_cents >= 0:
+            raise ValueError(f"Posted transaction '{transaction_id}' is not a debit and cannot receive a provisional credit.")
+        prior_credit = repo.get_fraud_provisional_credit_entry(account.id, transaction_id)
+        if prior_credit:
+            raise ValueError(f"Posted transaction '{transaction_id}' already has a provisional fraud credit.")
+
+        action = fraud_repo.create_case_action(
+            fraud_alert_id=fraud_alert_id,
+            action_type="FRAUD_PROVISIONAL_CREDIT_APPLIED",
+            status="PENDING",
+            idempotency_key=idempotency_key,
+            request_payload={
+                "account_id": str(account.id),
+                "transaction_id": str(original_tx.id),
+                "reason": reason,
+            },
+        )
+
+        credit_amount = abs(int(original_tx.amount_cents))
+        credit_entry = AccountLedger(
+            account_id=account.id,
+            amount_cents=credit_amount,
+            description=f"FRAUD_PROVISIONAL_CREDIT_REF_{transaction_id}",
+            posted_at=datetime.datetime.now(datetime.timezone.utc),
+        )
+        repo.save_ledger(credit_entry)
+        account.cleared_balance_cents -= credit_amount
+        account.available_credit_cents += credit_amount
+        repo.save_account(account)
+
+        result = {
+            "account_id": str(account.id),
+            "transaction_id": str(original_tx.id),
+            "provisional_credit_transaction_id": str(credit_entry.id),
+            "fraud_alert_id": fraud_alert_id,
+            "credited_amount_cents": credit_amount,
+            "cleared_balance_cents": account.cleared_balance_cents,
+            "available_credit_cents": account.available_credit_cents,
+            "message": "Provisional fraud credit applied pending investigation.",
+        }
+        record_audit_event(
+            db,
+            "FRAUD_PROVISIONAL_CREDIT_APPLIED",
+            {
+                "fraud_alert_id": fraud_alert_id,
+                "correlation_id": fraud_alert_id,
+                "account_id": str(account.id),
+                "posted_transaction_id": str(original_tx.id),
+                "provisional_credit_transaction_id": str(credit_entry.id),
+                "amount_cents": credit_amount,
+                "reason": reason,
+            },
+        )
+        fraud_repo.complete_case_action(
+            action_id=action.id,
+            status="SUCCEEDED",
+            result_payload=result,
+        )
+        db.commit()
+        return result
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error applying fraud provisional credit: {e}")
+        raise e
+
+
 def get_fdx_account(db: Session, account_id: str, customer_id: str) -> FDXAccount:
     from repositories.credit_card import CreditCardRepository
     repo = CreditCardRepository(db)

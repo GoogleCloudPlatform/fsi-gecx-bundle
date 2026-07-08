@@ -146,11 +146,26 @@ class CreditCardRepository:
         """Retrieves a single ledger entry transaction by its unique ID."""
         return self.db.query(AccountLedger).filter(AccountLedger.id == entry_id).first()
 
+    def get_ledger_entry_by_id_for_account(self, entry_id: str, account_id: str) -> Optional[AccountLedger]:
+        """Retrieves a single ledger entry after verifying account ownership."""
+        return self.db.query(AccountLedger).filter(
+            AccountLedger.id == entry_id,
+            AccountLedger.account_id == account_id,
+        ).first()
+
     def save_ledger(self, entry: AccountLedger) -> AccountLedger:
         """Saves an Account Ledger transaction entry to the session."""
         self.db.add(entry)
         self.db.flush()
         return entry
+
+    def get_fraud_provisional_credit_entry(self, account_id: str, original_tx_id: str) -> Optional[AccountLedger]:
+        """Checks if a fraud provisional credit already exists for a posted transaction."""
+        return self.db.query(AccountLedger).filter(
+            AccountLedger.account_id == account_id,
+            AccountLedger.authorization_id.is_(None),
+            AccountLedger.description == f"FRAUD_PROVISIONAL_CREDIT_REF_{original_tx_id}",
+        ).first()
 
     def get_reversal_entry(self, account_id: str, original_tx_id: str) -> Optional[AccountLedger]:
         """Checks if a reversal transaction already exists for the specified transaction ID."""
@@ -174,6 +189,13 @@ class CreditCardRepository:
     def get_authorization_by_id(self, auth_id: str) -> Optional[TransactionAuthorization]:
         """Retrieves a transaction authorization by its ID."""
         return self.db.query(TransactionAuthorization).filter(TransactionAuthorization.id == auth_id).first()
+
+    def get_authorization_by_id_for_account(self, auth_id: str, account_id: str) -> Optional[TransactionAuthorization]:
+        """Retrieves a transaction authorization after verifying account ownership."""
+        return self.db.query(TransactionAuthorization).filter(
+            TransactionAuthorization.id == auth_id,
+            TransactionAuthorization.account_id == account_id,
+        ).first()
 
     def save_authorization(self, auth: TransactionAuthorization) -> TransactionAuthorization:
         """Saves a Transaction Authorization record to the session."""

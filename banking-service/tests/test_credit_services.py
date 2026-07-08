@@ -20,17 +20,20 @@ from sqlalchemy.orm import sessionmaker
 import models.audit  # noqa: F401
 import models.fraud  # noqa: F401
 from models.audit import AuditOutbox
-from models.credit_card import Base, FinancialAccount, IssuedCard, AccountLedger, CreditProduct
+from models.fraud import FraudCaseAction
+from models.credit_card import Base, FinancialAccount, IssuedCard, AccountLedger, CreditProduct, TransactionAuthorization
 from models.identity import User
 from repositories.credit_card import CreditCardRepository
 from repositories.fraud import FraudAlertRepository
 from services.credit_card import (
     apply_limit_increase,
+    apply_fraud_provisional_credit,
     freeze_card,
     issue_replacement_card,
     queue_wallet_provisioning,
     reverse_posted_fee,
     unfreeze_card,
+    void_fraud_authorization_hold,
 )
 
 # Use an isolated, in-memory SQLite database for sub-second, side-effect-free testing
@@ -338,3 +341,186 @@ def test_reverse_posted_fee_already_reversed(db_session):
     # 2nd reversal must raise ValueError
     with pytest.raises(ValueError, match="has already been reversed"):
         reverse_posted_fee(db_session, account_id="12300000-0000-4000-8000-000000000123", transaction_id="01000000-0000-4000-8000-000000000001", reason="SECOND_TRY")
+
+
+def _create_fraud_alert(db_session, *, thread_id="thread-fraud-remediation"):
+    return FraudAlertRepository(db_session).create_alert(
+        customer_id="88888888-8888-4888-8888-222222222222",
+        auth_provider_uid="cust-test-xyz",
+        credit_account_id="12300000-0000-4000-8000-000000000123",
+        card_id="99900000-0000-4000-8000-000000000999",
+        card_last_four="1234",
+        message_thread_id=thread_id,
+        suspicious_authorization_ids=["02000000-0000-4000-8000-000000000002"],
+        suspicious_transactions=[{"merchant_name": "TEST FRAUD MERCHANT", "amount_cents": 4200}],
+    )
+
+
+def _create_pending_fraud_authorization(db_session):
+    auth = TransactionAuthorization(
+        id="02000000-0000-4000-8000-000000000002",
+        card_id="99900000-0000-4000-8000-000000000999",
+        account_id="12300000-0000-4000-8000-000000000123",
+        transaction_amount_cents=4200,
+        billing_amount_cents=4200,
+        status="PENDING",
+        auth_code="123456",
+        retrieval_reference_number="123456789012",
+        card_network="VISA",
+        merchant_category_code="5999",
+        merchant_name="TEST FRAUD MERCHANT",
+        expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7),
+    )
+    db_session.add(auth)
+    account = db_session.query(FinancialAccount).filter_by(id="12300000-0000-4000-8000-000000000123").first()
+    account.available_credit_cents -= 4200
+    db_session.commit()
+    return auth
+
+
+def test_void_fraud_authorization_hold_releases_available_credit_and_records_action(db_session):
+    alert = _create_fraud_alert(db_session)
+    auth = _create_pending_fraud_authorization(db_session)
+
+    result = void_fraud_authorization_hold(
+        db_session,
+        account_id="12300000-0000-4000-8000-000000000123",
+        authorization_id=str(auth.id),
+        fraud_alert_id=str(alert.id),
+    )
+
+    refreshed_auth = db_session.query(TransactionAuthorization).filter_by(id=auth.id).first()
+    action = db_session.query(FraudCaseAction).filter_by(
+        fraud_alert_id=alert.id,
+        action_type="FRAUD_AUTHORIZATION_VOIDED",
+    ).first()
+    event = db_session.query(AuditOutbox).filter_by(event_type="FRAUD_AUTHORIZATION_VOIDED").first()
+    account = db_session.query(FinancialAccount).filter_by(id="12300000-0000-4000-8000-000000000123").first()
+
+    assert result["voided_amount_cents"] == 4200
+    assert refreshed_auth.status == "REVERSED"
+    assert account.available_credit_cents == 496500
+    assert action is not None
+    assert action.status == "SUCCEEDED"
+    assert event is not None
+    assert str(alert.id) in event.payload
+
+
+def test_void_fraud_authorization_hold_is_idempotent(db_session):
+    alert = _create_fraud_alert(db_session, thread_id="thread-fraud-remediation-idempotent")
+    auth = _create_pending_fraud_authorization(db_session)
+
+    first = void_fraud_authorization_hold(
+        db_session,
+        account_id="12300000-0000-4000-8000-000000000123",
+        authorization_id=str(auth.id),
+        fraud_alert_id=str(alert.id),
+    )
+    second = void_fraud_authorization_hold(
+        db_session,
+        account_id="12300000-0000-4000-8000-000000000123",
+        authorization_id=str(auth.id),
+        fraud_alert_id=str(alert.id),
+    )
+
+    actions = db_session.query(FraudCaseAction).filter_by(
+        fraud_alert_id=alert.id,
+        action_type="FRAUD_AUTHORIZATION_VOIDED",
+    ).all()
+    account = db_session.query(FinancialAccount).filter_by(id="12300000-0000-4000-8000-000000000123").first()
+
+    assert first["voided_amount_cents"] == second["voided_amount_cents"] == 4200
+    assert second["idempotent_replay"] is True
+    assert account.available_credit_cents == 496500
+    assert len(actions) == 1
+
+
+def test_apply_fraud_provisional_credit_posts_credit_and_records_action(db_session):
+    alert = _create_fraud_alert(db_session)
+
+    result = apply_fraud_provisional_credit(
+        db_session,
+        account_id="12300000-0000-4000-8000-000000000123",
+        transaction_id="01000000-0000-4000-8000-000000000001",
+        fraud_alert_id=str(alert.id),
+    )
+
+    credit_entry = db_session.query(AccountLedger).filter_by(id=result["provisional_credit_transaction_id"]).first()
+    action = db_session.query(FraudCaseAction).filter_by(
+        fraud_alert_id=alert.id,
+        action_type="FRAUD_PROVISIONAL_CREDIT_APPLIED",
+    ).first()
+    event = db_session.query(AuditOutbox).filter_by(event_type="FRAUD_PROVISIONAL_CREDIT_APPLIED").first()
+    account = db_session.query(FinancialAccount).filter_by(id="12300000-0000-4000-8000-000000000123").first()
+
+    assert result["credited_amount_cents"] == 3500
+    assert credit_entry.amount_cents == 3500
+    assert credit_entry.description == "FRAUD_PROVISIONAL_CREDIT_REF_01000000-0000-4000-8000-000000000001"
+    assert account.cleared_balance_cents == 0
+    assert account.available_credit_cents == 500000
+    assert action is not None
+    assert action.status == "SUCCEEDED"
+    assert event is not None
+    assert str(alert.id) in event.payload
+
+
+def test_apply_fraud_provisional_credit_is_idempotent(db_session):
+    alert = _create_fraud_alert(db_session, thread_id="thread-fraud-credit-idempotent")
+
+    first = apply_fraud_provisional_credit(
+        db_session,
+        account_id="12300000-0000-4000-8000-000000000123",
+        transaction_id="01000000-0000-4000-8000-000000000001",
+        fraud_alert_id=str(alert.id),
+    )
+    second = apply_fraud_provisional_credit(
+        db_session,
+        account_id="12300000-0000-4000-8000-000000000123",
+        transaction_id="01000000-0000-4000-8000-000000000001",
+        fraud_alert_id=str(alert.id),
+    )
+
+    credit_entries = db_session.query(AccountLedger).filter_by(
+        description="FRAUD_PROVISIONAL_CREDIT_REF_01000000-0000-4000-8000-000000000001",
+    ).all()
+    account = db_session.query(FinancialAccount).filter_by(id="12300000-0000-4000-8000-000000000123").first()
+
+    assert first["credited_amount_cents"] == second["credited_amount_cents"] == 3500
+    assert second["idempotent_replay"] is True
+    assert account.cleared_balance_cents == 0
+    assert account.available_credit_cents == 500000
+    assert len(credit_entries) == 1
+
+
+def test_apply_fraud_provisional_credit_rejects_credit_transaction(db_session):
+    alert = _create_fraud_alert(db_session)
+    payment = AccountLedger(
+        id="03000000-0000-4000-8000-000000000003",
+        account_id="12300000-0000-4000-8000-000000000123",
+        amount_cents=1000,
+        description="PAYMENT",
+        posted_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    db_session.add(payment)
+    db_session.commit()
+
+    with pytest.raises(ValueError, match="is not a debit"):
+        apply_fraud_provisional_credit(
+            db_session,
+            account_id="12300000-0000-4000-8000-000000000123",
+            transaction_id="03000000-0000-4000-8000-000000000003",
+            fraud_alert_id=str(alert.id),
+        )
+
+
+def test_void_fraud_authorization_hold_rejects_wrong_account(db_session):
+    alert = _create_fraud_alert(db_session)
+    auth = _create_pending_fraud_authorization(db_session)
+
+    with pytest.raises(ValueError, match="not found"):
+        void_fraud_authorization_hold(
+            db_session,
+            account_id="77700000-0000-4000-8000-000000000777",
+            authorization_id=str(auth.id),
+            fraud_alert_id=str(alert.id),
+        )
