@@ -69,6 +69,23 @@ class FraudAlertRepository:
             .first()
         )
 
+    def get_alert_by_id(self, *, fraud_alert_id) -> FraudAlert | None:
+        return self.db.query(FraudAlert).filter(FraudAlert.id == fraud_alert_id).first()
+
+    def get_alert_for_customer(
+        self,
+        *,
+        fraud_alert_id,
+        auth_provider_uid: str | None = None,
+        customer_id=None,
+    ) -> FraudAlert | None:
+        query = self.db.query(FraudAlert).filter(FraudAlert.id == fraud_alert_id)
+        if auth_provider_uid:
+            query = query.filter(FraudAlert.auth_provider_uid == auth_provider_uid)
+        if customer_id is not None:
+            query = query.filter(FraudAlert.customer_id == customer_id)
+        return query.first()
+
     def resolve_alert(
         self,
         *,
