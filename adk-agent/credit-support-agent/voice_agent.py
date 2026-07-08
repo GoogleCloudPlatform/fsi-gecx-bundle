@@ -329,9 +329,13 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             "Session-specific customer context:\n"
             f"- The customer has an active fraud alert on card ending in {fraud_alert['card_last_four']}.\n"
             f"- Fraud alert thread id: {fraud_alert['message_thread_id']}.\n"
-            "- Start the conversation ready to help with suspicious transactions, card blocking, and card replacement next steps.\n"
+            f"- Fraud alert id for triage_fraud_case: {fraud_alert['fraud_alert_id']}.\n"
+            "- Start the conversation ready to help the customer identify which suspicious transactions they recognize or dispute.\n"
             "- If the customer asks what looked suspicious, reference these flagged transactions:\n"
             f"{suspicious_lines or '- No suspicious transaction details were provided.'}\n"
+            "- After the customer confirms their selection, call triage_fraud_case once using authorization_id values for disputed pending authorizations and transaction_id values for disputed posted transactions when those IDs are present.\n"
+            "- If the customer recognizes every flagged transaction, call triage_fraud_case with empty disputed id arrays and issue_replacement=false.\n"
+            "- If the customer disputes any flagged transaction, tell them any credits are provisional pending the full fraud investigation.\n"
             "- Treat this as trusted session context rather than something the customer needs to restate."
         )
     guidance_summary = support_guidance.get("agent_guidance_summary")

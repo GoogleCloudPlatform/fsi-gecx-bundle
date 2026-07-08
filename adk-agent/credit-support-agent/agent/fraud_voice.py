@@ -17,6 +17,7 @@ def build_fraud_playbook(voice_context: dict | None) -> dict:
             "card_blocked": False,
             "replacement_issued": False,
             "wallet_push_queued": False,
+            "triage_submitted": False,
             "required_sequence": [],
         }
 
@@ -35,12 +36,10 @@ def build_fraud_playbook(voice_context: dict | None) -> dict:
         "card_blocked": False,
         "replacement_issued": False,
         "wallet_push_queued": False,
+        "triage_submitted": False,
         "required_sequence": [
             "get_open_fraud_alert",
-            "report_lost_stolen_card",
-            "issue_replacement_card_tool",
-            "push_card_to_google_wallet",
-            "resolve_fraud_alert",
+            "triage_fraud_case",
         ],
     }
 
@@ -52,7 +51,7 @@ def build_initial_greeting(fraud_playbook: dict | None) -> str:
         return (
             "Please introduce yourself briefly, acknowledge that you can see a suspicious activity alert "
             f"on the customer's card ending in {card_last_four}, explain that you are reviewing {suspicious_count} flagged charges now, "
-            "inspect the open fraud alert before recommending next steps, and ask whether the customer recognizes the transactions."
+            "inspect the open fraud alert before recommending next steps, and ask which flagged transactions the customer recognizes or disputes."
         )
 
     return (
@@ -71,31 +70,29 @@ def validate_fraud_tool_sequence(fraud_playbook: dict | None, tool_name: str, ar
     if tool_name == "get_open_fraud_alert":
         return None
 
-    if tool_name in {
+    legacy_fraud_mitigation_tools = {
         "report_lost_stolen_card",
         "issue_replacement_card_tool",
-        "push_card_to_google_wallet",
         "resolve_fraud_alert",
-    } and not playbook.get("open_alert_inspected"):
-        return "Inspect the open fraud alert before taking mitigation actions."
-
-    if tool_name == "issue_replacement_card_tool" and not playbook.get("card_blocked"):
-        return "Block the card before issuing a replacement card."
+    }
+    if tool_name in legacy_fraud_mitigation_tools:
+        return "Use triage_fraud_case for active fraud alert mitigation instead of sequencing low-level fraud tools."
 
     if tool_name == "push_card_to_google_wallet" and not playbook.get("replacement_issued"):
-        return "Issue the replacement card before queueing Google Wallet provisioning."
+        return "Complete fraud triage and replacement before queueing Google Wallet provisioning."
 
-    if tool_name == "resolve_fraud_alert":
-        resolution = str((args or {}).get("resolution") or "").strip().upper()
-        if resolution == "CUSTOMER_RECOGNIZED":
-            return None
-        if resolution == "CUSTOMER_CONFIRMED_FRAUD":
-            if not playbook.get("card_blocked"):
-                return "Block the card before resolving the alert as confirmed fraud."
-            if not playbook.get("replacement_issued"):
-                return "Issue the replacement card before resolving the alert as confirmed fraud."
-            if not playbook.get("wallet_push_queued"):
-                return "Queue Google Wallet provisioning before resolving the alert as confirmed fraud."
+    if tool_name == "triage_fraud_case" and not playbook.get("open_alert_inspected"):
+        return "Inspect the open fraud alert before taking mitigation actions."
+
+    if tool_name == "triage_fraud_case":
+        fraud_alert_id = str((args or {}).get("fraud_alert_id") or "").strip()
+        expected_alert_id = str(playbook.get("fraud_alert_id") or "").strip()
+        if expected_alert_id and not fraud_alert_id:
+            return "Use the active fraud alert id from the inspected alert when triaging the fraud case."
+        if expected_alert_id and fraud_alert_id and fraud_alert_id != expected_alert_id:
+            return "Use the active fraud alert id from the inspected alert when triaging the fraud case."
+        if playbook.get("triage_submitted") or playbook.get("resolution_completed"):
+            return "The fraud case has already been triaged. Do not submit the fraud workflow again."
     return None
 
 
@@ -124,6 +121,19 @@ def mark_fraud_tool_completed(
 
     if tool_name == "push_card_to_google_wallet":
         playbook["wallet_push_queued"] = True
+        return playbook
+
+    if tool_name == "triage_fraud_case":
+        outcome = str((tool_response or {}).get("outcome") or "").strip().upper()
+        playbook["triage_submitted"] = True
+        playbook["resolution_completed"] = True
+        if outcome == "CUSTOMER_RECOGNIZED":
+            playbook["recognized_activity_confirmed"] = True
+        else:
+            playbook["confirmed_fraud"] = True
+            if (tool_response or {}).get("replacement_card"):
+                playbook["card_blocked"] = True
+                playbook["replacement_issued"] = True
         return playbook
 
     if tool_name == "resolve_fraud_alert":

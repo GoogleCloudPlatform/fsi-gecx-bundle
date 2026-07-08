@@ -221,6 +221,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
         "issue_replacement_card_tool",
         "push_card_to_google_wallet",
         "resolve_fraud_alert",
+        "triage_fraud_case",
     }
     sequencing_error = validate_fraud_tool_sequence(fraud_playbook, tool_name, args)
     if sequencing_error:
@@ -331,6 +332,30 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
                 "status": fraud_alert.get("status"),
                 "resolution": fraud_alert.get("resolution"),
                 "card_last_four": fraud_alert.get("card_last_four"),
+            })
+            return None
+
+        if tool_name == "triage_fraud_case":
+            logger.info(
+                "[CALLBACK] FRAUD_CASE_TRIAGED event broadcasted %s",
+                format_log_context(
+                    state=tool_context.state if hasattr(tool_context, "state") else None,
+                    tool_name=tool_name,
+                    outcome=structured.get("outcome"),
+                ),
+            )
+            fraud_alert = structured.get("fraud_alert") or {}
+            notify_event({
+                "type": DataChannelEvent.FRAUD_ALERT_RESOLVED.value,
+                "fraud_alert_id": fraud_alert.get("fraud_alert_id"),
+                "status": fraud_alert.get("status"),
+                "resolution": structured.get("outcome"),
+                "card_last_four": fraud_alert.get("card_last_four"),
+                "voided_authorizations": structured.get("voided_authorizations", []),
+                "provisional_credits": structured.get("provisional_credits", []),
+                "replacement_card": structured.get("replacement_card"),
+                "secure_message": structured.get("secure_message"),
+                "escalated": structured.get("escalated", False),
             })
             return None
 

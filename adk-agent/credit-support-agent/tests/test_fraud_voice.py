@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from agent.fraud_voice import (
     build_fraud_playbook,
     build_initial_greeting,
@@ -34,6 +36,7 @@ def test_build_fraud_playbook_uses_alert_context() -> None:
     assert playbook["fraud_alert_id"] == "fraud-123"
     assert playbook["card_last_four"] == "4242"
     assert playbook["suspicious_transactions_count"] == 2
+    assert playbook["required_sequence"] == ["get_open_fraud_alert", "triage_fraud_case"]
 
 
 def test_build_initial_greeting_acknowledges_fraud_context() -> None:
@@ -48,7 +51,7 @@ def test_build_initial_greeting_acknowledges_fraud_context() -> None:
     assert "suspicious activity alert" in greeting
     assert "4242" in greeting
     assert "inspect the open fraud alert" in greeting
-    assert "whether the customer recognizes the transactions" in greeting
+    assert "recognizes or disputes" in greeting
 
 
 def test_build_initial_greeting_defaults_to_general_support() -> None:
@@ -66,12 +69,12 @@ def test_validate_fraud_tool_sequence_requires_alert_inspection_first() -> None:
         }
     )
 
-    error = validate_fraud_tool_sequence(playbook, "report_lost_stolen_card", {})
+    error = validate_fraud_tool_sequence(playbook, "triage_fraud_case", {"fraud_alert_id": "fraud-123"})
 
     assert error == "Inspect the open fraud alert before taking mitigation actions."
 
 
-def test_validate_fraud_tool_sequence_requires_block_before_replacement() -> None:
+def test_validate_fraud_tool_sequence_blocks_low_level_fraud_tools_for_active_alert() -> None:
     playbook = build_fraud_playbook(
         {
             "has_active_fraud_alert": True,
@@ -82,10 +85,10 @@ def test_validate_fraud_tool_sequence_requires_block_before_replacement() -> Non
 
     error = validate_fraud_tool_sequence(playbook, "issue_replacement_card_tool", {})
 
-    assert error == "Block the card before issuing a replacement card."
+    assert error == "Use triage_fraud_case for active fraud alert mitigation instead of sequencing low-level fraud tools."
 
 
-def test_validate_fraud_tool_sequence_requires_wallet_before_confirmed_resolution() -> None:
+def test_validate_fraud_tool_sequence_allows_wallet_push_after_triage_replacement() -> None:
     playbook = build_fraud_playbook(
         {
             "has_active_fraud_alert": True,
@@ -93,19 +96,29 @@ def test_validate_fraud_tool_sequence_requires_wallet_before_confirmed_resolutio
         }
     )
     playbook["open_alert_inspected"] = True
-    playbook["card_blocked"] = True
+    playbook["triage_submitted"] = True
     playbook["replacement_issued"] = True
 
-    error = validate_fraud_tool_sequence(
-        playbook,
-        "resolve_fraud_alert",
-        {"resolution": "CUSTOMER_CONFIRMED_FRAUD"},
+    error = validate_fraud_tool_sequence(playbook, "push_card_to_google_wallet", {})
+
+    assert error is None
+
+
+def test_validate_fraud_tool_sequence_requires_replacement_before_wallet_push() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
     )
+    playbook["open_alert_inspected"] = True
 
-    assert error == "Queue Google Wallet provisioning before resolving the alert as confirmed fraud."
+    error = validate_fraud_tool_sequence(playbook, "push_card_to_google_wallet", {})
+
+    assert error == "Complete fraud triage and replacement before queueing Google Wallet provisioning."
 
 
-def test_validate_fraud_tool_sequence_allows_recognized_resolution_after_inspection() -> None:
+def test_validate_fraud_tool_sequence_rejects_wrong_triage_alert_id() -> None:
     playbook = build_fraud_playbook(
         {
             "has_active_fraud_alert": True,
@@ -116,14 +129,70 @@ def test_validate_fraud_tool_sequence_allows_recognized_resolution_after_inspect
 
     error = validate_fraud_tool_sequence(
         playbook,
-        "resolve_fraud_alert",
-        {"resolution": "CUSTOMER_RECOGNIZED"},
+        "triage_fraud_case",
+        {"fraud_alert_id": "fraud-999"},
+    )
+
+    assert error == "Use the active fraud alert id from the inspected alert when triaging the fraud case."
+
+
+def test_validate_fraud_tool_sequence_requires_triage_alert_id() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    playbook["open_alert_inspected"] = True
+
+    error = validate_fraud_tool_sequence(playbook, "triage_fraud_case", {})
+
+    assert error == "Use the active fraud alert id from the inspected alert when triaging the fraud case."
+
+
+def test_validate_fraud_tool_sequence_allows_triage_after_inspection() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    playbook["open_alert_inspected"] = True
+
+    error = validate_fraud_tool_sequence(
+        playbook,
+        "triage_fraud_case",
+        {
+            "fraud_alert_id": "fraud-123",
+            "disputed_authorization_ids": [],
+            "disputed_transaction_ids": [],
+            "issue_replacement": False,
+        },
     )
 
     assert error is None
 
 
-def test_mark_fraud_tool_completed_tracks_mitigation_progress() -> None:
+def test_validate_fraud_tool_sequence_blocks_duplicate_triage() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    playbook["open_alert_inspected"] = True
+    playbook["triage_submitted"] = True
+
+    error = validate_fraud_tool_sequence(
+        playbook,
+        "triage_fraud_case",
+        {"fraud_alert_id": "fraud-123"},
+    )
+
+    assert error == "The fraud case has already been triaged. Do not submit the fraud workflow again."
+
+
+def test_mark_fraud_tool_completed_tracks_single_triage_workflow() -> None:
     playbook = build_fraud_playbook(
         {
             "has_active_fraud_alert": True,
@@ -132,18 +201,51 @@ def test_mark_fraud_tool_completed_tracks_mitigation_progress() -> None:
     )
 
     playbook = mark_fraud_tool_completed(playbook, "get_open_fraud_alert", {"fraud_alert": {}})
-    playbook = mark_fraud_tool_completed(playbook, "report_lost_stolen_card", {})
-    playbook = mark_fraud_tool_completed(playbook, "issue_replacement_card_tool", {})
-    playbook = mark_fraud_tool_completed(playbook, "push_card_to_google_wallet", {})
     playbook = mark_fraud_tool_completed(
         playbook,
-        "resolve_fraud_alert",
-        {"fraud_alert": {"resolution": "CUSTOMER_CONFIRMED_FRAUD"}},
+        "triage_fraud_case",
+        {
+            "outcome": "PENDING_SPECIALIST_REVIEW",
+            "replacement_card": {"new_card_id": "card-456"},
+        },
     )
 
     assert playbook["open_alert_inspected"] is True
+    assert playbook["triage_submitted"] is True
     assert playbook["card_blocked"] is True
     assert playbook["replacement_issued"] is True
-    assert playbook["wallet_push_queued"] is True
     assert playbook["resolution_completed"] is True
     assert playbook["confirmed_fraud"] is True
+
+
+def test_mark_fraud_tool_completed_tracks_recognized_triage() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+
+    playbook = mark_fraud_tool_completed(playbook, "get_open_fraud_alert", {"fraud_alert": {}})
+    playbook = mark_fraud_tool_completed(
+        playbook,
+        "triage_fraud_case",
+        {"outcome": "CUSTOMER_RECOGNIZED", "replacement_card": None},
+    )
+
+    assert playbook["triage_submitted"] is True
+    assert playbook["resolution_completed"] is True
+    assert playbook["recognized_activity_confirmed"] is True
+    assert playbook["confirmed_fraud"] is False
+
+
+def test_instruction_contract_prefers_single_triage_workflow() -> None:
+    instruction = Path(__file__).parents[1].joinpath("agent", "resources", "instruction.txt").read_text()
+
+    assert "call `triage_fraud_case` exactly once" in instruction
+    assert "Do not burst-call multiple fraud tools in a row" in instruction
+    assert (
+        "Do not call `report_lost_stolen_card`, `issue_replacement_card_tool`, "
+        "`push_card_to_google_wallet`, or `resolve_fraud_alert` as separate steps"
+    ) in instruction
+    assert "you may separately offer to queue Google Wallet provisioning" in instruction
