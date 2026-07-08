@@ -163,6 +163,24 @@ class CdcMonitoringService:
             "bigquery_error": bq_error,
         }
 
+    def get_cached_cdc_status(self) -> dict:
+        global _cache
+        if _cache:
+            try:
+                cached = _cache.get("cdc_status")
+                if cached:
+                    return json.loads(cached)
+            except Exception as exc:
+                logger.warning(f"Redis CDC status cache error: {exc}")
+
+        status = self.get_cdc_status()
+        if _cache:
+            try:
+                _cache.setex("cdc_status", 15, json.dumps(status))
+            except Exception:
+                pass
+        return status
+
     def get_lakehouse_stream(self, limit: int = 20) -> dict:
         rows = self.lakehouse_repo.list_recent_transactions(limit=limit)
         return {
@@ -179,7 +197,7 @@ class CdcMonitoringService:
                     metrics = json.loads(cached)
                     open_alerts = self.get_open_fraud_alert_count()
                     metrics["operational_active_fraud_alerts"] = open_alerts
-                    metrics["active_anomalies"] = max(int(metrics.get("active_anomalies") or 0), open_alerts)
+                    metrics["active_anomalies"] = open_alerts
                     return metrics
             except Exception as exc:
                 logger.warning(f"Redis cache error: {exc}")
@@ -190,6 +208,7 @@ class CdcMonitoringService:
             "total_bytes_processed": None,
             "active_anomalies": 0,
             "operational_active_fraud_alerts": 0,
+            "lakehouse_fraud_anomalies": 0,
             "status": "SUCCESS",
         }
 
@@ -201,7 +220,7 @@ class CdcMonitoringService:
             metrics["status"] = "DEGRADED"
 
         try:
-            metrics["active_anomalies"] = max(metrics["active_anomalies"], self.lakehouse_repo.get_anomalies_count())
+            metrics["lakehouse_fraud_anomalies"] = self.lakehouse_repo.get_anomalies_count()
         except Exception as exc:
             logger.warning(f"Error fetching anomalies count: {exc}")
             metrics["status"] = "DEGRADED"

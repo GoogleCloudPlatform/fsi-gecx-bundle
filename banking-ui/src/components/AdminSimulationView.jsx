@@ -519,7 +519,7 @@ function AdminSimulationView() {
               <ShieldAlert className={`w-4 h-4 ${anomalySeverity.iconClass}`} />
             </div>
             <div className={`text-2xl font-black font-mono ${anomalySeverity.textClass}`}>{cdcStats.activeAnomalies}</div>
-            <div className={`text-[10px] mt-1 ${anomalySeverity.textClass}`}>Open anomalies in curated credit analytics</div>
+            <div className={`text-[10px] mt-1 ${anomalySeverity.textClass}`}>Open fraud cases awaiting customer mitigation</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
@@ -901,12 +901,12 @@ function AdminSimulationView() {
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            The <strong>Credit Risk Metrics</strong> tile tracks fraud-anomaly outcomes and live card exposure separately from replication transport health. A non-zero anomaly count means the demo has suspicious card activity available for secure-message review and the voice agent flow.
+            The <strong>Credit Risk Metrics</strong> tile tracks open fraud-case outcomes and live card exposure separately from replication transport health. A non-zero anomaly count means the demo has suspicious card activity available for secure-message review and the voice agent flow.
           </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">Active Fraud Anomalies</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Active anomalies represent suspicious credit-card authorizations that have been enriched and surfaced for customer mitigation.</p>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Active anomalies represent open operational fraud alerts that have been enriched and surfaced for customer mitigation.</p>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <div className="text-amber-500 dark:text-amber-400 font-mono font-bold">Flagged Event Rate + Pending Exposure</div>

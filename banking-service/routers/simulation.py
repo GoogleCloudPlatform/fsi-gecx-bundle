@@ -150,13 +150,12 @@ def get_cdc_status(
 @alias_router.get("/stream-sse")
 async def stream_sse(
     token: ValidatedToken = Depends(verify_presenter_domain),
-    db: Session = Depends(get_db)
 ):
     """
     Push-based Server-Sent Events (SSE) stream delivering real-time CDC lakehouse transactions
     directly to the Admin Simulation UI without requiring manual refreshes or client-side polling.
     """
-    return StreamingResponse(SimulationService(db).stream_payload(token), media_type="text/event-stream", headers={
+    return StreamingResponse(SimulationService.stream_payload(token), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
         "X-Accel-Buffering": "no"

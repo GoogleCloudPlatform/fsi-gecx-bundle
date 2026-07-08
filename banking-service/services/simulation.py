@@ -25,7 +25,7 @@ from services.seeding_service import (
 )
 from services.fraud_alerts import FraudAlertService
 from utils.audit import record_audit_event
-from utils.database import enable_session_rbac_override
+from utils.database import SessionLocal, enable_session_rbac_override
 from utils.internal_auth import get_internal_switch_token
 from utils.internal_execution import InternalServiceContext, apply_internal_db_access
 from utils.redis_client import get_redis_client
@@ -447,10 +447,10 @@ class SimulationService:
             "final_utilization": round(final_utilization, 4),
         }
 
-    async def stream_payload(self, token: ValidatedToken):
+    @staticmethod
+    async def stream_payload(token: ValidatedToken):
         del token
 
-        cdc_service = CdcMonitoringService(self.db)
         from utils.redis_client import get_redis_client
 
         redis_client = get_redis_client()
@@ -458,16 +458,21 @@ class SimulationService:
         last_heartbeat = 0.0
 
         def build_payload(kind: str) -> str:
-            return json.dumps(
-                {
-                    "status": "SUCCESS",
-                    "event_kind": kind,
-                    "operational_stream": cdc_service.get_operational_stream(limit=20)["stream"],
-                    "stream_metrics": cdc_service.get_operational_stream_metrics(),
-                    "cdc_metrics": cdc_service.get_cached_datastream_metrics(),
-                    "cdc_status": cdc_service.get_cdc_status(),
-                }
-            )
+            db = SessionLocal()
+            try:
+                cdc_service = CdcMonitoringService(db)
+                return json.dumps(
+                    {
+                        "status": "SUCCESS",
+                        "event_kind": kind,
+                        "operational_stream": cdc_service.get_operational_stream(limit=20)["stream"],
+                        "stream_metrics": cdc_service.get_operational_stream_metrics(),
+                        "cdc_metrics": cdc_service.get_cached_datastream_metrics(),
+                        "cdc_status": cdc_service.get_cached_cdc_status(),
+                    }
+                )
+            finally:
+                db.close()
 
         if pubsub:
             pubsub.subscribe("channel:transactions:live")

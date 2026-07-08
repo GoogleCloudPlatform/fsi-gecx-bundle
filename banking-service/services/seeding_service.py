@@ -34,6 +34,7 @@ from models.identity import User, UserAddress, RetailLocation
 from models.kyc import KYCRecord, UserCreditProfile
 from models.origination import Account, AccountLedgerEntry, Transaction
 from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, CreditProduct, TransactionAuthorization
+from models.fraud import FraudAlert
 from models.origination import DepositProduct
 from models.settings import SystemSetting
 from models.reference import MerchantCategoryCode
@@ -311,9 +312,13 @@ def clean_database(db: Session) -> None:
         
     # Order matters due to foreign key constraints!
     from models.support import Escalation
+    from models.identity import UserDevice, UserSecureMessage
     from models.origination import Application, MortgageApplication, CreditCardApplication, DepositApplication, ApplicationArtifact
 
     db.query(Escalation).delete(synchronize_session=False)
+    db.query(FraudAlert).delete(synchronize_session=False)
+    db.query(UserSecureMessage).delete(synchronize_session=False)
+    db.query(UserDevice).delete(synchronize_session=False)
 
     db.query(PostedTransaction).delete(synchronize_session=False)
     db.query(TransactionAuthorization).delete(synchronize_session=False)

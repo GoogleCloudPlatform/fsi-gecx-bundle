@@ -30,8 +30,8 @@ from models.fraud import FraudAlert
 from models.audit import AuditOutbox
 from models.identity import User
 from models.origination import Account
-from models.credit_card import CreditAccount, PostedTransaction
-from services.seeding_service import provision_user_suite
+from models.credit_card import CreditAccount, IssuedCard, PostedTransaction
+from services.seeding_service import clean_database, provision_user_suite
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
 test_engine = create_engine(
@@ -74,6 +74,50 @@ def fixture_db_session():
 async def async_client():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
+
+
+def test_clean_database_removes_fraud_alerts(db_session):
+    user = User(auth_provider_uid="fraud-reset-user", email="fraud-reset@example.com")
+    db_session.add(user)
+    db_session.flush()
+    credit_account = CreditAccount(
+        customer_id=user.id,
+        product_code="CASHBACK_EVERYDAY",
+        status="ACTIVE",
+        credit_limit_cents=100000,
+        available_credit_cents=100000,
+    )
+    db_session.add(credit_account)
+    db_session.flush()
+    card = IssuedCard(
+        account_id=credit_account.id,
+        cardholder_name="Fraud Reset",
+        card_token="tok_fraud_reset",
+        last_four="4242",
+        exp_month=1,
+        exp_year=2030,
+        status="ACTIVE",
+        is_active=True,
+    )
+    db_session.add(card)
+    db_session.flush()
+    db_session.add(
+        FraudAlert(
+            customer_id=user.id,
+            auth_provider_uid=user.auth_provider_uid,
+            credit_account_id=credit_account.id,
+            card_id=card.id,
+            card_last_four=card.last_four,
+            message_thread_id="thread-fraud-reset",
+            suspicious_authorization_ids=[],
+            suspicious_transactions=[],
+        )
+    )
+    db_session.flush()
+
+    clean_database(db_session)
+
+    assert db_session.query(FraudAlert).count() == 0
 
 @pytest.mark.asyncio
 async def test_provision_my_demo_success(async_client, db_session):
@@ -353,6 +397,26 @@ async def test_get_active_cards_marks_demo_script_accounts_ineligible_for_genera
     regular_card = cards_by_name["Regular Customer"]
     assert regular_card["is_demo_script_account"] is False
     assert regular_card["generator_eligible"] is True
+
+
+@pytest.mark.asyncio
+async def test_sse_stream_does_not_hold_request_db_session(async_client):
+    async def one_event_stream(token):
+        del token
+        yield 'data: {"status":"SUCCESS","event_kind":"snapshot"}\n\n'
+
+    def fail_if_route_requests_db():
+        raise AssertionError("SSE stream should not allocate a request-scoped DB session")
+        yield
+
+    app.dependency_overrides[get_db] = fail_if_route_requests_db
+    with patch("routers.simulation.SimulationService.stream_payload", one_event_stream):
+        async with async_client.stream("GET", "/api/v1/simulation/stream-sse") as response:
+            body = await response.aread()
+
+    assert response.status_code == status.HTTP_200_OK
+    assert b'"event_kind":"snapshot"' in body
+
 
 @pytest.mark.asyncio
 async def test_inject_late_fee_and_global_stream(async_client, db_session):
