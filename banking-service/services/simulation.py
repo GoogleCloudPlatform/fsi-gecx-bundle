@@ -28,6 +28,7 @@ from utils.audit import record_audit_event
 from utils.database import enable_session_rbac_override
 from utils.internal_auth import get_internal_switch_token
 from utils.internal_execution import InternalServiceContext, apply_internal_db_access
+from utils.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -247,6 +248,26 @@ class SimulationService:
             )
             self.db.add(auth)
             injected_auths.append(auth)
+            if risk > 0:
+                try:
+                    redis_client = get_redis_client()
+                    if redis_client:
+                        event_time = auth.created_at
+                        payload = json.dumps({
+                            "id": f"AUTH_{str(auth.id)[:8]}",
+                            "rrn": auth.retrieval_reference_number,
+                            "timestamp": event_time.strftime("%H:%M:%S"),
+                            "merchant_name": desc,
+                            "amount_cents": amt,
+                            "status": "FLAGGED (FRAUD REVIEW)",
+                            "bq_view": "analytics_curated.international_fraud_anomalies",
+                            "raw_time": event_time.timestamp(),
+                        })
+                        redis_client.lpush("recent_transactions", payload)
+                        redis_client.ltrim("recent_transactions", 0, 99)
+                        redis_client.publish("channel:transactions:live", payload)
+                except Exception as exc:
+                    logger.warning("Failed to publish fraud anomaly event to Redis stream: %s", exc)
             record_audit_event(
                 self.db,
                 "CREDIT_TRANSACTION_AUTHORIZED",

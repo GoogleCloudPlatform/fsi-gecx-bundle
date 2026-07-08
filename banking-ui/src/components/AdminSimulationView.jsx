@@ -17,8 +17,8 @@ import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { useNavigate } from 'react-router-dom';
 import { 
   Sparkles, Activity, ShieldAlert, Zap, Database, RefreshCw, 
-  ArrowLeft, CheckCircle2, AlertTriangle, TrendingUp, Globe, Clock,
-  Layers, ChevronRight, Play, ExternalLink
+  ArrowLeft, CheckCircle2, AlertTriangle, TrendingUp, Clock,
+  Layers, ExternalLink
 } from 'lucide-react';
 import {
   triggerSpendSurge,
@@ -127,6 +127,24 @@ function AdminSimulationView() {
       postedAmountCents: 0,
     },
   );
+
+  const anomalySeverity = cdcStats.activeAnomalies >= 5
+    ? {
+        cardClass: 'bg-rose-50 dark:bg-rose-950/10 border-rose-100 dark:border-rose-900/40',
+        textClass: 'text-rose-700 dark:text-rose-300',
+        iconClass: 'text-rose-500',
+      }
+    : cdcStats.activeAnomalies > 0
+    ? {
+        cardClass: 'bg-amber-50 dark:bg-amber-950/10 border-amber-100 dark:border-amber-900/40',
+        textClass: 'text-amber-700 dark:text-amber-300',
+        iconClass: 'text-amber-500',
+      }
+    : {
+        cardClass: 'bg-emerald-50 dark:bg-emerald-950/10 border-emerald-100 dark:border-emerald-900/40',
+        textClass: 'text-emerald-700 dark:text-emerald-300',
+        iconClass: 'text-emerald-500',
+      };
 
   const applyMonitorSnapshot = (streamSnapshot) => {
     if (streamSnapshot?.stream) {
@@ -297,7 +315,8 @@ function AdminSimulationView() {
       });
       setCdcStats(prev => ({
         ...prev,
-        activeAnomalies: prev.activeAnomalies + (res.injected_swipes_count || 4)
+        activeAnomalies: Math.max(prev.activeAnomalies, 1),
+        flaggedEventsPerMinute: Math.max(prev.flaggedEventsPerMinute, 1),
       }));
       fetchGlobalStream();
     } catch (err) {
@@ -367,6 +386,53 @@ function AdminSimulationView() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
+        <button
+          onClick={handleSpendSurge}
+          disabled={isSurgeLoading}
+          className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 hover:bg-slate-50 dark:hover:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 active:scale-[0.99] transition-all disabled:opacity-60 text-left flex items-start gap-3"
+        >
+          <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-600 dark:text-cyan-400 shrink-0">
+            {isSurgeLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <TrendingUp className="w-5 h-5" />}
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-slate-900 dark:text-white">Spend Velocity Surge</div>
+            <div className="text-[11px] text-slate-500">50 synthetic swipes</div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">Rapid domestic card activity to exercise stream throughput and replication freshness.</div>
+          </div>
+        </button>
+
+        <button
+          onClick={handleFraudAnomaly}
+          disabled={isAnomalyLoading}
+          className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 hover:bg-slate-50 dark:hover:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 active:scale-[0.99] transition-all disabled:opacity-60 text-left flex items-start gap-3"
+        >
+          <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0">
+            {isAnomalyLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <ShieldAlert className="w-5 h-5" />}
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-slate-900 dark:text-white">Targeted Fraud Anomaly</div>
+            <div className="text-[11px] text-slate-500">High-risk gift cards</div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">Creates a customer fraud alert, secure message, and flagged risk stream activity.</div>
+          </div>
+        </button>
+
+        <button
+          onClick={handleLateFee}
+          disabled={isFeeLoading}
+          className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 hover:bg-slate-50 dark:hover:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 active:scale-[0.99] transition-all disabled:opacity-60 text-left flex items-start gap-3"
+        >
+          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
+            {isFeeLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Zap className="w-5 h-5" />}
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-slate-900 dark:text-white">Inject Late Fee</div>
+            <div className="text-[11px] text-slate-500">$35 posted charge flow</div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">Adds a standalone fee event for ledger, support, and voice-agent demonstrations.</div>
+          </div>
+        </button>
       </div>
 
       {/* Section 1: Datastream & WAL CDC Replication Status */}
@@ -494,13 +560,13 @@ function AdminSimulationView() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/10 border border-rose-100 dark:border-rose-900/40">
-            <div className="flex items-center justify-between text-xs text-rose-700/70 dark:text-rose-300/70 mb-1">
+          <div className={`p-4 rounded-2xl border ${anomalySeverity.cardClass}`}>
+            <div className={`flex items-center justify-between text-xs mb-1 ${anomalySeverity.textClass}`}>
               <span>Active Fraud Anomalies</span>
-              <ShieldAlert className="w-4 h-4 text-rose-500" />
+              <ShieldAlert className={`w-4 h-4 ${anomalySeverity.iconClass}`} />
             </div>
-            <div className="text-2xl font-black font-mono text-rose-700 dark:text-rose-300">{cdcStats.activeAnomalies}</div>
-            <div className="text-[10px] text-rose-700/70 dark:text-rose-300/70 mt-1">Open anomalies in curated credit analytics</div>
+            <div className={`text-2xl font-black font-mono ${anomalySeverity.textClass}`}>{cdcStats.activeAnomalies}</div>
+            <div className={`text-[10px] mt-1 ${anomalySeverity.textClass}`}>Open anomalies in curated credit analytics</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
@@ -535,141 +601,6 @@ function AdminSimulationView() {
             </div>
             <div className="text-[10px] text-slate-400 mt-1">{creditRiskMetrics.postedCount} posted events in current wall</div>
           </div>
-        </div>
-      </div>
-
-      {/* Section 3: Interactive Simulation Command Center */}
-      <h3 className="text-xl font-extrabold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
-        <Zap className="w-6 h-6 text-amber-500" />
-        Simulation Event Command Center
-      </h3>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-        
-        {/* Card 1: Spend Surge */}
-        <div className="relative group p-7 rounded-3xl bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 border border-slate-200 dark:border-slate-800 hover:border-cyan-500/50 dark:hover:border-cyan-500/50 transition-all duration-300 shadow-xl hover:shadow-2xl hover:shadow-cyan-500/10 flex flex-col justify-between overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" />
-          
-          <div>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-600 dark:text-cyan-400">
-                <TrendingUp className="w-6 h-6" />
-              </div>
-              <div>
-                <h4 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Spend Velocity Surge
-                </h4>
-                <span className="text-xs font-semibold text-cyan-600 dark:text-cyan-400">
-                  50 SWIPES / 10 SECONDS
-                </span>
-              </div>
-            </div>
-            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-6">
-              Triggers a rapid-fire synthetic activity surge across the active card pool. Simulates realistic domestic purchases across coffee shops, restaurants, grocers, and airlines to exercise the banking service and push live events through the replication pipeline.
-            </p>
-          </div>
-
-          <button
-            onClick={handleSpendSurge}
-            disabled={isSurgeLoading}
-            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {isSurgeLoading ? (
-              <>
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                Dispatching Surge...
-              </>
-            ) : (
-              <>
-                <Play className="w-5 h-5 fill-current" />
-                Trigger Spend Surge
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Card 2: Targeted Fraud Anomaly */}
-        <div className="relative group p-7 rounded-3xl bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 border border-slate-200 dark:border-slate-800 hover:border-rose-500/50 dark:hover:border-rose-500/50 transition-all duration-300 shadow-xl hover:shadow-2xl hover:shadow-rose-500/10 flex flex-col justify-between overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" />
-          
-          <div>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400">
-                <Globe className="w-6 h-6" />
-              </div>
-              <div>
-                <h4 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Targeted Fraud Anomaly
-                </h4>
-                <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">
-                  HIGH-RISK DIGITAL GIFT CARDS
-                </span>
-              </div>
-            </div>
-            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-6">
-              Injects rapid-fire online electronics and gift-card purchases against the active demo card. Useful for verifying customer fraud alerts, anomaly enrichment, and downstream CDC replication stay aligned.
-            </p>
-          </div>
-
-          <button
-            onClick={handleFraudAnomaly}
-            disabled={isAnomalyLoading}
-            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-400 hover:to-red-500 text-white font-bold shadow-lg shadow-rose-500/25 hover:shadow-rose-500/40 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {isAnomalyLoading ? (
-              <>
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                Injecting Anomaly...
-              </>
-            ) : (
-              <>
-                <ShieldAlert className="w-5 h-5" />
-                Inject Targeted Anomaly
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Card 3: Inject Late Fee */}
-        <div className="relative group p-7 rounded-3xl bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 border border-slate-200 dark:border-slate-800 hover:border-amber-500/50 dark:hover:border-amber-500/50 transition-all duration-300 shadow-xl hover:shadow-2xl hover:shadow-amber-500/10 flex flex-col justify-between overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" />
-          
-          <div>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400">
-                <Clock className="w-6 h-6" />
-              </div>
-              <div>
-                <h4 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Inject Late Fee
-                </h4>
-                <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-                  $35.00 POSTED CHARGE
-                </span>
-              </div>
-            </div>
-            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-6">
-              Posts a standalone $35.00 late fee to the active demo card ledger. Useful for voice-agent demos and for confirming that posted ledger activity appears on the live wall and continues through replication.
-            </p>
-          </div>
-
-          <button
-            onClick={handleLateFee}
-            disabled={isFeeLoading}
-            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {isFeeLoading ? (
-              <>
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                Injecting Fee...
-              </>
-            ) : (
-              <>
-                <Zap className="w-5 h-5" />
-                Inject Late Fee
-              </>
-            )}
-          </button>
         </div>
       </div>
 
