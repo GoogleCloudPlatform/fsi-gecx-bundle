@@ -33,9 +33,51 @@ os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")
 BANKING_SERVICE_URL = os.getenv("BANKING_SERVICE_URL", "http://localhost:8080").rstrip("/")
 active_customer_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("active_customer_id", default="jane.doe@example.com")
 session_event_callback_var: contextvars.ContextVar = contextvars.ContextVar("session_event_callback", default=None)
+session_should_end_var: contextvars.ContextVar[bool] = contextvars.ContextVar("session_should_end", default=False)
+is_processing_tool_var: contextvars.ContextVar[bool] = contextvars.ContextVar("is_processing_tool", default=False)
 
 def register_event_callback(cb):
     session_event_callback_var.set(cb)
+
+
+def bind_session_context(customer_id: str, callback):
+    """Binds per-session customer and callback context and resets transient flags."""
+    return {
+        "customer": active_customer_id_var.set(customer_id),
+        "callback": session_event_callback_var.set(callback),
+        "should_end": session_should_end_var.set(False),
+        "is_processing": is_processing_tool_var.set(False),
+    }
+
+
+def reset_session_context(tokens: dict) -> None:
+    """Restores prior context-var state for a completed session."""
+    if not tokens:
+        return
+    is_processing_tool_var.reset(tokens["is_processing"])
+    session_should_end_var.reset(tokens["should_end"])
+    session_event_callback_var.reset(tokens["callback"])
+    active_customer_id_var.reset(tokens["customer"])
+
+
+def is_session_end_requested() -> bool:
+    return session_should_end_var.get()
+
+
+def request_session_end() -> None:
+    session_should_end_var.set(True)
+
+
+def clear_session_end_request() -> None:
+    session_should_end_var.set(False)
+
+
+def is_tool_processing() -> bool:
+    return is_processing_tool_var.get()
+
+
+def set_tool_processing(is_processing: bool) -> None:
+    is_processing_tool_var.set(is_processing)
 
 def notify_event(event_dict):
     cb = session_event_callback_var.get()
@@ -77,13 +119,10 @@ mcp_tools = McpToolset(
     )
 )
 
-session_should_end = False
-
 def end_consultation() -> dict:
     """Terminates the current voice consultation session. Call this when the customer confirms they are finished or want to end the call.
     """
-    global session_should_end
-    session_should_end = True
+    request_session_end()
     return {"status": "SUCCESS", "message": "Session end signal sent."}
 
 def transfer_to_human(reason: str) -> dict:
@@ -117,35 +156,30 @@ def get_auth_headers() -> dict:
         "x-target-customer-id": active_customer_id_var.get()
     }
 
-is_processing_tool = False
-
 async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
-    global is_processing_tool
     tool_name = getattr(tool, "name", str(tool))
     import logging
     logger = logging.getLogger("voice_agent")
     logger.info(f"[CALLBACK] before_tool_callback triggered: tool_name={tool_name}, args={args}")
-    is_processing_tool = True
+    set_tool_processing(True)
     tool_context.state["is_processing_tool"] = True
     return None
 
 async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> None:
-    global is_processing_tool
     tool_name = getattr(tool, "name", str(tool))
     import logging
     logger = logging.getLogger("voice_agent")
     logger.info(f"[CALLBACK] on_tool_error_callback triggered: tool_name={tool_name}, error={error}")
-    is_processing_tool = False
+    set_tool_processing(False)
     tool_context.state["is_processing_tool"] = False
     return None
 
 async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs) -> dict | None:
-    global is_processing_tool
     tool_name = getattr(tool, "name", str(tool))
     import logging
     logger = logging.getLogger("voice_agent")
     logger.info(f"[CALLBACK] after_tool_callback triggered: tool_name={tool_name}, result={tool_response}")
-    is_processing_tool = False
+    set_tool_processing(False)
     tool_context.state["is_processing_tool"] = False
     # Check if the tool succeeded
     structured = tool_response.get("structuredContent") if isinstance(tool_response, dict) else None

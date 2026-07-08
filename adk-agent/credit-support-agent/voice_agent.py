@@ -14,7 +14,14 @@ import uvicorn
 # Prepend the directory to sys.path
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
-from agent import root_agent, register_event_callback
+from agent import (
+    bind_session_context,
+    clear_session_end_request,
+    is_session_end_requested,
+    is_tool_processing,
+    reset_session_context,
+    root_agent,
+)
 from agent.version import BUILD_VERSION, BUILD_COMMIT_ID
 from agent.events import DataChannelEvent
 from google.adk.runners import Runner
@@ -182,8 +189,7 @@ async def run_stt_worker(client, audio_queue: asyncio.Queue, sample_rate: int, a
 async def run_voice_agent_session(room_name: str, customer_id: str, session_id: str, mode: str = "audio"):
     logger.info(f"Initializing voice agent session for room: {room_name} (customer: {customer_id}, mode: {mode})")
     import agent.agent as agent_module
-    agent_module.active_customer_id_var.set(customer_id)
-    logger.info(f"Set active customer ID for database tools: {agent_module.active_customer_id_var.get()}")
+    session_context_tokens = None
 
     # Load active configurations from banking-service
     mock_avatar_enabled = False
@@ -333,7 +339,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 
             loop.call_soon_threadsafe(lambda: asyncio.create_task(sync_escalation()))
 
-    register_event_callback(on_agent_event)
+    session_context_tokens = bind_session_context(customer_id, on_agent_event)
+    logger.info(f"Bound session context for customer ID: {agent_module.active_customer_id_var.get()}")
 
     user_stt_queue = None
     agent_stt_queue = None
@@ -462,7 +469,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 resampled_frames = resampler.push(frame)
                 for res_frame in resampled_frames:
                     # Check if the agent is currently processing a tool call or shutting down to drop user mic buffers
-                    if agent_module.is_processing_tool or agent_module.session_should_end:
+                    if is_tool_processing() or is_session_end_requested():
                         logger.debug("Muting microphone audio: tool execution or session shutdown in progress.")
                         continue
 
@@ -643,9 +650,9 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         "author": "agent",
                         "text": event.output_transcription.text
                     })
-                    if agent_module.session_should_end:
+                    if is_session_end_requested():
                         logger.info("Session end requested via end_consultation tool. Initiating shutdown after farewell.")
-                        agent_module.session_should_end = False  # Reset flag
+                        clear_session_end_request()
                         on_agent_event({
                             "type": "SESSION_END"
                         })
@@ -912,6 +919,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             await room.disconnect()
         except Exception:
             pass
+        reset_session_context(session_context_tokens)
         logger.info("Voice agent successfully entered handoff standby status and completed the session.")
     except Exception as e:
         logger.error(f"Encountered error in voice agent session: {e}", exc_info=True)
