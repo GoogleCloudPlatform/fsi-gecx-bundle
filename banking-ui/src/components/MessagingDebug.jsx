@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Send, AlertCircle, CheckCircle2, Loader2, Bell, Shield, Radio } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Send, AlertCircle, CheckCircle2, Loader2, Bell, Shield, Radio, ArrowLeft } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { getCustomersList, sendNotification } from '../utils/api.js';
 
@@ -7,6 +8,7 @@ import { getCustomersList, sendNotification } from '../utils/api.js';
 
 
 function MessagingDebug({ fbUser, customerProfile }) {
+  const navigate = useNavigate();
   const { brandColorFrom, brandColorTo } = useSettings();
 
   // Form Fields
@@ -142,23 +144,40 @@ function MessagingDebug({ fbUser, customerProfile }) {
   });
 
   return (
-    <section className="relative pt-32 pb-24 md:pt-48 md:pb-32 px-6 max-w-3xl mx-auto">
-      {/* Background Glows */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-emerald-500/10 dark:bg-emerald-500/5 blur-[120px] pointer-events-none -z-10" />
+    <section className="relative pt-24 pb-16 md:pt-28 md:pb-24 px-6 max-w-4xl mx-auto min-h-[calc(100vh-80px)] flex flex-col text-left">
+      {/* Background ambient lighting */}
+      <div className="absolute top-1/3 left-1/4 w-[450px] h-[450px] rounded-full bg-purple-500/10 blur-[120px] pointer-events-none -z-10 animate-pulse" />
+      <div className="absolute top-1/2 right-1/4 w-[400px] h-[400px] rounded-full bg-pink-600/10 blur-[100px] pointer-events-none -z-10" />
 
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 border border-slate-200 dark:border-slate-800/80 shadow-2xl relative overflow-hidden">
-        {/* Card Header */}
-        <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-100 dark:border-slate-800/50">
-          <div className="flex items-center space-x-3 text-left">
+      {/* Header Navigation */}
+      <div className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
+        <div>
+          <button 
+            type="button"
+            onClick={() => navigate('/admin')}
+            className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors mb-3 group"
+          >
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            Back to Admin Portal
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 text-slate-950 flex items-center justify-center shadow-lg shadow-purple-500/20 animate-pulse">
+              <Bell className="w-7 h-7" />
+            </div>
             <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
+              <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
                 FCM Messaging Debug
               </h1>
-              <p className="text-xs text-slate-400 mt-0.5">Test real Firebase Cloud Messages from the backend API.</p>
+              <p className="text-sm text-slate-505 dark:text-slate-400 mt-1">
+                Test real Firebase Cloud Messages from the backend API.
+              </p>
             </div>
           </div>
         </div>
+      </div>
 
+      {/* Main card panel */}
+      <div className="p-6 md:p-8 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5 relative overflow-hidden">
         {/* Alerts */}
         {errorMsg && (
           <div className="mb-6 p-4 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/30 text-red-600 dark:text-red-400 text-sm flex items-center gap-2.5 animate-shake">
@@ -317,7 +336,7 @@ function MessagingDebug({ fbUser, customerProfile }) {
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-2.5 text-slate-400">
-                  <Shield className="w-4 h-4" />
+                  <Radio className="w-4 h-4" />
                 </span>
                 <input
                   id="topic"

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Room, RoomEvent } from 'livekit-client';
 import { 
   Phone, 
@@ -10,7 +11,8 @@ import {
   Volume2, 
   Sparkles, 
   MousePointerClick,
-  ExternalLink
+  ExternalLink,
+  ArrowLeft
 } from 'lucide-react';
 import GoogleCloudIcon from './GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
@@ -28,6 +30,7 @@ import {
 import { DataChannelEvent } from '../utils/constants.js';
 
 export default function AgentSupportDashboard() {
+  const navigate = useNavigate();
   const [escalations, setEscalations] = useState([]);
   const [selectedEscalation, setSelectedEscalation] = useState(null);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
@@ -277,11 +280,18 @@ export default function AgentSupportDashboard() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 text-slate-800 dark:text-slate-100 min-h-[85vh] flex flex-col justify-between">
+    <div className="relative pt-24 pb-16 md:pt-28 md:pb-24 px-6 max-w-7xl mx-auto min-h-[calc(100vh-80px)] flex flex-col justify-between text-slate-800 dark:text-slate-100">
       
       {/* Header section */}
       <div className="mb-6 flex justify-between items-center border-b border-slate-200 dark:border-slate-805 pb-4 w-full">
         <div>
+          <button 
+            onClick={() => navigate('/admin')}
+            className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors mb-3 group"
+          >
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            Back to Admin Portal
+          </button>
           <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 via-slate-705 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
             Supervisor Takeover Dashboard
           </h1>
