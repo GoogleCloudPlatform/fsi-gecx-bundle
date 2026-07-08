@@ -13,16 +13,77 @@
 # limitations under the License.
 
 steps:
+  - name: "ghcr.io/github-linguist/linguist:latest"
+    id: "run-linguist"
+    entrypoint: "sh"
+    args:
+      - "-c"
+      - |
+        github-linguist /workspace --json > /workspace/linguist.json
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "get-version"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        apt-get update -qq && apt-get install -y -qq jq
+        LINGUIST_RESULT=$$(jq @json /workspace/linguist.json)
+        
+        VERSION_INPUT="0.0.0"
+        IS_RELEASE="false"
+        if [ -n "$TAG_NAME" ]; then
+          CLEANED_TAG=$$(echo "$TAG_NAME" | sed 's/^v//')
+          if echo "$$CLEANED_TAG" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$'; then
+            VERSION_INPUT="$$CLEANED_TAG"
+            IS_RELEASE="true"
+          else
+            echo "Error: Tag '$TAG_NAME' is not in semver format (X.Y.Z or vX.Y.Z)." >&2
+            exit 1
+          fi
+        fi
+        
+        bq query --use_legacy_sql=false --format=csv "CALL \`$PROJECT_ID.ci.get_build_version\`('data-generator', 'ci', '$$VERSION_INPUT', 'fsi-gecx-bundle', '$COMMIT_SHA', $$IS_RELEASE, $$LINGUIST_RESULT)" > raw_output.txt
+        cat raw_output.txt
+        VERSION=$$(grep -o 'BUILD_VERSION=[0-9][0-9.]*' raw_output.txt | cut -d= -f2 | head -n 1 | tr -d '\r\n ')
+        if [ -z "$$VERSION" ]; then
+          echo "Error: Failed to retrieve build version from BigQuery." >&2
+          exit 1
+        fi
+        echo "$$VERSION" > build_version.txt
+        echo "Build Version is: $$VERSION"
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "update-configs"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        VERSION=$$(cat build_version.txt)
+        COMMIT_SHA="$SHORT_SHA"
+        if [ -z "$$COMMIT_SHA" ]; then
+          COMMIT_SHA="local"
+        fi
+        echo "Updating pyproject.toml version to: $$VERSION"
+        sed -i 's/^version = "[^"]*"/version = "'"$${VERSION}"'"/g' data-generator/pyproject.toml
+        cat data-generator/pyproject.toml | grep "^version ="
+
+        echo "Updating utils/version.py version: $$VERSION and commit: $$COMMIT_SHA"
+        sed -i 's/BUILD_VERSION = "[^"]*"/BUILD_VERSION = "'"$${VERSION}"'"/g' data-generator/utils/version.py
+        sed -i 's/BUILD_COMMIT_ID = "[^"]*"/BUILD_COMMIT_ID = "'"$${COMMIT_SHA}"'"/g' data-generator/utils/version.py
+        cat data-generator/utils/version.py | grep "BUILD_VERSION =\|BUILD_COMMIT_ID ="
+
   - name: "gcr.io/cloud-builders/docker"
     id: "build-image"
     entrypoint: "bash"
     args:
       - "-c"
       - |
-        docker build \
-          -t "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:$${COMMIT_SHA:-local}" \
-          -t "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:latest" \
-          .
+        TAGS="-t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:$${COMMIT_SHA:-local} -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:latest"
+        if [ -n "$TAG_NAME" ]; then
+          TAGS="$$TAGS -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:$TAG_NAME"
+        fi
+        docker build $$TAGS .
     dir: "data-generator"
 
   - name: "gcr.io/cloud-builders/docker"

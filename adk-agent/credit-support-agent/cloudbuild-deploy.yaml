@@ -29,7 +29,21 @@ steps:
       - |
         apt-get update -qq && apt-get install -y -qq jq
         LINGUIST_RESULT=$$(jq @json /workspace/linguist.json)
-        bq query --use_legacy_sql=false --format=csv "CALL \`$PROJECT_ID.ci.get_build_version\`('credit-support-agent', 'ci', '0.0.0', 'fsi-gecx-bundle', '$COMMIT_SHA', false, $$LINGUIST_RESULT)" > raw_output.txt
+        
+        VERSION_INPUT="0.0.0"
+        IS_RELEASE="false"
+        if [ -n "$TAG_NAME" ]; then
+          CLEANED_TAG=$$(echo "$TAG_NAME" | sed 's/^v//')
+          if echo "$$CLEANED_TAG" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$'; then
+            VERSION_INPUT="$$CLEANED_TAG"
+            IS_RELEASE="true"
+          else
+            echo "Error: Tag '$TAG_NAME' is not in semver format (X.Y.Z or vX.Y.Z)." >&2
+            exit 1
+          fi
+        fi
+        
+        bq query --use_legacy_sql=false --format=csv "CALL \`$PROJECT_ID.ci.get_build_version\`('credit-support-agent', 'ci', '$$VERSION_INPUT', 'fsi-gecx-bundle', '$COMMIT_SHA', $$IS_RELEASE, $$LINGUIST_RESULT)" > raw_output.txt
         cat raw_output.txt
         VERSION=$$(grep -o 'BUILD_VERSION=[0-9][0-9.]*' raw_output.txt | cut -d= -f2 | head -n 1 | tr -d '\r\n ')
         if [ -z "$$VERSION" ]; then
@@ -73,12 +87,15 @@ steps:
     args:
       - "-c"
       - |
+        TAGS="-t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:$${COMMIT_SHA:-local} -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:latest"
+        if [ -n "$TAG_NAME" ]; then
+          TAGS="$$TAGS -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:$TAG_NAME"
+        fi
         DOCKER_BUILDKIT=1 docker build \
           --cache-from "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:latest" \
           --build-arg BUILDKIT_INLINE_CACHE=1 \
           -f adk-agent/credit-support-agent/Dockerfile \
-          -t "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:$${COMMIT_SHA:-local}" \
-          -t "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:latest" \
+          $$TAGS \
           .
 
   - name: "gcr.io/cloud-builders/docker"
