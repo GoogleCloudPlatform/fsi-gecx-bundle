@@ -185,6 +185,11 @@ resource "google_cloud_run_v2_service" "banking_service" {
       }
 
       env {
+        name  = "CDC_BIGQUERY_CURATED_DATASET"
+        value = "analytics_curated"
+      }
+
+      env {
         name  = "REDIS_HOST"
         value = google_redis_instance.banking.host
       }
@@ -730,6 +735,11 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
         env {
           name  = "IAM_DB_VIEWER_USERS"
           value = join(",", [for k, v in local.db_iam_viewer_members : v.name])
+        }
+
+        env {
+          name  = "REQUIRE_CDC_BOOTSTRAP"
+          value = "true"
         }
       }
 

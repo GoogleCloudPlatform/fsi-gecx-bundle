@@ -8,6 +8,7 @@ Create Date: 2026-07-07 09:36:38.513747
 from typing import Sequence, Union
 from pathlib import Path
 import datetime
+import logging
 import os
 import json
 import uuid
@@ -26,6 +27,21 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 RESOURCE_DATA_DIR = Path(__file__).resolve().parents[2] / "resources" / "data"
+logger = logging.getLogger(__name__)
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _handle_cdc_bootstrap_issue(message: str, *, required: bool, exc: Exception | None = None) -> None:
+    if required:
+        logger.error("CDC bootstrap failed: %s", message, exc_info=exc)
+        raise RuntimeError(message) from exc
+    logger.warning("CDC bootstrap skipped or incomplete: %s", message, exc_info=exc)
 
 
 def _load_json_resource(filename: str):
@@ -731,10 +747,16 @@ def upgrade() -> None:
                     pass
 
         db_user = os.getenv("CDC_REPLICATION_USER", "banking_bq_connector")
+        require_cdc_bootstrap = _env_flag("REQUIRE_CDC_BOOTSTRAP", default=False)
         conn = op.get_bind()
         try:
             user_exists = conn.execute(text("SELECT 1 FROM pg_roles WHERE rolname = :username"), {"username": db_user}).scalar()
-            if user_exists:
+            if not user_exists:
+                _handle_cdc_bootstrap_issue(
+                    f"Replication user '{db_user}' does not exist; cannot bootstrap Datastream CDC prerequisites.",
+                    required=require_cdc_bootstrap,
+                )
+            else:
                 has_priv = conn.execute(text("""
                     SELECT EXISTS (
                         SELECT 1 FROM pg_roles 
@@ -750,54 +772,68 @@ def upgrade() -> None:
                           )
                     );
                 """)).scalar()
-                if has_priv:
+                if not has_priv:
+                    _handle_cdc_bootstrap_issue(
+                        "Migration user cannot grant replication privileges or create replication slots.",
+                        required=require_cdc_bootstrap,
+                    )
+                else:
                     try:
                         with conn.begin_nested():
                             conn.execute(text(f'ALTER ROLE "{db_user}" WITH REPLICATION;'))
-                    except Exception:
-                        pass
-                for schema_name in ["cards", "origination", "identity"]:
-                    try:
-                        with conn.begin_nested():
-                            conn.execute(text(f'GRANT USAGE ON SCHEMA "{schema_name}" TO "{db_user}";'))
-                            conn.execute(text(f'GRANT SELECT ON ALL TABLES IN SCHEMA "{schema_name}" TO "{db_user}";'))
-                            conn.execute(text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA "{schema_name}" GRANT SELECT ON TABLES TO "{db_user}";'))
-                    except Exception:
-                        pass
-            try:
-                with conn.begin_nested():
-                    pub_exists = conn.execute(text("SELECT 1 FROM pg_publication WHERE pubname = 'datastream_publication'")).scalar()
-                    if not pub_exists:
-                        conn.execute(text('CREATE PUBLICATION datastream_publication FOR ALL TABLES;'))
-            except Exception:
-                pass
-            try:
-                wal_level = conn.execute(text("SHOW wal_level;")).scalar()
-                if wal_level == 'logical':
-                    has_priv = conn.execute(text("""
-                        SELECT EXISTS (
-                            SELECT 1 FROM pg_roles 
-                            WHERE rolname = CURRENT_USER 
-                              AND (
-                                rolsuper = true 
-                                OR rolreplication = true 
-                                OR EXISTS (
-                                    SELECT 1 FROM pg_auth_members m 
-                                    JOIN pg_roles r ON m.roleid = r.oid 
-                                    WHERE m.member = pg_roles.oid AND r.rolname = 'cloudsqlsuperuser'
-                                )
-                              )
-                        );
-                    """)).scalar()
-                    if has_priv:
+                    except Exception as exc:
+                        _handle_cdc_bootstrap_issue(
+                            f"Failed to grant replication to '{db_user}'.",
+                            required=require_cdc_bootstrap,
+                            exc=exc,
+                        )
+                    for schema_name in ["cards", "origination", "identity"]:
+                        try:
+                            with conn.begin_nested():
+                                conn.execute(text(f'GRANT USAGE ON SCHEMA "{schema_name}" TO "{db_user}";'))
+                                conn.execute(text(f'GRANT SELECT ON ALL TABLES IN SCHEMA "{schema_name}" TO "{db_user}";'))
+                                conn.execute(text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA "{schema_name}" GRANT SELECT ON TABLES TO "{db_user}";'))
+                        except Exception as exc:
+                            _handle_cdc_bootstrap_issue(
+                                f"Failed to grant CDC read access on schema '{schema_name}' to '{db_user}'.",
+                                required=require_cdc_bootstrap,
+                                exc=exc,
+                            )
+                try:
+                    with conn.begin_nested():
+                        pub_exists = conn.execute(text("SELECT 1 FROM pg_publication WHERE pubname = 'datastream_publication'")).scalar()
+                        if not pub_exists:
+                            conn.execute(text('CREATE PUBLICATION datastream_publication FOR ALL TABLES;'))
+                except Exception as exc:
+                    _handle_cdc_bootstrap_issue(
+                        "Failed to create PostgreSQL publication 'datastream_publication'.",
+                        required=require_cdc_bootstrap,
+                        exc=exc,
+                    )
+                try:
+                    wal_level = conn.execute(text("SHOW wal_level;")).scalar()
+                    if wal_level != 'logical':
+                        _handle_cdc_bootstrap_issue(
+                            f"PostgreSQL wal_level is '{wal_level}', expected 'logical' for Datastream CDC.",
+                            required=require_cdc_bootstrap,
+                        )
+                    else:
                         with conn.begin_nested():
                             slot_exists = conn.execute(text("SELECT 1 FROM pg_replication_slots WHERE slot_name = 'datastream_replication_slot'")).scalar()
                             if not slot_exists:
                                 conn.execute(text("SELECT pg_create_logical_replication_slot('datastream_replication_slot', 'pgoutput');"))
-            except Exception:
-                pass
-        except Exception:
-            pass
+                except Exception as exc:
+                    _handle_cdc_bootstrap_issue(
+                        "Failed to create PostgreSQL replication slot 'datastream_replication_slot'.",
+                        required=require_cdc_bootstrap,
+                        exc=exc,
+                    )
+        except Exception as exc:
+            _handle_cdc_bootstrap_issue(
+                "Unexpected error while bootstrapping Datastream CDC prerequisites.",
+                required=require_cdc_bootstrap,
+                exc=exc,
+            )
 
 
 def downgrade() -> None:

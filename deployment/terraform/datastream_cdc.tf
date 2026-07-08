@@ -64,10 +64,12 @@ resource "google_datastream_connection_profile" "bigquery_destination" {
 }
 
 resource "google_datastream_stream" "banking_cdc_stream" {
-  display_name              = "Banking CDC Stream to Iceberg Data Lake"
-  location                  = var.region
-  stream_id                 = "banking-cdc-stream"
-  desired_state             = "RUNNING"
+  display_name = "Banking CDC Stream to Iceberg Data Lake"
+  location     = var.region
+  stream_id    = "banking-cdc-stream"
+  # Create the stream without auto-starting so fresh environments can finish
+  # database migrations before Datastream validates publication/slot state.
+  desired_state             = "NOT_STARTED"
   create_without_validation = true
 
   backfill_all {}
@@ -123,12 +125,6 @@ resource "google_datastream_stream" "banking_cdc_stream" {
 
   depends_on = [
     google_project_service.datastream_googleapis_com,
-    google_bigquery_table.posted_transactions,
-    google_bigquery_table.issued_card,
-    google_bigquery_table.transaction_authorization,
-    google_bigquery_table.applications_lake,
-    google_bigquery_table.credit_card_applications,
-    google_bigquery_table.mortgage_applications,
-    google_bigquery_table.users_lake
+    google_bigquery_dataset.iceberg_catalog
   ]
 }

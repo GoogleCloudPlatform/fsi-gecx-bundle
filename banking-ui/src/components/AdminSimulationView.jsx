@@ -347,7 +347,7 @@ function AdminSimulationView() {
                 Datastream WAL Replication Engine
               </h2>
               <p className="text-xs text-slate-500">
-                PostgreSQL Outbox WAL &rarr; Cloud Storage &rarr; BigQuery Active Lakehouse (`fsi_lakehouse`)
+                PostgreSQL Outbox WAL &rarr; Datastream CDC tables in `iceberg_catalog` &rarr; curated views in `analytics_curated`
               </p>
             </div>
           </div>

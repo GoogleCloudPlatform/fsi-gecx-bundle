@@ -26,8 +26,9 @@ class CdcLakehouseRepository:
     def __init__(self):
         self.project_id = get_project_id()
         self.dataset = os.getenv("CDC_BIGQUERY_DATASET", "iceberg_catalog")
-        self.auth_table = os.getenv("CDC_BIGQUERY_AUTH_TABLE", "transaction_authorization")
-        self.posted_table = os.getenv("CDC_BIGQUERY_POSTED_TABLE", "posted_transactions")
+        self.auth_table = os.getenv("CDC_BIGQUERY_AUTH_TABLE", "cards_transaction_authorization")
+        self.posted_table = os.getenv("CDC_BIGQUERY_POSTED_TABLE", "cards_posted_transactions")
+        self.curated_dataset = os.getenv("CDC_BIGQUERY_CURATED_DATASET", "analytics_curated")
 
     def _client(self):
         return bigquery.Client(project=self.project_id)
@@ -87,7 +88,7 @@ class CdcLakehouseRepository:
         try:
             rows = self._query(f"""
                 SELECT COUNT(1) AS cnt
-                FROM `{self.project_id}.{self.dataset}.v_international_fraud_anomalies`
+                FROM `{self.project_id}.{self.curated_dataset}.international_fraud_anomalies`
             """, limit=1)
             return int(rows[0]["cnt"]) if rows else 0
         except Exception:
