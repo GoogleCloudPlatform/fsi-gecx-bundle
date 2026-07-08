@@ -266,7 +266,7 @@ resource "google_project_iam_member" "cloudbuild_sa_bq_job_user" {
 }
 
 resource "google_project_iam_member" "database_viewer_bq_job_user" {
-  for_each = toset(var.database_iam_viewer_users)
+  for_each = toset(local.database_iam_viewer_users)
   project  = data.google_project.project.project_id
   role     = "roles/bigquery.jobUser"
   member   = each.value

@@ -31,8 +31,6 @@ resource "google_secret_manager_secret_version" "postgres_banking_root_password_
   secret_data = random_password.postgres_root_password.result
 }
 
-
-
 resource "google_secret_manager_secret" "postgres_banking_bq_connector_password" {
   secret_id = "postgres_banking_bq_connector_password"
 
@@ -106,4 +104,30 @@ resource "random_password" "card_network_switch_token" {
 resource "google_secret_manager_secret_version" "card_network_switch_token_version" {
   secret      = google_secret_manager_secret.card_network_switch_token.id
   secret_data = random_password.card_network_switch_token.result
+}
+
+data "google_secret_manager_secret_version_access" "database_iam_support_users" {
+  secret  = "database-iam-support-users"
+  version = "latest"
+}
+
+data "google_secret_manager_secret_version_access" "database_iam_viewer_users" {
+  secret  = "database-iam-viewer-users"
+  version = "latest"
+}
+
+data "google_secret_manager_secret_version_access" "additional_cloud_run_iap_members" {
+  secret  = "additional-cloud-run-iap-members"
+  version = "latest"
+}
+
+locals {
+  database_iam_support_users_raw = data.google_secret_manager_secret_version_access.database_iam_support_users.secret_data
+  database_iam_support_users     = compact([for s in split(",", local.database_iam_support_users_raw) : trimspace(s)])
+
+  database_iam_viewer_users_raw = data.google_secret_manager_secret_version_access.database_iam_viewer_users.secret_data
+  database_iam_viewer_users     = compact([for s in split(",", local.database_iam_viewer_users_raw) : trimspace(s)])
+
+  additional_cloud_run_iap_members_raw = data.google_secret_manager_secret_version_access.additional_cloud_run_iap_members.secret_data
+  additional_cloud_run_iap_members     = compact([for s in split(",", local.additional_cloud_run_iap_members_raw) : trimspace(s)])
 }

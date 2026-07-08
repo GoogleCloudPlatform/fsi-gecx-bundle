@@ -109,7 +109,7 @@ resource "google_cloud_run_service_iam_member" "iap_login_ui_public_invoker" {
 locals {
   cloud_run_iap_members = concat([
     "user:${data.google_client_openid_userinfo.me.email}"
-  ], var.additional_cloud_run_iap_members)
+  ], local.additional_cloud_run_iap_members)
 }
 
 resource "google_iap_web_backend_service_iam_member" "banking_service_access" {
@@ -301,7 +301,7 @@ resource "google_bigquery_dataset_iam_member" "cloudbuild_sa_ci_bq_data_editor" 
 }
 
 resource "google_bigquery_dataset_iam_member" "database_viewer_compliance_audit_data_viewer" {
-  for_each   = toset(var.database_iam_viewer_users)
+  for_each   = toset(local.database_iam_viewer_users)
   project    = data.google_project.project.project_id
   dataset_id = google_bigquery_dataset.compliance_audit.dataset_id
   role       = "roles/bigquery.dataViewer"
@@ -309,7 +309,7 @@ resource "google_bigquery_dataset_iam_member" "database_viewer_compliance_audit_
 }
 
 resource "google_bigquery_dataset_iam_member" "database_viewer_iceberg_catalog_data_viewer" {
-  for_each   = toset(var.database_iam_viewer_users)
+  for_each   = toset(local.database_iam_viewer_users)
   project    = data.google_project.project.project_id
   dataset_id = google_bigquery_dataset.iceberg_catalog.dataset_id
   role       = "roles/bigquery.dataViewer"
@@ -317,7 +317,7 @@ resource "google_bigquery_dataset_iam_member" "database_viewer_iceberg_catalog_d
 }
 
 resource "google_bigquery_dataset_iam_member" "database_viewer_analytics_curated_data_viewer" {
-  for_each   = toset(var.database_iam_viewer_users)
+  for_each   = toset(local.database_iam_viewer_users)
   project    = data.google_project.project.project_id
   dataset_id = google_bigquery_dataset.analytics_curated.dataset_id
   role       = "roles/bigquery.dataViewer"
@@ -325,7 +325,7 @@ resource "google_bigquery_dataset_iam_member" "database_viewer_analytics_curated
 }
 
 resource "google_bigquery_dataset_iam_member" "database_viewer_ci_data_viewer" {
-  for_each   = toset(var.database_iam_viewer_users)
+  for_each   = toset(local.database_iam_viewer_users)
   project    = data.google_project.project.project_id
   dataset_id = google_bigquery_dataset.ci.dataset_id
   role       = "roles/bigquery.dataViewer"

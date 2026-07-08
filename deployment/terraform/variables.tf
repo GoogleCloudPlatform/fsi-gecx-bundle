@@ -57,12 +57,6 @@ variable "iap_login_ui_image_url" {
   default = null
 }
 
-variable "additional_cloud_run_iap_members" {
-  description = "A list of IAM members to grant the Cloud Run IAP role."
-  type        = list(string)
-  default     = []
-}
-
 variable "enable_ccai" {
   type    = bool
   default = false
@@ -232,18 +226,6 @@ variable "gecx_location" {
   type        = string
   description = "The location for GECX API endpoints (e.g. 'us' or 'eu')"
   default     = "us"
-}
-
-variable "database_iam_support_users" {
-  type        = list(string)
-  description = "List of IAM user or group strings (e.g. user:email@domain.com, group:email@domain.com) to grant database Cloud SQL access."
-  default     = []
-}
-
-variable "database_iam_viewer_users" {
-  type        = list(string)
-  description = "List of IAM user or group strings (e.g. user:email@domain.com, group:email@domain.com) to grant database Cloud SQL viewer access."
-  default     = []
 }
 
 variable "banking_service_db_pool_size" {
