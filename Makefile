@@ -255,6 +255,13 @@ run-triggers: ## Run Cloud Build triggers for a specific branch (usage: make run
 		--format="value(metadata.build.id)") && \
 	gcloud builds log $$BUILD_ID --region=$(REGION) --stream
 
+	# Create lakehouse view reconcile artifact
+	BUILD_ID=$$(gcloud builds triggers run lakehouse-view-reconcile-image \
+		--region=$(REGION) \
+		--branch=$(BRANCH) \
+		--format="value(metadata.build.id)") && \
+	gcloud builds log $$BUILD_ID --region=$(REGION) --stream
+
 .PHONY: trigger-site-crawl
 trigger-site-crawl:
 	@if [ -z "$(BRANCH)" ]; then echo "Error: BRANCH is required. Usage: make run-triggers BRANCH=feature/foo"; exit 1; fi
