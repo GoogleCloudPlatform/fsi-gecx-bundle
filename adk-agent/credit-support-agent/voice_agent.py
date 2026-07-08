@@ -198,6 +198,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     warning_duration = 240
     hard_timeout_enabled = False
     voice_context = {"has_active_fraud_alert": False, "fraud_alert": None}
+    fraud_alert_state = {}
 
     try:
         import httpx
@@ -237,9 +238,31 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     audio_port = None
 
     session_service = InMemorySessionService()
+    if voice_context.get("has_active_fraud_alert") and voice_context.get("fraud_alert"):
+        fraud_alert_state = dict(voice_context["fraud_alert"])
+    session_state = {
+        "room_name": room_name,
+        "customer_id": customer_id,
+        "session_id": session_id,
+        "mode": mode,
+        "has_active_fraud_alert": voice_context.get("has_active_fraud_alert", False),
+        "fraud_context": fraud_alert_state,
+    }
     # Create the session dynamically using the passed IDs
     user_id = f"user-{customer_id}"
-    await session_service.create_session(app_name="credit-support-agent", user_id=user_id, session_id=session_id)
+    await session_service.create_session(
+        app_name="credit-support-agent",
+        user_id=user_id,
+        session_id=session_id,
+        state=session_state,
+    )
+    logger.info(
+        "Created ADK session state room=%s customer=%s mode=%s fraud_alert_id=%s",
+        room_name,
+        customer_id,
+        mode,
+        fraud_alert_state.get("fraud_alert_id"),
+    )
     
     import copy
     from google.adk.models import Gemini

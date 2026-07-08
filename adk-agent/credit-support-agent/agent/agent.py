@@ -160,7 +160,13 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
     tool_name = getattr(tool, "name", str(tool))
     import logging
     logger = logging.getLogger("voice_agent")
-    logger.info(f"[CALLBACK] before_tool_callback triggered: tool_name={tool_name}, args={args}")
+    fraud_context = tool_context.state.get("fraud_context", {}) if hasattr(tool_context, "state") else {}
+    logger.info(
+        "[CALLBACK] before_tool_callback triggered: tool_name=%s args=%s fraud_alert_id=%s",
+        tool_name,
+        args,
+        fraud_context.get("fraud_alert_id"),
+    )
     set_tool_processing(True)
     tool_context.state["is_processing_tool"] = True
     return None
@@ -169,7 +175,13 @@ async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> N
     tool_name = getattr(tool, "name", str(tool))
     import logging
     logger = logging.getLogger("voice_agent")
-    logger.info(f"[CALLBACK] on_tool_error_callback triggered: tool_name={tool_name}, error={error}")
+    fraud_context = tool_context.state.get("fraud_context", {}) if hasattr(tool_context, "state") else {}
+    logger.info(
+        "[CALLBACK] on_tool_error_callback triggered: tool_name=%s error=%s fraud_alert_id=%s",
+        tool_name,
+        error,
+        fraud_context.get("fraud_alert_id"),
+    )
     set_tool_processing(False)
     tool_context.state["is_processing_tool"] = False
     return None
@@ -178,7 +190,13 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
     tool_name = getattr(tool, "name", str(tool))
     import logging
     logger = logging.getLogger("voice_agent")
-    logger.info(f"[CALLBACK] after_tool_callback triggered: tool_name={tool_name}, result={tool_response}")
+    fraud_context = tool_context.state.get("fraud_context", {}) if hasattr(tool_context, "state") else {}
+    logger.info(
+        "[CALLBACK] after_tool_callback triggered: tool_name=%s fraud_alert_id=%s result=%s",
+        tool_name,
+        fraud_context.get("fraud_alert_id"),
+        tool_response,
+    )
     set_tool_processing(False)
     tool_context.state["is_processing_tool"] = False
     # Check if the tool succeeded
