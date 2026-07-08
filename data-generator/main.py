@@ -696,7 +696,13 @@ async def run_activity_surge_task(active_cards: Optional[List[Dict[str, Any]]] =
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "data-generator"}
+    from utils.version import BUILD_VERSION, BUILD_COMMIT_ID
+    return {
+        "status": "ok",
+        "service": "data-generator",
+        "version": BUILD_VERSION,
+        "commit": BUILD_COMMIT_ID,
+    }
 
 @app.post("/generate", status_code=status.HTTP_200_OK)
 @app.post("/simulate-pulse", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
