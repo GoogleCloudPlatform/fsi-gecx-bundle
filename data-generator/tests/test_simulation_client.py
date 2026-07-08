@@ -25,7 +25,11 @@ client = TestClient(app)
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "service": "data-generator"}
+    res = response.json()
+    assert res["status"] == "ok"
+    assert res["service"] == "data-generator"
+    assert "version" in res
+    assert "commit" in res
 
 
 @respx.mock
