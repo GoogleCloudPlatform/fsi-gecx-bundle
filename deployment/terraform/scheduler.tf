@@ -35,3 +35,35 @@ resource "google_cloud_scheduler_job" "data_generator_cron" {
     google_project_service.cloudscheduler_googleapis_com
   ]
 }
+
+resource "google_cloud_scheduler_job" "lakehouse_view_reconcile_daily" {
+  count            = var.deploy_cloud_run_services ? 1 : 0
+  name             = "lakehouse-view-reconcile-daily"
+  description      = "Run idempotent Lakehouse Silver view reconciliation once daily"
+  schedule         = "17 10 * * *"
+  time_zone        = "Etc/UTC"
+  attempt_deadline = "120s"
+  region           = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${data.google_project.project.project_id}/jobs/${google_cloud_run_v2_job.lakehouse_view_reconcile[0].name}:run"
+
+    headers = {
+      "Content-Type" = "application/json"
+    }
+
+    body = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.lakehouse_reconcile_service_account.email
+      scope                 = "https://www.googleapis.com/auth/cloud-platform"
+    }
+  }
+
+  depends_on = [
+    google_project_service.cloudscheduler_googleapis_com,
+    google_cloud_run_v2_job.lakehouse_view_reconcile,
+    google_project_iam_member.lakehouse_reconcile_sa_run_developer,
+  ]
+}
