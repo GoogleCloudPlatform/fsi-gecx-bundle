@@ -31,8 +31,6 @@ resource "google_secret_manager_secret_version" "postgres_banking_root_password_
   secret_data = random_password.postgres_root_password.result
 }
 
-
-
 resource "google_secret_manager_secret" "postgres_banking_bq_connector_password" {
   secret_id = "postgres_banking_bq_connector_password"
 
@@ -106,4 +104,27 @@ resource "random_password" "card_network_switch_token" {
 resource "google_secret_manager_secret_version" "card_network_switch_token_version" {
   secret      = google_secret_manager_secret.card_network_switch_token.id
   secret_data = random_password.card_network_switch_token.result
+}
+
+data "external" "database_iam_support_users" {
+  program = ["bash", "${path.module}/scripts/get_secret_safe.sh", "database-iam-support-users", var.project_id, "true"]
+}
+
+data "external" "database_iam_viewer_users" {
+  program = ["bash", "${path.module}/scripts/get_secret_safe.sh", "database-iam-viewer-users", var.project_id, "true"]
+}
+
+data "external" "additional_cloud_run_iap_members" {
+  program = ["bash", "${path.module}/scripts/get_secret_safe.sh", "additional-cloud-run-iap-members", var.project_id, "true"]
+}
+
+locals {
+  database_iam_support_users_raw = data.external.database_iam_support_users.result.secret_data
+  database_iam_support_users     = compact([for s in split(",", local.database_iam_support_users_raw) : trimspace(s)])
+
+  database_iam_viewer_users_raw = data.external.database_iam_viewer_users.result.secret_data
+  database_iam_viewer_users     = compact([for s in split(",", local.database_iam_viewer_users_raw) : trimspace(s)])
+
+  additional_cloud_run_iap_members_raw = data.external.additional_cloud_run_iap_members.result.secret_data
+  additional_cloud_run_iap_members     = compact([for s in split(",", local.additional_cloud_run_iap_members_raw) : trimspace(s)])
 }

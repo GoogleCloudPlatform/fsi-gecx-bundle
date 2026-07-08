@@ -32,6 +32,18 @@ resource "google_service_account" "cloudbuild_service_account" {
   }
 }
 
+resource "google_service_account" "cloudbuild_terraform_service_account" {
+  account_id   = "cloudbuild-terraform-sa"
+  display_name = "Cloud Build Terraform Service Account"
+
+  lifecycle {
+    ignore_changes = [
+      description,
+      display_name
+    ]
+  }
+}
+
 resource "google_service_account" "cloudbuild_crawler_service_account" {
   account_id   = "cloudbuild-crawler-sa"
   display_name = "Cloud Build Crawler Service Account"

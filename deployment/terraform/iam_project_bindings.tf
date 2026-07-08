@@ -18,6 +18,24 @@ resource "google_project_iam_member" "cloudbuild_sa_log_writer" {
   member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
 
+resource "google_project_iam_member" "cloudbuild_terraform_sa_editor" {
+  project = data.google_project.project.project_id
+  role    = "roles/editor"
+  member  = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
+}
+
+resource "google_project_iam_member" "cloudbuild_terraform_sa_act_as" {
+  project = data.google_project.project.project_id
+  role    = "roles/iam.serviceAccountUser"
+  member  = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
+}
+
+resource "google_project_iam_member" "cloudbuild_terraform_sa_secret_accessor" {
+  project = data.google_project.project.project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
+}
+
 resource "google_project_iam_member" "cloudbuild_sa_run_admin" {
   project = var.project_id
   role    = "roles/run.admin"
@@ -272,7 +290,7 @@ resource "google_project_iam_member" "lakehouse_reconcile_sa_run_developer" {
 }
 
 resource "google_project_iam_member" "database_viewer_bq_job_user" {
-  for_each = toset(var.database_iam_viewer_users)
+  for_each = toset(local.database_iam_viewer_users)
   project  = data.google_project.project.project_id
   role     = "roles/bigquery.jobUser"
   member   = each.value
