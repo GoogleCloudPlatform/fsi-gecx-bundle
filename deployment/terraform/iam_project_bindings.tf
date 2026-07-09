@@ -285,9 +285,27 @@ resource "google_project_iam_member" "lakehouse_reconcile_sa_run_developer" {
   member  = "serviceAccount:${google_service_account.lakehouse_reconcile_service_account.email}"
 }
 
-resource "google_project_iam_member" "database_viewer_bq_job_user" {
-  for_each = toset(local.database_iam_viewer_users)
+locals {
+  demo_viewer_roles      = yamldecode(file("${path.module}/config/demo_viewer_role.yaml")).roles
+  viewer_user_roles_list = setproduct(local.iam_console_viewers, local.demo_viewer_roles)
+  viewer_user_roles = {
+    for pair in local.viewer_user_roles_list : "${pair[0]}_${pair[1]}" => {
+      user = pair[0]
+      role = pair[1]
+    }
+  }
+}
+
+resource "google_project_iam_member" "demo_user_iam_role" {
+  for_each = local.viewer_user_roles
   project  = data.google_project.project.project_id
-  role     = "roles/bigquery.jobUser"
+  role     = each.value.role
+  member   = each.value.user
+}
+
+resource "google_project_iam_member" "demo_user_custom_role" {
+  for_each = toset(local.iam_console_viewers)
+  project  = data.google_project.project.project_id
+  role     = google_project_iam_custom_role.demo_viewer.id
   member   = each.value
 }

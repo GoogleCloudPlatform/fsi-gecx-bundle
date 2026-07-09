@@ -1,0 +1,50 @@
+roles:
+  # Role to list datasets, tables, and create jobs
+  - roles/bigquery.metadataViewer
+  - roles/bigquery.jobUser
+
+  # Roles to view Streams
+  - roles/datastream.viewer
+
+  # Roles to view Cloud Run
+  - roles/run.viewer
+
+  # Roles to view Pub/Sub topics and subscriptions
+  - roles/pubsub.viewer
+
+  # Roles to view Eventarc triggers
+  - roles/eventarc.viewer
+
+  # Roles to view Cloud Scheduler jobs
+  - roles/cloudscheduler.viewer
+
+  # Roles to view Artifact Registry
+  - roles/artifactregistry.viewer
+
+  # Roles to view Compute Engine
+  - roles/compute.viewer
+
+  # Roles to view Redis
+  - roles/redis.viewer
+
+  # Roles to view KMS
+  - roles/cloudkms.viewer
+
+  # Roles to view Data Catalog
+  - roles/datacatalog.viewer
+
+  # Roles to view Cloud Build
+  - roles/cloudbuild.viewer
+
+  # Gemini Enterprise for Customer Experience (CES)
+  - roles/ces.viewer
+
+  # Dataplex (Knowledge Catalog)
+  - roles/dataplex.viewer
+  - roles/dataplex.catalogViewer
+
+  # Discovery Engine (Agent Search)
+  - roles/discoveryengine.viewer
+
+  # Document AI
+  - roles/documentai.viewer

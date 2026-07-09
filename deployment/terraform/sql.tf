@@ -157,7 +157,7 @@ locals {
     }
   }
   db_iam_viewer_members = {
-    for member in local.database_iam_viewer_users :
+    for member in local.iam_console_viewers :
     member => {
       name = split(":", member)[1]
       type = split(":", member)[0] == "user" ? "CLOUD_IAM_USER" : (

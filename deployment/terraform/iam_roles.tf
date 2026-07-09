@@ -18,3 +18,14 @@ resource "google_project_iam_custom_role" "cloud_build_job_runner" {
   description = "Allows triggering Cloud Build builds"
   permissions = ["cloudbuild.builds.create"]
 }
+
+locals {
+  demo_viewer_custom_role_config = yamldecode(file("${path.module}/config/demo_viewer_custom_role.yaml"))
+}
+
+resource "google_project_iam_custom_role" "demo_viewer" {
+  role_id     = local.demo_viewer_custom_role_config.role_id
+  title       = local.demo_viewer_custom_role_config.title
+  description = local.demo_viewer_custom_role_config.description
+  permissions = local.demo_viewer_custom_role_config.permissions
+}

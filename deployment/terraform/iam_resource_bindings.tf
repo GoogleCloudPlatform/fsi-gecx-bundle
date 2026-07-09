@@ -245,6 +245,20 @@ resource "google_storage_bucket_iam_member" "discovery_engine_site_crawled_conte
   member = local.discovery_engine_service_account
 }
 
+resource "google_storage_bucket_iam_member" "database_viewer_site_crawled_content_viewer" {
+  for_each = toset(local.iam_console_viewers)
+  bucket   = google_storage_bucket.site_crawled_content.name
+  role     = "roles/storage.objectViewer"
+  member   = each.value
+}
+
+resource "google_storage_bucket_iam_member" "database_viewer_iceberg_warehouse_viewer" {
+  for_each = toset(local.iam_console_viewers)
+  bucket   = google_storage_bucket.iceberg_warehouse.name
+  role     = "roles/storage.objectViewer"
+  member   = each.value
+}
+
 resource "google_storage_bucket_iam_member" "iceberg_connection_access" {
   bucket = google_storage_bucket.iceberg_warehouse.name
   role   = "roles/storage.objectUser"
@@ -320,7 +334,7 @@ resource "google_bigquery_dataset_iam_member" "cloudbuild_sa_ci_bq_data_editor" 
 }
 
 resource "google_bigquery_dataset_iam_member" "database_viewer_compliance_audit_data_viewer" {
-  for_each   = toset(local.database_iam_viewer_users)
+  for_each   = toset(local.iam_console_viewers)
   project    = data.google_project.project.project_id
   dataset_id = google_bigquery_dataset.compliance_audit.dataset_id
   role       = "roles/bigquery.dataViewer"
@@ -328,7 +342,7 @@ resource "google_bigquery_dataset_iam_member" "database_viewer_compliance_audit_
 }
 
 resource "google_bigquery_dataset_iam_member" "database_viewer_iceberg_catalog_data_viewer" {
-  for_each   = toset(local.database_iam_viewer_users)
+  for_each   = toset(local.iam_console_viewers)
   project    = data.google_project.project.project_id
   dataset_id = google_bigquery_dataset.iceberg_catalog.dataset_id
   role       = "roles/bigquery.dataViewer"
@@ -336,7 +350,7 @@ resource "google_bigquery_dataset_iam_member" "database_viewer_iceberg_catalog_d
 }
 
 resource "google_bigquery_dataset_iam_member" "database_viewer_analytics_curated_data_viewer" {
-  for_each   = toset(local.database_iam_viewer_users)
+  for_each   = toset(local.iam_console_viewers)
   project    = data.google_project.project.project_id
   dataset_id = google_bigquery_dataset.analytics_curated.dataset_id
   role       = "roles/bigquery.dataViewer"
@@ -344,9 +358,27 @@ resource "google_bigquery_dataset_iam_member" "database_viewer_analytics_curated
 }
 
 resource "google_bigquery_dataset_iam_member" "database_viewer_ci_data_viewer" {
-  for_each   = toset(local.database_iam_viewer_users)
+  for_each   = toset(local.iam_console_viewers)
   project    = data.google_project.project.project_id
   dataset_id = google_bigquery_dataset.ci.dataset_id
   role       = "roles/bigquery.dataViewer"
   member     = each.value
+}
+
+resource "google_bigquery_connection_iam_member" "database_viewer_iceberg_connection_user" {
+  for_each      = toset(local.iam_console_viewers)
+  project       = data.google_project.project.project_id
+  location      = google_bigquery_connection.iceberg.location
+  connection_id = google_bigquery_connection.iceberg.connection_id
+  role          = "roles/bigquery.connectionUser"
+  member        = each.value
+}
+
+resource "google_bigquery_connection_iam_member" "database_viewer_banking_data_postgres_connection_user" {
+  for_each      = toset(local.iam_console_viewers)
+  project       = data.google_project.project.project_id
+  location      = google_bigquery_connection.banking_data_postgres_connection.location
+  connection_id = google_bigquery_connection.banking_data_postgres_connection.connection_id
+  role          = "roles/bigquery.connectionUser"
+  member        = each.value
 }
