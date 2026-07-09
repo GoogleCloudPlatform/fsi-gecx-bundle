@@ -35,3 +35,6 @@ roles:
 
   # Roles to view Cloud Build in console
   - roles/cloudbuild.viewer
+
+  # Gemini Enterprise for Customer Experience (CES)
+  - roles/ces.viewer
