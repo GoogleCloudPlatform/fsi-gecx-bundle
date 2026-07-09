@@ -272,12 +272,13 @@ def run_migrations_online() -> None:
                         except Exception as grant_err:
                             logger.debug(f"Notice: Could not grant viewer permissions on {s} to {role}: {grant_err}")
 
-                    if "ledger" in allowed_schemas:
-                        try:
-                            with connection.begin_nested():
-                                connection.execute(sa.text(f'REVOKE UPDATE, DELETE ON TABLE ledger.account_ledger FROM "{role}";'))
-                        except Exception as rev_err:
-                            logger.debug(f"Notice: Could not revoke immutable ledger permissions from {role}: {rev_err}")
+                immutable_ledger_roles = set(roles + viewer_roles)
+                for role in immutable_ledger_roles:
+                    try:
+                        with connection.begin_nested():
+                            connection.execute(sa.text(f'REVOKE UPDATE, DELETE ON TABLE ledger.account_ledger FROM "{role}";'))
+                    except Exception as rev_err:
+                        logger.debug(f"Notice: Could not revoke immutable ledger permissions from {role}: {rev_err}")
 
                 try:
                     with connection.begin_nested():
