@@ -176,42 +176,44 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
   const currentCard = CARDS_MAP[selectedCardKey];
 
   return (
-    <section className="relative pt-32 pb-24 md:pt-48 md:pb-32 px-6">
+    <section className="relative pt-24 pb-16 md:pt-28 md:pb-24 px-6 max-w-6xl mx-auto min-h-[calc(100vh-80px)] flex flex-col text-left w-full">
       {/* Background Glows */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-emerald-500/10 dark:bg-emerald-500/5 blur-[120px] pointer-events-none -z-10" />
+      <div className="absolute top-1/4 left-1/3 w-[400px] h-[400px] rounded-full bg-emerald-500/5 blur-[100px] pointer-events-none -z-10" />
 
-      <div className="max-w-3xl mx-auto bg-white dark:bg-slate-900 rounded-3xl p-8 border border-slate-200 dark:border-slate-800/80 shadow-2xl relative overflow-hidden">
-        
-        {/* Card Header */}
-        <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-100 dark:border-slate-800/50">
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={() => navigate('/credit-cards')}
-              className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all hover:scale-105"
-              aria-label="Back"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
-                Apply for a Credit Card
-              </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Complete the secure form below to submit your application.
-              </p>
-            </div>
+      {/* Portal Header */}
+      <div className="mb-8 pb-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center relative w-full">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/credit-cards')}
+            className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-550 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all hover:scale-105 shadow-sm cursor-pointer"
+            aria-label="Back"
+          >
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shadow-sm">
+            <CreditCard className="w-6 h-6 text-emerald-500" />
           </div>
-          <div className="flex items-center gap-3 shrink-0">
-            <button
-              onClick={() => setIsInfoModalOpen(true)}
-              className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-850 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-850 dark:hover:text-white"
-              title="GCP App Integration Info"
-            >
-              <GoogleCloudIcon className="w-4 h-4" />
-            </button>
-            <CreditCard className="w-8 h-8 text-emerald-500 hidden sm:block" />
+          <div>
+            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
+              Apply for a Credit Card
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Complete the secure form below to submit your application.
+            </p>
           </div>
         </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={() => setIsInfoModalOpen(true)}
+            className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-850 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-550 hover:text-slate-850 dark:hover:text-white"
+            title="GCP App Integration Info"
+          >
+            <GoogleCloudIcon className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="max-w-4xl mx-auto w-full bg-white dark:bg-slate-900 rounded-3xl p-8 border border-slate-200 dark:border-slate-800/80 shadow-2xl relative overflow-hidden">
 
         {/* Alerts */}
         {errorMsg && (
@@ -577,7 +579,7 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Read about the GECX client-side function callbacks, React Router prefill mapping, and schemas.</p>
               </div>
               <a
-                href="https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/blob/main/docs/architecture/credit_card_prefill_integration.md"
+                href="https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/blob/main/docs/architecture/domain-workflows/origination/credit_card_prefill_integration.md"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"

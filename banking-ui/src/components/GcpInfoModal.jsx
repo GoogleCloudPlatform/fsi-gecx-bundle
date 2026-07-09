@@ -21,21 +21,23 @@ export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Inte
 
   return (
     <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 max-w-lg w-full shadow-2xl animate-fade-in relative text-left">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 max-w-lg w-full shadow-2xl animate-fade-in relative text-left flex flex-col max-h-[90vh]">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
-        <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2.5">
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2.5 shrink-0">
           <GoogleCloudIcon className="w-6 h-6" />
           <span>{title}</span>
         </h2>
         
-        {children}
+        <div className="flex-1 overflow-y-auto pr-1">
+          {children}
+        </div>
 
-        <div className="mt-6 flex justify-end">
+        <div className="mt-6 flex justify-end shrink-0">
           <button
             onClick={onClose}
             className="px-5 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-sm transition-colors cursor-pointer"
