@@ -211,6 +211,12 @@ resource "google_project_iam_member" "banking_service_sa_cloudsql_instance_user"
   member  = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
+resource "google_project_iam_member" "banking_service_sa_run_developer" {
+  project = data.google_project.project.project_id
+  role    = "roles/run.developer"
+  member  = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
 resource "google_project_iam_member" "banking_migration_sa_cloudsql_client" {
   project = data.google_project.project.project_id
   role    = "roles/cloudsql.client"
@@ -221,6 +227,24 @@ resource "google_project_iam_member" "banking_migration_sa_cloudsql_instance_use
   project = data.google_project.project.project_id
   role    = "roles/cloudsql.instanceUser"
   member  = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
+}
+
+resource "google_project_iam_member" "banking_reset_sa_cloudsql_client" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.banking_db_reset_service_account.email}"
+}
+
+resource "google_project_iam_member" "banking_reset_sa_cloudsql_instance_user" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = "serviceAccount:${google_service_account.banking_db_reset_service_account.email}"
+}
+
+resource "google_project_iam_member" "banking_reset_sa_log_writer" {
+  project = data.google_project.project.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.banking_db_reset_service_account.email}"
 }
 
 resource "google_project_iam_member" "ledger_sa_cloudsql_client" {

@@ -17,6 +17,7 @@ import json
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from utils.database import Base
+import services.seeding_service as seeding_service
 from services.seeding_service import perform_algorithmic_seeding, provision_user_suite
 from models.identity import User, UserAddress
 from models.kyc import KYCRecord, UserCreditProfile
@@ -88,3 +89,27 @@ def test_provision_user_suite_generates_unique_card_tokens_for_same_name(db_sess
     assert first["card_token"].startswith("tok_visa_")
     assert second["card_token"].startswith("tok_visa_")
     assert first["card_token"] != second["card_token"]
+
+
+def test_seeding_job_clears_maintenance_on_failure(monkeypatch):
+    class FakeSession:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    fake_session = FakeSession()
+    maintenance_calls = []
+
+    def fail_seeding(_db):
+        raise RuntimeError("seed exploded")
+
+    monkeypatch.setattr(seeding_service, "SessionLocal", lambda: fake_session)
+    monkeypatch.setattr(seeding_service, "perform_algorithmic_seeding", fail_seeding)
+    monkeypatch.setattr(seeding_service, "disable_maintenance_mode", lambda: maintenance_calls.append("cleared"))
+
+    with pytest.raises(RuntimeError, match="seed exploded"):
+        seeding_service.run_algorithmic_seeding_job()
+
+    assert fake_session.closed is True
+    assert maintenance_calls == ["cleared"]

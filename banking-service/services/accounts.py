@@ -253,7 +253,10 @@ class AccountsService:
         enable_session_rbac_override(self.db)
 
         # Fetch checking/savings accounts
-        deposit_accounts = self.db.query(Account).filter(Account.user_id == user.id).all()
+        deposit_accounts = self.db.query(Account).filter(
+            Account.user_id == user.id,
+            Account.status == "ACTIVE",
+        ).all()
 
         # Fetch credit accounts
         from models.credit_card import CreditAccount
@@ -271,7 +274,10 @@ class AccountsService:
                 provision_user_suite(self.db, user_email, user_uid)
                 self.db.commit()
                 # Fetch accounts again
-                deposit_accounts = self.db.query(Account).filter(Account.user_id == user_id).all()
+                deposit_accounts = self.db.query(Account).filter(
+                    Account.user_id == user_id,
+                    Account.status == "ACTIVE",
+                ).all()
                 credit_accounts = self.db.query(CreditAccount).filter(CreditAccount.customer_id == user_id).all()
             except Exception as e:
                 logger.error(f"Failed to auto-provision local sandbox for user: {user_email}. Error: {e}")

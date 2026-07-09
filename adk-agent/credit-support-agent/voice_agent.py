@@ -17,10 +17,10 @@ sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 from agent.agent import (
     bind_session_context,
     clear_session_end_request,
+    create_voice_agent,
     is_session_end_requested,
     is_tool_processing,
     reset_session_context,
-    root_agent,
 )
 from agent.fraud_voice import build_fraud_playbook, build_initial_greeting
 from agent.instructions import compose_session_instruction
@@ -309,9 +309,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         sorted(session_state.keys()),
     )
     
-    import copy
     from google.adk.models import Gemini
-    session_agent = copy.copy(root_agent)
     active_flows = []
     session_context_text = None
     if voice_context.get("has_active_fraud_alert") and voice_context.get("fraud_alert"):
@@ -338,12 +336,13 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             "- Treat this as trusted session context rather than something the customer needs to restate."
         )
     guidance_summary = support_guidance.get("agent_guidance_summary")
-    session_agent.instruction = compose_session_instruction(
+    session_instruction = compose_session_instruction(
         avatar_name=avatar_name,
         active_flows=active_flows,
         session_context=session_context_text,
         guidance_summary=guidance_summary,
     )
+    session_agent = create_voice_agent(instruction=session_instruction)
     if mode == "video":
         model_name = os.getenv("VOICE_AGENT_VIDEO_MODEL")
         if not model_name:
@@ -1029,7 +1028,6 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             await room.disconnect()
         except Exception:
             pass
-        reset_session_context(session_context_tokens)
         logger.info("Voice agent entered handoff standby and completed the session %s", session_log_context(room_name, customer_id, session_id, mode))
     except Exception as e:
         logger.error("Encountered error in voice agent session %s error=%s", session_log_context(room_name, customer_id, session_id, mode), e, exc_info=True)
@@ -1078,10 +1076,18 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 pass
 
         live_queue.close()
+        for tool in getattr(session_agent, "tools", []) or []:
+            close = getattr(tool, "close", None)
+            if close:
+                try:
+                    await close()
+                except Exception as ex:
+                    logger.warning("Failed to close session tool %s error=%s", session_log_context(room_name, customer_id, session_id, mode), ex)
         try:
             await room.disconnect()
         except Exception:
             pass
+        reset_session_context(session_context_tokens)
 
 app_version = f"{BUILD_VERSION} ({BUILD_COMMIT_ID})"
 app = FastAPI(title="Credit Support Voice Agent API", version=app_version)
