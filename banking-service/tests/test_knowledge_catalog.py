@@ -52,3 +52,40 @@ def test_aspect_data_to_dict_converts_nested_protobuf_values_to_plain_json():
         "must_do": ["confirm disputed transactions"],
         "tool_dependencies": ["triage_fraud_case"],
     }
+
+
+def test_voice_token_json_sanitizer_handles_protobuf_guidance_values():
+    from fastapi.encoders import jsonable_encoder
+    from google.protobuf import struct_pb2
+    from routers.credit_card import _to_json_safe
+
+    data = struct_pb2.Struct()
+    data.update(
+        {
+            "topic_id": "fraud_golden_path",
+            "must_do": ["confirm disputed transactions"],
+        }
+    )
+    payload = {
+        "fraud_context": {
+            "support_guidance": {
+                "topics": [data],
+            },
+        },
+    }
+
+    safe_payload = _to_json_safe(payload)
+
+    assert safe_payload == {
+        "fraud_context": {
+            "support_guidance": {
+                "topics": [
+                    {
+                        "topic_id": "fraud_golden_path",
+                        "must_do": ["confirm disputed transactions"],
+                    }
+                ],
+            },
+        },
+    }
+    jsonable_encoder(safe_payload)

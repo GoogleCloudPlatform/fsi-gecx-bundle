@@ -14,7 +14,11 @@
 
 import logging
 import os
-from typing import Dict
+from collections.abc import Mapping, Sequence
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Any, Dict
+from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
@@ -50,6 +54,31 @@ v1_router = APIRouter(prefix="/v1/credit-card", tags=["Credit Card Support"])
 # LiveKit Server Settings (Defaults match local development Docker setup)
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "devkey")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "secret")
+
+
+def _to_json_safe(value: Any) -> Any:
+    """Coerce SDK/protobuf/database values into FastAPI-safe JSON primitives."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, (UUID, Decimal)):
+        return str(value)
+    if hasattr(value, "DESCRIPTOR"):
+        from google.protobuf.json_format import MessageToDict
+
+        return _to_json_safe(MessageToDict(value, preserving_proto_field_name=True))
+    if isinstance(value, Mapping):
+        return {str(_to_json_safe(key)): _to_json_safe(item) for key, item in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_to_json_safe(item) for item in value]
+    try:
+        return _to_json_safe(dict(value))
+    except (TypeError, ValueError):
+        pass
+    if hasattr(value, "__dict__"):
+        return _to_json_safe(vars(value))
+    return str(value)
 
 
 def get_credit_card_repo(db: Session = Depends(get_db)) -> CreditCardRepository:
@@ -371,7 +400,7 @@ def get_voice_room_token(
             can_publish=True,
             can_subscribe=True
         ))
-        fraud_context = FraudAlertService(db).get_active_voice_context(auth_provider_uid=customer_id)
+        fraud_context = _to_json_safe(FraudAlertService(db).get_active_voice_context(auth_provider_uid=customer_id))
         background_tasks.add_task(trigger_voice_agent_session_async, room_name, customer_id, session_id, mode)
         return {
             "token": token.to_jwt(),
