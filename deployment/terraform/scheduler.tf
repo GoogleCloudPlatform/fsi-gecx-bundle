@@ -14,7 +14,7 @@
 
 resource "google_cloud_scheduler_job" "data_generator_cron" {
   name             = "data-generator-cron"
-  description      = "Trigger throttled background synthetic card activity pulse"
+  description      = "Trigger steady lightweight synthetic card activity"
   schedule         = var.data_generator_cron_schedule
   time_zone        = "Etc/UTC"
   attempt_deadline = var.data_generator_request_timeout

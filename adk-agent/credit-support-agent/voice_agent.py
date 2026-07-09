@@ -327,10 +327,11 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             f"- Fraud alert thread id: {fraud_alert['message_thread_id']}.\n"
             f"- Fraud alert id for triage_fraud_case: {fraud_alert['fraud_alert_id']}.\n"
             "- Start the conversation by asking whether the customer recognizes the flagged transactions; do not assume fraud has occurred.\n"
-            "- If the customer asks what looked suspicious, reference these flagged transactions:\n"
+            "- Name each flagged merchant and amount when summarizing what looked suspicious:\n"
             f"{suspicious_lines or '- No suspicious transaction details were provided.'}\n"
             "- Before opening a fraud case, briefly restate the exact transactions the customer says they do not recognize and ask them to confirm that selection.\n"
-            "- After the customer confirms their selection, call triage_fraud_case once using authorization_id values for disputed pending authorizations and transaction_id values for disputed posted transactions when those IDs are present.\n"
+            "- Stop after asking for confirmation. Do not call triage_fraud_case in the same response where you ask whether the selection sounds right or is correct.\n"
+            "- After the customer explicitly confirms their selection in a later response, call triage_fraud_case once using authorization_id values for disputed pending authorizations and transaction_id values for disputed posted transactions when those IDs are present.\n"
             "- If the customer recognizes every flagged transaction, call triage_fraud_case with empty disputed id arrays and issue_replacement=false.\n"
             "- If the customer disputes any flagged transaction, tell them any credits are provisional pending the full fraud investigation.\n"
             "- If triage_fraud_case returns a clearly transient technical failure, retry it once with the same arguments before offering human escalation.\n"
@@ -389,6 +390,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         # Capture session end trigger and disconnect
         elif event_dict.get("type") == DataChannelEvent.SESSION_END.value:
             logger.info("SESSION_END event received from tool %s", session_log_context(room_name, customer_id, session_id, mode))
+            disconnect_event.set()
         
         # Capture human handoff trigger and save to DB
         elif event_dict.get("type") == DataChannelEvent.HANDOFF_PENDING.value:

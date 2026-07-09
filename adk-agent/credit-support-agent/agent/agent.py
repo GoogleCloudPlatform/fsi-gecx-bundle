@@ -165,6 +165,7 @@ def end_consultation() -> dict:
     """Terminates the current voice consultation session. Call this when the customer confirms they are finished or want to end the call.
     """
     request_session_end()
+    notify_event({"type": DataChannelEvent.SESSION_END.value})
     return {"status": "SUCCESS", "message": "Session end signal sent."}
 
 def transfer_to_human(reason: str) -> dict:

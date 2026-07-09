@@ -269,6 +269,8 @@ def test_composed_fraud_instruction_prefers_single_triage_workflow() -> None:
     assert "Call `triage_fraud_case` exactly once" in instruction
     assert "Ask whether the customer recognizes these transactions" in instruction
     assert "restate the specific transactions" in instruction
+    assert "Stop after asking for confirmation" in instruction
+    assert "do not call any fraud workflow tool in the same response" in instruction
     assert "raising a case with the fraud investigation team" in instruction
     assert "Before the tool call, briefly explain the pending-investigation actions" in instruction
     assert "summarize only confirmed tool results" in instruction
