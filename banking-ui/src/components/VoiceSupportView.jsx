@@ -1417,7 +1417,7 @@ export default function VoiceSupportView() {
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">Learn about LiveKit, WebRTC signaling, and low-latency audio/video routing.</p>
                   </div>
                   <a
-                    href="https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/blob/main/docs/architecture/gemini_live_voice_agent.md"
+                      href="https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/blob/main/docs/architecture/ai-and-voice/gemini_live_voice_agent.md"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"

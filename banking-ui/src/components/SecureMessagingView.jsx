@@ -45,6 +45,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
   const [activeThreadId, setActiveThreadId] = useState(null);
   const [isComposing, setIsComposing] = useState(false);
   const [copiedThreadId, setCopiedThreadId] = useState(false);
+  const [copiedQuery, setCopiedQuery] = useState(false);
 
   // Debug Simulator Modal State
   const [isDebugOpen, setIsDebugOpen] = useState(false);
@@ -368,6 +369,16 @@ function SecureMessagingView({ fbUser, customerProfile }) {
       setTimeout(() => setCopiedThreadId(false), 2000);
     } catch (err) {
       console.error('Failed to copy thread ID:', err);
+    }
+  };
+
+  const handleCopyQuery = async () => {
+    try {
+      await navigator.clipboard.writeText('select * from identity.user_secure_messages;');
+      setCopiedQuery(true);
+      setTimeout(() => setCopiedQuery(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy query:', err);
     }
   };
 
@@ -977,18 +988,37 @@ function SecureMessagingView({ fbUser, customerProfile }) {
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">BigQuery Secure Message Table</h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">View message text archives, timestamps, and thread keys.</p>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Secure Message Table</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">View message text archives, timestamps, and thread keys. Login to the banking database using IAM upon clicking 'Open Cloud SQL Studio'.</p>
               </div>
-              <a
-                href={`https://console.cloud.google.com/bigquery?project=${projectId}&ws=!1m6!1m5!4m3!1s${projectId}!2sbanking!3suser_secure_message!23sRESOURCE_LIST`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
-              >
-                <span>View Table</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                <a
+                  href={`https://console.cloud.google.com/sql/instances/banking-data/studio?project=${projectId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs hover:underline"
+                >
+                  <span>Open Cloud SQL Studio</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                <button
+                  type="button"
+                  onClick={handleCopyQuery}
+                  className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs hover:underline cursor-pointer"
+                >
+                  {copiedQuery ? (
+                    <>
+                      <span>Copied!</span>
+                      <Check className="w-3.5 h-3.5" />
+                    </>
+                  ) : (
+                    <>
+                      <span>Copy Query</span>
+                      <Copy className="w-3.5 h-3.5" />
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
             <hr className="border-slate-100 dark:border-slate-800" />
             <div className="flex items-start justify-between gap-4">
