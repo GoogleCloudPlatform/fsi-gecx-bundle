@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -265,14 +266,26 @@ class KnowledgeCatalogService:
         if hasattr(data, "DESCRIPTOR"):
             from google.protobuf.json_format import MessageToDict
 
-            return MessageToDict(data, preserving_proto_field_name=True)
+            return KnowledgeCatalogService._to_plain_json(
+                MessageToDict(data, preserving_proto_field_name=True)
+            )
         if isinstance(data, dict):
-            return dict(data)
+            return KnowledgeCatalogService._to_plain_json(data)
         try:
-            return dict(data)
+            return KnowledgeCatalogService._to_plain_json(dict(data))
         except (TypeError, ValueError):
             pass
 
         from google.protobuf.json_format import MessageToDict
 
-        return MessageToDict(data, preserving_proto_field_name=True)
+        return KnowledgeCatalogService._to_plain_json(MessageToDict(data, preserving_proto_field_name=True))
+
+    @staticmethod
+    def _to_plain_json(value: Any) -> Any:
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, Mapping):
+            return {str(key): KnowledgeCatalogService._to_plain_json(item) for key, item in value.items()}
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            return [KnowledgeCatalogService._to_plain_json(item) for item in value]
+        return value

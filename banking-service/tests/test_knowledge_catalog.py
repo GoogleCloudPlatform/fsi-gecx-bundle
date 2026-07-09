@@ -54,6 +54,26 @@ def test_aspect_data_to_dict_converts_nested_protobuf_values_to_plain_json():
     }
 
 
+def test_aspect_data_to_dict_normalizes_sequence_values_to_plain_lists():
+    parsed = KnowledgeCatalogService._to_plain_json(
+        {
+            "topic_id": "fraud_golden_path",
+            "must_do": ("confirm disputed transactions", "call triage_fraud_case"),
+            "nested": {
+                "tool_dependencies": ("get_open_fraud_alert", "triage_fraud_case"),
+            },
+        }
+    )
+
+    assert parsed == {
+        "topic_id": "fraud_golden_path",
+        "must_do": ["confirm disputed transactions", "call triage_fraud_case"],
+        "nested": {
+            "tool_dependencies": ["get_open_fraud_alert", "triage_fraud_case"],
+        },
+    }
+
+
 def test_voice_token_json_sanitizer_handles_protobuf_guidance_values():
     from fastapi.encoders import jsonable_encoder
     from google.protobuf import struct_pb2
