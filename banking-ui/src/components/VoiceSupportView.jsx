@@ -11,6 +11,7 @@ import {
   User,
   Calendar,
   AlertCircle,
+  CheckCircle2,
   Video,
   VideoOff,
   ExternalLink
@@ -949,13 +950,22 @@ export default function VoiceSupportView() {
                       <FraudStep label="Specialist review" complete={fraudProgress.specialistReview} />
                     </div>
                   ) : (
-                    <div className="mt-3 rounded-xl border border-amber-200 dark:border-amber-800/70 bg-white/70 dark:bg-slate-950/30 p-3 text-xs text-amber-900 dark:text-amber-200">
-                      <p className="font-bold uppercase tracking-wide">Alert review</p>
-                      <p className="mt-1 text-amber-800 dark:text-amber-300">
-                        {fraudProgress.inspected
-                          ? 'Suspicious transactions are ready for customer confirmation.'
-                          : 'The support agent will review suspicious activity before taking account action.'}
-                      </p>
+                    <div className="mt-3 rounded-xl border border-amber-200 dark:border-amber-800/70 bg-white/80 dark:bg-slate-950/30 p-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                          {fraudProgress.inspected ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">
+                            {fraudProgress.inspected ? 'Ready for confirmation' : 'Alert review'}
+                          </p>
+                          <p className="text-xs text-amber-800 dark:text-amber-300">
+                            {fraudProgress.inspected
+                              ? 'Suspicious transactions have been reviewed with the customer.'
+                              : 'Suspicious activity is being reviewed before account action.'}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   )}
                   {fraudTriage.outcome && (

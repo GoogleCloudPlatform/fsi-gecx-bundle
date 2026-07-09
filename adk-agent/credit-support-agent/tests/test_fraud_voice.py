@@ -266,13 +266,14 @@ def test_composed_fraud_instruction_prefers_single_triage_workflow() -> None:
         session_context="Session-specific customer context:\n- Fraud alert id for triage_fraud_case: fraud-123.",
     )
 
-    assert "Call `triage_fraud_case` exactly once" in instruction
+    assert "Immediately call `triage_fraud_case` exactly once" in instruction
     assert "Ask whether the customer recognizes these transactions" in instruction
     assert "restate the specific transactions" in instruction
     assert "Stop after asking for confirmation" in instruction
     assert "do not call any fraud workflow tool in the same response" in instruction
     assert "raising a case with the fraud investigation team" in instruction
-    assert "Before the tool call, briefly explain the pending-investigation actions" in instruction
+    assert "This is not a second confirmation checkpoint" in instruction
+    assert "Immediately call `triage_fraud_case` exactly once after that disclosure" in instruction
     assert "summarize only confirmed tool results" in instruction
     assert "Do not push a virtual card to Google Wallet unless" in instruction
     assert "Do not burst-call multiple fraud tools in a row" in instruction
