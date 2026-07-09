@@ -29,3 +29,26 @@ def test_local_guidance_bundle_filters_unknown_topics():
     assert bundle["topic_ids"] == ["replacement_card"]
     assert len(bundle["topics"]) == 1
     assert bundle["topics"][0]["topic_id"] == "replacement_card"
+
+
+def test_aspect_data_to_dict_converts_nested_protobuf_values_to_plain_json():
+    from google.protobuf import struct_pb2
+
+    data = struct_pb2.Struct()
+    data.update(
+        {
+            "topic_id": "fraud_golden_path",
+            "title": "Fraud Golden Path",
+            "must_do": ["confirm disputed transactions"],
+            "tool_dependencies": ["triage_fraud_case"],
+        }
+    )
+
+    parsed = KnowledgeCatalogService._aspect_data_to_dict(data)
+
+    assert parsed == {
+        "topic_id": "fraud_golden_path",
+        "title": "Fraud Golden Path",
+        "must_do": ["confirm disputed transactions"],
+        "tool_dependencies": ["triage_fraud_case"],
+    }

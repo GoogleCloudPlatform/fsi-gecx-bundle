@@ -262,6 +262,10 @@ class KnowledgeCatalogService:
     def _aspect_data_to_dict(data: Any) -> dict[str, Any]:
         if not data:
             return {}
+        if hasattr(data, "DESCRIPTOR"):
+            from google.protobuf.json_format import MessageToDict
+
+            return MessageToDict(data, preserving_proto_field_name=True)
         if isinstance(data, dict):
             return dict(data)
         try:
