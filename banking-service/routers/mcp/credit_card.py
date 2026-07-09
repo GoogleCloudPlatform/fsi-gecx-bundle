@@ -244,6 +244,7 @@ async def issue_replacement_card_tool(
             "message": result["message"],
             "new_last_four": result["new_last_four"],
             "new_card_id": result["new_card_id"],
+            "new_card_token": result["new_card_token"],
             "replacement_status": result["replacement_status"],
             "is_virtual": result["is_virtual"],
             "fraud_alert_id": result.get("fraud_alert_id"),
@@ -306,6 +307,18 @@ async def push_card_to_google_wallet(
             if not active_card:
                 return {"success": False, "message": "No active card found for wallet provisioning."}
             card_token = active_card.card_token
+        else:
+            cards = repo.list_cards_by_account(account.id)
+            matching_card = next(
+                (
+                    card for card in cards
+                    if card.card_token == card_token or str(card.id) == str(card_token)
+                ),
+                None,
+            )
+            if not matching_card:
+                return {"success": False, "message": "Card not found for wallet provisioning."}
+            card_token = matching_card.card_token
 
         open_alert = FraudAlertService(db).get_open_alert_for_account(credit_account_id=account.id)
         result = queue_wallet_provisioning(

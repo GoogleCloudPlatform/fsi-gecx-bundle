@@ -292,11 +292,13 @@ async def test_issue_replacement_card_tool_success(mock_send_event, mock_validat
     assert result["replacement_status"] == "ISSUED"
     assert result["is_virtual"] is True
     assert result["new_last_four"]
+    assert result["new_card_token"]
 
     cards = db_session.query(IssuedCard).filter_by(account_id="88888888-8888-4888-8888-999999999999").all()
     active_cards = [card for card in cards if card.is_active]
     assert len(active_cards) == 1
     assert active_cards[0].last_four == result["new_last_four"]
+    assert active_cards[0].card_token == result["new_card_token"]
 
     mock_send_event.assert_called_once()
     args, _kwargs = mock_send_event.call_args
@@ -354,6 +356,32 @@ async def test_push_card_to_google_wallet_success(mock_validate_token, db_sessio
     assert result["success"] is True
     assert result["wallet_provider"] == "GOOGLE_WALLET"
     assert result["wallet_provisioning_status"] == "QUEUED"
+
+
+@pytest.mark.asyncio
+@patch("routers.mcp.utils.validate_firebase_token")
+@patch("routers.mcp.credit_card.send_session_event")
+async def test_push_card_to_google_wallet_accepts_replacement_card_id(mock_send_event, mock_validate_token, db_session):
+    """Verify wallet provisioning accepts the card id returned by replacement-card tooling."""
+    mock_validate_token.return_value = MagicMock(claims={"sub": "jane.doe@example.com", "email": "customer@example.com"})
+
+    replacement = await issue_replacement_card_tool(
+        account_id="88888888-8888-4888-8888-999999999999",
+        assertion_token="valid-token",
+        ctx=MagicMock(),
+    )
+
+    result = await push_card_to_google_wallet(
+        account_id="88888888-8888-4888-8888-999999999999",
+        card_token=replacement["new_card_id"],
+        assertion_token="valid-token",
+        ctx=MagicMock(),
+    )
+
+    assert result["success"] is True
+    assert result["wallet_provider"] == "GOOGLE_WALLET"
+    assert result["wallet_provisioning_status"] == "QUEUED"
+    assert result["card_token"] == replacement["new_card_token"]
 
 
 @pytest.mark.asyncio

@@ -419,7 +419,7 @@ def get_voice_session_context(
     customer_id: str = Depends(_get_active_customer_id),
 ):
     """Returns customer-specific fraud or support context that should be available at voice-session start."""
-    return FraudAlertService(db).get_active_voice_context(auth_provider_uid=customer_id)
+    return _to_json_safe(FraudAlertService(db).get_active_voice_context(auth_provider_uid=customer_id))
 
 
 @router.post("/fraud-alert/acknowledge")
