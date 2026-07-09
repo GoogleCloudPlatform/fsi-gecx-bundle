@@ -579,7 +579,7 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Read about the GECX client-side function callbacks, React Router prefill mapping, and schemas.</p>
               </div>
               <a
-                href="https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/blob/main/docs/architecture/credit_card_prefill_integration.md"
+                href="https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/blob/main/docs/architecture/domain-workflows/origination/credit_card_prefill_integration.md"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
