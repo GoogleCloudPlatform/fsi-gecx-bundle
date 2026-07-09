@@ -154,16 +154,14 @@ class KnowledgeCatalogService:
         return topics
 
     def _parse_entry(self, entry: Any) -> dict[str, Any] | None:
-        from google.protobuf.json_format import MessageToDict
-
         policy_data: dict[str, Any] | None = None
         summary_data: dict[str, Any] | None = None
         for aspect in entry.aspects.values():
             aspect_type = getattr(aspect, "aspect_type", "")
             if aspect_type.endswith(f"/aspectTypes/{self.policy_aspect_type_id}"):
-                policy_data = MessageToDict(aspect.data, preserving_proto_field_name=True)
+                policy_data = self._aspect_data_to_dict(aspect.data)
             elif aspect_type.endswith(f"/aspectTypes/{self.summary_aspect_type_id}"):
-                summary_data = MessageToDict(aspect.data, preserving_proto_field_name=True)
+                summary_data = self._aspect_data_to_dict(aspect.data)
 
         if not policy_data:
             return None
@@ -259,3 +257,18 @@ class KnowledgeCatalogService:
 
         client = dataplex_v1.CatalogServiceClient()
         return client, dataplex_v1, field_mask_pb2, struct_pb2, exceptions
+
+    @staticmethod
+    def _aspect_data_to_dict(data: Any) -> dict[str, Any]:
+        if not data:
+            return {}
+        if isinstance(data, dict):
+            return dict(data)
+        try:
+            return dict(data)
+        except (TypeError, ValueError):
+            pass
+
+        from google.protobuf.json_format import MessageToDict
+
+        return MessageToDict(data, preserving_proto_field_name=True)
