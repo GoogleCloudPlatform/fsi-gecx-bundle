@@ -23,3 +23,12 @@ permissions:
   # Storage buckets listing
   - storage.buckets.list
   - storage.buckets.get
+
+  # Firebase Cloud Messaging Dashboard (no Auth or bucket content access)
+  - fcmdata.deliverydata.list
+  - firebase.clients.get
+  - firebase.clients.list
+  - firebase.projects.get
+  - firebasenotifications.messages.get
+  - firebasenotifications.messages.list
+  - resourcemanager.projects.get
