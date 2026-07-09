@@ -15,6 +15,8 @@ def test_local_guidance_bundle_for_voice_fraud_returns_expected_topics():
     ]
     assert "Fraud Golden Path" in bundle["agent_guidance_summary"]
     assert "get_open_fraud_alert" in bundle["agent_guidance_summary"]
+    assert "Ask whether the customer recognizes the suspicious charges" in bundle["agent_guidance_summary"]
+    assert "Before opening a fraud case" in bundle["agent_guidance_summary"]
 
 
 def test_local_guidance_bundle_filters_unknown_topics():

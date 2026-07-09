@@ -23,6 +23,7 @@ from agent.agent import (
     root_agent,
 )
 from agent.fraud_voice import build_fraud_playbook, build_initial_greeting
+from agent.instructions import compose_session_instruction
 from agent.version import BUILD_VERSION, BUILD_COMMIT_ID
 from agent.events import DataChannelEvent
 from google.adk.runners import Runner
@@ -30,9 +31,6 @@ from google.adk.sessions import InMemorySessionService
 from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.agents.live_request_queue import LiveRequestQueue
 from google.genai import types
-
-# from agent.patch_adk import apply_patch
-# apply_patch()
 
 class HandoffException(Exception):
     pass
@@ -314,25 +312,24 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     import copy
     from google.adk.models import Gemini
     session_agent = copy.copy(root_agent)
-    if avatar_name:
-        session_agent.instruction = session_agent.instruction.replace("{{avatar_name}}", avatar_name)
-    else:
-        session_agent.instruction = session_agent.instruction.replace("{{avatar_name}}", "Nova")
+    active_flows = []
+    session_context_text = None
     if voice_context.get("has_active_fraud_alert") and voice_context.get("fraud_alert"):
+        active_flows.append("fraud_alert")
         fraud_alert = voice_context["fraud_alert"]
         suspicious_lines = "\n".join(
             f"- {txn['merchant_name']}: ${txn['amount_cents'] / 100:,.2f}"
             for txn in fraud_alert.get("suspicious_transactions", [])
         )
-        session_agent.instruction = (
-            f"{session_agent.instruction}\n\n"
+        session_context_text = (
             "Session-specific customer context:\n"
             f"- The customer has an active fraud alert on card ending in {fraud_alert['card_last_four']}.\n"
             f"- Fraud alert thread id: {fraud_alert['message_thread_id']}.\n"
             f"- Fraud alert id for triage_fraud_case: {fraud_alert['fraud_alert_id']}.\n"
-            "- Start the conversation ready to help the customer identify which suspicious transactions they recognize or dispute.\n"
+            "- Start the conversation by asking whether the customer recognizes the flagged transactions; do not assume fraud has occurred.\n"
             "- If the customer asks what looked suspicious, reference these flagged transactions:\n"
             f"{suspicious_lines or '- No suspicious transaction details were provided.'}\n"
+            "- Before opening a fraud case, briefly restate the exact transactions the customer says they do not recognize and ask them to confirm that selection.\n"
             "- After the customer confirms their selection, call triage_fraud_case once using authorization_id values for disputed pending authorizations and transaction_id values for disputed posted transactions when those IDs are present.\n"
             "- If the customer recognizes every flagged transaction, call triage_fraud_case with empty disputed id arrays and issue_replacement=false.\n"
             "- If the customer disputes any flagged transaction, tell them any credits are provisional pending the full fraud investigation.\n"
@@ -340,13 +337,12 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             "- Treat this as trusted session context rather than something the customer needs to restate."
         )
     guidance_summary = support_guidance.get("agent_guidance_summary")
-    if guidance_summary:
-        session_agent.instruction = (
-            f"{session_agent.instruction}\n\n"
-            "Approved fraud support guidance:\n"
-            f"{guidance_summary}\n"
-            "- Use this guidance to shape phrasing and sequencing, but use live tools and session context for operational truth."
-        )
+    session_agent.instruction = compose_session_instruction(
+        avatar_name=avatar_name,
+        active_flows=active_flows,
+        session_context=session_context_text,
+        guidance_summary=guidance_summary,
+    )
     if mode == "video":
         model_name = os.getenv("VOICE_AGENT_VIDEO_MODEL")
         if not model_name:

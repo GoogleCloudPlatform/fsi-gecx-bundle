@@ -29,6 +29,7 @@ from services.credit_card import (
     apply_limit_increase,
     apply_fraud_provisional_credit,
     freeze_card,
+    get_account_summary_dto,
     issue_replacement_card,
     queue_wallet_provisioning,
     reverse_posted_fee,
@@ -297,6 +298,31 @@ def test_queue_wallet_provisioning_records_fraud_alert_correlation(db_session):
     assert result["fraud_alert_id"] == str(alert.id)
     assert payload["fraud_alert_id"] == str(alert.id)
     assert payload["correlation_id"] == str(alert.id)
+
+
+def test_account_summary_surfaces_virtual_card_and_wallet_status(db_session):
+    """Verify card-instrument DTOs expose virtual card and wallet provisioning state."""
+    replacement = issue_replacement_card(
+        db_session,
+        account_id="12300000-0000-4000-8000-000000000123",
+        reason="CUSTOMER_FRAUD_REISSUE",
+        issue_virtual_card=True,
+        compromised_card_id="99900000-0000-4000-8000-000000000999",
+    )
+    queue_wallet_provisioning(
+        db_session,
+        account_id="12300000-0000-4000-8000-000000000123",
+        card_token=replacement["new_card_token"],
+        wallet_provider="GOOGLE_WALLET",
+    )
+
+    summary = get_account_summary_dto(CreditCardRepository(db_session), "cust-test-xyz")
+    virtual_card = next(card for card in summary["cards"] if card["card_id"] == replacement["new_card_id"])
+
+    assert virtual_card["is_virtual"] is True
+    assert virtual_card["status"] == "ACTIVE"
+    assert virtual_card["wallet_provider"] == "GOOGLE_WALLET"
+    assert virtual_card["wallet_provisioning_status"] == "QUEUED"
 
 
 def test_freeze_card_not_found(db_session):

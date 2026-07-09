@@ -10,6 +10,8 @@
         "Acknowledge suspicious activity on the first turn when fraud context exists.",
         "Inspect the open fraud alert before recommending any mitigation.",
         "Ask whether the customer recognizes the suspicious charges.",
+        "Do not label activity as fraud until the customer confirms they do not recognize one or more charges.",
+        "Before opening a fraud case, briefly restate the transactions the customer does not recognize and ask them to confirm the selection.",
         "Keep spoken responses brief and specific."
       ],
       "must_not_do": [
@@ -19,7 +21,7 @@
       "tool_dependencies": [
         "get_open_fraud_alert"
       ],
-      "customer_safe_summary": "Review the suspicious charges with the customer first, then move into card protection and replacement only if the customer confirms fraud.",
+      "customer_safe_summary": "Review the suspicious charges with the customer first, ask whether they recognize them, then confirm the selected disputed transactions before moving into card protection and replacement.",
       "source_policy_ref": "fraud_voice_demo_v1",
       "version": "1.0",
       "last_reviewed": "2026-07-07"

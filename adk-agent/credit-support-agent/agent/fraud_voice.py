@@ -51,7 +51,7 @@ def build_initial_greeting(fraud_playbook: dict | None) -> str:
         return (
             "Please introduce yourself briefly, acknowledge that you can see a suspicious activity alert "
             f"on the customer's card ending in {card_last_four}, explain that you are reviewing {suspicious_count} flagged charges now, "
-            "inspect the open fraud alert before recommending next steps, and ask which flagged transactions the customer recognizes or disputes."
+            "inspect the open fraud alert before recommending next steps, and ask whether the customer recognizes the flagged transactions."
         )
 
     return (

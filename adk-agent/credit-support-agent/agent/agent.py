@@ -24,6 +24,7 @@ from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnecti
 
 from agent.events import DataChannelEvent
 from agent.fraud_voice import mark_fraud_tool_completed, validate_fraud_tool_sequence
+from agent.instructions import INSTRUCTION_TEXT
 
 LOCATION = os.getenv("LOCATION", "us-central1")
 credentials, project_id = google.auth.default()
@@ -413,10 +414,6 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
 
 NAME = "credit_card_support_voice_assistant"
 DESCRIPTION = "A voice assistant that helps customers freeze cards, issue replacement cards, request limit increases, and reverse late fees."
-
-INSTRUCTION_PATH = os.path.join(os.path.dirname(__file__), "resources", "instruction.txt")
-with open(INSTRUCTION_PATH, "r", encoding="utf-8") as f:
-    INSTRUCTION_TEXT = f.read()
 
 root_agent = Agent(
     name=NAME,

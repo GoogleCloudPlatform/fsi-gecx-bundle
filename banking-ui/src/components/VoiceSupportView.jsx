@@ -88,6 +88,19 @@ function applyReplacementCardEvent(cards, replacement) {
   return updatedCards;
 }
 
+function applyWalletProvisioningEvent(cards, event) {
+  const cardToken = event?.card_token;
+  if (!cardToken) return cards || [];
+  return (cards || []).map((card) => {
+    if (card.card_token !== cardToken) return card;
+    return {
+      ...card,
+      wallet_provider: event.wallet_provider || card.wallet_provider || 'GOOGLE_WALLET',
+      wallet_provisioning_status: event.wallet_provisioning_status || card.wallet_provisioning_status || 'QUEUED',
+    };
+  });
+}
+
 export default function VoiceSupportView() {
   const projectId = window.firebaseConfig?.projectId;
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
@@ -700,6 +713,10 @@ export default function VoiceSupportView() {
             ]);
           } else if (event.type === DataChannelEvent.WALLET_PROVISIONING_QUEUED) {
             setFraudTriage(prev => ({ ...prev, walletQueued: true }));
+            setAccount(prev => prev ? {
+              ...prev,
+              cards: applyWalletProvisioningEvent(prev.cards, event),
+            } : prev);
             setTranscripts(prev => [
               ...prev,
               {
@@ -1026,7 +1043,7 @@ export default function VoiceSupportView() {
                             {card.is_virtual ? 'Virtual card' : 'Physical card'} ending in {card.last_four}
                           </p>
                           <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                            {isAffected ? 'Compromised card' : isReplacement ? 'Replacement card' : 'Unaffected active card'}
+                            {isAffected ? 'Compromised card' : isReplacement ? 'Replacement card' : card.wallet_provisioning_status ? `${card.wallet_provider || 'Google Wallet'} ${card.wallet_provisioning_status.toLowerCase()}` : 'Unaffected active card'}
                           </p>
                         </div>
                       </div>

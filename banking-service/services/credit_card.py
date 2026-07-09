@@ -14,9 +14,11 @@
 
 import logging
 import datetime
+import json
 import secrets
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
+from models.audit import AuditOutbox
 from models.credit_card import AccountLedger, IssuedCard
 from utils.audit import record_audit_event
 from models.fdx import (
@@ -34,6 +36,33 @@ def _generate_card_token() -> str:
 
 def _generate_last_four() -> str:
     return f"{secrets.randbelow(10_000):04d}"
+
+
+def get_wallet_status_by_card_token(db: Session, account_id: str) -> dict[str, dict[str, Any]]:
+    """Builds a lightweight card-token wallet status map from the durable audit outbox."""
+    rows = (
+        db.query(AuditOutbox)
+        .filter(AuditOutbox.event_type == "WALLET_PROVISIONING_QUEUED")
+        .order_by(AuditOutbox.created_at.asc())
+        .all()
+    )
+    statuses: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        try:
+            payload = json.loads(row.payload or "{}")
+        except json.JSONDecodeError:
+            continue
+        if str(payload.get("account_id")) != str(account_id):
+            continue
+        card_token = payload.get("card_token")
+        if not card_token:
+            continue
+        statuses[card_token] = {
+            "wallet_provider": payload.get("wallet_provider", "GOOGLE_WALLET"),
+            "wallet_provisioning_status": payload.get("status", "QUEUED"),
+            "wallet_queued_at": row.created_at.isoformat() if row.created_at else None,
+        }
+    return statuses
 
 
 def queue_wallet_provisioning(
@@ -695,6 +724,7 @@ def get_account_summary_dto(repo: Any, customer_id: str) -> Optional[Dict[str, A
     account = repo.get_account_by_customer(customer_id)
     if not account:
         return None
+    wallet_statuses = get_wallet_status_by_card_token(repo.db, str(account.id))
     return {
         "account_id": account.id,
         "credit_limit_cents": account.credit_limit_cents,
@@ -711,7 +741,8 @@ def get_account_summary_dto(repo: Any, customer_id: str) -> Optional[Dict[str, A
                 "status": card.status,
                 "is_virtual": card.is_virtual,
                 "exp_month": card.exp_month,
-                "exp_year": card.exp_year
+                "exp_year": card.exp_year,
+                **wallet_statuses.get(card.card_token, {}),
             } for card in account.cards
         ]
     }
