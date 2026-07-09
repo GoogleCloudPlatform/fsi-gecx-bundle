@@ -116,13 +116,6 @@ class AccountsService:
 
         self.db.commit()
 
-        from services.credit_card import get_wallet_status_by_card_token
-
-        wallet_status_by_account = {
-            str(cred_acc.id): get_wallet_status_by_card_token(self.db, str(cred_acc.id))
-            for cred_acc in credit_accounts
-        }
-
         return {
             "status": "SUCCESS",
             "message": "Bill payment successfully processed.",
@@ -283,6 +276,13 @@ class AccountsService:
             except Exception as e:
                 logger.error(f"Failed to auto-provision local sandbox for user: {user_email}. Error: {e}")
                 self.db.rollback()
+
+        from services.credit_card import get_wallet_status_by_card_token
+
+        wallet_status_by_account = {
+            str(cred_acc.id): get_wallet_status_by_card_token(self.db, str(cred_acc.id))
+            for cred_acc in credit_accounts
+        }
 
         return {
             "deposit_accounts": [

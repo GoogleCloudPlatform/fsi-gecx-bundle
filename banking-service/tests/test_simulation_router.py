@@ -235,7 +235,8 @@ async def test_reset_my_demo_clears_fraud_state_and_restores_card_baseline(async
     user = db_session.query(User).filter(User.id == user_id).first()
     cred_acc = db_session.query(CreditAccount).filter(CreditAccount.customer_id == user_id).first()
     original_card = db_session.query(IssuedCard).filter(IssuedCard.account_id == cred_acc.id).first()
-    original_last_four = original_card.last_four
+    original_card_id = original_card.id
+    original_card_token = original_card.card_token
 
     original_card.status = "BLOCKED"
     original_card.is_active = False
@@ -252,6 +253,8 @@ async def test_reset_my_demo_clears_fraud_state_and_restores_card_baseline(async
     )
     db_session.add(replacement)
     db_session.flush()
+    replacement_card_id = replacement.id
+    replacement_card_token = replacement.card_token
     fraud_alert = FraudAlert(
         customer_id=user.id,
         auth_provider_uid=user.auth_provider_uid,
@@ -305,14 +308,21 @@ async def test_reset_my_demo_clears_fraud_state_and_restores_card_baseline(async
     assert reset_response.status_code == status.HTTP_200_OK
     cards = db_session.query(IssuedCard).filter(IssuedCard.account_id == cred_acc.id).all()
     assert len(cards) == 1
-    assert cards[0].last_four == original_last_four
-    assert cards[0].status == "ACTIVE"
-    assert cards[0].is_active is True
+    reset_card = cards[0]
+    assert reset_card.id != original_card_id
+    assert reset_card.id != replacement_card_id
+    assert reset_card.card_token != original_card_token
+    assert reset_card.card_token != replacement_card_token
+    assert reset_card.status == "ACTIVE"
+    assert reset_card.is_active is True
+    assert reset_card.is_virtual is False
     assert db_session.query(FraudAlert).filter(FraudAlert.customer_id == user.id).count() == 0
     assert db_session.query(FraudCaseAction).count() == 0
     assert db_session.query(UserSecureMessage).filter(UserSecureMessage.thread_id == "thread-reset-fraud").count() == 0
     assert db_session.query(UserSecureMessage).filter(UserSecureMessage.thread_id == "thread-reset-support").count() == 0
-    assert db_session.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == cred_acc.id).count() >= 2
+    reset_auths = db_session.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == cred_acc.id).all()
+    assert len(reset_auths) >= 2
+    assert {auth.card_id for auth in reset_auths} == {reset_card.id}
 
 @pytest.mark.asyncio
 async def test_reset_my_demo_not_found(async_client, db_session):

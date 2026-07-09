@@ -1191,20 +1191,33 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
         db.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == cred_acc.id).delete(synchronize_session=False)
         cred_acc.cleared_balance_cents = 0
         cred_acc.available_credit_cents = cred_acc.credit_limit_cents
-        cards = (
-            db.query(IssuedCard)
-            .filter(IssuedCard.account_id == cred_acc.id)
-            .order_by(IssuedCard.created_at.asc(), IssuedCard.id.asc())
-            .all()
+        db.query(IssuedCard).filter(IssuedCard.account_id == cred_acc.id).delete(synchronize_session=False)
+
+        card_num = generate_luhn_card_number(prefix="4111", length=16)
+        card = IssuedCard(
+            id=uuid.uuid4(),
+            account_id=cred_acc.id,
+            cardholder_name=f"{user.first_name} {user.last_name}",
+            card_token=_generate_demo_card_token(),
+            last_four=card_num[-4:],
+            exp_month=datetime.datetime.now(datetime.timezone.utc).month,
+            exp_year=datetime.datetime.now(datetime.timezone.utc).year + 3,
+            status="ACTIVE",
+            is_active=True,
+            is_virtual=False,
         )
-        card = cards[0] if cards else None
-        for extra_card in cards[1:]:
-            db.delete(extra_card)
-        if card:
-            card.status = "ACTIVE"
-            card.is_active = True
-            card.is_virtual = bool(card.is_virtual)
-            card.pin_fail_count = 0
+        db.add(card)
+        db.flush()
+        record_audit_event(
+            db,
+            "CREDIT_CARD_ISSUED",
+            {
+                "user_id": str(user_id),
+                "account_id": str(cred_acc.id),
+                "card_token": card.card_token,
+                "reset": True,
+            },
+        )
     
     if not checking_acc or not savings_acc or not cred_acc or not card:
         raise ValueError(
