@@ -14,7 +14,7 @@
 
 resource "google_cloud_scheduler_job" "data_generator_cron" {
   name             = "data-generator-cron"
-  description      = "Trigger lightweight background synthetic card activity"
+  description      = "Trigger throttled background synthetic card activity pulse"
   schedule         = var.data_generator_cron_schedule
   time_zone        = "Etc/UTC"
   attempt_deadline = var.data_generator_request_timeout
@@ -22,7 +22,7 @@ resource "google_cloud_scheduler_job" "data_generator_cron" {
 
   pubsub_target {
     topic_name = google_pubsub_topic.data_generator_trigger.id
-    data       = base64encode("{\"num_accounts\": 2, \"transactions_per_account\": 5}")
+    data       = base64encode("{}")
   }
 
   lifecycle {
