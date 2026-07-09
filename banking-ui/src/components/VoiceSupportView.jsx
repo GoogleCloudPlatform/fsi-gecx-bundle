@@ -157,8 +157,9 @@ export default function VoiceSupportView() {
     triaged: Boolean(fraudTriage.outcome),
     replaced: Boolean(fraudTriage.replacement_card || replacementCard),
     walletQueued: Boolean(fraudTriage.walletQueued) || transcripts.some(t => t.author === 'system' && t.text.includes('Virtual card provisioning')),
-    resolved: Boolean(fraudContext?.fraud_alert?.resolution || (fraudContext?.fraud_alert?.status || '').startsWith('RESOLVED_')),
+    specialistReview: Boolean(fraudTriage.outcome && fraudTriage.outcome !== 'CUSTOMER_RECOGNIZED'),
   };
+  const showFraudRemediationProgress = fraudProgress.triaged || fraudProgress.blocked || fraudProgress.replaced || fraudProgress.walletQueued;
 
   const roomRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -269,6 +270,20 @@ export default function VoiceSupportView() {
     }, 5000);
   }, [endConsultation]);
 
+  const refreshCreditCardData = useCallback(async () => {
+    const data = await getCreditCardAccount();
+    setAccount(data);
+    if (data.cards && data.cards.length > 0) {
+      setCardStatus(data.cards[0].status);
+    }
+    setCreditLimit(data.credit_limit_cents / 100);
+    setAvailableCredit(data.available_credit_cents / 100);
+    setClearedBalance(data.cleared_balance_cents / 100);
+
+    const txData = await getCreditCardTransactions();
+    setTransactions(txData);
+  }, []);
+
   // Sync state values to references to avoid stale closures inside event listeners
   useEffect(() => {
     volumeRef.current = volume;
@@ -289,24 +304,14 @@ export default function VoiceSupportView() {
   useEffect(() => {
     async function loadData() {
       try {
-        const data = await getCreditCardAccount();
-        setAccount(data);
-        if (data.cards && data.cards.length > 0) {
-          setCardStatus(data.cards[0].status);
-        }
-        setCreditLimit(data.credit_limit_cents / 100);
-        setAvailableCredit(data.available_credit_cents / 100);
-        setClearedBalance(data.cleared_balance_cents / 100);
-        
-        const txData = await getCreditCardTransactions();
-        setTransactions(txData);
+        await refreshCreditCardData();
       } catch (err) {
         console.error('Failed to load card account profile:', err);
         setErrorMessage('Failed to connect to core banking service.');
       }
     }
     loadData();
-  }, []);
+  }, [refreshCreditCardData]);
 
   // Auto scroll transcript panel inside container
   useEffect(() => {
@@ -751,6 +756,9 @@ export default function VoiceSupportView() {
               }));
               window.dispatchEvent(new CustomEvent('refresh-unread-count'));
             }
+            refreshCreditCardData().catch(err => {
+              console.error('Failed to refresh credit card data after fraud triage:', err);
+            });
             setFraudContext(prev => prev ? {
               ...prev,
               has_active_fraud_alert: false,
@@ -932,14 +940,24 @@ export default function VoiceSupportView() {
                   <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
                     {fraudContext.fraud_alert.summary}
                   </p>
-                  <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
-                    <FraudStep label="Alert reviewed" complete={fraudProgress.inspected} />
-                    <FraudStep label="Card blocked" complete={fraudProgress.blocked} />
-                    <FraudStep label="Case triaged" complete={fraudProgress.triaged} />
-                    <FraudStep label="Replacement issued" complete={fraudProgress.replaced} />
-                    <FraudStep label="Wallet queued" complete={fraudProgress.walletQueued} />
-                    <FraudStep label="Case resolved" complete={fraudProgress.resolved} />
-                  </div>
+                  {showFraudRemediationProgress ? (
+                    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
+                      <FraudStep label="Case triaged" complete={fraudProgress.triaged} />
+                      <FraudStep label="Card blocked" complete={fraudProgress.blocked} />
+                      <FraudStep label="Replacement issued" complete={fraudProgress.replaced} />
+                      <FraudStep label="Wallet queued" complete={fraudProgress.walletQueued} />
+                      <FraudStep label="Specialist review" complete={fraudProgress.specialistReview} />
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-xl border border-amber-200 dark:border-amber-800/70 bg-white/70 dark:bg-slate-950/30 p-3 text-xs text-amber-900 dark:text-amber-200">
+                      <p className="font-bold uppercase tracking-wide">Alert review</p>
+                      <p className="mt-1 text-amber-800 dark:text-amber-300">
+                        {fraudProgress.inspected
+                          ? 'Suspicious transactions are ready for customer confirmation.'
+                          : 'The support agent will review suspicious activity before taking account action.'}
+                      </p>
+                    </div>
+                  )}
                   {fraudTriage.outcome && (
                     <div className="mt-3 rounded-xl border border-amber-200 dark:border-amber-800/70 bg-white/70 dark:bg-slate-950/30 p-3 text-xs text-amber-900 dark:text-amber-200">
                       <p className="font-bold uppercase tracking-wide">Fraud triage summary</p>
@@ -1074,7 +1092,7 @@ export default function VoiceSupportView() {
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Owed Balance</span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Current Balance</span>
               <p className="text-xl font-bold mt-1 text-indigo-600 dark:text-indigo-400">${clearedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
           </div>
