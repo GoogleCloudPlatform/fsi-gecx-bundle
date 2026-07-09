@@ -336,7 +336,7 @@ resource "google_cloud_run_v2_service" "banking_ui" {
   iap_enabled = false
 
   template {
-    service_account = google_service_account.banking_service_account.email
+    service_account = google_service_account.banking_ui_service_account.email
 
     containers {
       image = local.banking_ui_image_url
