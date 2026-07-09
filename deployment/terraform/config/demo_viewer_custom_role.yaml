@@ -1,0 +1,13 @@
+role_id: "demo.console.viewer"
+title: "Demo Console User"
+description: "Custom role for demo console user access"
+permissions:
+  # Visibility of BigQuery Datasets, Tables, and ability to create Jobs
+  - bigquery.jobs.create
+  - bigquery.datasets.get
+  - bigquery.tables.get
+  - bigquery.tables.list
+
+  # Visibility of Project-Level BQ Connections
+  - bigquery.connections.get
+  - bigquery.connections.list

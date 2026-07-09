@@ -122,8 +122,8 @@ locals {
   database_iam_support_users_raw = data.external.database_iam_support_users.result.secret_data
   database_iam_support_users     = compact([for s in split(",", local.database_iam_support_users_raw) : trimspace(s)])
 
-  database_iam_viewer_users_raw = data.external.database_iam_viewer_users.result.secret_data
-  database_iam_viewer_users     = compact([for s in split(",", local.database_iam_viewer_users_raw) : trimspace(s)])
+  iam_console_viewers_raw = data.external.database_iam_viewer_users.result.secret_data
+  iam_console_viewers     = compact([for s in split(",", local.iam_console_viewers_raw) : trimspace(s)])
 
   additional_cloud_run_iap_members_raw = data.external.additional_cloud_run_iap_members.result.secret_data
   additional_cloud_run_iap_members     = compact([for s in split(",", local.additional_cloud_run_iap_members_raw) : trimspace(s)])
