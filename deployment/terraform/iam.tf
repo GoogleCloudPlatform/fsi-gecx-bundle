@@ -69,7 +69,7 @@ resource "google_service_account" "banking_service_account" {
 }
 
 resource "google_service_account" "banking_ui_service_account" {
-  account_id   = "banking-ui-service-sa"
+  account_id   = "banking-ui-sa"
   display_name = "Banking UI Service Account"
 
   lifecycle {
