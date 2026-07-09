@@ -6,3 +6,15 @@ roles:
   # Roles to view Streams in console
   - roles/datastream.viewer
 
+  # Roles to view Cloud Run in console
+  - roles/run.viewer
+
+  # Roles to view Pub/Sub topics and subscriptions in console
+  - roles/pubsub.viewer
+
+  # Roles to view Eventarc triggers in console
+  - roles/eventarc.viewer
+
+  # Roles to view Cloud Scheduler jobs in console
+  - roles/cloudscheduler.viewer
+

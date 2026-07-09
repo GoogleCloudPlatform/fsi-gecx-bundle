@@ -11,3 +11,7 @@ permissions:
   # Visibility of Project-Level BQ Connections
   - bigquery.connections.get
   - bigquery.connections.list
+
+  # Visibility of Cloud Monitoring Dashboards
+  - monitoring.dashboards.get
+  - monitoring.dashboards.list
