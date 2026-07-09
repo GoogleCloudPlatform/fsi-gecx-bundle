@@ -51,6 +51,7 @@ function formatCurrencyFromCents(cents) {
 
 function AdminSimulationView() {
   const navigate = useNavigate();
+  const projectId = window.firebaseConfig?.projectId;
   const [isSurgeLoading, setIsSurgeLoading] = useState(false);
   const [isAnomalyLoading, setIsAnomalyLoading] = useState(false);
   const [isFeeLoading, setIsFeeLoading] = useState(false);
@@ -791,7 +792,7 @@ function AdminSimulationView() {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Inspect the analytical lakehouse destination, CDC-derived views, and anomaly datasets after replication lands.</p>
               </div>
               <a
-                href="https://console.cloud.google.com/bigquery"
+                href={`https://console.cloud.google.com/bigquery?project=${projectId}&ws=!1m5!1m4!3m2!1s${projectId}!2siceberg_catalog!23sTREE_NODE_SELECTION`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
@@ -865,7 +866,7 @@ function AdminSimulationView() {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Inspect the analytical lakehouse destination, CDC-derived views, and anomaly datasets after replication lands.</p>
               </div>
               <a
-                href="https://console.cloud.google.com/bigquery"
+                href={`https://console.cloud.google.com/bigquery?project=${projectId}&ws=!1m5!1m4!3m2!1s${projectId}!2siceberg_catalog!23sTREE_NODE_SELECTION`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
