@@ -38,3 +38,8 @@ roles:
 
   # Gemini Enterprise for Customer Experience (CES)
   - roles/ces.viewer
+
+  # Dataplex (Knowledge Catalog)
+  - roles/dataplex.viewer
+  - roles/dataplex.catalogViewer
+  
