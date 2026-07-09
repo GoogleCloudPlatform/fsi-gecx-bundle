@@ -1,0 +1,75 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    id: "pull-image"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        docker pull "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:latest" || true
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build-image"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        IMAGE="${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:catalog-sync-$${COMMIT_SHA:-local}"
+        DOCKER_BUILDKIT=1 docker build \
+          --cache-from "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:latest" \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t "$$IMAGE" \
+          .
+    dir: "banking-service"
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-image"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        IMAGE="${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:catalog-sync-$${COMMIT_SHA:-local}"
+        docker push "$$IMAGE"
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "sync-knowledge-catalog"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        IMAGE="${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:catalog-sync-$${COMMIT_SHA:-local}"
+        if ! gcloud run jobs describe banking-knowledge-catalog-sync --region "${_REGION}" >/dev/null 2>&1; then
+          echo "Knowledge Catalog sync job not found; apply Terraform before running this trigger." >&2
+          exit 1
+        fi
+
+        echo "Registering latest catalog sync image with Cloud Run Job..."
+        gcloud run jobs update banking-knowledge-catalog-sync \
+          --image "$$IMAGE" \
+          --command "python" \
+          --args "scripts/sync_fraud_support_guidance.py" \
+          --region "${_REGION}"
+
+        echo "Syncing fraud support guidance into Dataplex Knowledge Catalog..."
+        gcloud run jobs execute banking-knowledge-catalog-sync \
+          --region "${_REGION}" \
+          --wait
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _REGION: "us-central1"

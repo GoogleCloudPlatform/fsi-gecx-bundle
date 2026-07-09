@@ -15,10 +15,32 @@
 import axios from 'axios';
 
 const backendUrl = window.env?.BANKING_API_URL || import.meta.env.VITE_BANKING_API_URL || "http://localhost:8080";
+const REQUEST_TIMEOUT_MS = 20000;
+const TOKEN_TIMEOUT_MS = 8000;
 
 const api = axios.create({
   baseURL: backendUrl,
+  timeout: REQUEST_TIMEOUT_MS,
 });
+
+async function getFirebaseIdTokenWithTimeout(user) {
+  if (!user || typeof user.getIdToken !== 'function') {
+    return null;
+  }
+
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(`Firebase ID token lookup timed out after ${TOKEN_TIMEOUT_MS}ms`));
+    }, TOKEN_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([user.getIdToken(), timeout]);
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
 
 api.interceptors.request.use(
   async (config) => {
@@ -31,8 +53,10 @@ api.interceptors.request.use(
         const user = window.firebaseAuth.getCurrentUser();
         if (user) {
           try {
-            const token = await user.getIdToken();
-            config.headers.Authorization = `Bearer ${token}`;
+            const token = await getFirebaseIdTokenWithTimeout(user);
+            if (token) {
+              config.headers.Authorization = `Bearer ${token}`;
+            }
           } catch (error) {
             console.error('Error getting Firebase ID token:', error);
           }
@@ -56,8 +80,10 @@ export async function getBackendAuthHeaders(initialHeaders = {}) {
     const user = window.firebaseAuth.getCurrentUser();
     if (user) {
       try {
-        const token = await user.getIdToken();
-        headers.Authorization = `Bearer ${token}`;
+        const token = await getFirebaseIdTokenWithTimeout(user);
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
       } catch (error) {
         console.error('Error getting Firebase ID token:', error);
       }
