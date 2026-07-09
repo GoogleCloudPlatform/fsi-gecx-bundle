@@ -42,4 +42,3 @@ roles:
   # Dataplex (Knowledge Catalog)
   - roles/dataplex.viewer
   - roles/dataplex.catalogViewer
-  
