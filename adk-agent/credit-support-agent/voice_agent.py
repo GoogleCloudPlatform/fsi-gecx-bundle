@@ -387,10 +387,9 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 "text": event_dict["text"]
             })
         
-        # Capture session end trigger and disconnect
+        # The stream loop schedules the graceful disconnect after final audio playout.
         elif event_dict.get("type") == DataChannelEvent.SESSION_END.value:
             logger.info("SESSION_END event received from tool %s", session_log_context(room_name, customer_id, session_id, mode))
-            disconnect_event.set()
         
         # Capture human handoff trigger and save to DB
         elif event_dict.get("type") == DataChannelEvent.HANDOFF_PENDING.value:
@@ -692,6 +691,33 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             except Exception as e:
                 logger.error(f"Playout capture error: {e}")
 
+    session_end_disconnect_task = None
+    session_end_event_published = False
+
+    async def wait_for_playout_drain(reason: str) -> None:
+        try:
+            await asyncio.wait_for(playout_queue.join(), timeout=8.0)
+        except asyncio.TimeoutError:
+            logger.warning("Timed out waiting for final agent audio playout %s reason=%s", session_log_context(room_name, customer_id, session_id, mode), reason)
+        await asyncio.sleep(1.0)
+
+    def schedule_session_end_disconnect(reason: str) -> None:
+        nonlocal session_end_disconnect_task, session_end_event_published
+        if session_end_disconnect_task and not session_end_disconnect_task.done():
+            return
+
+        async def delayed_disconnect():
+            nonlocal session_end_event_published
+            logger.info("Scheduling graceful session end %s reason=%s", session_log_context(room_name, customer_id, session_id, mode), reason)
+            await wait_for_playout_drain(reason)
+            if not session_end_event_published:
+                session_end_event_published = True
+                on_agent_event({"type": "SESSION_END"})
+            await asyncio.sleep(5.0)
+            disconnect_event.set()
+
+        session_end_disconnect_task = asyncio.create_task(delayed_disconnect())
+
     async def run_gemini_loop():
         logger.info("Starting run_live stream loop %s", session_log_context(room_name, customer_id, session_id, mode, fraud_alert_id=fraud_playbook.get("fraud_alert_id")))
         try:
@@ -736,32 +762,33 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                     if is_session_end_requested():
                         logger.info("Session end requested via end_consultation tool %s", session_log_context(room_name, customer_id, session_id, mode))
                         clear_session_end_request()
-                        on_agent_event({
-                            "type": "SESSION_END"
-                        })
-                        async def delayed_disconnect():
-                            await asyncio.sleep(5.0)  # Give time for speech output and UI transition
-                            disconnect_event.set()
-                        asyncio.create_task(delayed_disconnect())
+                        schedule_session_end_disconnect("final_output_transcript")
 
                 # Log any final responses or tool call events for tracking
                 if event.is_final_response():
                     logger.debug("Agent turn complete. Finished generation.")
+                    if is_session_end_requested():
+                        logger.info("Session end requested without final output transcript %s", session_log_context(room_name, customer_id, session_id, mode))
+                        clear_session_end_request()
+                        schedule_session_end_disconnect("final_response")
 
                 # Trigger clean shutdown when the model completes the session
                 if event.actions and event.actions.end_of_agent:
                     logger.info("Model requested end of session conversation %s", session_log_context(room_name, customer_id, session_id, mode))
-                    on_agent_event({
-                        "type": "SESSION_END"
-                    })
-                    
-                    async def delayed_disconnect():
-                        await asyncio.sleep(3.5)
-                        disconnect_event.set()
-                    asyncio.create_task(delayed_disconnect())
+                    schedule_session_end_disconnect("end_of_agent")
+
+                if is_session_end_requested() and not session_end_disconnect_task:
+                    logger.info("Session end requested; using graceful fallback disconnect %s", session_log_context(room_name, customer_id, session_id, mode))
+                    clear_session_end_request()
+                    schedule_session_end_disconnect("session_end_fallback")
         except Exception as e:
             logger.error("Error in Gemini run_live loop %s error=%s", session_log_context(room_name, customer_id, session_id, mode), e, exc_info=True)
         finally:
+            if session_end_disconnect_task and not disconnect_event.is_set():
+                try:
+                    await asyncio.wait_for(session_end_disconnect_task, timeout=15.0)
+                except asyncio.TimeoutError:
+                    logger.warning("Timed out waiting for graceful session end %s", session_log_context(room_name, customer_id, session_id, mode))
             logger.info("Gemini stream loop finished; closing connections %s", session_log_context(room_name, customer_id, session_id, mode))
             live_queue.close()
             await room.disconnect()
