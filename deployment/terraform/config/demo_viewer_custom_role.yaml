@@ -17,3 +17,9 @@ permissions:
   - monitoring.dashboards.list
   - monitoring.monitoredResourceDescriptors.list
 
+  - datacatalog.taxonomies.get
+  - datacatalog.taxonomies.list
+  # - bigquery.dataPolicies.list # To view data policies
+
+  # Gemini Enterprise for Customer Experience (CES)
+  - roles/ces.viewer

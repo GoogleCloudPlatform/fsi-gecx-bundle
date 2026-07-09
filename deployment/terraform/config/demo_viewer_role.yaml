@@ -30,5 +30,8 @@ roles:
   # Roles to view KMS in console
   - roles/cloudkms.viewer
 
-  # Roles to view Data Catalog Policy Tag Taxonomies in console
+  # Roles to view Data Catalog in console
   - roles/datacatalog.viewer
+
+  # Roles to view Cloud Build in console
+  - roles/cloudbuild.viewer
