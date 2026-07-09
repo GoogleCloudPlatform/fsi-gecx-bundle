@@ -603,7 +603,7 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
 
       env {
         name  = "BANKING_SERVICE_MCP_URL"
-        value = "https://banking-service-${data.google_project.project.number}.${var.region}.run.app/api/mcp/"
+        value = "https://banking-service-${data.google_project.project.number}.${var.region}.run.app/mcp/"
       }
 
       env {
