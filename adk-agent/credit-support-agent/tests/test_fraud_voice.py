@@ -259,6 +259,16 @@ def test_base_instruction_includes_grounding_and_disclosure_guardrails() -> None
     assert "Do not provide financial, legal, tax, or investment advice" in instruction
 
 
+def test_voice_session_uses_fresh_agent_factory() -> None:
+    voice_agent_source = Path(__file__).parents[1].joinpath("voice_agent.py").read_text()
+    agent_source = Path(__file__).parents[1].joinpath("agent", "agent.py").read_text()
+
+    assert "copy.copy(root_agent)" not in voice_agent_source
+    assert "create_voice_agent(instruction=session_instruction)" in voice_agent_source
+    assert "def create_mcp_toolset()" in agent_source
+    assert "root_agent = create_voice_agent()" not in agent_source
+
+
 def test_composed_fraud_instruction_prefers_single_triage_workflow() -> None:
     instruction = compose_session_instruction(
         avatar_name="Nova",

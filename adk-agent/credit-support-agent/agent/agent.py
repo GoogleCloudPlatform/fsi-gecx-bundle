@@ -153,13 +153,13 @@ def custom_client_factory(headers=None, timeout=None, auth=None):
     dynamic_auth = DynamicGoogleAuth()
     return create_mcp_http_client(headers=headers, timeout=timeout, auth=dynamic_auth)
 
-# Initialize MCP Toolset using Streamable HTTP
-mcp_tools = McpToolset(
-    connection_params=StreamableHTTPConnectionParams(
-        url=get_banking_service_mcp_url(),
-        httpx_client_factory=custom_client_factory
+def create_mcp_toolset() -> McpToolset:
+    return McpToolset(
+        connection_params=StreamableHTTPConnectionParams(
+            url=get_banking_service_mcp_url(),
+            httpx_client_factory=custom_client_factory,
+        )
     )
-)
 
 def end_consultation() -> dict:
     """Terminates the current voice consultation session. Call this when the customer confirms they are finished or want to end the call.
@@ -415,16 +415,20 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
 NAME = "credit_card_support_voice_assistant"
 DESCRIPTION = "A voice assistant that helps customers freeze cards, issue replacement cards, request limit increases, and reverse late fees."
 
-root_agent = Agent(
-    name=NAME,
-    description=DESCRIPTION,
-    model=os.getenv("VOICE_AGENT_AUDIO_MODEL"),
-    instruction=INSTRUCTION_TEXT,
-    tools=[mcp_tools, end_consultation, transfer_to_human],
-    before_tool_callback=before_tool_callback,
-    after_tool_callback=after_tool_callback,
-    on_tool_error_callback=on_tool_error_callback,
-    planner=BuiltInPlanner(
-        thinking_config=ThinkingConfig(include_thoughts=False)
+
+def create_voice_agent(*, model=None, instruction: str = INSTRUCTION_TEXT) -> Agent:
+    return Agent(
+        name=NAME,
+        description=DESCRIPTION,
+        model=model or os.getenv("VOICE_AGENT_AUDIO_MODEL"),
+        instruction=instruction,
+        tools=[create_mcp_toolset(), end_consultation, transfer_to_human],
+        before_tool_callback=before_tool_callback,
+        after_tool_callback=after_tool_callback,
+        on_tool_error_callback=on_tool_error_callback,
+        planner=BuiltInPlanner(
+            thinking_config=ThinkingConfig(include_thoughts=False)
+        )
     )
-)
+
+root_agent = None

@@ -215,12 +215,15 @@ async def test_reset_my_demo_success(async_client, db_session):
     swipes_count = db_session.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).count()
     assert swipes_count == 10
     
-    accounts = db_session.query(Account).filter(Account.user_id == user_id).all()
+    accounts = db_session.query(Account).filter(Account.user_id == user_id, Account.status == "ACTIVE").all()
+    assert len([acc for acc in accounts if acc.account_type == "CHECKING"]) == 1
+    assert len([acc for acc in accounts if acc.account_type == "SAVINGS"]) == 1
     for acc in accounts:
         if acc.account_type == "CHECKING":
             assert acc.cleared_balance_cents == 1000000
         elif acc.account_type == "SAVINGS":
             assert acc.cleared_balance_cents == 2000000
+    assert db_session.query(Account).filter(Account.user_id == user_id, Account.status == "CLOSED").count() == 2
 
 
 @pytest.mark.asyncio

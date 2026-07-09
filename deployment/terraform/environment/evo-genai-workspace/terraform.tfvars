@@ -30,6 +30,7 @@ cx_agent_studio_upload_tool_name                 = "projects/evo-genai-workspace
 cx_agent_studio_populate_content_tool_name       = "projects/evo-genai-workspace/locations/us/apps/a3e14f8f-8ac8-4020-94f9-dd7d53294566/tools/8e42a29a-d20e-4aba-8ea9-beecb68c6a60"
 use_external_identities                          = true
 enable_blocking_functions                        = true
+enable_current_user_grants                       = true
 repo_branch_expression                           = "^main$"
 cloud_build_trigger_event                        = "push_to_branch"
 github_repo_remote_uri                           = "https://github.com/GoogleCloudPlatform/fsi-gecx-bundle.git"

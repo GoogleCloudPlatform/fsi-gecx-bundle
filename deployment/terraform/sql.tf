@@ -128,6 +128,12 @@ resource "google_sql_user" "banking_db_migration_iam_user" {
   type     = "CLOUD_IAM_SERVICE_ACCOUNT"
 }
 
+resource "google_sql_user" "banking_db_reset_iam_user" {
+  name     = replace(google_service_account.banking_db_reset_service_account.email, ".gserviceaccount.com", "")
+  instance = google_sql_database_instance.banking_data.name
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
+}
+
 resource "google_sql_user" "banking_service_sa_iam_user" {
   name     = replace(google_service_account.banking_service_account.email, ".gserviceaccount.com", "")
   instance = google_sql_database_instance.banking_data.name

@@ -14,6 +14,7 @@
 
 import os
 import logging
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
@@ -23,8 +24,9 @@ from google.cloud import bigquery
 from pydantic import BaseModel, Field
 from utils.auth import require_admin_user, verify_eventarc_oidc_token
 from utils.database import enable_session_rbac_override
+from utils.env import is_cloud_run
 from utils.lazy_clients import LazyClient
-from utils.maintenance import maintenance_window
+from utils.maintenance import disable_maintenance_mode, enable_maintenance_mode, maintenance_window
 from utils.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,40 @@ def clear_operational_transaction_stream() -> None:
         redis_client.delete("recent_transactions", "datastream_metrics", "cdc_status")
     except Exception as exc:
         logger.warning("Could not clear Redis transaction or metrics cache during reset: %s", exc)
+
+
+def _run_cloud_run_reset_job() -> dict | None:
+    job_name = os.getenv("FULL_RESET_JOB_NAME")
+    if not is_cloud_run() or not job_name:
+        return None
+
+    project_id = (
+        os.getenv("FULL_RESET_JOB_PROJECT_ID")
+        or os.getenv("GOOGLE_CLOUD_PROJECT")
+        or os.getenv("GCP_PROJECT")
+    )
+    region = os.getenv("FULL_RESET_JOB_REGION") or os.getenv("GOOGLE_CLOUD_REGION") or "us-central1"
+    if not project_id:
+        raise RuntimeError("FULL_RESET_JOB_PROJECT_ID or GOOGLE_CLOUD_PROJECT must be set to run the reset job.")
+
+    import google.auth
+    import google.auth.transport.requests
+    import httpx
+
+    credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    credentials.refresh(google.auth.transport.requests.Request())
+    headers = {"Authorization": f"Bearer {credentials.token}", "Content-Type": "application/json"}
+
+    job_path = f"projects/{project_id}/locations/{region}/jobs/{job_name}"
+    run_url = f"https://run.googleapis.com/v2/{job_path}:run"
+
+    with httpx.Client(timeout=30.0) as client:
+        response = client.post(run_url, headers=headers, json={})
+        response.raise_for_status()
+        operation = response.json()
+        if not operation.get("name"):
+            raise RuntimeError(f"Cloud Run reset job did not return an operation: {operation}")
+        return operation
 
 class EventarcPayload(BaseModel):
     name: str = Field(..., description="GCS object name.")
@@ -186,6 +222,33 @@ def reset_database(
     try:
         enable_session_rbac_override(db)
 
+        if is_cloud_run() and os.getenv("FULL_RESET_JOB_NAME"):
+            enable_maintenance_mode(
+                reason="database_reset",
+                message="Admin reset in progress. Transaction traffic is temporarily paused.",
+                ttl_seconds=300,
+            )
+            try:
+                reset_job_operation = _run_cloud_run_reset_job()
+            except Exception:
+                disable_maintenance_mode()
+                raise
+        else:
+            reset_job_operation = None
+
+        if reset_job_operation:
+            time.sleep(2.0)
+            clear_operational_transaction_stream()
+            logger.info("Database reset started via Cloud Run job operation: %s", reset_job_operation.get("name"))
+            if purge_audit_logs or purge_data_lake:
+                warnings.append("Audit and data lake purge are skipped for asynchronous Cloud Run reset jobs.")
+            return {
+                "status": "SUCCESS",
+                "message": "Database reset job started. Demo data will be rebuilt shortly.",
+                "operation": reset_job_operation.get("name"),
+                "warnings": warnings,
+            }
+
         with maintenance_window(
             reason="database_reset",
             message="Admin reset in progress. Transaction traffic is temporarily paused.",
@@ -195,13 +258,18 @@ def reset_database(
             logger.info("Maintenance mode enabled for admin database reset.")
             clear_operational_transaction_stream()
 
-            # Seed and clean databases using the Seeding Service
+            # Local/test fallback: seed and clean databases using the Seeding Service.
             perform_algorithmic_seeding(db)
             clear_operational_transaction_stream()
 
             if purge_audit_logs:
-                db.query(AuditOutbox).delete()
-                logger.info("Purging PostgreSQL audit outbox...")
+                try:
+                    db.query(AuditOutbox).delete()
+                    logger.info("Purging PostgreSQL audit outbox...")
+                except Exception as audit_ex:
+                    db.rollback()
+                    logger.warning(f"Could not purge PostgreSQL audit outbox: {audit_ex}")
+                    warnings.append(f"PostgreSQL audit outbox purge skipped: {audit_ex}")
                 try:
                     project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
                     for tbl in ["origination_audit_log", "financial_ledger_audit_log", "identity_access_audit_log"]:
