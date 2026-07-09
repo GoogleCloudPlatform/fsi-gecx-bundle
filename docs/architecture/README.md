@@ -13,6 +13,7 @@ Specifications covering our transactional database schemas, continuous deploymen
 | **[BigQuery OLAP & Compliance Audit Architecture](./data-platform/bigquery_olap_audit_architecture.md)** | SOX/GLBA-compliant immutable audit logging, Pub/Sub Storage Write API streaming, and KMS/Data Catalog PII column masking. |
 | **[Transactional Data Layer Architecture](./data-platform/data_layer_architecture.md)** | PostgreSQL Bounded Context domain schemas (`cards`, `origination`, `identity`, `ledger`), UUID generation, and advisory-locked deployment governance. |
 | **[Pre-Deployment Migrations & CI/CD Strategy](./data-platform/pre_deployment_migrations_plan.md)** | Ephemeral container validation, Alembic migration orchestration in Cloud Build, and zero-downtime schema rollout protocols. |
+| **[Knowledge Catalog Fraud Support Guidance](./data-platform/knowledge_catalog_fraud_support_guidance.md)** | Dataplex Knowledge Catalog entry/aspect model, sync job, fallback behavior, and runtime guidance flow for fraud voice support. |
 
 ---
 
@@ -24,6 +25,7 @@ Specifications detailing our Google Cloud AI integrations, conversational teleph
 | **[Gemini Multimodal Live Voice Agent](./ai-and-voice/gemini_live_voice_agent.md)** | Bidirectional WebSocket voice streaming, PyTorch CPU optimization, and real-time tool orchestration with Gemini Live. |
 | **[GECX Telephony Voice Agent](./ai-and-voice/gecx_telephony_voice_agent.md)** | Google Enterprise Contact Center Experience (GECX) integration, SIP telephony bridging, and conversational customer support workflows. |
 | **[Document AI Processing Pipeline](./ai-and-voice/doc_ai_processing_pipeline.md)** | Asynchronous optical character recognition (OCR) and structured entity extraction for W-2 tax forms, paystubs, and bank statements. |
+| **[Knowledge Catalog Fraud Support Guidance](./data-platform/knowledge_catalog_fraud_support_guidance.md)** | Data-platform-owned Dataplex policy guidance consumed by the Gemini Live credit support agent at session startup. |
 
 ---
 

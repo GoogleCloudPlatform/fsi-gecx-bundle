@@ -1,12 +1,14 @@
 # FSI Architecture Design: Gemini Live Voice Agent & WebRTC Orchestration
 
-This document defines the system architecture, design patterns, and Google Cloud Platform deployment configurations for the real-time **Gemini Live Voice Agent**. 
+This document defines the system architecture, design patterns, and Google Cloud Platform deployment configurations for the real-time **Gemini Live Voice Agent** used by the credit support portal.
+
+The current reference flow is the fraud alert voice mitigation journey: the customer opens the support page from a secure message or support portal, the agent detects trusted active fraud context, reviews suspicious transactions, confirms the disputed selection, and then invokes a high-level fraud triage workflow through MCP.
 
 ---
 
 ## 📐 1. System Topology & Media Flow
 
-The Voice Agent is orchestrated using the **Google Agent Development Kit (ADK)** and **LiveKit WebRTC**. It establishes persistent, low-latency, bidirectional audio streaming channels with the client browser, executing real-time ledger operations against the core FastAPI banking service.
+The Voice Agent is orchestrated using the **Google Agent Development Kit (ADK)** and **LiveKit WebRTC**. It establishes persistent, low-latency, bidirectional audio streaming channels with the client browser and uses MCP tools exposed by the core FastAPI banking service.
 
 ```mermaid
 sequenceDiagram
@@ -18,7 +20,7 @@ sequenceDiagram
     participant API as banking-service (Cloud Run)
     participant DB as Issuer Database (PostgreSQL)
 
-    Customer->>UI: Click "Start Voice Assistant"
+    Customer->>UI: Open /support/voice?entry=fraud-alert
     UI->>API: GET /api/v1/credit-card/token (Request Session)
     API-->>UI: Return LiveKit Room Access Token
     
@@ -26,27 +28,28 @@ sequenceDiagram
     LK->>Worker: Dispatch WebRTC Signaling Handshake (wss://)
     
     %% Continuous streaming loop
-    Customer->>UI: Speaks: "Lock my card immediately"
+    Customer->>UI: Speaks: "I do not recognize those charges"
     UI->>LK: Stream Mic Audio (WebRTC UDP DTLS/SRTP)
     LK->>Worker: Push PCM16 16kHz Audio Frame stream
     Note over Worker: Local Silero VAD detects speech boundaries
     
+    Worker->>API: GET /credit-card/voice/context
+    API-->>Worker: Active fraud alert + Knowledge Catalog guidance
+    Worker->>Worker: Compose session-specific ADK instruction
     Worker->>Worker: Run Gemini Live Session Event Loop
-    Worker->>API: POST /credit-card/block (Invoke Tool)
-    
-    %% Transaction and Locking logic
-    critical Exclusive Database Row Lock
-        API->>DB: SELECT FOR UPDATE (Lock card_token)
-        DB-->>API: Row Locked
-        API->>DB: UPDATE status = 'BLOCKED'
-    end
-    API-->>Worker: HTTP 200 (Success)
+    Worker->>API: POST /api/mcp/ (get_open_fraud_alert)
+    API-->>Worker: Suspicious transactions and alert id
+    Worker-->>Customer: Ask whether customer recognizes each suspicious transaction
+    Customer->>UI: Confirms disputed selection
+    Worker->>API: POST /api/mcp/ (triage_fraud_case)
+    API->>DB: Void pending auths, apply provisional credits, block compromised card, issue replacement, write audit/secure message
+    API-->>Worker: Triage result
     
     %% UI State Sync
-    Worker->>LK: Broadcast Data Event: { type: "CARD_STATUS_LOCK", status: "BLOCKED" }
+    Worker->>LK: Broadcast Data Event: FRAUD_ALERT_RESOLVED
     LK->>UI: WebRTC Data Channel Message
-    UI->>UI: Render Digital Card Grayed-out with Padlock Overlay
-    Worker-->>Customer: Gemini Native Audio: "I've locked your card. No transactions can be authorized."
+    UI->>UI: Update fraud triage panel and card status
+    Worker-->>Customer: Gemini Native Audio summary of confirmed tool results
 ```
 
 ---
@@ -63,29 +66,66 @@ sequenceDiagram
   1. A new, offsetting positive credit transaction is appended to the `account_ledger` table with the description `"FEE_REVERSAL_REF_<original_tx_id>"`.
   2. The account balances (`cleared_balance_cents` and `available_credit_cents`) are re-computed and committed.
 
-### C. CPU-Only PyTorch VAD Optimization
+### C. Deterministic Fraud Workflow Behind MCP
+* **Context**: Gemini Live is good at conversational slot-filling, but brittle if asked to sequence several low-level card operations in one live turn. Fraud remediation also needs idempotency, audit events, provisional-credit semantics, secure messaging, and card targeting based on the active fraud alert.
+* **Decision**: The agent uses a high-level MCP tool, `triage_fraud_case`, after it has inspected the alert and the customer has confirmed which transactions are disputed. Banking-service owns the business workflow:
+  1. Validate the alert belongs to the customer and target `FraudAlert.card_id`.
+  2. Void or release pending suspicious authorizations.
+  3. Apply provisional credit entries for posted disputed charges.
+  4. Block the compromised card and issue a replacement when requested by the workflow.
+  5. Emit audit events and send secure-message follow-up.
+
+The agent can still use existing support capabilities such as late fee reversal, credit limit increase, human escalation, card replacement, and wallet provisioning. During an active fraud alert, however, it must prefer the high-level fraud triage workflow rather than burst-calling low-level fraud tools.
+
+### D. Session-Specific Prompt Composition
+* **Context**: The base voice instruction should remain reusable for future specialized flows such as overdraft remediation. Baking every workflow into a monolithic prompt would make the reference architecture hard to extend.
+* **Decision**: The agent composes instructions per LiveKit session:
+  1. Base guidance from `agent/resources/instruction.txt`.
+  2. Trusted session context from `/credit-card/voice/context`.
+  3. Active-flow guidance such as `agent/resources/flows/fraud_alert.txt`.
+  4. A compact `agent_guidance_summary` returned by banking-service from Dataplex Knowledge Catalog or local fallback.
+
+This keeps general guardrails stable while allowing an active fraud alert to inject only the fraud-specific behavior needed for that session.
+
+### E. Knowledge Catalog Guidance Grounding
+* **Context**: Fraud support language changes more often than the mechanics of WebRTC audio. The demo also needs to show governed policy guidance flowing from the data platform into the agent.
+* **Decision**: Dataplex Knowledge Catalog stores approved fraud support topics as entries and aspects. Banking-service reads those topics through `KnowledgeCatalogService` and returns the guidance bundle in voice context. If catalog is unavailable, banking-service falls back to `fraud_support_guidance.json`.
+
+Catalog guidance is policy and phrasing context, not operational truth. Live banking-service state and MCP tool results remain the source of truth for fraud alert status, card status, provisional credits, and wallet provisioning.
+
+See [Knowledge Catalog Fraud Support Guidance](../data-platform/knowledge_catalog_fraud_support_guidance.md) for the Dataplex entry/aspect model, sync job, fallback behavior, and IAM boundary.
+
+### F. Per-Session MCP Tool Isolation
+* **Context**: A module-level ADK `McpToolset` can retain stream/session state across LiveKit calls. In rehearsal this allowed one customer's fraud alert id and authorization ids to bleed into a later customer's `triage_fraud_case` call, which the fraud playbook guard correctly blocked.
+* **Decision**: Each LiveKit session creates a fresh ADK agent instance and fresh MCP toolset after the customer context is bound. Session cleanup explicitly closes MCP tools and resets session context variables. This keeps target-customer headers, MCP session ids, fraud alert ids, and tool arguments scoped to one call.
+
+### G. CPU-Only PyTorch VAD Optimization
 * **Context**: The Voice Agent relies on **Silero VAD** (Voice Activity Detection) running locally inside the container to identify speech boundaries. Standard PyTorch packages include massive CUDA binaries, inflating the Docker image size to over 5GB.
 * **Decision**: We bundle a CPU-only PyTorch build using the index URL `https://download.pytorch.org/whl/cpu`. This slashes the image size to under 1.2GB, reducing memory footprints, improving cold-start speeds, and driving down GCP compute costs.
 
-### D. Multimodal Live Avatar Pipeline (FFmpeg Transcoding & Playout Pacing)
+### H. Multimodal Live Avatar Pipeline (FFmpeg Transcoding & Playout Pacing)
 * **Context**: In video mode, the Gemini Live API (`gemini-3.1-flash-live-preview-04-2026`) does not emit raw audio PCM blocks. It returns unified `video/mp4` streams containing H.264 video and AAC audio.
 * **Decision**: The backend container routes these MP4 packets into a subprocess running FFmpeg. The decoded raw RGBA video frames and PCM audio blocks are read from FFmpeg stdout/sockets and published to LiveKit `rtc.VideoSource` and `rtc.AudioSource` tracks. To maintain lip-sync and prevent audio/video stuttering under variable network/container CPU load, we enforce a local playout buffer queue on the container.
 
-### E. Client-Side Video Warmup Guard (45-Frame Paint Threshold)
+### I. Client-Side Video Warmup Guard (45-Frame Paint Threshold)
 * **Context**: During WebRTC track connection, the browser's video decoder requires ~1-2 seconds to warm up, resulting in blank or green frame artifacts being painted on the screen.
 * **Decision**: The React UI renders a dynamic letter placeholder card matching the active agent's profile. The HTML `<video>` element is overlayed at `opacity: 0` underneath the card. The UI uses the browser's native `requestVideoFrameCallback` API to count decoded and painted video frames; only when **45 consecutive frames** have successfully been decoded and painted does it transition the video element to `opacity: 1` and unmount the placeholder card, guaranteeing a seamless visual transition.
 
-### F. Hybrid Out-of-Band Speech-to-Text (STT) Transcription Pipeline
+### J. Hybrid Out-of-Band Speech-to-Text (STT) Transcription Pipeline
 * **Context**: Because the video model outputs unified multiplexed MP4 chunks rather than raw inline speech frames, Gemini's native transcription events are unavailable in the same turn structure.
 * **Decision**: We implement a hybrid out-of-band transcription pipeline. For user input, the React frontend uses the browser's native Web Speech API (`webkitSpeechRecognition`) as primary. For agent output, the backend container copies FFmpeg-decoded PCM chunks to an asynchronous `agent_stt_queue`, which streams out-of-band to a `google-cloud-speech` AsyncClient. Final transcripts are broadcasted to the frontend via the LiveKit data channel.
 
-### G. Thread-Safe Event Loop Scheduling (`loop.call_soon_threadsafe`)
+### K. Thread-Safe Event Loop Scheduling (`loop.call_soon_threadsafe`)
 * **Context**: To prevent database queries (SQL executions) from blocking the high-bandwidth video frame processing loop (108 MB/s), the agent tools are offloaded to separate background thread pools (`asyncio.to_thread`). Scheduling asynchronous tasks (such as broadcasting room events via the LiveKit data channel) directly from these background threads causes silent crashes due to asyncio's thread-safety constraints.
 * **Decision**: We retrieve the main event loop at startup. Inside background worker callbacks, we schedule all WebRTC data channel updates back onto the main event loop thread using Python's thread-safe `loop.call_soon_threadsafe()`, resolving GUI state freezing and missing transcript errors.
 
-### H. Gated Audio Input (Design Stage)
-* **Context**: The Gemini 3.1 Live Preview model requires 2-4 seconds of planning to output structured tool calls. During this silence, if the user speaks (*"Hello? Are you there?"*), the audio stream acts as an immediate cancellation signal to Gemini. The model discards the pending tool call and resets its state, locking it in an interruption loop.
-* **Decision**: We design an event-driven audio gate on the container. When a tool begins execution on the backend, it emits `TOOL_START`, which gates (drops) all incoming microphone audio packets at the container gateway. When the tool completes, it emits `TOOL_END`, un-gating user audio. This blocks conversational interruptions from cancelling model turns.
+### L. Gated Audio Input During Tool Processing
+* **Context**: Gemini Live can discard a pending tool call if the customer speaks during the model's planning/tool-call interval.
+* **Decision**: The backend tracks tool execution state through ADK tool callbacks. While a tool is processing or the session is shutting down, incoming microphone audio frames are dropped before they are sent to the model. This prevents conversational interruptions from cancelling fraud triage or other consequential tool turns.
+
+### M. Graceful Session End Playout
+* **Context**: Disconnecting the LiveKit room immediately after `end_consultation` can cut off the agent's final spoken goodbye.
+* **Decision**: The agent waits for playout queue drain, publishes a `SESSION_END` data event, and then uses a short delayed disconnect so the farewell audio finishes before the WebRTC room is closed.
 
 ---
 
