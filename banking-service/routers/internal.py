@@ -26,7 +26,7 @@ from utils.auth import require_admin_user, verify_eventarc_oidc_token
 from utils.database import enable_session_rbac_override
 from utils.env import is_cloud_run
 from utils.lazy_clients import LazyClient
-from utils.maintenance import enable_maintenance_mode, maintenance_window
+from utils.maintenance import disable_maintenance_mode, enable_maintenance_mode, maintenance_window
 from utils.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
@@ -222,13 +222,21 @@ def reset_database(
     try:
         enable_session_rbac_override(db)
 
-        reset_job_operation = _run_cloud_run_reset_job()
-        if reset_job_operation:
+        if is_cloud_run() and os.getenv("FULL_RESET_JOB_NAME"):
             enable_maintenance_mode(
                 reason="database_reset",
                 message="Admin reset in progress. Transaction traffic is temporarily paused.",
                 ttl_seconds=300,
             )
+            try:
+                reset_job_operation = _run_cloud_run_reset_job()
+            except Exception:
+                disable_maintenance_mode()
+                raise
+        else:
+            reset_job_operation = None
+
+        if reset_job_operation:
             time.sleep(2.0)
             clear_operational_transaction_stream()
             logger.info("Database reset started via Cloud Run job operation: %s", reset_job_operation.get("name"))

@@ -28,6 +28,7 @@ from utils.database import SessionLocal
 from utils.database import enable_session_rbac_override
 from utils.encryption import encrypt_pii
 from utils.audit import record_audit_event
+from utils.maintenance import disable_maintenance_mode
 
 # Models
 from models.identity import User, UserAddress, RetailLocation, UserSecureMessage
@@ -1282,8 +1283,7 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
     logger.info(f"Successfully reset personal demo suite accounts for user_id={user_id}.")
 
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+def run_algorithmic_seeding_job() -> Dict[str, Any]:
     logger.info("Invoking Seeding Service from command-line...")
     db_session = SessionLocal()
     try:
@@ -1291,5 +1291,12 @@ if __name__ == "__main__":
         print("\n=== SEEDED CARDS MANIFEST ===")
         print(json.dumps(manifest, indent=2))
         print("===============================\n")
+        return manifest
     finally:
         db_session.close()
+        disable_maintenance_mode()
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    run_algorithmic_seeding_job()
