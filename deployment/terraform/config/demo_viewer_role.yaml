@@ -48,3 +48,6 @@ roles:
 
   # Document AI
   - roles/documentai.viewer
+
+  # Secret Manager
+  - roles/secretmanager.viewer
