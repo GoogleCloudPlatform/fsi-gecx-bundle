@@ -35,6 +35,7 @@ resource "google_cloud_run_v2_service" "banking_service" {
   iap_enabled = false
 
   template {
+    timeout                          = "${var.banking_service_timeout_seconds}s"
     service_account                  = google_service_account.banking_service_account.email
     max_instance_request_concurrency = var.banking_service_max_instance_request_concurrency
 

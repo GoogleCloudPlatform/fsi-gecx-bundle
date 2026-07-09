@@ -281,3 +281,9 @@ variable "enable_current_user_grants" {
   description = "Set to true to grant the current openid user IAP backend accessor role."
   default     = false
 }
+
+variable "banking_service_timeout_seconds" {
+  type        = number
+  description = "Timeout in seconds for the banking-service Cloud Run instance."
+  default     = 30
+}

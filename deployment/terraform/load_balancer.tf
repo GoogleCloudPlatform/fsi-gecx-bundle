@@ -80,7 +80,7 @@ resource "google_compute_backend_service" "ui_backend" {
   count                 = var.deploy_cloud_run_services ? 1 : 0
   name                  = "banking-ui-backend"
   protocol              = "HTTP"
-  timeout_sec           = 30
+  timeout_sec           = var.banking_service_timeout_seconds
   load_balancing_scheme = "EXTERNAL_MANAGED"
 
   backend {
@@ -98,7 +98,7 @@ resource "google_compute_backend_service" "service_backend" {
   count                 = var.deploy_cloud_run_services ? 1 : 0
   name                  = "banking-service-backend"
   protocol              = "HTTP"
-  timeout_sec           = 30
+  timeout_sec           = var.banking_service_timeout_seconds
   load_balancing_scheme = "EXTERNAL_MANAGED"
 
   backend {
@@ -116,7 +116,7 @@ resource "google_compute_backend_service" "iap_login_ui_backend" {
   count                 = var.deploy_cloud_run_services && var.use_external_identities ? 1 : 0
   name                  = "iap-login-ui-backend"
   protocol              = "HTTP"
-  timeout_sec           = 30
+  timeout_sec           = var.banking_service_timeout_seconds
   load_balancing_scheme = "EXTERNAL_MANAGED"
 
   backend {
@@ -324,5 +324,3 @@ resource "google_compute_backend_service" "livekit_backend" {
 
   health_checks = [google_compute_health_check.livekit_hc[0].id]
 }
-
-
