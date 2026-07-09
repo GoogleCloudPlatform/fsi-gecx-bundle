@@ -420,6 +420,8 @@ async def test_inject_anomaly_success(mock_get_tokens, mock_send_multicast, mock
     data = response.json()
     assert data["status"] == "ANOMALY_INJECTED"
     assert data["injected_swipes_count"] == 5
+    assert data["flagged_authorizations_count"] == 5
+    assert data["superseded_open_alerts_count"] == 0
     assert data["total_fraud_cents"] == 585399
     assert data["fraud_alert_id"]
     assert data["secure_message_thread_id"]
@@ -434,6 +436,24 @@ async def test_inject_anomaly_success(mock_get_tokens, mock_send_multicast, mock
     assert fraud_alert.status == "OPEN"
     assert fraud_alert.auth_provider_uid == "presenter-2"
     assert len(fraud_alert.suspicious_authorization_ids) == 5
+    assert len(fraud_alert.suspicious_transactions) == 5
+    assert all(txn["authorization_id"] for txn in fraud_alert.suspicious_transactions)
+    suspicious_auths = db_session.query(TransactionAuthorization).filter(
+        TransactionAuthorization.id.in_(fraud_alert.suspicious_authorization_ids)
+    ).all()
+    assert all(auth.fraud_risk_score and auth.fraud_risk_score > 0 for auth in suspicious_auths)
+    account_after_injection = db_session.query(CreditAccount).filter(CreditAccount.id == fraud_alert.credit_account_id).first()
+    pending_sum = sum(auth.transaction_amount_cents for auth in db_session.query(TransactionAuthorization).filter(
+        TransactionAuthorization.account_id == fraud_alert.credit_account_id,
+        TransactionAuthorization.status == "PENDING",
+    ).all())
+    assert account_after_injection.available_credit_cents == max(
+        0,
+        min(
+            account_after_injection.credit_limit_cents,
+            account_after_injection.credit_limit_cents - account_after_injection.cleared_balance_cents - pending_sum,
+        ),
+    )
 
     fraud_created_event = db_session.query(AuditOutbox).filter(AuditOutbox.event_type == "FRAUD_ALERT_CREATED").order_by(AuditOutbox.created_at.desc()).first()
     fraud_notified_event = db_session.query(AuditOutbox).filter(AuditOutbox.event_type == "FRAUD_ALERT_CUSTOMER_NOTIFIED").order_by(AuditOutbox.created_at.desc()).first()
@@ -480,6 +500,52 @@ async def test_inject_anomaly_success(mock_get_tokens, mock_send_multicast, mock
     acknowledged = acknowledge_response.json()
     assert acknowledged["success"] is True
     assert acknowledged["fraud_alert"]["status"] == "RESOLVED_CUSTOMER_RECOGNIZED"
+
+
+@pytest.mark.asyncio
+@patch("services.messaging.messaging.send")
+@patch("services.messaging.messaging.send_each_for_multicast")
+@patch("services.messaging.identity_repo.get_device_tokens_for_customer")
+async def test_inject_anomaly_supersedes_prior_open_simulation_alert(mock_get_tokens, mock_send_multicast, mock_send, async_client, db_session):
+    global mock_claims
+    mock_claims = {"sub": "presenter-repeat", "email": "presenter.repeat@google.com"}
+    mock_get_tokens.return_value = ["device_token_xyz"]
+    mock_send.return_value = "topic-message-id"
+    mock_batch = MagicMock()
+    mock_batch.success_count = 1
+    mock_batch.failure_count = 0
+    mock_send_multicast.return_value = mock_batch
+
+    provision_response = await async_client.post("/api/v1/simulation/provision-my-demo")
+    assert provision_response.status_code == status.HTTP_201_CREATED
+
+    first_response = await async_client.post("/api/v1/simulation/inject-anomaly")
+    assert first_response.status_code == status.HTTP_200_OK
+    first_alert_id = first_response.json()["fraud_alert_id"]
+
+    second_response = await async_client.post("/api/v1/simulation/inject-anomaly")
+    assert second_response.status_code == status.HTTP_200_OK
+    second_data = second_response.json()
+
+    assert second_data["fraud_alert_id"] != first_alert_id
+    assert second_data["injected_swipes_count"] == 5
+    assert second_data["flagged_authorizations_count"] == 5
+    assert second_data["superseded_open_alerts_count"] == 1
+
+    first_alert = db_session.query(FraudAlert).filter(FraudAlert.id == first_alert_id).first()
+    second_alert = db_session.query(FraudAlert).filter(FraudAlert.id == second_data["fraud_alert_id"]).first()
+    assert first_alert.status == "SUPERSEDED_BY_NEW_SIMULATION"
+    assert first_alert.resolved_at is not None
+    assert second_alert.status == "OPEN"
+    assert len(second_alert.suspicious_authorization_ids) == 5
+    assert db_session.query(FraudAlert).filter(
+        FraudAlert.auth_provider_uid == "presenter-repeat",
+        FraudAlert.status == "OPEN",
+    ).count() == 1
+
+    superseded_event = db_session.query(AuditOutbox).filter_by(event_type="FRAUD_ALERT_SUPERSEDED").first()
+    assert superseded_event is not None
+
 
 @pytest.mark.asyncio
 async def test_get_active_cards_success(async_client, db_session):

@@ -277,7 +277,12 @@ class AccountsService:
                 logger.error(f"Failed to auto-provision local sandbox for user: {user_email}. Error: {e}")
                 self.db.rollback()
 
+        from repositories.credit_card import CreditCardRepository
         from services.credit_card import get_wallet_status_by_card_token
+
+        credit_repo = CreditCardRepository(self.db)
+        for cred_acc in credit_accounts:
+            credit_repo.recalculate_available_credit(cred_acc)
 
         wallet_status_by_account = {
             str(cred_acc.id): get_wallet_status_by_card_token(self.db, str(cred_acc.id))

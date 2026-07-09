@@ -223,6 +223,18 @@ class CreditCardRepository:
         ).scalar()
         return int(res or 0)
 
+    def calculate_available_credit_cents(self, account: FinancialAccount) -> int:
+        """Calculates available credit from the ledger balance and active pending holds."""
+        pending_sum = self.get_pending_auth_total(str(account.id))
+        raw_available = account.credit_limit_cents - account.cleared_balance_cents - pending_sum
+        return max(0, min(account.credit_limit_cents, raw_available))
+
+    def recalculate_available_credit(self, account: FinancialAccount) -> int:
+        """Persists canonical available credit for a credit account."""
+        account.available_credit_cents = self.calculate_available_credit_cents(account)
+        self.save_account(account)
+        return account.available_credit_cents
+
     def get_authorization_by_rrn(self, rrn: str, status: Optional[str] = None) -> Optional[TransactionAuthorization]:
         """Retrieves a transaction authorization by its retrieval reference number and optional status."""
         query = self.db.query(TransactionAuthorization).filter(TransactionAuthorization.retrieval_reference_number == rrn)

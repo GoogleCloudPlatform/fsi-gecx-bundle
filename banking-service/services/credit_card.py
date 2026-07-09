@@ -446,8 +446,7 @@ def void_fraud_authorization_hold(
         release_amount = int(auth.billing_amount_cents or auth.transaction_amount_cents or 0)
         auth.status = "REVERSED"
         repo.save_authorization(auth)
-        account.available_credit_cents += release_amount
-        repo.save_account(account)
+        repo.recalculate_available_credit(account)
 
         result = {
             "account_id": str(account.id),
@@ -551,8 +550,7 @@ def apply_fraud_provisional_credit(
         )
         repo.save_ledger(credit_entry)
         account.cleared_balance_cents -= credit_amount
-        account.available_credit_cents += credit_amount
-        repo.save_account(account)
+        repo.recalculate_available_credit(account)
 
         result = {
             "account_id": str(account.id),
@@ -724,6 +722,7 @@ def get_account_summary_dto(repo: Any, customer_id: str) -> Optional[Dict[str, A
     account = repo.get_account_by_customer(customer_id)
     if not account:
         return None
+    repo.recalculate_available_credit(account)
     wallet_statuses = get_wallet_status_by_card_token(repo.db, str(account.id))
     return {
         "account_id": account.id,

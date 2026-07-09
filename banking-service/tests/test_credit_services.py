@@ -461,6 +461,25 @@ def test_void_fraud_authorization_hold_is_idempotent(db_session):
     assert len(actions) == 1
 
 
+def test_void_fraud_authorization_hold_recalculates_drifted_available_credit(db_session):
+    alert = _create_fraud_alert(db_session, thread_id="thread-fraud-remediation-drift")
+    auth = _create_pending_fraud_authorization(db_session)
+    account = db_session.query(FinancialAccount).filter_by(id="12300000-0000-4000-8000-000000000123").first()
+    account.available_credit_cents = account.credit_limit_cents
+    db_session.commit()
+
+    result = void_fraud_authorization_hold(
+        db_session,
+        account_id="12300000-0000-4000-8000-000000000123",
+        authorization_id=str(auth.id),
+        fraud_alert_id=str(alert.id),
+    )
+
+    assert result["voided_amount_cents"] == 4200
+    assert account.available_credit_cents == 496500
+    assert account.available_credit_cents <= account.credit_limit_cents
+
+
 def test_apply_fraud_provisional_credit_posts_credit_and_records_action(db_session):
     alert = _create_fraud_alert(db_session)
 
