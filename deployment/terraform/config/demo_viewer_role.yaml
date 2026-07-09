@@ -17,4 +17,3 @@ roles:
 
   # Roles to view Cloud Scheduler jobs in console
   - roles/cloudscheduler.viewer
-

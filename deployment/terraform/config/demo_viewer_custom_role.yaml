@@ -15,3 +15,4 @@ permissions:
   # Visibility of Cloud Monitoring Dashboards
   - monitoring.dashboards.get
   - monitoring.dashboards.list
+  - monitoring.monitoredResourceDescriptors.list
