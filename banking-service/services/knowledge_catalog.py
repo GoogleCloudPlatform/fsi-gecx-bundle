@@ -78,7 +78,12 @@ class KnowledgeCatalogService:
             entry_name = self._entry_name(topic["topic_id"])
             aspects = self._build_topic_aspects(topic, dataplex_v1, struct_pb2)
             try:
-                client.get_entry(name=entry_name, view=dataplex_v1.EntryView.FULL)
+                client.get_entry(
+                    request=dataplex_v1.GetEntryRequest(
+                        name=entry_name,
+                        view=dataplex_v1.EntryView.FULL,
+                    )
+                )
                 entry = dataplex_v1.Entry(
                     name=entry_name,
                     entry_source=dataplex_v1.EntrySource(description=topic["title"]),
@@ -92,7 +97,6 @@ class KnowledgeCatalogService:
                 entry = dataplex_v1.Entry(
                     entry_type=self._entry_type_name(),
                     entry_source=dataplex_v1.EntrySource(description=topic["title"]),
-                    fully_qualified_name=f"fraud-support://{topic['topic_id']}",
                     aspects=aspects,
                 )
                 client.create_entry(parent=entry_group_name, entry=entry, entry_id=topic["topic_id"])
@@ -132,8 +136,10 @@ class KnowledgeCatalogService:
         for topic_id in topic_ids:
             try:
                 entry = client.get_entry(
-                    name=self._entry_name(topic_id),
-                    view=dataplex_v1.EntryView.FULL,
+                    request=dataplex_v1.GetEntryRequest(
+                        name=self._entry_name(topic_id),
+                        view=dataplex_v1.EntryView.FULL,
+                    )
                 )
             except exceptions.NotFound:
                 continue
