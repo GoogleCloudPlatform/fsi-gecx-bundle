@@ -807,6 +807,78 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
   ]
 }
 
+resource "google_cloud_run_v2_job" "knowledge_catalog_sync" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  name     = "banking-knowledge-catalog-sync"
+  location = var.region
+
+  template {
+    template {
+      max_retries     = 1
+      timeout         = "300s"
+      service_account = google_service_account.knowledge_catalog_sync_service_account.email
+
+      containers {
+        image   = "us-central1-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/banking-service:latest"
+        command = ["python"]
+        args    = ["scripts/sync_fraud_support_guidance.py"]
+
+        env {
+          name  = "KNOWLEDGE_CATALOG_ENABLED"
+          value = "true"
+        }
+
+        env {
+          name  = "KNOWLEDGE_CATALOG_PROJECT_ID"
+          value = var.project_id
+        }
+
+        env {
+          name  = "KNOWLEDGE_CATALOG_LOCATION"
+          value = var.region
+        }
+
+        env {
+          name  = "KNOWLEDGE_CATALOG_ENTRY_GROUP_ID"
+          value = google_dataplex_entry_group.fraud_support_guidance.entry_group_id
+        }
+
+        env {
+          name  = "KNOWLEDGE_CATALOG_ENTRY_TYPE_ID"
+          value = google_dataplex_entry_type.fraud_support_topic.entry_type_id
+        }
+
+        env {
+          name  = "KNOWLEDGE_CATALOG_POLICY_ASPECT_TYPE_ID"
+          value = google_dataplex_aspect_type.fraud_support_policy.aspect_type_id
+        }
+
+        env {
+          name  = "KNOWLEDGE_CATALOG_SUMMARY_ASPECT_TYPE_ID"
+          value = google_dataplex_aspect_type.fraud_customer_summary.aspect_type_id
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version
+    ]
+  }
+
+  depends_on = [
+    google_project_service.run_googleapis_com,
+    google_project_iam_member.knowledge_catalog_sync_sa_catalog_editor,
+    google_dataplex_entry_group.fraud_support_guidance,
+    google_dataplex_entry_type.fraud_support_topic,
+    google_dataplex_aspect_type.fraud_support_policy,
+    google_dataplex_aspect_type.fraud_customer_summary,
+  ]
+}
+
 resource "google_cloud_run_v2_job" "lakehouse_view_reconcile" {
   count               = var.deploy_cloud_run_services ? 1 : 0
   name                = "lakehouse-view-reconcile"

@@ -159,6 +159,20 @@ steps:
           else
             echo "Lakehouse reconcile job not found; skipping non-blocking view reconciliation."
           fi
+          if gcloud run jobs describe banking-knowledge-catalog-sync --region "${_REGION}" >/dev/null 2>&1; then
+            echo "Registering latest image with Knowledge Catalog sync job..."
+            gcloud run jobs update banking-knowledge-catalog-sync \
+              --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
+              --command "python" \
+              --args "scripts/sync_fraud_support_guidance.py" \
+              --region "${_REGION}"
+            echo "Syncing fraud support guidance into Dataplex Knowledge Catalog..."
+            gcloud run jobs execute banking-knowledge-catalog-sync \
+              --region "${_REGION}" \
+              --wait
+          else
+            echo "Knowledge Catalog sync job not found; skipping guidance sync."
+          fi
         else
           echo "Skipping migrations because _TRIGGER_DEPLOY is not true"
         fi

@@ -12,19 +12,24 @@
         "Ask whether the customer recognizes the suspicious charges.",
         "Do not label activity as fraud until the customer confirms they do not recognize one or more charges.",
         "Before opening a fraud case, briefly restate the transactions the customer does not recognize and ask them to confirm the selection.",
+        "After the customer confirms the disputed selection, explain that a case is being raised with the fraud investigation team and that eligible pending authorizations will be released or voided, posted charges will receive provisional credits, the affected card will be blocked, and a secure message will summarize the case.",
+        "Call triage_fraud_case once after the customer's disputed transaction selection is clear.",
         "Keep spoken responses brief and specific."
       ],
       "must_not_do": [
         "Do not block the card or issue a replacement before the customer confirms fraud.",
+        "Do not sequence low-level fraud mitigation tools for an active fraud alert when triage_fraud_case can handle the workflow.",
+        "Do not claim provisional credits are final; state they are pending the full fraud investigation.",
         "Do not treat catalog guidance as live operational state."
       ],
       "tool_dependencies": [
-        "get_open_fraud_alert"
+        "get_open_fraud_alert",
+        "triage_fraud_case"
       ],
-      "customer_safe_summary": "Review the suspicious charges with the customer first, ask whether they recognize them, then confirm the selected disputed transactions before moving into card protection and replacement.",
-      "source_policy_ref": "fraud_voice_demo_v1",
-      "version": "1.0",
-      "last_reviewed": "2026-07-07"
+      "customer_safe_summary": "Review the suspicious charges with the customer first, ask whether they recognize them, confirm the selected disputed transactions, then raise the fraud case and explain provisional remediation pending investigation.",
+      "source_policy_ref": "fraud_alert_voice_mitigation_v2",
+      "version": "2.0",
+      "last_reviewed": "2026-07-09"
     },
     {
       "topic_id": "recognized_activity",
@@ -33,19 +38,20 @@
       "channel": "VOICE",
       "applies_when": ["customer_recognizes_charges"],
       "must_do": [
-        "Resolve the fraud alert as recognized activity.",
+        "Submit triage_fraud_case with empty disputed authorization and transaction arrays when the customer recognizes every flagged charge.",
         "Explain that the card can remain active because the customer recognized the charges."
       ],
       "must_not_do": [
-        "Do not freeze or replace the card when the customer confirms the activity is legitimate."
+        "Do not freeze or replace the card when the customer confirms the activity is legitimate.",
+        "Do not ask the customer to restate transaction IDs that are already present in trusted fraud context."
       ],
       "tool_dependencies": [
-        "resolve_fraud_alert"
+        "triage_fraud_case"
       ],
-      "customer_safe_summary": "If the charges are legitimate, close the alert and reassure the customer that no card action is required.",
-      "source_policy_ref": "fraud_voice_demo_v1",
-      "version": "1.0",
-      "last_reviewed": "2026-07-07"
+      "customer_safe_summary": "If the charges are legitimate, close the alert through the fraud triage workflow and reassure the customer that no card action is required.",
+      "source_policy_ref": "fraud_alert_voice_mitigation_v2",
+      "version": "2.0",
+      "last_reviewed": "2026-07-09"
     },
     {
       "topic_id": "replacement_card",
@@ -54,20 +60,21 @@
       "channel": "VOICE",
       "applies_when": ["customer_confirms_fraud"],
       "must_do": [
-        "Block the compromised card before issuing a replacement.",
-        "Explain that the replacement card is virtual and available immediately for demo purposes."
+        "For confirmed disputed activity, let triage_fraud_case block the compromised card and issue the replacement when issue_replacement is true.",
+        "After triage succeeds, summarize only confirmed tool results, including whether the compromised card was blocked and whether a replacement card was issued.",
+        "Explain that any replacement card availability is part of fraud case remediation, not a separate promise made before the workflow succeeds."
       ],
       "must_not_do": [
+        "Do not call report_lost_stolen_card or issue_replacement_card_tool separately during active fraud alert triage.",
         "Do not imply that digital wallet provisioning has already happened when only the replacement card has been issued."
       ],
       "tool_dependencies": [
-        "report_lost_stolen_card",
-        "issue_replacement_card_tool"
+        "triage_fraud_case"
       ],
-      "customer_safe_summary": "After blocking the compromised card, issue the replacement virtual card and confirm its new last four digits.",
-      "source_policy_ref": "fraud_voice_demo_v1",
-      "version": "1.0",
-      "last_reviewed": "2026-07-07"
+      "customer_safe_summary": "When fraud is confirmed, the fraud triage workflow blocks the compromised card and may issue a replacement card as part of the case remediation.",
+      "source_policy_ref": "fraud_alert_voice_mitigation_v2",
+      "version": "2.0",
+      "last_reviewed": "2026-07-09"
     },
     {
       "topic_id": "wallet_provisioning",
@@ -76,19 +83,22 @@
       "channel": "VOICE",
       "applies_when": ["replacement_card_issued"],
       "must_do": [
+        "Treat wallet provisioning as optional recovery help after fraud triage succeeds.",
+        "Offer wallet provisioning only after a replacement card exists and the customer asks for continued card access or explicitly agrees when offered.",
         "Describe wallet provisioning as a queued follow-up step.",
         "Keep wallet language separate from replacement issuance language."
       ],
       "must_not_do": [
+        "Do not push a virtual card to Google Wallet before the customer asks or agrees.",
         "Do not say the card is already in the wallet unless the wallet queue tool has succeeded."
       ],
       "tool_dependencies": [
         "push_card_to_google_wallet"
       ],
-      "customer_safe_summary": "Queue the new card for Google Wallet separately and clearly describe it as pending or queued.",
-      "source_policy_ref": "fraud_voice_demo_v1",
-      "version": "1.0",
-      "last_reviewed": "2026-07-07"
+      "customer_safe_summary": "After a replacement card is issued, offer to queue it for Google Wallet only if the customer wants immediate card access, and describe the queue as pending until the tool succeeds.",
+      "source_policy_ref": "fraud_alert_voice_mitigation_v2",
+      "version": "2.0",
+      "last_reviewed": "2026-07-09"
     },
     {
       "topic_id": "human_escalation",
@@ -98,18 +108,20 @@
       "applies_when": ["customer_requests_human", "agent_cannot_resolve"],
       "must_do": [
         "Offer a human handoff when the customer requests a supervisor or the request exceeds tool capabilities.",
-        "Preserve the current fraud context for the handoff."
+        "Preserve the current fraud context for the handoff.",
+        "If triage_fraud_case fails after one retry for a transient technical issue, summarize the problem briefly and offer human escalation."
       ],
       "must_not_do": [
-        "Do not improvise unsupported dispute or card-operations actions."
+        "Do not improvise unsupported dispute or card-operations actions.",
+        "Do not retry validation failures, not-found responses, declined business outcomes, or workflow responses that explain the requested action cannot be performed."
       ],
       "tool_dependencies": [
         "transfer_to_human"
       ],
       "customer_safe_summary": "If the customer wants a human representative, transfer the conversation without losing the fraud case context.",
-      "source_policy_ref": "fraud_voice_demo_v1",
-      "version": "1.0",
-      "last_reviewed": "2026-07-07"
+      "source_policy_ref": "fraud_alert_voice_mitigation_v2",
+      "version": "2.0",
+      "last_reviewed": "2026-07-09"
     }
   ]
 }
