@@ -68,6 +68,18 @@ resource "google_service_account" "banking_service_account" {
   }
 }
 
+resource "google_service_account" "banking_ui_service_account" {
+  account_id   = "banking-ui-service-sa"
+  display_name = "Banking UI Service Account"
+
+  lifecycle {
+    ignore_changes = [
+      description,
+      display_name
+    ]
+  }
+}
+
 resource "google_service_account" "banking_db_migration_service_account" {
   account_id   = "banking-db-migration-sa"
   display_name = "Banking DB Migration Service Account"
