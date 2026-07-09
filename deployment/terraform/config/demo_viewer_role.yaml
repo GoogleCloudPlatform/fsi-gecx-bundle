@@ -51,3 +51,7 @@ roles:
 
   # Secret Manager
   - roles/secretmanager.viewer
+
+  # Identity Platform
+  - roles/identityplatform.viewer
+
