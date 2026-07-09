@@ -19,3 +19,7 @@ permissions:
 
   - datacatalog.taxonomies.get
   - datacatalog.taxonomies.list
+
+  # Storage buckets listing
+  - storage.buckets.list
+  - storage.buckets.get

@@ -3,37 +3,37 @@ roles:
   - roles/bigquery.metadataViewer
   - roles/bigquery.jobUser
 
-  # Roles to view Streams in console
+  # Roles to view Streams
   - roles/datastream.viewer
 
-  # Roles to view Cloud Run in console
+  # Roles to view Cloud Run
   - roles/run.viewer
 
-  # Roles to view Pub/Sub topics and subscriptions in console
+  # Roles to view Pub/Sub topics and subscriptions
   - roles/pubsub.viewer
 
-  # Roles to view Eventarc triggers in console
+  # Roles to view Eventarc triggers
   - roles/eventarc.viewer
 
-  # Roles to view Cloud Scheduler jobs in console
+  # Roles to view Cloud Scheduler jobs
   - roles/cloudscheduler.viewer
 
-  # Roles to view Artifact Registry in console
+  # Roles to view Artifact Registry
   - roles/artifactregistry.viewer
 
-  # Roles to view Compute Engine in console
+  # Roles to view Compute Engine
   - roles/compute.viewer
 
-  # Roles to view Redis in console
+  # Roles to view Redis
   - roles/redis.viewer
 
-  # Roles to view KMS in console
+  # Roles to view KMS
   - roles/cloudkms.viewer
 
-  # Roles to view Data Catalog in console
+  # Roles to view Data Catalog
   - roles/datacatalog.viewer
 
-  # Roles to view Cloud Build in console
+  # Roles to view Cloud Build
   - roles/cloudbuild.viewer
 
   # Gemini Enterprise for Customer Experience (CES)
@@ -42,3 +42,6 @@ roles:
   # Dataplex (Knowledge Catalog)
   - roles/dataplex.viewer
   - roles/dataplex.catalogViewer
+
+  # Discovery Engine (Agent Search)
+  - roles/discoveryengine.viewer

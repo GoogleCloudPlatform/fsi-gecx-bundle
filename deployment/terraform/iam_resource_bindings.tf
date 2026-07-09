@@ -245,6 +245,13 @@ resource "google_storage_bucket_iam_member" "discovery_engine_site_crawled_conte
   member = local.discovery_engine_service_account
 }
 
+resource "google_storage_bucket_iam_member" "database_viewer_site_crawled_content_viewer" {
+  for_each = toset(local.iam_console_viewers)
+  bucket   = google_storage_bucket.site_crawled_content.name
+  role     = "roles/storage.objectViewer"
+  member   = each.value
+}
+
 resource "google_storage_bucket_iam_member" "iceberg_connection_access" {
   bucket = google_storage_bucket.iceberg_warehouse.name
   role   = "roles/storage.objectUser"
