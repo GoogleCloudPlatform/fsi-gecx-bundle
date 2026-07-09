@@ -196,6 +196,21 @@ resource "google_cloud_run_v2_service" "banking_service" {
       }
 
       env {
+        name  = "FULL_RESET_JOB_NAME"
+        value = "banking-db-reset"
+      }
+
+      env {
+        name  = "FULL_RESET_JOB_PROJECT_ID"
+        value = var.project_id
+      }
+
+      env {
+        name  = "FULL_RESET_JOB_REGION"
+        value = var.region
+      }
+
+      env {
         name  = "CORS_ALLOWED_ORIGINS"
         value = local.cors_allowed_origins
       }
@@ -830,6 +845,74 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
   depends_on = [
     google_project_service.run_googleapis_com,
     google_secret_manager_secret_iam_member.banking_db_migration_postgres_root_password_accessor
+  ]
+}
+
+resource "google_cloud_run_v2_job" "db_reset_job" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  name     = "banking-db-reset"
+  location = var.region
+
+  template {
+    template {
+      max_retries     = 0
+      timeout         = "300s"
+      service_account = google_service_account.banking_db_reset_service_account.email
+
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.banking_data.connection_name]
+        }
+      }
+
+      containers {
+        image   = "us-central1-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/banking-service:latest"
+        command = ["python"]
+        args    = ["services/seeding_service.py"]
+
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+
+        env {
+          name  = "DATABASE_URL"
+          value = "postgresql+psycopg2://${google_sql_user.banking_db_reset_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+        }
+
+        env {
+          name  = "DB_IAM_AUTH"
+          value = "true"
+        }
+
+        env {
+          name  = "PYTHONUNBUFFERED"
+          value = "1"
+        }
+      }
+
+      vpc_access {
+        network_interfaces {
+          network    = google_compute_network.fsi_gecx_vpc.name
+          subnetwork = google_compute_subnetwork.fsi_gecx_subnet.name
+        }
+        egress = "PRIVATE_RANGES_ONLY"
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version
+    ]
+  }
+
+  depends_on = [
+    google_project_service.run_googleapis_com,
+    google_sql_user.banking_db_reset_iam_user,
   ]
 }
 

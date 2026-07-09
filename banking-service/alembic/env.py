@@ -226,8 +226,11 @@ def run_migrations_online() -> None:
                     project_id = os.getenv("PROJECT_ID")
 
                 schemas = ["identity", "kyc", "ledger", "cards", "operations", "origination", "audit", "admin", "catalog", "ref_data", "merchants"]
+                reset_schemas = [s for s in schemas if s != "admin"]
                 sa_names = ["banking-service-sa", "kyc-service-sa", "ledger-service-sa"]
                 roles = [f"{sa}@{project_id}.iam" if project_id and str(project_id) != "None" else sa for sa in sa_names]
+                reset_sa_names = ["banking-db-reset-sa"]
+                reset_roles = [f"{sa}@{project_id}.iam" if project_id and str(project_id) != "None" else sa for sa in reset_sa_names]
                 if os.getenv("IAM_DBA_USERS"):
                     roles.extend([u.strip() for u in os.getenv("IAM_DBA_USERS").split(",") if u.strip()])
 
@@ -235,7 +238,7 @@ def run_migrations_online() -> None:
                 if os.getenv("IAM_DB_VIEWER_USERS"):
                     viewer_roles.extend([u.strip() for u in os.getenv("IAM_DB_VIEWER_USERS").split(",") if u.strip()])
 
-                for role in roles + viewer_roles:
+                for role in roles + viewer_roles + reset_roles:
                     try:
                         with connection.begin_nested():
                             stmt = f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = \'{role}\') THEN CREATE ROLE "{role}" NOLOGIN; END IF; END $$;'
@@ -274,7 +277,7 @@ def run_migrations_online() -> None:
                             logger.debug(f"Notice: Could not grant permissions on {s} to {role}: {grant_err}")
 
                 for role in viewer_roles:
-                    for s in schemas:
+                    for s in reset_schemas:
                         try:
                             with connection.begin_nested():
                                 connection.execute(sa.text(f'GRANT USAGE ON SCHEMA {s} TO "{role}";'))
@@ -282,6 +285,25 @@ def run_migrations_online() -> None:
                                 connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT ON TABLES TO "{role}";'))
                         except Exception as grant_err:
                             logger.debug(f"Notice: Could not grant viewer permissions on {s} to {role}: {grant_err}")
+
+                current_database = connection.execute(sa.text("SELECT current_database()")).scalar()
+                for role in reset_roles:
+                    try:
+                        with connection.begin_nested():
+                            connection.execute(sa.text(f'GRANT CONNECT ON DATABASE "{current_database}" TO "{role}";'))
+                    except Exception as grant_err:
+                        logger.debug(f"Notice: Could not grant reset database connection to {role}: {grant_err}")
+
+                    for s in schemas:
+                        try:
+                            with connection.begin_nested():
+                                connection.execute(sa.text(f'GRANT USAGE ON SCHEMA {s} TO "{role}";'))
+                                connection.execute(sa.text(f'GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA {s} TO "{role}";'))
+                                connection.execute(sa.text(f'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {s} TO "{role}";'))
+                                connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON TABLES TO "{role}";'))
+                                connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO "{role}";'))
+                        except Exception as grant_err:
+                            logger.debug(f"Notice: Could not grant reset permissions on {s} to {role}: {grant_err}")
 
                 immutable_ledger_roles = set(roles + viewer_roles)
                 for role in immutable_ledger_roles:

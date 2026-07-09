@@ -92,6 +92,18 @@ resource "google_service_account" "banking_db_migration_service_account" {
   }
 }
 
+resource "google_service_account" "banking_db_reset_service_account" {
+  account_id   = "banking-db-reset-sa"
+  display_name = "Banking DB Reset Service Account"
+
+  lifecycle {
+    ignore_changes = [
+      description,
+      display_name
+    ]
+  }
+}
+
 resource "google_service_account" "knowledge_catalog_sync_service_account" {
   account_id   = "knowledge-catalog-sync-sa"
   display_name = "Knowledge Catalog Sync Service Account"
