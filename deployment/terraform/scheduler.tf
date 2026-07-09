@@ -14,15 +14,15 @@
 
 resource "google_cloud_scheduler_job" "data_generator_cron" {
   name             = "data-generator-cron"
-  description      = "Trigger synthetic data generation every 1 minute"
-  schedule         = "*/1 * * * *"
+  description      = "Trigger steady lightweight synthetic card activity"
+  schedule         = var.data_generator_cron_schedule
   time_zone        = "Etc/UTC"
-  attempt_deadline = "120s"
+  attempt_deadline = var.data_generator_request_timeout
   region           = var.region
 
   pubsub_target {
     topic_name = google_pubsub_topic.data_generator_trigger.id
-    data       = base64encode("{\"num_accounts\": 2, \"transactions_per_account\": 5}")
+    data       = base64encode("{}")
   }
 
   lifecycle {

@@ -22,7 +22,14 @@ from . import mcp  # Import shared FastMCP server instance
 from routers.mcp.utils import requires_user_assertion, verified_customer_id_var
 from utils.database import SessionLocal
 from repositories.credit_card import CreditCardRepository
-from services.credit_card import freeze_card, apply_limit_increase, reverse_posted_fee
+from services.credit_card import (
+    apply_limit_increase,
+    freeze_card,
+    issue_replacement_card,
+    queue_wallet_provisioning,
+    reverse_posted_fee,
+)
+from services.fraud_alerts import FraudAlertService
 from services.voice_bidi import send_session_event
 
 logger = logging.getLogger(__name__)
@@ -159,6 +166,316 @@ async def unfreeze_card(
     except Exception as e:
         logger.error(f"Error in FastMCP unfreeze_card: {e}")
         return {"success": False, "message": f"Internal error: {str(e)}"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def issue_replacement_card_tool(
+    account_id: str = None,
+    wallet_provider: str = "GOOGLE_WALLET",
+    ctx: Context = None,
+) -> dict:
+    """
+    Issues a replacement virtual card for the verified customer and queues wallet provisioning.
+
+    Args:
+        account_id: Optional unique identifier for the credit card account.
+        wallet_provider: Optional wallet target for digital card provisioning.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    logger.info(
+        "FastMCP issue_replacement_card_tool invoked for account: %s (Customer: %s)",
+        account_id,
+        verified_customer_id,
+    )
+
+    db = SessionLocal()
+    repo = CreditCardRepository(db)
+    try:
+        if not account_id:
+            account = repo.get_account_by_customer(verified_customer_id)
+            if not account:
+                return {"success": False, "message": "No credit card account found for the user."}
+            account_id = str(account.id)
+
+        if not re.match(r"^[a-zA-Z0-9_-]{4,64}$", str(account_id)):
+            return {"success": False, "message": "Access Denied: Invalid account ID format."}
+
+        account = repo.get_account_by_customer(verified_customer_id)
+        if not account or str(account.id) != str(account_id):
+            logger.error(
+                "Security Alert: BOLA/IDOR attempt or account not found for %s by %s",
+                account_id,
+                verified_customer_id,
+            )
+            return {"success": False, "message": "Account not found or unauthorized."}
+
+        open_alert = FraudAlertService(db).get_open_alert_for_account(credit_account_id=account.id)
+        result = issue_replacement_card(
+            db,
+            account_id=str(account.id),
+            reason="CUSTOMER_FRAUD_REISSUE",
+            wallet_provider=wallet_provider,
+            issue_virtual_card=True,
+            fraud_alert_id=open_alert["fraud_alert_id"] if open_alert else None,
+            compromised_card_id=open_alert["card_id"] if open_alert else None,
+        )
+
+        session_id = f"session-{verified_customer_id}"
+        await send_session_event(
+            session_id,
+            {
+                "type": "CARD_REPLACED",
+                "status": result["status"],
+                "replacement_status": result["replacement_status"],
+                "new_last_four": result["new_last_four"],
+                "new_card_id": result["new_card_id"],
+                "new_card_token": result["new_card_token"],
+                "is_virtual": result["is_virtual"],
+                "fraud_alert_id": result.get("fraud_alert_id"),
+                "compromised_card_id": result.get("compromised_card_id"),
+            },
+        )
+
+        return {
+            "success": True,
+            "message": result["message"],
+            "new_last_four": result["new_last_four"],
+            "new_card_id": result["new_card_id"],
+            "new_card_token": result["new_card_token"],
+            "replacement_status": result["replacement_status"],
+            "is_virtual": result["is_virtual"],
+            "fraud_alert_id": result.get("fraud_alert_id"),
+            "compromised_card_id": result.get("compromised_card_id"),
+        }
+    except Exception as e:
+        logger.error(f"Error in FastMCP issue_replacement_card_tool: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def push_card_to_google_wallet(
+    account_id: str = None,
+    card_token: str = None,
+    wallet_provider: str = "GOOGLE_WALLET",
+    ctx: Context = None,
+) -> dict:
+    """
+    Queues a mocked digital-wallet push for the verified customer's active card.
+
+    Args:
+        account_id: Optional unique identifier for the credit card account.
+        card_token: Optional card token. Defaults to the account's active card.
+        wallet_provider: Optional wallet target for digital card provisioning.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    logger.info(
+        "FastMCP push_card_to_google_wallet invoked for account: %s (Customer: %s)",
+        account_id,
+        verified_customer_id,
+    )
+
+    db = SessionLocal()
+    repo = CreditCardRepository(db)
+    try:
+        if not account_id:
+            account = repo.get_account_by_customer(verified_customer_id)
+            if not account:
+                return {"success": False, "message": "No credit card account found for the user."}
+            account_id = str(account.id)
+
+        if not re.match(r"^[a-zA-Z0-9_-]{4,64}$", str(account_id)):
+            return {"success": False, "message": "Access Denied: Invalid account ID format."}
+
+        account = repo.get_account_by_customer(verified_customer_id)
+        if not account or str(account.id) != str(account_id):
+            logger.error(
+                "Security Alert: BOLA/IDOR attempt or account not found for %s by %s",
+                account_id,
+                verified_customer_id,
+            )
+            return {"success": False, "message": "Account not found or unauthorized."}
+
+        if not card_token:
+            cards = repo.list_cards_by_account(account.id)
+            active_card = next((card for card in cards if card.is_active and card.status == "ACTIVE"), None)
+            if not active_card:
+                return {"success": False, "message": "No active card found for wallet provisioning."}
+            card_token = active_card.card_token
+        else:
+            cards = repo.list_cards_by_account(account.id)
+            matching_card = next(
+                (
+                    card for card in cards
+                    if card.card_token == card_token or str(card.id) == str(card_token)
+                ),
+                None,
+            )
+            if not matching_card:
+                return {"success": False, "message": "Card not found for wallet provisioning."}
+            card_token = matching_card.card_token
+
+        open_alert = FraudAlertService(db).get_open_alert_for_account(credit_account_id=account.id)
+        result = queue_wallet_provisioning(
+            db,
+            account_id=str(account.id),
+            card_token=card_token,
+            wallet_provider=wallet_provider,
+            initiated_by="CUSTOMER_VOICE_SUPPORT",
+            fraud_alert_id=open_alert["fraud_alert_id"] if open_alert else None,
+        )
+        return {
+            "success": True,
+            "message": result["message"],
+            "card_token": result["card_token"],
+            "wallet_provider": result["wallet_provider"],
+            "wallet_provisioning_status": result["wallet_provisioning_status"],
+            "fraud_alert_id": result.get("fraud_alert_id"),
+        }
+    except Exception as e:
+        logger.error(f"Error in FastMCP push_card_to_google_wallet: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def get_open_fraud_alert(
+    ctx: Context = None,
+) -> dict:
+    """
+    Retrieves the latest open fraud alert for the verified customer.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    logger.info("FastMCP get_open_fraud_alert invoked for customer: %s", verified_customer_id)
+
+    db = SessionLocal()
+    try:
+        service = FraudAlertService(db)
+        return service.get_open_alert_details(auth_provider_uid=verified_customer_id)
+    except Exception as e:
+        logger.error(f"Error in FastMCP get_open_fraud_alert: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}", "fraud_alert": None}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def resolve_fraud_alert(
+    resolution: str,
+    ctx: Context = None,
+) -> dict:
+    """
+    Resolves the latest open fraud alert for the verified customer.
+
+    Args:
+        resolution: Resolution code such as CUSTOMER_CONFIRMED_FRAUD or CUSTOMER_RECOGNIZED.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    logger.info(
+        "FastMCP resolve_fraud_alert invoked for customer: %s with resolution=%s",
+        verified_customer_id,
+        resolution,
+    )
+
+    allowed_resolutions = {"CUSTOMER_CONFIRMED_FRAUD", "CUSTOMER_RECOGNIZED"}
+    normalized_resolution = str(resolution or "").strip().upper()
+    if normalized_resolution not in allowed_resolutions:
+        return {
+            "success": False,
+            "message": "Invalid fraud alert resolution.",
+            "fraud_alert": None,
+        }
+
+    db = SessionLocal()
+    try:
+        service = FraudAlertService(db)
+        return service.resolve_open_alert_for_customer(
+            auth_provider_uid=verified_customer_id,
+            resolution=normalized_resolution,
+        )
+    except Exception as e:
+        logger.error(f"Error in FastMCP resolve_fraud_alert: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}", "fraud_alert": None}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def triage_fraud_case(
+    fraud_alert_id: str,
+    disputed_authorization_ids: list[str] = None,
+    disputed_transaction_ids: list[str] = None,
+    issue_replacement: bool = True,
+    escalate: bool = False,
+    idempotency_key: str = None,
+    ctx: Context = None,
+) -> dict:
+    """
+    Triages an active fraud case after customer confirmation.
+
+    Args:
+        fraud_alert_id: Fraud alert identifier returned by get_open_fraud_alert.
+        disputed_authorization_ids: Pending authorization ids the customer disputes.
+        disputed_transaction_ids: Posted transaction ids the customer disputes.
+        issue_replacement: Whether to issue a replacement virtual card for confirmed fraud.
+        escalate: Whether to mark the case for human fraud specialist review.
+        idempotency_key: Optional stable key for retrying the same voice workflow safely.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    logger.info(
+        "FastMCP triage_fraud_case invoked for customer=%s fraud_alert_id=%s",
+        verified_customer_id,
+        fraud_alert_id,
+    )
+
+    if not re.match(r"^[a-fA-F0-9-]{32,36}$", str(fraud_alert_id or "")):
+        return {"success": False, "message": "Invalid fraud alert id.", "fraud_alert": None}
+
+    db = SessionLocal()
+    try:
+        service = FraudAlertService(db)
+        result = service.triage_fraud_case(
+            auth_provider_uid=verified_customer_id,
+            fraud_alert_id=fraud_alert_id,
+            disputed_authorization_ids=disputed_authorization_ids or [],
+            disputed_transaction_ids=disputed_transaction_ids or [],
+            issue_replacement=issue_replacement,
+            escalate=escalate,
+            idempotency_key=idempotency_key,
+        )
+
+        if result.get("success"):
+            session_id = f"session-{verified_customer_id}"
+            await send_session_event(
+                session_id,
+                {
+                    "type": "FRAUD_CASE_TRIAGED",
+                    "fraud_alert_id": fraud_alert_id,
+                    "outcome": result.get("outcome"),
+                    "fraud_alert": result.get("fraud_alert"),
+                    "voided_authorizations": result.get("voided_authorizations", []),
+                    "provisional_credits": result.get("provisional_credits", []),
+                    "replacement_card": result.get("replacement_card"),
+                    "secure_message": result.get("secure_message"),
+                    "escalated": result.get("escalated", False),
+                },
+            )
+        return result
+    except ValueError as e:
+        logger.warning(f"Validation error in FastMCP triage_fraud_case: {e}")
+        return {"success": False, "message": str(e), "fraud_alert": None}
+    except Exception as e:
+        logger.error(f"Error in FastMCP triage_fraud_case: {e}")
+        return {"success": False, "message": f"Internal error: {str(e)}", "fraud_alert": None}
     finally:
         db.close()
 

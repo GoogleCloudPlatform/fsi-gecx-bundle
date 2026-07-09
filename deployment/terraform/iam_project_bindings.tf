@@ -143,6 +143,12 @@ resource "google_project_iam_member" "cloudbuild_sa_build_runner" {
   member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
 
+resource "google_project_iam_member" "knowledge_catalog_sync_sa_catalog_editor" {
+  project = data.google_project.project.project_id
+  role    = "roles/dataplex.catalogEditor"
+  member  = "serviceAccount:${google_service_account.knowledge_catalog_sync_service_account.email}"
+}
+
 resource "google_project_iam_member" "banking_service_sa_fcm_admin" {
   project = data.google_project.project.project_id
   role    = "roles/firebasecloudmessaging.admin"

@@ -178,6 +178,9 @@ function AppContent() {
   const [fcmToken, setFcmToken] = useState(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationPermission, setNotificationPermission] = useState(
+    typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
+  );
   const [fbUser, setFbUser] = useState(null);
 
   useEffect(() => {
@@ -223,6 +226,8 @@ function AppContent() {
   useEffect(() => {
     if (fbUser) {
       fetchUnreadCount();
+      const interval = setInterval(fetchUnreadCount, 15000);
+      return () => clearInterval(interval);
     }
   }, [fbUser, fetchUnreadCount]);
 
@@ -255,13 +260,19 @@ function AppContent() {
   }, [fbUser, location.pathname, fetchAccountsSummary]);
 
   useEffect(() => {
+    const isSupportMessageForCurrentUser = (data = {}) => {
+      const notificationUserId = data.user_id;
+      const currentUserId = customerProfile?.user_id || fbUser?.uid;
+      return data.type === 'support_message' && (!notificationUserId || notificationUserId === currentUserId);
+    };
+
     const handleNotification = (e) => {
       console.log("Received custom push notification event:", e.detail);
       const payload = e.detail;
       if (payload && (payload.notification || payload.data)) {
-        const isSupportMessage = payload.data?.type === 'support_message'
-          && payload.data.title && payload.data.body
-          && payload.data.user_id === customerProfile?.user_id;
+        const isSupportMessage = isSupportMessageForCurrentUser(payload.data)
+          && payload.data.title
+          && payload.data.body;
 
         const isBroadcastAnnoucement = payload.data?.type === 'broadcast_announcement'
           && payload.data.title && payload.data.body;
@@ -276,15 +287,25 @@ function AppContent() {
         } else {
           console.log("Silent topic message or message without visual content received");
         }
-        if (payload.data?.type === 'support_message' &&
-            (!payload.data?.user_id || payload.data.user_id === customerProfile?.user_id)) {
+        if (isSupportMessageForCurrentUser(payload.data)) {
+          setUnreadCount(prev => prev + 1);
           fetchUnreadCount();
         }
       }
     };
+    const handleSecureMessageCreated = (e) => {
+      const data = e.detail || {};
+      if (isSupportMessageForCurrentUser({ type: 'support_message', user_id: data.user_id })) {
+        fetchUnreadCount();
+      }
+    };
     window.addEventListener('firebase-push-notification', handleNotification);
-    return () => window.removeEventListener('firebase-push-notification', handleNotification);
-  }, [fetchUnreadCount, customerProfile]);
+    window.addEventListener('secure-message-created', handleSecureMessageCreated);
+    return () => {
+      window.removeEventListener('firebase-push-notification', handleNotification);
+      window.removeEventListener('secure-message-created', handleSecureMessageCreated);
+    };
+  }, [fetchUnreadCount, customerProfile, fbUser]);
 
 
 
@@ -328,6 +349,7 @@ function AppContent() {
         if (permissionStatusObj) {
           const state = permissionStatusObj.state;
           console.log("Notification permission state changed:", state);
+          setNotificationPermission(state);
           if (state === 'denied' || state === 'prompt') {
             const registeredToken = localStorage.getItem('registered_fcm_token');
             if (registeredToken) {
@@ -336,6 +358,7 @@ function AppContent() {
                 await unregisterDeviceToken(registeredToken);
                 console.log("FCM token unregistered from backend successfully.");
                 localStorage.removeItem('registered_fcm_token');
+                setFcmToken(null);
               } catch (err) {
                 console.error("Error unregistering FCM token:", err);
               }
@@ -346,6 +369,7 @@ function AppContent() {
 
       navigator.permissions.query({ name: 'notifications' }).then((status) => {
         permissionStatusObj = status;
+        setNotificationPermission(status.state);
         status.addEventListener('change', handlePermissionChange);
       }).catch(err => {
         console.warn("Permissions API query for notifications not supported or failed:", err);
@@ -358,6 +382,12 @@ function AppContent() {
       };
     }
   }, [fbUser]);
+
+  const handleEnableNotifications = async () => {
+    if (!window.firebaseNotifications?.requestPermission) return;
+    await window.firebaseNotifications.requestPermission();
+    setNotificationPermission(window.firebaseNotifications.getPermissionState?.() || Notification.permission);
+  };
 
 
   const userDataRef = useRef({ email: null, sub: null });
@@ -1271,6 +1301,17 @@ function AppContent() {
                           <MessageSquare className="w-3 h-3 text-slate-400" />
                           <span>Secure Messages</span>
                         </Link>
+                        {notificationPermission !== 'granted' && (
+                          <button
+                            onClick={handleEnableNotifications}
+                            disabled={notificationPermission === 'denied' || notificationPermission === 'unsupported'}
+                            className="flex-grow py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                            title={notificationPermission === 'denied' ? 'Notifications are blocked in browser settings' : 'Enable browser push notifications'}
+                          >
+                            <Bell className="w-3 h-3 text-slate-400" />
+                            <span>{notificationPermission === 'denied' ? 'Notifications Blocked' : 'Enable Alerts'}</span>
+                          </button>
+                        )}
                         {isAltPressed && (
                           <button
                             onClick={handleCopyNewToken}
@@ -1963,7 +2004,7 @@ function AppContent() {
                 Dismiss
               </button>
               {activeNotification.data?.type === 'support_message' && 
-               (!activeNotification.data?.user_id || activeNotification.data.user_id === customerProfile?.user_id) && (
+               (!activeNotification.data?.user_id || activeNotification.data.user_id === (customerProfile?.user_id || fbUser?.uid)) && (
                 <button 
                   onClick={() => {
                     setActiveNotification(null);

@@ -156,6 +156,41 @@ resource "google_cloud_run_v2_service" "banking_service" {
       }
 
       env {
+        name  = "KNOWLEDGE_CATALOG_ENABLED"
+        value = "true"
+      }
+
+      env {
+        name  = "KNOWLEDGE_CATALOG_PROJECT_ID"
+        value = var.project_id
+      }
+
+      env {
+        name  = "KNOWLEDGE_CATALOG_LOCATION"
+        value = var.region
+      }
+
+      env {
+        name  = "KNOWLEDGE_CATALOG_ENTRY_GROUP_ID"
+        value = google_dataplex_entry_group.fraud_support_guidance.entry_group_id
+      }
+
+      env {
+        name  = "KNOWLEDGE_CATALOG_ENTRY_TYPE_ID"
+        value = google_dataplex_entry_type.fraud_support_topic.entry_type_id
+      }
+
+      env {
+        name  = "KNOWLEDGE_CATALOG_POLICY_ASPECT_TYPE_ID"
+        value = google_dataplex_aspect_type.fraud_support_policy.aspect_type_id
+      }
+
+      env {
+        name  = "KNOWLEDGE_CATALOG_SUMMARY_ASPECT_TYPE_ID"
+        value = google_dataplex_aspect_type.fraud_customer_summary.aspect_type_id
+      }
+
+      env {
         name  = "DATA_GENERATOR_URL"
         value = var.deploy_cloud_run_services ? google_cloud_run_v2_service.data_generator[0].uri : "http://localhost:8001"
       }
@@ -568,6 +603,11 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
       }
 
       env {
+        name  = "BANKING_SERVICE_MCP_URL"
+        value = "https://banking-service-${data.google_project.project.number}.${var.region}.run.app/api/mcp/"
+      }
+
+      env {
         name  = "LIVEKIT_URL"
         value = "ws://${google_compute_instance.livekit_server.network_interface[0].network_ip}:7880"
       }
@@ -661,6 +701,31 @@ resource "google_cloud_run_v2_service" "data_generator" {
       env {
         name  = "SWIPE_WORKFLOW_CONCURRENCY"
         value = tostring(var.data_generator_swipe_workflow_concurrency)
+      }
+
+      env {
+        name  = "PULSE_WINDOW_SECONDS"
+        value = tostring(var.data_generator_pulse_window_seconds)
+      }
+
+      env {
+        name  = "PULSE_MIN_EVENTS"
+        value = tostring(var.data_generator_pulse_min_events)
+      }
+
+      env {
+        name  = "PULSE_MAX_EVENTS"
+        value = tostring(var.data_generator_pulse_max_events)
+      }
+
+      env {
+        name  = "SWIPE_REQUEST_TIMEOUT_SECONDS"
+        value = tostring(var.data_generator_swipe_request_timeout_seconds)
+      }
+
+      env {
+        name  = "AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE"
+        value = tostring(var.data_generator_auto_paydown_max_accounts_per_pulse)
       }
     }
   }
@@ -768,10 +833,83 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
   ]
 }
 
-resource "google_cloud_run_v2_job" "lakehouse_view_reconcile" {
+resource "google_cloud_run_v2_job" "knowledge_catalog_sync" {
   count    = var.deploy_cloud_run_services ? 1 : 0
-  name     = "lakehouse-view-reconcile"
+  name     = "banking-knowledge-catalog-sync"
   location = var.region
+
+  template {
+    template {
+      max_retries     = 1
+      timeout         = "300s"
+      service_account = google_service_account.knowledge_catalog_sync_service_account.email
+
+      containers {
+        image   = "us-central1-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/banking-service:latest"
+        command = ["python"]
+        args    = ["scripts/sync_fraud_support_guidance.py"]
+
+        env {
+          name  = "KNOWLEDGE_CATALOG_ENABLED"
+          value = "true"
+        }
+
+        env {
+          name  = "KNOWLEDGE_CATALOG_PROJECT_ID"
+          value = var.project_id
+        }
+
+        env {
+          name  = "KNOWLEDGE_CATALOG_LOCATION"
+          value = var.region
+        }
+
+        env {
+          name  = "KNOWLEDGE_CATALOG_ENTRY_GROUP_ID"
+          value = google_dataplex_entry_group.fraud_support_guidance.entry_group_id
+        }
+
+        env {
+          name  = "KNOWLEDGE_CATALOG_ENTRY_TYPE_ID"
+          value = google_dataplex_entry_type.fraud_support_topic.entry_type_id
+        }
+
+        env {
+          name  = "KNOWLEDGE_CATALOG_POLICY_ASPECT_TYPE_ID"
+          value = google_dataplex_aspect_type.fraud_support_policy.aspect_type_id
+        }
+
+        env {
+          name  = "KNOWLEDGE_CATALOG_SUMMARY_ASPECT_TYPE_ID"
+          value = google_dataplex_aspect_type.fraud_customer_summary.aspect_type_id
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version
+    ]
+  }
+
+  depends_on = [
+    google_project_service.run_googleapis_com,
+    google_project_iam_member.knowledge_catalog_sync_sa_catalog_editor,
+    google_dataplex_entry_group.fraud_support_guidance,
+    google_dataplex_entry_type.fraud_support_topic,
+    google_dataplex_aspect_type.fraud_support_policy,
+    google_dataplex_aspect_type.fraud_customer_summary,
+  ]
+}
+
+resource "google_cloud_run_v2_job" "lakehouse_view_reconcile" {
+  count               = var.deploy_cloud_run_services ? 1 : 0
+  name                = "lakehouse-view-reconcile"
+  location            = var.region
+  deletion_protection = false
 
   template {
     template {

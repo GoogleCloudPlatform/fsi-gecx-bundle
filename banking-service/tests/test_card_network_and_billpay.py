@@ -29,6 +29,7 @@ from models.identity import User
 from models.origination import Account
 from models.credit_card import CreditAccount, IssuedCard, TransactionAuthorization, PostedTransaction
 from models.audit import AuditOutbox
+from services.credit_card import queue_wallet_provisioning
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
 test_engine = create_engine(
@@ -274,6 +275,13 @@ async def test_accounts_summary_and_pay_success(async_client, db_session):
     credit_acc.cleared_balance_cents = 15000 # outstanding debt $150.00
     credit_acc.available_credit_cents = 85000
     db_session.commit()
+
+    queue_wallet_provisioning(
+        db_session,
+        account_id=str(credit_acc.id),
+        card_token=card.card_token,
+        wallet_provider="GOOGLE_WALLET",
+    )
     
     # Verify summary API
     summary_resp = await async_client.get("/api/v1/accounts/summary")
@@ -283,6 +291,10 @@ async def test_accounts_summary_and_pay_success(async_client, db_session):
     assert summary_data["deposit_accounts"][0]["cleared_balance_cents"] == 50000
     assert len(summary_data["credit_accounts"]) == 1
     assert summary_data["credit_accounts"][0]["cleared_balance_cents"] == 15000
+    summary_card = summary_data["credit_accounts"][0]["cards"][0]
+    assert summary_card["card_token"] == card.card_token
+    assert summary_card["wallet_provider"] == "GOOGLE_WALLET"
+    assert summary_card["wallet_provisioning_status"] == "QUEUED"
     
     # Pay credit card bill of $50.00 from checking
     pay_payload = {

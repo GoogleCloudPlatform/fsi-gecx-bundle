@@ -81,7 +81,7 @@ All endpoints are protected by `verify_switch_or_presenter_token`, requiring the
 | `GET` | `/health` | Liveness check returning `{"status": "ok", "service": "data-generator"}`. |
 | `POST` | `/simulate-pulse` | Wakes up and synchronously fires a randomized batch of 3–5 swipes across active cards. Used for continuous background heartbeat traffic. |
 | `POST` | `/simulate-surge` | Accepts a `SurgeRequest` and initiates an asynchronous background task (`run_activity_surge_task`) firing 50 rapid-fire swipes over 10 seconds. |
-| `POST` | `/inject-anomaly` | Identifies the CE Presenter card (or accepts an `AnomalyRequest` token) and fires 4 rapid-fire high-risk card-present transactions at `LUXURY BOUTIQUE CANCUN [MEX]` (`risk_score = 30`). This immediately flags real-time fraud alerts in the curated BigQuery view `analytics_curated.international_fraud_anomalies`. |
+| `POST` | `/inject-anomaly` | Identifies the CE Presenter card (or accepts an `AnomalyRequest` token) and fires 5 rapid-fire high-risk digital electronics and gift-card transactions. This immediately flags real-time fraud alerts in the curated BigQuery view `analytics_curated.international_fraud_anomalies`. |
 
 ---
 

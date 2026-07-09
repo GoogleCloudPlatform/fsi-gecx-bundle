@@ -22,6 +22,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models.credit_card import PostedTransaction, TransactionAuthorization
+from models.fraud import FraudAlert
 from repositories.cdc_lakehouse import CdcLakehouseRepository
 from utils.database import enable_session_rbac_override
 from utils.gcp import get_project_id
@@ -123,6 +124,10 @@ class CdcMonitoringService:
             "recent_buffered_events": len(events),
         }
 
+    def get_open_fraud_alert_count(self) -> int:
+        enable_session_rbac_override(self.db)
+        return self.db.query(FraudAlert).filter(FraudAlert.status == "OPEN").count()
+
     def get_cdc_status(self) -> dict:
         operational_latest = self.get_operational_latest_timestamp()
         lakehouse_latest = None
@@ -158,6 +163,24 @@ class CdcMonitoringService:
             "bigquery_error": bq_error,
         }
 
+    def get_cached_cdc_status(self) -> dict:
+        global _cache
+        if _cache:
+            try:
+                cached = _cache.get("cdc_status")
+                if cached:
+                    return json.loads(cached)
+            except Exception as exc:
+                logger.warning(f"Redis CDC status cache error: {exc}")
+
+        status = self.get_cdc_status()
+        if _cache:
+            try:
+                _cache.setex("cdc_status", 15, json.dumps(status))
+            except Exception:
+                pass
+        return status
+
     def get_lakehouse_stream(self, limit: int = 20) -> dict:
         rows = self.lakehouse_repo.list_recent_transactions(limit=limit)
         return {
@@ -171,7 +194,11 @@ class CdcMonitoringService:
             try:
                 cached = _cache.get("datastream_metrics")
                 if cached:
-                    return json.loads(cached)
+                    metrics = json.loads(cached)
+                    open_alerts = self.get_open_fraud_alert_count()
+                    metrics["operational_active_fraud_alerts"] = open_alerts
+                    metrics["active_anomalies"] = open_alerts
+                    return metrics
             except Exception as exc:
                 logger.warning(f"Redis cache error: {exc}")
 
@@ -180,11 +207,20 @@ class CdcMonitoringService:
             "data_freshness_ms": None,
             "total_bytes_processed": None,
             "active_anomalies": 0,
+            "operational_active_fraud_alerts": 0,
+            "lakehouse_fraud_anomalies": 0,
             "status": "SUCCESS",
         }
 
         try:
-            metrics["active_anomalies"] = self.lakehouse_repo.get_anomalies_count()
+            metrics["operational_active_fraud_alerts"] = self.get_open_fraud_alert_count()
+            metrics["active_anomalies"] = metrics["operational_active_fraud_alerts"]
+        except Exception as exc:
+            logger.warning(f"Error fetching operational fraud alert count: {exc}")
+            metrics["status"] = "DEGRADED"
+
+        try:
+            metrics["lakehouse_fraud_anomalies"] = self.lakehouse_repo.get_anomalies_count()
         except Exception as exc:
             logger.warning(f"Error fetching anomalies count: {exc}")
             metrics["status"] = "DEGRADED"

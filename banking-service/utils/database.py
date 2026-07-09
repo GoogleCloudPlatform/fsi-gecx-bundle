@@ -23,6 +23,7 @@ import uuid as _uuid
 from sqlalchemy.types import TypeDecorator, Uuid
 
 logger = logging.getLogger(__name__)
+ALEMENTIC_ENV_FLAG = "ALEMBIC_RUNNING"
 
 class StringComparableUUID(_uuid.UUID):
     def __eq__(self, other):
@@ -149,6 +150,45 @@ def create_db_engine(url_str=DATABASE_URL, **kwargs):
     return new_engine
 
 
+def _is_alembic_runtime() -> bool:
+    return os.getenv(ALEMENTIC_ENV_FLAG, "false").lower() == "true" or any("alembic" in arg for arg in sys.argv)
+
+
+def _sqlite_attach_statements(main_file: str) -> list[str]:
+    if not main_file:
+        return [
+            "ATTACH DATABASE 'file:identity_mem?mode=memory&cache=shared' AS identity;",
+            "ATTACH DATABASE 'file:kyc_mem?mode=memory&cache=shared' AS kyc;",
+            "ATTACH DATABASE 'file:ledger_mem?mode=memory&cache=shared' AS ledger;",
+            "ATTACH DATABASE 'file:cards_mem?mode=memory&cache=shared' AS cards;",
+            "ATTACH DATABASE 'file:operations_mem?mode=memory&cache=shared' AS operations;",
+            "ATTACH DATABASE 'file:origination_mem?mode=memory&cache=shared' AS origination;",
+            "ATTACH DATABASE 'file:audit_mem?mode=memory&cache=shared' AS audit;",
+            "ATTACH DATABASE 'file:admin_mem?mode=memory&cache=shared' AS admin;",
+            "ATTACH DATABASE 'file:catalog_mem?mode=memory&cache=shared' AS catalog;",
+            "ATTACH DATABASE 'file:ref_data_mem?mode=memory&cache=shared' AS ref_data;",
+        ]
+
+    base_prefix = main_file.rsplit(".", 1)[0] if "." in main_file else main_file
+    if not _is_alembic_runtime() and base_prefix.endswith("banking"):
+        base_prefix = ""
+    else:
+        base_prefix = base_prefix + "_"
+
+    return [
+        f"ATTACH DATABASE '{base_prefix}identity.db' AS identity;",
+        f"ATTACH DATABASE '{base_prefix}kyc.db' AS kyc;",
+        f"ATTACH DATABASE '{base_prefix}ledger.db' AS ledger;",
+        f"ATTACH DATABASE '{base_prefix}cards.db' AS cards;",
+        f"ATTACH DATABASE '{base_prefix}operations.db' AS operations;",
+        f"ATTACH DATABASE '{base_prefix}origination.db' AS origination;",
+        f"ATTACH DATABASE '{base_prefix}audit.db' AS audit;",
+        f"ATTACH DATABASE '{base_prefix}admin.db' AS admin;",
+        f"ATTACH DATABASE '{base_prefix}catalog.db' AS catalog;",
+        f"ATTACH DATABASE '{base_prefix}ref_data.db' AS ref_data;",
+    ]
+
+
 @event.listens_for(Engine, "connect")
 def attach_sqlite_schemas(dbapi_connection, connection_record):
     if "sqlite" not in type(dbapi_connection).__module__.lower():
@@ -180,37 +220,7 @@ def attach_sqlite_schemas(dbapi_connection, connection_record):
                     main_file = row[2] if len(row) > 2 and row[2] else ""
                     break
 
-            if not main_file:
-                stmts = [
-                    "ATTACH DATABASE 'file:identity_mem?mode=memory&cache=shared' AS identity;",
-                    "ATTACH DATABASE 'file:kyc_mem?mode=memory&cache=shared' AS kyc;",
-                    "ATTACH DATABASE 'file:ledger_mem?mode=memory&cache=shared' AS ledger;",
-                    "ATTACH DATABASE 'file:cards_mem?mode=memory&cache=shared' AS cards;",
-                    "ATTACH DATABASE 'file:operations_mem?mode=memory&cache=shared' AS operations;",
-                    "ATTACH DATABASE 'file:origination_mem?mode=memory&cache=shared' AS origination;",
-                    "ATTACH DATABASE 'file:audit_mem?mode=memory&cache=shared' AS audit;",
-                    "ATTACH DATABASE 'file:admin_mem?mode=memory&cache=shared' AS admin;",
-                    "ATTACH DATABASE 'file:catalog_mem?mode=memory&cache=shared' AS catalog;",
-                    "ATTACH DATABASE 'file:ref_data_mem?mode=memory&cache=shared' AS ref_data;",
-                ]
-            else:
-                base_prefix = main_file.rsplit(".", 1)[0] if "." in main_file else main_file
-                if base_prefix.endswith("banking"):
-                    base_prefix = ""
-                else:
-                    base_prefix = base_prefix + "_"
-                stmts = [
-                    f"ATTACH DATABASE '{base_prefix}identity.db' AS identity;",
-                    f"ATTACH DATABASE '{base_prefix}kyc.db' AS kyc;",
-                    f"ATTACH DATABASE '{base_prefix}ledger.db' AS ledger;",
-                    f"ATTACH DATABASE '{base_prefix}cards.db' AS cards;",
-                    f"ATTACH DATABASE '{base_prefix}operations.db' AS operations;",
-                    f"ATTACH DATABASE '{base_prefix}origination.db' AS origination;",
-                    f"ATTACH DATABASE '{base_prefix}audit.db' AS audit;",
-                    f"ATTACH DATABASE '{base_prefix}admin.db' AS admin;",
-                    f"ATTACH DATABASE '{base_prefix}catalog.db' AS catalog;",
-                    f"ATTACH DATABASE '{base_prefix}ref_data.db' AS ref_data;",
-                ]
+            stmts = _sqlite_attach_statements(main_file)
 
             for stmt in stmts:
                 try:
@@ -294,6 +304,7 @@ def init_db():
     import models.origination  # noqa: F401
     import models.audit  # noqa: F401
     import models.credit_card  # noqa: F401
+    import models.fraud  # noqa: F401
     import models.support  # noqa: F401
     import models.settings  # noqa: F401
     import models.kyc  # noqa: F401
@@ -305,5 +316,5 @@ def init_db():
         logger.warning(f"Could not auto-initialize tables: {e}")
 
 
-if not any("alembic" in arg for arg in sys.argv) and os.getenv("DISABLE_INIT_DB") != "true":
+if not _is_alembic_runtime() and os.getenv("DISABLE_INIT_DB") != "true":
     init_db()

@@ -38,9 +38,9 @@ def clear_operational_transaction_stream() -> None:
         return
 
     try:
-        redis_client.delete("recent_transactions")
+        redis_client.delete("recent_transactions", "datastream_metrics", "cdc_status")
     except Exception as exc:
-        logger.warning("Could not clear Redis recent transaction buffer during reset: %s", exc)
+        logger.warning("Could not clear Redis transaction or metrics cache during reset: %s", exc)
 
 class EventarcPayload(BaseModel):
     name: str = Field(..., description="GCS object name.")

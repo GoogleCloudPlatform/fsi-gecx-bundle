@@ -802,7 +802,7 @@ async def simulate_surge(payload: SurgeRequest):
 @app.post("/inject-anomaly", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
 async def inject_anomaly(req: Optional[AnomalyRequest] = None):
     """
-    Accepts a card token (or defaults to CE presenter) and fires 4 rapid-fire Mexico/Cancun fraud authorizations
+    Accepts a card token (or defaults to CE presenter) and fires 5 rapid-fire digital fraud authorizations
     against /api/v1/card-network/authorize.
     """
     target_token = req.card_token if req and req.card_token else None
@@ -828,7 +828,8 @@ async def inject_anomaly(req: Optional[AnomalyRequest] = None):
         ("GAME*TEST TOKEN ONLINE", 499, "5814", "USA", 0),
         ("APPLE.COM*ONLINE", 149900, "4899", "USA", 0),
         ("BEST BUY*MKTPLACE", 215000, "5311", "USA", 0),
-        ("LUXURY BOUTIQUE CANCUN [MEX]", 320000, "5311", "MEX", 30),
+        ("RAZER GOLD GIFT CARD", 125000, "5947", "USA", 30),
+        ("TARGET.COM GIFT CARDS", 95000, "5311", "USA", 30),
     ]
 
     injected_auths = []

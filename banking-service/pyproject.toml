@@ -31,6 +31,7 @@ dependencies = [
     "psycopg2-binary==2.9.10",
     "alembic>=1.18.4",
     "google-cloud-discoveryengine>=0.13.12",
+    "google-cloud-dataplex>=2.20.0",
     "google-cloud-kms>=3.2.0",
     "cryptography>=48.0.1",
     "redis>=8.0.1",

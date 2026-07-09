@@ -27,7 +27,8 @@ import {
   markMessagesRead, 
   createMessage, 
   deleteThread, 
-  deleteMessage 
+  deleteMessage,
+  acknowledgeFraudAlert,
 } from '../utils/api.js';
 
 
@@ -63,6 +64,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
   // UI Loading / Feedback State
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isAcknowledgingFraud, setIsAcknowledgingFraud] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
@@ -94,15 +96,22 @@ function SecureMessagingView({ fbUser, customerProfile }) {
     const handlePushNotification = (e) => {
       console.log("Customer received custom push notification event:", e.detail);
       const payload = e.detail;
+      const notificationUserId = payload?.data?.user_id;
+      const currentUserId = customerProfile?.user_id || fbUser?.uid;
       if (payload?.data?.type === 'support_message' &&
-          (!payload.data?.user_id || payload.data.user_id === customerProfile?.user_id)) {
+          (!notificationUserId || notificationUserId === currentUserId)) {
         console.log("Support reply received! Silently refreshing secure messages...");
         fetchMessages(true);
       }
     };
+    const handleSecureMessageCreated = () => fetchMessages(true);
     window.addEventListener('firebase-push-notification', handlePushNotification);
-    return () => window.removeEventListener('firebase-push-notification', handlePushNotification);
-  }, [fetchMessages, customerProfile]);
+    window.addEventListener('secure-message-created', handleSecureMessageCreated);
+    return () => {
+      window.removeEventListener('firebase-push-notification', handlePushNotification);
+      window.removeEventListener('secure-message-created', handleSecureMessageCreated);
+    };
+  }, [fetchMessages, customerProfile, fbUser]);
 
   useEffect(() => {
     const selectThreadId = location.state?.selectThreadId;
@@ -185,6 +194,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
   const getCategoryStyle = (cat) => {
     switch (cat?.toLowerCase()) {
       case 'security':
+      case 'fraud alert':
         return 'bg-red-500/10 dark:bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/20';
       case 'loans':
         return 'bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
@@ -192,6 +202,51 @@ function SecureMessagingView({ fbUser, customerProfile }) {
         return 'bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/20';
       default:
         return 'bg-sky-500/10 dark:bg-sky-500/20 text-sky-600 dark:text-sky-400 border-sky-500/20';
+    }
+  };
+
+  const isFraudAlertMessage = (msg) => (
+    msg.sender !== 'user'
+    && msg.category?.toLowerCase() === 'fraud alert'
+    && msg.message?.toLowerCase().includes('suspicious transactions')
+  );
+
+  const renderMessageText = (messageText) => {
+    const parts = messageText.split(/(\/support\/voice\?entry=fraud-alert|\/support\/voice)/g);
+    return parts.map((part, index) => {
+      if (part === '/support/voice' || part === '/support/voice?entry=fraud-alert') {
+        return (
+          <button
+            key={`${part}-${index}`}
+            type="button"
+            onClick={() => navigate('/support/voice', { state: { entry: 'fraud-alert' } })}
+            className="inline-flex items-center gap-1 font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+          >
+            {part}
+            <ExternalLink className="w-3 h-3" />
+          </button>
+        );
+      }
+      return <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>;
+    });
+  };
+
+  const handleAcknowledgeFraudAlert = async () => {
+    setIsAcknowledgingFraud(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      const result = await acknowledgeFraudAlert();
+      if (result.success === false) {
+        throw new Error(result.message || 'No open fraud alert was found.');
+      }
+      setSuccessMsg('Thanks. We marked these purchases as recognized activity and closed the fraud alert.');
+      await fetchMessages(true);
+    } catch (err) {
+      console.error('Failed to acknowledge fraud alert:', err);
+      setErrorMsg(err.response?.data?.detail || err.message || 'Unable to acknowledge the fraud alert.');
+    } finally {
+      setIsAcknowledgingFraud(false);
     }
   };
 
@@ -681,7 +736,32 @@ function SecureMessagingView({ fbUser, customerProfile }) {
                               backgroundImage: `linear-gradient(to top right, ${brandColorFrom}, ${brandColorTo})`,
                             } : {}}
                           >
-                            <p className="whitespace-pre-line break-words">{msg.message}</p>
+                            <p className="whitespace-pre-line break-words">{renderMessageText(msg.message)}</p>
+                            {isFraudAlertMessage(msg) && (
+                              <div className="mt-3 pt-3 border-t border-slate-200/70 dark:border-slate-700/70 flex flex-col sm:flex-row gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => navigate('/support/voice', { state: { entry: 'fraud-alert' } })}
+                                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-colors"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  Chat with support
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleAcknowledgeFraudAlert}
+                                  disabled={isAcknowledgingFraud}
+                                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 text-[11px] font-bold transition-colors disabled:opacity-60"
+                                >
+                                  {isAcknowledgingFraud ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                  )}
+                                  I recognize these
+                                </button>
+                              </div>
+                            )}
                           </div>
                           <span className={`text-[9px] text-slate-400 mt-1 ${isUser ? 'text-right pr-1' : 'text-left pl-1'}`}>
                             {formatTime(msg.created_at)}

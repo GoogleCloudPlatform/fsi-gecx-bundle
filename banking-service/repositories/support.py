@@ -23,7 +23,7 @@ class SupportRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_by_id(self, escalation_id: int) -> Optional[Escalation]:
+    def get_by_id(self, escalation_id: str) -> Optional[Escalation]:
         """Retrieves a specific support escalation by its primary key ID."""
         return self.db.query(Escalation).filter(Escalation.id == escalation_id).first()
 

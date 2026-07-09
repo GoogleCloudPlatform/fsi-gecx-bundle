@@ -21,10 +21,11 @@ from services.cdc_monitoring import CdcMonitoringService
 class FakeLakehouseRepository:
     dataset = "iceberg_catalog"
 
-    def __init__(self, watermark=None, rows=None, error=None):
+    def __init__(self, watermark=None, rows=None, error=None, anomalies_count=0):
         self.watermark = watermark
         self.rows = rows or []
         self.error = error
+        self.anomalies_count = anomalies_count
 
     def get_cdc_watermark(self):
         if self.error:
@@ -36,9 +37,23 @@ class FakeLakehouseRepository:
             raise self.error
         return self.rows[:limit]
 
+    def get_anomalies_count(self):
+        if self.error:
+            raise self.error
+        return self.anomalies_count
+
 class FakeSession:
+    def __init__(self, open_fraud_alert_count=0):
+        self.open_fraud_alert_count = open_fraud_alert_count
+
     def query(self, *_args, **_kwargs):
         return self
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def count(self):
+        return self.open_fraud_alert_count
 
     def scalar(self):
         return datetime.datetime(2026, 7, 6, 12, 0, 5, tzinfo=datetime.timezone.utc)
@@ -72,6 +87,31 @@ def test_cdc_status_reports_degraded_on_bigquery_error():
 
     assert result["status"] == "DEGRADED"
     assert result["bigquery_error"] == "bq down"
+
+
+def test_cached_cdc_status_uses_redis_snapshot():
+    service = CdcMonitoringService(FakeSession(), FakeLakehouseRepository(error=RuntimeError("should not query")))
+    cached_status = {
+        "status": "SUCCESS",
+        "operational_latest_timestamp": "2026-07-06T12:00:05+00:00",
+        "lakehouse_latest_timestamp": "2026-07-06T12:00:00+00:00",
+        "replication_lag_seconds": 5,
+        "replication_lag_ms": 5000,
+        "lakehouse_row_count": 42,
+        "bigquery_dataset": "iceberg_catalog",
+        "bigquery_error": None,
+    }
+
+    class FakeCache:
+        def get(self, key):
+            assert key == "cdc_status"
+            import json
+            return json.dumps(cached_status)
+
+    with patch("services.cdc_monitoring._cache", FakeCache()):
+        result = service.get_cached_cdc_status()
+
+    assert result == cached_status
 
 
 def test_lakehouse_stream_normalizes_rows():
@@ -114,3 +154,34 @@ def test_operational_stream_metrics_derive_event_rate():
     assert result["posted_events_per_minute"] == 1
     assert result["flagged_events_per_minute"] == 1
     assert result["latest_event_age_ms"] == 1000
+
+
+def test_datastream_metrics_keep_operational_fraud_alert_floor():
+    service = CdcMonitoringService(
+        FakeSession(open_fraud_alert_count=2),
+        FakeLakehouseRepository(anomalies_count=0),
+    )
+
+    with patch("services.cdc_monitoring._cache", None), \
+         patch("services.cdc_monitoring.monitoring_v3.MetricServiceClient") as mock_client:
+        mock_client.return_value.list_time_series.return_value = []
+        result = service.get_cached_datastream_metrics()
+
+    assert result["operational_active_fraud_alerts"] == 2
+    assert result["active_anomalies"] == 2
+
+
+def test_datastream_metrics_do_not_treat_historical_lakehouse_rows_as_active():
+    service = CdcMonitoringService(
+        FakeSession(open_fraud_alert_count=0),
+        FakeLakehouseRepository(anomalies_count=3),
+    )
+
+    with patch("services.cdc_monitoring._cache", None), \
+         patch("services.cdc_monitoring.monitoring_v3.MetricServiceClient") as mock_client:
+        mock_client.return_value.list_time_series.return_value = []
+        result = service.get_cached_datastream_metrics()
+
+    assert result["operational_active_fraud_alerts"] == 0
+    assert result["lakehouse_fraud_anomalies"] == 3
+    assert result["active_anomalies"] == 0

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from models.authentication import ValidatedToken
 from models.credit_card import TransactionAuthorization
+from models.fraud import FraudAlert
 from repositories.accounts import AccountsRepository
 from repositories.credit_card import CreditCardRepository
 from services.accounts import AccountsService
@@ -23,10 +24,12 @@ from services.seeding_service import (
     provision_user_suite,
     reset_user_suite,
 )
+from services.fraud_alerts import FraudAlertService
 from utils.audit import record_audit_event
-from utils.database import enable_session_rbac_override
+from utils.database import SessionLocal, enable_session_rbac_override
 from utils.internal_auth import get_internal_switch_token
 from utils.internal_execution import InternalServiceContext, apply_internal_db_access
+from utils.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -219,14 +222,42 @@ class SimulationService:
 
         card, cred_acc = target_card
         now = datetime.datetime.now(datetime.timezone.utc)
+        superseded_alerts = (
+            self.db.query(FraudAlert)
+            .filter(
+                FraudAlert.customer_id == user.id,
+                FraudAlert.card_id == card.id,
+                FraudAlert.source == "SIMULATION_TARGETED_FRAUD",
+                FraudAlert.status == "OPEN",
+            )
+            .all()
+        )
+        for alert in superseded_alerts:
+            alert.status = "SUPERSEDED_BY_NEW_SIMULATION"
+            alert.resolved_at = now
+            self.db.add(alert)
+            record_audit_event(
+                self.db,
+                "FRAUD_ALERT_SUPERSEDED",
+                {
+                    "fraud_alert_id": str(alert.id),
+                    "correlation_id": str(alert.id),
+                    "customer_id": str(user.id),
+                    "credit_account_id": str(cred_acc.id),
+                    "replacement_reason": "TARGETED_FRAUD_SIMULATION_REINJECTED",
+                },
+            )
+
         swipes = [
-            ("GAME*TEST TOKEN ONLINE", 499, "5814", "USA", 0),
-            ("APPLE.COM*ONLINE", 149900, "4899", "USA", 0),
-            ("BEST BUY*MKTPLACE", 215000, "5311", "USA", 0),
-            ("LUXURY BOUTIQUE RIVIERA MAYA [MEX]", 320000, "5311", "MEX", 30),
+            ("GAME*TEST TOKEN ONLINE", 499, "5814", "USA", 45),
+            ("APPLE.COM*ONLINE", 149900, "4899", "USA", 72),
+            ("BEST BUY*MKTPLACE", 215000, "5311", "USA", 78),
+            ("RAZER GOLD GIFT CARD", 125000, "5947", "USA", 91),
+            ("TARGET.COM GIFT CARDS", 95000, "5311", "USA", 89),
         ]
 
         injected_auths = []
+        flagged_stream_events = 0
         for idx, (desc, amt, mcc, country, risk) in enumerate(swipes):
             auth = TransactionAuthorization(
                 id=uuid.uuid4(),
@@ -240,11 +271,33 @@ class SimulationService:
                 card_network="VISA",
                 merchant_category_code=mcc,
                 merchant_name=desc,
+                fraud_risk_score=risk,
                 created_at=now + datetime.timedelta(seconds=idx),
                 expires_at=now + datetime.timedelta(days=7),
             )
             self.db.add(auth)
             injected_auths.append(auth)
+            if risk > 0:
+                try:
+                    redis_client = get_redis_client()
+                    if redis_client:
+                        event_time = auth.created_at
+                        payload = json.dumps({
+                            "id": f"AUTH_{str(auth.id)[:8]}",
+                            "rrn": auth.retrieval_reference_number,
+                            "timestamp": event_time.strftime("%H:%M:%S"),
+                            "merchant_name": desc,
+                            "amount_cents": amt,
+                            "status": "FLAGGED (FRAUD REVIEW)",
+                            "bq_view": "analytics_curated.international_fraud_anomalies",
+                            "raw_time": event_time.timestamp(),
+                        })
+                        redis_client.lpush("recent_transactions", payload)
+                        redis_client.ltrim("recent_transactions", 0, 99)
+                        redis_client.publish("channel:transactions:live", payload)
+                        flagged_stream_events += 1
+                except Exception as exc:
+                    logger.warning("Failed to publish fraud anomaly event to Redis stream: %s", exc)
             record_audit_event(
                 self.db,
                 "CREDIT_TRANSACTION_AUTHORIZED",
@@ -258,15 +311,28 @@ class SimulationService:
                 },
             )
 
+        self.credit_repo.recalculate_available_credit(cred_acc)
+        fraud_alert = FraudAlertService(self.db).create_alert_from_simulation(
+            auth_token=token,
+            customer=user,
+            card=card,
+            credit_account=cred_acc,
+            suspicious_authorizations=injected_auths,
+        )
         self.db.commit()
-        logger.info("Injected 4 targeted fraud anomaly swipes for user=%s (%s).", user.id, token.email)
+        logger.info("Injected %s targeted fraud anomaly swipes for user=%s (%s).", len(injected_auths), user.id, token.email)
         return {
             "status": "ANOMALY_INJECTED",
             "user_id": str(user.id),
             "card_token": card.card_token,
             "injected_swipes_count": len(injected_auths),
+            "flagged_authorizations_count": sum(1 for _, _, _, _, risk in swipes if risk > 0),
+            "flagged_stream_events_count": flagged_stream_events,
+            "superseded_open_alerts_count": len(superseded_alerts),
             "total_fraud_cents": sum(amt for _, amt, _, _, _ in swipes),
-            "message": "Fraud surge successfully injected into cards.transaction_authorizations.",
+            "fraud_alert_id": fraud_alert["fraud_alert_id"],
+            "secure_message_thread_id": fraud_alert["thread_id"],
+            "message": "Injected 5 suspicious authorizations into one active fraud alert for customer review.",
         }
 
     def inject_late_fee(self, token: ValidatedToken) -> dict:
@@ -415,10 +481,10 @@ class SimulationService:
             "final_utilization": round(final_utilization, 4),
         }
 
-    async def stream_payload(self, token: ValidatedToken):
+    @staticmethod
+    async def stream_payload(token: ValidatedToken):
         del token
 
-        cdc_service = CdcMonitoringService(self.db)
         from utils.redis_client import get_redis_client
 
         redis_client = get_redis_client()
@@ -426,16 +492,21 @@ class SimulationService:
         last_heartbeat = 0.0
 
         def build_payload(kind: str) -> str:
-            return json.dumps(
-                {
-                    "status": "SUCCESS",
-                    "event_kind": kind,
-                    "operational_stream": cdc_service.get_operational_stream(limit=20)["stream"],
-                    "stream_metrics": cdc_service.get_operational_stream_metrics(),
-                    "cdc_metrics": cdc_service.get_cached_datastream_metrics(),
-                    "cdc_status": cdc_service.get_cdc_status(),
-                }
-            )
+            db = SessionLocal()
+            try:
+                cdc_service = CdcMonitoringService(db)
+                return json.dumps(
+                    {
+                        "status": "SUCCESS",
+                        "event_kind": kind,
+                        "operational_stream": cdc_service.get_operational_stream(limit=20)["stream"],
+                        "stream_metrics": cdc_service.get_operational_stream_metrics(),
+                        "cdc_metrics": cdc_service.get_cached_datastream_metrics(),
+                        "cdc_status": cdc_service.get_cached_cdc_status(),
+                    }
+                )
+            finally:
+                db.close()
 
         if pubsub:
             pubsub.subscribe("channel:transactions:live")

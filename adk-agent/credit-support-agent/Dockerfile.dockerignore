@@ -1,0 +1,14 @@
+.git
+**/.venv
+**/venv
+**/env
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/node_modules
+**/dist
+**/build
+**/*.egg-info
+**/*.db
+deployment/terraform/.terraform
+deployment/terraform/tfplan

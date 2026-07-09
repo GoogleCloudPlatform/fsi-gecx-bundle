@@ -61,8 +61,7 @@ def _publish_redis_event(event_type: str, item_dict: dict):
 def recalculate_available_credit(db: Session, account: CreditAccount) -> None:
     """Updates the available credit cents for a credit account using the system of record."""
     repo = CreditCardRepository(db)
-    pending_sum = repo.get_pending_auth_total(str(account.id))
-    account.available_credit_cents = account.credit_limit_cents - account.cleared_balance_cents - pending_sum
+    repo.recalculate_available_credit(account)
 
 def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
     """

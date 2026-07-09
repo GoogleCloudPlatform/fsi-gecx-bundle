@@ -277,6 +277,18 @@ class AccountsService:
                 logger.error(f"Failed to auto-provision local sandbox for user: {user_email}. Error: {e}")
                 self.db.rollback()
 
+        from repositories.credit_card import CreditCardRepository
+        from services.credit_card import get_wallet_status_by_card_token
+
+        credit_repo = CreditCardRepository(self.db)
+        for cred_acc in credit_accounts:
+            credit_repo.recalculate_available_credit(cred_acc)
+
+        wallet_status_by_account = {
+            str(cred_acc.id): get_wallet_status_by_card_token(self.db, str(cred_acc.id))
+            for cred_acc in credit_accounts
+        }
+
         return {
             "deposit_accounts": [
                 {
@@ -305,7 +317,12 @@ class AccountsService:
                             "cardholder_name": card.cardholder_name,
                             "last_four": card.last_four,
                             "card_token": card.card_token,
-                            "status": card.status
+                            "status": card.status,
+                            "is_active": card.is_active,
+                            "is_virtual": card.is_virtual,
+                            "exp_month": card.exp_month,
+                            "exp_year": card.exp_year,
+                            **wallet_status_by_account.get(str(cred_acc.id), {}).get(card.card_token, {}),
                         } for card in cred_acc.cards
                     ]
                 } for cred_acc in credit_accounts

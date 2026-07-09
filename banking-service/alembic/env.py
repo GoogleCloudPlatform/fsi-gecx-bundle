@@ -9,6 +9,8 @@ from sqlalchemy.engine.url import make_url
 
 from alembic import context
 
+os.environ.setdefault("ALEMBIC_RUNNING", "true")
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
@@ -32,6 +34,7 @@ import models.audit  # noqa: E402, F401
 import models.kyc  # noqa: E402, F401
 import models.reference  # noqa: E402, F401
 import models.merchant  # noqa: E402, F401
+import models.fraud  # noqa: E402, F401
 
 # Set target metadata for alembic schema scanning
 target_metadata = Base.metadata
@@ -47,6 +50,9 @@ try:
 except Exception:
     masked_url = "Redacted Connection String"
 
+IS_SQLITE_URL = str(DATABASE_URL).startswith("sqlite")
+SQLITE_AUTOGEN_IGNORED_SCHEMAS = {"merchants", "ref_data"}
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -59,7 +65,44 @@ def compare_type(context, inspected_column, metadata_column, inspected_type, met
     return None
 
 
+def _autogenerate_requested() -> bool:
+    return bool(getattr(config.cmd_opts, "autogenerate", False))
+
+
+def _object_schema(obj, compare_to):
+    for candidate in (obj, compare_to):
+        if candidate is None:
+            continue
+        schema = getattr(candidate, "schema", None)
+        if schema:
+            return schema
+        table = getattr(candidate, "table", None)
+        if table is not None and getattr(table, "schema", None):
+            return table.schema
+    return None
+
+
+def include_object(obj, name, type_, reflected, compare_to):
+    if not _autogenerate_requested():
+        return True
+
+    if IS_SQLITE_URL and type_ == "foreign_key_constraint":
+        return False
+
+    if IS_SQLITE_URL and _object_schema(obj, compare_to) in SQLITE_AUTOGEN_IGNORED_SCHEMAS:
+        return False
+
+    return True
+
+
 def process_revision_directives(context, revision, directives):
+    if _autogenerate_requested() and directives:
+        script = directives[0]
+        if script.upgrade_ops.is_empty():
+            directives[:] = []
+            logger.info("Autogenerate detected no schema changes.")
+            return
+
     if context.dialect.name == "sqlite":
         script = directives[0]
         if hasattr(script, "upgrade_ops") and hasattr(script.upgrade_ops, "ops"):
@@ -104,6 +147,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         include_schemas=True,
+        include_object=include_object,
         compare_foreign_keys=False,
         process_revision_directives=process_revision_directives,
         version_table_schema="admin" if (url and url.startswith("postgresql")) else None,
@@ -159,6 +203,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             include_schemas=True,
+            include_object=include_object,
             compare_foreign_keys=False,
             process_revision_directives=process_revision_directives,
             version_table_schema="admin" if is_postgres else None,
@@ -227,12 +272,13 @@ def run_migrations_online() -> None:
                         except Exception as grant_err:
                             logger.debug(f"Notice: Could not grant viewer permissions on {s} to {role}: {grant_err}")
 
-                    if "ledger" in allowed_schemas:
-                        try:
-                            with connection.begin_nested():
-                                connection.execute(sa.text(f'REVOKE UPDATE, DELETE ON TABLE ledger.account_ledger FROM "{role}";'))
-                        except Exception as rev_err:
-                            logger.debug(f"Notice: Could not revoke immutable ledger permissions from {role}: {rev_err}")
+                immutable_ledger_roles = set(roles + viewer_roles)
+                for role in immutable_ledger_roles:
+                    try:
+                        with connection.begin_nested():
+                            connection.execute(sa.text(f'REVOKE UPDATE, DELETE ON TABLE ledger.account_ledger FROM "{role}";'))
+                    except Exception as rev_err:
+                        logger.debug(f"Notice: Could not revoke immutable ledger permissions from {role}: {rev_err}")
 
                 try:
                     with connection.begin_nested():

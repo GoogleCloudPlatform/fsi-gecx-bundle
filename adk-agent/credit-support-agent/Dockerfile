@@ -25,14 +25,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ make ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
-# Install CPU-only PyTorch and Torchaudio
+# Install runtime dependencies before copying version-mutated package metadata.
+# PyTorch and torchaudio must come from the CPU wheel index; the default PyPI torch
+# wheel pulls CUDA libs, and Silero VAD declares torchaudio as a runtime dependency.
+COPY adk-agent/credit-support-agent/requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu
-
-# Copy pyproject.toml and install dependencies using a dummy package layout
-COPY adk-agent/credit-support-agent/pyproject.toml ./
-RUN mkdir -p agent && touch voice_agent.py agent/__init__.py && \
-    pip install --no-cache-dir .
+    pip install --no-cache-dir torch==2.12.0 torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the voice agent package source
 COPY adk-agent/credit-support-agent/ /app/adk-agent/credit-support-agent/

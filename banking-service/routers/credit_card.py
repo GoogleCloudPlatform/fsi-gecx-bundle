@@ -14,7 +14,11 @@
 
 import logging
 import os
-from typing import Dict
+from collections.abc import Mapping, Sequence
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Any, Dict
+from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
@@ -33,6 +37,7 @@ from services.credit_card import (
     reverse_posted_fee,
     unfreeze_card,
 )
+from services.fraud_alerts import FraudAlertService
 from services.taxonomy_service import TaxonomyService
 from services.simulation import SimulationService
 from utils.auth import get_current_user, is_support_staff
@@ -51,6 +56,31 @@ LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "devkey")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "secret")
 
 
+def _to_json_safe(value: Any) -> Any:
+    """Coerce SDK/protobuf/database values into FastAPI-safe JSON primitives."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, (UUID, Decimal)):
+        return str(value)
+    if hasattr(value, "DESCRIPTOR"):
+        from google.protobuf.json_format import MessageToDict
+
+        return _to_json_safe(MessageToDict(value, preserving_proto_field_name=True))
+    if isinstance(value, Mapping):
+        return {str(_to_json_safe(key)): _to_json_safe(item) for key, item in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_to_json_safe(item) for item in value]
+    try:
+        return _to_json_safe(dict(value))
+    except (TypeError, ValueError):
+        pass
+    if hasattr(value, "__dict__"):
+        return _to_json_safe(vars(value))
+    return str(value)
+
+
 def get_credit_card_repo(db: Session = Depends(get_db)) -> CreditCardRepository:
     """Dependency provider resolving the CreditCardRepository."""
     return CreditCardRepository(db)
@@ -58,10 +88,14 @@ def get_credit_card_repo(db: Session = Depends(get_db)) -> CreditCardRepository:
 
 def _get_active_customer_id(
     token: ValidatedToken = Depends(get_current_user),
+    x_target_customer_id: str | None = Header(None),
     repo: CreditCardRepository = Depends(get_credit_card_repo),
     fallback: bool = False
 ) -> str:
     """Helper: Resolves active customer ID from validated Firebase token."""
+    if x_target_customer_id and is_support_staff(token):
+        return x_target_customer_id
+
     if token and hasattr(token, "claims"):
         user_id = token.user_id or token.claims.get("user_id") or token.claims.get("identifier") or token.claims.get("sub")
         if user_id:
@@ -343,6 +377,7 @@ async def trigger_voice_agent_session_async(room_name: str, customer_id: str, se
 def get_voice_room_token(
     background_tasks: BackgroundTasks,
     mode: str = "audio",
+    db: Session = Depends(get_db),
     customer_id: str = Depends(_get_active_customer_id)
 ):
     """
@@ -365,12 +400,42 @@ def get_voice_room_token(
             can_publish=True,
             can_subscribe=True
         ))
-        
+        fraud_context = _to_json_safe(FraudAlertService(db).get_active_voice_context(auth_provider_uid=customer_id))
         background_tasks.add_task(trigger_voice_agent_session_async, room_name, customer_id, session_id, mode)
-        return {"token": token.to_jwt(), "room_name": room_name, "session_id": session_id}
+        return {
+            "token": token.to_jwt(),
+            "room_name": room_name,
+            "session_id": session_id,
+            "fraud_context": fraud_context,
+        }
     except Exception as e:
         logger.error(f"Failed to generate LiveKit token: {e}")
         raise HTTPException(status_code=500, detail="LiveKit token creation error.")
+
+
+@router.get("/voice/context")
+def get_voice_session_context(
+    db: Session = Depends(get_db),
+    customer_id: str = Depends(_get_active_customer_id),
+):
+    """Returns customer-specific fraud or support context that should be available at voice-session start."""
+    return _to_json_safe(FraudAlertService(db).get_active_voice_context(auth_provider_uid=customer_id))
+
+
+@router.post("/fraud-alert/acknowledge")
+@apiv1_router.post("/fraud-alert/acknowledge")
+@v1_router.post("/fraud-alert/acknowledge")
+def acknowledge_fraud_alert_false_positive(
+    db: Session = Depends(get_db),
+    customer_id: str = Depends(_get_active_customer_id),
+):
+    """Resolves the customer's latest open fraud alert as recognized card activity."""
+    return FraudAlertService(db).resolve_open_alert_for_customer(
+        auth_provider_uid=customer_id,
+        resolution="CUSTOMER_RECOGNIZED",
+    )
+
+
 class BillPaymentRequest(BaseModel):
     source_account_id: str = Field(..., description="Deposit account UUID to debit")
     credit_account_id: str = Field(..., description="Credit account UUID to credit")

@@ -1,0 +1,13 @@
+# Runtime deps mirrored from pyproject.toml, excluding torch/torchaudio.
+# The Dockerfile installs those first from the PyTorch CPU wheel index.
+google-adk==2.3.0
+google-cloud-logging>=3.14.0,<4.0.0
+protobuf>=6.33.6,<7.0.0
+livekit==0.19.1
+livekit-api==1.1.0
+silero-vad==6.2.1
+onnxruntime==1.26.0
+opencv-python-headless>=4.10.0
+google-cloud-speech>=2.30.0
+httpx>=0.28.0
+mcp

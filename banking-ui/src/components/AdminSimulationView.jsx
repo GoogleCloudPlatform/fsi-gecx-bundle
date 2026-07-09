@@ -17,8 +17,8 @@ import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { useNavigate } from 'react-router-dom';
 import { 
   Sparkles, Activity, ShieldAlert, Zap, Database, RefreshCw, 
-  ArrowLeft, CheckCircle2, AlertTriangle, TrendingUp, Globe, Clock,
-  Layers, ChevronRight, Play, ExternalLink
+  ArrowLeft, CheckCircle2, AlertTriangle, TrendingUp, Clock,
+  Layers, ExternalLink
 } from 'lucide-react';
 import {
   triggerSpendSurge,
@@ -43,6 +43,10 @@ function formatEventAge(ms) {
   if (ms < 1000) return `${ms} ms`;
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
   return `${Math.round(ms / 60_000)} min`;
+}
+
+function formatCurrencyFromCents(cents) {
+  return `$${(Math.abs(cents ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function AdminSimulationView() {
@@ -94,6 +98,52 @@ function AdminSimulationView() {
         className: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-600 dark:text-cyan-400',
         dotClassName: 'bg-cyan-500',
         animate: true,
+      };
+
+  const creditRiskMetrics = streamData.reduce(
+    (acc, item) => {
+      const status = String(item.status || '');
+      const amount = Math.abs(item.amount_cents ?? 0);
+      if (status.includes('FLAGGED')) {
+        acc.flaggedCount += 1;
+        acc.flaggedAmountCents += amount;
+      }
+      if (status.includes('HOLD') || status.includes('FLAGGED')) {
+        acc.pendingCount += 1;
+        acc.pendingAmountCents += amount;
+      }
+      if (status.includes('SETTLE')) {
+        acc.postedCount += 1;
+        acc.postedAmountCents += amount;
+      }
+      return acc;
+    },
+    {
+      flaggedCount: 0,
+      flaggedAmountCents: 0,
+      pendingCount: 0,
+      pendingAmountCents: 0,
+      postedCount: 0,
+      postedAmountCents: 0,
+    },
+  );
+
+  const anomalySeverity = cdcStats.activeAnomalies >= 5
+    ? {
+        cardClass: 'bg-rose-50 dark:bg-rose-950/10 border-rose-100 dark:border-rose-900/40',
+        textClass: 'text-rose-700 dark:text-rose-300',
+        iconClass: 'text-rose-500',
+      }
+    : cdcStats.activeAnomalies > 0
+    ? {
+        cardClass: 'bg-amber-50 dark:bg-amber-950/10 border-amber-100 dark:border-amber-900/40',
+        textClass: 'text-amber-700 dark:text-amber-300',
+        iconClass: 'text-amber-500',
+      }
+    : {
+        cardClass: 'bg-emerald-50 dark:bg-emerald-950/10 border-emerald-100 dark:border-emerald-900/40',
+        textClass: 'text-emerald-700 dark:text-emerald-300',
+        iconClass: 'text-emerald-500',
       };
 
   const applyMonitorSnapshot = (streamSnapshot) => {
@@ -260,12 +310,13 @@ function AdminSimulationView() {
       setFeedback({
         type: 'warning',
         title: 'Targeted Fraud Anomaly Injected',
-        message: res.message || `Injected ${res.injected_swipes_count || 4} high-risk Mexico/Cancun transactions against the active demo card.`,
+        message: res.message || `Injected ${res.injected_swipes_count || 5} high-risk digital gift-card transactions against the active demo card.`,
         data: res
       });
       setCdcStats(prev => ({
         ...prev,
-        activeAnomalies: prev.activeAnomalies + (res.injected_swipes_count || 4)
+        activeAnomalies: Math.max(prev.activeAnomalies, 1),
+        flaggedEventsPerMinute: Math.max(prev.flaggedEventsPerMinute, 1),
       }));
       fetchGlobalStream();
     } catch (err) {
@@ -372,7 +423,7 @@ function AdminSimulationView() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Stream Status</span>
+              <span>SSE Connection</span>
               <Clock className="w-4 h-4 text-cyan-500" />
             </div>
             <div className={`text-2xl font-black font-mono ${
@@ -384,7 +435,7 @@ function AdminSimulationView() {
             }`}>
               {streamConnection.state === 'live' ? 'LIVE' : streamConnection.state === 'error' ? 'RETRY' : 'SYNC'}
             </div>
-            <div className="text-[10px] text-slate-500 mt-1">{streamConnection.message}</div>
+            <div className="text-[10px] text-slate-500 mt-1">Browser connection to the live Redis-backed event feed</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
@@ -413,22 +464,19 @@ function AdminSimulationView() {
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Replication Freshness</span>
+              <span>Datastream Freshness</span>
               <ShieldAlert className="w-4 h-4 text-rose-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
               {formatLatency(cdcStats.dataFreshnessMs)}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">Datastream freshness from Cloud Monitoring</div>
+            <div className="text-[10px] text-slate-400 mt-1">Managed CDC destination freshness</div>
           </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-slate-500">
           <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
             System lag: <span className="font-mono text-slate-700 dark:text-slate-300">{formatLatency(cdcStats.systemLagMs)}</span>
-          </span>
-          <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-            Active anomalies: <span className="font-mono text-slate-700 dark:text-slate-300">{cdcStats.activeAnomalies}</span>
           </span>
           <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
             Buffered events: <span className="font-mono text-slate-700 dark:text-slate-300">{cdcStats.recentBufferedEvents}</span>
@@ -439,138 +487,144 @@ function AdminSimulationView() {
         </div>
       </div>
 
-      {/* Section 2: Interactive Simulation Command Center */}
-      <h3 className="text-xl font-extrabold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
-        <Zap className="w-6 h-6 text-amber-500" />
-        Simulation Event Command Center
-      </h3>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-        
-        {/* Card 1: Spend Surge */}
-        <div className="relative group p-7 rounded-3xl bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 border border-slate-200 dark:border-slate-800 hover:border-cyan-500/50 dark:hover:border-cyan-500/50 transition-all duration-300 shadow-xl hover:shadow-2xl hover:shadow-cyan-500/10 flex flex-col justify-between overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" />
-          
-          <div>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-600 dark:text-cyan-400">
-                <TrendingUp className="w-6 h-6" />
-              </div>
-              <div>
-                <h4 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Spend Velocity Surge
-                </h4>
-                <span className="text-xs font-semibold text-cyan-600 dark:text-cyan-400">
-                  50 SWIPES / 10 SECONDS
-                </span>
-              </div>
+      {/* Section 2: Credit Risk Metrics */}
+      <div className="mb-10 p-6 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5">
+        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200/60 dark:border-slate-800/60">
+          <div className="flex items-center gap-3">
+            <ShieldAlert className="w-6 h-6 text-rose-500" />
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                Credit Risk Metrics
+              </h2>
+              <p className="text-xs text-slate-500">
+                Fraud anomaly posture, pending exposure, and authorization-to-posting flow from the live card stream.
+              </p>
             </div>
-            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-6">
-              Triggers a rapid-fire synthetic activity surge across the active card pool. Simulates realistic domestic purchases across coffee shops, restaurants, grocers, and airlines to exercise the banking service and push live events through the replication pipeline.
-            </p>
           </div>
-
-          <button
-            onClick={handleSpendSurge}
-            disabled={isSurgeLoading}
-            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {isSurgeLoading ? (
-              <>
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                Dispatching Surge...
-              </>
-            ) : (
-              <>
-                <Play className="w-5 h-5 fill-current" />
-                Trigger Spend Surge
-              </>
-            )}
-          </button>
+          {showInfoModals() && (
+            <button
+              onClick={() => setInfoModal('credit-risk')}
+              className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+              title="Credit risk metrics info"
+            >
+              <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
+            </button>
+          )}
         </div>
 
-        {/* Card 2: Targeted Fraud Anomaly */}
-        <div className="relative group p-7 rounded-3xl bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 border border-slate-200 dark:border-slate-800 hover:border-rose-500/50 dark:hover:border-rose-500/50 transition-all duration-300 shadow-xl hover:shadow-2xl hover:shadow-rose-500/10 flex flex-col justify-between overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" />
-          
-          <div>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400">
-                <Globe className="w-6 h-6" />
-              </div>
-              <div>
-                <h4 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Targeted Fraud Anomaly
-                </h4>
-                <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">
-                  RIVIERA MAYA HIGH-RISK SWIPES
-                </span>
-              </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className={`p-4 rounded-2xl border ${anomalySeverity.cardClass}`}>
+            <div className={`flex items-center justify-between text-xs mb-1 ${anomalySeverity.textClass}`}>
+              <span>Active Fraud Anomalies</span>
+              <ShieldAlert className={`w-4 h-4 ${anomalySeverity.iconClass}`} />
             </div>
-            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-6">
-              Injects 4 rapid-fire card-present transactions in Riviera Maya, Mexico against the active demo card. Useful for verifying that live authorizations, anomaly enrichment, and downstream CDC replication stay aligned.
-            </p>
+            <div className={`text-2xl font-black font-mono ${anomalySeverity.textClass}`}>{cdcStats.activeAnomalies}</div>
+            <div className={`text-[10px] mt-1 ${anomalySeverity.textClass}`}>Open fraud cases awaiting customer mitigation</div>
           </div>
 
-          <button
-            onClick={handleFraudAnomaly}
-            disabled={isAnomalyLoading}
-            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-400 hover:to-red-500 text-white font-bold shadow-lg shadow-rose-500/25 hover:shadow-rose-500/40 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {isAnomalyLoading ? (
-              <>
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                Injecting Anomaly...
-              </>
-            ) : (
-              <>
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>Flagged Event Rate</span>
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+            </div>
+            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+              {cdcStats.flaggedEventsPerMinute} <span className="text-sm font-normal text-slate-500">/ min</span>
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">{creditRiskMetrics.flaggedCount} flagged in current wall</div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>Pending Exposure</span>
+              <Clock className="w-4 h-4 text-amber-500" />
+            </div>
+            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+              {formatCurrencyFromCents(creditRiskMetrics.pendingAmountCents)}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">{creditRiskMetrics.pendingCount} pending or flagged authorizations</div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>Auth vs Posted Flow</span>
+              <Layers className="w-4 h-4 text-blue-500" />
+            </div>
+            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+              {cdcStats.authorizationEventsPerMinute}:{cdcStats.postedEventsPerMinute}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">{creditRiskMetrics.postedCount} posted events in current wall</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-10">
+        <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <Zap className="w-4 h-4 text-amber-500" />
+          Synthetic Transaction Controls
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-950/10">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-600 dark:text-cyan-400 shrink-0">
+                <TrendingUp className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-slate-900 dark:text-white">Spend Velocity Surge</div>
+                <div className="text-[11px] text-slate-500">50 synthetic swipes</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">Rapid domestic card activity to exercise stream throughput and replication freshness.</div>
+              </div>
+            </div>
+            <button
+              onClick={handleSpendSurge}
+              disabled={isSurgeLoading}
+              className="mt-4 w-full py-2.5 px-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-cyan-600"
+            >
+              {isSurgeLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+              {isSurgeLoading ? 'Injecting Surge...' : 'Run Surge'}
+            </button>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-950/10">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0">
                 <ShieldAlert className="w-5 h-5" />
-                Inject Targeted Anomaly
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Card 3: Inject Late Fee */}
-        <div className="relative group p-7 rounded-3xl bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 border border-slate-200 dark:border-slate-800 hover:border-amber-500/50 dark:hover:border-amber-500/50 transition-all duration-300 shadow-xl hover:shadow-2xl hover:shadow-amber-500/10 flex flex-col justify-between overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" />
-          
-          <div>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400">
-                <Clock className="w-6 h-6" />
               </div>
-              <div>
-                <h4 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Inject Late Fee
-                </h4>
-                <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-                  $35.00 POSTED CHARGE
-                </span>
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-slate-900 dark:text-white">Targeted Fraud Anomaly</div>
+                <div className="text-[11px] text-slate-500">High-risk gift cards</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">Creates a customer fraud alert, secure message, and flagged risk stream activity.</div>
               </div>
             </div>
-            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-6">
-              Posts a standalone $35.00 late fee to the active demo card ledger. Useful for voice-agent demos and for confirming that posted ledger activity appears on the live wall and continues through replication.
-            </p>
+            <button
+              onClick={handleFraudAnomaly}
+              disabled={isAnomalyLoading}
+              className="mt-4 w-full py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-rose-600"
+            >
+              {isAnomalyLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldAlert className="w-4 h-4" />}
+              {isAnomalyLoading ? 'Creating Alert...' : 'Inject Anomaly'}
+            </button>
           </div>
 
-          <button
-            onClick={handleLateFee}
-            disabled={isFeeLoading}
-            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {isFeeLoading ? (
-              <>
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                Injecting Fee...
-              </>
-            ) : (
-              <>
+          <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-950/10">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
                 <Zap className="w-5 h-5" />
-                Inject Late Fee
-              </>
-            )}
-          </button>
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-slate-900 dark:text-white">Inject Late Fee</div>
+                <div className="text-[11px] text-slate-500">$35 posted charge flow</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">Adds a standalone fee event for ledger, support, and voice-agent demonstrations.</div>
+              </div>
+            </div>
+            <button
+              onClick={handleLateFee}
+              disabled={isFeeLoading}
+              className="mt-4 w-full py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-amber-600"
+            >
+              {isFeeLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+              {isFeeLoading ? 'Injecting Fee...' : 'Inject Fee'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -603,7 +657,7 @@ function AdminSimulationView() {
         </div>
       )}
 
-      {/* Section 3: Live Transaction Activity Streams */}
+      {/* Section 4: Live Transaction Activity Streams */}
       <div className="p-7 rounded-3xl bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-2xl shadow-slate-950/5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
@@ -683,9 +737,7 @@ function AdminSimulationView() {
                     <td className="p-3.5 text-slate-800 dark:text-slate-300 font-bold whitespace-nowrap">{item.rrn}</td>
                     <td className="p-3.5 text-slate-900 dark:text-white font-sans font-medium truncate max-w-xs">{item.merchant_name}</td>
                     <td className="p-3.5 text-right text-slate-900 dark:text-slate-100 font-bold whitespace-nowrap">
-                      ${(
-                        Math.abs(item.amount_cents ?? 0) / 100
-                      ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {formatCurrencyFromCents(item.amount_cents)}
                     </td>
                     <td className="p-3.5 whitespace-nowrap">
                       <div className="flex flex-col gap-0.5">
@@ -775,19 +827,35 @@ function AdminSimulationView() {
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            The <strong>Datastream WAL Replication Engine</strong> panel summarizes downstream replication health for the operational transaction pipeline. It tracks the live stream connection, recent event age, event throughput, and managed Datastream freshness signals.
+            The <strong>Datastream WAL Replication Engine</strong> panel summarizes operational stream health and downstream CDC freshness for transaction writes.
           </p>
           <p>
-            In practical terms, this panel helps confirm that transaction writes are still moving through the system, that the event stream is active, and that the managed replication path into the analytical lakehouse is staying current.
+            In practical terms, this panel helps confirm that new transaction events are reaching the admin console and that writes are moving from PostgreSQL WAL into Datastream CDC tables and curated analytical views.
           </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-cyan-500 dark:text-cyan-400 font-mono font-bold">Operational stream health</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">The UI listens to Redis-backed transaction events and reports how fresh the latest activity is and how many events are arriving per minute.</p>
+              <div className="text-cyan-500 dark:text-cyan-400 font-mono font-bold">SSE Connection</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Shows whether this browser has an authenticated server-sent-events connection to the banking-service live stream. LIVE means the admin UI is connected; RETRY means the client is reconnecting.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-emerald-500 dark:text-emerald-400 font-mono font-bold">Last Event Age</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Measures how long it has been since the newest transaction event in the Redis-backed stream. A high value can mean the system is quiet or that live event publishing has stalled.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-blue-500 dark:text-blue-400 font-mono font-bold">Event Throughput</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Counts recent live events per minute and breaks them into authorization, posted, and flagged activity so the wall can distinguish holds from settled ledger events.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">Datastream Freshness</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Reports managed CDC freshness from Cloud Monitoring. This is downstream replication health, separate from the browser's live SSE connection.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-cyan-500 dark:text-cyan-400 font-mono font-bold">PostgreSQL WAL to Datastream</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Operational writes are replicated into lakehouse CDC tables before curated analytics views consume them.</p>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">Managed replication health</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">System lag, freshness, and anomaly counts come from managed cloud metrics so you can distinguish a quiet system from a replication problem.</p>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">System lag and freshness come from managed cloud metrics so you can distinguish a quiet system from a replication problem.</p>
             </div>
           </div>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
@@ -821,6 +889,32 @@ function AdminSimulationView() {
                 <span>View Cloud Run</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
+            </div>
+          </div>
+        </div>
+      </GcpInfoModal>
+
+      <GcpInfoModal
+        isOpen={infoModal === 'credit-risk'}
+        onClose={() => setInfoModal(null)}
+        title="Credit Risk Metrics"
+      >
+        <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+          <p>
+            The <strong>Credit Risk Metrics</strong> tile tracks open fraud-case outcomes and live card exposure separately from replication transport health. A non-zero anomaly count means the demo has suspicious card activity available for secure-message review and the voice agent flow.
+          </p>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">Active Fraud Anomalies</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Active anomalies represent open operational fraud alerts that have been enriched and surfaced for customer mitigation.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-amber-500 dark:text-amber-400 font-mono font-bold">Flagged Event Rate + Pending Exposure</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Flagged rate shows suspicious live activity per minute. Pending exposure sums the current wall's outstanding holds and flagged authorizations so presenters can see unsettled card risk quickly.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-blue-500 dark:text-blue-400 font-mono font-bold">Auth vs Posted Flow</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Compares authorization events to posted events per minute. A surge of authorizations with few postings is expected during fraud simulation because those transactions are still pending review.</p>
             </div>
           </div>
         </div>

@@ -73,9 +73,14 @@ resource "google_cloudbuild_trigger" "service_deploy_trigger" {
     }
   }
 
-  service_account    = google_service_account.cloudbuild_service_account.id
-  included_files     = ["banking-service/**"]
-  ignored_files      = ["banking-service/cloudbuild-db-migrate.yaml"]
+  service_account = google_service_account.cloudbuild_service_account.id
+  included_files  = ["banking-service/**"]
+  ignored_files = [
+    "banking-service/cloudbuild-db-migrate.yaml",
+    "banking-service/cloudbuild-knowledge-catalog-sync.yaml",
+    "banking-service/resources/data/fraud_support_guidance.json",
+    "banking-service/scripts/sync_fraud_support_guidance.py",
+  ]
   filename           = "banking-service/cloudbuild-publish-deploy.yaml"
   include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
 
@@ -84,6 +89,35 @@ resource "google_cloudbuild_trigger" "service_deploy_trigger" {
     _TRIGGER_DEPLOY      = "true"
     _IAM_DBA_USERS       = join(",", [for k, v in local.db_iam_support_members : v.name])
     _IAM_DB_VIEWER_USERS = join(",", [for k, v in local.db_iam_viewer_members : v.name])
+  }
+}
+
+resource "google_cloudbuild_trigger" "knowledge_catalog_sync_trigger" {
+  count    = var.deploy_cloud_build_triggers ? 1 : 0
+  name     = "banking-knowledge-catalog-sync"
+  location = var.region
+  tags     = ["banking-service", "knowledge-catalog", "sync"]
+
+  repository_event_config {
+    repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
+    push {
+      branch = local.trigger_by_branch ? var.repo_branch_expression : null
+      tag    = local.trigger_by_tag ? var.repo_tag_expression : null
+    }
+  }
+
+  service_account = google_service_account.cloudbuild_service_account.id
+  included_files = [
+    "banking-service/cloudbuild-knowledge-catalog-sync.yaml",
+    "banking-service/resources/data/fraud_support_guidance.json",
+    "banking-service/scripts/sync_fraud_support_guidance.py",
+    "banking-service/services/knowledge_catalog.py",
+  ]
+  filename           = "banking-service/cloudbuild-knowledge-catalog-sync.yaml"
+  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
+
+  substitutions = {
+    _REGION = var.region
   }
 }
 

@@ -15,7 +15,7 @@
 import pytest
 import respx
 import httpx
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from fastapi import status
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy import create_engine
@@ -26,10 +26,12 @@ from main import app
 from utils.database import Base, get_db
 from utils.auth import get_current_user
 from models.authentication import ValidatedToken
-from models.identity import User
+from models.fraud import FraudAlert, FraudCaseAction
+from models.audit import AuditOutbox
+from models.identity import User, UserSecureMessage
 from models.origination import Account
-from models.credit_card import CreditAccount, PostedTransaction
-from services.seeding_service import provision_user_suite
+from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, TransactionAuthorization
+from services.seeding_service import clean_database, provision_user_suite
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
 test_engine = create_engine(
@@ -72,6 +74,61 @@ def fixture_db_session():
 async def async_client():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
+
+
+def test_clean_database_removes_fraud_alerts(db_session):
+    user = User(auth_provider_uid="fraud-reset-user", email="fraud-reset@example.com")
+    db_session.add(user)
+    db_session.flush()
+    credit_account = CreditAccount(
+        customer_id=user.id,
+        product_code="CASHBACK_EVERYDAY",
+        status="ACTIVE",
+        credit_limit_cents=100000,
+        available_credit_cents=100000,
+    )
+    db_session.add(credit_account)
+    db_session.flush()
+    card = IssuedCard(
+        account_id=credit_account.id,
+        cardholder_name="Fraud Reset",
+        card_token="tok_fraud_reset",
+        last_four="4242",
+        exp_month=1,
+        exp_year=2030,
+        status="ACTIVE",
+        is_active=True,
+    )
+    db_session.add(card)
+    db_session.flush()
+    fraud_alert = FraudAlert(
+        customer_id=user.id,
+        auth_provider_uid=user.auth_provider_uid,
+        credit_account_id=credit_account.id,
+        card_id=card.id,
+        card_last_four=card.last_four,
+        message_thread_id="thread-fraud-reset",
+        suspicious_authorization_ids=[],
+        suspicious_transactions=[],
+    )
+    db_session.add(fraud_alert)
+    db_session.flush()
+    db_session.add(
+        FraudCaseAction(
+            fraud_alert_id=fraud_alert.id,
+            action_type="FRAUD_CASE_TRIAGED",
+            status="SUCCEEDED",
+            idempotency_key="reset-test",
+            request_payload={},
+            result_payload={},
+        )
+    )
+    db_session.flush()
+
+    clean_database(db_session)
+
+    assert db_session.query(FraudCaseAction).count() == 0
+    assert db_session.query(FraudAlert).count() == 0
 
 @pytest.mark.asyncio
 async def test_provision_my_demo_success(async_client, db_session):
@@ -165,6 +222,108 @@ async def test_reset_my_demo_success(async_client, db_session):
         elif acc.account_type == "SAVINGS":
             assert acc.cleared_balance_cents == 2000000
 
+
+@pytest.mark.asyncio
+async def test_reset_my_demo_clears_fraud_state_and_restores_card_baseline(async_client, db_session):
+    global mock_claims
+    mock_claims = {"sub": "reset-fraud-uid", "email": "reset.fraud.presenter@google.com"}
+
+    provision_response = await async_client.post("/api/v1/simulation/provision-my-demo")
+    assert provision_response.status_code == status.HTTP_201_CREATED
+    user_id = provision_response.json()["summary"]["user_id"]
+
+    user = db_session.query(User).filter(User.id == user_id).first()
+    cred_acc = db_session.query(CreditAccount).filter(CreditAccount.customer_id == user_id).first()
+    original_card = db_session.query(IssuedCard).filter(IssuedCard.account_id == cred_acc.id).first()
+    original_card_id = original_card.id
+    original_card_token = original_card.card_token
+
+    original_card.status = "BLOCKED"
+    original_card.is_active = False
+    replacement = IssuedCard(
+        account_id=cred_acc.id,
+        cardholder_name=original_card.cardholder_name,
+        card_token="tok_reset_fraud_replacement",
+        last_four="5188",
+        exp_month=original_card.exp_month,
+        exp_year=original_card.exp_year + 1,
+        status="ACTIVE",
+        is_active=True,
+        is_virtual=True,
+    )
+    db_session.add(replacement)
+    db_session.flush()
+    replacement_card_id = replacement.id
+    replacement_card_token = replacement.card_token
+    fraud_alert = FraudAlert(
+        customer_id=user.id,
+        auth_provider_uid=user.auth_provider_uid,
+        credit_account_id=cred_acc.id,
+        card_id=original_card.id,
+        card_last_four=original_card.last_four,
+        message_thread_id="thread-reset-fraud",
+        suspicious_authorization_ids=[],
+        suspicious_transactions=[],
+        replacement_card_id=replacement.id,
+        triage_message_thread_id="thread-reset-fraud",
+        triage_message_id="message-reset-fraud",
+    )
+    db_session.add(fraud_alert)
+    db_session.flush()
+    db_session.add(
+        FraudCaseAction(
+            fraud_alert_id=fraud_alert.id,
+            action_type="FRAUD_CASE_TRIAGED",
+            status="SUCCEEDED",
+            idempotency_key="reset-fraud-flow",
+            request_payload={},
+            result_payload={},
+        )
+    )
+    db_session.add(
+        UserSecureMessage(
+            message_id="message-reset-fraud",
+            user_id=user.id,
+            sender="bank",
+            category="Fraud Alert",
+            message="Fraud case pending review.",
+            thread_id="thread-reset-fraud",
+        )
+    )
+    db_session.add(
+        UserSecureMessage(
+            message_id="message-reset-pending-support",
+            user_id=user.id,
+            sender="bank",
+            category="General",
+            message="Pending support reply.",
+            thread_id="thread-reset-support",
+            is_user_read=False,
+        )
+    )
+    db_session.commit()
+
+    reset_response = await async_client.post("/api/v1/simulation/reset-my-demo")
+
+    assert reset_response.status_code == status.HTTP_200_OK
+    cards = db_session.query(IssuedCard).filter(IssuedCard.account_id == cred_acc.id).all()
+    assert len(cards) == 1
+    reset_card = cards[0]
+    assert reset_card.id != original_card_id
+    assert reset_card.id != replacement_card_id
+    assert reset_card.card_token != original_card_token
+    assert reset_card.card_token != replacement_card_token
+    assert reset_card.status == "ACTIVE"
+    assert reset_card.is_active is True
+    assert reset_card.is_virtual is False
+    assert db_session.query(FraudAlert).filter(FraudAlert.customer_id == user.id).count() == 0
+    assert db_session.query(FraudCaseAction).count() == 0
+    assert db_session.query(UserSecureMessage).filter(UserSecureMessage.thread_id == "thread-reset-fraud").count() == 0
+    assert db_session.query(UserSecureMessage).filter(UserSecureMessage.thread_id == "thread-reset-support").count() == 0
+    reset_auths = db_session.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == cred_acc.id).all()
+    assert len(reset_auths) >= 2
+    assert {auth.card_id for auth in reset_auths} == {reset_card.id}
+
 @pytest.mark.asyncio
 async def test_reset_my_demo_not_found(async_client, db_session):
     global mock_claims
@@ -238,9 +397,18 @@ async def test_simulate_surge_returns_accepted_when_generator_response_times_out
     assert "accepted" in data["message"].lower()
 
 @pytest.mark.asyncio
-async def test_inject_anomaly_success(async_client, db_session):
+@patch("services.messaging.messaging.send")
+@patch("services.messaging.messaging.send_each_for_multicast")
+@patch("services.messaging.identity_repo.get_device_tokens_for_customer")
+async def test_inject_anomaly_success(mock_get_tokens, mock_send_multicast, mock_send, async_client, db_session):
     global mock_claims
     mock_claims = {"sub": "presenter-2", "email": "presenter.two@google.com"}
+    mock_get_tokens.return_value = ["device_token_xyz"]
+    mock_send.return_value = "topic-message-id"
+    mock_batch = MagicMock()
+    mock_batch.success_count = 1
+    mock_batch.failure_count = 0
+    mock_send_multicast.return_value = mock_batch
     
     # 1. Provision profile first
     prov_resp = await async_client.post("/api/v1/simulation/provision-my-demo")
@@ -251,13 +419,133 @@ async def test_inject_anomaly_success(async_client, db_session):
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["status"] == "ANOMALY_INJECTED"
-    assert data["injected_swipes_count"] == 4
-    assert data["total_fraud_cents"] == 685399
+    assert data["injected_swipes_count"] == 5
+    assert data["flagged_authorizations_count"] == 5
+    assert data["superseded_open_alerts_count"] == 0
+    assert data["total_fraud_cents"] == 585399
+    assert data["fraud_alert_id"]
+    assert data["secure_message_thread_id"]
     
     # 3. Verify in database
     from models.credit_card import TransactionAuthorization
-    auths = db_session.query(TransactionAuthorization).filter(TransactionAuthorization.merchant_name == "LUXURY BOUTIQUE RIVIERA MAYA [MEX]").all()
+    from models.identity import UserSecureMessage
+    auths = db_session.query(TransactionAuthorization).filter(TransactionAuthorization.merchant_name == "TARGET.COM GIFT CARDS").all()
     assert len(auths) == 1
+    fraud_alert = db_session.query(FraudAlert).filter(FraudAlert.id == data["fraud_alert_id"]).first()
+    assert fraud_alert is not None
+    assert fraud_alert.status == "OPEN"
+    assert fraud_alert.auth_provider_uid == "presenter-2"
+    assert len(fraud_alert.suspicious_authorization_ids) == 5
+    assert len(fraud_alert.suspicious_transactions) == 5
+    assert all(txn["authorization_id"] for txn in fraud_alert.suspicious_transactions)
+    suspicious_auths = db_session.query(TransactionAuthorization).filter(
+        TransactionAuthorization.id.in_(fraud_alert.suspicious_authorization_ids)
+    ).all()
+    assert all(auth.fraud_risk_score and auth.fraud_risk_score > 0 for auth in suspicious_auths)
+    account_after_injection = db_session.query(CreditAccount).filter(CreditAccount.id == fraud_alert.credit_account_id).first()
+    pending_sum = sum(auth.transaction_amount_cents for auth in db_session.query(TransactionAuthorization).filter(
+        TransactionAuthorization.account_id == fraud_alert.credit_account_id,
+        TransactionAuthorization.status == "PENDING",
+    ).all())
+    assert account_after_injection.available_credit_cents == max(
+        0,
+        min(
+            account_after_injection.credit_limit_cents,
+            account_after_injection.credit_limit_cents - account_after_injection.cleared_balance_cents - pending_sum,
+        ),
+    )
+
+    fraud_created_event = db_session.query(AuditOutbox).filter(AuditOutbox.event_type == "FRAUD_ALERT_CREATED").order_by(AuditOutbox.created_at.desc()).first()
+    fraud_notified_event = db_session.query(AuditOutbox).filter(AuditOutbox.event_type == "FRAUD_ALERT_CUSTOMER_NOTIFIED").order_by(AuditOutbox.created_at.desc()).first()
+    assert fraud_created_event is not None
+    assert fraud_notified_event is not None
+    assert data["fraud_alert_id"] in fraud_created_event.payload
+    assert data["fraud_alert_id"] in fraud_notified_event.payload
+
+    user = db_session.query(User).filter(User.auth_provider_uid == "presenter-2").first()
+    secure_messages = db_session.query(UserSecureMessage).filter(
+        UserSecureMessage.user_id == user.id,
+        UserSecureMessage.thread_id == data["secure_message_thread_id"],
+    ).all()
+    assert len(secure_messages) == 1
+    assert "credit card ending in" in secure_messages[0].message.lower()
+    assert "/support/voice?entry=fraud-alert" in secure_messages[0].message
+
+    push_message = mock_send_multicast.call_args.args[0]
+    assert push_message.data["title"] == "Fraud alert: review recent card activity"
+    assert push_message.data["thread_id"] == data["secure_message_thread_id"]
+    assert push_message.data["entry"] == "fraud-alert"
+
+    voice_context_response = await async_client.get("/credit-card/voice/context")
+    assert voice_context_response.status_code == status.HTTP_200_OK
+    voice_context = voice_context_response.json()
+    assert voice_context["has_active_fraud_alert"] is True
+    assert voice_context["fraud_alert"]["fraud_alert_id"] == data["fraud_alert_id"]
+    assert voice_context["fraud_alert"]["card_last_four"]
+    assert "active fraud alert" in voice_context["fraud_alert"]["summary"].lower()
+
+    mock_claims = {"sub": "voice-agent-sa", "email": "support.agent@google.com"}
+    support_context_response = await async_client.get(
+        "/credit-card/voice/context",
+        headers={"x-target-customer-id": "presenter-2"},
+    )
+    assert support_context_response.status_code == status.HTTP_200_OK
+    support_voice_context = support_context_response.json()
+    assert support_voice_context["has_active_fraud_alert"] is True
+    assert support_voice_context["fraud_alert"]["fraud_alert_id"] == data["fraud_alert_id"]
+
+    mock_claims = {"sub": "presenter-2", "email": "presenter.two@google.com"}
+    acknowledge_response = await async_client.post("/credit-card/fraud-alert/acknowledge")
+    assert acknowledge_response.status_code == status.HTTP_200_OK
+    acknowledged = acknowledge_response.json()
+    assert acknowledged["success"] is True
+    assert acknowledged["fraud_alert"]["status"] == "RESOLVED_CUSTOMER_RECOGNIZED"
+
+
+@pytest.mark.asyncio
+@patch("services.messaging.messaging.send")
+@patch("services.messaging.messaging.send_each_for_multicast")
+@patch("services.messaging.identity_repo.get_device_tokens_for_customer")
+async def test_inject_anomaly_supersedes_prior_open_simulation_alert(mock_get_tokens, mock_send_multicast, mock_send, async_client, db_session):
+    global mock_claims
+    mock_claims = {"sub": "presenter-repeat", "email": "presenter.repeat@google.com"}
+    mock_get_tokens.return_value = ["device_token_xyz"]
+    mock_send.return_value = "topic-message-id"
+    mock_batch = MagicMock()
+    mock_batch.success_count = 1
+    mock_batch.failure_count = 0
+    mock_send_multicast.return_value = mock_batch
+
+    provision_response = await async_client.post("/api/v1/simulation/provision-my-demo")
+    assert provision_response.status_code == status.HTTP_201_CREATED
+
+    first_response = await async_client.post("/api/v1/simulation/inject-anomaly")
+    assert first_response.status_code == status.HTTP_200_OK
+    first_alert_id = first_response.json()["fraud_alert_id"]
+
+    second_response = await async_client.post("/api/v1/simulation/inject-anomaly")
+    assert second_response.status_code == status.HTTP_200_OK
+    second_data = second_response.json()
+
+    assert second_data["fraud_alert_id"] != first_alert_id
+    assert second_data["injected_swipes_count"] == 5
+    assert second_data["flagged_authorizations_count"] == 5
+    assert second_data["superseded_open_alerts_count"] == 1
+
+    first_alert = db_session.query(FraudAlert).filter(FraudAlert.id == first_alert_id).first()
+    second_alert = db_session.query(FraudAlert).filter(FraudAlert.id == second_data["fraud_alert_id"]).first()
+    assert first_alert.status == "SUPERSEDED_BY_NEW_SIMULATION"
+    assert first_alert.resolved_at is not None
+    assert second_alert.status == "OPEN"
+    assert len(second_alert.suspicious_authorization_ids) == 5
+    assert db_session.query(FraudAlert).filter(
+        FraudAlert.auth_provider_uid == "presenter-repeat",
+        FraudAlert.status == "OPEN",
+    ).count() == 1
+
+    superseded_event = db_session.query(AuditOutbox).filter_by(event_type="FRAUD_ALERT_SUPERSEDED").first()
+    assert superseded_event is not None
+
 
 @pytest.mark.asyncio
 async def test_get_active_cards_success(async_client, db_session):
@@ -299,6 +587,26 @@ async def test_get_active_cards_marks_demo_script_accounts_ineligible_for_genera
     regular_card = cards_by_name["Regular Customer"]
     assert regular_card["is_demo_script_account"] is False
     assert regular_card["generator_eligible"] is True
+
+
+@pytest.mark.asyncio
+async def test_sse_stream_does_not_hold_request_db_session(async_client):
+    async def one_event_stream(token):
+        del token
+        yield 'data: {"status":"SUCCESS","event_kind":"snapshot"}\n\n'
+
+    def fail_if_route_requests_db():
+        raise AssertionError("SSE stream should not allocate a request-scoped DB session")
+        yield
+
+    app.dependency_overrides[get_db] = fail_if_route_requests_db
+    with patch("routers.simulation.SimulationService.stream_payload", one_event_stream):
+        async with async_client.stream("GET", "/api/v1/simulation/stream-sse") as response:
+            body = await response.aread()
+
+    assert response.status_code == status.HTTP_200_OK
+    assert b'"event_kind":"snapshot"' in body
+
 
 @pytest.mark.asyncio
 async def test_inject_late_fee_and_global_stream(async_client, db_session):

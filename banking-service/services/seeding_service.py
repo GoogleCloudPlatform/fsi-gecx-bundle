@@ -30,10 +30,11 @@ from utils.encryption import encrypt_pii
 from utils.audit import record_audit_event
 
 # Models
-from models.identity import User, UserAddress, RetailLocation
+from models.identity import User, UserAddress, RetailLocation, UserSecureMessage
 from models.kyc import KYCRecord, UserCreditProfile
 from models.origination import Account, AccountLedgerEntry, Transaction
 from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, CreditProduct, TransactionAuthorization
+from models.fraud import FraudAlert, FraudCaseAction
 from models.origination import DepositProduct
 from models.settings import SystemSetting
 from models.reference import MerchantCategoryCode
@@ -311,9 +312,14 @@ def clean_database(db: Session) -> None:
         
     # Order matters due to foreign key constraints!
     from models.support import Escalation
+    from models.identity import UserDevice, UserSecureMessage
     from models.origination import Application, MortgageApplication, CreditCardApplication, DepositApplication, ApplicationArtifact
 
     db.query(Escalation).delete(synchronize_session=False)
+    db.query(FraudCaseAction).delete(synchronize_session=False)
+    db.query(FraudAlert).delete(synchronize_session=False)
+    db.query(UserSecureMessage).delete(synchronize_session=False)
+    db.query(UserDevice).delete(synchronize_session=False)
 
     db.query(PostedTransaction).delete(synchronize_session=False)
     db.query(TransactionAuthorization).delete(synchronize_session=False)
@@ -1153,10 +1159,65 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
         else:
             acc.cleared_balance_cents = 1000000
 
-    # 2. Fetch credit accounts belonging to user
+    # 2. Clear fraud workflow residue and restore card/account baseline state.
+    fraud_alerts = db.query(FraudAlert).filter(FraudAlert.customer_id == user_id).all()
+    fraud_alert_ids = [alert.id for alert in fraud_alerts]
+    fraud_thread_ids = {
+        thread_id
+        for alert in fraud_alerts
+        for thread_id in (alert.message_thread_id, alert.triage_message_thread_id)
+        if thread_id
+    }
+    if fraud_alert_ids:
+        db.query(FraudCaseAction).filter(FraudCaseAction.fraud_alert_id.in_(fraud_alert_ids)).delete(synchronize_session=False)
+        db.query(FraudAlert).filter(FraudAlert.id.in_(fraud_alert_ids)).delete(synchronize_session=False)
+    if fraud_thread_ids:
+        db.query(UserSecureMessage).filter(
+            UserSecureMessage.user_id == user.id,
+            UserSecureMessage.thread_id.in_(fraud_thread_ids),
+        ).delete(synchronize_session=False)
+    db.query(UserSecureMessage).filter(
+        UserSecureMessage.user_id == user.id,
+        UserSecureMessage.sender != "user",
+        UserSecureMessage.is_user_read.is_(False),
+    ).delete(synchronize_session=False)
+
+    # 3. Fetch credit accounts belonging to user
     credit_accounts = db.query(CreditAccount).filter(CreditAccount.customer_id == user_id).all()
     cred_acc = credit_accounts[0] if credit_accounts else None
-    card = db.query(IssuedCard).filter(IssuedCard.account_id == cred_acc.id).first() if cred_acc else None
+    card = None
+    if cred_acc:
+        db.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).delete(synchronize_session=False)
+        db.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == cred_acc.id).delete(synchronize_session=False)
+        cred_acc.cleared_balance_cents = 0
+        cred_acc.available_credit_cents = cred_acc.credit_limit_cents
+        db.query(IssuedCard).filter(IssuedCard.account_id == cred_acc.id).delete(synchronize_session=False)
+
+        card_num = generate_luhn_card_number(prefix="4111", length=16)
+        card = IssuedCard(
+            id=uuid.uuid4(),
+            account_id=cred_acc.id,
+            cardholder_name=f"{user.first_name} {user.last_name}",
+            card_token=_generate_demo_card_token(),
+            last_four=card_num[-4:],
+            exp_month=datetime.datetime.now(datetime.timezone.utc).month,
+            exp_year=datetime.datetime.now(datetime.timezone.utc).year + 3,
+            status="ACTIVE",
+            is_active=True,
+            is_virtual=False,
+        )
+        db.add(card)
+        db.flush()
+        record_audit_event(
+            db,
+            "CREDIT_CARD_ISSUED",
+            {
+                "user_id": str(user_id),
+                "account_id": str(cred_acc.id),
+                "card_token": card.card_token,
+                "reset": True,
+            },
+        )
     
     if not checking_acc or not savings_acc or not cred_acc or not card:
         raise ValueError(

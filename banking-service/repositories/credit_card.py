@@ -70,6 +70,13 @@ class CreditCardRepository:
         """Retrieves an Issued Card by its primary card ID."""
         return self.db.query(IssuedCard).filter(IssuedCard.id == card_id).first()
 
+    def get_card_by_id_for_account(self, card_id: str, account_id: str) -> Optional[IssuedCard]:
+        """Retrieves an Issued Card by ID after verifying it belongs to the account."""
+        return self.db.query(IssuedCard).filter(
+            IssuedCard.id == card_id,
+            IssuedCard.account_id == account_id,
+        ).first()
+
     def get_card_by_token(self, card_token: str) -> Optional[IssuedCard]:
         """Retrieves an Issued Card by its unique token reference."""
         return self.db.query(IssuedCard).filter(IssuedCard.card_token == card_token).first()
@@ -78,10 +85,30 @@ class CreditCardRepository:
         """Retrieves all Issued Cards registered under the specified Financial Account."""
         return self.db.query(IssuedCard).filter(IssuedCard.account_id == account_id).all()
 
+    def list_active_cards_by_account(self, account_id: str) -> List[IssuedCard]:
+        """Retrieves active card instruments for the specified Financial Account."""
+        return self.db.query(IssuedCard).filter(
+            IssuedCard.account_id == account_id,
+            IssuedCard.status == "ACTIVE",
+            IssuedCard.is_active,
+        ).all()
+
     def get_card_by_customer_secured(self, card_id: str, customer_id: str) -> Optional[IssuedCard]:
         """Secured retrieval verifying the card belongs to the active customer context."""
         resolved_uid = self._resolve_user_id(customer_id)
         return self.db.query(IssuedCard).join(FinancialAccount).filter(
+            IssuedCard.id == card_id,
+            FinancialAccount.customer_id == resolved_uid
+        ).first()
+
+    def get_card_and_account_by_customer_secured(
+        self,
+        card_id: str,
+        customer_id: str,
+    ) -> tuple[IssuedCard, FinancialAccount] | None:
+        """Secured retrieval of a card and backing account for the active customer context."""
+        resolved_uid = self._resolve_user_id(customer_id)
+        return self.db.query(IssuedCard, FinancialAccount).join(FinancialAccount).filter(
             IssuedCard.id == card_id,
             FinancialAccount.customer_id == resolved_uid
         ).first()
@@ -119,11 +146,26 @@ class CreditCardRepository:
         """Retrieves a single ledger entry transaction by its unique ID."""
         return self.db.query(AccountLedger).filter(AccountLedger.id == entry_id).first()
 
+    def get_ledger_entry_by_id_for_account(self, entry_id: str, account_id: str) -> Optional[AccountLedger]:
+        """Retrieves a single ledger entry after verifying account ownership."""
+        return self.db.query(AccountLedger).filter(
+            AccountLedger.id == entry_id,
+            AccountLedger.account_id == account_id,
+        ).first()
+
     def save_ledger(self, entry: AccountLedger) -> AccountLedger:
         """Saves an Account Ledger transaction entry to the session."""
         self.db.add(entry)
         self.db.flush()
         return entry
+
+    def get_fraud_provisional_credit_entry(self, account_id: str, original_tx_id: str) -> Optional[AccountLedger]:
+        """Checks if a fraud provisional credit already exists for a posted transaction."""
+        return self.db.query(AccountLedger).filter(
+            AccountLedger.account_id == account_id,
+            AccountLedger.authorization_id.is_(None),
+            AccountLedger.description == f"FRAUD_PROVISIONAL_CREDIT_REF_{original_tx_id}",
+        ).first()
 
     def get_reversal_entry(self, account_id: str, original_tx_id: str) -> Optional[AccountLedger]:
         """Checks if a reversal transaction already exists for the specified transaction ID."""
@@ -147,6 +189,13 @@ class CreditCardRepository:
     def get_authorization_by_id(self, auth_id: str) -> Optional[TransactionAuthorization]:
         """Retrieves a transaction authorization by its ID."""
         return self.db.query(TransactionAuthorization).filter(TransactionAuthorization.id == auth_id).first()
+
+    def get_authorization_by_id_for_account(self, auth_id: str, account_id: str) -> Optional[TransactionAuthorization]:
+        """Retrieves a transaction authorization after verifying account ownership."""
+        return self.db.query(TransactionAuthorization).filter(
+            TransactionAuthorization.id == auth_id,
+            TransactionAuthorization.account_id == account_id,
+        ).first()
 
     def save_authorization(self, auth: TransactionAuthorization) -> TransactionAuthorization:
         """Saves a Transaction Authorization record to the session."""
@@ -173,6 +222,18 @@ class CreditCardRepository:
             TransactionAuthorization.status == "PENDING"
         ).scalar()
         return int(res or 0)
+
+    def calculate_available_credit_cents(self, account: FinancialAccount) -> int:
+        """Calculates available credit from the ledger balance and active pending holds."""
+        pending_sum = self.get_pending_auth_total(str(account.id))
+        raw_available = account.credit_limit_cents - account.cleared_balance_cents - pending_sum
+        return max(0, min(account.credit_limit_cents, raw_available))
+
+    def recalculate_available_credit(self, account: FinancialAccount) -> int:
+        """Persists canonical available credit for a credit account."""
+        account.available_credit_cents = self.calculate_available_credit_cents(account)
+        self.save_account(account)
+        return account.available_credit_cents
 
     def get_authorization_by_rrn(self, rrn: str, status: Optional[str] = None) -> Optional[TransactionAuthorization]:
         """Retrieves a transaction authorization by its retrieval reference number and optional status."""
