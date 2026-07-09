@@ -26,7 +26,7 @@ from utils.auth import require_admin_user, verify_eventarc_oidc_token
 from utils.database import enable_session_rbac_override
 from utils.env import is_cloud_run
 from utils.lazy_clients import LazyClient
-from utils.maintenance import maintenance_window
+from utils.maintenance import enable_maintenance_mode, maintenance_window
 from utils.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ def clear_operational_transaction_stream() -> None:
         logger.warning("Could not clear Redis transaction or metrics cache during reset: %s", exc)
 
 
-def _run_cloud_run_reset_job(timeout_seconds: int = 300) -> dict | None:
+def _run_cloud_run_reset_job() -> dict | None:
     job_name = os.getenv("FULL_RESET_JOB_NAME")
     if not is_cloud_run() or not job_name:
         return None
@@ -69,32 +69,14 @@ def _run_cloud_run_reset_job(timeout_seconds: int = 300) -> dict | None:
 
     job_path = f"projects/{project_id}/locations/{region}/jobs/{job_name}"
     run_url = f"https://run.googleapis.com/v2/{job_path}:run"
-    deadline = time.monotonic() + timeout_seconds
 
     with httpx.Client(timeout=30.0) as client:
         response = client.post(run_url, headers=headers, json={})
         response.raise_for_status()
         operation = response.json()
-        operation_name = operation.get("name")
-        if not operation_name:
+        if not operation.get("name"):
             raise RuntimeError(f"Cloud Run reset job did not return an operation: {operation}")
-
-        operation_url = (
-            operation_name
-            if operation_name.startswith("https://")
-            else f"https://run.googleapis.com/v2/{operation_name}"
-        )
-        while time.monotonic() < deadline:
-            poll = client.get(operation_url, headers=headers)
-            poll.raise_for_status()
-            operation = poll.json()
-            if operation.get("done"):
-                if operation.get("error"):
-                    raise RuntimeError(f"Cloud Run reset job failed: {operation['error']}")
-                return operation
-            time.sleep(2)
-
-    raise TimeoutError(f"Timed out waiting for Cloud Run reset job {job_name} to finish.")
+        return operation
 
 class EventarcPayload(BaseModel):
     name: str = Field(..., description="GCS object name.")
@@ -240,6 +222,25 @@ def reset_database(
     try:
         enable_session_rbac_override(db)
 
+        reset_job_operation = _run_cloud_run_reset_job()
+        if reset_job_operation:
+            enable_maintenance_mode(
+                reason="database_reset",
+                message="Admin reset in progress. Transaction traffic is temporarily paused.",
+                ttl_seconds=300,
+            )
+            time.sleep(2.0)
+            clear_operational_transaction_stream()
+            logger.info("Database reset started via Cloud Run job operation: %s", reset_job_operation.get("name"))
+            if purge_audit_logs or purge_data_lake:
+                warnings.append("Audit and data lake purge are skipped for asynchronous Cloud Run reset jobs.")
+            return {
+                "status": "SUCCESS",
+                "message": "Database reset job started. Demo data will be rebuilt shortly.",
+                "operation": reset_job_operation.get("name"),
+                "warnings": warnings,
+            }
+
         with maintenance_window(
             reason="database_reset",
             message="Admin reset in progress. Transaction traffic is temporarily paused.",
@@ -249,12 +250,8 @@ def reset_database(
             logger.info("Maintenance mode enabled for admin database reset.")
             clear_operational_transaction_stream()
 
-            reset_job_operation = _run_cloud_run_reset_job()
-            if reset_job_operation:
-                logger.info("Database reset completed via Cloud Run job: %s", reset_job_operation.get("name"))
-            else:
-                # Local/test fallback: seed and clean databases using the Seeding Service.
-                perform_algorithmic_seeding(db)
+            # Local/test fallback: seed and clean databases using the Seeding Service.
+            perform_algorithmic_seeding(db)
             clear_operational_transaction_stream()
 
             if purge_audit_logs:

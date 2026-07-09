@@ -13,4 +13,5 @@ def test_alembic_env_revokes_immutable_ledger_permissions_for_all_roles() -> Non
     assert '"ledger",' in env_text
     assert 'REVOKE UPDATE, DELETE ON TABLE ledger.account_ledger FROM "{role}"' in env_text
     assert 'REVOKE UPDATE, DELETE ON TABLE ledger.account_ledger FROM PUBLIC' in env_text
+    assert 'if role.startswith("banking-service-sa"):\n                        continue' not in env_text
     assert 'if "ledger" in allowed_schemas:' not in env_text

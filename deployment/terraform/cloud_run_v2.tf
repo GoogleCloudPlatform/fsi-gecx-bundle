@@ -869,7 +869,7 @@ resource "google_cloud_run_v2_job" "db_reset_job" {
       containers {
         image   = "us-central1-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/banking-service:latest"
         command = ["python"]
-        args    = ["services/seeding_service.py"]
+        args    = ["-m", "services.seeding_service"]
 
         volume_mounts {
           name       = "cloudsql"
