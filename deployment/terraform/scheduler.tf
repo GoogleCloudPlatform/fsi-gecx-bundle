@@ -14,10 +14,10 @@
 
 resource "google_cloud_scheduler_job" "data_generator_cron" {
   name             = "data-generator-cron"
-  description      = "Trigger synthetic data generation every 1 minute"
-  schedule         = "*/1 * * * *"
+  description      = "Trigger lightweight background synthetic card activity"
+  schedule         = var.data_generator_cron_schedule
   time_zone        = "Etc/UTC"
-  attempt_deadline = "120s"
+  attempt_deadline = var.data_generator_request_timeout
   region           = var.region
 
   pubsub_target {

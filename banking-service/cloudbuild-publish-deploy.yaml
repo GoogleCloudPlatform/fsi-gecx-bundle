@@ -173,6 +173,9 @@ steps:
           echo "Deploying application to Cloud Run Service..."
           gcloud run deploy banking-service \
             --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
+            --min-instances "1" \
+            --max-instances "20" \
+            --concurrency "16" \
             --region "${_REGION}"
         else
           echo "Skipping deployment because _TRIGGER_DEPLOY is not true"

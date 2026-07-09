@@ -701,6 +701,31 @@ resource "google_cloud_run_v2_service" "data_generator" {
         name  = "SWIPE_WORKFLOW_CONCURRENCY"
         value = tostring(var.data_generator_swipe_workflow_concurrency)
       }
+
+      env {
+        name  = "PULSE_WINDOW_SECONDS"
+        value = tostring(var.data_generator_pulse_window_seconds)
+      }
+
+      env {
+        name  = "PULSE_MIN_EVENTS"
+        value = tostring(var.data_generator_pulse_min_events)
+      }
+
+      env {
+        name  = "PULSE_MAX_EVENTS"
+        value = tostring(var.data_generator_pulse_max_events)
+      }
+
+      env {
+        name  = "SWIPE_REQUEST_TIMEOUT_SECONDS"
+        value = tostring(var.data_generator_swipe_request_timeout_seconds)
+      }
+
+      env {
+        name  = "AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE"
+        value = tostring(var.data_generator_auto_paydown_max_accounts_per_pulse)
+      }
     }
   }
 
