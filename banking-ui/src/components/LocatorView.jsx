@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { MapPin, Search, Navigation, Clock, Phone, ExternalLink } from 'lucide-react';
+import { MapPin, Search, Navigation, Clock, Phone, ExternalLink, Copy, Check } from 'lucide-react';
 import { getLocations } from '../utils/api.js';
 import GoogleCloudIcon from './GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
@@ -27,6 +27,7 @@ export default function LocatorView() {
   const [gpsUsed, setGpsUsed] = useState(false);
   const [openOnly, setOpenOnly] = useState(false);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const [copiedQuery, setCopiedQuery] = useState(false);
   const projectId = window.firebaseConfig?.projectId;
 
   // Helper to determine if a location is open right now
@@ -48,6 +49,16 @@ export default function LocatorView() {
       return currTimeDecimal >= 9 && currTimeDecimal < 13;
     }
     return false;
+  };
+
+  const handleCopyQuery = async () => {
+    try {
+      await navigator.clipboard.writeText('select * from operations.retail_locations;');
+      setCopiedQuery(true);
+      setTimeout(() => setCopiedQuery(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy query:", err);
+    }
   };
 
   const filteredLocations = useMemo(() => {
@@ -320,33 +331,52 @@ export default function LocatorView() {
       <GcpInfoModal
         isOpen={isInfoModalOpen}
         onClose={() => setIsInfoModalOpen(false)}
-        title="BigQuery Database Integration"
+        title="Cloud SQL Database Integration"
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            This branch and ATM locator search is powered by <strong>Google Cloud Platform's BigQuery</strong> serverless data warehouse.
+            This branch and ATM locator search is powered by <strong>Google Cloud Platform's Cloud SQL</strong>.
           </p>
           <p>
-            The backend retrieves retail location coordinates and service types in real-time by querying geographic distance metrics from the locations table.
+            The backend retrieves retail location coordinates and service types in real-time by querying geographic distance metrics from the retail locations table.
           </p>
           <p>
-            You can inspect the underlying dataset schema and query logs directly in the Google Cloud Console using the link below:
+            You can inspect the underlying dataset schema and query data directly in the Google Cloud Console using the link below:
           </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">BigQuery Locations Table</h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">View schemas, columns, preview rows, and execute query analysis.</p>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Retail Locations Table</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">View schemas, columns, preview rows, and execute query analysis. Login to the banking database using IAM upon clicking 'Open Cloud SQL Studio'.</p>
               </div>
-              <a
-                href={`https://console.cloud.google.com/bigquery?project=${projectId}&ws=!1m6!1m5!4m3!1s${projectId}!2sbanking!3sretail_location!23sRESOURCE_LIST`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
-              >
-                <span>View Table</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                <a
+                  href={`https://console.cloud.google.com/sql/instances/banking-data/studio?project=${projectId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs hover:underline"
+                >
+                  <span>Open Cloud SQL Studio</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                <button
+                  type="button"
+                  onClick={handleCopyQuery}
+                  className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs hover:underline cursor-pointer"
+                >
+                  {copiedQuery ? (
+                    <>
+                      <span>Copied!</span>
+                      <Check className="w-3.5 h-3.5" />
+                    </>
+                  ) : (
+                    <>
+                      <span>Copy Query</span>
+                      <Copy className="w-3.5 h-3.5" />
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
