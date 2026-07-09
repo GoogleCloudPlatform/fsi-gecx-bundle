@@ -17,3 +17,15 @@ roles:
 
   # Roles to view Cloud Scheduler jobs in console
   - roles/cloudscheduler.viewer
+
+  # Roles to view Artifact Registry in console
+  - roles/artifactregistry.viewer
+
+  # Roles to view Compute Engine in console
+  - roles/compute.viewer
+
+  # Roles to view Redis in console
+  - roles/redis.viewer
+
+  # Roles to view KMS in console
+  - roles/cloudkms.viewer
