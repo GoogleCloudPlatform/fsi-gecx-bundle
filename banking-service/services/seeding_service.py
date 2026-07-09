@@ -643,19 +643,32 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
         raise e
 
 
-def _seed_user_transactions(db: Session, user_uuid: uuid.UUID, checking_acc: Account, savings_acc: Account, cred_acc: CreditAccount, card: IssuedCard, first_name: str, last_name: str) -> None:
+def _seed_user_transactions(
+    db: Session,
+    user_uuid: uuid.UUID,
+    checking_acc: Account,
+    savings_acc: Account,
+    cred_acc: CreditAccount,
+    card: IssuedCard,
+    first_name: str,
+    last_name: str,
+    *,
+    clear_existing: bool = True,
+) -> None:
     """Seeds consistent pending and posted transactions across checking, savings, and credit card accounts."""
     now = datetime.datetime.now(datetime.timezone.utc)
     card_token = card.card_token if card else None
 
-    # 1. Clear any existing transactions for these accounts
-    if checking_acc:
-        db.query(AccountLedgerEntry).filter(AccountLedgerEntry.account_id == checking_acc.id).delete()
-    if savings_acc:
-        db.query(AccountLedgerEntry).filter(AccountLedgerEntry.account_id == savings_acc.id).delete()
-    if cred_acc:
-        db.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == cred_acc.id).delete()
-        db.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).delete()
+    # 1. Clear existing transactions only for reseeding flows. First-time provisioning uses
+    # brand-new accounts and must not issue no-op deletes against the append-only ledger.
+    if clear_existing:
+        if checking_acc:
+            db.query(AccountLedgerEntry).filter(AccountLedgerEntry.account_id == checking_acc.id).delete()
+        if savings_acc:
+            db.query(AccountLedgerEntry).filter(AccountLedgerEntry.account_id == savings_acc.id).delete()
+        if cred_acc:
+            db.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == cred_acc.id).delete()
+            db.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).delete()
 
     # 2. Checking Account Seeding (Pending & Posted)
     if checking_acc:
@@ -1104,7 +1117,17 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
         )
 
         # 9. Seed unified transactions across checking, savings, and credit cards
-        _seed_user_transactions(db, user_uuid=user_uuid, checking_acc=checking_acc, savings_acc=savings_acc, cred_acc=cred_acc, card=card, first_name=first_name, last_name=last_name)
+        _seed_user_transactions(
+            db,
+            user_uuid=user_uuid,
+            checking_acc=checking_acc,
+            savings_acc=savings_acc,
+            cred_acc=cred_acc,
+            card=card,
+            first_name=first_name,
+            last_name=last_name,
+            clear_existing=False,
+        )
         
         db.commit()
         logger.info(f"Dynamically provisioned personal demo suite for email={email} (user_id={user_uuid}) successfully.")
@@ -1136,28 +1159,46 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
     if not user:
         raise ValueError(f"User {user_id} was not found.")
 
-    # 1. Fetch all checking/savings accounts belonging to user
+    # 1. Retire active deposit accounts and issue fresh ones. Ledger rows are
+    # append-only, so reset must not delete historical account ledger entries.
     accounts = db.query(Account).filter(Account.user_id == user_id).all()
-    checking_acc = None
-    savings_acc = None
     for acc in accounts:
-        db.query(AccountLedgerEntry).filter(AccountLedgerEntry.account_id == acc.id).delete(synchronize_session=False)
-        if acc.account_type == "CHECKING":
-            checking_acc = acc
-            if user.email == "erikvoit@google.com":
-                acc.cleared_balance_cents = 4500000
-            elif user.email == "mservedio@google.com":
-                acc.cleared_balance_cents = 6000000
-            else:
-                acc.cleared_balance_cents = 1000000
-        elif acc.account_type == "SAVINGS":
-            savings_acc = acc
-            if user.email == "erikvoit@google.com":
-                acc.cleared_balance_cents = 15000000
-            else:
-                acc.cleared_balance_cents = 2000000
-        else:
-            acc.cleared_balance_cents = 1000000
+        if acc.account_type in ("CHECKING", "SAVINGS") and acc.status == "ACTIVE":
+            acc.status = "CLOSED"
+
+    checking_balance = 4500000 if user.email == "erikvoit@google.com" else (6000000 if user.email == "mservedio@google.com" else 1000000)
+    savings_balance = 15000000 if user.email == "erikvoit@google.com" else 2000000
+
+    checking_acc = Account(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        account_number=f"CHK-{random.randint(10000000, 99999999)}",
+        account_type="CHECKING",
+        product_name="Nova Signature Checking",
+        product_code="CHECKING_SIGNATURE",
+        cleared_balance_cents=checking_balance,
+        routing_number="021000021",
+        status="ACTIVE",
+    )
+    while db.query(Account).filter(Account.account_number == checking_acc.account_number).first():
+        checking_acc.account_number = f"CHK-{random.randint(10000000, 99999999)}"
+
+    savings_acc = Account(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        account_number=f"SAV-{random.randint(10000000, 99999999)}",
+        account_type="SAVINGS",
+        product_name="Nova High Yield Savings",
+        product_code="SAVINGS_HIGH_YIELD",
+        cleared_balance_cents=savings_balance,
+        routing_number="021000021",
+        status="ACTIVE",
+    )
+    while db.query(Account).filter(Account.account_number == savings_acc.account_number).first():
+        savings_acc.account_number = f"SAV-{random.randint(10000000, 99999999)}"
+
+    db.add_all([checking_acc, savings_acc])
+    db.flush()
 
     # 2. Clear fraud workflow residue and restore card/account baseline state.
     fraud_alerts = db.query(FraudAlert).filter(FraudAlert.customer_id == user_id).all()
@@ -1233,7 +1274,8 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
         cred_acc=cred_acc, 
         card=card, 
         first_name=user.first_name,
-        last_name=user.last_name
+        last_name=user.last_name,
+        clear_existing=False,
     )
         
     db.commit()

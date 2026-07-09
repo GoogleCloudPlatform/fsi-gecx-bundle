@@ -249,7 +249,18 @@ def run_migrations_online() -> None:
                     elif role.startswith("ledger-service-sa"):
                         allowed_schemas = ["ledger", "audit", "catalog", "ref_data", "merchants"]
                     elif role.startswith("banking-service-sa"):
-                        allowed_schemas = ["identity", "cards", "operations", "origination", "audit", "admin", "catalog", "ref_data", "merchants"]
+                        allowed_schemas = [
+                            "identity",
+                            "ledger",
+                            "cards",
+                            "operations",
+                            "origination",
+                            "audit",
+                            "admin",
+                            "catalog",
+                            "ref_data",
+                            "merchants",
+                        ]
                     else:
                         allowed_schemas = schemas
 
