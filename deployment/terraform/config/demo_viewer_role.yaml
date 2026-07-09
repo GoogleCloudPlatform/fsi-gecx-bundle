@@ -45,3 +45,6 @@ roles:
 
   # Discovery Engine (Agent Search)
   - roles/discoveryengine.viewer
+
+  # Document AI
+  - roles/documentai.viewer
