@@ -238,7 +238,15 @@ def run_migrations_online() -> None:
                 if os.getenv("IAM_DB_VIEWER_USERS"):
                     viewer_roles.extend([u.strip() for u in os.getenv("IAM_DB_VIEWER_USERS").split(",") if u.strip()])
 
-                for role in roles + viewer_roles + reset_roles:
+                # Cloud SQL IAM database users are Terraform-owned. Do not
+                # pre-create their backing PostgreSQL roles here, or a service
+                # deployment/migration can race Terraform and leave an orphan
+                # role that blocks google_sql_user creation.
+                bootstrap_roles = [
+                    role for role in roles + viewer_roles + reset_roles
+                    if "@" not in role
+                ]
+                for role in bootstrap_roles:
                     try:
                         with connection.begin_nested():
                             stmt = f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = \'{role}\') THEN CREATE ROLE "{role}" NOLOGIN; END IF; END $$;'
