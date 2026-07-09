@@ -986,9 +986,6 @@ export default function VoiceSupportView() {
                         {fraudTriage.replacement_card && (
                           <p>Replacement virtual card: <span className="font-semibold">ending in {fraudTriage.replacement_card.new_last_four}</span></p>
                         )}
-                        {fraudTriage.secure_message && (
-                          <p>Secure message: <span className="font-semibold">sent to thread {fraudTriage.secure_message.thread_id}</span></p>
-                        )}
                       </div>
                     </div>
                   )}
