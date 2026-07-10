@@ -24,6 +24,14 @@
       ]
     },
     {
+      "name": "fraud_model_decision_history",
+      "sql": "fraud_model_decision_history.sql",
+      "sources": [
+        "iceberg_catalog.operations_fraud_model_decisions",
+        "iceberg_catalog.cards_transaction_authorization"
+      ]
+    },
+    {
       "name": "premium_travel_offer_candidates",
       "sql": "premium_travel_offer_candidates.sql",
       "sources": [

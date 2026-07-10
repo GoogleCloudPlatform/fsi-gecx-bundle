@@ -49,6 +49,21 @@ class CardAuthHoldRequest(BaseModel):
     merchant_category_code: str = Field(..., max_length=4, description="Merchant category code (MCC)")
     merchant_name: str = Field(..., description="Merchant name")
     card_network: str = Field("VISA", description="Card network provider")
+    transaction_channel: str | None = Field(None, description="CARD_PRESENT, CARD_NOT_PRESENT, ECOMMERCE, or WALLET")
+    entry_mode: str | None = Field(None, description="CHIP, CONTACTLESS, MAG_STRIPE, ECOMMERCE, or MANUAL")
+    merchant_country_code: str | None = Field(None, max_length=3, description="ISO 3-letter merchant country code")
+    merchant_city: str | None = None
+    merchant_region: str | None = None
+    merchant_postal_code: str | None = None
+    merchant_latitude: float | None = None
+    merchant_longitude: float | None = None
+    ip_country_code: str | None = Field(None, max_length=3, description="Coarse ecommerce IP country code")
+    shipping_country_code: str | None = Field(None, max_length=3, description="Coarse ecommerce shipping country code")
+    is_digital_goods: bool = False
+    merchant_high_risk_flags: list[str] = Field(default_factory=list)
+    synthetic_fraud_label: str | None = None
+    fraud_pattern_label: str | None = None
+    fraud_pattern_sequence: int | None = None
 
 class CardSettlementRequest(BaseModel):
     retrieval_reference_number: str = Field(..., max_length=12, description="RRN matching the hold authorization")

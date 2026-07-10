@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import httpx
+import json
 import pytest
 import respx
 from fastapi.testclient import TestClient
@@ -69,6 +70,14 @@ def test_get_merchants_prefers_canonical_api_shape(monkeypatch):
                     "category": "Retail",
                     "mcc": "5311",
                     "country_code": "USA",
+                    "city": "San Francisco",
+                    "region": "CA",
+                    "postal_code": "94103",
+                    "latitude": 37.7749,
+                    "longitude": -122.4194,
+                    "card_present_capable": True,
+                    "ecommerce_capable": False,
+                    "high_risk_flags": ["ELECTRONICS"],
                     "is_international": False,
                     "risk_score": 1,
                 }
@@ -85,6 +94,14 @@ def test_get_merchants_prefers_canonical_api_shape(monkeypatch):
             "category": "Retail",
             "mcc": "5311",
             "country_code": "USA",
+            "city": "San Francisco",
+            "region": "CA",
+            "postal_code": "94103",
+            "latitude": 37.7749,
+            "longitude": -122.4194,
+            "card_present_capable": True,
+            "ecommerce_capable": False,
+            "high_risk_flags": ["ELECTRONICS"],
             "is_international": False,
             "risk_score": 1,
         }
@@ -107,6 +124,14 @@ def test_get_merchants_falls_back_to_legacy_route_shape(monkeypatch):
                     "category": "Dining",
                     "default_mcc": "5812",
                     "country_code": "MEX",
+                    "city": "Cancun",
+                    "region": "QR",
+                    "postal_code": "77500",
+                    "latitude": 21.1619,
+                    "longitude": -86.8515,
+                    "card_present_capable": True,
+                    "ecommerce_capable": False,
+                    "high_risk_flags": [],
                     "is_international": True,
                     "risk_score": 9,
                 }
@@ -123,6 +148,14 @@ def test_get_merchants_falls_back_to_legacy_route_shape(monkeypatch):
             "category": "Dining",
             "mcc": "5812",
             "country_code": "MEX",
+            "city": "Cancun",
+            "region": "QR",
+            "postal_code": "77500",
+            "latitude": 21.1619,
+            "longitude": -86.8515,
+            "card_present_capable": True,
+            "ecommerce_capable": False,
+            "high_risk_flags": [],
             "is_international": True,
             "risk_score": 9,
         }
@@ -170,9 +203,13 @@ async def test_simulate_pulse_success():
     for request in auth_route.calls:
         assert request[0].headers.get("X-Card-Network-Token") == main.get_card_network_token()
         payload = request[0].read().decode()
-        assert "card_token" in payload
-        assert "amount_cents" in payload
-        assert "retrieval_reference_number" in payload
+        parsed = json.loads(payload)
+        assert "card_token" in parsed
+        assert "amount_cents" in parsed
+        assert "retrieval_reference_number" in parsed
+        assert parsed["transaction_channel"] in {"CARD_PRESENT", "WALLET", "ECOMMERCE"}
+        assert parsed["entry_mode"] in {"CHIP", "CONTACTLESS", "MAG_STRIPE", "ECOMMERCE"}
+        assert parsed["merchant_country_code"] == "USA"
 
 @pytest.mark.asyncio
 @respx.mock
@@ -375,6 +412,36 @@ def test_get_generator_eligible_cards_excludes_presenter_and_vip_cards():
     assert [card["card_token"] for card in eligible] == ["tok_mock", "tok_legacy"]
 
 
+def test_build_fraud_pattern_payloads_labels_without_score_override():
+    payloads = main.build_fraud_pattern_payloads(
+        {"card_token": "tok_pattern", "available_credit_cents": 200000},
+        "cnp_gift_card_burst",
+    )
+
+    assert len(payloads) == 3
+    first = payloads[0]
+    assert first["card_token"] == "tok_pattern"
+    assert first["synthetic_fraud_label"] == "FRAUD_PATTERN"
+    assert first["fraud_pattern_label"] == "cnp_gift_card_burst"
+    assert first["transaction_channel"] == "ECOMMERCE"
+    assert first["entry_mode"] == "ECOMMERCE"
+    assert first["is_digital_goods"] is True
+    assert "risk_score" not in first
+    assert "is_fraud_simulation" not in first
+
+
+def test_build_fraud_pattern_payloads_supports_impossible_travel_sequence():
+    payloads = main.build_fraud_pattern_payloads(
+        {"card_token": "tok_travel", "available_credit_cents": 200000},
+        "impossible_travel_card_present",
+    )
+
+    assert len(payloads) == 2
+    assert payloads[0]["merchant_city"] == "San Francisco"
+    assert payloads[1]["merchant_city"] == "New York"
+    assert all(payload["transaction_channel"] == "CARD_PRESENT" for payload in payloads)
+
+
 @pytest.mark.asyncio
 @respx.mock
 async def test_auto_paydown_high_utilization_cards_calls_internal_endpoint():
@@ -446,3 +513,30 @@ async def test_inject_anomaly_success():
     assert data["injected_swipes_count"] == 5
     assert data["card_token"] == "tok_visa_test"
     assert auth_route.call_count == 5
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_simulate_fraud_patterns_dispatches_labeled_payloads_without_overrides():
+    auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
+        return_value=httpx.Response(200, json={"action_code": "00", "auth_code": "999999", "status": "FLAGGED"})
+    )
+
+    response = client.post(
+        "/simulate-fraud-patterns",
+        json={"card_token": "tok_visa_pattern", "pattern": "cnp_gift_card_burst", "count": 1},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "FRAUD_PATTERNS_SIMULATED"
+    assert data["patterns_attempted"] == 1
+    assert data["authorizations_created"] == 3
+    assert auth_route.call_count == 3
+    for call in auth_route.calls:
+        payload = json.loads(call.request.read().decode())
+        assert payload["synthetic_fraud_label"] == "FRAUD_PATTERN"
+        assert payload["fraud_pattern_label"] == "cnp_gift_card_burst"
+        assert payload["transaction_channel"] == "ECOMMERCE"
+        assert "risk_score" not in payload
+        assert "is_fraud_simulation" not in payload

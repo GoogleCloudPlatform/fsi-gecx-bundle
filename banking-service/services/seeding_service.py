@@ -44,6 +44,7 @@ from services.merchant_service import MerchantEnrichmentService
 logger = logging.getLogger(__name__)
 RESOURCE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "data")
 DEMO_SCRIPT_DOMAINS = {"google.com", "gcp.solutions", "altostrat.com", "nova.horizon.test"}
+DEFAULT_SEED_MOCK_USER_COUNT = 200
 
 
 def _generate_demo_card_token() -> str:
@@ -138,6 +139,17 @@ def load_vip_googlers():
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
+
+def get_seed_mock_user_count() -> int:
+    raw_value = os.getenv("SEED_MOCK_USER_COUNT")
+    if not raw_value:
+        return DEFAULT_SEED_MOCK_USER_COUNT
+    try:
+        return max(0, int(raw_value))
+    except ValueError:
+        logger.warning("Invalid SEED_MOCK_USER_COUNT=%r; using default %s.", raw_value, DEFAULT_SEED_MOCK_USER_COUNT)
+        return DEFAULT_SEED_MOCK_USER_COUNT
+
 def get_seeding_personas():
     base_personas = get_base_personas()
     vip_googlers = load_vip_googlers()
@@ -205,7 +217,8 @@ def get_seeding_personas():
     street_names = meta["street_names"]
     underwriting_tiers = meta["underwriting_tiers"]
     
-    mock_needed = max(0, 200 - len(base_personas))
+    target_mock_population = get_seed_mock_user_count()
+    mock_needed = max(0, target_mock_population - len(base_personas))
     generated_mock = []
     
     rng = random.Random(42)
@@ -838,6 +851,13 @@ def _seed_user_transactions(
                     posted_date = now - datetime.timedelta(
                         days=demo_charge.get("posted_days_ago", 2)
                     )
+                merchant_context = MerchantEnrichmentService.enrich_transaction(
+                    db,
+                    store_desc,
+                    mcc=mcc_val,
+                    country=demo_charge.get("merchant_country_code", "MEX"),
+                )
+                merchant_context["country_code"] = demo_charge.get("merchant_country_code", merchant_context.get("country_code"))
             else:
                 mch, store_desc = MerchantEnrichmentService.get_random_merchant(
                     db, 
@@ -846,6 +866,17 @@ def _seed_user_transactions(
                     home_metro=user_home_metro
                 )
                 mcc_val = mch.mcc if mch else "5311"
+                merchant_context = {
+                    "country_code": mch.country_code if mch else "USA",
+                    "city": mch.city if mch else None,
+                    "region": mch.region if mch else None,
+                    "postal_code": mch.postal_code if mch else None,
+                    "latitude": mch.latitude if mch else None,
+                    "longitude": mch.longitude if mch else None,
+                    "ecommerce_capable": mch.ecommerce_capable if mch else False,
+                    "card_present_capable": mch.card_present_capable if mch else True,
+                    "high_risk_flags": list(mch.high_risk_flags) if mch else [],
+                }
                 amount_cents = random.randint(1250, 45000)
                 if is_pending:
                     posted_date = now - datetime.timedelta(hours=(12 - i) * 2)
@@ -855,6 +886,8 @@ def _seed_user_transactions(
             rrn = f"REF_{str(user_uuid)[:5]}_{i:02d}"
             
             created_at = posted_date - datetime.timedelta(hours=2)
+            transaction_channel = "ECOMMERCE" if merchant_context.get("ecommerce_capable") else "CARD_PRESENT"
+            entry_mode = "ECOMMERCE" if transaction_channel == "ECOMMERCE" else "CHIP"
             auth = TransactionAuthorization(
                 id=uuid.uuid4(),
                 card_id=card.id,
@@ -869,6 +902,15 @@ def _seed_user_transactions(
                 merchant_category_code=mcc_val,
                 merchant_name=store_desc,
                 fraud_risk_score=0,
+                transaction_channel=transaction_channel,
+                entry_mode=entry_mode,
+                merchant_country_code=merchant_context.get("country_code"),
+                merchant_city=merchant_context.get("city"),
+                merchant_region=merchant_context.get("region"),
+                merchant_postal_code=merchant_context.get("postal_code"),
+                merchant_latitude=merchant_context.get("latitude"),
+                merchant_longitude=merchant_context.get("longitude"),
+                is_digital_goods="DIGITAL_GOODS" in (merchant_context.get("high_risk_flags") or []),
                 created_at=created_at,
                 expires_at=created_at + datetime.timedelta(days=7),
             )

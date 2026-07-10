@@ -787,7 +787,8 @@ def upgrade() -> None:
                             required=require_cdc_bootstrap,
                             exc=exc,
                         )
-                    for schema_name in ["cards", "origination", "identity"]:
+                    cdc_schemas = ["cards", "origination", "identity", "kyc", "merchants", "operations"]
+                    for schema_name in cdc_schemas:
                         try:
                             with conn.begin_nested():
                                 conn.execute(text(f'GRANT USAGE ON SCHEMA "{schema_name}" TO "{db_user}";'))

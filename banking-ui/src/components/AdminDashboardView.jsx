@@ -15,7 +15,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings, Bell, ExternalLink, Sparkles } from 'lucide-react';
-import { resetDatabase, getSystemSettings, updateSystemSettings, provisionMyDemo, resetMyDemo, getCreditCardAccount } from '../utils/api.js';
+import { resetDatabase, getResetDatabaseAccess, getSystemSettings, updateSystemSettings, provisionMyDemo, resetMyDemo, getCreditCardAccount } from '../utils/api.js';
 import GoogleCloudIcon from './GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { showInfoModals } from '../utils/constants.js';
@@ -25,6 +25,7 @@ function AdminDashboardView() {
   const [isResetting, setIsResetting] = useState(false);
   const [purgeAuditLogs, setPurgeAuditLogs] = useState(false);
   const [purgeDataLake, setPurgeDataLake] = useState(false);
+  const [fullResetAccess, setFullResetAccess] = useState({ allowed: false, message: 'Full database reset status is loading.' });
   const [notice, setNotice] = useState({ type: '', text: '' });
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   
@@ -65,6 +66,19 @@ function AdminDashboardView() {
     loadSettings();
   }, []);
 
+  useEffect(() => {
+    async function loadResetAccess() {
+      try {
+        const access = await getResetDatabaseAccess();
+        setFullResetAccess(access);
+      } catch (err) {
+        console.error("Failed to load full reset access:", err);
+        setFullResetAccess({ allowed: false, message: 'Full database reset is restricted. Use personal demo reset for presenter recovery.' });
+      }
+    }
+    loadResetAccess();
+  }, []);
+
   // Check if current user has a seeded profile
   useEffect(() => {
     async function checkSeededProfile() {
@@ -102,6 +116,10 @@ function AdminDashboardView() {
   };
 
   const handleResetDatabase = async () => {
+    if (!fullResetAccess.allowed) {
+      setNotice({ type: 'error', text: fullResetAccess.message || 'Full database reset is restricted.' });
+      return;
+    }
     let confirmMsg = "Are you sure you want to reset the database? This will clear active applications and cards while preserving immutable audit logs and analytical lake tables.";
     if (purgeAuditLogs && purgeDataLake) {
       confirmMsg = "Are you sure you want to reset the database AND PURGE ALL BIGQUERY AUDIT LOGS & APACHE ICEBERG DATA LAKE TABLES? This cannot be undone.";
@@ -393,44 +411,47 @@ function AdminDashboardView() {
         </div>
       </form>
 
-      {/* System Debug Tools Panel */}
-      <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">System Debug Tools</h4>
-          <p className="text-xs text-slate-500 mt-0.5">Wipe the transactional database and re-seed all test accounts with baseline configurations in one click.</p>
-          <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={purgeAuditLogs}
-              onChange={(e) => setPurgeAuditLogs(e.target.checked)}
-              disabled={isResetting}
-              className="rounded border-slate-300 dark:border-slate-700 text-rose-600 focus:ring-rose-500"
-            />
-            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Purge BigQuery & PostgreSQL compliance audit logs</span>
-          </label>
-          <label className="flex items-center gap-2 mt-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={purgeDataLake}
-              onChange={(e) => setPurgeDataLake(e.target.checked)}
-              disabled={isResetting}
-              className="rounded border-slate-300 dark:border-slate-700 text-amber-600 focus:ring-amber-500"
-            />
-            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Purge Apache Iceberg BigLake analytical tables</span>
-          </label>
+      {fullResetAccess.allowed && (
+        <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">System Debug Tools</h4>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Wipe the transactional database and re-seed all test accounts with baseline configurations in one click.
+            </p>
+            <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={purgeAuditLogs}
+                onChange={(e) => setPurgeAuditLogs(e.target.checked)}
+                disabled={isResetting}
+                className="rounded border-slate-300 dark:border-slate-700 text-rose-600 focus:ring-rose-500"
+              />
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Purge BigQuery & PostgreSQL compliance audit logs</span>
+            </label>
+            <label className="flex items-center gap-2 mt-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={purgeDataLake}
+                onChange={(e) => setPurgeDataLake(e.target.checked)}
+                disabled={isResetting}
+                className="rounded border-slate-300 dark:border-slate-700 text-amber-600 focus:ring-amber-500"
+              />
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Purge Apache Iceberg BigLake analytical tables</span>
+            </label>
+          </div>
+          <button
+            onClick={handleResetDatabase}
+            disabled={isResetting}
+            className={`px-5 py-2.5 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap self-start sm:self-auto ${
+              isResetting
+                ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                : 'border-rose-200 dark:border-rose-900/30 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100/50 dark:hover:bg-rose-950/40'
+            }`}
+          >
+            {isResetting ? 'Resetting Database...' : 'Reset Database'}
+          </button>
         </div>
-        <button
-          onClick={handleResetDatabase}
-          disabled={isResetting}
-          className={`px-5 py-2.5 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap self-start sm:self-auto ${
-            isResetting
-              ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-              : 'border-rose-200 dark:border-rose-900/30 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100/50 dark:hover:bg-rose-950/40'
-          }`}
-        >
-          {isResetting ? 'Resetting Database...' : 'Reset Database'}
-        </button>
-      </div>
+      )}
 
       {/* Personal Demo Suite Management Panel */}
       <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

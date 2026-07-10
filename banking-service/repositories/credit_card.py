@@ -142,6 +142,24 @@ class CreditCardRepository:
             query = query.filter(TransactionAuthorization.status == status)
         return query.order_by(TransactionAuthorization.created_at.desc()).all()
 
+    def list_recent_authorizations(
+        self,
+        account_id: str,
+        since: datetime.datetime,
+        limit: int = 100,
+    ) -> List[TransactionAuthorization]:
+        """Retrieves recent authorization history for bounded online feature extraction."""
+        return (
+            self.db.query(TransactionAuthorization)
+            .filter(
+                TransactionAuthorization.account_id == account_id,
+                TransactionAuthorization.created_at >= since,
+            )
+            .order_by(TransactionAuthorization.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
     def get_ledger_entry_by_id(self, entry_id: str) -> Optional[AccountLedger]:
         """Retrieves a single ledger entry transaction by its unique ID."""
         return self.db.query(AccountLedger).filter(AccountLedger.id == entry_id).first()

@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import BigInteger, Column, DateTime, Index, JSON, String, UniqueConstraint
+from sqlalchemy import BigInteger, Column, DateTime, Index, Integer, JSON, String, UniqueConstraint
 
 from utils.database import Base
 from utils.database import UniversalUUID as UUID, generate_uuid
@@ -61,3 +61,35 @@ class FraudCaseAction(Base):
     result_payload = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     completed_at = Column(DateTime, nullable=True)
+
+
+class FraudModelDecision(Base):
+    """Explainable fraud model decision snapshot for one card authorization."""
+
+    __tablename__ = "fraud_model_decisions"
+    __table_args__ = (
+        Index("idx_fraud_model_decisions_customer_created", "customer_id", "created_at"),
+        Index("idx_fraud_model_decisions_account_created", "credit_account_id", "created_at"),
+        Index("idx_fraud_model_decisions_card_created", "card_id", "created_at"),
+        UniqueConstraint("authorization_id", name="uq_fraud_model_decisions_authorization"),
+        {"schema": "operations"},
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    authorization_id = Column(UUID(as_uuid=True), nullable=False)
+    customer_id = Column(UUID(as_uuid=True), nullable=False)
+    credit_account_id = Column(UUID(as_uuid=True), nullable=False)
+    card_id = Column(UUID(as_uuid=True), nullable=False)
+    score = Column(Integer, nullable=False)
+    threshold = Column(Integer, nullable=False)
+    decision = Column(String(32), nullable=False)
+    reason_codes = Column(JSON, nullable=False, default=list)
+    feature_snapshot = Column(JSON, nullable=False, default=dict)
+    merchant_name = Column(String(255), nullable=True)
+    merchant_category_code = Column(String(4), nullable=True)
+    transaction_channel = Column(String(32), nullable=True)
+    merchant_country_code = Column(String(3), nullable=True)
+    merchant_city = Column(String(100), nullable=True)
+    merchant_region = Column(String(100), nullable=True)
+    model_version = Column(String(64), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))

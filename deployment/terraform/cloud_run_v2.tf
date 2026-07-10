@@ -211,6 +211,16 @@ resource "google_cloud_run_v2_service" "banking_service" {
       }
 
       env {
+        name  = "FULL_RESET_ENABLED"
+        value = tostring(var.full_reset_enabled)
+      }
+
+      env {
+        name  = "DATABASE_IAM_SUPPORT_USERS"
+        value = join(",", local.database_iam_support_users)
+      }
+
+      env {
         name  = "CORS_ALLOWED_ORIGINS"
         value = local.cors_allowed_origins
       }
@@ -773,6 +783,26 @@ resource "google_cloud_run_v2_service" "data_generator" {
       }
 
       env {
+        name  = "FRAUD_PATTERN_ENABLED"
+        value = tostring(var.data_generator_fraud_pattern_enabled)
+      }
+
+      env {
+        name  = "FRAUD_PATTERN_RATE"
+        value = tostring(var.data_generator_fraud_pattern_rate)
+      }
+
+      env {
+        name  = "FRAUD_PATTERN_MAX_PER_PULSE"
+        value = tostring(var.data_generator_fraud_pattern_max_per_pulse)
+      }
+
+      env {
+        name  = "FRAUD_PATTERN_TARGET_MODE"
+        value = var.data_generator_fraud_pattern_target_mode
+      }
+
+      env {
         name  = "REDIS_HOST"
         value = google_redis_instance.banking.host
       }
@@ -944,6 +974,11 @@ resource "google_cloud_run_v2_job" "db_reset_job" {
         env {
           name  = "PYTHONUNBUFFERED"
           value = "1"
+        }
+
+        env {
+          name  = "SEED_MOCK_USER_COUNT"
+          value = tostring(var.seed_mock_user_count)
         }
       }
 

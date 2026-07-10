@@ -298,6 +298,11 @@ export async function resetDatabase(purgeAuditLogs = false, purgeDataLake = fals
   return res.data;
 }
 
+export async function getResetDatabaseAccess() {
+  const res = await api.get('internal/debug/reset-db/access');
+  return res.data;
+}
+
 export async function getSystemSettings() {
   const res = await api.get('settings');
   return res.data;

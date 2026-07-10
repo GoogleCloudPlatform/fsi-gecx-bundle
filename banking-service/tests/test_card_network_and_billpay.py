@@ -14,6 +14,7 @@
 
 import pytest
 import uuid
+import datetime
 from unittest.mock import patch
 from fastapi import status
 from httpx import AsyncClient, ASGITransport
@@ -25,10 +26,12 @@ from main import app
 from utils.database import Base, get_db
 from utils.auth import get_current_user
 from models.authentication import ValidatedToken
-from models.identity import User
+from models.identity import User, UserSecureMessage
 from models.origination import Account
 from models.credit_card import CreditAccount, IssuedCard, TransactionAuthorization, PostedTransaction
 from models.audit import AuditOutbox
+from models.fraud import FraudAlert, FraudModelDecision
+from services.card_network import process_authorization
 from services.credit_card import queue_wallet_provisioning
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -118,6 +121,127 @@ def setup_test_cardholder_suite(db):
     db.add(card)
     db.commit()
     return user, checking, credit_acc, card
+
+
+def test_process_authorization_publishes_structured_fraud_decision(db_session):
+    user, checking, credit_acc, card = setup_test_cardholder_suite(db_session)
+    published_events = []
+    now = datetime.datetime(2026, 7, 10, 12, 0, tzinfo=datetime.timezone.utc)
+    prior_auth = TransactionAuthorization(
+        card_id=card.id,
+        account_id=credit_acc.id,
+        transaction_amount_cents=1000,
+        billing_amount_cents=1000,
+        status="PENDING",
+        decline_reason="NONE",
+        auth_code="111111",
+        retrieval_reference_number="777777777776",
+        card_network="VISA",
+        merchant_category_code="5947",
+        merchant_name="GAME TEST TOKEN ONLINE",
+        transaction_channel="ECOMMERCE",
+        entry_mode="ECOMMERCE",
+        merchant_country_code="USA",
+        merchant_city="San Francisco",
+        merchant_region="CA",
+        merchant_latitude=37.7749,
+        merchant_longitude=-122.4194,
+        fraud_risk_score=3,
+        created_at=now - datetime.timedelta(minutes=5),
+        expires_at=now + datetime.timedelta(days=7),
+    )
+    db_session.add(prior_auth)
+    db_session.commit()
+    payload = {
+        "card_token": "tok_visa_swipe_tester",
+        "amount_cents": 95000,
+        "retrieval_reference_number": "777777777777",
+        "merchant_category_code": "5947",
+        "merchant_name": "RAZER GOLD GIFT CARD",
+        "card_network": "VISA",
+        "transaction_channel": "ECOMMERCE",
+        "entry_mode": "ECOMMERCE",
+        "merchant_country_code": "USA",
+        "merchant_city": "San Francisco",
+        "merchant_region": "CA",
+        "merchant_postal_code": "94103",
+        "merchant_latitude": 37.7749,
+        "merchant_longitude": -122.4194,
+        "ip_country_code": "USA",
+        "shipping_country_code": "USA",
+        "is_digital_goods": True,
+        "merchant_high_risk_flags": ["DIGITAL_GOODS", "GIFT_CARD"],
+        "is_fraud_simulation": True,
+        "risk_score": 91,
+        "created_at": now,
+    }
+
+    with patch("services.card_network._publish_redis_event", side_effect=lambda event_type, item: published_events.append((event_type, item))):
+        result = process_authorization(db_session, payload)
+
+    assert result["action_code"] == "00"
+    assert result["status"] == "FLAGGED"
+    assert result["fraud_risk_score"] == 91
+    assert result["fraud_reason_codes"] == ["EXPLICIT_SIMULATION_OVERRIDE"]
+    assert result["fraud_model_version"] == "local-deterministic-v1"
+    assert result["transaction_channel"] == "ECOMMERCE"
+    assert result["merchant_country_code"] == "USA"
+    assert result["fraud_decision"]["decision"] == "FLAGGED"
+    assert result["fraud_decision"]["features"]["amount_cents"] == 95000
+    assert result["fraud_decision"]["features"]["transaction_channel"] == "ECOMMERCE"
+    assert result["fraud_decision"]["features"]["merchant_city"] == "San Francisco"
+    assert result["fraud_decision"]["features"]["is_digital_goods"] is True
+    assert result["fraud_decision"]["features"]["recent_auth_count_10m"] == 1
+    assert result["fraud_decision"]["features"]["amount_to_recent_average_ratio"] == 95.0
+
+    auth = db_session.query(TransactionAuthorization).filter_by(retrieval_reference_number="777777777777").first()
+    assert auth is not None
+    assert auth.status == "FLAGGED"
+    assert auth.fraud_risk_score == 91
+    assert auth.transaction_channel == "ECOMMERCE"
+    assert auth.entry_mode == "ECOMMERCE"
+    assert auth.merchant_country_code == "USA"
+    assert auth.merchant_city == "San Francisco"
+    assert auth.is_digital_goods is True
+
+    decision_record = db_session.query(FraudModelDecision).filter_by(authorization_id=auth.id).first()
+    assert decision_record is not None
+    assert decision_record.score == 91
+    assert decision_record.decision == "FLAGGED"
+    assert decision_record.reason_codes == ["EXPLICIT_SIMULATION_OVERRIDE"]
+    assert decision_record.feature_snapshot["recent_auth_count_10m"] == 1
+    assert decision_record.transaction_channel == "ECOMMERCE"
+
+    audit_event = db_session.query(AuditOutbox).filter_by(event_type="FRAUD_MODEL_DECISION_RECORDED").first()
+    assert audit_event is not None
+    assert str(auth.id) in audit_event.payload
+
+    alert = db_session.query(FraudAlert).filter_by(credit_account_id=credit_acc.id).first()
+    assert alert is not None
+    assert alert.source == "MODEL_DETECTED_FRAUD"
+    assert alert.suspicious_authorization_ids == [str(auth.id)]
+    assert alert.suspicious_transactions[0]["fraud_score"] == 91
+    assert alert.suspicious_transactions[0]["reason_codes"] == ["EXPLICIT_SIMULATION_OVERRIDE"]
+
+    secure_message = db_session.query(UserSecureMessage).filter_by(thread_id=alert.message_thread_id).first()
+    assert secure_message is not None
+    assert secure_message.category == "Fraud Alert"
+    assert "RAZER GOLD GIFT CARD" in secure_message.message
+
+    alert_created_event = db_session.query(AuditOutbox).filter_by(event_type="FRAUD_ALERT_CREATED").first()
+    assert alert_created_event is not None
+    assert str(alert.id) in alert_created_event.payload
+
+    assert len(published_events) == 1
+    event_type, event_payload = published_events[0]
+    assert event_type == "AUTH"
+    assert event_payload["status"] == "FLAGGED (RISK 91)"
+    assert event_payload["fraud_risk_score"] == 91
+    assert event_payload["fraud_reason_codes"] == ["EXPLICIT_SIMULATION_OVERRIDE"]
+    assert event_payload["fraud_model_version"] == "local-deterministic-v1"
+    assert event_payload["transaction_channel"] == "ECOMMERCE"
+    assert event_payload["merchant_country_code"] == "USA"
+    assert event_payload["fraud_features"]["recent_auth_count_10m"] == 1
 
 @pytest.mark.asyncio
 async def test_card_network_authorize_success(async_client, db_session):

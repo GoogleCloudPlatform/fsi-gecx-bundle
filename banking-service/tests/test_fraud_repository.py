@@ -1,4 +1,5 @@
 import datetime
+import uuid
 
 import pytest
 from sqlalchemy import create_engine
@@ -9,7 +10,7 @@ import models.credit_card  # noqa: F401
 import models.fraud  # noqa: F401
 import models.identity  # noqa: F401
 from models.credit_card import Base
-from repositories.fraud import FraudAlertRepository
+from repositories.fraud import FraudAlertRepository, FraudDecisionRepository
 
 
 DATABASE_URL = "sqlite:///:memory:"
@@ -119,3 +120,76 @@ def test_complete_case_action_records_result_and_completion_time(db_session, fra
     assert completed.status == "SUCCEEDED"
     assert completed.result_payload == {"credit_cents": 25000}
     assert completed.completed_at is not None
+
+
+def test_record_model_decision_is_idempotent_for_authorization(db_session):
+    repo = FraudDecisionRepository(db_session)
+    authorization_id = uuid.uuid4()
+    customer_id = uuid.uuid4()
+    account_id = uuid.uuid4()
+    card_id = uuid.uuid4()
+    feature_snapshot = {
+        "merchant_name": "RAZER GOLD GIFT CARD",
+        "merchant_category_code": "5947",
+        "transaction_channel": "ECOMMERCE",
+        "merchant_country_code": "USA",
+        "merchant_city": "San Francisco",
+        "merchant_region": "CA",
+        "recent_auth_count_10m": 3,
+    }
+
+    first = repo.record_model_decision(
+        authorization_id=authorization_id,
+        customer_id=customer_id,
+        credit_account_id=account_id,
+        card_id=card_id,
+        score=91,
+        threshold=20,
+        decision="FLAGGED",
+        reason_codes=["GIFT_CARD_OR_DIGITAL_GOODS"],
+        feature_snapshot=feature_snapshot,
+        model_version="local-deterministic-v1",
+    )
+    second = repo.record_model_decision(
+        authorization_id=authorization_id,
+        customer_id=customer_id,
+        credit_account_id=account_id,
+        card_id=card_id,
+        score=3,
+        threshold=20,
+        decision="APPROVED",
+        reason_codes=["BASELINE_LOW_RISK"],
+        feature_snapshot={},
+        model_version="local-deterministic-v1",
+    )
+
+    assert second.id == first.id
+    assert second.score == 91
+    assert second.reason_codes == ["GIFT_CARD_OR_DIGITAL_GOODS"]
+    assert second.feature_snapshot["recent_auth_count_10m"] == 3
+    assert second.transaction_channel == "ECOMMERCE"
+
+
+def test_append_suspicious_authorization_deduplicates_alert_items(db_session, fraud_alert):
+    repo = FraudAlertRepository(db_session)
+    transaction = {
+        "authorization_id": "auth-3",
+        "merchant_name": "MODEL DETECTED MERCHANT",
+        "amount_cents": 9900,
+        "fraud_score": 82,
+    }
+
+    first = repo.append_suspicious_authorization(
+        fraud_alert_id=fraud_alert.id,
+        authorization_id="auth-3",
+        suspicious_transaction=transaction,
+    )
+    second = repo.append_suspicious_authorization(
+        fraud_alert_id=fraud_alert.id,
+        authorization_id="auth-3",
+        suspicious_transaction=transaction,
+    )
+
+    assert first.id == second.id
+    assert second.suspicious_authorization_ids.count("auth-3") == 1
+    assert len([txn for txn in second.suspicious_transactions if txn.get("authorization_id") == "auth-3"]) == 1

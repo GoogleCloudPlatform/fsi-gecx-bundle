@@ -32,6 +32,9 @@ import GoogleCloudIcon from './GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { showInfoModals } from '../utils/constants.js';
 
+const MIN_RISK_CONDITION_SCORED_EVENTS = 5;
+const ELEVATED_AVERAGE_RISK_SCORE = 25;
+
 function formatLatency(ms) {
   if (ms == null) return 'N/A';
   if (ms < 1000) return `${ms} ms`;
@@ -49,13 +52,32 @@ function formatCurrencyFromCents(cents) {
   return `$${(Math.abs(cents ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function formatFraudReason(reason) {
+  return String(reason || '')
+    .replaceAll('_', ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function isLowRiskReason(reason) {
+  return ['BASELINE_LOW_RISK', 'LOW_RISK'].includes(String(reason || '').toUpperCase());
+}
+
+function parseFraudRiskScore(item) {
+  const explicitScore = Number(item?.fraud_risk_score);
+  if (Number.isFinite(explicitScore)) {
+    return explicitScore;
+  }
+  const match = String(item?.status || '').match(/RISK\s+(\d+)/i);
+  return match ? Number(match[1]) : null;
+}
+
 function AdminSimulationView() {
   const navigate = useNavigate();
   const projectId = window.firebaseConfig?.projectId;
   const [isSurgeLoading, setIsSurgeLoading] = useState(false);
   const [isAnomalyLoading, setIsAnomalyLoading] = useState(false);
   const [isFeeLoading, setIsFeeLoading] = useState(false);
-  const [isStreamLoading, setIsStreamLoading] = useState(false);
   const [infoModal, setInfoModal] = useState(null);
   const [streamData, setStreamData] = useState([]);
   const [feedback, setFeedback] = useState({ type: '', title: '', message: '', data: null });
@@ -105,9 +127,13 @@ function AdminSimulationView() {
     (acc, item) => {
       const status = String(item.status || '');
       const amount = Math.abs(item.amount_cents ?? 0);
+      const riskScore = parseFraudRiskScore(item);
       if (status.includes('FLAGGED')) {
         acc.flaggedCount += 1;
         acc.flaggedAmountCents += amount;
+        if (riskScore != null) {
+          acc.flaggedRiskScoreTotal += riskScore;
+        }
       }
       if (status.includes('HOLD') || status.includes('FLAGGED')) {
         acc.pendingCount += 1;
@@ -117,17 +143,72 @@ function AdminSimulationView() {
         acc.postedCount += 1;
         acc.postedAmountCents += amount;
       }
+      if (riskScore != null) {
+        acc.scoredCount += 1;
+        acc.riskScoreTotal += riskScore;
+        if (acc.peakRiskScore == null || riskScore > acc.peakRiskScore) {
+          acc.peakRiskScore = riskScore;
+          acc.peakRiskMerchant = item.merchant_name || 'Recent authorization';
+        }
+      }
+      if (item.fraud_model_version) {
+        acc.latestModelVersion = item.fraud_model_version;
+      }
       return acc;
     },
     {
       flaggedCount: 0,
       flaggedAmountCents: 0,
+      flaggedRiskScoreTotal: 0,
       pendingCount: 0,
       pendingAmountCents: 0,
       postedCount: 0,
       postedAmountCents: 0,
+      scoredCount: 0,
+      riskScoreTotal: 0,
+      peakRiskScore: null,
+      peakRiskMerchant: null,
+      latestModelVersion: null,
     },
   );
+  creditRiskMetrics.averageRiskScore = creditRiskMetrics.scoredCount
+    ? Math.round(creditRiskMetrics.riskScoreTotal / creditRiskMetrics.scoredCount)
+    : null;
+  creditRiskMetrics.averageFlaggedRiskScore = creditRiskMetrics.flaggedCount
+    ? Math.round(creditRiskMetrics.flaggedRiskScoreTotal / creditRiskMetrics.flaggedCount)
+    : null;
+  const hasSustainedElevatedRisk =
+    creditRiskMetrics.scoredCount >= MIN_RISK_CONDITION_SCORED_EVENTS
+    && creditRiskMetrics.averageRiskScore >= ELEVATED_AVERAGE_RISK_SCORE;
+
+  const riskCondition = (() => {
+    if (cdcStats.flaggedEventsPerMinute >= 3 || cdcStats.activeAnomalies >= 5) {
+      return {
+        label: 'Surging',
+        className: 'bg-rose-50 dark:bg-rose-950/10 border-rose-100 dark:border-rose-900/40',
+        textClass: 'text-rose-700 dark:text-rose-300',
+        iconClass: 'text-rose-500',
+      };
+    }
+    if (
+      cdcStats.flaggedEventsPerMinute > 0
+      || cdcStats.activeAnomalies > 0
+      || hasSustainedElevatedRisk
+    ) {
+      return {
+        label: 'Elevated',
+        className: 'bg-amber-50 dark:bg-amber-950/10 border-amber-100 dark:border-amber-900/40',
+        textClass: 'text-amber-700 dark:text-amber-300',
+        iconClass: 'text-amber-500',
+      };
+    }
+    return {
+      label: 'Normal',
+      className: 'bg-emerald-50 dark:bg-emerald-950/10 border-emerald-100 dark:border-emerald-900/40',
+      textClass: 'text-emerald-700 dark:text-emerald-300',
+      iconClass: 'text-emerald-500',
+    };
+  })();
 
   const anomalySeverity = cdcStats.activeAnomalies >= 5
     ? {
@@ -169,14 +250,11 @@ function AdminSimulationView() {
   };
 
   const fetchGlobalStream = async () => {
-    setIsStreamLoading(true);
     try {
       const streamRes = await getGlobalStream();
       applyMonitorSnapshot(streamRes);
     } catch (e) {
       console.error("Failed to fetch global stream:", e);
-    } finally {
-      setIsStreamLoading(false);
     }
   };
 
@@ -513,47 +591,80 @@ function AdminSimulationView() {
           )}
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className={`p-4 rounded-2xl border ${anomalySeverity.cardClass}`}>
             <div className={`flex items-center justify-between text-xs mb-1 ${anomalySeverity.textClass}`}>
-              <span>Active Fraud Anomalies</span>
+              <span>Open Fraud Alerts</span>
               <ShieldAlert className={`w-4 h-4 ${anomalySeverity.iconClass}`} />
             </div>
             <div className={`text-2xl font-black font-mono ${anomalySeverity.textClass}`}>{cdcStats.activeAnomalies}</div>
-            <div className={`text-[10px] mt-1 ${anomalySeverity.textClass}`}>Open fraud cases awaiting customer mitigation</div>
+            <div className={`text-[10px] mt-1 ${anomalySeverity.textClass}`}>Customer-facing cases awaiting review</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Flagged Event Rate</span>
+              <span>Peak Model Score</span>
               <AlertTriangle className="w-4 h-4 text-amber-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {cdcStats.flaggedEventsPerMinute} <span className="text-sm font-normal text-slate-500">/ min</span>
+              {creditRiskMetrics.peakRiskScore ?? 0}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">{creditRiskMetrics.flaggedCount} flagged in current wall</div>
+            <div className="text-[10px] text-slate-400 mt-1 truncate">
+              {creditRiskMetrics.peakRiskMerchant || 'Awaiting scored authorizations'}
+            </div>
+          </div>
+
+          <div className={`p-4 rounded-2xl border ${riskCondition.className}`}>
+            <div className={`flex items-center justify-between text-xs mb-1 ${riskCondition.textClass}`}>
+              <span>Risk Condition</span>
+              <ShieldAlert className={`w-4 h-4 ${riskCondition.iconClass}`} />
+            </div>
+            <div className={`text-2xl font-black font-mono ${riskCondition.textClass}`}>
+              {riskCondition.label}
+            </div>
+            <div className={`text-[10px] mt-1 ${riskCondition.textClass}`}>Live model posture</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Pending Exposure</span>
+              <span>Flagged Exposure</span>
               <Clock className="w-4 h-4 text-amber-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {formatCurrencyFromCents(creditRiskMetrics.pendingAmountCents)}
+              {formatCurrencyFromCents(creditRiskMetrics.flaggedAmountCents)}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">{creditRiskMetrics.pendingCount} pending or flagged authorizations</div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              {creditRiskMetrics.flaggedCount} flagged auth{creditRiskMetrics.flaggedCount === 1 ? '' : 's'}
+              {creditRiskMetrics.averageFlaggedRiskScore != null ? `, avg score ${creditRiskMetrics.averageFlaggedRiskScore}` : ''}
+            </div>
           </div>
+        </div>
 
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Auth vs Posted Flow</span>
-              <Layers className="w-4 h-4 text-blue-500" />
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-3 text-[11px]">
+              <span className="text-slate-500">Live event mix</span>
+              <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                {cdcStats.authorizationEventsPerMinute} auth / {cdcStats.postedEventsPerMinute} posted / {cdcStats.flaggedEventsPerMinute} flagged
+              </span>
             </div>
-            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {cdcStats.authorizationEventsPerMinute}:{cdcStats.postedEventsPerMinute}
+          </div>
+          <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-3 text-[11px]">
+              <span className="text-slate-500">Pending exposure</span>
+              <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                {formatCurrencyFromCents(creditRiskMetrics.pendingAmountCents)} across {creditRiskMetrics.pendingCount} hold{creditRiskMetrics.pendingCount === 1 ? '' : 's'}
+              </span>
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">{creditRiskMetrics.postedCount} posted events in current wall</div>
+          </div>
+          <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-3 text-[11px]">
+              <span className="text-slate-500">Model signal</span>
+              <span className="font-mono font-bold text-slate-800 dark:text-slate-200 truncate">
+                {creditRiskMetrics.latestModelVersion || 'Awaiting model events'}
+                {creditRiskMetrics.averageRiskScore != null ? `, avg ${creditRiskMetrics.averageRiskScore}` : ''}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -688,15 +799,6 @@ function AdminSimulationView() {
           </div>
 
           <div className="flex items-center gap-3 self-start md:self-auto">
-            <button
-              onClick={fetchGlobalStream}
-              disabled={isStreamLoading}
-              className="py-2 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-semibold flex items-center gap-2 transition-all border border-slate-200 dark:border-slate-700 disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isStreamLoading ? 'animate-spin' : ''}`} />
-              {isStreamLoading ? 'Refreshing...' : 'Refresh Stream'}
-            </button>
-
             {showInfoModals() && (
               <button
                 onClick={() => setInfoModal('monitor')}
@@ -718,44 +820,79 @@ function AdminSimulationView() {
                 <th className="p-3.5 font-semibold">RRN / Event ID</th>
                 <th className="p-3.5 font-semibold">Merchant / Descriptor</th>
                 <th className="p-3.5 font-semibold text-right">Amount</th>
-                <th className="p-3.5 font-semibold">Status / Replication Target</th>
+                <th className="p-3.5 font-semibold">Risk</th>
+                <th className="p-3.5 font-semibold">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
               {streamData.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="p-8 text-center text-slate-500 dark:text-slate-500 font-sans">
+                  <td colSpan="6" className="p-8 text-center text-slate-500 dark:text-slate-500 font-sans">
                     Waiting for operational transaction activity... Trigger a surge, anomaly, or late fee above.
                   </td>
                 </tr>
               ) : (
-                streamData.map((item, idx) => (
-                  <tr key={item.id + idx} className="hover:bg-slate-100 dark:hover:bg-slate-900/60 transition-colors">
-                    <td className="p-3.5 text-slate-500 dark:text-slate-400 whitespace-nowrap flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      {item.timestamp}
-                    </td>
-                    <td className="p-3.5 text-slate-800 dark:text-slate-300 font-bold whitespace-nowrap">{item.rrn}</td>
-                    <td className="p-3.5 text-slate-900 dark:text-white font-sans font-medium truncate max-w-xs">{item.merchant_name}</td>
-                    <td className="p-3.5 text-right text-slate-900 dark:text-slate-100 font-bold whitespace-nowrap">
-                      {formatCurrencyFromCents(item.amount_cents)}
-                    </td>
-                    <td className="p-3.5 whitespace-nowrap">
-                      <div className="flex flex-col gap-0.5">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit ${
-                          item.status.includes('FLAGGED') 
-                            ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30' 
-                            : item.status.includes('HOLD') 
-                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30' 
-                            : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
-                        }`}>
-                          {item.status}
-                        </span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-500">{item.bq_view}</span>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                streamData.map((item, idx) => {
+                  const riskScore = parseFraudRiskScore(item);
+                  const isSettlement = String(item.status || '').includes('SETTLE');
+                  const fraudReasons = (Array.isArray(item.fraud_reason_codes) ? item.fraud_reason_codes : [])
+                    .filter((reason) => !isLowRiskReason(reason));
+                  return (
+                    <tr key={item.id + idx} className="hover:bg-slate-100 dark:hover:bg-slate-900/60 transition-colors">
+                      <td className="p-3.5 text-slate-500 dark:text-slate-400 whitespace-nowrap flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        {item.timestamp}
+                      </td>
+                      <td className="p-3.5 text-slate-800 dark:text-slate-300 font-bold whitespace-nowrap">{item.rrn}</td>
+                      <td className="p-3.5 text-slate-900 dark:text-white font-sans font-medium truncate max-w-xs">{item.merchant_name}</td>
+                      <td className="p-3.5 text-right text-slate-900 dark:text-slate-100 font-bold whitespace-nowrap">
+                        {formatCurrencyFromCents(item.amount_cents)}
+                      </td>
+                      <td className="p-3.5 whitespace-nowrap">
+                        {!isSettlement && (
+                          <div className="flex flex-col gap-1">
+                            {riskScore != null && (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit ${
+                                riskScore < 20
+                                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                                  : riskScore < 70
+                                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
+                                  : 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30'
+                              }`}>
+                                {`${riskScore < 20 ? 'Low' : riskScore < 70 ? 'Elevated' : 'High'} ${riskScore}`}
+                              </span>
+                            )}
+                            {fraudReasons.length > 0 && (
+                              <div className="flex flex-wrap gap-1 max-w-md">
+                                {fraudReasons.slice(0, 3).map((reason) => (
+                                  <span
+                                    key={reason}
+                                    className="inline-flex items-center px-1.5 py-0.5 rounded border border-rose-500/20 bg-rose-500/10 text-[9px] font-bold text-rose-700 dark:text-rose-300"
+                                  >
+                                    {formatFraudReason(reason)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-3.5 whitespace-nowrap">
+                        <div className="flex flex-col gap-1">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit ${
+                            item.status.includes('FLAGGED')
+                              ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30'
+                              : item.status.includes('HOLD')
+                              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
+                              : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                          }`}>
+                            {item.status}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -773,7 +910,7 @@ function AdminSimulationView() {
             The <strong>Live Transaction Replication Monitor</strong> shows recent card activity as it is created by the banking service. Authorizations, settlements, reversals, and flagged events are published to Redis and streamed directly into the admin UI over authenticated server-sent events.
           </p>
           <p>
-            This panel is meant to answer a simple operational question: what is happening right now in the transaction flow? It is a live event wall, ordered with the newest activity first, and every connected admin session sees the same shared stream.
+            This panel is meant to answer a simple operational question: what is happening right now in the transaction flow? It is a live event stream, ordered with the newest activity first, and every connected admin session sees the same shared stream.
           </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
@@ -805,7 +942,7 @@ function AdminSimulationView() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Cloud Run + Memorystore</h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">Track the banking-service SSE connections, the data-generator pulse worker, and the Redis event bus that powers the live wall.</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Track the banking-service SSE connections, the data-generator pulse worker, and the Redis event bus that powers the live monitor.</p>
               </div>
               <a
                 href="https://console.cloud.google.com/run"
@@ -844,7 +981,7 @@ function AdminSimulationView() {
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <div className="text-blue-500 dark:text-blue-400 font-mono font-bold">Event Throughput</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Counts recent live events per minute and breaks them into authorization, posted, and flagged activity so the wall can distinguish holds from settled ledger events.</p>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Counts recent live events per minute and breaks them into authorization, posted, and flagged activity so the stream can distinguish holds from settled ledger events.</p>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">Datastream Freshness</div>
@@ -902,20 +1039,24 @@ function AdminSimulationView() {
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            The <strong>Credit Risk Metrics</strong> tile tracks open fraud-case outcomes and live card exposure separately from replication transport health. A non-zero anomaly count means the demo has suspicious card activity available for secure-message review and the voice agent flow.
+            The <strong>Credit Risk Metrics</strong> tile tracks open fraud-case outcomes, live model scores, risk condition, and unsettled exposure separately from replication transport health. A non-zero alert count means the demo has suspicious card activity available for secure-message review and the voice agent flow.
           </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">Active Fraud Anomalies</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Active anomalies represent open operational fraud alerts that have been enriched and surfaced for customer mitigation.</p>
+              <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">Open Fraud Alerts</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Open alerts represent operational fraud cases that have been enriched, messaged to the customer, and made available to support workflows.</p>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-amber-500 dark:text-amber-400 font-mono font-bold">Flagged Event Rate + Pending Exposure</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Flagged rate shows suspicious live activity per minute. Pending exposure sums the current wall's outstanding holds and flagged authorizations so presenters can see unsettled card risk quickly.</p>
+              <div className="text-amber-500 dark:text-amber-400 font-mono font-bold">Risk Condition</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Normal means the visible stream has low model scores and no active alert pressure. Elevated means the stream has flagged activity, open alerts, or an average model score above the operating threshold. Surging means multiple flagged authorizations per minute or several open alerts.</p>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-blue-500 dark:text-blue-400 font-mono font-bold">Auth vs Posted Flow</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Compares authorization events to posted events per minute. A surge of authorizations with few postings is expected during fraud simulation because those transactions are still pending review.</p>
+              <div className="text-amber-500 dark:text-amber-400 font-mono font-bold">Peak Model Score</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">The score comes directly from authorization fraud decision payloads, making the tile reflect the current model rather than a separate hard-coded anomaly counter.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-blue-500 dark:text-blue-400 font-mono font-bold">Exposure + Event Mix</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Flagged exposure sums suspicious authorizations in the visible stream, while the event mix compares authorization, posting, and flagged activity per minute.</p>
             </div>
           </div>
         </div>

@@ -42,3 +42,8 @@ Specifications detailing customer-facing banking journeys, loan origination pipe
 | Specification | Description |
 | :--- | :--- |
 | **[Secure Messaging Backend Integration](./domain-workflows/support/secure_messaging_backend_integration.md)** | Eventarc event-driven messaging, Firebase Cloud Messaging (FCM) mobile push notifications, and customer support threads. |
+
+### 🛡️ C. Fraud Detection & Remediation (`domain-workflows/fraud/`)
+| Specification | Description |
+| :--- | :--- |
+| **[Fraud Detection Workflow](./domain-workflows/fraud/fraud_detection_workflow.md)** | Real-time card authorization scoring, merchant/location enrichment, fraud alert creation, support triage, and CDC-backed analytical decision history. |

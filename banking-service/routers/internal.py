@@ -34,6 +34,71 @@ bq_client = LazyClient(bigquery.Client)
 router = APIRouter(prefix="/internal", tags=["internal"])
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.lower() in {"1", "true", "yes", "on"}
+
+
+def _full_reset_operator_emails() -> set[str]:
+    return {
+        email.strip().lower()
+        for email in os.getenv("FULL_RESET_OPERATOR_EMAILS", "").split(",")
+        if email.strip()
+    }
+
+
+def _database_iam_support_users() -> tuple[set[str], bool]:
+    emails: set[str] = set()
+    configured = False
+    for member in os.getenv("DATABASE_IAM_SUPPORT_USERS", "").split(","):
+        member = member.strip().lower()
+        if not member:
+            continue
+        configured = True
+        if member.startswith("user:"):
+            emails.add(member.split(":", 1)[1])
+        elif "@" in member and ":" not in member:
+            emails.add(member)
+    return emails, configured
+
+
+def full_reset_access_status(admin) -> dict:
+    enabled = _env_flag("FULL_RESET_ENABLED", default=False)
+    full_reset_operator_emails = _full_reset_operator_emails()
+    database_iam_support_user_emails, database_iam_support_users_configured = _database_iam_support_users()
+    operator_emails = full_reset_operator_emails | database_iam_support_user_emails
+    operator_allowlist_configured = bool(full_reset_operator_emails) or database_iam_support_users_configured
+    email = (admin.email or "").lower()
+    operator_allowed = not operator_allowlist_configured or email in operator_emails
+    allowed = enabled and operator_allowed
+    reason = "ALLOWED"
+    if not enabled:
+        reason = "FULL_RESET_DISABLED"
+    elif not operator_allowed:
+        reason = "OPERATOR_NOT_ALLOWLISTED"
+    return {
+        "allowed": allowed,
+        "enabled": enabled,
+        "operator_allowlist_configured": operator_allowlist_configured,
+        "operator_allowed": operator_allowed,
+        "reason": reason,
+        "message": (
+            "Full database reset is available for this operator."
+            if allowed
+            else "Full database reset is restricted. Use personal demo reset for presenter recovery."
+        ),
+    }
+
+
+def require_full_reset_access(admin) -> None:
+    status = full_reset_access_status(admin)
+    if status["allowed"]:
+        return
+    raise HTTPException(status_code=403, detail=status["message"])
+
+
 def clear_operational_transaction_stream() -> None:
     redis_client = get_redis_client()
     if not redis_client:
@@ -201,6 +266,12 @@ def process_outbox(batch_size: int = 50, _admin=Depends(require_admin_user)):
     finally:
         db.close()
 
+
+@router.get("/debug/reset-db/access")
+def get_reset_database_access(_admin=Depends(require_admin_user)):
+    return full_reset_access_status(_admin)
+
+
 @router.post("/debug/reset-db")
 def reset_database(
     purge_audit_logs: bool = False,
@@ -212,6 +283,7 @@ def reset_database(
     Optionally purges PostgreSQL and BigQuery compliance audit logs if purge_audit_logs=True.
     Optionally purges Apache Iceberg BigLake analytical tables if purge_data_lake=True.
     """
+    require_full_reset_access(_admin)
     logger.info(f"Internal Debug request: Resetting database (purge_audit_logs={purge_audit_logs}, purge_data_lake={purge_data_lake})...")
     from utils.database import SessionLocal
     from services.seeding_service import perform_algorithmic_seeding

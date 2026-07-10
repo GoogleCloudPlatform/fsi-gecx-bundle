@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import datetime
-from sqlalchemy import Column, String, Boolean, Integer, DateTime, Index, ForeignKey
+from sqlalchemy import Column, String, Boolean, Integer, DateTime, Index, ForeignKey, Numeric
 from sqlalchemy.orm import relationship
 from utils.database import Base, UniversalUUID as UUID, generate_uuid
 from models.reference import MerchantCategoryCode
@@ -66,6 +66,14 @@ class MerchantStore(Base):
     location_name = Column(String(100), nullable=False)
     raw_descriptor = Column(String(150), nullable=False, index=True)
     country_code = Column(String(3), nullable=False, default="USA")
+    city = Column(String(100), nullable=True)
+    region = Column(String(100), nullable=True)
+    postal_code = Column(String(20), nullable=True)
+    latitude = Column(Numeric(9, 6), nullable=True)
+    longitude = Column(Numeric(9, 6), nullable=True)
+    card_present_capable = Column(Boolean, nullable=False, default=True)
+    ecommerce_capable = Column(Boolean, nullable=False, default=False)
+    high_risk_flags = Column(String(255), nullable=True)
     is_international = Column(Boolean, nullable=False, default=False)
     risk_score = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))

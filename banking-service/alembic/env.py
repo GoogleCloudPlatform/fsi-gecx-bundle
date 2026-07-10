@@ -294,6 +294,34 @@ def run_migrations_online() -> None:
                         except Exception as grant_err:
                             logger.debug(f"Notice: Could not grant viewer permissions on {s} to {role}: {grant_err}")
 
+                cdc_replication_user = os.getenv("CDC_REPLICATION_USER", "banking_bq_connector")
+                require_cdc_bootstrap = os.getenv("REQUIRE_CDC_BOOTSTRAP", "").lower() in {"1", "true", "yes", "on"}
+                cdc_schemas = ["cards", "origination", "identity", "kyc", "merchants", "operations"]
+                try:
+                    cdc_user_exists = connection.execute(
+                        sa.text("SELECT 1 FROM pg_roles WHERE rolname = :username"),
+                        {"username": cdc_replication_user},
+                    ).scalar()
+                    if not cdc_user_exists:
+                        raise RuntimeError(f"CDC replication user '{cdc_replication_user}' does not exist.")
+
+                    with connection.begin_nested():
+                        connection.execute(sa.text(f'ALTER ROLE "{cdc_replication_user}" WITH REPLICATION;'))
+
+                    current_database = connection.execute(sa.text("SELECT current_database()")).scalar()
+                    with connection.begin_nested():
+                        connection.execute(sa.text(f'GRANT CONNECT ON DATABASE "{current_database}" TO "{cdc_replication_user}";'))
+
+                    for s in cdc_schemas:
+                        with connection.begin_nested():
+                            connection.execute(sa.text(f'GRANT USAGE ON SCHEMA {s} TO "{cdc_replication_user}";'))
+                            connection.execute(sa.text(f'GRANT SELECT ON ALL TABLES IN SCHEMA {s} TO "{cdc_replication_user}";'))
+                            connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT ON TABLES TO "{cdc_replication_user}";'))
+                except Exception as cdc_grant_err:
+                    if require_cdc_bootstrap:
+                        raise
+                    logger.debug(f"Notice: Could not apply CDC grants to {cdc_replication_user}: {cdc_grant_err}")
+
                 current_database = connection.execute(sa.text("SELECT current_database()")).scalar()
                 for role in reset_roles:
                     try:

@@ -2,7 +2,7 @@ import datetime
 
 from sqlalchemy.orm import Session
 
-from models.fraud import FraudAlert, FraudCaseAction
+from models.fraud import FraudAlert, FraudCaseAction, FraudModelDecision
 
 
 class FraudAlertRepository:
@@ -68,6 +68,28 @@ class FraudAlertRepository:
             .order_by(FraudAlert.created_at.desc())
             .first()
         )
+
+    def append_suspicious_authorization(
+        self,
+        *,
+        fraud_alert_id,
+        authorization_id: str,
+        suspicious_transaction: dict,
+    ) -> FraudAlert | None:
+        alert = self.db.query(FraudAlert).filter(FraudAlert.id == fraud_alert_id).first()
+        if not alert:
+            return None
+
+        authorization_ids = list(alert.suspicious_authorization_ids or [])
+        transactions = list(alert.suspicious_transactions or [])
+        if authorization_id not in authorization_ids:
+            authorization_ids.append(authorization_id)
+            transactions.append(suspicious_transaction)
+            alert.suspicious_authorization_ids = authorization_ids
+            alert.suspicious_transactions = transactions
+            self.db.add(alert)
+            self.db.flush()
+        return alert
 
     def get_alert_by_id(self, *, fraud_alert_id) -> FraudAlert | None:
         return self.db.query(FraudAlert).filter(FraudAlert.id == fraud_alert_id).first()
@@ -210,3 +232,59 @@ class FraudAlertRepository:
         self.db.add(action)
         self.db.flush()
         return action
+
+
+class FraudDecisionRepository:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def record_model_decision(
+        self,
+        *,
+        authorization_id,
+        customer_id,
+        credit_account_id,
+        card_id,
+        score: int,
+        threshold: int,
+        decision: str,
+        reason_codes: list[str],
+        feature_snapshot: dict,
+        model_version: str,
+    ) -> FraudModelDecision:
+        existing = (
+            self.db.query(FraudModelDecision)
+            .filter(FraudModelDecision.authorization_id == authorization_id)
+            .first()
+        )
+        if existing:
+            return existing
+
+        record = FraudModelDecision(
+            authorization_id=authorization_id,
+            customer_id=customer_id,
+            credit_account_id=credit_account_id,
+            card_id=card_id,
+            score=score,
+            threshold=threshold,
+            decision=decision,
+            reason_codes=reason_codes,
+            feature_snapshot=feature_snapshot,
+            merchant_name=feature_snapshot.get("merchant_name"),
+            merchant_category_code=feature_snapshot.get("merchant_category_code"),
+            transaction_channel=feature_snapshot.get("transaction_channel"),
+            merchant_country_code=feature_snapshot.get("merchant_country_code"),
+            merchant_city=feature_snapshot.get("merchant_city"),
+            merchant_region=feature_snapshot.get("merchant_region"),
+            model_version=model_version,
+        )
+        self.db.add(record)
+        self.db.flush()
+        return record
+
+    def get_decision_for_authorization(self, *, authorization_id) -> FraudModelDecision | None:
+        return (
+            self.db.query(FraudModelDecision)
+            .filter(FraudModelDecision.authorization_id == authorization_id)
+            .first()
+        )

@@ -19,13 +19,90 @@ from typing import Dict, Any
 from sqlalchemy.orm import Session
 
 from models.credit_card import CreditAccount, TransactionAuthorization, PostedTransaction
+from models.identity import User
 from repositories.credit_card import CreditCardRepository
+from repositories.fraud import FraudDecisionRepository
+from services.fraud_alerts import FraudAlertService
 from services.fraud_scoring import FraudScoringService
 from services.merchant_service import MerchantEnrichmentService
 import json
+from utils.audit import record_audit_event
 from utils.database import enable_session_rbac_override
 
 logger = logging.getLogger(__name__)
+
+
+ONLINE_DESCRIPTOR_TOKENS = ("ONLINE", ".COM", "MKTPLACE", "STREAMING", "SUBSCRIPTION", "DIGITAL", "GIFT CARD")
+CARD_PRESENT_ENTRY_MODES = {"CHIP", "CONTACTLESS", "MAG_STRIPE"}
+CARD_NOT_PRESENT_CHANNELS = {"CARD_NOT_PRESENT", "ECOMMERCE"}
+
+
+def _normalize_transaction_channel(payload: Dict[str, Any], merchant_name: str) -> tuple[str, str]:
+    channel = str(payload.get("transaction_channel") or "").upper()
+    entry_mode = str(payload.get("entry_mode") or "").upper()
+    descriptor = merchant_name.upper()
+
+    if not channel:
+        if entry_mode in CARD_PRESENT_ENTRY_MODES:
+            channel = "CARD_PRESENT"
+        elif any(token in descriptor for token in ONLINE_DESCRIPTOR_TOKENS):
+            channel = "ECOMMERCE"
+        else:
+            channel = "CARD_PRESENT"
+
+    if not entry_mode:
+        if channel == "WALLET":
+            entry_mode = "CONTACTLESS"
+        elif channel in CARD_NOT_PRESENT_CHANNELS or channel == "ECOMMERCE":
+            entry_mode = "ECOMMERCE"
+        else:
+            entry_mode = "CHIP"
+
+    return channel, entry_mode
+
+
+def _build_authorization_context(db: Session, payload: Dict[str, Any], merchant_name: str, mcc: str) -> Dict[str, Any]:
+    merchant_country = str(payload.get("merchant_country_code") or payload.get("country_code") or "").upper() or None
+    context = {
+        "transaction_channel": payload.get("transaction_channel"),
+        "entry_mode": payload.get("entry_mode"),
+        "merchant_country_code": merchant_country,
+        "merchant_city": payload.get("merchant_city"),
+        "merchant_region": payload.get("merchant_region"),
+        "merchant_postal_code": payload.get("merchant_postal_code"),
+        "merchant_latitude": payload.get("merchant_latitude"),
+        "merchant_longitude": payload.get("merchant_longitude"),
+        "ip_country_code": payload.get("ip_country_code"),
+        "shipping_country_code": payload.get("shipping_country_code"),
+        "is_digital_goods": bool(payload.get("is_digital_goods", False)),
+        "merchant_high_risk_flags": payload.get("merchant_high_risk_flags") or [],
+        "synthetic_fraud_label": payload.get("synthetic_fraud_label"),
+        "fraud_pattern_label": payload.get("fraud_pattern_label"),
+        "fraud_pattern_sequence": payload.get("fraud_pattern_sequence"),
+    }
+
+    if not merchant_country:
+        try:
+            enriched = MerchantEnrichmentService.enrich_transaction(db, raw_descriptor=merchant_name, mcc=mcc)
+            context.update(
+                {
+                    "merchant_country_code": enriched.get("country_code"),
+                    "merchant_city": enriched.get("city"),
+                    "merchant_region": enriched.get("region"),
+                    "merchant_postal_code": enriched.get("postal_code"),
+                    "merchant_latitude": enriched.get("latitude"),
+                    "merchant_longitude": enriched.get("longitude"),
+                    "is_digital_goods": context["is_digital_goods"] or ("DIGITAL_GOODS" in enriched.get("high_risk_flags", [])),
+                    "merchant_high_risk_flags": context["merchant_high_risk_flags"] or enriched.get("high_risk_flags", []),
+                }
+            )
+        except Exception as exc:
+            logger.warning("Merchant enrichment failed during authorization for descriptor=%s: %s", merchant_name, exc)
+
+    channel, entry_mode = _normalize_transaction_channel({**payload, **context}, merchant_name)
+    context["transaction_channel"] = channel
+    context["entry_mode"] = entry_mode
+    return context
 
 
 def _resolve_posted_transaction_description(db: Session, auth: TransactionAuthorization) -> str:
@@ -135,6 +212,8 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
                 "decline_reason": "ACCOUNT_FROZEN"
             }
 
+        auth_context = _build_authorization_context(db, payload, merchant_name, mcc)
+
         # 4. Check Credit Limit
         if amount_cents > account.available_credit_cents:
             logger.warning(f"Swipe declined: Insufficient funds. Available: {account.available_credit_cents}, Requested: {amount_cents}")
@@ -152,6 +231,17 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
                 card_network=card_network,
                 merchant_category_code=mcc,
                 merchant_name=merchant_name,
+                transaction_channel=auth_context["transaction_channel"],
+                entry_mode=auth_context["entry_mode"],
+                merchant_country_code=auth_context["merchant_country_code"],
+                merchant_city=auth_context["merchant_city"],
+                merchant_region=auth_context["merchant_region"],
+                merchant_postal_code=auth_context["merchant_postal_code"],
+                merchant_latitude=auth_context["merchant_latitude"],
+                merchant_longitude=auth_context["merchant_longitude"],
+                ip_country_code=auth_context["ip_country_code"],
+                shipping_country_code=auth_context["shipping_country_code"],
+                is_digital_goods=auth_context["is_digital_goods"],
                 expires_at=datetime.datetime.now(datetime.timezone.utc)
             )
             db.add(declined_auth)
@@ -164,14 +254,26 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
                 "decline_reason": "INSUFFICIENT_FUNDS"
             }
 
+        now = payload.get("created_at") or datetime.datetime.now(datetime.timezone.utc)
+
         # 5. Evaluate Fraud Risk
+        recent_authorizations = repo.list_recent_authorizations(
+            str(account.id),
+            since=now - datetime.timedelta(hours=24),
+            limit=100,
+        )
         fraud_service = FraudScoringService()
-        risk_score = fraud_service.evaluate_transaction_risk(payload)
-        auth_status = "FLAGGED" if risk_score > 20 else "PENDING"
+        fraud_decision = fraud_service.evaluate_authorization(
+            {**payload, "created_at": now},
+            context=auth_context,
+            recent_authorizations=recent_authorizations,
+            account=account,
+        )
+        risk_score = fraud_decision.score
+        auth_status = "FLAGGED" if fraud_decision.is_flagged else "PENDING"
 
         # 6. Approve Hold
         auth_code = f"{random.randint(100000, 999999)}"
-        now = payload.get("created_at") or datetime.datetime.now(datetime.timezone.utc)
         
         auth_hold = TransactionAuthorization(
             card_id=card.id,
@@ -186,11 +288,67 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
             card_network=card_network,
             merchant_category_code=mcc,
             merchant_name=merchant_name,
+            transaction_channel=auth_context["transaction_channel"],
+            entry_mode=auth_context["entry_mode"],
+            merchant_country_code=auth_context["merchant_country_code"],
+            merchant_city=auth_context["merchant_city"],
+            merchant_region=auth_context["merchant_region"],
+            merchant_postal_code=auth_context["merchant_postal_code"],
+            merchant_latitude=auth_context["merchant_latitude"],
+            merchant_longitude=auth_context["merchant_longitude"],
+            ip_country_code=auth_context["ip_country_code"],
+            shipping_country_code=auth_context["shipping_country_code"],
+            is_digital_goods=auth_context["is_digital_goods"],
             created_at=now,
             expires_at=now + datetime.timedelta(days=7)
         )
         db.add(auth_hold)
         db.flush()
+
+        decision_record = FraudDecisionRepository(db).record_model_decision(
+            authorization_id=auth_hold.id,
+            customer_id=account.customer_id,
+            credit_account_id=account.id,
+            card_id=card.id,
+            score=fraud_decision.score,
+            threshold=fraud_decision.threshold,
+            decision=fraud_decision.decision,
+            reason_codes=fraud_decision.reason_codes,
+            feature_snapshot=fraud_decision.features,
+            model_version=fraud_decision.model_version,
+        )
+        record_audit_event(
+            db,
+            "FRAUD_MODEL_DECISION_RECORDED",
+            {
+                "decision_id": str(decision_record.id),
+                "authorization_id": str(auth_hold.id),
+                "customer_id": str(account.customer_id),
+                "credit_account_id": str(account.id),
+                "card_id": str(card.id),
+                "score": fraud_decision.score,
+                "threshold": fraud_decision.threshold,
+                "decision": fraud_decision.decision,
+                "reason_codes": fraud_decision.reason_codes,
+                "model_version": fraud_decision.model_version,
+            },
+        )
+        if (
+            fraud_service.alerts_enabled
+            and fraud_decision.is_flagged
+            and fraud_decision.score >= fraud_service.alert_threshold
+        ):
+            customer = db.query(User).filter(User.id == account.customer_id).first()
+            if customer:
+                FraudAlertService(db).create_or_update_alert_from_model_decision(
+                    customer=customer,
+                    card=card,
+                    credit_account=account,
+                    authorization=auth_hold,
+                    decision_record=decision_record,
+                )
+            else:
+                logger.warning("Skipping model fraud alert because customer %s was not found.", account.customer_id)
         
         # Recalculate credit balances
         recalculate_available_credit(db, account)
@@ -204,10 +362,16 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
             "rrn": rrn or "N/A",
             "timestamp": now.strftime("%H:%M:%S"),
             "merchant_name": merchant_name,
+            "transaction_channel": auth_context["transaction_channel"],
+            "merchant_country_code": auth_context["merchant_country_code"],
             "amount_cents": amount_cents,
             "status": f"FLAGGED (RISK {risk_score})" if auth_status == "FLAGGED" else f"HOLD ({auth_status})",
-            "bq_view": "analytics_curated.international_fraud_anomalies" if risk_score > 20 else "analytics_curated.realtime_spend_velocity",
-            "raw_time": now.timestamp()
+            "fraud_risk_score": risk_score,
+            "fraud_reason_codes": fraud_decision.reason_codes,
+            "fraud_model_version": fraud_decision.model_version,
+            "fraud_features": fraud_decision.features,
+            "bq_view": "analytics_curated.international_fraud_anomalies" if fraud_decision.is_flagged else "analytics_curated.realtime_spend_velocity",
+            "raw_time": now.timestamp(),
         })
 
         return {
@@ -215,7 +379,12 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
             "auth_code": auth_code,
             "status": auth_status,
             "fraud_risk_score": risk_score,
-            "decline_reason": "NONE"
+            "fraud_decision": fraud_decision.to_dict(),
+            "fraud_reason_codes": fraud_decision.reason_codes,
+            "fraud_model_version": fraud_decision.model_version,
+            "transaction_channel": auth_context["transaction_channel"],
+            "merchant_country_code": auth_context["merchant_country_code"],
+            "decline_reason": "NONE",
         }
     except Exception as e:
         db.rollback()
