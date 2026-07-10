@@ -773,6 +773,26 @@ resource "google_cloud_run_v2_service" "data_generator" {
       }
 
       env {
+        name  = "FRAUD_PATTERN_ENABLED"
+        value = tostring(var.data_generator_fraud_pattern_enabled)
+      }
+
+      env {
+        name  = "FRAUD_PATTERN_RATE"
+        value = tostring(var.data_generator_fraud_pattern_rate)
+      }
+
+      env {
+        name  = "FRAUD_PATTERN_MAX_PER_PULSE"
+        value = tostring(var.data_generator_fraud_pattern_max_per_pulse)
+      }
+
+      env {
+        name  = "FRAUD_PATTERN_TARGET_MODE"
+        value = var.data_generator_fraud_pattern_target_mode
+      }
+
+      env {
         name  = "REDIS_HOST"
         value = google_redis_instance.banking.host
       }

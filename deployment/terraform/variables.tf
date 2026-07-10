@@ -306,6 +306,30 @@ variable "data_generator_auto_paydown_max_accounts_per_pulse" {
   default     = 2
 }
 
+variable "data_generator_fraud_pattern_enabled" {
+  type        = bool
+  description = "Enable low-rate labeled fraud-pattern traffic during scheduled data-generator pulses."
+  default     = false
+}
+
+variable "data_generator_fraud_pattern_rate" {
+  type        = number
+  description = "Probability that an admitted scheduled data-generator pulse includes fraud-pattern traffic when enabled."
+  default     = 0.05
+}
+
+variable "data_generator_fraud_pattern_max_per_pulse" {
+  type        = number
+  description = "Maximum labeled fraud-pattern target cards per scheduled data-generator pulse."
+  default     = 1
+}
+
+variable "data_generator_fraud_pattern_target_mode" {
+  type        = string
+  description = "Fraud-pattern target selection mode. Use eligible to preserve presenter and VIP exclusions."
+  default     = "eligible"
+}
+
 variable "seed_mock_user_count" {
   type        = number
   description = "Target base plus generated mock banking users for algorithmic seeding. VIP/demo-script users are added separately."
