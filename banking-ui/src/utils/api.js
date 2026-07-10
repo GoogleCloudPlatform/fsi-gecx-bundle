@@ -348,6 +348,21 @@ export async function triggerSpendSurge() {
   return res.data;
 }
 
+export async function planGenerationScenario(payload) {
+  const res = await api.post('v1/simulation/scenarios/plan', payload);
+  return res.data;
+}
+
+export async function executeGenerationScenario(payload) {
+  const res = await api.post('v1/simulation/scenarios/execute', payload);
+  return res.data;
+}
+
+export async function getGenerationScenarioOutcomes(scenarioId) {
+  const res = await api.get(`v1/simulation/scenarios/${encodeURIComponent(scenarioId)}/outcomes`);
+  return res.data;
+}
+
 export async function injectFraudAnomaly() {
   const res = await api.post('v1/simulation/inject-anomaly');
   return res.data;

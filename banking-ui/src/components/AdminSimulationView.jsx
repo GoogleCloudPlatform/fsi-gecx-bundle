@@ -18,10 +18,12 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Sparkles, Activity, ShieldAlert, Zap, Database, RefreshCw, 
   ArrowLeft, CheckCircle2, AlertTriangle, TrendingUp, Clock,
-  Layers, ExternalLink
+  Layers, ExternalLink, ClipboardList, Play, RotateCcw
 } from 'lucide-react';
 import {
   triggerSpendSurge,
+  planGenerationScenario,
+  executeGenerationScenario,
   injectFraudAnomaly,
   injectLateFee,
   getGlobalStream,
@@ -34,6 +36,40 @@ import { showInfoModals } from '../utils/constants.js';
 
 const MIN_RISK_CONDITION_SCORED_EVENTS = 5;
 const ELEVATED_AVERAGE_RISK_SCORE = 25;
+
+const SCENARIO_OPTIONS = [
+  {
+    value: 'cnp_gift_card_campaign',
+    label: 'Gift Card CNP Campaign',
+    goal: 'Create a coordinated card-not-present gift card fraud campaign.',
+  },
+  {
+    value: 'digital_card_testing_campaign',
+    label: 'Digital Card Testing',
+    goal: 'Create a digital goods card testing campaign with small probes and follow-up activity.',
+  },
+  {
+    value: 'impossible_travel_campaign',
+    label: 'Impossible Travel',
+    goal: 'Create rapid card-present geography jumps that should surface impossible-travel risk.',
+  },
+  {
+    value: 'travel_false_positive_story',
+    label: 'Legitimate Travel Review',
+    goal: 'Create a legitimate Mexico travel story with false-positive review and confirmed customer outcome.',
+  },
+  {
+    value: 'lakehouse_spend_velocity_surge',
+    label: 'Spend Velocity Surge',
+    goal: 'Run a scenario-backed active lakehouse spend velocity surge.',
+  },
+];
+
+const SCENARIO_INTENSITIES = ['low', 'medium', 'high'];
+
+function buildScenarioIdempotencyKey(prefix, plan) {
+  return `${prefix}:${plan?.scenario_id || 'scenario'}:${Date.now()}`;
+}
 
 function formatLatency(ms) {
   if (ms == null) return 'N/A';
@@ -78,6 +114,13 @@ function AdminSimulationView() {
   const [isSurgeLoading, setIsSurgeLoading] = useState(false);
   const [isAnomalyLoading, setIsAnomalyLoading] = useState(false);
   const [isFeeLoading, setIsFeeLoading] = useState(false);
+  const [isScenarioLoading, setIsScenarioLoading] = useState(false);
+  const [selectedScenarioType, setSelectedScenarioType] = useState(SCENARIO_OPTIONS[0].value);
+  const [scenarioIntensity, setScenarioIntensity] = useState('medium');
+  const [scenarioSeed, setScenarioSeed] = useState('1841');
+  const [scenarioMaxEvents, setScenarioMaxEvents] = useState('8');
+  const [scenarioPlan, setScenarioPlan] = useState(null);
+  const [scenarioResult, setScenarioResult] = useState(null);
   const [infoModal, setInfoModal] = useState(null);
   const [streamData, setStreamData] = useState([]);
   const [feedback, setFeedback] = useState({ type: '', title: '', message: '', data: null });
@@ -434,6 +477,107 @@ function AdminSimulationView() {
     }
   };
 
+  const selectedScenario = SCENARIO_OPTIONS.find((option) => option.value === selectedScenarioType) || SCENARIO_OPTIONS[0];
+
+  const buildScenarioRequest = (mode = 'dry_run') => ({
+    goal: selectedScenario.goal,
+    scenario_type: selectedScenario.value,
+    mode,
+    intensity: scenarioIntensity,
+    seed: Number(scenarioSeed) || 1841,
+    max_events: Number(scenarioMaxEvents) || 8,
+    target_cohort_size: Math.max(1, Math.min(Number(scenarioMaxEvents) || 8, 25)),
+  });
+
+  const handleScenarioDryRun = async () => {
+    setIsScenarioLoading(true);
+    setFeedback({ type: '', title: '', message: '', data: null });
+    try {
+      const plan = await planGenerationScenario(buildScenarioRequest('dry_run'));
+      setScenarioPlan(plan);
+      setScenarioResult(null);
+      setFeedback({
+        type: 'success',
+        title: 'Scenario Dry Run Planned',
+        message: `${plan.scenario_type} prepared ${plan.timeline?.length || 0} planned events with ${plan.expected_validations?.length || 0} validation hint${(plan.expected_validations?.length || 0) === 1 ? '' : 's'}.`,
+        data: plan,
+      });
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        title: 'Scenario Planning Failed',
+        message: err.response?.data?.detail || err.message || 'Unable to plan the synthetic scenario.',
+        data: null,
+      });
+    } finally {
+      setIsScenarioLoading(false);
+    }
+  };
+
+  const executeScenarioPlan = async (plan, mode = 'execute') => {
+    const result = await executeGenerationScenario({
+      plan,
+      mode,
+      idempotency_key: buildScenarioIdempotencyKey(`ui-${mode}`, plan),
+      operator: window.firebaseAuth?.getCurrentUser?.()?.email || 'admin-simulation-ui',
+    });
+    setScenarioResult(result);
+    setFeedback({
+      type: result.status === 'failed' ? 'error' : result.status === 'partial' ? 'warning' : 'success',
+      title: mode === 'replay' ? 'Scenario Replay Submitted' : 'Scenario Execution Submitted',
+      message: `${result.status || 'submitted'}: ${result.succeeded_events || 0}/${result.planned_events || 0} events succeeded, ${result.outcomes?.length || 0} outcome labels captured.`,
+      data: result,
+    });
+    fetchGlobalStream();
+  };
+
+  const handleScenarioExecute = async () => {
+    setIsScenarioLoading(true);
+    setFeedback({ type: '', title: '', message: '', data: null });
+    try {
+      const plan = scenarioPlan?.scenario_type === selectedScenario.value
+        ? scenarioPlan
+        : await planGenerationScenario(buildScenarioRequest('dry_run'));
+      setScenarioPlan(plan);
+      await executeScenarioPlan(plan, 'execute');
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        title: 'Scenario Execution Failed',
+        message: err.response?.data?.detail || err.message || 'Unable to execute the synthetic scenario.',
+        data: null,
+      });
+    } finally {
+      setIsScenarioLoading(false);
+    }
+  };
+
+  const handleScenarioReplay = async () => {
+    if (!scenarioPlan) {
+      setFeedback({
+        type: 'warning',
+        title: 'No Scenario To Replay',
+        message: 'Run a dry run or execute a scenario before replaying it.',
+        data: null,
+      });
+      return;
+    }
+    setIsScenarioLoading(true);
+    setFeedback({ type: '', title: '', message: '', data: null });
+    try {
+      await executeScenarioPlan(scenarioPlan, 'replay');
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        title: 'Scenario Replay Failed',
+        message: err.response?.data?.detail || err.message || 'Unable to replay the synthetic scenario.',
+        data: null,
+      });
+    } finally {
+      setIsScenarioLoading(false);
+    }
+  };
+
   return (
     <section className="relative pt-24 pb-16 md:pt-28 md:pb-24 px-6 max-w-6xl mx-auto min-h-[calc(100vh-80px)] flex flex-col text-left">
       
@@ -736,6 +880,139 @@ function AdminSimulationView() {
               {isFeeLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
               {isFeeLoading ? 'Injecting Fee...' : 'Inject Fee'}
             </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-10 p-6 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5">
+        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
+          <div className="min-w-0">
+            <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <ClipboardList className="w-4 h-4 text-violet-500" />
+              Scenario Studio
+            </div>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Agentic Data Generation Controls</h2>
+            <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+              Plan, execute, or replay scenario-backed synthetic transaction stories through the data-generator service.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-xs min-w-[220px]">
+            <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+              <div className="text-slate-500">Last Plan</div>
+              <div className="font-mono font-bold text-slate-900 dark:text-white truncate">{scenarioPlan?.scenario_id || 'None'}</div>
+            </div>
+            <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+              <div className="text-slate-500">Last Result</div>
+              <div className="font-mono font-bold text-slate-900 dark:text-white">{scenarioResult?.status || 'None'}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Template</span>
+              <select
+                value={selectedScenarioType}
+                onChange={(event) => {
+                  setSelectedScenarioType(event.target.value);
+                  setScenarioPlan(null);
+                  setScenarioResult(null);
+                }}
+                className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+              >
+                {SCENARIO_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Intensity</span>
+              <select
+                value={scenarioIntensity}
+                onChange={(event) => setScenarioIntensity(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+              >
+                {SCENARIO_INTENSITIES.map((intensity) => (
+                  <option key={intensity} value={intensity}>{intensity.toUpperCase()}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Seed</span>
+              <input
+                type="number"
+                min="0"
+                value={scenarioSeed}
+                onChange={(event) => setScenarioSeed(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Max Events</span>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={scenarioMaxEvents}
+                onChange={(event) => setScenarioMaxEvents(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </label>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <div className="rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800 p-4">
+              <div className="text-sm font-bold text-slate-900 dark:text-white">{selectedScenario.label}</div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">{selectedScenario.goal}</div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+                <div>
+                  <div className="text-slate-400">Events</div>
+                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{scenarioPlan?.timeline?.length || 0}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400">Labels</div>
+                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{scenarioResult?.outcomes?.length || 0}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400">Success</div>
+                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{scenarioResult?.succeeded_events ?? 0}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={handleScenarioDryRun}
+                disabled={isScenarioLoading}
+                className="py-2.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-slate-800"
+                title="Plan scenario"
+              >
+                {isScenarioLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ClipboardList className="w-4 h-4" />}
+                Dry Run
+              </button>
+              <button
+                onClick={handleScenarioExecute}
+                disabled={isScenarioLoading}
+                className="py-2.5 px-2 rounded-xl bg-violet-600 hover:bg-violet-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-violet-600"
+                title="Execute scenario"
+              >
+                {isScenarioLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                Execute
+              </button>
+              <button
+                onClick={handleScenarioReplay}
+                disabled={isScenarioLoading || !scenarioPlan}
+                className="py-2.5 px-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-cyan-600"
+                title="Replay last plan"
+              >
+                {isScenarioLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                Replay
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -14,7 +14,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -87,6 +87,48 @@ async def simulate_activity_surge(
     if result.get("status") == "ACCEPTED":
         response.status_code = status.HTTP_202_ACCEPTED
     return result
+
+@router.post("/scenarios/plan", status_code=status.HTTP_200_OK)
+@v1_router.post("/scenarios/plan", status_code=status.HTTP_200_OK)
+@alias_router.post("/scenarios/plan", status_code=status.HTTP_200_OK)
+async def plan_generation_scenario(
+    payload: dict = Body(...),
+    token: ValidatedToken = Depends(verify_presenter_domain),
+    db: Session = Depends(get_db)
+):
+    """
+    Proxies a synthetic generation scenario planning request to the data-generator service.
+    """
+    del token
+    return await SimulationService(db).plan_generation_scenario(payload)
+
+@router.post("/scenarios/execute", status_code=status.HTTP_200_OK)
+@v1_router.post("/scenarios/execute", status_code=status.HTTP_200_OK)
+@alias_router.post("/scenarios/execute", status_code=status.HTTP_200_OK)
+async def execute_generation_scenario(
+    payload: dict = Body(...),
+    token: ValidatedToken = Depends(verify_presenter_domain),
+    db: Session = Depends(get_db)
+):
+    """
+    Proxies a validated synthetic scenario execution or replay request to the data-generator service.
+    """
+    del token
+    return await SimulationService(db).execute_generation_scenario(payload)
+
+@router.get("/scenarios/{scenario_id}/outcomes", status_code=status.HTTP_200_OK)
+@v1_router.get("/scenarios/{scenario_id}/outcomes", status_code=status.HTTP_200_OK)
+@alias_router.get("/scenarios/{scenario_id}/outcomes", status_code=status.HTTP_200_OK)
+async def get_generation_scenario_outcomes(
+    scenario_id: str,
+    token: ValidatedToken = Depends(verify_presenter_domain),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns synthetic scenario outcome labels captured by the data-generator service.
+    """
+    del token
+    return await SimulationService(db).get_generation_scenario_outcomes(scenario_id)
 
 @router.post("/inject-anomaly", status_code=status.HTTP_200_OK)
 @v1_router.post("/inject-anomaly", status_code=status.HTTP_200_OK)

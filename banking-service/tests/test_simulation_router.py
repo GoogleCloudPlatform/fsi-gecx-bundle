@@ -399,6 +399,110 @@ async def test_simulate_surge_returns_accepted_when_generator_response_times_out
     assert data["status"] == "ACCEPTED"
     assert "accepted" in data["message"].lower()
 
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_plan_generation_scenario_proxies_to_data_generator(async_client, db_session):
+    del db_session
+    global mock_claims
+    mock_claims = {"sub": "scenario-planner", "email": "scenario.planner@google.com"}
+
+    from services.simulation import DATA_GENERATOR_URL
+    scenario_route = respx.post(f"{DATA_GENERATOR_URL}/scenarios/plan").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "scenario_id": "scenario-test-plan",
+                "scenario_type": "cnp_gift_card_campaign",
+                "mode": "dry_run",
+                "timeline": [],
+                "personas": [],
+                "behavior_policies": [],
+                "expected_validations": [],
+                "limits": {"max_customers": 1, "max_cards": 1, "max_authorizations": 10, "max_settlements": 10, "max_duration_seconds": 120, "max_fraud_events": 10},
+                "seed": 1841,
+                "template_version": "test",
+                "planner_version": "test",
+                "goal": "Create a gift card fraud campaign.",
+            },
+        )
+    )
+
+    response = await async_client.post(
+        "/api/v1/simulation/scenarios/plan",
+        json={
+            "goal": "Create a gift card fraud campaign.",
+            "scenario_type": "cnp_gift_card_campaign",
+            "mode": "dry_run",
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["scenario_id"] == "scenario-test-plan"
+    assert scenario_route.called
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_execute_generation_scenario_attaches_eligible_cards(async_client, db_session):
+    global mock_claims
+    mock_claims = {"sub": "scenario-executor", "email": "scenario.executor@google.com"}
+
+    prov_resp = await async_client.post("/api/v1/simulation/provision-my-demo")
+    assert prov_resp.status_code == status.HTTP_201_CREATED
+    provision_user_suite(db_session, "regular.scenario.customer@example.com", "regular-scenario-customer")
+
+    from services.simulation import DATA_GENERATOR_URL
+    scenario_route = respx.post(f"{DATA_GENERATOR_URL}/scenarios/execute").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "scenario_id": "scenario-test-execute",
+                "execution_id": "scenario-exec-test",
+                "idempotency_key": "ui-scenario-test",
+                "mode": "execute",
+                "status": "succeeded",
+                "started_at": "2026-01-01T00:00:00Z",
+                "completed_at": "2026-01-01T00:00:01Z",
+                "planned_events": 1,
+                "attempted_events": 1,
+                "succeeded_events": 1,
+                "skipped_events": 0,
+                "failed_events": 0,
+                "outcomes": [],
+                "steps": [],
+            },
+        )
+    )
+
+    response = await async_client.post(
+        "/api/v1/simulation/scenarios/execute",
+        json={
+            "plan": {
+                "scenario_id": "scenario-test-execute",
+                "scenario_type": "cnp_gift_card_campaign",
+                "mode": "dry_run",
+                "seed": 1841,
+                "template_version": "test",
+                "planner_version": "test",
+                "goal": "Execute a gift card fraud campaign.",
+                "personas": [],
+                "behavior_policies": [],
+                "timeline": [],
+                "expected_validations": [],
+                "limits": {"max_customers": 1, "max_cards": 1, "max_authorizations": 10, "max_settlements": 10, "max_duration_seconds": 120, "max_fraud_events": 10},
+            },
+            "mode": "execute",
+            "idempotency_key": "ui-scenario-test",
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert scenario_route.called
+    forwarded = httpx.Response(200, content=scenario_route.calls.last.request.read()).json()
+    assert forwarded["default_card_tokens"]
+    assert forwarded["default_card_tokens"][0].startswith("tok_visa_")
+
 @pytest.mark.asyncio
 @patch("services.messaging.messaging.send")
 @patch("services.messaging.messaging.send_each_for_multicast")
