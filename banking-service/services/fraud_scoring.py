@@ -9,6 +9,9 @@ logger = logging.getLogger(__name__)
 
 FRAUD_SCORER_VERSION = "local-deterministic-v1"
 DEFAULT_FRAUD_FLAG_THRESHOLD = int(os.getenv("FRAUD_FLAG_THRESHOLD", "20"))
+DEFAULT_FRAUD_ALERT_THRESHOLD = int(os.getenv("FRAUD_ALERT_THRESHOLD", "70"))
+FRAUD_MODEL_ALERTS_ENABLED = os.getenv("FRAUD_MODEL_ALERTS_ENABLED", "false").lower() in {"1", "true", "yes"}
+HIGH_RISK_MCCS = {"5947", "5967", "6051", "6211", "7995"}
 DESCRIPTOR_FLAG_KEYWORDS = {
     "ONLINE": "ONLINE",
     ".COM": "ONLINE",
@@ -74,8 +77,15 @@ class FraudDecision:
 
 
 class FraudScoringService:
-    def __init__(self, flag_threshold: int = DEFAULT_FRAUD_FLAG_THRESHOLD):
+    def __init__(
+        self,
+        flag_threshold: int = DEFAULT_FRAUD_FLAG_THRESHOLD,
+        alert_threshold: int = DEFAULT_FRAUD_ALERT_THRESHOLD,
+        alerts_enabled: bool = FRAUD_MODEL_ALERTS_ENABLED,
+    ):
         self.flag_threshold = flag_threshold
+        self.alert_threshold = alert_threshold
+        self.alerts_enabled = alerts_enabled
 
     def extract_authorization_features(
         self,
@@ -181,6 +191,77 @@ class FraudScoringService:
         }
         return features
 
+    def score_features(self, features: dict[str, Any]) -> tuple[int, list[str]]:
+        score = 3
+        reason_codes: list[str] = []
+        flags = set(features.get("descriptor_flags") or [])
+        channel = str(features.get("transaction_channel") or "CARD_PRESENT").upper()
+        merchant_country = str(features.get("merchant_country_code") or "USA").upper()
+        ip_country = str(features.get("ip_country_code") or "").upper()
+        shipping_country = str(features.get("shipping_country_code") or "").upper()
+
+        if str(features.get("merchant_category_code") or "") in HIGH_RISK_MCCS:
+            score += 18
+            reason_codes.append("HIGH_RISK_MCC")
+
+        if channel in {"CARD_NOT_PRESENT", "ECOMMERCE"} and flags.intersection({"ONLINE", "MARKETPLACE"}):
+            score += 8
+            reason_codes.append("CARD_NOT_PRESENT_DESCRIPTOR")
+
+        if features.get("is_digital_goods") or flags.intersection({"GIFT_CARD", "DIGITAL_GOODS", "GAMING"}):
+            score += 20
+            reason_codes.append("GIFT_CARD_OR_DIGITAL_GOODS")
+
+        if "ELECTRONICS" in flags and int(features.get("same_mcc_count_1h") or 0) >= 2:
+            score += 12
+            reason_codes.append("ELECTRONICS_BURST")
+
+        if int(features.get("recent_auth_count_10m") or 0) >= 3:
+            score += 18
+            reason_codes.append("VELOCITY_SPIKE_10M")
+
+        if int(features.get("recent_auth_count_1h") or 0) >= 6:
+            score += 10
+            reason_codes.append("VELOCITY_SPIKE_1H")
+
+        amount_ratio = features.get("amount_to_recent_average_ratio")
+        if amount_ratio is not None and amount_ratio >= 4:
+            score += 15
+            reason_codes.append("AMOUNT_OUTLIER")
+
+        distance = features.get("distance_from_recent_card_present_location")
+        minutes_since = features.get("minutes_since_last_card_present_location")
+        if distance is not None and minutes_since is not None and distance >= 500 and minutes_since <= 180:
+            score += 30
+            reason_codes.append("IMPOSSIBLE_TRAVEL")
+
+        if merchant_country != "USA":
+            score += 10
+            reason_codes.append("INTERNATIONAL_ANOMALY")
+            if channel in {"CARD_PRESENT", "WALLET"}:
+                score += 12
+                reason_codes.append("FOREIGN_CARD_PRESENT_ANOMALY")
+
+        if channel in {"CARD_NOT_PRESENT", "ECOMMERCE"} and merchant_country:
+            coarse_countries = {country for country in [ip_country, shipping_country] if country}
+            if coarse_countries and merchant_country not in coarse_countries:
+                score += 14
+                reason_codes.append("UNUSUAL_ECOMMERCE_COUNTRY")
+
+        utilization_after = features.get("credit_utilization_after_auth")
+        available_ratio = features.get("available_credit_ratio")
+        if (utilization_after is not None and utilization_after >= 0.85) or (available_ratio is not None and available_ratio <= 0.15):
+            score += 12
+            reason_codes.append("NEAR_LIMIT_PRESSURE")
+
+        if int(features.get("recent_flagged_count_24h") or 0) > 0:
+            score += 15
+            reason_codes.append("RECENT_FLAGGED_ACTIVITY")
+
+        if not reason_codes:
+            reason_codes.append("BASELINE_LOW_RISK")
+        return max(0, min(100, score)), reason_codes
+
     def evaluate_authorization(
         self,
         payload: dict[str, Any],
@@ -206,8 +287,7 @@ class FraudScoringService:
             score = int(payload.get("risk_score") if payload.get("risk_score") is not None else 85)
             reason_codes.append("EXPLICIT_SIMULATION_OVERRIDE")
         else:
-            score = 3
-            reason_codes.append("BASELINE_LOW_RISK")
+            score, reason_codes = self.score_features(features)
 
         score = max(0, min(100, score))
         decision = "FLAGGED" if score > self.flag_threshold else "APPROVED"
