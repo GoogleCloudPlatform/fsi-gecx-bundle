@@ -29,6 +29,7 @@ class ScenarioType(StrEnum):
     CNP_GIFT_CARD_CAMPAIGN = "cnp_gift_card_campaign"
     DIGITAL_CARD_TESTING_CAMPAIGN = "digital_card_testing_campaign"
     IMPOSSIBLE_TRAVEL_CAMPAIGN = "impossible_travel_campaign"
+    TRAVEL_FALSE_POSITIVE_STORY = "travel_false_positive_story"
     PREMIUM_TRAVEL_OFFER_FUEL = "premium_travel_offer_fuel"
     NORMAL_BASELINE_ACTIVITY = "normal_baseline_activity"
     LAKEHOUSE_SPEND_VELOCITY_SURGE = "lakehouse_spend_velocity_surge"

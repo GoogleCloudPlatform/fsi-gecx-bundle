@@ -31,6 +31,7 @@ client = TestClient(app)
         ("Create a gift card campaign.", ScenarioType.CNP_GIFT_CARD_CAMPAIGN),
         ("Create a digital card testing campaign.", ScenarioType.DIGITAL_CARD_TESTING_CAMPAIGN),
         ("Create an impossible travel campaign.", ScenarioType.IMPOSSIBLE_TRAVEL_CAMPAIGN),
+        ("Create a false positive travel story.", ScenarioType.TRAVEL_FALSE_POSITIVE_STORY),
         ("Generate Mexico travel trend fuel for premium card offer analytics.", ScenarioType.PREMIUM_TRAVEL_OFFER_FUEL),
         ("Create normal weekday baseline card activity.", ScenarioType.NORMAL_BASELINE_ACTIVITY),
         ("Run a lakehouse spend velocity surge for the replication monitor.", ScenarioType.LAKEHOUSE_SPEND_VELOCITY_SURGE),
@@ -88,6 +89,20 @@ def test_impossible_travel_campaign_includes_card_present_geography():
     assert {"USA", "GBR"}.issubset(countries)
     assert all(event.merchant_context.transaction_channel == "CARD_PRESENT" for event in plan.timeline if event.merchant_context)
     assert any(event.merchant_context.latitude is not None for event in plan.timeline if event.merchant_context)
+
+
+def test_travel_false_positive_story_uses_mexico_geography_without_fraud_language():
+    plan = plan_scenario(ScenarioRequest(goal="Create a false positive travel story.", seed=1841))
+
+    assert plan.scenario_type == ScenarioType.TRAVEL_FALSE_POSITIVE_STORY
+    assert plan.labels["fraud_language"] == "false"
+    assert plan.limits.max_fraud_events == 0
+    auth_events = [event for event in plan.timeline if event.merchant_context]
+    assert auth_events
+    assert {event.merchant_context.country_code for event in auth_events} == {"MEX"}
+    assert any(event.outcome_label == "false_positive" for event in plan.timeline)
+    assert any(event.outcome_label == "confirmed_legitimate" for event in plan.timeline)
+    assert all(event.merchant_context.latitude is not None for event in auth_events)
 
 
 def test_premium_travel_offer_plan_is_growth_oriented():

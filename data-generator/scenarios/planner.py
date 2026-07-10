@@ -30,6 +30,8 @@ def infer_scenario_type(goal: str) -> ScenarioType | None:
         return ScenarioType.DIGITAL_CARD_TESTING_CAMPAIGN
     if any(term in normalized for term in ("impossible travel", "rapid geography", "geography jump")):
         return ScenarioType.IMPOSSIBLE_TRAVEL_CAMPAIGN
+    if any(term in normalized for term in ("false positive travel", "recognized travel", "legitimate travel alert")):
+        return ScenarioType.TRAVEL_FALSE_POSITIVE_STORY
     if any(term in normalized for term in ("premium travel", "offer", "mexico travel trend", "travel offer")):
         return ScenarioType.PREMIUM_TRAVEL_OFFER_FUEL
     if any(term in normalized for term in ("baseline", "normal activity", "ambient", "heartbeat")):

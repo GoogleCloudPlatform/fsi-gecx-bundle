@@ -391,6 +391,87 @@ def impossible_travel_campaign(request: ScenarioRequest) -> ScenarioPlan:
     )
 
 
+def travel_false_positive_story(request: ScenarioRequest) -> ScenarioPlan:
+    persona = PersonaProfile(
+        persona_id="recognized_mexico_traveler",
+        role="travel-prone customer with legitimate Mexico activity",
+        home_metro="San Francisco, CA",
+        card_profile="premium_travel_card",
+        typical_mccs=["4511", "7011", "5812", "4121", "7298"],
+        travel_propensity=0.9,
+        digital_commerce_propensity=0.25,
+        card_present_propensity=0.85,
+        protected_account_policy="exclude",
+        notes=["Synthetic false-positive story for recognized travel activity."],
+    )
+    policy = BehaviorPolicy(
+        policy_id="recognized_mexico_traveler_policy",
+        preferred_mccs=["4511", "7011", "5812", "4121", "7298"],
+        spend_min_cents=1_500,
+        spend_max_cents=90_000,
+        settlement_probability=0.88,
+        reversal_probability=0.02,
+        pending_probability=0.10,
+        travel_context="Plausible Mexico travel activity confirmed by customer.",
+    )
+    items = [
+        ("recognized-flight", "AEROMEXICO", "Airline", "4511", 54_000, "Mexico City", "CDMX", 19.4326, -99.1332),
+        ("recognized-hotel", "CANCUN RESORT POS", "Hotel", "7011", 82_000, "Cancun", "QR", 21.1619, -86.8515),
+        ("recognized-dining", "POLANCO DINING", "Dining", "5812", 12_500, "Mexico City", "CDMX", 19.4326, -99.1332),
+        ("recognized-wellness", "TULUM WELLNESS SPA", "Wellness", "7298", 18_000, "Tulum", "QR", 20.2114, -87.4654),
+    ]
+    timeline = [
+        PlannedCardEvent(
+            event_id=event_id,
+            offset_minutes=idx * 30,
+            event_type=PlannedEventType.AUTHORIZATION,
+            persona_id=persona.persona_id,
+            amount_cents=amount,
+            merchant_context=MerchantContext(
+                category=category,
+                mcc=mcc,
+                merchant_name_hint=name,
+                country_code="MEX",
+                city=city,
+                region=region,
+                latitude=lat,
+                longitude=lon,
+                transaction_channel="CARD_PRESENT",
+                entry_mode="CHIP",
+            ),
+            expected_score_band="low_to_moderate",
+            expected_reason_codes=["INTERNATIONAL_ANOMALY"] if idx == 1 else [],
+            outcome_label=OutcomeLabel.FALSE_POSITIVE if idx == 1 else OutcomeLabel.CONFIRMED_LEGITIMATE,
+            description="Legitimate Mexico travel activity that may initially look unusual but is customer-recognized.",
+        )
+        for idx, (event_id, name, category, mcc, amount, city, region, lat, lon) in enumerate(items, start=1)
+    ]
+    timeline.append(
+        PlannedCardEvent(
+            event_id="customer-recognized-travel",
+            offset_minutes=150,
+            event_type=PlannedEventType.CUSTOMER_ACTION,
+            persona_id=persona.persona_id,
+            outcome_label=OutcomeLabel.CONFIRMED_LEGITIMATE,
+            description="Customer confirms the Mexico travel activity as legitimate.",
+        )
+    )
+    return _base_plan(
+        request,
+        ScenarioType.TRAVEL_FALSE_POSITIVE_STORY,
+        personas=[persona],
+        behavior_policies=[policy],
+        timeline=timeline,
+        expected_validations=[
+            ExpectedValidation(validation_id="travel-false-positive", surface="fraud_dashboard", expectation="Travel activity can show moderate risk without unresolved fraud."),
+            ExpectedValidation(validation_id="travel-offer-reusable", surface="bigquery", expectation="Mexico travel rows are reusable by premium travel offer analytics."),
+        ],
+        limits=_limits(request, customers=1, cards=1, authorizations=4, settlements=4, duration_seconds=300, fraud_events=0),
+        assumptions=["The story is synthetic and explicitly customer-recognized."],
+        labels={"demo_surface": "travel", "campaign_type": "false_positive", "fraud_language": "false"},
+    )
+
+
 def premium_travel_offer_fuel(request: ScenarioRequest) -> ScenarioPlan:
     cohort_size = request.target_cohort_size or {"low": 8, "medium": 15, "high": 30}[request.intensity.value]
     persona = PersonaProfile(
@@ -618,6 +699,7 @@ TEMPLATE_BUILDERS: dict[ScenarioType, Callable[[ScenarioRequest], ScenarioPlan]]
     ScenarioType.CNP_GIFT_CARD_CAMPAIGN: cnp_gift_card_campaign,
     ScenarioType.DIGITAL_CARD_TESTING_CAMPAIGN: digital_card_testing_campaign,
     ScenarioType.IMPOSSIBLE_TRAVEL_CAMPAIGN: impossible_travel_campaign,
+    ScenarioType.TRAVEL_FALSE_POSITIVE_STORY: travel_false_positive_story,
     ScenarioType.PREMIUM_TRAVEL_OFFER_FUEL: premium_travel_offer_fuel,
     ScenarioType.NORMAL_BASELINE_ACTIVITY: normal_baseline_activity,
     ScenarioType.LAKEHOUSE_SPEND_VELOCITY_SURGE: lakehouse_spend_velocity_surge,
