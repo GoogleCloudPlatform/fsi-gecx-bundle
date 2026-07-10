@@ -20,6 +20,7 @@ deploy_cloud_build_triggers                 = true
 deploy_cloud_run_services                   = true
 set_cloud_run_audiences                     = true
 custom_domain                               = "[YOUR_CUSTOM_DOMAIN]"
+stable_env_url                              = "[OPTIONAL_STABLE_ENVIRONMENT_URL]"
 enable_ccai                                 = false
 ccai_company_id                             = "[YOUR_CCAI_COMPANY_ID]"
 ccai_host                                   = "[YOUR_CCAI_HOST_URL]"

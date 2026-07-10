@@ -323,3 +323,9 @@ variable "banking_service_timeout_seconds" {
   description = "Timeout in seconds for the banking-service Cloud Run instance."
   default     = 30
 }
+
+variable "stable_env_url" {
+  type        = string
+  description = "URL of the stable environment to show in the test environment banner (leave empty to disable the banner)"
+  default     = null
+}

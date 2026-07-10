@@ -25,7 +25,8 @@ import {
   Check,
   Key,
   ExternalLink,
-  LogIn
+  LogIn,
+  AlertCircle
 } from 'lucide-react';
 
 
@@ -978,10 +979,28 @@ function AppContent() {
   const savingsAccs = accountsSummary?.deposit_accounts?.filter(a => a.account_type === 'SAVINGS') || [];
   const creditAccs = accountsSummary?.credit_accounts || [];
 
+  const stableEnvUrl = window.env?.STABLE_ENV_URL;
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-[Outfit] antialiased overflow-x-hidden">
+    <div 
+      className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-[Outfit] antialiased overflow-x-hidden"
+      style={{ paddingTop: stableEnvUrl ? '36px' : '0px' }}
+    >
+      {stableEnvUrl && (
+        <div className="fixed top-0 left-0 right-0 h-9 z-50 bg-amber-500/10 dark:bg-amber-500/5 border-b border-amber-500/20 text-amber-800 dark:text-amber-300 text-xs flex items-center justify-center font-medium gap-1.5 px-4 backdrop-blur-md">
+          <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span>This is a test environment. For the stable environment go to</span>
+          <a href={stableEnvUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-amber-950 dark:hover:text-amber-100 transition-colors font-semibold flex items-center gap-0.5">
+            {stableEnvUrl}
+            <ExternalLink className="w-3 h-3 inline" />
+          </a>
+        </div>
+      )}
       {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800/50">
+      <nav 
+        className="fixed left-0 right-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800/50"
+        style={{ top: stableEnvUrl ? '36px' : '0px' }}
+      >
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between gap-4">
           <div className="flex items-center space-x-8 lg:space-x-12">
             <Link

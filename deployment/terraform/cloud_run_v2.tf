@@ -364,6 +364,13 @@ resource "google_cloud_run_v2_service" "banking_ui" {
         name  = "VITE_BANKING_API_URL"
         value = "https://${var.custom_domain}/api"
       }
+      dynamic "env" {
+        for_each = var.stable_env_url != null && var.stable_env_url != "" ? [1] : []
+        content {
+          name  = "VITE_STABLE_ENV_URL"
+          value = var.stable_env_url
+        }
+      }
       env {
         name  = "VITE_CCAI_COMPANY_ID"
         value = var.ccai_company_id

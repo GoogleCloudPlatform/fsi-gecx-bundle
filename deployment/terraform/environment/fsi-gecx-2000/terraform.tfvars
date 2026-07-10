@@ -22,6 +22,7 @@ set_cloud_run_audiences                     = true
 ccai_company_id                             = "17762261086439462b8f0b64f6cd0d5e3"
 ccai_host                                   = "https://fsi-test-4000-jz3ioz1.uc1.ccaiplatform.com"
 custom_domain                               = "banking.mservidio.demo.altostrat.com"
+stable_env_url                              = "http://agentic-finance.gcp-solutions.com/"
 github_app_installation_id                  = "261964"
 github_oauth_token_secret_name              = "GoogleCloudPlatform-github-oauthtoken-a845c6"
 manage_github_connection                    = false
