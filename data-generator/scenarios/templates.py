@@ -208,6 +208,189 @@ def fraud_travel_story(request: ScenarioRequest) -> ScenarioPlan:
     )
 
 
+def _campaign_persona(persona_id: str, role: str) -> PersonaProfile:
+    return PersonaProfile(
+        persona_id=persona_id,
+        role=role,
+        home_metro="Distributed US metros",
+        card_profile="mixed_active_cards",
+        typical_mccs=["5947", "5816", "5311", "5411"],
+        travel_propensity=0.15,
+        digital_commerce_propensity=0.75,
+        card_present_propensity=0.35,
+        protected_account_policy="exclude",
+        notes=["Synthetic fraud campaign cohort; presenter/VIP accounts excluded by default."],
+    )
+
+
+def _campaign_policy(policy_id: str) -> BehaviorPolicy:
+    return BehaviorPolicy(
+        policy_id=policy_id,
+        preferred_mccs=["5947", "5816", "5311", "5411"],
+        spend_min_cents=499,
+        spend_max_cents=85_000,
+        settlement_probability=0.35,
+        reversal_probability=0.20,
+        pending_probability=0.45,
+        ecommerce_context="Suspicious card-not-present campaign activity.",
+    )
+
+
+def cnp_gift_card_campaign(request: ScenarioRequest) -> ScenarioPlan:
+    cohort_size = request.target_cohort_size or {"low": 1, "medium": 3, "high": 8}[request.intensity.value]
+    persona = _campaign_persona("cnp_gift_card_ring", "card-not-present gift-card fraud ring")
+    policy = _campaign_policy("cnp_gift_card_ring_policy")
+    merchants = [
+        ("gift-card-razer", "RAZER GOLD GIFT CARD ONLINE", 48_500),
+        ("gift-card-target", "TARGET.COM GIFT CARDS", 44_000),
+        ("gift-card-game", "GAME*TEST TOKEN ONLINE", 4_900),
+        ("gift-card-market", "DIGITAL VALUE CARD MKTPLACE", 32_000),
+    ]
+    timeline = [
+        PlannedCardEvent(
+            event_id=f"{event_id}-{idx:03d}",
+            offset_minutes=idx * 4,
+            event_type=PlannedEventType.AUTHORIZATION,
+            persona_id=persona.persona_id,
+            amount_cents=amount,
+            merchant_context=MerchantContext(
+                category="Gift Cards",
+                mcc="5947",
+                merchant_name_hint=name,
+                transaction_channel="ECOMMERCE",
+                entry_mode="ECOMMERCE",
+                is_digital_goods=True,
+                high_risk_flags=["DIGITAL_GOODS", "GIFT_CARD"],
+            ),
+            expected_score_band="high",
+            expected_reason_codes=["CARD_NOT_PRESENT_DESCRIPTOR", "GIFT_CARD_OR_DIGITAL_GOODS", "VELOCITY_SPIKE_1H"],
+            outcome_label=OutcomeLabel.EXPECTED_FRAUD,
+            description="Coordinated card-not-present gift-card campaign event.",
+        )
+        for idx, (event_id, name, amount) in enumerate(merchants, start=1)
+    ]
+    return _base_plan(
+        request,
+        ScenarioType.CNP_GIFT_CARD_CAMPAIGN,
+        personas=[persona],
+        behavior_policies=[policy],
+        timeline=timeline,
+        expected_validations=[
+            ExpectedValidation(validation_id="gift-card-risk", surface="fraud_dashboard", expectation="Peak model score and flagged exposure increase after gift-card cluster."),
+            ExpectedValidation(validation_id="gift-card-decisions", surface="bigquery", expectation="Fraud model decisions include gift-card/digital goods reason codes."),
+        ],
+        limits=_limits(request, customers=cohort_size, cards=cohort_size, authorizations=4, settlements=2, duration_seconds=180, fraud_events=4),
+        labels={"demo_surface": "fraud_campaign", "campaign_type": "cnp_gift_card", "fraud_language": "true"},
+    )
+
+
+def digital_card_testing_campaign(request: ScenarioRequest) -> ScenarioPlan:
+    cohort_size = request.target_cohort_size or {"low": 1, "medium": 5, "high": 12}[request.intensity.value]
+    persona = _campaign_persona("digital_card_testing_ring", "digital merchant card-testing ring")
+    policy = _campaign_policy("digital_card_testing_ring_policy")
+    attempts = [
+        ("card-test-001", "GAME*MICRO TEST ONLINE", 199),
+        ("card-test-002", "STREAMING TRIAL ONLINE", 299),
+        ("card-test-003", "APP STORE TOKEN CHECK", 499),
+        ("card-test-004", "GAME*TOKEN ONLINE", 899),
+        ("card-test-005", "DIGITAL MARKETPLACE VERIFY", 1299),
+    ]
+    timeline = [
+        PlannedCardEvent(
+            event_id=event_id,
+            offset_minutes=idx * 2,
+            event_type=PlannedEventType.AUTHORIZATION,
+            persona_id=persona.persona_id,
+            amount_cents=amount,
+            merchant_context=MerchantContext(
+                category="Gaming/Digital Goods",
+                mcc="5816",
+                merchant_name_hint=name,
+                transaction_channel="ECOMMERCE",
+                entry_mode="ECOMMERCE",
+                is_digital_goods=True,
+                high_risk_flags=["DIGITAL_GOODS", "ONLINE"],
+            ),
+            expected_score_band="elevated",
+            expected_reason_codes=["CARD_NOT_PRESENT_DESCRIPTOR", "VELOCITY_SPIKE_10M"],
+            outcome_label=OutcomeLabel.EXPECTED_FRAUD,
+            description="Low-dollar digital card-testing attempt.",
+        )
+        for idx, (event_id, name, amount) in enumerate(attempts, start=1)
+    ]
+    return _base_plan(
+        request,
+        ScenarioType.DIGITAL_CARD_TESTING_CAMPAIGN,
+        personas=[persona],
+        behavior_policies=[policy],
+        timeline=timeline,
+        expected_validations=[
+            ExpectedValidation(validation_id="testing-velocity", surface="fraud_dashboard", expectation="Velocity signals increase from repeated low-dollar ecommerce attempts."),
+            ExpectedValidation(validation_id="testing-stream", surface="admin_stream", expectation="Live stream shows repeated digital merchant descriptors."),
+        ],
+        limits=_limits(request, customers=cohort_size, cards=cohort_size, authorizations=5, settlements=2, duration_seconds=120, fraud_events=5),
+        labels={"demo_surface": "fraud_campaign", "campaign_type": "digital_card_testing", "fraud_language": "true"},
+    )
+
+
+def impossible_travel_campaign(request: ScenarioRequest) -> ScenarioPlan:
+    persona = _campaign_persona("impossible_travel_card", "card-present impossible travel sequence")
+    policy = BehaviorPolicy(
+        policy_id="impossible_travel_card_policy",
+        preferred_mccs=["5411", "5812"],
+        spend_min_cents=1_000,
+        spend_max_cents=18_000,
+        settlement_probability=0.55,
+        reversal_probability=0.10,
+        pending_probability=0.35,
+        travel_context="Rapid card-present geography jump.",
+    )
+    locations = [
+        ("travel-sf", "LOCAL MARKET - SAN FRANCISCO CA", "Groceries", "5411", 2_400, "USA", "San Francisco", "CA", 37.7749, -122.4194),
+        ("travel-ny", "GROCERY - NEW YORK NY", "Groceries", "5411", 4_500, "USA", "New York", "NY", 40.7128, -74.0060),
+        ("travel-london", "LONDON DINING POS", "Dining", "5812", 16_800, "GBR", "London", "ENG", 51.5072, -0.1276),
+    ]
+    timeline = [
+        PlannedCardEvent(
+            event_id=event_id,
+            offset_minutes=idx * 12,
+            event_type=PlannedEventType.AUTHORIZATION,
+            persona_id=persona.persona_id,
+            amount_cents=amount,
+            merchant_context=MerchantContext(
+                category=category,
+                mcc=mcc,
+                merchant_name_hint=name,
+                country_code=country,
+                city=city,
+                region=region,
+                latitude=lat,
+                longitude=lon,
+                transaction_channel="CARD_PRESENT",
+                entry_mode="CHIP",
+            ),
+            expected_score_band="high" if idx > 1 else "low",
+            expected_reason_codes=["IMPOSSIBLE_TRAVEL"] if idx > 1 else [],
+            outcome_label=OutcomeLabel.EXPECTED_FRAUD if idx > 1 else OutcomeLabel.CONFIRMED_LEGITIMATE,
+            description="Rapid card-present geography jump for impossible-travel detection.",
+        )
+        for idx, (event_id, name, category, mcc, amount, country, city, region, lat, lon) in enumerate(locations, start=1)
+    ]
+    return _base_plan(
+        request,
+        ScenarioType.IMPOSSIBLE_TRAVEL_CAMPAIGN,
+        personas=[persona],
+        behavior_policies=[policy],
+        timeline=timeline,
+        expected_validations=[
+            ExpectedValidation(validation_id="impossible-travel-risk", surface="fraud_dashboard", expectation="Impossible-travel reason appears after rapid geography jump."),
+            ExpectedValidation(validation_id="impossible-travel-geo", surface="bigquery", expectation="Generated authorizations carry card-present city/lat/long context."),
+        ],
+        limits=_limits(request, customers=1, cards=1, authorizations=3, settlements=2, duration_seconds=180, fraud_events=2),
+        labels={"demo_surface": "fraud_campaign", "campaign_type": "impossible_travel", "fraud_language": "true"},
+    )
+
+
 def premium_travel_offer_fuel(request: ScenarioRequest) -> ScenarioPlan:
     cohort_size = request.target_cohort_size or {"low": 8, "medium": 15, "high": 30}[request.intensity.value]
     persona = PersonaProfile(
@@ -432,6 +615,9 @@ def unknown_request_plan(request: ScenarioRequest, warnings: list[str] | None = 
 
 TEMPLATE_BUILDERS: dict[ScenarioType, Callable[[ScenarioRequest], ScenarioPlan]] = {
     ScenarioType.FRAUD_TRAVEL_STORY: fraud_travel_story,
+    ScenarioType.CNP_GIFT_CARD_CAMPAIGN: cnp_gift_card_campaign,
+    ScenarioType.DIGITAL_CARD_TESTING_CAMPAIGN: digital_card_testing_campaign,
+    ScenarioType.IMPOSSIBLE_TRAVEL_CAMPAIGN: impossible_travel_campaign,
     ScenarioType.PREMIUM_TRAVEL_OFFER_FUEL: premium_travel_offer_fuel,
     ScenarioType.NORMAL_BASELINE_ACTIVITY: normal_baseline_activity,
     ScenarioType.LAKEHOUSE_SPEND_VELOCITY_SURGE: lakehouse_spend_velocity_surge,

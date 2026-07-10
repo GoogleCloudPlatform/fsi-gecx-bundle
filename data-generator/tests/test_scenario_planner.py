@@ -28,6 +28,9 @@ client = TestClient(app)
     ("goal", "scenario_type"),
     [
         ("Create a fraud story for a traveling executive.", ScenarioType.FRAUD_TRAVEL_STORY),
+        ("Create a gift card campaign.", ScenarioType.CNP_GIFT_CARD_CAMPAIGN),
+        ("Create a digital card testing campaign.", ScenarioType.DIGITAL_CARD_TESTING_CAMPAIGN),
+        ("Create an impossible travel campaign.", ScenarioType.IMPOSSIBLE_TRAVEL_CAMPAIGN),
         ("Generate Mexico travel trend fuel for premium card offer analytics.", ScenarioType.PREMIUM_TRAVEL_OFFER_FUEL),
         ("Create normal weekday baseline card activity.", ScenarioType.NORMAL_BASELINE_ACTIVITY),
         ("Run a lakehouse spend velocity surge for the replication monitor.", ScenarioType.LAKEHOUSE_SPEND_VELOCITY_SURGE),
@@ -57,6 +60,34 @@ def test_fraud_travel_story_contains_fraud_labels_and_expected_reasons():
     assert "GIFT_CARD_OR_DIGITAL_GOODS" in reason_codes
     assert "customer_disputed" in outcome_labels
     assert plan.limits.max_fraud_events == 2
+
+
+@pytest.mark.parametrize(
+    ("goal", "scenario_type", "expected_reason"),
+    [
+        ("Create a gift card campaign.", ScenarioType.CNP_GIFT_CARD_CAMPAIGN, "GIFT_CARD_OR_DIGITAL_GOODS"),
+        ("Create a digital card testing campaign.", ScenarioType.DIGITAL_CARD_TESTING_CAMPAIGN, "VELOCITY_SPIKE_10M"),
+        ("Create an impossible travel campaign.", ScenarioType.IMPOSSIBLE_TRAVEL_CAMPAIGN, "IMPOSSIBLE_TRAVEL"),
+    ],
+)
+def test_coordinated_fraud_campaign_templates(goal, scenario_type, expected_reason):
+    plan = plan_scenario(ScenarioRequest(goal=goal, seed=1841))
+
+    assert plan.scenario_type == scenario_type
+    assert plan.labels["demo_surface"] == "fraud_campaign"
+    assert plan.labels["fraud_language"] == "true"
+    assert plan.limits.max_fraud_events >= 2
+    assert any(event.outcome_label == "expected_fraud" for event in plan.timeline)
+    assert any(expected_reason in event.expected_reason_codes for event in plan.timeline)
+
+
+def test_impossible_travel_campaign_includes_card_present_geography():
+    plan = plan_scenario(ScenarioRequest(goal="Create impossible travel fraud sequence.", seed=1841))
+
+    countries = {event.merchant_context.country_code for event in plan.timeline if event.merchant_context}
+    assert {"USA", "GBR"}.issubset(countries)
+    assert all(event.merchant_context.transaction_channel == "CARD_PRESENT" for event in plan.timeline if event.merchant_context)
+    assert any(event.merchant_context.latitude is not None for event in plan.timeline if event.merchant_context)
 
 
 def test_premium_travel_offer_plan_is_growth_oriented():

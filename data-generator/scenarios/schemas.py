@@ -26,6 +26,9 @@ class ScenarioMode(StrEnum):
 
 class ScenarioType(StrEnum):
     FRAUD_TRAVEL_STORY = "fraud_travel_story"
+    CNP_GIFT_CARD_CAMPAIGN = "cnp_gift_card_campaign"
+    DIGITAL_CARD_TESTING_CAMPAIGN = "digital_card_testing_campaign"
+    IMPOSSIBLE_TRAVEL_CAMPAIGN = "impossible_travel_campaign"
     PREMIUM_TRAVEL_OFFER_FUEL = "premium_travel_offer_fuel"
     NORMAL_BASELINE_ACTIVITY = "normal_baseline_activity"
     LAKEHOUSE_SPEND_VELOCITY_SURGE = "lakehouse_spend_velocity_surge"

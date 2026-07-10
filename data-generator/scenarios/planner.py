@@ -24,6 +24,12 @@ def infer_scenario_type(goal: str) -> ScenarioType | None:
     normalized = goal.lower()
     if any(term in normalized for term in ("spend surge", "velocity surge", "lakehouse surge", "replication monitor")):
         return ScenarioType.LAKEHOUSE_SPEND_VELOCITY_SURGE
+    if any(term in normalized for term in ("gift card campaign", "gift-card campaign", "gift card burst")):
+        return ScenarioType.CNP_GIFT_CARD_CAMPAIGN
+    if any(term in normalized for term in ("card testing", "digital card testing", "gaming test")):
+        return ScenarioType.DIGITAL_CARD_TESTING_CAMPAIGN
+    if any(term in normalized for term in ("impossible travel", "rapid geography", "geography jump")):
+        return ScenarioType.IMPOSSIBLE_TRAVEL_CAMPAIGN
     if any(term in normalized for term in ("premium travel", "offer", "mexico travel trend", "travel offer")):
         return ScenarioType.PREMIUM_TRAVEL_OFFER_FUEL
     if any(term in normalized for term in ("baseline", "normal activity", "ambient", "heartbeat")):
