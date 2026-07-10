@@ -17,10 +17,11 @@ import logging
 import os
 import random
 import sys
+import uuid
 from typing import List, Dict, Any, Optional
 
 import httpx
-from fastapi import FastAPI, HTTPException, status, Header, Depends
+from fastapi import FastAPI, HTTPException, status, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -72,12 +73,184 @@ SURGE_STAGGER_SECONDS = float(os.getenv("SURGE_STAGGER_SECONDS", "0.2"))
 ACTIVE_CARD_FETCH_TIMEOUT_SECONDS = float(os.getenv("ACTIVE_CARD_FETCH_TIMEOUT_SECONDS", "10"))
 AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE = int(os.getenv("AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE", "6"))
 SWIPE_REQUEST_TIMEOUT_SECONDS = float(os.getenv("SWIPE_REQUEST_TIMEOUT_SECONDS", "10"))
+PULSE_ACTIVE_LOCK_TTL_SECONDS = int(os.getenv("PULSE_ACTIVE_LOCK_TTL_SECONDS", str(max(PULSE_WINDOW_SECONDS + 90, 180))))
+PULSE_EVENT_DEDUP_TTL_SECONDS = int(os.getenv("PULSE_EVENT_DEDUP_TTL_SECONDS", "3600"))
+PULSE_ADMISSION_REDIS_REQUIRED = os.getenv("PULSE_ADMISSION_REDIS_REQUIRED", "true").lower() not in {"0", "false", "no"}
 
 _pulse_lock = asyncio.Lock()
+_redis_client = None
+_redis_disabled = False
 
 
 class MaintenanceModeError(RuntimeError):
     """Raised when banking-service has temporarily paused writes for maintenance/reset."""
+
+
+class PulseAdmission:
+    def __init__(
+        self,
+        *,
+        admitted: bool,
+        status: str = "ADMITTED",
+        message: str = "Pulse admitted.",
+        pulse_token: str | None = None,
+        event_id: str | None = None,
+        redis_client: Any | None = None,
+        active_lock_key: str = "data-generator:pulse:active",
+    ):
+        self.admitted = admitted
+        self.status = status
+        self.message = message
+        self.pulse_token = pulse_token
+        self.event_id = event_id
+        self.redis_client = redis_client
+        self.active_lock_key = active_lock_key
+
+    def skipped_response(self) -> Dict[str, Any]:
+        return {
+            "status": self.status,
+            "message": self.message,
+            "event_id": self.event_id,
+        }
+
+
+def get_pulse_redis_client():
+    global _redis_client
+    global _redis_disabled
+
+    if _redis_disabled:
+        return None
+
+    if _redis_client is None:
+        try:
+            import redis
+
+            port = int(os.getenv("REDIS_PORT", "6379"))
+            _redis_client = redis.Redis(
+                host=os.getenv("REDIS_HOST", "localhost"),
+                port=port,
+                password=os.getenv("REDIS_PASSWORD"),
+                decode_responses=True,
+                ssl=(port == 6378),
+                ssl_cert_reqs="none",
+                health_check_interval=30,
+                socket_keepalive=True,
+                retry_on_timeout=True,
+                socket_connect_timeout=0.25,
+                socket_timeout=0.25,
+            )
+            _redis_client.ping()
+        except Exception as exc:
+            logger.warning("Pulse admission Redis client unavailable: %s", exc)
+            _redis_client = None
+            _redis_disabled = True
+
+    return _redis_client
+
+
+def extract_pulse_event_id(request: Request, body: Any | None = None) -> str | None:
+    """Resolve an idempotency key from Eventarc/CloudEvents or Pub/Sub payloads."""
+    for header_name in ("ce-id", "Ce-Id", "CE-ID"):
+        header_value = request.headers.get(header_name)
+        if header_value:
+            return header_value.split("/", 1)[0].strip()
+
+    if isinstance(body, dict):
+        message = body.get("message") if isinstance(body.get("message"), dict) else {}
+        for key in ("messageId", "message_id", "id"):
+            value = message.get(key) or body.get(key)
+            if value:
+                return str(value).strip()
+
+    return None
+
+
+async def parse_request_json(request: Request) -> Any | None:
+    try:
+        return await request.json()
+    except Exception:
+        return None
+
+
+def admit_pulse(event_id: str | None) -> PulseAdmission:
+    pulse_token = str(uuid.uuid4())
+    redis_client = get_pulse_redis_client()
+
+    if not redis_client:
+        if is_local_dev() or not PULSE_ADMISSION_REDIS_REQUIRED:
+            return PulseAdmission(
+                admitted=True,
+                pulse_token=pulse_token,
+                event_id=event_id,
+                message="Pulse admitted with process-local admission control.",
+            )
+        return PulseAdmission(
+            admitted=False,
+            status="SKIPPED_ADMISSION_UNAVAILABLE",
+            message="Pulse admission control is unavailable; skipped to avoid scheduler retry amplification.",
+            event_id=event_id,
+        )
+
+    try:
+        if event_id:
+            event_key = f"data-generator:pulse:event:{event_id}"
+            event_admitted = redis_client.set(
+                event_key,
+                pulse_token,
+                nx=True,
+                ex=PULSE_EVENT_DEDUP_TTL_SECONDS,
+            )
+            if not event_admitted:
+                return PulseAdmission(
+                    admitted=False,
+                    status="SKIPPED_DUPLICATE_EVENT",
+                    message="Scheduler/Eventarc pulse event was already admitted.",
+                    event_id=event_id,
+                    redis_client=redis_client,
+                )
+
+        active_lock_key = "data-generator:pulse:active"
+        active_admitted = redis_client.set(
+            active_lock_key,
+            pulse_token,
+            nx=True,
+            ex=PULSE_ACTIVE_LOCK_TTL_SECONDS,
+        )
+        if not active_admitted:
+            return PulseAdmission(
+                admitted=False,
+                status="SKIPPED_ACTIVE_PULSE",
+                message="Another simulation pulse is already active.",
+                event_id=event_id,
+                redis_client=redis_client,
+            )
+    except Exception as exc:
+        logger.warning("Pulse admission failed; skipping pulse to avoid duplicate traffic: %s", exc)
+        return PulseAdmission(
+            admitted=False,
+            status="SKIPPED_ADMISSION_UNAVAILABLE",
+            message="Pulse admission control failed; skipped to avoid scheduler retry amplification.",
+            event_id=event_id,
+        )
+
+    return PulseAdmission(
+        admitted=True,
+        pulse_token=pulse_token,
+        event_id=event_id,
+        redis_client=redis_client,
+        active_lock_key="data-generator:pulse:active",
+    )
+
+
+def release_pulse_admission(admission: PulseAdmission) -> None:
+    if not admission.redis_client or not admission.pulse_token:
+        return
+    try:
+        current_token = admission.redis_client.get(admission.active_lock_key)
+        if current_token == admission.pulse_token:
+            admission.redis_client.delete(admission.active_lock_key)
+    except Exception as exc:
+        logger.warning("Failed to release pulse admission lock: %s", exc)
 
 
 def get_card_network_token() -> str:
@@ -706,73 +879,93 @@ def health():
 
 @app.post("/generate", status_code=status.HTTP_200_OK)
 @app.post("/simulate-pulse", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
-async def simulate_pulse():
+async def simulate_pulse(request: Request):
     """Wakes up once a minute and fans transactions across the next 58 seconds."""
-    if _pulse_lock.locked():
-        logger.info("Skipping pulse because another simulation pulse is already running.")
+    request_body = await parse_request_json(request)
+    event_id = extract_pulse_event_id(request, request_body)
+    admission = admit_pulse(event_id)
+    if not admission.admitted:
+        logger.info("Skipping simulation pulse during admission: %s event_id=%s", admission.status, event_id)
+        return admission.skipped_response()
+
+    try:
+        if _pulse_lock.locked():
+            logger.info("Skipping pulse because another simulation pulse is already running.")
+            return {
+                "status": "SKIPPED_ACTIVE_PULSE",
+                "message": "Another simulation pulse is already in progress.",
+                "event_id": event_id,
+            }
+
+        async with _pulse_lock:
+            return await execute_simulation_pulse(event_id=event_id)
+    finally:
+        release_pulse_admission(admission)
+
+
+async def execute_simulation_pulse(event_id: str | None = None) -> Dict[str, Any]:
+    """Execute one admitted synthetic activity pulse."""
+    logger.info("Triggered randomized simulation pulse for the next %s seconds.", PULSE_WINDOW_SECONDS)
+    try:
+        cards = get_spendable_cards(get_active_cards())
+    except MaintenanceModeError:
         return {
             "status": "SKIPPED",
-            "message": "Another simulation pulse is already in progress.",
+            "message": "banking-service reset is in progress.",
+            "active_cards_count": 0,
+            "event_id": event_id,
         }
-
-    async with _pulse_lock:
-        logger.info("Triggered randomized simulation pulse for the next %s seconds.", PULSE_WINDOW_SECONDS)
-        try:
-            cards = get_spendable_cards(get_active_cards())
-        except MaintenanceModeError:
-            return {
-                "status": "SKIPPED",
-                "message": "banking-service reset is in progress.",
-                "active_cards_count": 0,
-            }
-        except HTTPException as exc:
-            logger.warning("Skipping simulation pulse because active card discovery is unavailable: %s", exc.detail)
-            return {
-                "status": "SKIPPED",
-                "message": "Active card discovery is temporarily unavailable.",
-                "reason": exc.detail,
-                "active_cards_count": 0,
-            }
-        if not cards:
-            return {
-                "status": "SKIPPED",
-                "message": "No spendable active cards found to swipe.",
-                "active_cards_count": 0,
-            }
-
-        total_events = random.randint(PULSE_MIN_EVENTS, PULSE_MAX_EVENTS)
-        event_offsets = build_randomized_pulse_plan(total_events=total_events, window_seconds=PULSE_WINDOW_SECONDS)
-        semaphore = asyncio.Semaphore(SWIPE_WORKFLOW_CONCURRENCY)
-
-        async def dispatch_after_offset(client: httpx.AsyncClient, offset_seconds: float, card: Dict[str, Any]) -> Dict[str, Any]:
-            await asyncio.sleep(offset_seconds)
-            async with semaphore:
-                return await simulate_swipe_event(client, card)
-
-        async with httpx.AsyncClient() as client:
-            tasks = [
-                dispatch_after_offset(client, offset, random.choice(cards))
-                for offset in event_offsets
-            ]
-            all_results = await asyncio.gather(*tasks, return_exceptions=False)
-            paydown_results = await auto_paydown_high_utilization_cards(client, cards)
-
-        summary = summarize_swipe_results(all_results)
-        summary["auto_paydowns_processed"] = sum(1 for result in paydown_results if result.get("status") == "SUCCESS")
-        status_label = "SUCCESS" if summary["authorizations_created"] > 0 else "NOOP"
-        message = (
-            "Simulation pulse completed."
-            if summary["authorizations_created"] > 0
-            else "Simulation pulse completed without creating new authorizations."
-        )
+    except HTTPException as exc:
+        logger.warning("Skipping simulation pulse because active card discovery is unavailable: %s", exc.detail)
         return {
-            "status": status_label,
-            "message": message,
-            "distribution_window_seconds": PULSE_WINDOW_SECONDS,
-            "scheduled_events": total_events,
-            **summary,
-            "active_cards_count": len(cards),
+            "status": "SKIPPED",
+            "message": "Active card discovery is temporarily unavailable.",
+            "reason": exc.detail,
+            "active_cards_count": 0,
+            "event_id": event_id,
         }
+    if not cards:
+        return {
+            "status": "SKIPPED",
+            "message": "No spendable active cards found to swipe.",
+            "active_cards_count": 0,
+            "event_id": event_id,
+        }
+
+    total_events = random.randint(PULSE_MIN_EVENTS, PULSE_MAX_EVENTS)
+    event_offsets = build_randomized_pulse_plan(total_events=total_events, window_seconds=PULSE_WINDOW_SECONDS)
+    semaphore = asyncio.Semaphore(SWIPE_WORKFLOW_CONCURRENCY)
+
+    async def dispatch_after_offset(client: httpx.AsyncClient, offset_seconds: float, card: Dict[str, Any]) -> Dict[str, Any]:
+        await asyncio.sleep(offset_seconds)
+        async with semaphore:
+            return await simulate_swipe_event(client, card)
+
+    async with httpx.AsyncClient() as client:
+        tasks = [
+            dispatch_after_offset(client, offset, random.choice(cards))
+            for offset in event_offsets
+        ]
+        all_results = await asyncio.gather(*tasks, return_exceptions=False)
+        paydown_results = await auto_paydown_high_utilization_cards(client, cards)
+
+    summary = summarize_swipe_results(all_results)
+    summary["auto_paydowns_processed"] = sum(1 for result in paydown_results if result.get("status") == "SUCCESS")
+    status_label = "SUCCESS" if summary["authorizations_created"] > 0 else "NOOP"
+    message = (
+        "Simulation pulse completed."
+        if summary["authorizations_created"] > 0
+        else "Simulation pulse completed without creating new authorizations."
+    )
+    return {
+        "status": status_label,
+        "message": message,
+        "distribution_window_seconds": PULSE_WINDOW_SECONDS,
+        "scheduled_events": total_events,
+        **summary,
+        "active_cards_count": len(cards),
+        "event_id": event_id,
+    }
 
 @app.post("/simulate-surge", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
 async def simulate_surge(payload: SurgeRequest):

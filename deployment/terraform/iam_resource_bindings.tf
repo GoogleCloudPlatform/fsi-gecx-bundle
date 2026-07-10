@@ -183,6 +183,12 @@ resource "google_secret_manager_secret_iam_member" "data_generator_card_network_
   member    = "serviceAccount:${google_service_account.data_generator_service_account.email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "data_generator_redis_password_accessor" {
+  secret_id = google_secret_manager_secret.redis_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.data_generator_service_account.email}"
+}
+
 resource "google_secret_manager_secret_iam_member" "ces_secret_accessor" {
   secret_id = "iap-client-secret"
   role      = "roles/secretmanager.secretAccessor"

@@ -22,6 +22,30 @@ from main import app, BANKING_SERVICE_URL
 
 client = TestClient(app)
 
+
+class FakeRedis:
+    def __init__(self):
+        self.store = {}
+        self.raise_on_set = False
+
+    def ping(self):
+        return True
+
+    def set(self, key, value, nx=False, ex=None):
+        del ex
+        if self.raise_on_set:
+            raise RuntimeError("redis unavailable")
+        if nx and key in self.store:
+            return False
+        self.store[key] = value
+        return True
+
+    def get(self, key):
+        return self.store.get(key)
+
+    def delete(self, key):
+        self.store.pop(key, None)
+
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
@@ -224,6 +248,7 @@ def test_simulate_surge_fails_without_spendable_cards():
 def test_generate_fails_without_active_cards_in_deployed_mode(monkeypatch):
     monkeypatch.setenv("K_SERVICE", "data-generator")
     monkeypatch.setenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")
+    monkeypatch.setattr(main, "PULSE_ADMISSION_REDIS_REQUIRED", False)
     respx.get(f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards").mock(
         return_value=httpx.Response(503, json={"detail": {"status": "MAINTENANCE"}})
     )
@@ -239,6 +264,7 @@ def test_generate_fails_without_active_cards_in_deployed_mode(monkeypatch):
 def test_generate_skips_without_retry_when_active_card_discovery_times_out(monkeypatch):
     monkeypatch.setenv("K_SERVICE", "data-generator")
     monkeypatch.setenv("CARD_NETWORK_SWITCH_TOKEN", "switch-secret-key-12345")
+    monkeypatch.setattr(main, "PULSE_ADMISSION_REDIS_REQUIRED", False)
     respx.get(f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards").mock(
         side_effect=httpx.ReadTimeout("timed out")
     )
@@ -248,6 +274,65 @@ def test_generate_skips_without_retry_when_active_card_discovery_times_out(monke
     assert response.status_code == 200
     assert response.json()["status"] == "SKIPPED"
     assert "temporarily unavailable" in response.json()["message"]
+
+
+def test_generate_skips_duplicate_cloudevent_without_generating(monkeypatch):
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(main, "get_pulse_redis_client", lambda: fake_redis)
+
+    async def fake_execute_simulation_pulse(event_id=None):
+        return {
+            "status": "SUCCESS",
+            "message": "Simulation pulse completed.",
+            "swipes_attempted": 1,
+            "event_id": event_id,
+        }
+
+    monkeypatch.setattr(main, "execute_simulation_pulse", fake_execute_simulation_pulse)
+
+    first = client.post("/generate", headers={"ce-id": "event-123"})
+    second = client.post("/generate", headers={"ce-id": "event-123"})
+
+    assert first.status_code == 200
+    assert first.json()["status"] == "SUCCESS"
+    assert first.json()["event_id"] == "event-123"
+    assert second.status_code == 200
+    assert second.json()["status"] == "SKIPPED_DUPLICATE_EVENT"
+    assert second.json()["event_id"] == "event-123"
+
+
+def test_generate_skips_active_distributed_pulse_without_generating(monkeypatch):
+    fake_redis = FakeRedis()
+    fake_redis.store["data-generator:pulse:active"] = "existing-token"
+    monkeypatch.setattr(main, "get_pulse_redis_client", lambda: fake_redis)
+
+    async def fail_if_called(event_id=None):
+        raise AssertionError(f"pulse should not execute for {event_id}")
+
+    monkeypatch.setattr(main, "execute_simulation_pulse", fail_if_called)
+
+    response = client.post("/generate", headers={"ce-id": "event-active"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "SKIPPED_ACTIVE_PULSE"
+    assert response.json()["event_id"] == "event-active"
+
+
+def test_generate_skips_when_admission_control_unavailable_in_deployed_mode(monkeypatch):
+    monkeypatch.setenv("K_SERVICE", "data-generator")
+    monkeypatch.setattr(main, "PULSE_ADMISSION_REDIS_REQUIRED", True)
+    monkeypatch.setattr(main, "get_pulse_redis_client", lambda: None)
+
+    async def fail_if_called(event_id=None):
+        raise AssertionError(f"pulse should not execute for {event_id}")
+
+    monkeypatch.setattr(main, "execute_simulation_pulse", fail_if_called)
+
+    response = client.post("/generate", headers={"ce-id": "event-no-redis"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "SKIPPED_ADMISSION_UNAVAILABLE"
+    assert response.json()["event_id"] == "event-no-redis"
 
 
 @respx.mock
@@ -358,6 +443,6 @@ async def test_inject_anomaly_success():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ANOMALY_INJECTED"
-    assert data["injected_swipes_count"] == 4
+    assert data["injected_swipes_count"] == 5
     assert data["card_token"] == "tok_visa_test"
-    assert auth_route.call_count == 4
+    assert auth_route.call_count == 5

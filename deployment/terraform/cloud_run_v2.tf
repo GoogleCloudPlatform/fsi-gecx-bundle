@@ -742,6 +742,31 @@ resource "google_cloud_run_v2_service" "data_generator" {
         name  = "AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE"
         value = tostring(var.data_generator_auto_paydown_max_accounts_per_pulse)
       }
+
+      env {
+        name  = "REDIS_HOST"
+        value = google_redis_instance.banking.host
+      }
+
+      env {
+        name  = "REDIS_PORT"
+        value = google_redis_instance.banking.port
+      }
+
+      env {
+        name = "REDIS_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.redis_password.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name  = "PULSE_ADMISSION_REDIS_REQUIRED"
+        value = "true"
+      }
     }
   }
 
@@ -756,6 +781,7 @@ resource "google_cloud_run_v2_service" "data_generator" {
   depends_on = [
     google_project_service.run_googleapis_com,
     google_secret_manager_secret_iam_member.data_generator_card_network_switch_token_accessor,
+    google_secret_manager_secret_iam_member.data_generator_redis_password_accessor,
   ]
 }
 
