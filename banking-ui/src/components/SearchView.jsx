@@ -300,7 +300,7 @@ function SearchView() {
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
               >
-                <span>View Datastore</span>
+                <span>View Datastores</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>

@@ -423,6 +423,13 @@ resource "google_cloud_run_v2_service" "banking_ui" {
         }
       }
       dynamic "env" {
+        for_each = var.cx_agent_studio_voice_agent_deployment_name != null ? [1] : []
+        content {
+          name  = "VITE_CX_AGENT_STUDIO_VOICE_AGENT_DEPLOYMENT_NAME"
+          value = var.cx_agent_studio_voice_agent_deployment_name
+        }
+      }
+      dynamic "env" {
         for_each = var.cx_agent_studio_upload_tool_name != null ? [1] : []
         content {
           name  = "VITE_CX_AGENT_STUDIO_UPLOAD_TOOL_NAME"

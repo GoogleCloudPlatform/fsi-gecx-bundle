@@ -68,6 +68,9 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
   const prefill = location.state?.prefill;
   const { brandColorFrom, brandColorTo, bankName } = useSettings();
   const projectId = window.firebaseConfig?.projectId;
+  const cxParts = (window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME || '').split('/');
+  const cxProjectId = cxParts.includes('projects') ? cxParts[cxParts.indexOf('projects') + 1] : '';
+  const appId = cxParts.includes('apps') ? cxParts[cxParts.indexOf('apps') + 1] : '';
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   // Get initial card parameter
@@ -546,15 +549,28 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
                 <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">CX Agent Studio Console</h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Inspect agent intents, parameters, and form-fill extension routes.</p>
               </div>
-              <a
-                href={`https://ces.cloud.google.com/projects/${projectId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
-              >
-                <span>View Console</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                <a
+                  href={`https://ces.cloud.google.com/projects/${projectId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs hover:underline"
+                >
+                  <span>View Console</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                {appId && (
+                  <a
+                    href={`https://ces.cloud.google.com/projects/${cxProjectId || projectId}/locations/us/apps/${appId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs hover:underline"
+                  >
+                    <span>View Agent</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+              </div>
             </div>
             <hr className="border-slate-100 dark:border-slate-800" />
             <div className="flex items-start justify-between gap-4">
