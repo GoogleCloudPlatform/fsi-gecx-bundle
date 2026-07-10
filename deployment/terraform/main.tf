@@ -47,3 +47,7 @@ data "google_project" "project" {}
 data "google_client_openid_userinfo" "me" {}
 
 data "google_client_config" "default" {}
+
+locals {
+  current_principal_member = endswith(data.google_client_openid_userinfo.me.email, ".gserviceaccount.com") ? "serviceAccount:${data.google_client_openid_userinfo.me.email}" : "user:${data.google_client_openid_userinfo.me.email}"
+}

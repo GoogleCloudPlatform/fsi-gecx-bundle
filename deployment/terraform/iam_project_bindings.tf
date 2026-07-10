@@ -189,14 +189,14 @@ resource "google_project_iam_member" "developer_cloudsql_client" {
   count   = var.enable_current_user_grants ? 1 : 0
   project = data.google_project.project.project_id
   role    = "roles/cloudsql.client"
-  member  = "user:${data.google_client_openid_userinfo.me.email}"
+  member  = local.current_principal_member
 }
 
 resource "google_project_iam_member" "developer_cloudsql_instance_user" {
   count   = var.enable_current_user_grants ? 1 : 0
   project = data.google_project.project.project_id
   role    = "roles/cloudsql.instanceUser"
-  member  = "user:${data.google_client_openid_userinfo.me.email}"
+  member  = local.current_principal_member
 }
 
 resource "google_project_iam_member" "banking_service_sa_cloudsql_client" {
