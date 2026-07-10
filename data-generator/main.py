@@ -26,6 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from scenarios import ScenarioExecutionRequest, ScenarioRequest, execute_scenario, plan_scenario
+from scenarios.schemas import ScenarioMode, ScenarioType
 from utils.internal_auth import get_internal_switch_token
 from utils.runtime import get_cors_origins, is_local_dev
 
@@ -1079,11 +1080,13 @@ def plan_generation_scenario(request: ScenarioRequest):
 async def execute_generation_scenario(request: ScenarioExecutionRequest):
     """Executes a validated scenario plan through bounded data-generator primitives."""
     default_card_token = request.default_card_token
-    if (request.mode or request.plan.mode).value == "execute" and not default_card_token:
+    default_card_tokens = request.default_card_tokens
+    if (request.mode or request.plan.mode).value == "execute" and not (default_card_token or default_card_tokens):
         cards = get_spendable_cards(get_generator_eligible_cards(get_active_cards()))
         if not cards:
             raise HTTPException(status_code=409, detail="No eligible active cards available for scenario execution.")
-        default_card_token = cards[0]["card_token"]
+        default_card_tokens = [card["card_token"] for card in cards]
+        request = request.model_copy(update={"default_card_tokens": default_card_tokens})
 
     result = await execute_scenario(
         request,
@@ -1197,7 +1200,7 @@ async def execute_simulation_pulse(event_id: str | None = None) -> Dict[str, Any
 
 @app.post("/simulate-surge", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
 async def simulate_surge(payload: SurgeRequest):
-    """Triggers an async rapid-fire activity surge of 50 swipes."""
+    """Triggers a scenario-backed lakehouse spend velocity surge."""
     active_cards = [c.model_dump() for c in payload.active_cards] if payload.active_cards else None
     if not active_cards:
         try:
@@ -1210,12 +1213,50 @@ async def simulate_surge(payload: SurgeRequest):
     active_cards = get_spendable_cards(get_generator_eligible_cards(active_cards))
     if not active_cards:
         raise HTTPException(status_code=409, detail="No spendable active cards supplied or discovered for surge.")
-    summary = await run_activity_surge_task(active_cards)
+
+    plan = plan_scenario(
+        ScenarioRequest(
+            goal="Run the Active Lakehouse spend velocity surge.",
+            scenario_type=ScenarioType.LAKEHOUSE_SPEND_VELOCITY_SURGE,
+            mode=ScenarioMode.EXECUTE,
+            seed=random.randint(1, 999_999),
+            max_events=SURGE_TOTAL_EVENTS,
+            target_cohort_size=len(active_cards),
+        )
+    )
+    execution = await execute_scenario(
+        ScenarioExecutionRequest(
+            plan=plan,
+            mode=ScenarioMode.EXECUTE,
+            idempotency_key=f"surge:{plan.scenario_id}:{uuid.uuid4().hex}",
+            default_card_tokens=[card["card_token"] for card in active_cards],
+        ),
+        banking_service_url=BANKING_SERVICE_URL,
+        headers=get_service_headers(),
+        timeout_seconds=SWIPE_REQUEST_TIMEOUT_SECONDS,
+    )
+    async with httpx.AsyncClient() as paydown_client:
+        paydown_results = await auto_paydown_high_utilization_cards(paydown_client, active_cards)
+
+    summary = {
+        "swipes_attempted": execution.attempted_events,
+        "authorizations_created": execution.authorizations_created,
+        "settlements_created": execution.settlements_created,
+        "reversals_created": execution.reversals_created,
+        "declines": sum(1 for step in execution.steps if step.resolution == "declined"),
+        "failures": execution.failed_events,
+        "auto_paydowns_processed": sum(1 for result in paydown_results if result.get("status") == "SUCCESS"),
+    }
     if summary["authorizations_created"] == 0:
         raise HTTPException(status_code=502, detail={"message": "No transaction authorizations were created.", **summary})
     return {
         "status": "SUCCESS",
-        "message": "Simulation surge completed against active card pool.",
+        "message": "Scenario-backed lakehouse spend velocity surge completed against active card pool.",
+        "scenario_id": plan.scenario_id,
+        "execution_id": execution.execution_id,
+        "planned_event_count": len(plan.timeline),
+        "pending_holds_created": execution.pending_holds_created,
+        "validation_hints": [validation.model_dump(mode="json") for validation in plan.expected_validations],
         "active_cards_count": len(active_cards),
         **summary,
     }

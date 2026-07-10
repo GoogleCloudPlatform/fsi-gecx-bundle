@@ -64,6 +64,12 @@ async def test_execute_scenario_sends_bounded_authorization_payloads():
     auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
         return_value=httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-123"})
     )
+    settle_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
+        return_value=httpx.Response(200, json={"status": "SETTLED", "transaction_id": "txn-123"})
+    )
+    reverse_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse").mock(
+        return_value=httpx.Response(200, json={"status": "REVERSED"})
+    )
 
     result = await execute_scenario(
         ScenarioExecutionRequest(plan=plan, mode=ScenarioMode.EXECUTE, idempotency_key="execute-001", default_card_token="tok_scenario"),
@@ -75,7 +81,9 @@ async def test_execute_scenario_sends_bounded_authorization_payloads():
     assert result.attempted_events == 2
     assert result.succeeded_events == 2
     assert result.created_authorization_ids == ["auth-123", "auth-123"]
+    assert result.settlements_created + result.reversals_created + result.pending_holds_created == 2
     assert auth_route.call_count == 2
+    assert settle_route.call_count + reverse_route.call_count <= 2
 
     payload = json.loads(auth_route.calls[0].request.content.decode())
     assert payload["card_token"] == "tok_scenario"
@@ -91,6 +99,12 @@ async def test_execute_scenario_idempotency_returns_cached_result():
     plan = plan_scenario(ScenarioRequest(goal="Run lakehouse spend velocity surge", max_events=1))
     auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
         return_value=httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-123"})
+    )
+    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
+        return_value=httpx.Response(200, json={"status": "SETTLED", "transaction_id": "txn-123"})
+    )
+    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse").mock(
+        return_value=httpx.Response(200, json={"status": "REVERSED"})
     )
     request = ScenarioExecutionRequest(
         plan=plan,

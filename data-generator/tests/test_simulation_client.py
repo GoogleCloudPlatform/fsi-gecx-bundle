@@ -247,7 +247,7 @@ async def test_simulate_pulse_declined():
 
 @respx.mock
 def test_simulate_surge_success():
-    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
+    auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
         return_value=httpx.Response(200, json={"action_code": "00", "auth_code": "123456", "status": "PENDING"})
     )
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
@@ -258,8 +258,16 @@ def test_simulate_surge_success():
     )
     response = client.post("/simulate-surge", json={})
     assert response.status_code == 200
-    assert response.json()["status"] == "SUCCESS"
-    assert response.json()["swipes_attempted"] == 50
+    body = response.json()
+    assert body["status"] == "SUCCESS"
+    assert body["swipes_attempted"] == 50
+    assert body["planned_event_count"] == 50
+    assert body["scenario_id"].startswith("lakehouse_spend_velocity_surge-")
+    assert body["settlements_created"] + body["reversals_created"] + body["pending_holds_created"] == 50
+    assert body["validation_hints"]
+    first_payload = json.loads(auth_route.calls[0].request.content.decode())
+    assert first_payload["synthetic_scenario_id"] == body["scenario_id"]
+    assert first_payload["synthetic_event_id"].startswith("surge-event-")
 
 
 def test_simulate_surge_fails_without_spendable_cards():

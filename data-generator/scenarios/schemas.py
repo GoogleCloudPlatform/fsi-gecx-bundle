@@ -243,6 +243,7 @@ class ScenarioExecutionRequest(BaseModel):
     idempotency_key: str = Field(..., min_length=8, max_length=200)
     operator: str | None = None
     default_card_token: str | None = None
+    default_card_tokens: list[str] = Field(default_factory=list)
 
 
 class ScenarioStepResult(BaseModel):
@@ -257,6 +258,7 @@ class ScenarioStepResult(BaseModel):
     transaction_id: str | None = None
     alert_id: str | None = None
     outcome_label: OutcomeLabel | None = None
+    resolution: Literal["settled", "reversed", "pending", "declined", "skipped", "failed"] | None = None
     status_code: int | None = None
     response_payload: dict[str, Any] | None = None
 
@@ -277,6 +279,10 @@ class ScenarioExecutionResult(BaseModel):
     succeeded_events: int
     skipped_events: int
     failed_events: int
+    authorizations_created: int = 0
+    settlements_created: int = 0
+    reversals_created: int = 0
+    pending_holds_created: int = 0
     created_authorization_ids: list[str] = Field(default_factory=list)
     created_transaction_ids: list[str] = Field(default_factory=list)
     created_alert_ids: list[str] = Field(default_factory=list)
