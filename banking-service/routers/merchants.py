@@ -32,6 +32,14 @@ class MerchantResponse(BaseModel):
     mcc: str
     category: str
     country_code: str
+    city: Optional[str] = None
+    region: Optional[str] = None
+    postal_code: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    card_present_capable: bool = True
+    ecommerce_capable: bool = False
+    high_risk_flags: List[str] = Field(default_factory=list)
     logo_url: Optional[str] = None
     merchant_domain: Optional[str] = None
     is_subscription: bool
@@ -55,6 +63,14 @@ class CreateMerchantRequest(BaseModel):
     mcc: str = Field(..., description="4-digit ISO Merchant Category Code e.g. '5311'")
     category: str = Field(..., description="Human-readable spend category e.g. 'Retail'")
     country_code: str = Field("USA", description="ISO 3-letter country code")
+    city: Optional[str] = None
+    region: Optional[str] = None
+    postal_code: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    card_present_capable: bool = True
+    ecommerce_capable: bool = False
+    high_risk_flags: List[str] = Field(default_factory=list)
     logo_url: Optional[str] = Field(None, description="CDN logo URL e.g. 'https://logo.clearbit.com/acme.com'")
     merchant_domain: Optional[str] = Field(None, description="Primary website domain e.g. 'acme.com'")
     is_subscription: bool = False
@@ -131,6 +147,14 @@ def create_custom_merchant(req: CreateMerchantRequest, db: Session = Depends(get
         location_name=req.clean_name,
         raw_descriptor=req.raw_descriptor_pattern,
         country_code=req.country_code,
+        city=req.city,
+        region=req.region,
+        postal_code=req.postal_code,
+        latitude=req.latitude,
+        longitude=req.longitude,
+        card_present_capable=req.card_present_capable,
+        ecommerce_capable=req.ecommerce_capable,
+        high_risk_flags=",".join(req.high_risk_flags),
         is_international=req.is_international,
         risk_score=req.risk_score
     )
@@ -149,6 +173,14 @@ def create_custom_merchant(req: CreateMerchantRequest, db: Session = Depends(get
         mcc=merchant.default_mcc,
         category=req.category,
         country_code=store.country_code,
+        city=store.city,
+        region=store.region,
+        postal_code=store.postal_code,
+        latitude=float(store.latitude) if store.latitude is not None else None,
+        longitude=float(store.longitude) if store.longitude is not None else None,
+        card_present_capable=store.card_present_capable,
+        ecommerce_capable=store.ecommerce_capable,
+        high_risk_flags=req.high_risk_flags,
         logo_url=merchant.logo_url,
         merchant_domain=merchant.merchant_domain,
         is_subscription=merchant.is_subscription,

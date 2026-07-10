@@ -296,8 +296,45 @@ def build_generic_merchant(mcc: str = "5311", country_code: str = "USA", is_inte
         "category": "Retail",
         "mcc": mcc,
         "country_code": country_code,
+        "city": None,
+        "region": None,
+        "postal_code": None,
+        "latitude": None,
+        "longitude": None,
+        "card_present_capable": not is_international,
+        "ecommerce_capable": False,
+        "high_risk_flags": [],
         "is_international": is_international,
         "risk_score": 20 if is_international else 0,
+    }
+
+
+def infer_channel_context(merchant: Dict[str, Any], formatted_merchant: str) -> Dict[str, Any]:
+    descriptor = formatted_merchant.upper()
+    ecommerce_capable = bool(merchant.get("ecommerce_capable"))
+    is_ecommerce = ecommerce_capable or any(
+        token in descriptor
+        for token in ["ONLINE", ".COM", "MKTPLACE", "STREAMING", "SUBSCRIPTION", "DIGITAL", "GIFT CARD"]
+    )
+
+    if is_ecommerce:
+        country_code = merchant.get("country_code", "USA")
+        return {
+            "transaction_channel": "ECOMMERCE",
+            "entry_mode": "ECOMMERCE",
+            "ip_country_code": country_code,
+            "shipping_country_code": country_code,
+            "is_digital_goods": "DIGITAL_GOODS" in merchant.get("high_risk_flags", []) or "GIFT CARD" in descriptor,
+        }
+
+    entry_mode = random.choices(["CHIP", "CONTACTLESS", "MAG_STRIPE"], weights=[65, 25, 10], k=1)[0]
+    channel = "WALLET" if entry_mode == "CONTACTLESS" and random.random() < 0.25 else "CARD_PRESENT"
+    return {
+        "transaction_channel": channel,
+        "entry_mode": entry_mode,
+        "ip_country_code": None,
+        "shipping_country_code": None,
+        "is_digital_goods": False,
     }
 
 def get_service_headers() -> Dict[str, str]:
@@ -498,6 +535,14 @@ def get_merchants() -> List[Dict[str, Any]]:
                         "category": item.get("category", "Retail"),
                         "mcc": item.get("mcc", item.get("default_mcc", "5311")),
                         "country_code": item.get("country_code", "USA"),
+                        "city": item.get("city"),
+                        "region": item.get("region"),
+                        "postal_code": item.get("postal_code"),
+                        "latitude": item.get("latitude"),
+                        "longitude": item.get("longitude"),
+                        "card_present_capable": item.get("card_present_capable", True),
+                        "ecommerce_capable": item.get("ecommerce_capable", False),
+                        "high_risk_flags": item.get("high_risk_flags", []),
                         "is_international": item.get("is_international", False),
                         "risk_score": item.get("risk_score", 0),
                     })
@@ -658,6 +703,7 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
         formatted_merchant = f"{raw_name.upper()}*ONLINE" if "Amazon" not in raw_name else "AMAZON.COM*MKTPLACE"
     else:
         formatted_merchant = f"{raw_name.upper()} - {home_metro}"
+    channel_context = infer_channel_context(merchant, formatted_merchant)
 
     rrn = "".join(random.choices("0123456789", k=12))
     
@@ -668,7 +714,19 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
         "retrieval_reference_number": rrn,
         "merchant_category_code": merchant.get("mcc", "5311"),
         "merchant_name": formatted_merchant,
-        "card_network": "VISA"
+        "card_network": "VISA",
+        "transaction_channel": channel_context["transaction_channel"],
+        "entry_mode": channel_context["entry_mode"],
+        "merchant_country_code": merchant.get("country_code", "USA"),
+        "merchant_city": merchant.get("city"),
+        "merchant_region": merchant.get("region"),
+        "merchant_postal_code": merchant.get("postal_code"),
+        "merchant_latitude": merchant.get("latitude"),
+        "merchant_longitude": merchant.get("longitude"),
+        "ip_country_code": channel_context["ip_country_code"],
+        "shipping_country_code": channel_context["shipping_country_code"],
+        "is_digital_goods": channel_context["is_digital_goods"],
+        "merchant_high_risk_flags": merchant.get("high_risk_flags", []),
     }
     
     auth_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
@@ -1037,7 +1095,14 @@ async def inject_anomaly(req: Optional[AnomalyRequest] = None):
                 "retrieval_reference_number": f"REF{random.randint(100000000, 999999999)}",
                 "merchant_category_code": mcc,
                 "merchant_name": desc,
-                "card_network": "VISA"
+                "card_network": "VISA",
+                "transaction_channel": "ECOMMERCE",
+                "entry_mode": "ECOMMERCE",
+                "merchant_country_code": country,
+                "ip_country_code": country,
+                "shipping_country_code": country,
+                "is_digital_goods": "GIFT" in desc.upper() or "ONLINE" in desc.upper(),
+                "merchant_high_risk_flags": ["DIGITAL_GOODS"] if "ONLINE" in desc.upper() or "GIFT" in desc.upper() else [],
             }
             try:
                 res = await client.post(auth_url, json=payload, headers=headers, timeout=5.0)

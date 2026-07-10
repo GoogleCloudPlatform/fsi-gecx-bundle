@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import httpx
+import json
 import pytest
 import respx
 from fastapi.testclient import TestClient
@@ -69,6 +70,14 @@ def test_get_merchants_prefers_canonical_api_shape(monkeypatch):
                     "category": "Retail",
                     "mcc": "5311",
                     "country_code": "USA",
+                    "city": "San Francisco",
+                    "region": "CA",
+                    "postal_code": "94103",
+                    "latitude": 37.7749,
+                    "longitude": -122.4194,
+                    "card_present_capable": True,
+                    "ecommerce_capable": False,
+                    "high_risk_flags": ["ELECTRONICS"],
                     "is_international": False,
                     "risk_score": 1,
                 }
@@ -85,6 +94,14 @@ def test_get_merchants_prefers_canonical_api_shape(monkeypatch):
             "category": "Retail",
             "mcc": "5311",
             "country_code": "USA",
+            "city": "San Francisco",
+            "region": "CA",
+            "postal_code": "94103",
+            "latitude": 37.7749,
+            "longitude": -122.4194,
+            "card_present_capable": True,
+            "ecommerce_capable": False,
+            "high_risk_flags": ["ELECTRONICS"],
             "is_international": False,
             "risk_score": 1,
         }
@@ -107,6 +124,14 @@ def test_get_merchants_falls_back_to_legacy_route_shape(monkeypatch):
                     "category": "Dining",
                     "default_mcc": "5812",
                     "country_code": "MEX",
+                    "city": "Cancun",
+                    "region": "QR",
+                    "postal_code": "77500",
+                    "latitude": 21.1619,
+                    "longitude": -86.8515,
+                    "card_present_capable": True,
+                    "ecommerce_capable": False,
+                    "high_risk_flags": [],
                     "is_international": True,
                     "risk_score": 9,
                 }
@@ -123,6 +148,14 @@ def test_get_merchants_falls_back_to_legacy_route_shape(monkeypatch):
             "category": "Dining",
             "mcc": "5812",
             "country_code": "MEX",
+            "city": "Cancun",
+            "region": "QR",
+            "postal_code": "77500",
+            "latitude": 21.1619,
+            "longitude": -86.8515,
+            "card_present_capable": True,
+            "ecommerce_capable": False,
+            "high_risk_flags": [],
             "is_international": True,
             "risk_score": 9,
         }
@@ -170,9 +203,13 @@ async def test_simulate_pulse_success():
     for request in auth_route.calls:
         assert request[0].headers.get("X-Card-Network-Token") == main.get_card_network_token()
         payload = request[0].read().decode()
-        assert "card_token" in payload
-        assert "amount_cents" in payload
-        assert "retrieval_reference_number" in payload
+        parsed = json.loads(payload)
+        assert "card_token" in parsed
+        assert "amount_cents" in parsed
+        assert "retrieval_reference_number" in parsed
+        assert parsed["transaction_channel"] in {"CARD_PRESENT", "WALLET", "ECOMMERCE"}
+        assert parsed["entry_mode"] in {"CHIP", "CONTACTLESS", "MAG_STRIPE", "ECOMMERCE"}
+        assert parsed["merchant_country_code"] == "USA"
 
 @pytest.mark.asyncio
 @respx.mock

@@ -147,6 +147,17 @@ class TransactionAuthorization(Base):
     card_network = Column(String(30), nullable=False) # 'VISA', 'MASTERCARD'
     merchant_category_code = Column(String(4), nullable=False) # MCC
     merchant_name = Column(String(255), nullable=True)
+    transaction_channel = Column(String(32), nullable=True)
+    entry_mode = Column(String(32), nullable=True)
+    merchant_country_code = Column(String(3), nullable=True)
+    merchant_city = Column(String(100), nullable=True)
+    merchant_region = Column(String(100), nullable=True)
+    merchant_postal_code = Column(String(20), nullable=True)
+    merchant_latitude = Column(Numeric(9, 6), nullable=True)
+    merchant_longitude = Column(Numeric(9, 6), nullable=True)
+    ip_country_code = Column(String(3), nullable=True)
+    shipping_country_code = Column(String(3), nullable=True)
+    is_digital_goods = Column(Boolean, nullable=False, default=False)
     fraud_risk_score = Column(Integer, nullable=True)
     
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))

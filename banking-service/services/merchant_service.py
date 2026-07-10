@@ -18,12 +18,62 @@ import random
 import logging
 from typing import List, Dict, Any, Optional, Tuple, Union
 from dataclasses import dataclass
+from decimal import Decimal
 from sqlalchemy.orm import Session
 from models.merchant import MerchantMaster, MerchantStore
 
 logger = logging.getLogger("banking_service.merchants")
 
 RESOURCE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources")
+
+KNOWN_STORE_GEO: Dict[str, Dict[str, Any]] = {
+    "MOUNTAIN VIEW CA": {"city": "Mountain View", "region": "CA", "postal_code": "94043", "latitude": 37.3861, "longitude": -122.0839},
+    "SAN FRANCISCO CA": {"city": "San Francisco", "region": "CA", "postal_code": "94103", "latitude": 37.7749, "longitude": -122.4194},
+    "NEW YORK NY": {"city": "New York", "region": "NY", "postal_code": "10001", "latitude": 40.7128, "longitude": -74.0060},
+    "CHICAGO IL": {"city": "Chicago", "region": "IL", "postal_code": "60601", "latitude": 41.8781, "longitude": -87.6298},
+    "SEATTLE WA": {"city": "Seattle", "region": "WA", "postal_code": "98101", "latitude": 47.6062, "longitude": -122.3321},
+    "DALLAS TX": {"city": "Dallas", "region": "TX", "postal_code": "75201", "latitude": 32.7767, "longitude": -96.7970},
+    "LOS ANGELES CA": {"city": "Los Angeles", "region": "CA", "postal_code": "90012", "latitude": 34.0522, "longitude": -118.2437},
+    "CANCUN MX": {"city": "Cancun", "region": "QR", "postal_code": "77500", "latitude": 21.1619, "longitude": -86.8515},
+    "CDMX": {"city": "Mexico City", "region": "CMX", "postal_code": "06000", "latitude": 19.4326, "longitude": -99.1332},
+    "MEXICO CITY": {"city": "Mexico City", "region": "CMX", "postal_code": "06000", "latitude": 19.4326, "longitude": -99.1332},
+}
+
+HIGH_RISK_FLAG_KEYWORDS: Dict[str, str] = {
+    "GIFT": "GIFT_CARD",
+    "RAZER": "DIGITAL_GOODS",
+    "GAME": "GAMING",
+    "CRYPTO": "CRYPTO_LIKE",
+    "ELECTRONIC": "ELECTRONICS",
+    "BEST BUY": "ELECTRONICS",
+    "APPLE": "ELECTRONICS",
+}
+
+
+def _infer_store_geo(location_name: str, raw_descriptor: str, country_code: str) -> Dict[str, Any]:
+    haystack = f"{location_name} {raw_descriptor}".upper()
+    for marker, geo in KNOWN_STORE_GEO.items():
+        if marker in haystack:
+            return geo
+    if country_code.upper() != "USA":
+        return {"city": None, "region": None, "postal_code": None, "latitude": None, "longitude": None}
+    return {"city": None, "region": None, "postal_code": None, "latitude": None, "longitude": None}
+
+
+def _is_ecommerce_descriptor(raw_descriptor: str) -> bool:
+    upper_desc = raw_descriptor.upper()
+    return any(token in upper_desc for token in ["ONLINE", ".COM", "MKTPLACE", "STREAMING", "SUBSCRIPTION", "PRIME", "ORDER", "DIGITAL"])
+
+
+def _infer_high_risk_flags(clean_name: str, raw_descriptor: str) -> list[str]:
+    haystack = f"{clean_name} {raw_descriptor}".upper()
+    return sorted({flag for keyword, flag in HIGH_RISK_FLAG_KEYWORDS.items() if keyword in haystack})
+
+
+def _decimal_or_none(value: Any) -> Decimal | None:
+    if value is None:
+        return None
+    return Decimal(str(value))
 
 
 @dataclass
@@ -37,6 +87,14 @@ class MerchantDTO:
     mcc: str
     category: str
     country_code: str
+    city: Optional[str]
+    region: Optional[str]
+    postal_code: Optional[str]
+    latitude: Optional[float]
+    longitude: Optional[float]
+    card_present_capable: bool
+    ecommerce_capable: bool
+    high_risk_flags: list[str]
     logo_url: Optional[str]
     merchant_domain: Optional[str]
     is_subscription: bool
@@ -71,6 +129,14 @@ class MerchantEnrichmentService:
             mcc=mcc,
             category="MERCHANDISE",
             country_code=country_code,
+            city=None,
+            region=None,
+            postal_code=None,
+            latitude=None,
+            longitude=None,
+            card_present_capable=not is_international,
+            ecommerce_capable=False,
+            high_risk_flags=[],
             logo_url=None,
             merchant_domain=None,
             is_subscription=False,
@@ -126,32 +192,56 @@ class MerchantEnrichmentService:
 
             if stores:
                 for s_dict in stores:
+                    geo = _infer_store_geo(s_dict["location_name"], s_dict["raw_descriptor"], s_dict.get("country_code", "USA"))
+                    ecommerce_capable = s_dict.get("ecommerce_capable", _is_ecommerce_descriptor(s_dict["raw_descriptor"]))
                     s = MerchantStore(
                         merchant_id=m.merchant_id,
                         location_name=s_dict["location_name"],
                         raw_descriptor=s_dict["raw_descriptor"],
                         country_code=s_dict.get("country_code", "USA"),
+                        city=s_dict.get("city", geo["city"]),
+                        region=s_dict.get("region", geo["region"]),
+                        postal_code=s_dict.get("postal_code", geo["postal_code"]),
+                        latitude=_decimal_or_none(s_dict.get("latitude", geo["latitude"])),
+                        longitude=_decimal_or_none(s_dict.get("longitude", geo["longitude"])),
+                        card_present_capable=s_dict.get("card_present_capable", not ecommerce_capable),
+                        ecommerce_capable=ecommerce_capable,
+                        high_risk_flags=",".join(s_dict.get("high_risk_flags", _infer_high_risk_flags(m.clean_name, s_dict["raw_descriptor"]))),
                         is_international=s_dict.get("is_international", False),
                         risk_score=s_dict.get("risk_score", 0)
                     )
                     db.add(s)
             elif legacy_vars:
                 for idx, v in enumerate(legacy_vars):
+                    geo = _infer_store_geo(f"{m.clean_name} #{idx+1}", v, "USA")
+                    ecommerce_capable = _is_ecommerce_descriptor(v)
                     s = MerchantStore(
                         merchant_id=m.merchant_id,
                         location_name=f"{m.clean_name} #{idx+1}",
                         raw_descriptor=v,
                         country_code="USA",
+                        city=geo["city"],
+                        region=geo["region"],
+                        postal_code=geo["postal_code"],
+                        latitude=_decimal_or_none(geo["latitude"]),
+                        longitude=_decimal_or_none(geo["longitude"]),
+                        card_present_capable=not ecommerce_capable,
+                        ecommerce_capable=ecommerce_capable,
+                        high_risk_flags=",".join(_infer_high_risk_flags(m.clean_name, v)),
                         is_international=False,
                         risk_score=0
                     )
                     db.add(s)
             else:
+                ecommerce_capable = _is_ecommerce_descriptor(m.clean_name)
                 s = MerchantStore(
                     merchant_id=m.merchant_id,
                     location_name=m.clean_name,
                     raw_descriptor=m.clean_name.upper(),
                     country_code="USA",
+                    card_present_capable=not ecommerce_capable,
+                    ecommerce_capable=ecommerce_capable,
+                    high_risk_flags=",".join(_infer_high_risk_flags(m.clean_name, m.clean_name)),
                     is_international=False,
                     risk_score=0
                 )
@@ -182,6 +272,9 @@ class MerchantEnrichmentService:
             m = s.merchant
             mcc_val = m.default_mcc if m else "0000"
             cat_data = tax_map.get(str(mcc_val), {"primary": "MERCHANDISE", "detailed": "MERCHANDISE_OTHER"})
+            inferred_geo = _infer_store_geo(s.location_name, s.raw_descriptor, s.country_code)
+            inferred_ecommerce = _is_ecommerce_descriptor(s.raw_descriptor)
+            inferred_flags = _infer_high_risk_flags(m.clean_name if m else s.location_name, s.raw_descriptor)
             
             dto = MerchantDTO(
                 id=s.id,
@@ -192,6 +285,14 @@ class MerchantEnrichmentService:
                 mcc=mcc_val,
                 category=cat_data["primary"],
                 country_code=s.country_code,
+                city=s.city or inferred_geo["city"],
+                region=s.region or inferred_geo["region"],
+                postal_code=s.postal_code or inferred_geo["postal_code"],
+                latitude=float(s.latitude) if s.latitude is not None else inferred_geo["latitude"],
+                longitude=float(s.longitude) if s.longitude is not None else inferred_geo["longitude"],
+                card_present_capable=s.card_present_capable and not inferred_ecommerce,
+                ecommerce_capable=s.ecommerce_capable or inferred_ecommerce,
+                high_risk_flags=[flag for flag in (s.high_risk_flags or "").split(",") if flag] or inferred_flags,
                 logo_url=m.logo_url if m else None,
                 merchant_domain=m.merchant_domain if m else None,
                 is_subscription=m.is_subscription if m else False,
@@ -235,6 +336,14 @@ class MerchantEnrichmentService:
                 "mcc": matched_dto.mcc,
                 "category": matched_dto.category,
                 "country_code": matched_dto.country_code,
+                "city": matched_dto.city,
+                "region": matched_dto.region,
+                "postal_code": matched_dto.postal_code,
+                "latitude": matched_dto.latitude,
+                "longitude": matched_dto.longitude,
+                "card_present_capable": matched_dto.card_present_capable,
+                "ecommerce_capable": matched_dto.ecommerce_capable,
+                "high_risk_flags": list(matched_dto.high_risk_flags),
                 "is_subscription": matched_dto.is_subscription,
                 "is_international": matched_dto.is_international,
                 "risk_score": matched_dto.risk_score,
@@ -250,6 +359,14 @@ class MerchantEnrichmentService:
             "mcc": fallback_mcc,
             "category": "General Merchandise",
             "country_code": country,
+            "city": None,
+            "region": None,
+            "postal_code": None,
+            "latitude": None,
+            "longitude": None,
+            "card_present_capable": country == "USA",
+            "ecommerce_capable": _is_ecommerce_descriptor(raw_descriptor),
+            "high_risk_flags": _infer_high_risk_flags(raw_descriptor, raw_descriptor),
             "is_subscription": False,
             "is_international": country != "USA",
             "risk_score": 30 if country != "USA" else 0,

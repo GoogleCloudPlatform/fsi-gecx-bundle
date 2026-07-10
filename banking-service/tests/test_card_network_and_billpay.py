@@ -131,6 +131,18 @@ def test_process_authorization_publishes_structured_fraud_decision(db_session):
         "merchant_category_code": "5947",
         "merchant_name": "RAZER GOLD GIFT CARD",
         "card_network": "VISA",
+        "transaction_channel": "ECOMMERCE",
+        "entry_mode": "ECOMMERCE",
+        "merchant_country_code": "USA",
+        "merchant_city": "San Francisco",
+        "merchant_region": "CA",
+        "merchant_postal_code": "94103",
+        "merchant_latitude": 37.7749,
+        "merchant_longitude": -122.4194,
+        "ip_country_code": "USA",
+        "shipping_country_code": "USA",
+        "is_digital_goods": True,
+        "merchant_high_risk_flags": ["DIGITAL_GOODS", "GIFT_CARD"],
         "is_fraud_simulation": True,
         "risk_score": 91,
     }
@@ -143,13 +155,23 @@ def test_process_authorization_publishes_structured_fraud_decision(db_session):
     assert result["fraud_risk_score"] == 91
     assert result["fraud_reason_codes"] == ["EXPLICIT_SIMULATION_OVERRIDE"]
     assert result["fraud_model_version"] == "local-deterministic-v1"
+    assert result["transaction_channel"] == "ECOMMERCE"
+    assert result["merchant_country_code"] == "USA"
     assert result["fraud_decision"]["decision"] == "FLAGGED"
     assert result["fraud_decision"]["features"]["amount_cents"] == 95000
+    assert result["fraud_decision"]["features"]["transaction_channel"] == "ECOMMERCE"
+    assert result["fraud_decision"]["features"]["merchant_city"] == "San Francisco"
+    assert result["fraud_decision"]["features"]["is_digital_goods"] is True
 
     auth = db_session.query(TransactionAuthorization).filter_by(retrieval_reference_number="777777777777").first()
     assert auth is not None
     assert auth.status == "FLAGGED"
     assert auth.fraud_risk_score == 91
+    assert auth.transaction_channel == "ECOMMERCE"
+    assert auth.entry_mode == "ECOMMERCE"
+    assert auth.merchant_country_code == "USA"
+    assert auth.merchant_city == "San Francisco"
+    assert auth.is_digital_goods is True
 
     assert len(published_events) == 1
     event_type, event_payload = published_events[0]
@@ -157,6 +179,8 @@ def test_process_authorization_publishes_structured_fraud_decision(db_session):
     assert event_payload["status"] == "FLAGGED (RISK 91)"
     assert event_payload["fraud_reason_codes"] == ["EXPLICIT_SIMULATION_OVERRIDE"]
     assert event_payload["fraud_model_version"] == "local-deterministic-v1"
+    assert event_payload["transaction_channel"] == "ECOMMERCE"
+    assert event_payload["merchant_country_code"] == "USA"
 
 @pytest.mark.asyncio
 async def test_card_network_authorize_success(async_client, db_session):
