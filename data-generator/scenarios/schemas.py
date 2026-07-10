@@ -267,6 +267,25 @@ class ScenarioStepResult(BaseModel):
     response_payload: dict[str, Any] | None = None
 
 
+class ScenarioOutcome(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_id: str
+    execution_id: str
+    event_id: str
+    authorization_id: str | None = None
+    transaction_id: str | None = None
+    card_token: str | None = None
+    outcome_label: OutcomeLabel
+    expected_reason_codes: list[str] = Field(default_factory=list)
+    actual_reason_codes: list[str] = Field(default_factory=list)
+    expected_score_band: str | None = None
+    actual_risk_score: int | None = None
+    model_version: str | None = None
+    synthetic_label: bool = True
+    created_at: str
+
+
 class ScenarioExecutionResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -290,5 +309,6 @@ class ScenarioExecutionResult(BaseModel):
     created_authorization_ids: list[str] = Field(default_factory=list)
     created_transaction_ids: list[str] = Field(default_factory=list)
     created_alert_ids: list[str] = Field(default_factory=list)
+    outcomes: list[ScenarioOutcome] = Field(default_factory=list)
     steps: list[ScenarioStepResult] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

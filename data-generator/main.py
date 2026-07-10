@@ -25,7 +25,7 @@ from fastapi import FastAPI, HTTPException, status, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from scenarios import ScenarioExecutionRequest, ScenarioRequest, execute_scenario, plan_scenario
+from scenarios import ScenarioExecutionRequest, ScenarioRequest, execute_scenario, list_scenario_outcomes, plan_scenario
 from scenarios.schemas import BehaviorPolicy, PersonaProfile, ScenarioMode, ScenarioType
 from utils.internal_auth import get_internal_switch_token
 from utils.runtime import get_cors_origins, is_local_dev
@@ -1171,6 +1171,17 @@ async def execute_generation_scenario(request: ScenarioExecutionRequest):
     )
     logger.info("Scenario execution %s finished with status %s.", result.execution_id, result.status)
     return result
+
+
+@app.get("/scenarios/{scenario_id}/outcomes", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
+def get_generation_scenario_outcomes(scenario_id: str):
+    """Returns synthetic feedback labels captured for a scenario execution."""
+    outcomes = list_scenario_outcomes(scenario_id)
+    return {
+        "scenario_id": scenario_id,
+        "count": len(outcomes),
+        "outcomes": outcomes,
+    }
 
 
 @app.post("/generate", status_code=status.HTTP_200_OK)
