@@ -20,6 +20,7 @@ window.env = {
   CCAI_COMPANY_ID: "17762261086439462b8f0b64f6cd0d5e3",
   CCAI_HOST: "https://fsi-test-4000-jz3ioz1.uc1.ccaiplatform.com",
   CX_AGENT_STUDIO_DEPLOYMENT_NAME: "projects/fsi-gecx-2000/locations/us/apps/e0b952c1-280d-41d0-8da5-46db4b0e6ad9/deployments/ca77d6f4-b7c2-4007-b6c0-51d905132e41",
+  CX_AGENT_STUDIO_VOICE_AGENT_DEPLOYMENT_NAME: "projects/fsi-gecx-2000/locations/us/apps/1c69bee5-af7d-40ff-a83f-012430d1e423/deployments/81b3e89e-31ff-4be9-93ae-f0c99e59d5e0",
   CX_AGENT_STUDIO_UPLOAD_TOOL_NAME: "projects/fsi-gecx-2000/locations/us/apps/e0b952c1-280d-41d0-8da5-46db4b0e6ad9/tools/7d1d2879-9909-42a5-a39b-4ac6370980d3",
   CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME: "projects/fsi-gecx-2000/locations/us/apps/e0b952c1-280d-41d0-8da5-46db4b0e6ad9/tools/8e42a29a-d20e-4aba-8ea9-beecb68c6a60",
   CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME: "projects/fsi-gecx-2000/locations/us/apps/e0b952c1-280d-41d0-8da5-46db4b0e6ad9/tools/692fbf88-0560-4a43-a700-ebb82122cd85",

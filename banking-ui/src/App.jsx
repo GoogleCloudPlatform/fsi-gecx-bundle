@@ -121,6 +121,7 @@ function AppContent() {
   const [isAuthInfoModalOpen, setIsAuthInfoModalOpen] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
   const projectId = window.firebaseConfig?.projectId;
+  const appId = (window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME || '').split('/apps/')?.[1]?.split('/')?.[0] || '';
 
   const handleCopy = (text, field) => {
     if (!text) return;
@@ -1839,15 +1840,28 @@ function AppContent() {
                 <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">CX Agent Studio Console</h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Orchestrate agent definitions, tool configurations, and prompt rules.</p>
               </div>
-              <a
-                href={`https://ces.cloud.google.com/projects/${projectId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
-              >
-                <span>View Console</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                <a
+                  href={`https://ces.cloud.google.com/projects/${projectId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs hover:underline"
+                >
+                  <span>View Console</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                {appId && (
+                  <a
+                    href={`https://ces.cloud.google.com/projects/${projectId}/locations/us/apps/${appId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs hover:underline"
+                  >
+                    <span>View Agent</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+              </div>
             </div>
             <hr className="border-slate-100 dark:border-slate-800" />
             <div className="flex items-start justify-between gap-4">
