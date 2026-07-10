@@ -22,7 +22,7 @@ from services.seeding_service import perform_algorithmic_seeding, provision_user
 from models.identity import User, UserAddress
 from models.kyc import KYCRecord, UserCreditProfile
 from models.origination import Account
-from models.credit_card import CreditAccount, IssuedCard
+from models.credit_card import CreditAccount, IssuedCard, TransactionAuthorization
 from models.settings import SystemSetting
 
 DATABASE_URL = "sqlite:///:memory:"
@@ -89,6 +89,22 @@ def test_provision_user_suite_generates_unique_card_tokens_for_same_name(db_sess
     assert first["card_token"].startswith("tok_visa_")
     assert second["card_token"].startswith("tok_visa_")
     assert first["card_token"] != second["card_token"]
+
+
+def test_provision_user_suite_structures_demo_travel_country(db_session):
+    summary = provision_user_suite(db_session, "travel.presenter@google.com", "uid-travel-presenter")
+
+    mexico_auths = (
+        db_session.query(TransactionAuthorization)
+        .join(IssuedCard, TransactionAuthorization.card_id == IssuedCard.id)
+        .filter(IssuedCard.card_token == summary["card_token"])
+        .filter(TransactionAuthorization.merchant_country_code == "MEX")
+        .all()
+    )
+
+    assert len(mexico_auths) >= 4
+    assert all(auth.transaction_channel in {"CARD_PRESENT", "ECOMMERCE"} for auth in mexico_auths)
+    assert all(auth.entry_mode for auth in mexico_auths)
 
 
 def test_get_seeding_personas_honors_configured_mock_user_count(monkeypatch):

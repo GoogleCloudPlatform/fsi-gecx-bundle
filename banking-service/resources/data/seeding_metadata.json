@@ -93,6 +93,7 @@
         "AMERICAN AIRLINES PLAYA DEL CARMEN [MEX]"
       ],
       "mcc": "4511",
+      "merchant_country_code": "MEX",
       "min_amount_cents": 55000,
       "max_amount_cents": 85000,
       "status": "SETTLED",
@@ -106,6 +107,7 @@
         "FAIRMONT MAYAKOBA RESORT [MEX]"
       ],
       "mcc": "7011",
+      "merchant_country_code": "MEX",
       "min_amount_cents": 45000,
       "max_amount_cents": 120000,
       "status": "SETTLED",
@@ -119,6 +121,7 @@
         "PUJOL POP-UP RIVIERA MAYA [MEX]"
       ],
       "mcc": "5812",
+      "merchant_country_code": "MEX",
       "min_amount_cents": 6500,
       "max_amount_cents": 18000,
       "status": "PENDING",
@@ -132,6 +135,7 @@
         "CHI WELLNESS LAGUNA MAYA [MEX]"
       ],
       "mcc": "7298",
+      "merchant_country_code": "MEX",
       "min_amount_cents": 8500,
       "max_amount_cents": 25000,
       "status": "PENDING",
