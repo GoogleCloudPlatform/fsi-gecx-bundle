@@ -188,6 +188,9 @@ class FraudScoringService:
             "available_credit_ratio": available_credit_ratio,
             "has_explicit_simulation_flag": bool(payload.get("is_fraud_simulation")),
             "has_risk_score_override": "risk_score" in payload and payload.get("risk_score") is not None,
+            "synthetic_fraud_label": context.get("synthetic_fraud_label") or payload.get("synthetic_fraud_label"),
+            "fraud_pattern_label": context.get("fraud_pattern_label") or payload.get("fraud_pattern_label"),
+            "fraud_pattern_sequence": context.get("fraud_pattern_sequence") or payload.get("fraud_pattern_sequence"),
         }
         return features
 

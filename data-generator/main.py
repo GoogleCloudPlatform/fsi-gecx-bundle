@@ -49,6 +49,12 @@ class AnomalyRequest(BaseModel):
     user_id: Optional[str] = None
     email: Optional[str] = None
 
+
+class FraudPatternRequest(BaseModel):
+    card_token: Optional[str] = None
+    pattern: Optional[str] = None
+    count: int = 1
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("data-generator")
 
@@ -76,6 +82,19 @@ SWIPE_REQUEST_TIMEOUT_SECONDS = float(os.getenv("SWIPE_REQUEST_TIMEOUT_SECONDS",
 PULSE_ACTIVE_LOCK_TTL_SECONDS = int(os.getenv("PULSE_ACTIVE_LOCK_TTL_SECONDS", str(max(PULSE_WINDOW_SECONDS + 90, 180))))
 PULSE_EVENT_DEDUP_TTL_SECONDS = int(os.getenv("PULSE_EVENT_DEDUP_TTL_SECONDS", "3600"))
 PULSE_ADMISSION_REDIS_REQUIRED = os.getenv("PULSE_ADMISSION_REDIS_REQUIRED", "true").lower() not in {"0", "false", "no"}
+FRAUD_PATTERN_ENABLED = os.getenv("FRAUD_PATTERN_ENABLED", "false").lower() in {"1", "true", "yes"}
+FRAUD_PATTERN_RATE = float(os.getenv("FRAUD_PATTERN_RATE", "0.05"))
+FRAUD_PATTERN_MAX_PER_PULSE = int(os.getenv("FRAUD_PATTERN_MAX_PER_PULSE", "1"))
+FRAUD_PATTERN_TARGET_MODE = os.getenv("FRAUD_PATTERN_TARGET_MODE", "eligible").lower()
+FRAUD_PATTERN_NAMES = [
+    "cnp_gift_card_burst",
+    "electronics_marketplace_burst",
+    "international_amount_outlier",
+    "impossible_travel_card_present",
+    "unusual_ecommerce_country",
+    "merchant_category_velocity",
+    "near_limit_pressure",
+]
 
 _pulse_lock = asyncio.Lock()
 _redis_client = None
@@ -335,6 +354,117 @@ def infer_channel_context(merchant: Dict[str, Any], formatted_merchant: str) -> 
         "ip_country_code": None,
         "shipping_country_code": None,
         "is_digital_goods": False,
+    }
+
+
+def build_fraud_pattern_payloads(card: Dict[str, Any], pattern: str) -> List[Dict[str, Any]]:
+    token = card["card_token"]
+    available_credit = int(card.get("available_credit_cents") or 150000)
+    base_amount = max(1000, min(available_credit // 3, 95000))
+
+    def payload(
+        *,
+        merchant_name: str,
+        amount_cents: int,
+        mcc: str,
+        channel: str,
+        entry_mode: str,
+        country: str = "USA",
+        city: str | None = None,
+        region: str | None = None,
+        lat: float | None = None,
+        lon: float | None = None,
+        ip_country: str | None = None,
+        shipping_country: str | None = None,
+        digital_goods: bool = False,
+        flags: Optional[List[str]] = None,
+        sequence: int = 1,
+    ) -> Dict[str, Any]:
+        return {
+            "card_token": token,
+            "amount_cents": max(100, min(amount_cents, max(available_credit - 100, 100))),
+            "retrieval_reference_number": "".join(random.choices("0123456789", k=12)),
+            "merchant_category_code": mcc,
+            "merchant_name": merchant_name,
+            "card_network": "VISA",
+            "transaction_channel": channel,
+            "entry_mode": entry_mode,
+            "merchant_country_code": country,
+            "merchant_city": city,
+            "merchant_region": region,
+            "merchant_latitude": lat,
+            "merchant_longitude": lon,
+            "ip_country_code": ip_country,
+            "shipping_country_code": shipping_country,
+            "is_digital_goods": digital_goods,
+            "merchant_high_risk_flags": flags or [],
+            "synthetic_fraud_label": "FRAUD_PATTERN",
+            "fraud_pattern_label": pattern,
+            "fraud_pattern_sequence": sequence,
+        }
+
+    if pattern == "cnp_gift_card_burst":
+        return [
+            payload(merchant_name=name, amount_cents=amt, mcc="5947", channel="ECOMMERCE", entry_mode="ECOMMERCE", digital_goods=True, flags=["DIGITAL_GOODS", "GIFT_CARD"], sequence=idx)
+            for idx, (name, amt) in enumerate(
+                [("RAZER GOLD GIFT CARD ONLINE", base_amount), ("TARGET.COM GIFT CARDS", base_amount - 500), ("GAME*TEST TOKEN ONLINE", 4900)],
+                start=1,
+            )
+        ]
+    if pattern == "electronics_marketplace_burst":
+        return [
+            payload(merchant_name=name, amount_cents=amt, mcc="5311", channel="ECOMMERCE", entry_mode="ECOMMERCE", digital_goods=False, flags=["ELECTRONICS"], sequence=idx)
+            for idx, (name, amt) in enumerate(
+                [("BEST BUY*MKTPLACE", base_amount), ("APPLE.COM*ONLINE", base_amount - 1000), ("AMAZON.COM*MKTPLACE ELECTRONICS", base_amount - 2000)],
+                start=1,
+            )
+        ]
+    if pattern == "international_amount_outlier":
+        return [
+            payload(merchant_name="CANCUN RESORT POS", amount_cents=base_amount, mcc="7011", channel="CARD_PRESENT", entry_mode="CHIP", country="MEX", city="Cancun", region="QR", lat=21.1619, lon=-86.8515, sequence=1)
+        ]
+    if pattern == "impossible_travel_card_present":
+        return [
+            payload(merchant_name="LOCAL MARKET - SAN FRANCISCO CA", amount_cents=2400, mcc="5411", channel="CARD_PRESENT", entry_mode="CHIP", country="USA", city="San Francisco", region="CA", lat=37.7749, lon=-122.4194, sequence=1),
+            payload(merchant_name="GROCERY - NEW YORK NY", amount_cents=4500, mcc="5411", channel="CARD_PRESENT", entry_mode="CHIP", country="USA", city="New York", region="NY", lat=40.7128, lon=-74.0060, sequence=2),
+        ]
+    if pattern == "unusual_ecommerce_country":
+        return [
+            payload(merchant_name="LONDON DIGITAL MARKETPLACE", amount_cents=base_amount, mcc="5816", channel="ECOMMERCE", entry_mode="ECOMMERCE", country="GBR", ip_country="USA", shipping_country="USA", digital_goods=True, flags=["DIGITAL_GOODS", "ONLINE"], sequence=1)
+        ]
+    if pattern == "merchant_category_velocity":
+        return [
+            payload(merchant_name=f"COFFEE SHOP VELOCITY {idx}", amount_cents=1800 + idx * 100, mcc="5814", channel="CARD_PRESENT", entry_mode="CONTACTLESS", country="USA", city="Seattle", region="WA", lat=47.6062, lon=-122.3321, sequence=idx)
+            for idx in range(1, 5)
+        ]
+    if pattern == "near_limit_pressure":
+        amount = max(1000, min(int(available_credit * 0.9), available_credit - 100))
+        return [
+            payload(merchant_name="HIGH VALUE MARKETPLACE ONLINE", amount_cents=amount, mcc="5311", channel="ECOMMERCE", entry_mode="ECOMMERCE", country="USA", ip_country="USA", shipping_country="USA", flags=["ONLINE"], sequence=1)
+        ]
+    raise ValueError(f"Unknown fraud pattern: {pattern}")
+
+
+async def dispatch_fraud_pattern(client: httpx.AsyncClient, card: Dict[str, Any], pattern: str) -> Dict[str, Any]:
+    headers = get_service_headers()
+    auth_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
+    payloads = build_fraud_pattern_payloads(card, pattern)
+    results = []
+    for payload in payloads:
+        response = await client.post(auth_url, json=payload, headers=headers, timeout=SWIPE_REQUEST_TIMEOUT_SECONDS)
+        results.append(
+            {
+                "pattern": pattern,
+                "rrn": payload["retrieval_reference_number"],
+                "status_code": response.status_code,
+                "action_code": response.json().get("action_code") if response.status_code == 200 else None,
+            }
+        )
+    return {
+        "pattern": pattern,
+        "attempted": len(payloads),
+        "authorized": sum(1 for result in results if result["status_code"] == 200 and result["action_code"] == "00"),
+        "results": results,
     }
 
 def get_service_headers() -> Dict[str, str]:
@@ -1005,9 +1135,18 @@ async def execute_simulation_pulse(event_id: str | None = None) -> Dict[str, Any
             for offset in event_offsets
         ]
         all_results = await asyncio.gather(*tasks, return_exceptions=False)
+        fraud_pattern_results = []
+        if FRAUD_PATTERN_ENABLED and random.random() < FRAUD_PATTERN_RATE:
+            fraud_count = max(0, min(FRAUD_PATTERN_MAX_PER_PULSE, len(cards)))
+            target_cards = random.sample(cards, fraud_count) if fraud_count else []
+            for card in target_cards:
+                pattern = random.choice(FRAUD_PATTERN_NAMES)
+                fraud_pattern_results.append(await dispatch_fraud_pattern(client, card, pattern))
         paydown_results = await auto_paydown_high_utilization_cards(client, cards)
 
     summary = summarize_swipe_results(all_results)
+    summary["fraud_patterns_attempted"] = len(fraud_pattern_results)
+    summary["fraud_pattern_authorizations_created"] = sum(result["authorized"] for result in fraud_pattern_results)
     summary["auto_paydowns_processed"] = sum(1 for result in paydown_results if result.get("status") == "SUCCESS")
     status_label = "SUCCESS" if summary["authorizations_created"] > 0 else "NOOP"
     message = (
@@ -1048,6 +1187,45 @@ async def simulate_surge(payload: SurgeRequest):
         "message": "Simulation surge completed against active card pool.",
         "active_cards_count": len(active_cards),
         **summary,
+    }
+
+
+@app.post("/simulate-fraud-patterns", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
+async def simulate_fraud_patterns(req: FraudPatternRequest):
+    """Runs labeled model-detection fraud patterns without explicit risk-score overrides."""
+    pattern_count = max(1, min(req.count, FRAUD_PATTERN_MAX_PER_PULSE if FRAUD_PATTERN_MAX_PER_PULSE > 0 else 1))
+    patterns = [req.pattern] if req.pattern else []
+    for _ in range(pattern_count - len(patterns)):
+        patterns.append(random.choice(FRAUD_PATTERN_NAMES))
+
+    for pattern in patterns:
+        if pattern not in FRAUD_PATTERN_NAMES:
+            raise HTTPException(status_code=400, detail=f"Unknown fraud pattern: {pattern}")
+
+    if req.card_token:
+        cards = [{"card_token": req.card_token, "available_credit_cents": 150000, "generator_eligible": True}]
+    else:
+        try:
+            cards = get_spendable_cards(get_generator_eligible_cards(get_active_cards()))
+        except MaintenanceModeError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="banking-service reset is in progress.")
+        if FRAUD_PATTERN_TARGET_MODE == "eligible":
+            cards = get_generator_eligible_cards(cards)
+        if not cards:
+            raise HTTPException(status_code=409, detail="No eligible active cards found for fraud pattern simulation.")
+
+    async with httpx.AsyncClient() as client:
+        results = []
+        for pattern in patterns:
+            card = cards[0] if req.card_token else random.choice(cards)
+            results.append(await dispatch_fraud_pattern(client, card, pattern))
+
+    return {
+        "status": "FRAUD_PATTERNS_SIMULATED",
+        "patterns_attempted": len(results),
+        "authorizations_created": sum(result["authorized"] for result in results),
+        "patterns": results,
+        "message": "Labeled fraud-pattern traffic dispatched without explicit risk-score overrides.",
     }
 
 @app.post("/inject-anomaly", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])

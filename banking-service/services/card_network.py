@@ -76,6 +76,9 @@ def _build_authorization_context(db: Session, payload: Dict[str, Any], merchant_
         "shipping_country_code": payload.get("shipping_country_code"),
         "is_digital_goods": bool(payload.get("is_digital_goods", False)),
         "merchant_high_risk_flags": payload.get("merchant_high_risk_flags") or [],
+        "synthetic_fraud_label": payload.get("synthetic_fraud_label"),
+        "fraud_pattern_label": payload.get("fraud_pattern_label"),
+        "fraud_pattern_sequence": payload.get("fraud_pattern_sequence"),
     }
 
     if not merchant_country:

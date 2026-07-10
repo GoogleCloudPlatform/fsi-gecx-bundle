@@ -61,6 +61,9 @@ class CardAuthHoldRequest(BaseModel):
     shipping_country_code: str | None = Field(None, max_length=3, description="Coarse ecommerce shipping country code")
     is_digital_goods: bool = False
     merchant_high_risk_flags: list[str] = Field(default_factory=list)
+    synthetic_fraud_label: str | None = None
+    fraud_pattern_label: str | None = None
+    fraud_pattern_sequence: int | None = None
 
 class CardSettlementRequest(BaseModel):
     retrieval_reference_number: str = Field(..., max_length=12, description="RRN matching the hold authorization")
