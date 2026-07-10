@@ -56,6 +56,15 @@ function formatFraudReason(reason) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function parseFraudRiskScore(item) {
+  const explicitScore = Number(item?.fraud_risk_score);
+  if (Number.isFinite(explicitScore)) {
+    return explicitScore;
+  }
+  const match = String(item?.status || '').match(/RISK\s+(\d+)/i);
+  return match ? Number(match[1]) : null;
+}
+
 function AdminSimulationView() {
   const navigate = useNavigate();
   const projectId = window.firebaseConfig?.projectId;
@@ -112,9 +121,14 @@ function AdminSimulationView() {
     (acc, item) => {
       const status = String(item.status || '');
       const amount = Math.abs(item.amount_cents ?? 0);
+      const riskScore = parseFraudRiskScore(item);
+      const fraudReasons = Array.isArray(item.fraud_reason_codes) ? item.fraud_reason_codes : [];
       if (status.includes('FLAGGED')) {
         acc.flaggedCount += 1;
         acc.flaggedAmountCents += amount;
+        if (riskScore != null) {
+          acc.flaggedRiskScoreTotal += riskScore;
+        }
       }
       if (status.includes('HOLD') || status.includes('FLAGGED')) {
         acc.pendingCount += 1;
@@ -124,17 +138,46 @@ function AdminSimulationView() {
         acc.postedCount += 1;
         acc.postedAmountCents += amount;
       }
+      if (riskScore != null) {
+        acc.scoredCount += 1;
+        acc.riskScoreTotal += riskScore;
+        if (acc.peakRiskScore == null || riskScore > acc.peakRiskScore) {
+          acc.peakRiskScore = riskScore;
+          acc.peakRiskMerchant = item.merchant_name || 'Recent authorization';
+        }
+      }
+      if (item.fraud_model_version) {
+        acc.latestModelVersion = item.fraud_model_version;
+      }
+      fraudReasons.forEach((reason) => {
+        acc.reasonCounts[reason] = (acc.reasonCounts[reason] || 0) + 1;
+      });
       return acc;
     },
     {
       flaggedCount: 0,
       flaggedAmountCents: 0,
+      flaggedRiskScoreTotal: 0,
       pendingCount: 0,
       pendingAmountCents: 0,
       postedCount: 0,
       postedAmountCents: 0,
+      scoredCount: 0,
+      riskScoreTotal: 0,
+      peakRiskScore: null,
+      peakRiskMerchant: null,
+      latestModelVersion: null,
+      reasonCounts: {},
     },
   );
+  creditRiskMetrics.averageRiskScore = creditRiskMetrics.scoredCount
+    ? Math.round(creditRiskMetrics.riskScoreTotal / creditRiskMetrics.scoredCount)
+    : null;
+  creditRiskMetrics.averageFlaggedRiskScore = creditRiskMetrics.flaggedCount
+    ? Math.round(creditRiskMetrics.flaggedRiskScoreTotal / creditRiskMetrics.flaggedCount)
+    : null;
+  creditRiskMetrics.topReason = Object.entries(creditRiskMetrics.reasonCounts)
+    .sort((a, b) => b[1] - a[1])[0] || null;
 
   const anomalySeverity = cdcStats.activeAnomalies >= 5
     ? {
@@ -520,47 +563,82 @@ function AdminSimulationView() {
           )}
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className={`p-4 rounded-2xl border ${anomalySeverity.cardClass}`}>
             <div className={`flex items-center justify-between text-xs mb-1 ${anomalySeverity.textClass}`}>
-              <span>Active Fraud Anomalies</span>
+              <span>Open Fraud Alerts</span>
               <ShieldAlert className={`w-4 h-4 ${anomalySeverity.iconClass}`} />
             </div>
             <div className={`text-2xl font-black font-mono ${anomalySeverity.textClass}`}>{cdcStats.activeAnomalies}</div>
-            <div className={`text-[10px] mt-1 ${anomalySeverity.textClass}`}>Open fraud cases awaiting customer mitigation</div>
+            <div className={`text-[10px] mt-1 ${anomalySeverity.textClass}`}>Customer-facing cases awaiting review</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Flagged Event Rate</span>
+              <span>Peak Model Score</span>
               <AlertTriangle className="w-4 h-4 text-amber-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {cdcStats.flaggedEventsPerMinute} <span className="text-sm font-normal text-slate-500">/ min</span>
+              {creditRiskMetrics.peakRiskScore ?? 'N/A'}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">{creditRiskMetrics.flaggedCount} flagged in current wall</div>
+            <div className="text-[10px] text-slate-400 mt-1 truncate">
+              {creditRiskMetrics.peakRiskMerchant || 'Awaiting scored authorizations'}
+            </div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Pending Exposure</span>
+              <span>Top Reason Code</span>
+              <ShieldAlert className="w-4 h-4 text-rose-500" />
+            </div>
+            <div className="text-xl font-black text-slate-900 dark:text-white font-mono truncate">
+              {creditRiskMetrics.topReason ? formatFraudReason(creditRiskMetrics.topReason[0]) : 'None'}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              {creditRiskMetrics.topReason ? `${creditRiskMetrics.topReason[1]} hit${creditRiskMetrics.topReason[1] === 1 ? '' : 's'} in current wall` : 'No flagged reason codes visible'}
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>Flagged Exposure</span>
               <Clock className="w-4 h-4 text-amber-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {formatCurrencyFromCents(creditRiskMetrics.pendingAmountCents)}
+              {formatCurrencyFromCents(creditRiskMetrics.flaggedAmountCents)}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">{creditRiskMetrics.pendingCount} pending or flagged authorizations</div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              {creditRiskMetrics.flaggedCount} flagged auth{creditRiskMetrics.flaggedCount === 1 ? '' : 's'}
+              {creditRiskMetrics.averageFlaggedRiskScore != null ? `, avg score ${creditRiskMetrics.averageFlaggedRiskScore}` : ''}
+            </div>
           </div>
+        </div>
 
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Auth vs Posted Flow</span>
-              <Layers className="w-4 h-4 text-blue-500" />
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-3 text-[11px]">
+              <span className="text-slate-500">Live event mix</span>
+              <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                {cdcStats.authorizationEventsPerMinute} auth / {cdcStats.postedEventsPerMinute} posted / {cdcStats.flaggedEventsPerMinute} flagged
+              </span>
             </div>
-            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {cdcStats.authorizationEventsPerMinute}:{cdcStats.postedEventsPerMinute}
+          </div>
+          <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-3 text-[11px]">
+              <span className="text-slate-500">Pending exposure</span>
+              <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                {formatCurrencyFromCents(creditRiskMetrics.pendingAmountCents)} across {creditRiskMetrics.pendingCount} hold{creditRiskMetrics.pendingCount === 1 ? '' : 's'}
+              </span>
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">{creditRiskMetrics.postedCount} posted events in current wall</div>
+          </div>
+          <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-3 text-[11px]">
+              <span className="text-slate-500">Model signal</span>
+              <span className="font-mono font-bold text-slate-800 dark:text-slate-200 truncate">
+                {creditRiskMetrics.latestModelVersion || 'Awaiting model events'}
+                {creditRiskMetrics.averageRiskScore != null ? `, avg ${creditRiskMetrics.averageRiskScore}` : ''}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -924,20 +1002,20 @@ function AdminSimulationView() {
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            The <strong>Credit Risk Metrics</strong> tile tracks open fraud-case outcomes and live card exposure separately from replication transport health. A non-zero anomaly count means the demo has suspicious card activity available for secure-message review and the voice agent flow.
+            The <strong>Credit Risk Metrics</strong> tile tracks open fraud-case outcomes, live model scores, reason-code activity, and unsettled exposure separately from replication transport health. A non-zero alert count means the demo has suspicious card activity available for secure-message review and the voice agent flow.
           </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">Active Fraud Anomalies</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Active anomalies represent open operational fraud alerts that have been enriched and surfaced for customer mitigation.</p>
+              <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">Open Fraud Alerts</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Open alerts represent operational fraud cases that have been enriched, messaged to the customer, and made available to support workflows.</p>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-amber-500 dark:text-amber-400 font-mono font-bold">Flagged Event Rate + Pending Exposure</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Flagged rate shows suspicious live activity per minute. Pending exposure sums the current wall's outstanding holds and flagged authorizations so presenters can see unsettled card risk quickly.</p>
+              <div className="text-amber-500 dark:text-amber-400 font-mono font-bold">Peak Model Score + Reason Codes</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">The score and reason-code fields come directly from the authorization fraud decision payload, making the tile reflect the current model rather than a separate hard-coded anomaly counter.</p>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-blue-500 dark:text-blue-400 font-mono font-bold">Auth vs Posted Flow</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Compares authorization events to posted events per minute. A surge of authorizations with few postings is expected during fraud simulation because those transactions are still pending review.</p>
+              <div className="text-blue-500 dark:text-blue-400 font-mono font-bold">Exposure + Event Mix</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Flagged exposure sums suspicious authorizations in the current wall, while the event mix compares authorization, posting, and flagged activity per minute.</p>
             </div>
           </div>
         </div>
