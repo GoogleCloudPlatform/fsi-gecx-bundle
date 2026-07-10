@@ -14,12 +14,55 @@
  * limitations under the License.
  */
 
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
-// https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+const localFbConfigPlugin = (env) => ({
+  name: 'local-fb-config-plugin',
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      const parsedUrl = new URL(req.url, 'http://localhost');
+      if (parsedUrl.pathname === '/fbConfig.js') {
+        const projectId = process.env.PROJECT_ID;
+        console.log(`[local-fb-config-plugin] Environment PROJECT_ID: "${projectId || 'undefined'}"`);
+        
+        let targetFile = null;
+        if (projectId) {
+          const candidate = path.join(__dirname, 'public', `fbConfig.${projectId}.js`);
+          if (fs.existsSync(candidate)) {
+            targetFile = candidate;
+          }
+        }
+        
+        if (targetFile) {
+          console.log(`[local-fb-config-plugin] Serving dynamic config: ${path.basename(targetFile)}`);
+          res.setHeader('Content-Type', 'application/javascript');
+          res.end(fs.readFileSync(targetFile, 'utf-8'));
+          return;
+        } else {
+          console.log('[local-fb-config-plugin] Falling back to default: fbConfig.js');
+        }
+      }
+      next();
+    });
+  }
+});
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  return {
+    plugins: [
+      react(),
+      tailwindcss(),
+      localFbConfigPlugin(env)
+    ]
+  };
 })
 
