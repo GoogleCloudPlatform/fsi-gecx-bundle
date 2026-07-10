@@ -30,7 +30,7 @@ const localFbConfigPlugin = (env) => ({
     server.middlewares.use((req, res, next) => {
       const parsedUrl = new URL(req.url, 'http://localhost');
       if (parsedUrl.pathname === '/fbConfig.js') {
-        const projectId = process.env.PROJECT_ID;
+        const projectId = env.PROJECT_ID;
         console.log(`[local-fb-config-plugin] Environment PROJECT_ID: "${projectId || 'undefined'}"`);
         
         let targetFile = null;
