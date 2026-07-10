@@ -29,6 +29,7 @@ from models.identity import User
 from models.origination import Account
 from models.credit_card import CreditAccount, IssuedCard, TransactionAuthorization, PostedTransaction
 from models.audit import AuditOutbox
+from services.card_network import process_authorization
 from services.credit_card import queue_wallet_provisioning
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -118,6 +119,44 @@ def setup_test_cardholder_suite(db):
     db.add(card)
     db.commit()
     return user, checking, credit_acc, card
+
+
+def test_process_authorization_publishes_structured_fraud_decision(db_session):
+    user, checking, credit_acc, card = setup_test_cardholder_suite(db_session)
+    published_events = []
+    payload = {
+        "card_token": "tok_visa_swipe_tester",
+        "amount_cents": 95000,
+        "retrieval_reference_number": "777777777777",
+        "merchant_category_code": "5947",
+        "merchant_name": "RAZER GOLD GIFT CARD",
+        "card_network": "VISA",
+        "is_fraud_simulation": True,
+        "risk_score": 91,
+    }
+
+    with patch("services.card_network._publish_redis_event", side_effect=lambda event_type, item: published_events.append((event_type, item))):
+        result = process_authorization(db_session, payload)
+
+    assert result["action_code"] == "00"
+    assert result["status"] == "FLAGGED"
+    assert result["fraud_risk_score"] == 91
+    assert result["fraud_reason_codes"] == ["EXPLICIT_SIMULATION_OVERRIDE"]
+    assert result["fraud_model_version"] == "local-deterministic-v1"
+    assert result["fraud_decision"]["decision"] == "FLAGGED"
+    assert result["fraud_decision"]["features"]["amount_cents"] == 95000
+
+    auth = db_session.query(TransactionAuthorization).filter_by(retrieval_reference_number="777777777777").first()
+    assert auth is not None
+    assert auth.status == "FLAGGED"
+    assert auth.fraud_risk_score == 91
+
+    assert len(published_events) == 1
+    event_type, event_payload = published_events[0]
+    assert event_type == "AUTH"
+    assert event_payload["status"] == "FLAGGED (RISK 91)"
+    assert event_payload["fraud_reason_codes"] == ["EXPLICIT_SIMULATION_OVERRIDE"]
+    assert event_payload["fraud_model_version"] == "local-deterministic-v1"
 
 @pytest.mark.asyncio
 async def test_card_network_authorize_success(async_client, db_session):

@@ -166,8 +166,9 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
 
         # 5. Evaluate Fraud Risk
         fraud_service = FraudScoringService()
-        risk_score = fraud_service.evaluate_transaction_risk(payload)
-        auth_status = "FLAGGED" if risk_score > 20 else "PENDING"
+        fraud_decision = fraud_service.evaluate_authorization(payload)
+        risk_score = fraud_decision.score
+        auth_status = "FLAGGED" if fraud_decision.is_flagged else "PENDING"
 
         # 6. Approve Hold
         auth_code = f"{random.randint(100000, 999999)}"
@@ -206,8 +207,10 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
             "merchant_name": merchant_name,
             "amount_cents": amount_cents,
             "status": f"FLAGGED (RISK {risk_score})" if auth_status == "FLAGGED" else f"HOLD ({auth_status})",
-            "bq_view": "analytics_curated.international_fraud_anomalies" if risk_score > 20 else "analytics_curated.realtime_spend_velocity",
-            "raw_time": now.timestamp()
+            "fraud_reason_codes": fraud_decision.reason_codes,
+            "fraud_model_version": fraud_decision.model_version,
+            "bq_view": "analytics_curated.international_fraud_anomalies" if fraud_decision.is_flagged else "analytics_curated.realtime_spend_velocity",
+            "raw_time": now.timestamp(),
         })
 
         return {
@@ -215,7 +218,10 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
             "auth_code": auth_code,
             "status": auth_status,
             "fraud_risk_score": risk_score,
-            "decline_reason": "NONE"
+            "fraud_decision": fraud_decision.to_dict(),
+            "fraud_reason_codes": fraud_decision.reason_codes,
+            "fraud_model_version": fraud_decision.model_version,
+            "decline_reason": "NONE",
         }
     except Exception as e:
         db.rollback()
