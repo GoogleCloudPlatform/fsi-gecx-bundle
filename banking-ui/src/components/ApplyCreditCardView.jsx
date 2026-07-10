@@ -68,7 +68,9 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
   const prefill = location.state?.prefill;
   const { brandColorFrom, brandColorTo, bankName } = useSettings();
   const projectId = window.firebaseConfig?.projectId;
-  const appId = (window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME || '').split('/apps/')?.[1]?.split('/')?.[0] || '';
+  const cxParts = (window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME || '').split('/');
+  const cxProjectId = cxParts.includes('projects') ? cxParts[cxParts.indexOf('projects') + 1] : '';
+  const appId = cxParts.includes('apps') ? cxParts[cxParts.indexOf('apps') + 1] : '';
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   // Get initial card parameter
@@ -559,7 +561,7 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
                 </a>
                 {appId && (
                   <a
-                    href={`https://ces.cloud.google.com/projects/${projectId}/locations/us/apps/${appId}`}
+                    href={`https://ces.cloud.google.com/projects/${cxProjectId || projectId}/locations/us/apps/${appId}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs hover:underline"

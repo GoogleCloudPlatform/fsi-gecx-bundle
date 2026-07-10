@@ -104,7 +104,9 @@ function applyWalletProvisioningEvent(cards, event) {
 
 export default function VoiceSupportView() {
   const projectId = window.firebaseConfig?.projectId;
-  const appId = (window.env?.CX_AGENT_STUDIO_VOICE_AGENT_DEPLOYMENT_NAME || '').split('/apps/')?.[1]?.split('/')?.[0] || '';
+  const voiceParts = (window.env?.CX_AGENT_STUDIO_VOICE_AGENT_DEPLOYMENT_NAME || '').split('/');
+  const cxProjectId = voiceParts.includes('projects') ? voiceParts[voiceParts.indexOf('projects') + 1] : '';
+  const appId = voiceParts.includes('apps') ? voiceParts[voiceParts.indexOf('apps') + 1] : '';
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [account, setAccount] = useState(null);
   const [cardStatus, setCardStatus] = useState('ACTIVE');
@@ -1371,7 +1373,7 @@ export default function VoiceSupportView() {
                     </a>
                     {appId && (
                       <a
-                        href={`https://ces.cloud.google.com/projects/${projectId}/locations/us/apps/${appId}`}
+                        href={`https://ces.cloud.google.com/projects/${cxProjectId || projectId}/locations/us/apps/${appId}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs hover:underline"
