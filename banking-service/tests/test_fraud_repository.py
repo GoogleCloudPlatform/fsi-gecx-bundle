@@ -1,4 +1,5 @@
 import datetime
+import uuid
 
 import pytest
 from sqlalchemy import create_engine
@@ -9,7 +10,7 @@ import models.credit_card  # noqa: F401
 import models.fraud  # noqa: F401
 import models.identity  # noqa: F401
 from models.credit_card import Base
-from repositories.fraud import FraudAlertRepository
+from repositories.fraud import FraudAlertRepository, FraudDecisionRepository
 
 
 DATABASE_URL = "sqlite:///:memory:"
@@ -119,3 +120,51 @@ def test_complete_case_action_records_result_and_completion_time(db_session, fra
     assert completed.status == "SUCCEEDED"
     assert completed.result_payload == {"credit_cents": 25000}
     assert completed.completed_at is not None
+
+
+def test_record_model_decision_is_idempotent_for_authorization(db_session):
+    repo = FraudDecisionRepository(db_session)
+    authorization_id = uuid.uuid4()
+    customer_id = uuid.uuid4()
+    account_id = uuid.uuid4()
+    card_id = uuid.uuid4()
+    feature_snapshot = {
+        "merchant_name": "RAZER GOLD GIFT CARD",
+        "merchant_category_code": "5947",
+        "transaction_channel": "ECOMMERCE",
+        "merchant_country_code": "USA",
+        "merchant_city": "San Francisco",
+        "merchant_region": "CA",
+        "recent_auth_count_10m": 3,
+    }
+
+    first = repo.record_model_decision(
+        authorization_id=authorization_id,
+        customer_id=customer_id,
+        credit_account_id=account_id,
+        card_id=card_id,
+        score=91,
+        threshold=20,
+        decision="FLAGGED",
+        reason_codes=["GIFT_CARD_OR_DIGITAL_GOODS"],
+        feature_snapshot=feature_snapshot,
+        model_version="local-deterministic-v1",
+    )
+    second = repo.record_model_decision(
+        authorization_id=authorization_id,
+        customer_id=customer_id,
+        credit_account_id=account_id,
+        card_id=card_id,
+        score=3,
+        threshold=20,
+        decision="APPROVED",
+        reason_codes=["BASELINE_LOW_RISK"],
+        feature_snapshot={},
+        model_version="local-deterministic-v1",
+    )
+
+    assert second.id == first.id
+    assert second.score == 91
+    assert second.reason_codes == ["GIFT_CARD_OR_DIGITAL_GOODS"]
+    assert second.feature_snapshot["recent_auth_count_10m"] == 3
+    assert second.transaction_channel == "ECOMMERCE"

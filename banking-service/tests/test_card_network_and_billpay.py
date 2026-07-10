@@ -30,6 +30,7 @@ from models.identity import User
 from models.origination import Account
 from models.credit_card import CreditAccount, IssuedCard, TransactionAuthorization, PostedTransaction
 from models.audit import AuditOutbox
+from models.fraud import FraudModelDecision
 from services.card_network import process_authorization
 from services.credit_card import queue_wallet_provisioning
 
@@ -202,6 +203,18 @@ def test_process_authorization_publishes_structured_fraud_decision(db_session):
     assert auth.merchant_country_code == "USA"
     assert auth.merchant_city == "San Francisco"
     assert auth.is_digital_goods is True
+
+    decision_record = db_session.query(FraudModelDecision).filter_by(authorization_id=auth.id).first()
+    assert decision_record is not None
+    assert decision_record.score == 91
+    assert decision_record.decision == "FLAGGED"
+    assert decision_record.reason_codes == ["EXPLICIT_SIMULATION_OVERRIDE"]
+    assert decision_record.feature_snapshot["recent_auth_count_10m"] == 1
+    assert decision_record.transaction_channel == "ECOMMERCE"
+
+    audit_event = db_session.query(AuditOutbox).filter_by(event_type="FRAUD_MODEL_DECISION_RECORDED").first()
+    assert audit_event is not None
+    assert str(auth.id) in audit_event.payload
 
     assert len(published_events) == 1
     event_type, event_payload = published_events[0]

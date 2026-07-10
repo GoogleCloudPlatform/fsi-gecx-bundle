@@ -20,9 +20,11 @@ from sqlalchemy.orm import Session
 
 from models.credit_card import CreditAccount, TransactionAuthorization, PostedTransaction
 from repositories.credit_card import CreditCardRepository
+from repositories.fraud import FraudDecisionRepository
 from services.fraud_scoring import FraudScoringService
 from services.merchant_service import MerchantEnrichmentService
 import json
+from utils.audit import record_audit_event
 from utils.database import enable_session_rbac_override
 
 logger = logging.getLogger(__name__)
@@ -297,6 +299,35 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
         )
         db.add(auth_hold)
         db.flush()
+
+        decision_record = FraudDecisionRepository(db).record_model_decision(
+            authorization_id=auth_hold.id,
+            customer_id=account.customer_id,
+            credit_account_id=account.id,
+            card_id=card.id,
+            score=fraud_decision.score,
+            threshold=fraud_decision.threshold,
+            decision=fraud_decision.decision,
+            reason_codes=fraud_decision.reason_codes,
+            feature_snapshot=fraud_decision.features,
+            model_version=fraud_decision.model_version,
+        )
+        record_audit_event(
+            db,
+            "FRAUD_MODEL_DECISION_RECORDED",
+            {
+                "decision_id": str(decision_record.id),
+                "authorization_id": str(auth_hold.id),
+                "customer_id": str(account.customer_id),
+                "credit_account_id": str(account.id),
+                "card_id": str(card.id),
+                "score": fraud_decision.score,
+                "threshold": fraud_decision.threshold,
+                "decision": fraud_decision.decision,
+                "reason_codes": fraud_decision.reason_codes,
+                "model_version": fraud_decision.model_version,
+            },
+        )
         
         # Recalculate credit balances
         recalculate_available_credit(db, account)
