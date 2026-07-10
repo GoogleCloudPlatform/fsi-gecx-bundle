@@ -21,7 +21,7 @@ WITH enriched_authorizations AS (
     user.email,
     address.city,
     address.state,
-    IF(REGEXP_CONTAINS(UPPER(auth.merchant_name), r'\\[MEX\\]'), 'MEX', 'USA') AS destination_country_code,
+    IF(REGEXP_CONTAINS(UPPER(auth.merchant_name), r'\[MEX\]'), 'MEX', 'USA') AS destination_country_code,
     0 AS merchant_risk_score,
     CASE
       WHEN auth.merchant_category_code IN ('4511') THEN 'TRAVEL'
