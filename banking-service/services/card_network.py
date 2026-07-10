@@ -247,15 +247,26 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
                 "decline_reason": "INSUFFICIENT_FUNDS"
             }
 
+        now = payload.get("created_at") or datetime.datetime.now(datetime.timezone.utc)
+
         # 5. Evaluate Fraud Risk
+        recent_authorizations = repo.list_recent_authorizations(
+            str(account.id),
+            since=now - datetime.timedelta(hours=24),
+            limit=100,
+        )
         fraud_service = FraudScoringService()
-        fraud_decision = fraud_service.evaluate_authorization(payload, context=auth_context)
+        fraud_decision = fraud_service.evaluate_authorization(
+            {**payload, "created_at": now},
+            context=auth_context,
+            recent_authorizations=recent_authorizations,
+            account=account,
+        )
         risk_score = fraud_decision.score
         auth_status = "FLAGGED" if fraud_decision.is_flagged else "PENDING"
 
         # 6. Approve Hold
         auth_code = f"{random.randint(100000, 999999)}"
-        now = payload.get("created_at") or datetime.datetime.now(datetime.timezone.utc)
         
         auth_hold = TransactionAuthorization(
             card_id=card.id,

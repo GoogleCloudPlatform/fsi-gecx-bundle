@@ -1,5 +1,7 @@
 import logging
 import os
+import datetime
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -7,6 +9,44 @@ logger = logging.getLogger(__name__)
 
 FRAUD_SCORER_VERSION = "local-deterministic-v1"
 DEFAULT_FRAUD_FLAG_THRESHOLD = int(os.getenv("FRAUD_FLAG_THRESHOLD", "20"))
+DESCRIPTOR_FLAG_KEYWORDS = {
+    "ONLINE": "ONLINE",
+    ".COM": "ONLINE",
+    "MKTPLACE": "MARKETPLACE",
+    "GIFT": "GIFT_CARD",
+    "RAZER": "GAMING",
+    "GAME": "GAMING",
+    "BEST BUY": "ELECTRONICS",
+    "APPLE": "ELECTRONICS",
+    "CRYPTO": "CRYPTO_LIKE",
+}
+
+
+def _coerce_datetime(value: Any) -> datetime.datetime | None:
+    if isinstance(value, datetime.datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=datetime.timezone.utc)
+        return value.astimezone(datetime.timezone.utc)
+    return None
+
+
+def _coerce_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius_miles = 3958.8
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    a = math.sin(delta_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+    return radius_miles * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
 @dataclass(frozen=True)
@@ -37,10 +77,116 @@ class FraudScoringService:
     def __init__(self, flag_threshold: int = DEFAULT_FRAUD_FLAG_THRESHOLD):
         self.flag_threshold = flag_threshold
 
+    def extract_authorization_features(
+        self,
+        payload: dict[str, Any],
+        context: dict[str, Any] | None = None,
+        recent_authorizations: list[Any] | None = None,
+        account: Any | None = None,
+    ) -> dict[str, Any]:
+        context = context or {}
+        recent_authorizations = recent_authorizations or []
+        amount_cents = int(payload.get("amount_cents") or 0)
+        mcc = str(payload.get("merchant_category_code") or "0000")
+        merchant_name = str(payload.get("merchant_name") or "Unknown Merchant")
+        now = _coerce_datetime(payload.get("created_at")) or datetime.datetime.now(datetime.timezone.utc)
+        descriptor = merchant_name.upper()
+        descriptor_flags = sorted(
+            {flag for keyword, flag in DESCRIPTOR_FLAG_KEYWORDS.items() if keyword in descriptor}
+            | set(context.get("merchant_high_risk_flags") or [])
+        )
+
+        merchant_country = (context.get("merchant_country_code") or payload.get("merchant_country_code") or "USA")
+        merchant_country = str(merchant_country).upper()
+        merchant_latitude = _coerce_float(context.get("merchant_latitude"))
+        merchant_longitude = _coerce_float(context.get("merchant_longitude"))
+
+        recent_10m = []
+        recent_1h = []
+        recent_24h = []
+        recent_amounts = []
+        same_mcc_1h = 0
+        recent_flagged_24h = 0
+        last_card_present_location = None
+
+        for auth in recent_authorizations:
+            created_at = _coerce_datetime(getattr(auth, "created_at", None))
+            if created_at is None:
+                continue
+            age_minutes = (now - created_at).total_seconds() / 60
+            if age_minutes < 0:
+                continue
+            if age_minutes <= 24 * 60:
+                recent_24h.append(auth)
+                if getattr(auth, "status", None) == "FLAGGED":
+                    recent_flagged_24h += 1
+            if age_minutes <= 60:
+                recent_1h.append(auth)
+                if str(getattr(auth, "merchant_category_code", "")) == mcc:
+                    same_mcc_1h += 1
+            if age_minutes <= 10:
+                recent_10m.append(auth)
+            if age_minutes <= 24 * 60:
+                recent_amounts.append(int(getattr(auth, "transaction_amount_cents", 0) or 0))
+            if last_card_present_location is None and getattr(auth, "transaction_channel", None) in {"CARD_PRESENT", "WALLET"}:
+                lat = _coerce_float(getattr(auth, "merchant_latitude", None))
+                lon = _coerce_float(getattr(auth, "merchant_longitude", None))
+                if lat is not None and lon is not None:
+                    last_card_present_location = (lat, lon, created_at)
+
+        recent_average = sum(recent_amounts) / len(recent_amounts) if recent_amounts else 0
+        amount_to_recent_average_ratio = round(amount_cents / recent_average, 2) if recent_average else None
+        distance_from_recent = None
+        minutes_since_last_location = None
+        if merchant_latitude is not None and merchant_longitude is not None and last_card_present_location:
+            last_lat, last_lon, last_seen = last_card_present_location
+            distance_from_recent = round(_haversine_miles(last_lat, last_lon, merchant_latitude, merchant_longitude), 1)
+            minutes_since_last_location = round((now - last_seen).total_seconds() / 60, 1)
+
+        credit_limit = int(getattr(account, "credit_limit_cents", 0) or 0) if account is not None else 0
+        available_credit = int(getattr(account, "available_credit_cents", 0) or 0) if account is not None else 0
+        available_credit_ratio = round(available_credit / credit_limit, 4) if credit_limit else None
+        credit_utilization_after_auth = None
+        if credit_limit:
+            credit_utilization_after_auth = round((credit_limit - max(0, available_credit - amount_cents)) / credit_limit, 4)
+
+        features = {
+            "amount_cents": amount_cents,
+            "merchant_category_code": mcc,
+            "merchant_name": merchant_name,
+            "transaction_channel": context.get("transaction_channel") or payload.get("transaction_channel") or "CARD_PRESENT",
+            "entry_mode": context.get("entry_mode") or payload.get("entry_mode") or "CHIP",
+            "merchant_country_code": merchant_country,
+            "merchant_city": context.get("merchant_city") or payload.get("merchant_city"),
+            "merchant_region": context.get("merchant_region") or payload.get("merchant_region"),
+            "merchant_postal_code": context.get("merchant_postal_code") or payload.get("merchant_postal_code"),
+            "merchant_latitude": merchant_latitude,
+            "merchant_longitude": merchant_longitude,
+            "ip_country_code": context.get("ip_country_code") or payload.get("ip_country_code"),
+            "shipping_country_code": context.get("shipping_country_code") or payload.get("shipping_country_code"),
+            "is_digital_goods": bool(context.get("is_digital_goods", payload.get("is_digital_goods", False))),
+            "descriptor_flags": descriptor_flags,
+            "is_international_like": merchant_country != "USA",
+            "distance_from_recent_card_present_location": distance_from_recent,
+            "minutes_since_last_card_present_location": minutes_since_last_location,
+            "recent_auth_count_10m": len(recent_10m),
+            "recent_auth_count_1h": len(recent_1h),
+            "recent_flagged_count_24h": recent_flagged_24h,
+            "amount_to_recent_average_ratio": amount_to_recent_average_ratio,
+            "same_mcc_count_1h": same_mcc_1h,
+            "credit_utilization_after_auth": credit_utilization_after_auth,
+            "available_credit_ratio": available_credit_ratio,
+            "has_explicit_simulation_flag": bool(payload.get("is_fraud_simulation")),
+            "has_risk_score_override": "risk_score" in payload and payload.get("risk_score") is not None,
+        }
+        return features
+
     def evaluate_authorization(
         self,
         payload: dict[str, Any],
         context: dict[str, Any] | None = None,
+        recent_authorizations: list[Any] | None = None,
+        account: Any | None = None,
     ) -> FraudDecision:
         """
         Evaluate the risk of a card authorization and return an explainable decision.
@@ -48,15 +194,12 @@ class FraudScoringService:
         This first contract slice intentionally keeps scoring simple and deterministic
         while creating the shape later feature extraction and model serving will use.
         """
-        context = context or {}
-        features = {
-            "amount_cents": int(payload.get("amount_cents") or 0),
-            "merchant_category_code": str(payload.get("merchant_category_code") or "0000"),
-            "merchant_name": str(payload.get("merchant_name") or "Unknown Merchant"),
-            "has_explicit_simulation_flag": bool(payload.get("is_fraud_simulation")),
-            "has_risk_score_override": "risk_score" in payload and payload.get("risk_score") is not None,
-            **context,
-        }
+        features = self.extract_authorization_features(
+            payload,
+            context=context,
+            recent_authorizations=recent_authorizations,
+            account=account,
+        )
 
         reason_codes: list[str] = []
         if features["has_explicit_simulation_flag"] or features["has_risk_score_override"]:

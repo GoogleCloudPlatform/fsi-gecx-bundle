@@ -14,6 +14,7 @@
 
 import pytest
 import uuid
+import datetime
 from unittest.mock import patch
 from fastapi import status
 from httpx import AsyncClient, ASGITransport
@@ -124,6 +125,32 @@ def setup_test_cardholder_suite(db):
 def test_process_authorization_publishes_structured_fraud_decision(db_session):
     user, checking, credit_acc, card = setup_test_cardholder_suite(db_session)
     published_events = []
+    now = datetime.datetime(2026, 7, 10, 12, 0, tzinfo=datetime.timezone.utc)
+    prior_auth = TransactionAuthorization(
+        card_id=card.id,
+        account_id=credit_acc.id,
+        transaction_amount_cents=1000,
+        billing_amount_cents=1000,
+        status="PENDING",
+        decline_reason="NONE",
+        auth_code="111111",
+        retrieval_reference_number="777777777776",
+        card_network="VISA",
+        merchant_category_code="5947",
+        merchant_name="GAME TEST TOKEN ONLINE",
+        transaction_channel="ECOMMERCE",
+        entry_mode="ECOMMERCE",
+        merchant_country_code="USA",
+        merchant_city="San Francisco",
+        merchant_region="CA",
+        merchant_latitude=37.7749,
+        merchant_longitude=-122.4194,
+        fraud_risk_score=3,
+        created_at=now - datetime.timedelta(minutes=5),
+        expires_at=now + datetime.timedelta(days=7),
+    )
+    db_session.add(prior_auth)
+    db_session.commit()
     payload = {
         "card_token": "tok_visa_swipe_tester",
         "amount_cents": 95000,
@@ -145,6 +172,7 @@ def test_process_authorization_publishes_structured_fraud_decision(db_session):
         "merchant_high_risk_flags": ["DIGITAL_GOODS", "GIFT_CARD"],
         "is_fraud_simulation": True,
         "risk_score": 91,
+        "created_at": now,
     }
 
     with patch("services.card_network._publish_redis_event", side_effect=lambda event_type, item: published_events.append((event_type, item))):
@@ -162,6 +190,8 @@ def test_process_authorization_publishes_structured_fraud_decision(db_session):
     assert result["fraud_decision"]["features"]["transaction_channel"] == "ECOMMERCE"
     assert result["fraud_decision"]["features"]["merchant_city"] == "San Francisco"
     assert result["fraud_decision"]["features"]["is_digital_goods"] is True
+    assert result["fraud_decision"]["features"]["recent_auth_count_10m"] == 1
+    assert result["fraud_decision"]["features"]["amount_to_recent_average_ratio"] == 95.0
 
     auth = db_session.query(TransactionAuthorization).filter_by(retrieval_reference_number="777777777777").first()
     assert auth is not None
@@ -181,6 +211,7 @@ def test_process_authorization_publishes_structured_fraud_decision(db_session):
     assert event_payload["fraud_model_version"] == "local-deterministic-v1"
     assert event_payload["transaction_channel"] == "ECOMMERCE"
     assert event_payload["merchant_country_code"] == "USA"
+    assert event_payload["fraud_features"]["recent_auth_count_10m"] == 1
 
 @pytest.mark.asyncio
 async def test_card_network_authorize_success(async_client, db_session):
