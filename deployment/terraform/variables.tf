@@ -329,3 +329,10 @@ variable "stable_env_url" {
   description = "URL of the stable environment to show in the test environment banner (leave empty to disable the banner)"
   default     = null
 }
+
+variable "feedback_url" {
+  type        = string
+  description = "URL for the buganizer feedback link to show on the stable environment banner (leave empty to disable)"
+  default     = null
+}
+

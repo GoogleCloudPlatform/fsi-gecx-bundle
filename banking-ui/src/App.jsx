@@ -980,6 +980,7 @@ function AppContent() {
   const creditAccs = accountsSummary?.credit_accounts || [];
 
   const stableEnvUrl = window.env?.STABLE_ENV_URL;
+  const feedbackUrl = window.env?.FEEDBACK_URL;
   const showStableBanner = stableEnvUrl && (() => {
     try {
       const stableHost = new URL(stableEnvUrl.startsWith('http') ? stableEnvUrl : `http://${stableEnvUrl}`).hostname;
@@ -988,11 +989,12 @@ function AppContent() {
       return stableEnvUrl !== window.location.hostname;
     }
   })();
+  const isStableEnv = stableEnvUrl && !showStableBanner && feedbackUrl;
 
   return (
     <div 
       className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-[Outfit] antialiased overflow-x-hidden"
-      style={{ paddingTop: showStableBanner ? '36px' : '0px' }}
+      style={{ paddingTop: (showStableBanner || isStableEnv) ? '36px' : '0px' }}
     >
       {showStableBanner && (
         <div className="fixed top-0 left-0 right-0 h-9 z-50 bg-amber-500/10 dark:bg-amber-500/5 border-b border-amber-500/20 text-amber-800 dark:text-amber-300 text-xs flex items-center justify-center font-medium gap-1.5 px-4 backdrop-blur-md">
@@ -1004,10 +1006,20 @@ function AppContent() {
           </a>
         </div>
       )}
+      {isStableEnv && (
+        <div className="fixed top-0 left-0 right-0 h-9 z-50 bg-emerald-500/10 dark:bg-emerald-500/5 border-b border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs flex items-center justify-center font-medium gap-1.5 px-4 backdrop-blur-md">
+          <MessageSquare className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span>Please submit feedback or issues to</span>
+          <a href={feedbackUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-emerald-950 dark:hover:text-emerald-100 transition-colors font-semibold flex items-center gap-0.5">
+            Google Buganizer
+            <ExternalLink className="w-3 h-3 inline" />
+          </a>
+        </div>
+      )}
       {/* Navigation */}
       <nav 
         className="fixed left-0 right-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800/50"
-        style={{ top: showStableBanner ? '36px' : '0px' }}
+        style={{ top: (showStableBanner || isStableEnv) ? '36px' : '0px' }}
       >
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between gap-4">
           <div className="flex items-center space-x-8 lg:space-x-12">
