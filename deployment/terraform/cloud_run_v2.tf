@@ -690,6 +690,14 @@ resource "google_cloud_run_v2_service" "data_generator" {
     max_instance_request_concurrency = var.data_generator_max_instance_request_concurrency
     timeout                          = var.data_generator_request_timeout
 
+    vpc_access {
+      network_interfaces {
+        network    = google_compute_network.fsi_gecx_vpc.name
+        subnetwork = google_compute_subnetwork.fsi_gecx_subnet.name
+      }
+      egress = "PRIVATE_RANGES_ONLY"
+    }
+
     containers {
       image = local.data_generator_image_url
 
