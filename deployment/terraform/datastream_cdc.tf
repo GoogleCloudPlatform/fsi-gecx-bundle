@@ -134,6 +134,12 @@ resource "google_datastream_stream" "banking_cdc_stream" {
             table = "merchant_category_codes"
           }
         }
+        postgresql_schemas {
+          schema = "operations"
+          postgresql_tables {
+            table = "fraud_model_decisions"
+          }
+        }
       }
     }
   }
