@@ -15,6 +15,7 @@ dist-ssr
 # Local configuration variables
 public/config.js
 public/fbConfig.js
+public/fbConfig.*.js
 
 # Editor directories and files
 .vscode/*
