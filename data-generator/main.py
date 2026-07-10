@@ -25,6 +25,7 @@ from fastapi import FastAPI, HTTPException, status, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from scenarios import ScenarioRequest, plan_scenario
 from utils.internal_auth import get_internal_switch_token
 from utils.runtime import get_cors_origins, is_local_dev
 
@@ -1064,6 +1065,15 @@ def health():
         "version": BUILD_VERSION,
         "commit": BUILD_COMMIT_ID,
     }
+
+
+@app.post("/scenarios/plan", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
+def plan_generation_scenario(request: ScenarioRequest):
+    """Returns a validated dry-run scenario plan without writing synthetic data."""
+    plan = plan_scenario(request)
+    logger.info("Planned data-generator scenario %s (%s).", plan.scenario_id, plan.scenario_type)
+    return plan
+
 
 @app.post("/generate", status_code=status.HTTP_200_OK)
 @app.post("/simulate-pulse", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
