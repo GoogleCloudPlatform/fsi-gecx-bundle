@@ -154,7 +154,7 @@ resource "google_sql_user" "kyc_service_iam_user" {
 
 locals {
   db_iam_support_members = {
-    for member in concat(local.database_iam_support_users, var.enable_current_user_grants ? [local.current_principal_member] : []) :
+    for member in distinct(concat(local.database_iam_support_users, var.enable_current_user_grants ? [local.current_principal_member] : [])) :
     member => {
       name = split(":", member)[0] == "serviceAccount" ? replace(split(":", member)[1], ".gserviceaccount.com", "") : split(":", member)[1]
       type = split(":", member)[0] == "user" ? "CLOUD_IAM_USER" : (

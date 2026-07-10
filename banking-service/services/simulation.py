@@ -289,6 +289,8 @@ class SimulationService:
                             "merchant_name": desc,
                             "amount_cents": amt,
                             "status": "FLAGGED (FRAUD REVIEW)",
+                            "fraud_risk_score": risk,
+                            "fraud_reason_codes": ["SIMULATED_FRAUD_ANOMALY"],
                             "bq_view": "analytics_curated.international_fraud_anomalies",
                             "raw_time": event_time.timestamp(),
                         })

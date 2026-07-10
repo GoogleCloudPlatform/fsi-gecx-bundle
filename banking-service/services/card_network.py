@@ -366,6 +366,7 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
             "merchant_country_code": auth_context["merchant_country_code"],
             "amount_cents": amount_cents,
             "status": f"FLAGGED (RISK {risk_score})" if auth_status == "FLAGGED" else f"HOLD ({auth_status})",
+            "fraud_risk_score": risk_score,
             "fraud_reason_codes": fraud_decision.reason_codes,
             "fraud_model_version": fraud_decision.model_version,
             "fraud_features": fraud_decision.features,

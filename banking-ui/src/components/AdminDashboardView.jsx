@@ -411,48 +411,47 @@ function AdminDashboardView() {
         </div>
       </form>
 
-      {/* System Debug Tools Panel */}
-      <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">System Debug Tools</h4>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {fullResetAccess.allowed
-              ? 'Wipe the transactional database and re-seed all test accounts with baseline configurations in one click.'
-              : 'Full-environment reset is restricted. Use personal demo reset for presenter recovery.'}
-          </p>
-          <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={purgeAuditLogs}
-              onChange={(e) => setPurgeAuditLogs(e.target.checked)}
-              disabled={isResetting || !fullResetAccess.allowed}
-              className="rounded border-slate-300 dark:border-slate-700 text-rose-600 focus:ring-rose-500"
-            />
-            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Purge BigQuery & PostgreSQL compliance audit logs</span>
-          </label>
-          <label className="flex items-center gap-2 mt-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={purgeDataLake}
-              onChange={(e) => setPurgeDataLake(e.target.checked)}
-              disabled={isResetting || !fullResetAccess.allowed}
-              className="rounded border-slate-300 dark:border-slate-700 text-amber-600 focus:ring-amber-500"
-            />
-            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Purge Apache Iceberg BigLake analytical tables</span>
-          </label>
+      {fullResetAccess.allowed && (
+        <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">System Debug Tools</h4>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Wipe the transactional database and re-seed all test accounts with baseline configurations in one click.
+            </p>
+            <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={purgeAuditLogs}
+                onChange={(e) => setPurgeAuditLogs(e.target.checked)}
+                disabled={isResetting}
+                className="rounded border-slate-300 dark:border-slate-700 text-rose-600 focus:ring-rose-500"
+              />
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Purge BigQuery & PostgreSQL compliance audit logs</span>
+            </label>
+            <label className="flex items-center gap-2 mt-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={purgeDataLake}
+                onChange={(e) => setPurgeDataLake(e.target.checked)}
+                disabled={isResetting}
+                className="rounded border-slate-300 dark:border-slate-700 text-amber-600 focus:ring-amber-500"
+              />
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Purge Apache Iceberg BigLake analytical tables</span>
+            </label>
+          </div>
+          <button
+            onClick={handleResetDatabase}
+            disabled={isResetting}
+            className={`px-5 py-2.5 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap self-start sm:self-auto ${
+              isResetting
+                ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                : 'border-rose-200 dark:border-rose-900/30 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100/50 dark:hover:bg-rose-950/40'
+            }`}
+          >
+            {isResetting ? 'Resetting Database...' : 'Reset Database'}
+          </button>
         </div>
-        <button
-          onClick={handleResetDatabase}
-          disabled={isResetting || !fullResetAccess.allowed}
-          className={`px-5 py-2.5 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap self-start sm:self-auto ${
-            isResetting || !fullResetAccess.allowed
-              ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-              : 'border-rose-200 dark:border-rose-900/30 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100/50 dark:hover:bg-rose-950/40'
-          }`}
-        >
-          {isResetting ? 'Resetting Database...' : 'Reset Database'}
-        </button>
-      </div>
+      )}
 
       {/* Personal Demo Suite Management Panel */}
       <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

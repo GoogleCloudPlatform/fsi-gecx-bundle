@@ -32,6 +32,9 @@ import GoogleCloudIcon from './GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { showInfoModals } from '../utils/constants.js';
 
+const MIN_RISK_CONDITION_SCORED_EVENTS = 5;
+const ELEVATED_AVERAGE_RISK_SCORE = 25;
+
 function formatLatency(ms) {
   if (ms == null) return 'N/A';
   if (ms < 1000) return `${ms} ms`;
@@ -174,6 +177,9 @@ function AdminSimulationView() {
   creditRiskMetrics.averageFlaggedRiskScore = creditRiskMetrics.flaggedCount
     ? Math.round(creditRiskMetrics.flaggedRiskScoreTotal / creditRiskMetrics.flaggedCount)
     : null;
+  const hasSustainedElevatedRisk =
+    creditRiskMetrics.scoredCount >= MIN_RISK_CONDITION_SCORED_EVENTS
+    && creditRiskMetrics.averageRiskScore >= ELEVATED_AVERAGE_RISK_SCORE;
 
   const riskCondition = (() => {
     if (cdcStats.flaggedEventsPerMinute >= 3 || cdcStats.activeAnomalies >= 5) {
@@ -187,7 +193,7 @@ function AdminSimulationView() {
     if (
       cdcStats.flaggedEventsPerMinute > 0
       || cdcStats.activeAnomalies > 0
-      || (creditRiskMetrics.averageRiskScore != null && creditRiskMetrics.averageRiskScore >= 25)
+      || hasSustainedElevatedRisk
     ) {
       return {
         label: 'Elevated',
@@ -828,6 +834,7 @@ function AdminSimulationView() {
               ) : (
                 streamData.map((item, idx) => {
                   const riskScore = parseFraudRiskScore(item);
+                  const isSettlement = String(item.status || '').includes('SETTLE');
                   const fraudReasons = (Array.isArray(item.fraud_reason_codes) ? item.fraud_reason_codes : [])
                     .filter((reason) => !isLowRiskReason(reason));
                   return (
@@ -842,29 +849,33 @@ function AdminSimulationView() {
                         {formatCurrencyFromCents(item.amount_cents)}
                       </td>
                       <td className="p-3.5 whitespace-nowrap">
-                        <div className="flex flex-col gap-1">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit ${
-                            riskScore == null || riskScore < 20
-                              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
-                              : riskScore < 70
-                              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
-                              : 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30'
-                          }`}>
-                            {riskScore == null ? 'Unscored' : `${riskScore < 20 ? 'Low' : riskScore < 70 ? 'Elevated' : 'High'} ${riskScore}`}
-                          </span>
-                          {fraudReasons.length > 0 && (
-                            <div className="flex flex-wrap gap-1 max-w-md">
-                              {fraudReasons.slice(0, 3).map((reason) => (
-                                <span
-                                  key={reason}
-                                  className="inline-flex items-center px-1.5 py-0.5 rounded border border-rose-500/20 bg-rose-500/10 text-[9px] font-bold text-rose-700 dark:text-rose-300"
-                                >
-                                  {formatFraudReason(reason)}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                        {!isSettlement && (
+                          <div className="flex flex-col gap-1">
+                            {riskScore != null && (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit ${
+                                riskScore < 20
+                                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                                  : riskScore < 70
+                                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
+                                  : 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30'
+                              }`}>
+                                {`${riskScore < 20 ? 'Low' : riskScore < 70 ? 'Elevated' : 'High'} ${riskScore}`}
+                              </span>
+                            )}
+                            {fraudReasons.length > 0 && (
+                              <div className="flex flex-wrap gap-1 max-w-md">
+                                {fraudReasons.slice(0, 3).map((reason) => (
+                                  <span
+                                    key={reason}
+                                    className="inline-flex items-center px-1.5 py-0.5 rounded border border-rose-500/20 bg-rose-500/10 text-[9px] font-bold text-rose-700 dark:text-rose-300"
+                                  >
+                                    {formatFraudReason(reason)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="p-3.5 whitespace-nowrap">
                         <div className="flex flex-col gap-1">

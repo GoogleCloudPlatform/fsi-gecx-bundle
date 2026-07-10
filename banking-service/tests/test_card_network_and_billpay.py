@@ -236,6 +236,7 @@ def test_process_authorization_publishes_structured_fraud_decision(db_session):
     event_type, event_payload = published_events[0]
     assert event_type == "AUTH"
     assert event_payload["status"] == "FLAGGED (RISK 91)"
+    assert event_payload["fraud_risk_score"] == 91
     assert event_payload["fraud_reason_codes"] == ["EXPLICIT_SIMULATION_OVERRIDE"]
     assert event_payload["fraud_model_version"] == "local-deterministic-v1"
     assert event_payload["transaction_channel"] == "ECOMMERCE"

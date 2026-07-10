@@ -49,11 +49,29 @@ def _full_reset_operator_emails() -> set[str]:
     }
 
 
+def _database_iam_support_users() -> tuple[set[str], bool]:
+    emails: set[str] = set()
+    configured = False
+    for member in os.getenv("DATABASE_IAM_SUPPORT_USERS", "").split(","):
+        member = member.strip().lower()
+        if not member:
+            continue
+        configured = True
+        if member.startswith("user:"):
+            emails.add(member.split(":", 1)[1])
+        elif "@" in member and ":" not in member:
+            emails.add(member)
+    return emails, configured
+
+
 def full_reset_access_status(admin) -> dict:
     enabled = _env_flag("FULL_RESET_ENABLED", default=False)
-    operator_emails = _full_reset_operator_emails()
+    full_reset_operator_emails = _full_reset_operator_emails()
+    database_iam_support_user_emails, database_iam_support_users_configured = _database_iam_support_users()
+    operator_emails = full_reset_operator_emails | database_iam_support_user_emails
+    operator_allowlist_configured = bool(full_reset_operator_emails) or database_iam_support_users_configured
     email = (admin.email or "").lower()
-    operator_allowed = not operator_emails or email in operator_emails
+    operator_allowed = not operator_allowlist_configured or email in operator_emails
     allowed = enabled and operator_allowed
     reason = "ALLOWED"
     if not enabled:
@@ -63,7 +81,7 @@ def full_reset_access_status(admin) -> dict:
     return {
         "allowed": allowed,
         "enabled": enabled,
-        "operator_allowlist_configured": bool(operator_emails),
+        "operator_allowlist_configured": operator_allowlist_configured,
         "operator_allowed": operator_allowed,
         "reason": reason,
         "message": (

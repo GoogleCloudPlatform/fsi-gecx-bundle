@@ -211,6 +211,16 @@ resource "google_cloud_run_v2_service" "banking_service" {
       }
 
       env {
+        name  = "FULL_RESET_ENABLED"
+        value = tostring(var.full_reset_enabled)
+      }
+
+      env {
+        name  = "DATABASE_IAM_SUPPORT_USERS"
+        value = join(",", local.database_iam_support_users)
+      }
+
+      env {
         name  = "CORS_ALLOWED_ORIGINS"
         value = local.cors_allowed_origins
       }

@@ -336,6 +336,12 @@ variable "seed_mock_user_count" {
   default     = 200
 }
 
+variable "full_reset_enabled" {
+  type        = bool
+  description = "Whether database IAM support users can run the full database reset from the admin GUI."
+  default     = false
+}
+
 variable "additional_cors_allowed_origins" {
   type        = list(string)
   description = "Additional allowed browser origins for Cloud Run CORS configuration."

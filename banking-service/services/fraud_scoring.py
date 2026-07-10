@@ -12,6 +12,7 @@ DEFAULT_FRAUD_FLAG_THRESHOLD = int(os.getenv("FRAUD_FLAG_THRESHOLD", "20"))
 DEFAULT_FRAUD_ALERT_THRESHOLD = int(os.getenv("FRAUD_ALERT_THRESHOLD", "70"))
 FRAUD_MODEL_ALERTS_ENABLED = os.getenv("FRAUD_MODEL_ALERTS_ENABLED", "true").lower() in {"1", "true", "yes"}
 HIGH_RISK_MCCS = {"5947", "5967", "6051", "6211", "7995"}
+DOMESTIC_COUNTRY_CODES = {"USA", "US", "PRI", "PR", "VIR", "GU", "GUM", "ASM", "MNP"}
 DESCRIPTOR_FLAG_KEYWORDS = {
     "ONLINE": "ONLINE",
     ".COM": "ONLINE",
@@ -50,6 +51,10 @@ def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> floa
     delta_lambda = math.radians(lon2 - lon1)
     a = math.sin(delta_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
     return radius_miles * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _is_domestic_country(country_code: str | None) -> bool:
+    return str(country_code or "USA").upper() in DOMESTIC_COUNTRY_CODES
 
 
 @dataclass(frozen=True)
@@ -176,7 +181,7 @@ class FraudScoringService:
             "shipping_country_code": context.get("shipping_country_code") or payload.get("shipping_country_code"),
             "is_digital_goods": bool(context.get("is_digital_goods", payload.get("is_digital_goods", False))),
             "descriptor_flags": descriptor_flags,
-            "is_international_like": merchant_country != "USA",
+            "is_international_like": not _is_domestic_country(merchant_country),
             "distance_from_recent_card_present_location": distance_from_recent,
             "minutes_since_last_card_present_location": minutes_since_last_location,
             "recent_auth_count_10m": len(recent_10m),
@@ -238,7 +243,7 @@ class FraudScoringService:
             score += 30
             reason_codes.append("IMPOSSIBLE_TRAVEL")
 
-        if merchant_country != "USA":
+        if not _is_domestic_country(merchant_country):
             score += 10
             reason_codes.append("INTERNATIONAL_ANOMALY")
             if channel in {"CARD_PRESENT", "WALLET"}:

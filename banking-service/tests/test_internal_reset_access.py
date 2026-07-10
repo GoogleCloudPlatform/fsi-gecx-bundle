@@ -17,6 +17,8 @@ def _override_user(email: str):
 
 def test_full_reset_access_defaults_to_disabled(monkeypatch):
     monkeypatch.delenv("FULL_RESET_ENABLED", raising=False)
+    monkeypatch.delenv("FULL_RESET_OPERATOR_EMAILS", raising=False)
+    monkeypatch.delenv("DATABASE_IAM_SUPPORT_USERS", raising=False)
     app.dependency_overrides[get_current_user] = _override_user("admin@google.com")
     try:
         access = client.get("/internal/debug/reset-db/access")
@@ -34,6 +36,7 @@ def test_full_reset_access_defaults_to_disabled(monkeypatch):
 def test_full_reset_access_respects_operator_allowlist(monkeypatch):
     monkeypatch.setenv("FULL_RESET_ENABLED", "true")
     monkeypatch.setenv("FULL_RESET_OPERATOR_EMAILS", "owner@example.com,reset-admin@google.com")
+    monkeypatch.delenv("DATABASE_IAM_SUPPORT_USERS", raising=False)
     app.dependency_overrides[get_current_user] = _override_user("reset-admin@google.com")
     try:
         response = client.get("/internal/debug/reset-db/access")
@@ -50,7 +53,43 @@ def test_full_reset_access_respects_operator_allowlist(monkeypatch):
 def test_full_reset_access_blocks_non_allowlisted_operator(monkeypatch):
     monkeypatch.setenv("FULL_RESET_ENABLED", "true")
     monkeypatch.setenv("FULL_RESET_OPERATOR_EMAILS", "owner@example.com")
+    monkeypatch.delenv("DATABASE_IAM_SUPPORT_USERS", raising=False)
     app.dependency_overrides[get_current_user] = _override_user("admin@google.com")
+    try:
+        response = client.get("/internal/debug/reset-db/access")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == 200
+    assert response.json()["allowed"] is False
+    assert response.json()["reason"] == "OPERATOR_NOT_ALLOWLISTED"
+
+
+def test_full_reset_access_respects_database_iam_support_users(monkeypatch):
+    monkeypatch.setenv("FULL_RESET_ENABLED", "true")
+    monkeypatch.delenv("FULL_RESET_OPERATOR_EMAILS", raising=False)
+    monkeypatch.setenv(
+        "DATABASE_IAM_SUPPORT_USERS",
+        "group:fsi-nova-horizon-dba-external@google.com,user:reset-admin@google.com",
+    )
+    app.dependency_overrides[get_current_user] = _override_user("reset-admin@google.com")
+    try:
+        response = client.get("/internal/debug/reset-db/access")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["allowed"] is True
+    assert data["operator_allowlist_configured"] is True
+    assert data["reason"] == "ALLOWED"
+
+
+def test_full_reset_access_does_not_treat_group_principal_as_membership_claim(monkeypatch):
+    monkeypatch.setenv("FULL_RESET_ENABLED", "true")
+    monkeypatch.delenv("FULL_RESET_OPERATOR_EMAILS", raising=False)
+    monkeypatch.setenv("DATABASE_IAM_SUPPORT_USERS", "group:fsi-nova-horizon-dba-external@google.com")
+    app.dependency_overrides[get_current_user] = _override_user("reset-admin@google.com")
     try:
         response = client.get("/internal/debug/reset-db/access")
     finally:

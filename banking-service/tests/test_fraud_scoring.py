@@ -150,6 +150,20 @@ def test_local_scoring_keeps_normal_card_present_swipes_low_risk():
     assert decision.reason_codes == ["BASELINE_LOW_RISK"]
 
 
+def test_local_scoring_treats_puerto_rico_as_domestic():
+    service = FraudScoringService()
+
+    decision = service.evaluate_authorization(
+        {"amount_cents": 4200, "merchant_category_code": "5411", "merchant_name": "SUPERMAX SAN JUAN [PRI]"},
+        context={"transaction_channel": "CARD_PRESENT", "merchant_country_code": "PRI"},
+    )
+
+    assert decision.score == 3
+    assert decision.decision == "APPROVED"
+    assert decision.reason_codes == ["BASELINE_LOW_RISK"]
+    assert decision.features["is_international_like"] is False
+
+
 def test_local_scoring_flags_high_value_online_gift_card_pattern():
     service = FraudScoringService()
 
