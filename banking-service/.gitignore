@@ -3,5 +3,6 @@ __pycache__/
 *$py.class
 .venv/
 *.db
+.sqlite/
 .env
 .DS_Store
