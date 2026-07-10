@@ -19,8 +19,10 @@ from typing import Dict, Any
 from sqlalchemy.orm import Session
 
 from models.credit_card import CreditAccount, TransactionAuthorization, PostedTransaction
+from models.identity import User
 from repositories.credit_card import CreditCardRepository
 from repositories.fraud import FraudDecisionRepository
+from services.fraud_alerts import FraudAlertService
 from services.fraud_scoring import FraudScoringService
 from services.merchant_service import MerchantEnrichmentService
 import json
@@ -328,6 +330,22 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
                 "model_version": fraud_decision.model_version,
             },
         )
+        if (
+            fraud_service.alerts_enabled
+            and fraud_decision.is_flagged
+            and fraud_decision.score >= fraud_service.alert_threshold
+        ):
+            customer = db.query(User).filter(User.id == account.customer_id).first()
+            if customer:
+                FraudAlertService(db).create_or_update_alert_from_model_decision(
+                    customer=customer,
+                    card=card,
+                    credit_account=account,
+                    authorization=auth_hold,
+                    decision_record=decision_record,
+                )
+            else:
+                logger.warning("Skipping model fraud alert because customer %s was not found.", account.customer_id)
         
         # Recalculate credit balances
         recalculate_available_credit(db, account)

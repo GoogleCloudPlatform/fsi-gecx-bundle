@@ -26,11 +26,11 @@ from main import app
 from utils.database import Base, get_db
 from utils.auth import get_current_user
 from models.authentication import ValidatedToken
-from models.identity import User
+from models.identity import User, UserSecureMessage
 from models.origination import Account
 from models.credit_card import CreditAccount, IssuedCard, TransactionAuthorization, PostedTransaction
 from models.audit import AuditOutbox
-from models.fraud import FraudModelDecision
+from models.fraud import FraudAlert, FraudModelDecision
 from services.card_network import process_authorization
 from services.credit_card import queue_wallet_provisioning
 
@@ -215,6 +215,22 @@ def test_process_authorization_publishes_structured_fraud_decision(db_session):
     audit_event = db_session.query(AuditOutbox).filter_by(event_type="FRAUD_MODEL_DECISION_RECORDED").first()
     assert audit_event is not None
     assert str(auth.id) in audit_event.payload
+
+    alert = db_session.query(FraudAlert).filter_by(credit_account_id=credit_acc.id).first()
+    assert alert is not None
+    assert alert.source == "MODEL_DETECTED_FRAUD"
+    assert alert.suspicious_authorization_ids == [str(auth.id)]
+    assert alert.suspicious_transactions[0]["fraud_score"] == 91
+    assert alert.suspicious_transactions[0]["reason_codes"] == ["EXPLICIT_SIMULATION_OVERRIDE"]
+
+    secure_message = db_session.query(UserSecureMessage).filter_by(thread_id=alert.message_thread_id).first()
+    assert secure_message is not None
+    assert secure_message.category == "Fraud Alert"
+    assert "RAZER GOLD GIFT CARD" in secure_message.message
+
+    alert_created_event = db_session.query(AuditOutbox).filter_by(event_type="FRAUD_ALERT_CREATED").first()
+    assert alert_created_event is not None
+    assert str(alert.id) in alert_created_event.payload
 
     assert len(published_events) == 1
     event_type, event_payload = published_events[0]

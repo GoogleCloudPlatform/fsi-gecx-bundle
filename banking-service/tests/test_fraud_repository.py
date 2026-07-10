@@ -168,3 +168,28 @@ def test_record_model_decision_is_idempotent_for_authorization(db_session):
     assert second.reason_codes == ["GIFT_CARD_OR_DIGITAL_GOODS"]
     assert second.feature_snapshot["recent_auth_count_10m"] == 3
     assert second.transaction_channel == "ECOMMERCE"
+
+
+def test_append_suspicious_authorization_deduplicates_alert_items(db_session, fraud_alert):
+    repo = FraudAlertRepository(db_session)
+    transaction = {
+        "authorization_id": "auth-3",
+        "merchant_name": "MODEL DETECTED MERCHANT",
+        "amount_cents": 9900,
+        "fraud_score": 82,
+    }
+
+    first = repo.append_suspicious_authorization(
+        fraud_alert_id=fraud_alert.id,
+        authorization_id="auth-3",
+        suspicious_transaction=transaction,
+    )
+    second = repo.append_suspicious_authorization(
+        fraud_alert_id=fraud_alert.id,
+        authorization_id="auth-3",
+        suspicious_transaction=transaction,
+    )
+
+    assert first.id == second.id
+    assert second.suspicious_authorization_ids.count("auth-3") == 1
+    assert len([txn for txn in second.suspicious_transactions if txn.get("authorization_id") == "auth-3"]) == 1

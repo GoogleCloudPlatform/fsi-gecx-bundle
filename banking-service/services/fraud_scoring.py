@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 FRAUD_SCORER_VERSION = "local-deterministic-v1"
 DEFAULT_FRAUD_FLAG_THRESHOLD = int(os.getenv("FRAUD_FLAG_THRESHOLD", "20"))
 DEFAULT_FRAUD_ALERT_THRESHOLD = int(os.getenv("FRAUD_ALERT_THRESHOLD", "70"))
-FRAUD_MODEL_ALERTS_ENABLED = os.getenv("FRAUD_MODEL_ALERTS_ENABLED", "false").lower() in {"1", "true", "yes"}
+FRAUD_MODEL_ALERTS_ENABLED = os.getenv("FRAUD_MODEL_ALERTS_ENABLED", "true").lower() in {"1", "true", "yes"}
 HIGH_RISK_MCCS = {"5947", "5967", "6051", "6211", "7995"}
 DESCRIPTOR_FLAG_KEYWORDS = {
     "ONLINE": "ONLINE",

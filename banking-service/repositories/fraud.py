@@ -69,6 +69,28 @@ class FraudAlertRepository:
             .first()
         )
 
+    def append_suspicious_authorization(
+        self,
+        *,
+        fraud_alert_id,
+        authorization_id: str,
+        suspicious_transaction: dict,
+    ) -> FraudAlert | None:
+        alert = self.db.query(FraudAlert).filter(FraudAlert.id == fraud_alert_id).first()
+        if not alert:
+            return None
+
+        authorization_ids = list(alert.suspicious_authorization_ids or [])
+        transactions = list(alert.suspicious_transactions or [])
+        if authorization_id not in authorization_ids:
+            authorization_ids.append(authorization_id)
+            transactions.append(suspicious_transaction)
+            alert.suspicious_authorization_ids = authorization_ids
+            alert.suspicious_transactions = transactions
+            self.db.add(alert)
+            self.db.flush()
+        return alert
+
     def get_alert_by_id(self, *, fraud_alert_id) -> FraudAlert | None:
         return self.db.query(FraudAlert).filter(FraudAlert.id == fraud_alert_id).first()
 

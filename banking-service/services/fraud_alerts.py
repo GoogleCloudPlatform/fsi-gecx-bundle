@@ -92,6 +92,109 @@ class FraudAlertService:
             "message_id": message.message_id,
         }
 
+    def create_or_update_alert_from_model_decision(
+        self,
+        *,
+        customer,
+        card: IssuedCard,
+        credit_account: CreditAccount,
+        authorization: TransactionAuthorization,
+        decision_record,
+    ) -> dict:
+        auth_provider_uid = customer.auth_provider_uid or str(customer.id)
+        suspicious_transaction = {
+            "authorization_id": str(authorization.id),
+            "merchant_name": authorization.merchant_name,
+            "amount_cents": authorization.transaction_amount_cents,
+            "merchant_category_code": authorization.merchant_category_code,
+            "card_network": authorization.card_network,
+            "created_at": authorization.created_at.isoformat() if authorization.created_at else None,
+            "fraud_score": decision_record.score,
+            "reason_codes": list(decision_record.reason_codes or []),
+            "model_version": decision_record.model_version,
+        }
+
+        existing_alert = self.repo.get_open_alert_for_account(credit_account_id=credit_account.id)
+        if existing_alert:
+            updated_alert = self.repo.append_suspicious_authorization(
+                fraud_alert_id=existing_alert.id,
+                authorization_id=str(authorization.id),
+                suspicious_transaction=suspicious_transaction,
+            )
+            record_audit_event(
+                self.db,
+                "FRAUD_ALERT_UPDATED",
+                {
+                    "fraud_alert_id": str(updated_alert.id),
+                    "correlation_id": str(updated_alert.id),
+                    "customer_id": str(customer.id),
+                    "credit_account_id": str(credit_account.id),
+                    "authorization_id": str(authorization.id),
+                    "source": updated_alert.source,
+                    "score": decision_record.score,
+                    "reason_codes": list(decision_record.reason_codes or []),
+                },
+            )
+            return {
+                "fraud_alert_id": str(updated_alert.id),
+                "thread_id": updated_alert.message_thread_id,
+                "created": False,
+            }
+
+        thread_id = str(uuid.uuid4())
+        alert = self.repo.create_alert(
+            customer_id=customer.id,
+            auth_provider_uid=auth_provider_uid,
+            credit_account_id=credit_account.id,
+            card_id=card.id,
+            card_last_four=card.last_four,
+            message_thread_id=thread_id,
+            suspicious_authorization_ids=[str(authorization.id)],
+            suspicious_transactions=[suspicious_transaction],
+            source="MODEL_DETECTED_FRAUD",
+        )
+        record_audit_event(
+            self.db,
+            "FRAUD_ALERT_CREATED",
+            {
+                "fraud_alert_id": str(alert.id),
+                "correlation_id": str(alert.id),
+                "customer_id": str(customer.id),
+                "credit_account_id": str(credit_account.id),
+                "card_last_four": card.last_four,
+                "authorization_ids": [str(authorization.id)],
+                "source": alert.source,
+                "score": decision_record.score,
+                "reason_codes": list(decision_record.reason_codes or []),
+            },
+        )
+
+        message = self._send_triage_secure_message(
+            auth_provider_uid=auth_provider_uid,
+            alert=alert,
+            message_body=self._build_customer_message(card.last_four, [suspicious_transaction]),
+        )
+        record_audit_event(
+            self.db,
+            "FRAUD_ALERT_CUSTOMER_NOTIFIED",
+            {
+                "fraud_alert_id": str(alert.id),
+                "correlation_id": str(alert.id),
+                "customer_id": str(customer.id),
+                "message_id": message.message_id,
+                "thread_id": message.thread_id,
+                "channel": "SECURE_MESSAGE_AND_PUSH",
+                "source": alert.source,
+            },
+        )
+
+        return {
+            "fraud_alert_id": str(alert.id),
+            "thread_id": message.thread_id,
+            "message_id": message.message_id,
+            "created": True,
+        }
+
     def get_active_voice_context(
         self,
         *,
