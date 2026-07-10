@@ -106,8 +106,8 @@ function HomeView({
           <div className="absolute inset-0 bg-gradient-to-b from-slate-50/50 via-slate-50/80 to-slate-50 dark:from-slate-950/50 dark:via-slate-950/80 dark:to-slate-950"></div>
         </div>
 
-        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
-          <div className="space-y-8">
+        <div className={`max-w-7xl mx-auto grid grid-cols-1 ${fbUser ? 'lg:grid-cols-2' : ''} gap-16 items-start`}>
+          <div className={`space-y-8 ${!fbUser ? 'max-w-4xl mx-auto text-center' : ''}`}>
             {fbUser ? (
               <>
                 <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight">
@@ -190,6 +190,7 @@ function HomeView({
           </div>
 
           {/* Interactive Glassmorphism Dashboard Preview */}
+          {fbUser && (
           <div className="relative block mt-12 lg:mt-0">
             <div className="absolute -inset-4 bg-gradient-to-tr from-emerald-500/20 to-cyan-500/20 rounded-3xl blur-3xl -z-10"></div>
             <div className="relative bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-8 shadow-xl dark:shadow-black/50">
@@ -198,59 +199,6 @@ function HomeView({
                   <div className="w-8 h-8 rounded-full border-2 border-slate-700 border-t-emerald-500 animate-spin"></div>
                   <span className="text-xs font-semibold">Synchronizing secure balances...</span>
                 </div>
-              ) : !fbUser ? (
-                // Guest Preview Mode (Fallback Mock Data)
-                <>
-                  <div className="flex items-start justify-between mb-8">
-                    <div>
-                      <div className="text-sm text-slate-500 dark:text-slate-400">Total Liquid Deposits</div>
-                      <div className="text-4xl font-bold text-slate-900 dark:text-white mt-1">$124,580.45</div>
-                    </div>
-                    {/* Schema trigger button on top right */}
-                    <button 
-                      onClick={() => setIsSchemaModalOpen(true)}
-                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 cursor-pointer flex items-center justify-center shrink-0"
-                      title="View Schema Details"
-                    >
-                      <GoogleCloudIcon className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="space-y-4 mb-8">
-                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.008] will-change-transform hover:shadow-md hover:border-emerald-500/20 cursor-pointer">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-500 dark:text-teal-400">
-                          <Wallet className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <div className="font-medium text-slate-900 dark:text-white">Nova Signature Checking</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">**** 4829</div>
-                        </div>
-                      </div>
-                      <div className="font-semibold text-slate-900 dark:text-white">$14,250.00</div>
-                    </div>
-
-                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-4 border border-slate-200/40 dark:border-slate-800/50 flex items-center justify-between transition-all duration-300 hover:bg-slate-100/50 dark:hover:bg-slate-900/30 hover:scale-[1.008] will-change-transform hover:shadow-md hover:border-emerald-500/20 cursor-pointer">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-500 dark:text-emerald-400">
-                          <Percent className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <div className="font-medium text-slate-900 dark:text-white">High-Yield Growth</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">Active Savings Tier</div>
-                        </div>
-                      </div>
-                      <div className="font-semibold text-slate-900 dark:text-white">$110,330.45</div>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end text-xs text-slate-400 dark:text-slate-500">
-                    <div className="flex items-center space-x-1 text-emerald-500 dark:text-emerald-400">
-                      <Lock className="w-3 h-3" />
-                      <span>End-to-End Encrypted</span>
-                    </div>
-                  </div>
-                </>
               ) : hasAccounts ? (
                 // Authenticated User with Accounts
                 <>
@@ -370,6 +318,7 @@ function HomeView({
               )}
             </div>
           </div>
+          )}
         </div>
       </section>
 
