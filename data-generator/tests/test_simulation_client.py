@@ -161,6 +161,92 @@ def test_get_merchants_falls_back_to_legacy_route_shape(monkeypatch):
         }
     ]
 
+
+def test_build_persona_profile_and_behavior_policy_shapes_card_usage():
+    ypro = main.build_persona_profile({"persona": "YPRO", "cardholder_name": "Ava Taylor"})
+    ypro_policy = main.build_behavior_policy({"persona": "YPRO", "amount_min": 400, "amount_max": 3500}, ypro)
+    hnw = main.build_persona_profile({"persona": "HNW", "cardholder_name": "Executive Traveler"})
+
+    assert ypro.persona_id == "young_professional_digital"
+    assert ypro.digital_commerce_propensity > ypro.travel_propensity
+    assert "4899" in ypro_policy.preferred_mccs
+    assert ypro_policy.ecommerce_context
+    assert hnw.persona_id == "hnw_travel"
+    assert hnw.travel_propensity > ypro.travel_propensity
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_simulate_swipe_event_uses_persona_ecommerce_context(monkeypatch):
+    monkeypatch.setattr(
+        main,
+        "get_merchants",
+        lambda: [
+            {
+                "merchant": "Streaming Merchant",
+                "descriptor": "STREAMING MERCHANT*ONLINE",
+                "category": "Streaming & Entertainment",
+                "mcc": "4899",
+                "country_code": "USA",
+                "city": None,
+                "region": None,
+                "postal_code": None,
+                "latitude": None,
+                "longitude": None,
+                "card_present_capable": False,
+                "ecommerce_capable": True,
+                "high_risk_flags": [],
+                "is_international": False,
+                "risk_score": 0,
+            },
+            {
+                "merchant": "Coffee Shop",
+                "descriptor": "COFFEE SHOP",
+                "category": "Coffee",
+                "mcc": "5814",
+                "country_code": "USA",
+                "city": "Mountain View",
+                "region": "CA",
+                "postal_code": "94043",
+                "latitude": 37.4,
+                "longitude": -122.1,
+                "card_present_capable": True,
+                "ecommerce_capable": False,
+                "high_risk_flags": [],
+                "is_international": False,
+                "risk_score": 0,
+            },
+        ],
+    )
+    random_values = iter([0.5, 0.0])
+    monkeypatch.setattr(main.random, "random", lambda: next(random_values, 0.5))
+    monkeypatch.setattr(main.random, "choice", lambda seq: seq[0])
+    monkeypatch.setattr(main.random, "choices", lambda population, weights=None, k=1: ["PENDING"])
+
+    auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
+        return_value=httpx.Response(200, json={"action_code": "00", "auth_code": "123456", "status": "PENDING"})
+    )
+
+    async with httpx.AsyncClient() as async_client:
+        result = await main.simulate_swipe_event(
+            async_client,
+            {
+                "card_token": "tok_ypro",
+                "cardholder_name": "Ava Taylor",
+                "persona": "YPRO",
+                "mccs": ["4899", "5814"],
+                "amount_min": 400,
+                "amount_max": 3500,
+                "available_credit_cents": 100000,
+            },
+        )
+
+    assert result["authorized"] is True
+    payload = json.loads(auth_route.calls[0].request.content.decode())
+    assert payload["merchant_category_code"] == "4899"
+    assert payload["transaction_channel"] == "ECOMMERCE"
+    assert payload["entry_mode"] == "ECOMMERCE"
+
 @pytest.mark.asyncio
 @respx.mock
 async def test_simulate_pulse_success():

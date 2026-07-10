@@ -26,7 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from scenarios import ScenarioExecutionRequest, ScenarioRequest, execute_scenario, plan_scenario
-from scenarios.schemas import ScenarioMode, ScenarioType
+from scenarios.schemas import BehaviorPolicy, PersonaProfile, ScenarioMode, ScenarioType
 from utils.internal_auth import get_internal_switch_token
 from utils.runtime import get_cors_origins, is_local_dev
 
@@ -328,6 +328,71 @@ def build_generic_merchant(mcc: str = "5311", country_code: str = "USA", is_inte
         "is_international": is_international,
         "risk_score": 20 if is_international else 0,
     }
+
+
+def build_persona_profile(card: Dict[str, Any]) -> PersonaProfile:
+    persona = str(card.get("persona") or "PRIME").upper()
+    cardholder_name = str(card.get("cardholder_name") or "")
+    home_metros = ["Mountain View, CA", "San Francisco, CA", "New York, NY", "Chicago, IL", "Seattle, WA", "Dallas, TX", "Los Angeles, CA"]
+    home_metro = home_metros[hash(cardholder_name or card.get("card_token", "default")) % len(home_metros)]
+
+    if persona == "HNW":
+        return PersonaProfile(
+            persona_id="hnw_travel",
+            role="high net worth travel cardholder",
+            home_metro=home_metro,
+            card_profile="premium_travel_card",
+            typical_mccs=["4511", "7011", "5812", "4121"],
+            travel_propensity=0.45,
+            digital_commerce_propensity=0.30,
+            card_present_propensity=0.78,
+        )
+    if persona == "YPRO":
+        return PersonaProfile(
+            persona_id="young_professional_digital",
+            role="young professional digital-first cardholder",
+            home_metro=home_metro,
+            card_profile="everyday_rewards_card",
+            typical_mccs=["5814", "4899", "5812", "4121"],
+            travel_propensity=0.12,
+            digital_commerce_propensity=0.65,
+            card_present_propensity=0.55,
+        )
+    return PersonaProfile(
+        persona_id="prime_everyday",
+        role="prime everyday cardholder",
+        home_metro=home_metro,
+        card_profile="prime_cashback_card",
+        typical_mccs=["5411", "5541", "5311", "4121", "5812"],
+        travel_propensity=0.18,
+        digital_commerce_propensity=0.35,
+        card_present_propensity=0.82,
+    )
+
+
+def build_behavior_policy(card: Dict[str, Any], persona: PersonaProfile) -> BehaviorPolicy:
+    amount_min = int(card.get("amount_min", 1500))
+    amount_max = int(card.get("amount_max", 15000))
+    if persona.persona_id == "hnw_travel":
+        settlement, reversal, pending = 0.82, 0.05, 0.13
+    elif persona.persona_id == "young_professional_digital":
+        settlement, reversal, pending = 0.76, 0.08, 0.16
+    else:
+        settlement, reversal, pending = 0.80, 0.10, 0.10
+
+    return BehaviorPolicy(
+        policy_id=f"{persona.persona_id}_baseline_policy",
+        preferred_mccs=list(card.get("mccs") or persona.typical_mccs),
+        spend_min_cents=max(100, amount_min),
+        spend_max_cents=max(max(100, amount_min), amount_max),
+        settlement_probability=settlement,
+        reversal_probability=reversal,
+        pending_probability=pending,
+        utilization_trigger=0.65,
+        target_utilization=0.35,
+        travel_context="Low-rate merchant-geography travel activity." if persona.travel_propensity > 0.2 else None,
+        ecommerce_context="Normal ecommerce/subscription activity." if persona.digital_commerce_propensity > 0.3 else None,
+    )
 
 
 def infer_channel_context(merchant: Dict[str, Any], formatted_merchant: str) -> Dict[str, Any]:
@@ -764,24 +829,25 @@ def get_active_cards() -> List[Dict[str, Any]]:
 async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) -> Dict[str, Any]:
     """Simulates a single credit card auth/settle/reverse workflow against the issuing bank gateway."""
     merchants = get_merchants()
-    mccs = card.get("mccs", ["5311", "5411", "5541", "4121"])
+    persona = build_persona_profile(card)
+    behavior_policy = build_behavior_policy(card, persona)
+    mccs = behavior_policy.preferred_mccs or ["5311", "5411", "5541", "4121"]
     default_mcc = next((mcc for mcc in mccs if mcc), "5311")
     matching_merchants = [m for m in merchants if m.get("mcc") in mccs]
     if not matching_merchants:
         matching_merchants = [build_generic_merchant(mcc=default_mcc)]
-        
-    is_googler = "GOOGLE" in str(card.get("cardholder_name", "")).upper() or "PRESENTER" in str(card.get("cardholder_name", "")).upper() or "DEMO" in str(card.get("cardholder_name", "")).upper()
-    metros = ["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA"]
-    if is_googler:
-        home_metro = ["MOUNTAIN VIEW CA", "SAN FRANCISCO CA"][hash(card.get("cardholder_name", "default")) % 2]
-    else:
-        home_metro = metros[hash(card.get("cardholder_name", "default")) % len(metros)]
 
-    is_intl_swipe = is_googler and (random.random() < 0.25)
+    home_metro = (persona.home_metro or "Mountain View, CA").upper().replace(",", "")
+    is_intl_swipe = random.random() < persona.travel_propensity
+    prefer_ecommerce = random.random() < persona.digital_commerce_propensity
     if is_intl_swipe:
         region_merchants = [m for m in merchants if m.get("is_international") and m.get("country_code") == "MEX" and m.get("mcc") in mccs]
         if not region_merchants:
             region_merchants = [m for m in merchants if m.get("is_international") and m.get("country_code") == "MEX"]
+    elif prefer_ecommerce:
+        region_merchants = [m for m in merchants if m.get("ecommerce_capable") and m.get("mcc") in mccs]
+        if not region_merchants:
+            region_merchants = [m for m in merchants if m.get("ecommerce_capable")]
     else:
         region_merchants = [m for m in merchants if not m.get("is_international") and m.get("mcc") in mccs]
         if not region_merchants:
@@ -799,8 +865,8 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
         ]
     merchant = random.choice(matching_merchants)
     available_credit = card.get("available_credit_cents")
-    amount_min = card.get("amount_min", 1500)
-    amount_max = card.get("amount_max", 15000)
+    amount_min = behavior_policy.spend_min_cents
+    amount_max = behavior_policy.spend_max_cents
 
     if available_credit is not None:
         amount_max = min(amount_max, int(available_credit))
@@ -901,7 +967,15 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
                 "error": None,
             }
             
-        resolution = random.choices(["SETTLE", "REVERSE", "PENDING"], weights=[80, 10, 10], k=1)[0]
+        resolution = random.choices(
+            ["SETTLE", "REVERSE", "PENDING"],
+            weights=[
+                behavior_policy.settlement_probability,
+                behavior_policy.reversal_probability,
+                behavior_policy.pending_probability,
+            ],
+            k=1,
+        )[0]
         
         if resolution == "SETTLE":
             final_amount = amount_cents
