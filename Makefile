@@ -95,7 +95,7 @@ run-backend-iam: ## Run the FastAPI banking service locally
 .PHONY: run-frontend
 run-frontend: ## Run the React/Vite frontend dev server locally
 	@echo "Starting banking-ui dev server..."
-	cd banking-ui && npm run dev
+	cd banking-ui && PROJECT_ID=$(PROJECT_ID) npm run dev
 
 .PHONY: run-data-generator
 run-data-generator: ## Run the FastAPI synthetic data generator locally
