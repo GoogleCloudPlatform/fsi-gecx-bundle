@@ -31,8 +31,7 @@
         "iceberg_catalog.cards_issued_card",
         "iceberg_catalog.cards_credit_accounts",
         "iceberg_catalog.identity_users",
-        "iceberg_catalog.identity_user_addresses",
-        "iceberg_catalog.user_credit_profiles"
+        "iceberg_catalog.identity_user_addresses"
       ]
     }
   ]

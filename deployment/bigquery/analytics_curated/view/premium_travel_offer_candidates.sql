@@ -21,9 +21,6 @@ WITH enriched_authorizations AS (
     user.email,
     address.city,
     address.state,
-    credit_profile.credit_score,
-    credit_profile.credit_tier,
-    credit_profile.stated_annual_income_cents,
     IF(REGEXP_CONTAINS(UPPER(auth.merchant_name), r'\\[MEX\\]'), 'MEX', 'USA') AS destination_country_code,
     0 AS merchant_risk_score,
     CASE
@@ -74,8 +71,6 @@ WITH enriched_authorizations AS (
   LEFT JOIN `__PROJECT_ID__.iceberg_catalog.identity_user_addresses` address
     ON user.id = address.user_id
    AND address.is_primary = TRUE
-  LEFT JOIN `__PROJECT_ID__.iceberg_catalog.user_credit_profiles` credit_profile
-    ON user.id = credit_profile.user_id
   WHERE auth.status IN ('PENDING', 'APPROVED', 'SETTLED', 'FLAGGED')
     AND auth.created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
 ),
@@ -100,9 +95,6 @@ candidate_rollup AS (
     credit_account_id,
     credit_account_status,
     credit_limit_cents,
-    credit_tier,
-    credit_score,
-    stated_annual_income_cents,
     destination_country_code,
     CASE
       WHEN destination_country_code = 'MEX' THEN 'Mexico'
@@ -132,9 +124,6 @@ candidate_rollup AS (
     credit_account_id,
     credit_account_status,
     credit_limit_cents,
-    credit_tier,
-    credit_score,
-    stated_annual_income_cents,
     destination_country_code,
     destination_country_name
 )
@@ -152,9 +141,6 @@ SELECT
   credit_account_id,
   credit_account_status,
   credit_limit_cents,
-  credit_tier,
-  credit_score,
-  stated_annual_income_cents,
   destination_country_code,
   destination_country_name,
   recent_travel_spend_dollars,
@@ -176,20 +162,13 @@ SELECT
       THEN 'Recent Mexico travel activity suggests this customer may value no foreign transaction fees and elevated travel rewards.'
     WHEN recent_travel_spend_dollars > 0
       THEN 'Recent travel-category spend suggests this customer may value premium travel rewards and concierge benefits.'
-    ELSE 'Active card relationship and credit profile suggest potential fit for premium travel benefits.'
+    ELSE 'Active card relationship and recent travel behavior suggest potential fit for premium travel benefits.'
   END AS offer_reason,
   CASE
     WHEN card_is_active
       AND credit_account_status = 'ACTIVE'
       AND destination_country_code = 'MEX'
       AND recent_mexico_spend_dollars > 0
-      AND COALESCE(credit_score, 0) >= 750
-      THEN TRUE
-    WHEN card_is_active
-      AND credit_account_status = 'ACTIVE'
-      AND destination_country_code = 'MEX'
-      AND recent_mexico_spend_dollars > 0
-      AND credit_tier IN ('PRIME_EXCELLENT', 'PRIME')
       THEN TRUE
     ELSE FALSE
   END AS is_premium_offer_candidate
