@@ -26,6 +26,6 @@ window.env = {
   CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME: "projects/fsi-gecx-2000/locations/us/apps/e0b952c1-280d-41d0-8da5-46db4b0e6ad9/tools/692fbf88-0560-4a43-a700-ebb82122cd85",
   BUILD_VERSION: "local-dev",
   BUILD_COMMIT_ID: "ABCDEFG",
-  STABLE_ENV_URL: "http://localhost:5174/",
+  STABLE_ENV_URL: "https://agentic-finance.gcp-solutions.com/",
   FEEDBACK_URL: "https://b.corp.google.com/issues/new?component=1466478&template=1902036&title=Demo%20Feedback%3A%20Personalized%20Financial%20Services%20with%20GECX%20%26%20Virtual%20Agents&assignee=mservidio%40google.com&collaborators=mservidio%40google.com%2Cerikvoit%40google.com%2Cjamestsai%40google.com&customFields=1232889%3A1841&customFields=951269%3ANA&parentIssueId=519210046"
 };
