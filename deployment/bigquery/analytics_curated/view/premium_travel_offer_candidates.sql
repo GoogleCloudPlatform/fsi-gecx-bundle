@@ -24,11 +24,27 @@ WITH enriched_authorizations AS (
     credit_profile.credit_score,
     credit_profile.credit_tier,
     credit_profile.stated_annual_income_cents,
-    COALESCE(store.country_code, IF(REGEXP_CONTAINS(UPPER(auth.merchant_name), r'\\[MEX\\]'), 'MEX', 'USA')) AS destination_country_code,
-    COALESCE(store.risk_score, 0) AS merchant_risk_score,
-    COALESCE(mcc.primary_category, 'UNKNOWN') AS merchant_primary_category,
-    COALESCE(mcc.detailed_category, 'Unclassified Merchant') AS merchant_detailed_category,
-    COALESCE(merchant.clean_name, store.location_name, auth.merchant_name) AS normalized_merchant_name,
+    IF(REGEXP_CONTAINS(UPPER(auth.merchant_name), r'\\[MEX\\]'), 'MEX', 'USA') AS destination_country_code,
+    0 AS merchant_risk_score,
+    CASE
+      WHEN auth.merchant_category_code IN ('4511') THEN 'TRAVEL'
+      WHEN auth.merchant_category_code IN ('7011') THEN 'TRAVEL'
+      WHEN auth.merchant_category_code IN ('5812', '5814') THEN 'DINING'
+      WHEN auth.merchant_category_code IN ('7298') THEN 'PERSONAL_SERVICES'
+      WHEN auth.merchant_category_code IN ('4121') THEN 'TRANSPORTATION'
+      WHEN auth.merchant_category_code IN ('3351', '3355', '3366', '3389') THEN 'TRAVEL'
+      ELSE 'OTHER'
+    END AS merchant_primary_category,
+    CASE
+      WHEN auth.merchant_category_code IN ('4511') THEN 'Airlines'
+      WHEN auth.merchant_category_code IN ('7011') THEN 'Hotels and resorts'
+      WHEN auth.merchant_category_code IN ('5812', '5814') THEN 'Dining'
+      WHEN auth.merchant_category_code IN ('7298') THEN 'Spa and wellness'
+      WHEN auth.merchant_category_code IN ('4121') THEN 'Ground transportation'
+      WHEN auth.merchant_category_code IN ('3351', '3355', '3366', '3389') THEN 'Car rental'
+      ELSE 'Other merchant'
+    END AS merchant_detailed_category,
+    auth.merchant_name AS normalized_merchant_name,
     CASE
       WHEN auth.merchant_category_code IN ('4511') THEN 'AIRLINE'
       WHEN auth.merchant_category_code IN ('7011') THEN 'LODGING'
@@ -36,7 +52,7 @@ WITH enriched_authorizations AS (
       WHEN auth.merchant_category_code IN ('7298') THEN 'WELLNESS'
       WHEN auth.merchant_category_code IN ('4121') THEN 'GROUND_TRANSPORTATION'
       WHEN auth.merchant_category_code IN ('3351', '3355', '3366', '3389') THEN 'CAR_RENTAL'
-      ELSE COALESCE(mcc.primary_category, 'OTHER')
+      ELSE 'OTHER'
     END AS travel_category,
     CASE
       WHEN UPPER(address.city) IN ('MOUNTAIN VIEW', 'PALO ALTO', 'LOS ALTOS', 'LOS ALTOS HILLS', 'MENLO PARK', 'WOODSIDE', 'ATHERTON', 'PORTOLA VALLEY', 'HILLSBOROUGH', 'SARATOGA')
@@ -58,14 +74,8 @@ WITH enriched_authorizations AS (
   LEFT JOIN `__PROJECT_ID__.iceberg_catalog.identity_user_addresses` address
     ON user.id = address.user_id
    AND address.is_primary = TRUE
-  LEFT JOIN `__PROJECT_ID__.iceberg_catalog.kyc_user_credit_profiles` credit_profile
+  LEFT JOIN `__PROJECT_ID__.iceberg_catalog.user_credit_profiles` credit_profile
     ON user.id = credit_profile.user_id
-  LEFT JOIN `__PROJECT_ID__.iceberg_catalog.merchants_merchant_stores` store
-    ON UPPER(auth.merchant_name) = UPPER(store.raw_descriptor)
-  LEFT JOIN `__PROJECT_ID__.iceberg_catalog.merchants_merchant_master` merchant
-    ON store.merchant_id = merchant.merchant_id
-  LEFT JOIN `__PROJECT_ID__.iceberg_catalog.merchants_merchant_category_codes` mcc
-    ON auth.merchant_category_code = mcc.mcc
   WHERE auth.status IN ('PENDING', 'APPROVED', 'SETTLED', 'FLAGGED')
     AND auth.created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
 ),

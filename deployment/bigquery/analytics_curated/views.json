@@ -32,10 +32,7 @@
         "iceberg_catalog.cards_credit_accounts",
         "iceberg_catalog.identity_users",
         "iceberg_catalog.identity_user_addresses",
-        "iceberg_catalog.kyc_user_credit_profiles",
-        "iceberg_catalog.merchants_merchant_master",
-        "iceberg_catalog.merchants_merchant_stores",
-        "iceberg_catalog.merchants_merchant_category_codes"
+        "iceberg_catalog.user_credit_profiles"
       ]
     }
   ]
