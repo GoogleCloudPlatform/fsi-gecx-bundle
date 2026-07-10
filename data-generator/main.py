@@ -25,7 +25,7 @@ from fastapi import FastAPI, HTTPException, status, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from scenarios import ScenarioRequest, plan_scenario
+from scenarios import ScenarioExecutionRequest, ScenarioRequest, execute_scenario, plan_scenario
 from utils.internal_auth import get_internal_switch_token
 from utils.runtime import get_cors_origins, is_local_dev
 
@@ -1073,6 +1073,27 @@ def plan_generation_scenario(request: ScenarioRequest):
     plan = plan_scenario(request)
     logger.info("Planned data-generator scenario %s (%s).", plan.scenario_id, plan.scenario_type)
     return plan
+
+
+@app.post("/scenarios/execute", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
+async def execute_generation_scenario(request: ScenarioExecutionRequest):
+    """Executes a validated scenario plan through bounded data-generator primitives."""
+    default_card_token = request.default_card_token
+    if (request.mode or request.plan.mode).value == "execute" and not default_card_token:
+        cards = get_spendable_cards(get_generator_eligible_cards(get_active_cards()))
+        if not cards:
+            raise HTTPException(status_code=409, detail="No eligible active cards available for scenario execution.")
+        default_card_token = cards[0]["card_token"]
+
+    result = await execute_scenario(
+        request,
+        banking_service_url=BANKING_SERVICE_URL,
+        headers=get_service_headers(),
+        default_card_token=default_card_token,
+        timeout_seconds=SWIPE_REQUEST_TIMEOUT_SECONDS,
+    )
+    logger.info("Scenario execution %s finished with status %s.", result.execution_id, result.status)
+    return result
 
 
 @app.post("/generate", status_code=status.HTTP_200_OK)

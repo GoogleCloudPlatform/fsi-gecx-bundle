@@ -47,6 +47,21 @@ class PlannedEventType(StrEnum):
     VALIDATION = "validation"
 
 
+class ScenarioExecutionStatus(StrEnum):
+    DRY_RUN = "dry_run"
+    SUCCEEDED = "succeeded"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class ScenarioStepStatus(StrEnum):
+    PLANNED = "planned"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
 class OutcomeLabel(StrEnum):
     EXPECTED_FRAUD = "expected_fraud"
     CONFIRMED_FRAUD = "confirmed_fraud"
@@ -218,3 +233,52 @@ class ScenarioPlan(BaseModel):
         if len(self.personas) > self.limits.max_customers:
             raise ValueError("persona count exceeds max_customers")
         return self
+
+
+class ScenarioExecutionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plan: ScenarioPlan
+    mode: ScenarioMode | None = None
+    idempotency_key: str = Field(..., min_length=8, max_length=200)
+    operator: str | None = None
+    default_card_token: str | None = None
+
+
+class ScenarioStepResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str
+    event_type: PlannedEventType
+    status: ScenarioStepStatus
+    message: str
+    retrieval_reference_number: str | None = None
+    authorization_id: str | None = None
+    transaction_id: str | None = None
+    alert_id: str | None = None
+    outcome_label: OutcomeLabel | None = None
+    status_code: int | None = None
+    response_payload: dict[str, Any] | None = None
+
+
+class ScenarioExecutionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_id: str
+    execution_id: str
+    idempotency_key: str
+    mode: ScenarioMode
+    status: ScenarioExecutionStatus
+    operator: str | None = None
+    started_at: str
+    completed_at: str
+    planned_events: int
+    attempted_events: int
+    succeeded_events: int
+    skipped_events: int
+    failed_events: int
+    created_authorization_ids: list[str] = Field(default_factory=list)
+    created_transaction_ids: list[str] = Field(default_factory=list)
+    created_alert_ids: list[str] = Field(default_factory=list)
+    steps: list[ScenarioStepResult] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
