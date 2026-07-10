@@ -49,6 +49,13 @@ function formatCurrencyFromCents(cents) {
   return `$${(Math.abs(cents ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function formatFraudReason(reason) {
+  return String(reason || '')
+    .replaceAll('_', ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function AdminSimulationView() {
   const navigate = useNavigate();
   const projectId = window.firebaseConfig?.projectId;
@@ -729,33 +736,48 @@ function AdminSimulationView() {
                   </td>
                 </tr>
               ) : (
-                streamData.map((item, idx) => (
-                  <tr key={item.id + idx} className="hover:bg-slate-100 dark:hover:bg-slate-900/60 transition-colors">
-                    <td className="p-3.5 text-slate-500 dark:text-slate-400 whitespace-nowrap flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      {item.timestamp}
-                    </td>
-                    <td className="p-3.5 text-slate-800 dark:text-slate-300 font-bold whitespace-nowrap">{item.rrn}</td>
-                    <td className="p-3.5 text-slate-900 dark:text-white font-sans font-medium truncate max-w-xs">{item.merchant_name}</td>
-                    <td className="p-3.5 text-right text-slate-900 dark:text-slate-100 font-bold whitespace-nowrap">
-                      {formatCurrencyFromCents(item.amount_cents)}
-                    </td>
-                    <td className="p-3.5 whitespace-nowrap">
-                      <div className="flex flex-col gap-0.5">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit ${
-                          item.status.includes('FLAGGED') 
-                            ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30' 
-                            : item.status.includes('HOLD') 
-                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30' 
-                            : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
-                        }`}>
-                          {item.status}
-                        </span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-500">{item.bq_view}</span>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                streamData.map((item, idx) => {
+                  const fraudReasons = Array.isArray(item.fraud_reason_codes) ? item.fraud_reason_codes : [];
+                  return (
+                    <tr key={item.id + idx} className="hover:bg-slate-100 dark:hover:bg-slate-900/60 transition-colors">
+                      <td className="p-3.5 text-slate-500 dark:text-slate-400 whitespace-nowrap flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        {item.timestamp}
+                      </td>
+                      <td className="p-3.5 text-slate-800 dark:text-slate-300 font-bold whitespace-nowrap">{item.rrn}</td>
+                      <td className="p-3.5 text-slate-900 dark:text-white font-sans font-medium truncate max-w-xs">{item.merchant_name}</td>
+                      <td className="p-3.5 text-right text-slate-900 dark:text-slate-100 font-bold whitespace-nowrap">
+                        {formatCurrencyFromCents(item.amount_cents)}
+                      </td>
+                      <td className="p-3.5 whitespace-nowrap">
+                        <div className="flex flex-col gap-1">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit ${
+                            item.status.includes('FLAGGED')
+                              ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30'
+                              : item.status.includes('HOLD')
+                              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
+                              : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                          }`}>
+                            {item.status}
+                          </span>
+                          {fraudReasons.length > 0 && (
+                            <div className="flex flex-wrap gap-1 max-w-md">
+                              {fraudReasons.slice(0, 3).map((reason) => (
+                                <span
+                                  key={reason}
+                                  className="inline-flex items-center px-1.5 py-0.5 rounded border border-rose-500/20 bg-rose-500/10 text-[9px] font-bold text-rose-700 dark:text-rose-300"
+                                >
+                                  {formatFraudReason(reason)}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <span className="text-[10px] text-slate-500 dark:text-slate-500">{item.bq_view}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
