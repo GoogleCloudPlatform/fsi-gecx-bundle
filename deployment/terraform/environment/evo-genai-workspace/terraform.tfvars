@@ -49,4 +49,5 @@ data_generator_cron_schedule                     = "* * * * *"
 data_generator_pulse_window_seconds              = 55
 data_generator_pulse_min_events                  = 1
 data_generator_pulse_max_events                  = 2
+seed_mock_user_count                             = 2000
 additional_cors_allowed_origins                  = []

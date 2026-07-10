@@ -945,6 +945,11 @@ resource "google_cloud_run_v2_job" "db_reset_job" {
           name  = "PYTHONUNBUFFERED"
           value = "1"
         }
+
+        env {
+          name  = "SEED_MOCK_USER_COUNT"
+          value = tostring(var.seed_mock_user_count)
+        }
       }
 
       vpc_access {

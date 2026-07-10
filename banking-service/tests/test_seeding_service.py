@@ -91,6 +91,24 @@ def test_provision_user_suite_generates_unique_card_tokens_for_same_name(db_sess
     assert first["card_token"] != second["card_token"]
 
 
+def test_get_seeding_personas_honors_configured_mock_user_count(monkeypatch):
+    base_count = len(seeding_service.get_base_personas())
+    monkeypatch.setenv("SEED_MOCK_USER_COUNT", str(base_count + 5))
+
+    personas = seeding_service.get_seeding_personas()
+    generated_mock = [p for p in personas if p["email"].endswith("@mockbanking.local")]
+
+    assert len(generated_mock) == 5
+    assert len({p["email"] for p in generated_mock}) == 5
+    assert all(p["card_token"].startswith("tok_visa_") for p in generated_mock)
+
+
+def test_get_seed_mock_user_count_falls_back_for_invalid_env(monkeypatch):
+    monkeypatch.setenv("SEED_MOCK_USER_COUNT", "not-a-number")
+
+    assert seeding_service.get_seed_mock_user_count() == seeding_service.DEFAULT_SEED_MOCK_USER_COUNT
+
+
 def test_seeding_job_clears_maintenance_on_failure(monkeypatch):
     class FakeSession:
         closed = False

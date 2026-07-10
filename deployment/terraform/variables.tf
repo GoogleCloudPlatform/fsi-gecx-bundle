@@ -306,6 +306,12 @@ variable "data_generator_auto_paydown_max_accounts_per_pulse" {
   default     = 2
 }
 
+variable "seed_mock_user_count" {
+  type        = number
+  description = "Target base plus generated mock banking users for algorithmic seeding. VIP/demo-script users are added separately."
+  default     = 200
+}
+
 variable "additional_cors_allowed_origins" {
   type        = list(string)
   description = "Additional allowed browser origins for Cloud Run CORS configuration."

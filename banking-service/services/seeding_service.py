@@ -44,6 +44,7 @@ from services.merchant_service import MerchantEnrichmentService
 logger = logging.getLogger(__name__)
 RESOURCE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "data")
 DEMO_SCRIPT_DOMAINS = {"google.com", "gcp.solutions", "altostrat.com", "nova.horizon.test"}
+DEFAULT_SEED_MOCK_USER_COUNT = 200
 
 
 def _generate_demo_card_token() -> str:
@@ -138,6 +139,17 @@ def load_vip_googlers():
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
+
+def get_seed_mock_user_count() -> int:
+    raw_value = os.getenv("SEED_MOCK_USER_COUNT")
+    if not raw_value:
+        return DEFAULT_SEED_MOCK_USER_COUNT
+    try:
+        return max(0, int(raw_value))
+    except ValueError:
+        logger.warning("Invalid SEED_MOCK_USER_COUNT=%r; using default %s.", raw_value, DEFAULT_SEED_MOCK_USER_COUNT)
+        return DEFAULT_SEED_MOCK_USER_COUNT
+
 def get_seeding_personas():
     base_personas = get_base_personas()
     vip_googlers = load_vip_googlers()
@@ -205,7 +217,8 @@ def get_seeding_personas():
     street_names = meta["street_names"]
     underwriting_tiers = meta["underwriting_tiers"]
     
-    mock_needed = max(0, 200 - len(base_personas))
+    target_mock_population = get_seed_mock_user_count()
+    mock_needed = max(0, target_mock_population - len(base_personas))
     generated_mock = []
     
     rng = random.Random(42)
