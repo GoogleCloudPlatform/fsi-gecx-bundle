@@ -154,9 +154,9 @@ resource "google_sql_user" "kyc_service_iam_user" {
 
 locals {
   db_iam_support_members = {
-    for member in concat(local.database_iam_support_users, var.enable_current_user_grants ? ["user:${data.google_client_openid_userinfo.me.email}"] : []) :
+    for member in concat(local.database_iam_support_users, var.enable_current_user_grants ? [local.current_principal_member] : []) :
     member => {
-      name = split(":", member)[1]
+      name = split(":", member)[0] == "serviceAccount" ? replace(split(":", member)[1], ".gserviceaccount.com", "") : split(":", member)[1]
       type = split(":", member)[0] == "user" ? "CLOUD_IAM_USER" : (
         split(":", member)[0] == "group" ? "CLOUD_IAM_GROUP" : "CLOUD_IAM_SERVICE_ACCOUNT"
       )
@@ -165,7 +165,7 @@ locals {
   db_iam_viewer_members = {
     for member in local.iam_console_viewers :
     member => {
-      name = split(":", member)[1]
+      name = split(":", member)[0] == "serviceAccount" ? replace(split(":", member)[1], ".gserviceaccount.com", "") : split(":", member)[1]
       type = split(":", member)[0] == "user" ? "CLOUD_IAM_USER" : (
         split(":", member)[0] == "group" ? "CLOUD_IAM_GROUP" : "CLOUD_IAM_SERVICE_ACCOUNT"
       )

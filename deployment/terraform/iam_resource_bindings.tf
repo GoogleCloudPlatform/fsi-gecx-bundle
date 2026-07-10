@@ -114,7 +114,7 @@ resource "google_cloud_run_service_iam_member" "iap_login_ui_public_invoker" {
 
 locals {
   cloud_run_iap_members = concat(
-    var.enable_current_user_grants ? ["user:${data.google_client_openid_userinfo.me.email}"] : [],
+    var.enable_current_user_grants ? [local.current_principal_member] : [],
     local.additional_cloud_run_iap_members
   )
 }
@@ -179,6 +179,12 @@ resource "google_secret_manager_secret_iam_member" "banking_service_card_network
 
 resource "google_secret_manager_secret_iam_member" "data_generator_card_network_switch_token_accessor" {
   secret_id = google_secret_manager_secret.card_network_switch_token.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.data_generator_service_account.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "data_generator_redis_password_accessor" {
+  secret_id = google_secret_manager_secret.redis_password.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.data_generator_service_account.email}"
 }

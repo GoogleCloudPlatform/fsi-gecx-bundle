@@ -86,6 +86,9 @@ resource "google_datastream_stream" "banking_cdc_stream" {
             table = "posted_transactions"
           }
           postgresql_tables {
+            table = "credit_accounts"
+          }
+          postgresql_tables {
             table = "issued_card"
           }
           postgresql_tables {
@@ -108,6 +111,27 @@ resource "google_datastream_stream" "banking_cdc_stream" {
           schema = "identity"
           postgresql_tables {
             table = "users"
+          }
+          postgresql_tables {
+            table = "user_addresses"
+          }
+        }
+        postgresql_schemas {
+          schema = "kyc"
+          postgresql_tables {
+            table = "user_credit_profiles"
+          }
+        }
+        postgresql_schemas {
+          schema = "merchants"
+          postgresql_tables {
+            table = "merchant_master"
+          }
+          postgresql_tables {
+            table = "merchant_stores"
+          }
+          postgresql_tables {
+            table = "merchant_category_codes"
           }
         }
       }

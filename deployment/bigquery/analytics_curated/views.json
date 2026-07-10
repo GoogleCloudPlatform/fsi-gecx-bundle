@@ -22,6 +22,17 @@
       "sources": [
         "iceberg_catalog.cards_transaction_authorization"
       ]
+    },
+    {
+      "name": "premium_travel_offer_candidates",
+      "sql": "premium_travel_offer_candidates.sql",
+      "sources": [
+        "iceberg_catalog.cards_transaction_authorization",
+        "iceberg_catalog.cards_issued_card",
+        "iceberg_catalog.cards_credit_accounts",
+        "iceberg_catalog.identity_users",
+        "iceberg_catalog.identity_user_addresses"
+      ]
     }
   ]
 }
