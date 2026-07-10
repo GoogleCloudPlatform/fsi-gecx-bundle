@@ -82,6 +82,11 @@ test-integration: ## Execute live GCP sandbox Document AI integration tests (man
 	@echo "Executing live cloud sandbox integration test suite..."
 	cd banking-service && RUN_INTEGRATION_TESTS=true .venv/bin/pytest tests/test_integration_docai.py -v -s
 
+.PHONY: db-init-local
+db-init-local: ## Initialize and seed the local SQLite database
+	@echo "Initializing and seeding local SQLite database..."
+	cd banking-service && uv run python -m services.seeding_service
+
 .PHONY: run-backend-local
 run-backend-local: ## Run the FastAPI banking service locally
 	@echo "Starting banking-service..."

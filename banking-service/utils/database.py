@@ -73,7 +73,7 @@ class UniversalUUID(TypeDecorator):
         return value
 
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///banking.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///.sqlite/banking.db")
 db_password = os.getenv("DB_PASSWORD")
 if db_password and "@" in DATABASE_URL:
     parts = DATABASE_URL.split("@", 1)
@@ -131,6 +131,16 @@ def create_db_engine(url_str=DATABASE_URL, **kwargs):
         exec_opts = engine_args.get("execution_options", {}).copy()
         exec_opts["schema_translate_map"] = {"merchants": "ref_data"}
         engine_args["execution_options"] = exec_opts
+        
+        if "sqlite:///:memory:" not in url_str:
+            path_part = url_str.split("sqlite://", 1)[1]
+            cleaned_path = path_part.lstrip("/")
+            if path_part.startswith("///"):
+                cleaned_path = "/" + cleaned_path
+            
+            db_dir = os.path.dirname(cleaned_path)
+            if db_dir:
+                os.makedirs(db_dir, exist_ok=True)
     elif url_str.startswith("postgresql"):
         if "pool_size" not in engine_args and "poolclass" not in engine_args:
             engine_args["pool_size"] = int(os.getenv("DB_POOL_SIZE", "10"))
@@ -169,23 +179,26 @@ def _sqlite_attach_statements(main_file: str) -> list[str]:
             "ATTACH DATABASE 'file:ref_data_mem?mode=memory&cache=shared' AS ref_data;",
         ]
 
-    base_prefix = main_file.rsplit(".", 1)[0] if "." in main_file else main_file
-    if not _is_alembic_runtime() and base_prefix.endswith("banking"):
-        base_prefix = ""
+    db_dir = os.path.dirname(main_file)
+    filename = os.path.basename(main_file)
+    base_name = filename.rsplit(".", 1)[0] if "." in filename else filename
+
+    if not _is_alembic_runtime() and base_name == "banking":
+        prefix = ""
     else:
-        base_prefix = base_prefix + "_"
+        prefix = base_name + "_"
 
     return [
-        f"ATTACH DATABASE '{base_prefix}identity.db' AS identity;",
-        f"ATTACH DATABASE '{base_prefix}kyc.db' AS kyc;",
-        f"ATTACH DATABASE '{base_prefix}ledger.db' AS ledger;",
-        f"ATTACH DATABASE '{base_prefix}cards.db' AS cards;",
-        f"ATTACH DATABASE '{base_prefix}operations.db' AS operations;",
-        f"ATTACH DATABASE '{base_prefix}origination.db' AS origination;",
-        f"ATTACH DATABASE '{base_prefix}audit.db' AS audit;",
-        f"ATTACH DATABASE '{base_prefix}admin.db' AS admin;",
-        f"ATTACH DATABASE '{base_prefix}catalog.db' AS catalog;",
-        f"ATTACH DATABASE '{base_prefix}ref_data.db' AS ref_data;",
+        f"ATTACH DATABASE '{os.path.join(db_dir, prefix + 'identity.db')}' AS identity;",
+        f"ATTACH DATABASE '{os.path.join(db_dir, prefix + 'kyc.db')}' AS kyc;",
+        f"ATTACH DATABASE '{os.path.join(db_dir, prefix + 'ledger.db')}' AS ledger;",
+        f"ATTACH DATABASE '{os.path.join(db_dir, prefix + 'cards.db')}' AS cards;",
+        f"ATTACH DATABASE '{os.path.join(db_dir, prefix + 'operations.db')}' AS operations;",
+        f"ATTACH DATABASE '{os.path.join(db_dir, prefix + 'origination.db')}' AS origination;",
+        f"ATTACH DATABASE '{os.path.join(db_dir, prefix + 'audit.db')}' AS audit;",
+        f"ATTACH DATABASE '{os.path.join(db_dir, prefix + 'admin.db')}' AS admin;",
+        f"ATTACH DATABASE '{os.path.join(db_dir, prefix + 'catalog.db')}' AS catalog;",
+        f"ATTACH DATABASE '{os.path.join(db_dir, prefix + 'ref_data.db')}' AS ref_data;",
     ]
 
 
@@ -309,6 +322,7 @@ def init_db():
     import models.settings  # noqa: F401
     import models.kyc  # noqa: F401
     import models.reference  # noqa: F401
+    import models.merchant  # noqa: F401
     try:
         Base.metadata.create_all(bind=ledger_pool)
         Base.metadata.create_all(bind=kyc_pool)
