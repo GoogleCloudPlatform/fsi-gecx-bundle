@@ -96,7 +96,7 @@ function HomeView({
   return (
     <>
       {/* Hero Section */}
-      <section className="relative pt-32 pb-24 md:pt-48 md:pb-32 px-6">
+      <section className="relative pt-32 pb-12 md:pt-36 md:pb-16 px-6">
         <div className="absolute inset-0 -z-10 overflow-hidden">
           <img 
             src="/hero_bg.png" 
@@ -323,7 +323,7 @@ function HomeView({
       </section>
 
       {/* Personalized Offers or CTA Section (moved below Hero) */}
-      <section className="py-24 px-6 relative overflow-hidden border-y border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+      <section className="py-12 px-6 relative overflow-hidden border-y border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-3xl -z-10"></div>
         <div className="max-w-7xl mx-auto relative z-10">
           {fbUser ? (
@@ -423,7 +423,7 @@ function HomeView({
       </section>
 
       {/* Interactive Loan Calculator Section (moved up above features) */}
-      <section id="calculator" className="py-24 px-6">
+      <section id="calculator" className="py-12 px-6">
         <div className="max-width-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           <div>
             <span className="text-emerald-600 dark:text-emerald-400 font-medium text-sm tracking-wider uppercase">Smart Planning</span>
@@ -518,7 +518,7 @@ function HomeView({
       </section>
 
       {/* Features Section (moved down below calculator) */}
-      <section id="features" className="py-24 px-6 bg-slate-50 dark:bg-slate-900/30 border-y border-slate-200 dark:border-slate-900">
+      <section id="features" className="py-12 px-6 bg-slate-50 dark:bg-slate-900/30 border-y border-slate-200 dark:border-slate-900">
         <div className="max-w-7xl mx-auto">
           <div className="text-center max-w-2xl mx-auto mb-16">
             <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-4 text-slate-900 dark:text-white">
@@ -578,7 +578,7 @@ function HomeView({
       </section>
 
       {/* Help Center & AI Support */}
-      <section id="help" className="py-24 px-6 bg-slate-50 dark:bg-slate-950">
+      <section id="help" className="py-12 px-6 bg-slate-50 dark:bg-slate-950">
         <div className="max-width-7xl mx-auto">
           <div className="text-center max-w-2xl mx-auto mb-16">
             <span className="text-teal-600 dark:text-teal-400 font-medium text-sm tracking-wider uppercase">Automated Assistance</span>
