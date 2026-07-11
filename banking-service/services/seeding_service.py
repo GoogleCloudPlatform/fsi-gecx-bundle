@@ -22,6 +22,10 @@ import hashlib
 from pathlib import Path
 from email.utils import parseaddr
 from typing import Dict, Any
+import google.auth
+from google.auth.transport.requests import AuthorizedSession, Request
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from utils.database import SessionLocal
@@ -45,6 +49,7 @@ logger = logging.getLogger(__name__)
 RESOURCE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "data")
 DEMO_SCRIPT_DOMAINS = {"google.com", "gcp.solutions", "altostrat.com", "nova.horizon.test"}
 DEFAULT_SEED_MOCK_USER_COUNT = 200
+DATA_GENERATOR_SCHEDULE_TABLE = "operations.synthetic_scheduled_events"
 
 
 def _generate_demo_card_token() -> str:
@@ -318,11 +323,80 @@ def generate_luhn_card_number(prefix: str, length: int) -> str:
     check_digit = (10 - (total % 10)) % 10
     return num_str + str(check_digit)
 
+
+def clear_synthetic_scheduler_records(db: Session) -> int | None:
+    """Delete Data Generator durable schedule rows during full demo reset."""
+    try:
+        result = db.execute(text(f"DELETE FROM {DATA_GENERATOR_SCHEDULE_TABLE}"))
+        deleted_count = result.rowcount if result.rowcount is not None else None
+        logger.info(
+            "Cleared Data Generator scheduler table %s rows=%s.",
+            DATA_GENERATOR_SCHEDULE_TABLE,
+            deleted_count if deleted_count is not None else "unknown",
+        )
+        return deleted_count
+    except SQLAlchemyError as exc:
+        logger.warning(
+            "Could not clear Data Generator scheduler table %s; continuing reset. Error: %s",
+            DATA_GENERATOR_SCHEDULE_TABLE,
+            exc,
+        )
+        db.rollback()
+        enable_session_rbac_override(db)
+        return None
+
+
+def purge_synthetic_cloud_tasks_queue() -> bool:
+    """Purge delayed Data Generator Cloud Tasks so reset cannot replay stale work."""
+    project_id = (
+        os.getenv("DATA_GENERATOR_CLOUD_TASKS_PROJECT_ID")
+        or os.getenv("CLOUD_TASKS_PROJECT_ID")
+        or os.getenv("GOOGLE_CLOUD_PROJECT")
+        or os.getenv("PROJECT_ID")
+    )
+    location = os.getenv("DATA_GENERATOR_CLOUD_TASKS_LOCATION") or os.getenv(
+        "CLOUD_TASKS_LOCATION"
+    )
+    queue = os.getenv("DATA_GENERATOR_CLOUD_TASKS_QUEUE") or os.getenv(
+        "CLOUD_TASKS_QUEUE"
+    )
+    if not (project_id and location and queue):
+        logger.info(
+            "Data Generator Cloud Tasks queue is not configured for reset cleanup; skipping queue purge."
+        )
+        return False
+
+    credentials, _ = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    )
+    credentials.refresh(Request())
+    authed_session = AuthorizedSession(credentials)
+    queue_name = f"projects/{project_id}/locations/{location}/queues/{queue}"
+    response = authed_session.post(
+        f"https://cloudtasks.googleapis.com/v2/{queue_name}:purge", timeout=30
+    )
+    if response.status_code not in {200, 201}:
+        raise RuntimeError(
+            "Failed to purge Data Generator Cloud Tasks queue "
+            f"{queue_name}: HTTP {response.status_code} {response.text[:500]}"
+        )
+    logger.info("Purged Data Generator Cloud Tasks queue %s.", queue_name)
+    return True
+
+
+def clear_synthetic_scheduler_artifacts(db: Session) -> dict[str, Any]:
+    """Clear durable scheduler rows and delayed Cloud Tasks during full reset."""
+    deleted_rows = clear_synthetic_scheduler_records(db)
+    purged_queue = purge_synthetic_cloud_tasks_queue()
+    return {"deleted_rows": deleted_rows, "purged_cloud_tasks_queue": purged_queue}
+
+
 def clean_database(db: Session) -> None:
     """Removes all transactional and customer-related tables while preserving catalogs."""
     logger.info("Purging transactional and profile database tables...")
     
     enable_session_rbac_override(db)
+    clear_synthetic_scheduler_artifacts(db)
         
     # Order matters due to foreign key constraints!
     from models.support import Escalation

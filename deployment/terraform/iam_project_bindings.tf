@@ -271,6 +271,12 @@ resource "google_project_iam_member" "banking_reset_sa_log_writer" {
   member  = "serviceAccount:${google_service_account.banking_db_reset_service_account.email}"
 }
 
+resource "google_project_iam_member" "banking_reset_sa_cloudtasks_queue_admin" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudtasks.queueAdmin"
+  member  = "serviceAccount:${google_service_account.banking_db_reset_service_account.email}"
+}
+
 resource "google_project_iam_member" "ledger_sa_cloudsql_client" {
   project = data.google_project.project.project_id
   role    = "roles/cloudsql.client"

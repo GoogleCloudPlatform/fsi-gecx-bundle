@@ -1059,6 +1059,21 @@ resource "google_cloud_run_v2_job" "db_reset_job" {
           name  = "SEED_MOCK_USER_COUNT"
           value = tostring(var.seed_mock_user_count)
         }
+
+        env {
+          name  = "DATA_GENERATOR_CLOUD_TASKS_PROJECT_ID"
+          value = var.project_id
+        }
+
+        env {
+          name  = "DATA_GENERATOR_CLOUD_TASKS_LOCATION"
+          value = var.region
+        }
+
+        env {
+          name  = "DATA_GENERATOR_CLOUD_TASKS_QUEUE"
+          value = google_cloud_tasks_queue.data_generator_synthetic_schedule[0].name
+        }
       }
 
       vpc_access {
@@ -1082,6 +1097,8 @@ resource "google_cloud_run_v2_job" "db_reset_job" {
   depends_on = [
     google_project_service.run_googleapis_com,
     google_sql_user.banking_db_reset_iam_user,
+    google_cloud_tasks_queue.data_generator_synthetic_schedule,
+    google_project_iam_member.banking_reset_sa_cloudtasks_queue_admin,
   ]
 }
 
