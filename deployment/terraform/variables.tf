@@ -330,6 +330,12 @@ variable "data_generator_fraud_pattern_target_mode" {
   default     = "eligible"
 }
 
+variable "data_generator_operator_email_domains" {
+  type        = list(string)
+  description = "Email domains allowed to call the direct Data Generator operator control surface through IAP."
+  default     = ["google.com", "gcp.solutions", "altostrat.com"]
+}
+
 variable "seed_mock_user_count" {
   type        = number
   description = "Target base plus generated mock banking users for algorithmic seeding. VIP/demo-script users are added separately."
@@ -371,4 +377,3 @@ variable "feedback_url" {
   description = "URL for the buganizer feedback link to show on the stable environment banner (leave empty to disable)"
   default     = null
 }
-

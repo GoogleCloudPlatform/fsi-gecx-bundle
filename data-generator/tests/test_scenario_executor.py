@@ -140,6 +140,84 @@ def test_execute_endpoint_dry_run_returns_structured_result():
     assert body["attempted_events"] == 0
 
 
+def test_simulation_status_endpoint_returns_control_surface_summary():
+    response = client.get("/simulation/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["service"] == "data-generator"
+    assert body["control_surface"] == "direct-fastapi"
+    assert "/scenarios/dry-run" in body["supported_routes"]
+    assert body["pulse"]["min_events"] >= 0
+
+
+def test_scenario_endpoint_accepts_iap_operator_header_in_deployed_mode(monkeypatch):
+    monkeypatch.setattr(main, "is_local_dev", lambda: False)
+
+    response = client.post(
+        "/scenarios/plan",
+        headers={"X-Goog-Authenticated-User-Email": "accounts.google.com:operator@google.com"},
+        json={
+            "goal": "Run lakehouse spend velocity surge",
+            "scenario_type": "lakehouse_spend_velocity_surge",
+            "max_events": 1,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["scenario_type"] == "lakehouse_spend_velocity_surge"
+
+
+def test_scenario_endpoint_rejects_missing_operator_context_in_deployed_mode(monkeypatch):
+    monkeypatch.setattr(main, "is_local_dev", lambda: False)
+
+    response = client.post(
+        "/scenarios/plan",
+        json={
+            "goal": "Run lakehouse spend velocity surge",
+            "scenario_type": "lakehouse_spend_velocity_surge",
+            "max_events": 1,
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_dry_run_endpoint_returns_execution_result_with_operator():
+    response = client.post(
+        "/scenarios/dry-run",
+        headers={"X-Goog-Authenticated-User-Email": "accounts.google.com:operator@google.com"},
+        json={
+            "goal": "Run lakehouse spend velocity surge",
+            "scenario_type": "lakehouse_spend_velocity_surge",
+            "max_events": 2,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "dry_run"
+    assert body["operator"] == "operator@google.com"
+    assert body["planned_events"] == 2
+    assert body["attempted_events"] == 0
+
+
+def test_replay_endpoint_sets_replay_mode_for_dry_run_plan():
+    plan = plan_scenario(ScenarioRequest(goal="Make something interesting happen", max_events=1))
+
+    response = client.post(
+        "/scenarios/replay",
+        json={
+            "plan": plan.model_dump(mode="json"),
+            "idempotency_key": "endpoint-replay-001",
+            "default_card_token": "tok_replay",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["mode"] == "replay"
+
+
 @pytest.mark.asyncio
 @respx.mock
 async def test_execute_scenario_records_synthetic_outcomes():

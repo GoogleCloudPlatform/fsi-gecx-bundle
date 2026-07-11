@@ -97,6 +97,11 @@ FRAUD_PATTERN_NAMES = [
     "merchant_category_velocity",
     "near_limit_pressure",
 ]
+OPERATOR_EMAIL_DOMAINS = [
+    domain.strip().lower()
+    for domain in os.getenv("DATA_GENERATOR_OPERATOR_EMAIL_DOMAINS", "google.com,gcp.solutions,altostrat.com").split(",")
+    if domain.strip()
+]
 
 _pulse_lock = asyncio.Lock()
 _redis_client = None
@@ -279,10 +284,33 @@ def get_card_network_token() -> str:
     return get_internal_switch_token()
 
 
+def _normalize_iap_email(header_value: str | None) -> str | None:
+    if not header_value:
+        return None
+    return header_value.replace("accounts.google.com:", "").strip().lower() or None
+
+
+def _is_allowed_operator_email(email: str | None) -> bool:
+    if not email or "@" not in email:
+        return False
+    domain = email.rsplit("@", 1)[-1]
+    return domain in OPERATOR_EMAIL_DOMAINS
+
+
+def extract_operator_identity(request: Request) -> str | None:
+    iap_email = _normalize_iap_email(request.headers.get("x-goog-authenticated-user-email"))
+    if iap_email:
+        return iap_email
+    return None
+
+
 def verify_switch_or_presenter_token(
-    x_card_network_token: Optional[str] = Header(None, alias="X-Card-Network-Token")
+    x_card_network_token: Optional[str] = Header(None, alias="X-Card-Network-Token"),
+    x_goog_authenticated_user_email: Optional[str] = Header(None, alias="X-Goog-Authenticated-User-Email"),
 ):
     if x_card_network_token and x_card_network_token == get_card_network_token():
+        return True
+    if _is_allowed_operator_email(_normalize_iap_email(x_goog_authenticated_user_email)):
         return True
     if is_local_dev():
         return True
@@ -1142,6 +1170,41 @@ def health():
     }
 
 
+@app.get("/simulation/status", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
+def get_simulation_status():
+    """Returns current generator control-surface status for direct GUI and future agentic clients."""
+    return {
+        "status": "READY",
+        "service": "data-generator",
+        "control_surface": "direct-fastapi",
+        "banking_service_url_configured": bool(BANKING_SERVICE_URL),
+        "pulse": {
+            "window_seconds": PULSE_WINDOW_SECONDS,
+            "min_events": PULSE_MIN_EVENTS,
+            "max_events": PULSE_MAX_EVENTS,
+            "workflow_concurrency": SWIPE_WORKFLOW_CONCURRENCY,
+            "admission_redis_required": PULSE_ADMISSION_REDIS_REQUIRED,
+        },
+        "surge": {
+            "total_events": SURGE_TOTAL_EVENTS,
+            "stagger_seconds": SURGE_STAGGER_SECONDS,
+        },
+        "fraud_patterns": {
+            "enabled": FRAUD_PATTERN_ENABLED,
+            "rate": FRAUD_PATTERN_RATE,
+            "max_per_pulse": FRAUD_PATTERN_MAX_PER_PULSE,
+            "target_mode": FRAUD_PATTERN_TARGET_MODE,
+        },
+        "supported_routes": [
+            "/scenarios/plan",
+            "/scenarios/dry-run",
+            "/scenarios/execute",
+            "/scenarios/replay",
+            "/scenarios/{scenario_id}/outcomes",
+        ],
+    }
+
+
 @app.post("/scenarios/plan", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
 def plan_generation_scenario(request: ScenarioRequest):
     """Returns a validated dry-run scenario plan without writing synthetic data."""
@@ -1150,12 +1213,35 @@ def plan_generation_scenario(request: ScenarioRequest):
     return plan
 
 
+@app.post("/scenarios/dry-run", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
+async def dry_run_generation_scenario(request: ScenarioRequest, http_request: Request):
+    """Plans and dry-runs a scenario through the same execution result contract without writing data."""
+    plan = plan_scenario(request.model_copy(update={"mode": ScenarioMode.DRY_RUN}))
+    operator = extract_operator_identity(http_request)
+    result = await execute_scenario(
+        ScenarioExecutionRequest(
+            plan=plan,
+            mode=ScenarioMode.DRY_RUN,
+            idempotency_key=f"dry-run:{plan.scenario_id}:{uuid.uuid4().hex}",
+            operator=operator,
+        ),
+        banking_service_url=BANKING_SERVICE_URL,
+        headers={},
+        timeout_seconds=SWIPE_REQUEST_TIMEOUT_SECONDS,
+    )
+    logger.info("Scenario dry-run %s prepared by %s.", result.execution_id, operator or "unknown-operator")
+    return result
+
+
 @app.post("/scenarios/execute", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
-async def execute_generation_scenario(request: ScenarioExecutionRequest):
+async def execute_generation_scenario(request: ScenarioExecutionRequest, http_request: Request):
     """Executes a validated scenario plan through bounded data-generator primitives."""
+    operator = request.operator or extract_operator_identity(http_request)
+    if operator and request.operator != operator:
+        request = request.model_copy(update={"operator": operator})
     default_card_token = request.default_card_token
     default_card_tokens = request.default_card_tokens
-    if (request.mode or request.plan.mode).value == "execute" and not (default_card_token or default_card_tokens):
+    if (request.mode or request.plan.mode).value in {"execute", "replay"} and not (default_card_token or default_card_tokens):
         cards = get_spendable_cards(get_generator_eligible_cards(get_active_cards()))
         if not cards:
             raise HTTPException(status_code=409, detail="No eligible active cards available for scenario execution.")
@@ -1171,6 +1257,18 @@ async def execute_generation_scenario(request: ScenarioExecutionRequest):
     )
     logger.info("Scenario execution %s finished with status %s.", result.execution_id, result.status)
     return result
+
+
+@app.post("/scenarios/replay", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
+async def replay_generation_scenario(request: ScenarioExecutionRequest, http_request: Request):
+    """Replays a validated scenario plan with an explicit replay mode and idempotency key."""
+    replay_request = request.model_copy(
+        update={
+            "mode": ScenarioMode.REPLAY,
+            "operator": request.operator or extract_operator_identity(http_request),
+        }
+    )
+    return await execute_generation_scenario(replay_request, http_request)
 
 
 @app.get("/scenarios/{scenario_id}/outcomes", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])

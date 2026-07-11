@@ -374,6 +374,10 @@ resource "google_cloud_run_v2_service" "banking_ui" {
         name  = "VITE_BANKING_API_URL"
         value = "https://${var.custom_domain}/api"
       }
+      env {
+        name  = "VITE_DATA_GENERATOR_API_URL"
+        value = "https://${var.custom_domain}/data-generator"
+      }
       dynamic "env" {
         for_each = var.stable_env_url != null && var.stable_env_url != "" ? [1] : []
         content {
@@ -800,6 +804,11 @@ resource "google_cloud_run_v2_service" "data_generator" {
       env {
         name  = "FRAUD_PATTERN_TARGET_MODE"
         value = var.data_generator_fraud_pattern_target_mode
+      }
+
+      env {
+        name  = "DATA_GENERATOR_OPERATOR_EMAIL_DOMAINS"
+        value = join(",", var.data_generator_operator_email_domains)
       }
 
       env {

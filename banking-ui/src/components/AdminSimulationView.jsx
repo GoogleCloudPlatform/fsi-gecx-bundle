@@ -1372,20 +1372,20 @@ function AdminSimulationView() {
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            <strong>Scenario Studio</strong> sends bounded scenario planning and execution requests through banking-service to the data-generator Cloud Run service. Dry runs only return a validated plan; execute and replay attach eligible active card tokens and write synthetic authorizations through the normal card-network path.
+            <strong>Scenario Studio</strong> sends bounded scenario planning and execution requests directly to the data-generator Cloud Run service. Dry runs only return a validated plan; execute and replay let the generator discover eligible active cards and write synthetic authorizations through the normal banking-service card-network path.
           </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-violet-500 dark:text-violet-400 font-mono font-bold">banking-service /v1/simulation/scenarios</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">The UI calls presenter-authenticated simulation endpoints. Banking-service adds service-to-service auth and, for writes, supplies generator-eligible card tokens.</p>
+              <div className="text-violet-500 dark:text-violet-400 font-mono font-bold">banking-ui /data-generator/scenarios</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">The UI calls the Data Generator control surface through the same IAP-protected load balancer used by the banking app.</p>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <div className="text-cyan-500 dark:text-cyan-400 font-mono font-bold">data-generator ScenarioPlan</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">The generator owns the Pydantic scenario contract, canned templates, idempotency keys, and synthetic outcome labels used by later fraud feedback demos.</p>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">The generator owns the Pydantic scenario contract, canned templates, idempotency keys, synthetic outcome labels, and future agentic control tools.</p>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-emerald-500 dark:text-emerald-400 font-mono font-bold">Redis Stream + CDC</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Executed scenarios create live stream events immediately, then flow through Datastream into the lakehouse curated views once CDC catches up.</p>
+              <div className="text-emerald-500 dark:text-emerald-400 font-mono font-bold">banking-service card-network APIs</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Executed scenarios still use banking-service for authorizations, settlement, reversal, fraud scoring, Redis stream events, and CDC into the lakehouse.</p>
             </div>
           </div>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-start justify-between gap-4">

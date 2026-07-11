@@ -65,6 +65,16 @@ resource "google_compute_region_network_endpoint_group" "service_neg" {
   }
 }
 
+resource "google_compute_region_network_endpoint_group" "data_generator_neg" {
+  count                 = var.deploy_cloud_run_services ? 1 : 0
+  name                  = "data-generator-neg"
+  network_endpoint_type = "SERVERLESS"
+  region                = var.region
+  cloud_run {
+    service = google_cloud_run_v2_service.data_generator[0].name
+  }
+}
+
 resource "google_compute_region_network_endpoint_group" "iap_login_ui_neg" {
   count                 = var.deploy_cloud_run_services && var.use_external_identities ? 1 : 0
   name                  = "iap-login-ui-neg"
@@ -112,6 +122,24 @@ resource "google_compute_backend_service" "service_backend" {
   }
 }
 
+resource "google_compute_backend_service" "data_generator_backend" {
+  count                 = var.deploy_cloud_run_services ? 1 : 0
+  name                  = "data-generator-backend"
+  protocol              = "HTTP"
+  timeout_sec           = var.banking_service_timeout_seconds
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+
+  backend {
+    group = google_compute_region_network_endpoint_group.data_generator_neg[0].id
+  }
+
+  iap {
+    enabled              = true
+    oauth2_client_id     = data.google_secret_manager_secret_version_access.iap_client_id.secret_data
+    oauth2_client_secret = data.google_secret_manager_secret_version_access.iap_client_secret.secret_data
+  }
+}
+
 resource "google_compute_backend_service" "iap_login_ui_backend" {
   count                 = var.deploy_cloud_run_services && var.use_external_identities ? 1 : 0
   name                  = "iap-login-ui-backend"
@@ -134,6 +162,7 @@ resource "google_compute_url_map" "lb_url_map" {
   depends_on = [
     google_compute_backend_service.ui_backend,
     google_compute_backend_service.service_backend,
+    google_compute_backend_service.data_generator_backend,
     google_compute_backend_service.iap_login_ui_backend
   ]
 
@@ -149,6 +178,16 @@ resource "google_compute_url_map" "lb_url_map" {
     path_rule {
       paths   = ["/api", "/api/*"]
       service = google_compute_backend_service.service_backend[0].id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/"
+        }
+      }
+    }
+
+    path_rule {
+      paths   = ["/data-generator", "/data-generator/*"]
+      service = google_compute_backend_service.data_generator_backend[0].id
       route_action {
         url_rewrite {
           path_prefix_rewrite = "/"
@@ -221,6 +260,21 @@ resource "google_iap_settings" "ui_backend_iap" {
 resource "google_iap_settings" "service_backend_iap" {
   count = var.deploy_cloud_run_services ? 1 : 0
   name  = "projects/${data.google_project.project.number}/iap_web/compute/services/${google_compute_backend_service.service_backend[0].name}"
+
+  dynamic "access_settings" {
+    for_each = var.use_external_identities ? [1] : []
+    content {
+      gcip_settings {
+        tenant_ids     = ["_${data.google_project.project.number}"]
+        login_page_uri = "https://${var.custom_domain}/login?apiKey=${data.google_firebase_web_app_config.banking_ui_app_config.api_key}"
+      }
+    }
+  }
+}
+
+resource "google_iap_settings" "data_generator_backend_iap" {
+  count = var.deploy_cloud_run_services ? 1 : 0
+  name  = "projects/${data.google_project.project.number}/iap_web/compute/services/${google_compute_backend_service.data_generator_backend[0].name}"
 
   dynamic "access_settings" {
     for_each = var.use_external_identities ? [1] : []
