@@ -14,11 +14,11 @@
 
 export const HELP_CATEGORIES = [
   'All',
-  'Home Financing',
-  'Wealth & Budgeting',
+  'Credit Mastery',
   'Digital Security',
+  'Home Financing',
   'Vehicle Purchasing',
-  'Credit Mastery'
+  'Wealth & Budgeting'
 ];
 
 /**

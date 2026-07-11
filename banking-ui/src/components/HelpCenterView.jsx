@@ -171,13 +171,21 @@ function HelpCenterView({ activeBot, setActiveBot }) {
   const categories = HELP_CATEGORIES;
 
   const filteredArticles = useMemo(() => {
-    return articles.filter(art => {
+    const filtered = articles.filter(art => {
       const matchesCat = selectedCategory === 'All' || art.category === selectedCategory;
       const matchesSearch = searchQuery.trim() === '' || 
         art.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         art.excerpt.toLowerCase().includes(searchQuery.toLowerCase()) ||
         art.body.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCat && matchesSearch;
+    });
+
+    return filtered.sort((a, b) => {
+      if (selectedCategory === 'All') {
+        const catCompare = a.category.localeCompare(b.category);
+        if (catCompare !== 0) return catCompare;
+      }
+      return a.title.localeCompare(b.title);
     });
   }, [searchQuery, selectedCategory]);
 
