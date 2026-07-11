@@ -24,6 +24,7 @@ import {
   triggerSpendSurge,
   planGenerationScenario,
   executeGenerationScenario,
+  getDataGeneratorStatus,
   injectFraudAnomaly,
   injectLateFee,
   getGlobalStream,
@@ -69,6 +70,12 @@ const SCENARIO_OPTIONS = [
 
 const SCENARIO_INTENSITIES = ['low', 'medium', 'high'];
 
+function uniqueValues(values, fallback = 'None') {
+  const unique = [...new Set(values.filter(Boolean))];
+  if (!unique.length) return fallback;
+  return unique.slice(0, 3).join(', ') + (unique.length > 3 ? ` +${unique.length - 3}` : '');
+}
+
 function buildScenarioIdempotencyKey(prefix, plan) {
   return `${prefix}:${plan?.scenario_id || 'scenario'}:${Date.now()}`;
 }
@@ -101,6 +108,47 @@ function isLowRiskReason(reason) {
   return ['BASELINE_LOW_RISK', 'LOW_RISK'].includes(String(reason || '').toUpperCase());
 }
 
+function summarizeScenarioPlan(plan) {
+  const events = plan?.timeline || [];
+  return {
+    eventCount: events.length,
+    personaCount: plan?.personas?.length || 0,
+    geography: uniqueValues(events.map((event) => event.merchant_context?.country_code), 'Local'),
+    categories: uniqueValues(events.map((event) => event.merchant_context?.category || event.merchant_context?.mcc), 'Mixed'),
+    validations: plan?.expected_validations?.length || 0,
+    warnings: plan?.warnings?.length || 0,
+  };
+}
+
+function summarizeScenarioResult(result) {
+  if (!result) {
+    return {
+      status: 'None',
+      attempted: 0,
+      succeeded: 0,
+      authorizations: 0,
+      settlements: 0,
+      reversals: 0,
+      pending: 0,
+      outcomes: 0,
+      failures: 0,
+      skipped: 0,
+    };
+  }
+  return {
+    status: result.status || 'None',
+    attempted: result.attempted_events || 0,
+    succeeded: result.succeeded_events || 0,
+    authorizations: result.authorizations_created || 0,
+    settlements: result.settlements_created || 0,
+    reversals: result.reversals_created || 0,
+    pending: result.pending_holds_created || 0,
+    outcomes: result.outcomes?.length || 0,
+    failures: result.failed_events || 0,
+    skipped: result.skipped_events || 0,
+  };
+}
+
 function parseFraudRiskScore(item) {
   const explicitScore = Number(item?.fraud_risk_score);
   if (Number.isFinite(explicitScore)) {
@@ -123,6 +171,7 @@ function AdminSimulationView() {
   const [scenarioMaxEvents, setScenarioMaxEvents] = useState('8');
   const [scenarioPlan, setScenarioPlan] = useState(null);
   const [scenarioResult, setScenarioResult] = useState(null);
+  const [dataGeneratorStatus, setDataGeneratorStatus] = useState(null);
   const [infoModal, setInfoModal] = useState(null);
   const [streamData, setStreamData] = useState([]);
   const [feedback, setFeedback] = useState({ type: '', title: '', message: '', data: null });
@@ -278,6 +327,10 @@ function AdminSimulationView() {
         iconClass: 'text-emerald-500',
       };
 
+  const scenarioPlanSummary = summarizeScenarioPlan(scenarioPlan);
+  const scenarioResultSummary = summarizeScenarioResult(scenarioResult);
+  const ambientProfile = dataGeneratorStatus?.ambient_profile || null;
+
   const applyMonitorSnapshot = (streamSnapshot) => {
     if (streamSnapshot?.stream) {
       setStreamData(streamSnapshot.stream);
@@ -321,6 +374,17 @@ function AdminSimulationView() {
     };
 
     loadInitialSnapshot();
+
+    const loadDataGeneratorStatus = async () => {
+      try {
+        const status = await getDataGeneratorStatus();
+        setDataGeneratorStatus(status);
+      } catch (error) {
+        console.error('Failed to fetch data-generator status:', error);
+      }
+    };
+
+    loadDataGeneratorStatus();
 
     const controller = new AbortController();
     let isMounted = true;
@@ -929,6 +993,31 @@ function AdminSimulationView() {
           </div>
         </div>
 
+        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
+          <div className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="text-slate-400">Ambient Profile</div>
+            <div className="font-mono font-bold text-slate-900 dark:text-white truncate">{ambientProfile?.profile_name || 'steady'}</div>
+          </div>
+          <div className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="text-slate-400">Pulse Events</div>
+            <div className="font-mono font-bold text-slate-900 dark:text-white">
+              {ambientProfile ? `${ambientProfile.pulse_min_events}-${ambientProfile.pulse_max_events}` : 'Default'}
+            </div>
+          </div>
+          <div className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="text-slate-400">Travel / Digital</div>
+            <div className="font-mono font-bold text-slate-900 dark:text-white">
+              {ambientProfile ? `${ambientProfile.travel_multiplier}x / ${ambientProfile.ecommerce_multiplier}x` : '1x / 1x'}
+            </div>
+          </div>
+          <div className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="text-slate-400">Fraud Pattern</div>
+            <div className="font-mono font-bold text-slate-900 dark:text-white">
+              {ambientProfile?.fraud_pattern_enabled ? `${Math.round((ambientProfile.fraud_pattern_rate || 0) * 100)}%` : 'Off'}
+            </div>
+          </div>
+        </div>
+
         <div className="mt-5 grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="block">
@@ -992,15 +1081,70 @@ function AdminSimulationView() {
               <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
                 <div>
                   <div className="text-slate-400">Events</div>
-                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{scenarioPlan?.timeline?.length || 0}</div>
+                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{scenarioPlanSummary.eventCount}</div>
                 </div>
                 <div>
-                  <div className="text-slate-400">Labels</div>
-                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{scenarioResult?.outcomes?.length || 0}</div>
+                  <div className="text-slate-400">Personas</div>
+                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{scenarioPlanSummary.personaCount}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400">Checks</div>
+                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{scenarioPlanSummary.validations}</div>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                <div>
+                  <div className="text-slate-400">Geography</div>
+                  <div className="font-semibold text-slate-700 dark:text-slate-200 truncate">{scenarioPlanSummary.geography}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400">Categories</div>
+                  <div className="font-semibold text-slate-700 dark:text-slate-200 truncate">{scenarioPlanSummary.categories}</div>
+                </div>
+              </div>
+              {scenarioPlanSummary.warnings > 0 && (
+                <div className="mt-3 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 px-3 py-2 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                  {scenarioPlanSummary.warnings} planning warning{scenarioPlanSummary.warnings === 1 ? '' : 's'} attached.
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800 p-4">
+              <div className="text-sm font-bold text-slate-900 dark:text-white">Execution Result</div>
+              <div className="mt-3 grid grid-cols-4 gap-2 text-[11px]">
+                <div>
+                  <div className="text-slate-400">Status</div>
+                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200 truncate">{scenarioResultSummary.status}</div>
                 </div>
                 <div>
                   <div className="text-slate-400">Success</div>
-                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{scenarioResult?.succeeded_events ?? 0}</div>
+                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{scenarioResultSummary.succeeded}/{scenarioResultSummary.attempted}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400">Auths</div>
+                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{scenarioResultSummary.authorizations}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400">Labels</div>
+                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{scenarioResultSummary.outcomes}</div>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-4 gap-2 text-[11px]">
+                <div>
+                  <div className="text-slate-400">Settle</div>
+                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{scenarioResultSummary.settlements}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400">Reverse</div>
+                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{scenarioResultSummary.reversals}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400">Holds</div>
+                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{scenarioResultSummary.pending}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400">Issues</div>
+                  <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{scenarioResultSummary.failures + scenarioResultSummary.skipped}</div>
                 </div>
               </div>
             </div>

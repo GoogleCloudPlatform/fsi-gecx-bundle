@@ -409,6 +409,21 @@ export async function getDataGeneratorStatus() {
   return res.data;
 }
 
+export async function getAmbientLoadProfile() {
+  const res = await dataGeneratorApi.get('ambient/profile');
+  return res.data;
+}
+
+export async function updateAmbientLoadProfile(payload) {
+  const res = await dataGeneratorApi.put('ambient/profile', payload);
+  return res.data;
+}
+
+export async function resetAmbientLoadProfile() {
+  const res = await dataGeneratorApi.post('ambient/profile/reset');
+  return res.data;
+}
+
 export async function injectFraudAnomaly() {
   const res = await api.post('v1/simulation/inject-anomaly');
   return res.data;
