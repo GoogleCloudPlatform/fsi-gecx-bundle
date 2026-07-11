@@ -117,8 +117,7 @@ function DisclosuresView() {
               <div
                 key={doc.id}
                 onClick={() => setViewingDocument(doc)}
-                className="card-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800/60 shadow-lg hover:border-sky-500/40 transition-all duration-300 flex flex-col justify-between space-y-6 group cursor-pointer"
-                style={{ backgroundColor: 'var(--card-bg-color, #0f172a)' }}
+                className="bg-white dark:bg-slate-900/40 p-8 rounded-3xl border border-slate-200 dark:border-slate-800/60 shadow-sm dark:shadow-none hover:border-sky-500/40 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-6 group cursor-pointer"
               >
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
