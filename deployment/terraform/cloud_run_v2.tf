@@ -915,6 +915,7 @@ resource "google_cloud_run_v2_service" "data_generator" {
     google_project_service.run_googleapis_com,
     google_sql_user.data_generator_iam_user,
     google_cloud_tasks_queue.data_generator_synthetic_schedule,
+    google_service_account_iam_member.datagen_sa_cloudtasks_oidc_act_as_self,
     google_project_iam_member.datagen_sa_cloudsql_client,
     google_project_iam_member.datagen_sa_cloudsql_instance_user,
     google_secret_manager_secret_iam_member.data_generator_card_network_switch_token_accessor,

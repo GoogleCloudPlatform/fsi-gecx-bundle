@@ -191,6 +191,12 @@ resource "google_project_iam_member" "datagen_sa_cloudtasks_enqueuer" {
   member  = "serviceAccount:${google_service_account.data_generator_service_account.email}"
 }
 
+resource "google_service_account_iam_member" "datagen_sa_cloudtasks_oidc_act_as_self" {
+  service_account_id = google_service_account.data_generator_service_account.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.data_generator_service_account.email}"
+}
+
 resource "google_project_iam_member" "datagen_sa_cloudsql_client" {
   project = data.google_project.project.project_id
   role    = "roles/cloudsql.client"
