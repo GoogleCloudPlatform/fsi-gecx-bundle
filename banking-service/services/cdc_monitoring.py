@@ -22,8 +22,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models.credit_card import PostedTransaction, TransactionAuthorization
-from models.fraud import FraudAlert
 from repositories.cdc_lakehouse import CdcLakehouseRepository
+from repositories.fraud import FraudAlertRepository
 from utils.database import enable_session_rbac_override
 from utils.gcp import get_project_id
 from utils.redis_client import get_redis_client
@@ -36,9 +36,15 @@ _cache = get_redis_client()
 class CdcMonitoringService:
     """Service layer for operational-to-lakehouse CDC monitoring."""
 
-    def __init__(self, db: Session, lakehouse_repo: CdcLakehouseRepository | None = None):
+    def __init__(
+        self,
+        db: Session,
+        lakehouse_repo: CdcLakehouseRepository | None = None,
+        fraud_alert_repo: FraudAlertRepository | None = None,
+    ):
         self.db = db
         self.lakehouse_repo = lakehouse_repo or CdcLakehouseRepository()
+        self.fraud_alert_repo = fraud_alert_repo or FraudAlertRepository(db)
         self.project_id = get_project_id()
 
     @staticmethod
@@ -126,7 +132,7 @@ class CdcMonitoringService:
 
     def get_open_fraud_alert_count(self) -> int:
         enable_session_rbac_override(self.db)
-        return self.db.query(FraudAlert).filter(FraudAlert.status == "OPEN").count()
+        return self.fraud_alert_repo.count_open_alerts()
 
     def get_cdc_status(self) -> dict:
         operational_latest = self.get_operational_latest_timestamp()

@@ -69,6 +69,9 @@ class FraudAlertRepository:
             .first()
         )
 
+    def count_open_alerts(self) -> int:
+        return self.db.query(FraudAlert).filter(FraudAlert.status == "OPEN").count()
+
     def append_suspicious_authorization(
         self,
         *,
