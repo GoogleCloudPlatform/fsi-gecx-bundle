@@ -36,6 +36,8 @@ import { showInfoModals } from '../utils/constants.js';
 
 const MIN_RISK_CONDITION_SCORED_EVENTS = 5;
 const ELEVATED_AVERAGE_RISK_SCORE = 25;
+const SURGING_AVERAGE_RISK_SCORE = 70;
+const FEEDBACK_DISMISS_MS = 30000;
 
 const SCENARIO_OPTIONS = [
   {
@@ -129,6 +131,8 @@ function AdminSimulationView() {
     systemLagMs: null,
     dataFreshnessMs: null,
     activeAnomalies: 0,
+    operationalActiveFraudAlerts: 0,
+    lakehouseFraudAnomalies: 0,
     eventsPerMinute: 0,
     authorizationEventsPerMinute: 0,
     postedEventsPerMinute: 0,
@@ -223,9 +227,12 @@ function AdminSimulationView() {
   const hasSustainedElevatedRisk =
     creditRiskMetrics.scoredCount >= MIN_RISK_CONDITION_SCORED_EVENTS
     && creditRiskMetrics.averageRiskScore >= ELEVATED_AVERAGE_RISK_SCORE;
+  const hasSustainedSurgingRisk =
+    creditRiskMetrics.scoredCount >= MIN_RISK_CONDITION_SCORED_EVENTS
+    && creditRiskMetrics.averageRiskScore >= SURGING_AVERAGE_RISK_SCORE;
 
   const riskCondition = (() => {
-    if (cdcStats.flaggedEventsPerMinute >= 3 || cdcStats.activeAnomalies >= 5) {
+    if (cdcStats.flaggedEventsPerMinute >= 3 || hasSustainedSurgingRisk) {
       return {
         label: 'Surging',
         className: 'bg-rose-50 dark:bg-rose-950/10 border-rose-100 dark:border-rose-900/40',
@@ -235,7 +242,7 @@ function AdminSimulationView() {
     }
     if (
       cdcStats.flaggedEventsPerMinute > 0
-      || cdcStats.activeAnomalies > 0
+      || cdcStats.operationalActiveFraudAlerts > 0
       || hasSustainedElevatedRisk
     ) {
       return {
@@ -253,13 +260,13 @@ function AdminSimulationView() {
     };
   })();
 
-  const anomalySeverity = cdcStats.activeAnomalies >= 5
+  const anomalySeverity = cdcStats.operationalActiveFraudAlerts >= 5
     ? {
         cardClass: 'bg-rose-50 dark:bg-rose-950/10 border-rose-100 dark:border-rose-900/40',
         textClass: 'text-rose-700 dark:text-rose-300',
         iconClass: 'text-rose-500',
       }
-    : cdcStats.activeAnomalies > 0
+    : cdcStats.operationalActiveFraudAlerts > 0
     ? {
         cardClass: 'bg-amber-50 dark:bg-amber-950/10 border-amber-100 dark:border-amber-900/40',
         textClass: 'text-amber-700 dark:text-amber-300',
@@ -281,6 +288,8 @@ function AdminSimulationView() {
         systemLagMs: streamSnapshot.cdc_metrics?.system_lag_ms ?? null,
         dataFreshnessMs: streamSnapshot.cdc_metrics?.data_freshness_ms ?? null,
         activeAnomalies: streamSnapshot.cdc_metrics?.active_anomalies ?? 0,
+        operationalActiveFraudAlerts: streamSnapshot.cdc_metrics?.operational_active_fraud_alerts ?? streamSnapshot.cdc_metrics?.active_anomalies ?? 0,
+        lakehouseFraudAnomalies: streamSnapshot.cdc_metrics?.lakehouse_fraud_anomalies ?? 0,
         eventsPerMinute: streamSnapshot.stream_metrics?.events_per_minute ?? 0,
         authorizationEventsPerMinute: streamSnapshot.stream_metrics?.authorization_events_per_minute ?? 0,
         postedEventsPerMinute: streamSnapshot.stream_metrics?.posted_events_per_minute ?? 0,
@@ -395,7 +404,7 @@ function AdminSimulationView() {
     if (feedback.message) {
       const timer = setTimeout(() => {
         setFeedback({ type: '', title: '', message: '', data: null });
-      }, 5000);
+      }, FEEDBACK_DISMISS_MS);
       return () => clearTimeout(timer);
     }
   }, [feedback]);
@@ -438,6 +447,7 @@ function AdminSimulationView() {
       setCdcStats(prev => ({
         ...prev,
         activeAnomalies: Math.max(prev.activeAnomalies, 1),
+        operationalActiveFraudAlerts: Math.max(prev.operationalActiveFraudAlerts, 1),
         flaggedEventsPerMinute: Math.max(prev.flaggedEventsPerMinute, 1),
       }));
       fetchGlobalStream();
@@ -741,7 +751,7 @@ function AdminSimulationView() {
               <span>Open Fraud Alerts</span>
               <ShieldAlert className={`w-4 h-4 ${anomalySeverity.iconClass}`} />
             </div>
-            <div className={`text-2xl font-black font-mono ${anomalySeverity.textClass}`}>{cdcStats.activeAnomalies}</div>
+            <div className={`text-2xl font-black font-mono ${anomalySeverity.textClass}`}>{cdcStats.operationalActiveFraudAlerts}</div>
             <div className={`text-[10px] mt-1 ${anomalySeverity.textClass}`}>Customer-facing cases awaiting review</div>
           </div>
 
@@ -891,7 +901,18 @@ function AdminSimulationView() {
               <ClipboardList className="w-4 h-4 text-violet-500" />
               Scenario Studio
             </div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Agentic Data Generation Controls</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Agentic Data Generation Controls</h2>
+              {showInfoModals() && (
+                <button
+                  onClick={() => setInfoModal('scenario-studio')}
+                  className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+                  title="Scenario Studio info"
+                >
+                  <GoogleCloudIcon className="w-4 h-4 text-indigo-400" />
+                </button>
+              )}
+            </div>
             <p className="text-xs text-slate-500 mt-1 max-w-2xl">
               Plan, execute, or replay scenario-backed synthetic transaction stories through the data-generator service.
             </p>
@@ -1034,7 +1055,12 @@ function AdminSimulationView() {
           <div className="flex-1 overflow-hidden">
             <div className="flex items-center justify-between">
               <h4 className="font-bold text-base">{feedback.title}</h4>
-              <span className="text-[10px] font-mono opacity-60 uppercase tracking-wider">Auto-dismissing in 5s...</span>
+              <button
+                onClick={() => setFeedback({ type: '', title: '', message: '', data: null })}
+                className="px-2.5 py-1 rounded-lg bg-white/30 dark:bg-black/20 hover:bg-white/50 dark:hover:bg-black/30 text-[10px] font-bold uppercase tracking-wider transition-colors"
+              >
+                Hide
+              </button>
             </div>
             <p className="text-sm mt-1 opacity-90">{feedback.message}</p>
             {feedback.data && (
@@ -1316,7 +1342,7 @@ function AdminSimulationView() {
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            The <strong>Credit Risk Metrics</strong> tile tracks open fraud-case outcomes, live model scores, risk condition, and unsettled exposure separately from replication transport health. A non-zero alert count means the demo has suspicious card activity available for secure-message review and the voice agent flow.
+            The <strong>Credit Risk Metrics</strong> tile tracks open fraud cases, recent model scores, risk condition, and unsettled exposure separately from replication transport health. A non-zero alert count means the demo has suspicious card activity available for secure-message review and the voice agent flow.
           </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
@@ -1325,7 +1351,7 @@ function AdminSimulationView() {
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <div className="text-amber-500 dark:text-amber-400 font-mono font-bold">Risk Condition</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Normal means the visible stream has low model scores and no active alert pressure. Elevated means the stream has flagged activity, open alerts, or an average model score above the operating threshold. Surging means multiple flagged authorizations per minute or several open alerts.</p>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Normal means the visible stream has low model scores and no active alert pressure. Elevated means the stream has flagged activity, open alerts, or an average model score above the operating threshold. Surging is reserved for multiple flagged authorizations per minute or a sustained high average model score.</p>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <div className="text-amber-500 dark:text-amber-400 font-mono font-bold">Peak Model Score</div>
@@ -1335,6 +1361,47 @@ function AdminSimulationView() {
               <div className="text-blue-500 dark:text-blue-400 font-mono font-bold">Exposure + Event Mix</div>
               <p className="text-slate-500 dark:text-slate-400 mt-1">Flagged exposure sums suspicious authorizations in the visible stream, while the event mix compares authorization, posting, and flagged activity per minute.</p>
             </div>
+          </div>
+        </div>
+      </GcpInfoModal>
+
+      <GcpInfoModal
+        isOpen={infoModal === 'scenario-studio'}
+        onClose={() => setInfoModal(null)}
+        title="Scenario Studio"
+      >
+        <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+          <p>
+            <strong>Scenario Studio</strong> sends bounded scenario planning and execution requests through banking-service to the data-generator Cloud Run service. Dry runs only return a validated plan; execute and replay attach eligible active card tokens and write synthetic authorizations through the normal card-network path.
+          </p>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-violet-500 dark:text-violet-400 font-mono font-bold">banking-service /v1/simulation/scenarios</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">The UI calls presenter-authenticated simulation endpoints. Banking-service adds service-to-service auth and, for writes, supplies generator-eligible card tokens.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-cyan-500 dark:text-cyan-400 font-mono font-bold">data-generator ScenarioPlan</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">The generator owns the Pydantic scenario contract, canned templates, idempotency keys, and synthetic outcome labels used by later fraud feedback demos.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-emerald-500 dark:text-emerald-400 font-mono font-bold">Redis Stream + CDC</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Executed scenarios create live stream events immediately, then flow through Datastream into the lakehouse curated views once CDC catches up.</p>
+            </div>
+          </div>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-start justify-between gap-4">
+            <div>
+              <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Cloud Run Services</h4>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Inspect revisions for banking-service, data-generator, and banking-ui after a scenario-control deployment.</p>
+            </div>
+            <a
+              href="https://console.cloud.google.com/run"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
+            >
+              <span>View Cloud Run</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
           </div>
         </div>
       </GcpInfoModal>

@@ -33,6 +33,21 @@ from .schemas import (
 PLANNER_VERSION = "local-template-planner-v1"
 TEMPLATE_VERSION = "scenario-template-v1"
 
+LAKEHOUSE_SURGE_MERCHANTS = [
+    ("WHOLE FOODS MARKET MV", "Groceries", "5411", "USA", "Mountain View", "CA", None, None, 0),
+    ("BLUE BOTTLE COFFEE SF", "Coffee", "5814", "USA", "San Francisco", "CA", None, None, 0),
+    ("GARRETT POPCORN CHICAGO", "Dining", "5812", "USA", "Chicago", "IL", None, None, 0),
+    ("PIKE PLACE MARKET SEATTLE", "Retail", "5311", "USA", "Seattle", "WA", None, None, 0),
+    ("HARBOUR TABLE VANCOUVER BC", "Dining", "5812", "CAN", "Vancouver", "BC", 49.2827, -123.1207, 12),
+    ("UNION BISTRO TORONTO ON", "Dining", "5812", "CAN", "Toronto", "ON", 43.6532, -79.3832, 12),
+    ("SOHO MARKET LONDON GBR", "Dining", "5812", "GBR", "London", "ENG", 51.5072, -0.1276, 18),
+    ("RIVE GAUCHE CAFE PARIS FRA", "Coffee", "5814", "FRA", "Paris", "IDF", 48.8566, 2.3522, 18),
+    ("MITTE KAFFEE BERLIN DEU", "Coffee", "5814", "DEU", "Berlin", "BE", 52.52, 13.405, 18),
+    ("GRAN VIA TAPAS MADRID ESP", "Dining", "5812", "ESP", "Madrid", "MD", 40.4168, -3.7038, 18),
+    ("TRASTEVERE OSTERIA ROME ITA", "Dining", "5812", "ITA", "Rome", "RM", 41.9028, 12.4964, 18),
+    ("LAGUNA CICCHETTI VENICE ITA", "Dining", "5812", "ITA", "Venice", "VE", 45.4408, 12.3155, 18),
+]
+
 
 def stable_scenario_id(request: ScenarioRequest, scenario_type: ScenarioType) -> str:
     normalized = "|".join(
@@ -624,28 +639,36 @@ def lakehouse_spend_velocity_surge(request: ScenarioRequest) -> ScenarioPlan:
         reversal_probability=0.10,
         pending_probability=0.10,
     )
-    timeline = [
-        PlannedCardEvent(
-            event_id=f"surge-event-{idx:03d}",
-            offset_minutes=idx // 5,
-            event_type=PlannedEventType.AUTHORIZATION,
-            persona_id=persona.persona_id,
-            amount_cents=1_000 + (idx % 12) * 750,
-            merchant_context=MerchantContext(
-                category=["Groceries", "Dining", "Coffee", "Fuel", "Rideshare", "Retail"][idx % 6],
-                mcc=["5411", "5812", "5814", "5541", "4121", "5311"][idx % 6],
-                merchant_name_hint=f"LAKEHOUSE SURGE MERCHANT {idx:03d}",
-                city=["Mountain View", "San Francisco", "Chicago", "Seattle"][idx % 4],
-                region=["CA", "CA", "IL", "WA"][idx % 4],
-                transaction_channel="CARD_PRESENT",
-                entry_mode=["CHIP", "CONTACTLESS", "MAG_STRIPE"][idx % 3],
-            ),
-            expected_score_band="low",
-            outcome_label=OutcomeLabel.CONFIRMED_LEGITIMATE,
-            description="Bounded non-fraud spend velocity event for lakehouse replication demo.",
+    timeline = []
+    for idx in range(1, min(event_count, 1000) + 1):
+        name, category, mcc, country, city, region, latitude, longitude, risk_hint = LAKEHOUSE_SURGE_MERCHANTS[
+            (idx - 1) % len(LAKEHOUSE_SURGE_MERCHANTS)
+        ]
+        timeline.append(
+            PlannedCardEvent(
+                event_id=f"surge-event-{idx:03d}",
+                offset_minutes=idx // 5,
+                event_type=PlannedEventType.AUTHORIZATION,
+                persona_id=persona.persona_id,
+                amount_cents=1_000 + (idx % 12) * 750,
+                merchant_context=MerchantContext(
+                    category=category,
+                    mcc=mcc,
+                    merchant_name_hint=name,
+                    country_code=country,
+                    city=city,
+                    region=region,
+                    latitude=latitude,
+                    longitude=longitude,
+                    transaction_channel="CARD_PRESENT",
+                    entry_mode=["CHIP", "CONTACTLESS", "MAG_STRIPE"][idx % 3],
+                    high_risk_flags=["LOW_INTERNATIONAL_TRAVEL_RISK"] if risk_hint else [],
+                ),
+                expected_score_band="low",
+                outcome_label=OutcomeLabel.CONFIRMED_LEGITIMATE,
+                description="Bounded non-fraud spend velocity event for lakehouse replication demo.",
+            )
         )
-        for idx in range(1, min(event_count, 1000) + 1)
-    ]
     validations = [
         ExpectedValidation(validation_id="stream-throughput", surface="admin_stream", expectation="Live event throughput increases immediately after execution.", metric_name="events_per_minute", expected_minimum=min(event_count, 50)),
         ExpectedValidation(validation_id="cdc-freshness", surface="cdc_monitor", expectation="Datastream freshness remains healthy during the burst."),

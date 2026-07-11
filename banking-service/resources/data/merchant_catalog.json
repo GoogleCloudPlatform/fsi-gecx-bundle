@@ -11376,5 +11376,119 @@
         "risk_score": 0
       }
     ]
+  },
+  {
+    "merchant_id": "global_travel_dining",
+    "clean_name": "Global Travel Dining",
+    "default_mcc": "5812",
+    "merchant_domain": "globaltraveldining.example",
+    "logo_url": null,
+    "is_subscription": false,
+    "stores": [
+      {
+        "location_name": "Harbour Table Vancouver",
+        "raw_descriptor": "HARBOUR TABLE VANCOUVER BC",
+        "country_code": "CAN",
+        "is_international": true,
+        "city": "Vancouver",
+        "region": "BC",
+        "latitude": 49.2827,
+        "longitude": -123.1207,
+        "card_present_capable": true,
+        "ecommerce_capable": false,
+        "risk_score": 12
+      },
+      {
+        "location_name": "Union Bistro Toronto",
+        "raw_descriptor": "UNION BISTRO TORONTO ON",
+        "country_code": "CAN",
+        "is_international": true,
+        "city": "Toronto",
+        "region": "ON",
+        "latitude": 43.6532,
+        "longitude": -79.3832,
+        "card_present_capable": true,
+        "ecommerce_capable": false,
+        "risk_score": 12
+      },
+      {
+        "location_name": "Soho Market London",
+        "raw_descriptor": "SOHO MARKET LONDON GBR",
+        "country_code": "GBR",
+        "is_international": true,
+        "city": "London",
+        "region": "ENG",
+        "latitude": 51.5072,
+        "longitude": -0.1276,
+        "card_present_capable": true,
+        "ecommerce_capable": false,
+        "risk_score": 18
+      },
+      {
+        "location_name": "Rive Gauche Cafe Paris",
+        "raw_descriptor": "RIVE GAUCHE CAFE PARIS FRA",
+        "country_code": "FRA",
+        "is_international": true,
+        "city": "Paris",
+        "region": "IDF",
+        "latitude": 48.8566,
+        "longitude": 2.3522,
+        "card_present_capable": true,
+        "ecommerce_capable": false,
+        "risk_score": 18
+      },
+      {
+        "location_name": "Mitte Kaffee Berlin",
+        "raw_descriptor": "MITTE KAFFEE BERLIN DEU",
+        "country_code": "DEU",
+        "is_international": true,
+        "city": "Berlin",
+        "region": "BE",
+        "latitude": 52.52,
+        "longitude": 13.405,
+        "card_present_capable": true,
+        "ecommerce_capable": false,
+        "risk_score": 18
+      },
+      {
+        "location_name": "Gran Via Tapas Madrid",
+        "raw_descriptor": "GRAN VIA TAPAS MADRID ESP",
+        "country_code": "ESP",
+        "is_international": true,
+        "city": "Madrid",
+        "region": "MD",
+        "latitude": 40.4168,
+        "longitude": -3.7038,
+        "card_present_capable": true,
+        "ecommerce_capable": false,
+        "risk_score": 18
+      },
+      {
+        "location_name": "Trastevere Osteria Rome",
+        "raw_descriptor": "TRASTEVERE OSTERIA ROME ITA",
+        "country_code": "ITA",
+        "is_international": true,
+        "city": "Rome",
+        "region": "RM",
+        "latitude": 41.9028,
+        "longitude": 12.4964,
+        "card_present_capable": true,
+        "ecommerce_capable": false,
+        "risk_score": 18
+      },
+      {
+        "location_name": "Laguna Cicchetti Venice",
+        "raw_descriptor": "LAGUNA CICCHETTI VENICE ITA",
+        "country_code": "ITA",
+        "is_international": true,
+        "city": "Venice",
+        "region": "VE",
+        "latitude": 45.4408,
+        "longitude": 12.3155,
+        "card_present_capable": true,
+        "ecommerce_capable": false,
+        "risk_score": 18
+      }
+    ]
   }
 ]

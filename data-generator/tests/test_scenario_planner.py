@@ -130,6 +130,10 @@ def test_lakehouse_spend_velocity_surge_is_bounded_non_fraud_activity():
     assert len(plan.timeline) == 12
     assert plan.labels["fraud_language"] == "false"
     assert {event.expected_score_band for event in plan.timeline} == {"low"}
+    merchant_names = {event.merchant_context.merchant_name_hint for event in plan.timeline if event.merchant_context}
+    countries = {event.merchant_context.country_code for event in plan.timeline if event.merchant_context}
+    assert not any("LAKEHOUSE SURGE MERCHANT" in name for name in merchant_names)
+    assert {"CAN", "GBR", "FRA", "DEU", "ESP", "ITA"}.issubset(countries)
 
 
 def test_same_prompt_seed_and_template_are_stable():
