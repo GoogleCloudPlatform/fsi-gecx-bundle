@@ -2174,10 +2174,10 @@ function AppContent() {
                     href={window.env.FEEDBACK_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-mono text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5"
+                    className="font-mono text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5 break-all text-right max-w-[65%]"
                   >
-                    <span>Link</span>
-                    <ExternalLink className="w-3 h-3" />
+                    <span>{window.env.FEEDBACK_URL}</span>
+                    <ExternalLink className="w-3 h-3 shrink-0" />
                   </a>
                 </div>
               )}
