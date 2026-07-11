@@ -19,6 +19,7 @@ import os
 import random
 import sys
 import uuid
+from contextlib import asynccontextmanager
 from typing import List, Dict, Any, Optional
 
 import httpx
@@ -78,7 +79,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger("data-generator")
 
-app = FastAPI(title="Modernized Synthetic Transaction Data Generator")
+data_generator_mcp_app = None
+
+
+@asynccontextmanager
+async def app_lifespan(parent_app: FastAPI):
+    if data_generator_mcp_app is None:
+        yield
+        return
+
+    async with data_generator_mcp_app.lifespan(parent_app):
+        yield
+
+
+app = FastAPI(
+    title="Modernized Synthetic Transaction Data Generator",
+    lifespan=app_lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -2679,7 +2696,8 @@ try:
         profile = update_ambient_profile(AmbientLoadProfileUpdate.model_validate(update))
         return profile.model_dump(mode="json")
 
-    app.mount("/mcp", data_generator_mcp.http_app(path="/", transport="http"))
+    data_generator_mcp_app = data_generator_mcp.http_app(path="/", transport="http")
+    app.mount("/mcp", data_generator_mcp_app)
 except Exception as mcp_exc:
     logger.warning("Data-generator FastMCP control surface unavailable: %s", mcp_exc)
 
