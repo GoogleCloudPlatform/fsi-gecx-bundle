@@ -30,6 +30,9 @@ import {
   getGlobalStream,
   getBackendApiUrl,
   getBackendAuthHeaders,
+  provisionMyDemo,
+  resetMyDemo,
+  getCreditCardAccount,
 } from '../utils/api.js';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
@@ -158,13 +161,23 @@ function parseFraudRiskScore(item) {
   return match ? Number(match[1]) : null;
 }
 
-function AdminSimulationView() {
+function AdminSimulationView({ mode = 'studio' }) {
   const navigate = useNavigate();
   const projectId = window.firebaseConfig?.projectId;
+  const isMonitoring = mode === 'monitoring';
+  const PageIcon = isMonitoring ? Activity : Sparkles;
+  const pageIconGradient = isMonitoring ? 'from-emerald-500 to-cyan-600' : 'from-cyan-500 to-blue-600';
+  const pageTitle = isMonitoring ? 'Operations Monitor' : 'Simulation Studio';
+  const pageSubtitle = isMonitoring
+    ? 'Live WAL replication health, credit risk posture, and transaction stream monitoring for banking operations.'
+    : 'Plan, dry-run, and execute synthetic banking scenarios with data-generator controls.';
   const [isSurgeLoading, setIsSurgeLoading] = useState(false);
   const [isAnomalyLoading, setIsAnomalyLoading] = useState(false);
   const [isFeeLoading, setIsFeeLoading] = useState(false);
   const [isScenarioLoading, setIsScenarioLoading] = useState(false);
+  const [hasSeededProfile, setHasSeededProfile] = useState(false);
+  const [isProvisioning, setIsProvisioning] = useState(false);
+  const [isResettingDemo, setIsResettingDemo] = useState(false);
   const [selectedScenarioType, setSelectedScenarioType] = useState(SCENARIO_OPTIONS[0].value);
   const [scenarioIntensity, setScenarioIntensity] = useState('medium');
   const [scenarioSeed, setScenarioSeed] = useState('1841');
@@ -473,6 +486,75 @@ function AdminSimulationView() {
     }
   }, [feedback]);
 
+  useEffect(() => {
+    if (isMonitoring) {
+      return;
+    }
+
+    async function checkSeededProfile() {
+      try {
+        await getCreditCardAccount(null, false);
+        setHasSeededProfile(true);
+      } catch {
+        setHasSeededProfile(false);
+      }
+    }
+
+    checkSeededProfile();
+  }, [isMonitoring]);
+
+  const handleProvisionDemo = async () => {
+    setIsProvisioning(true);
+    setFeedback({ type: '', title: '', message: '', data: null });
+    try {
+      const res = await provisionMyDemo();
+      setHasSeededProfile(true);
+      setFeedback({
+        type: 'success',
+        title: 'Demo Suite Provisioned',
+        message: res.message || 'Personal demo profile provisioned successfully.',
+        data: res,
+      });
+      fetchGlobalStream();
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        title: 'Demo Suite Provisioning Failed',
+        message: err.response?.data?.detail || err.message || 'Failed to provision demo profile.',
+        data: null,
+      });
+    } finally {
+      setIsProvisioning(false);
+    }
+  };
+
+  const handleResetDemo = async () => {
+    if (!window.confirm("Are you sure you want to reset your personal demo suite? This will clear your swipe history but won't impact other users.")) {
+      return;
+    }
+    setIsResettingDemo(true);
+    setFeedback({ type: '', title: '', message: '', data: null });
+    try {
+      const res = await resetMyDemo();
+      setFeedback({
+        type: 'success',
+        title: 'Demo Suite Reset',
+        message: res.message || 'Personal demo profile reset successfully.',
+        data: res,
+      });
+      fetchGlobalStream();
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        title: 'Demo Suite Reset Failed',
+        message: err.response?.data?.detail || err.message || 'Failed to reset demo profile.',
+        data: null,
+      });
+    } finally {
+      setIsResettingDemo(false);
+    }
+  };
+
   const handleSpendSurge = async () => {
     setIsSurgeLoading(true);
     setFeedback({ type: '', title: '', message: '', data: null });
@@ -670,21 +752,23 @@ function AdminSimulationView() {
             Back to Admin Portal
           </button>
           <div className="flex items-center gap-3">
-            <div className="p-3 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20">
-              <Sparkles className="w-7 h-7" />
+            <div className={`p-3 rounded-2xl bg-gradient-to-br ${pageIconGradient} text-white shadow-lg shadow-cyan-500/20`}>
+              <PageIcon className="w-7 h-7" />
             </div>
             <div>
               <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
-                Replication Monitor & Simulation Studio
+                {pageTitle}
               </h1>
               <p className="text-sm text-slate-500 mt-1">
-                Live Redis event streaming, Datastream health, and synthetic transaction controls for the banking service.
+                {pageSubtitle}
               </p>
             </div>
           </div>
         </div>
       </div>
 
+      {isMonitoring && (
+        <>
       {/* Section 1: Datastream & WAL CDC Replication Status */}
       <div className="mb-10 p-6 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5">
         <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200/60 dark:border-slate-800/60">
@@ -887,6 +971,11 @@ function AdminSimulationView() {
         </div>
       </div>
 
+        </>
+      )}
+
+      {!isMonitoring && (
+        <>
       <div className="mb-10">
         <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           <Zap className="w-4 h-4 text-amber-500" />
@@ -1182,6 +1271,47 @@ function AdminSimulationView() {
         </div>
       </div>
 
+      <div className="mb-10 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">Personal Demo Suite Management</h4>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {hasSeededProfile
+              ? "You have an active personal demo profile. Reset your swipe transactions and restore checking/savings default balances without impacting other presenters."
+              : "You do not have a seeded personal demo profile. Provision a complete account suite with checking, savings, credit cards, credit scoring profiles, and realistic transaction history."}
+          </p>
+        </div>
+        <div className="flex gap-3 self-start sm:self-auto">
+          {!hasSeededProfile ? (
+            <button
+              onClick={handleProvisionDemo}
+              disabled={isProvisioning}
+              className={`px-5 py-2.5 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
+                isProvisioning
+                  ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                  : 'border-emerald-200 dark:border-emerald-900/30 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100/50 dark:hover:bg-emerald-950/40'
+              }`}
+            >
+              {isProvisioning ? 'Provisioning...' : 'Provision My Demo Profile'}
+            </button>
+          ) : (
+            <button
+              onClick={handleResetDemo}
+              disabled={isResettingDemo}
+              className={`px-5 py-2.5 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
+                isResettingDemo
+                  ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                  : 'border-blue-200 dark:border-blue-900/30 bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100/50 dark:hover:bg-blue-950/40'
+              }`}
+            >
+              {isResettingDemo ? 'Resetting Suite...' : 'Reset My Demo Suite'}
+            </button>
+          )}
+        </div>
+      </div>
+
+        </>
+      )}
+
       {/* Feedback Alert Box (Pop-up above live streaming ledger) */}
       {feedback.message && (
         <div className={`mb-8 p-5 rounded-2xl border backdrop-blur-md flex items-start gap-4 transition-all duration-300 shadow-xl animate-fade-in ${
@@ -1216,6 +1346,8 @@ function AdminSimulationView() {
         </div>
       )}
 
+      {isMonitoring && (
+        <>
       {/* Section 4: Live Transaction Activity Streams */}
       <div className="p-7 rounded-3xl bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-2xl shadow-slate-950/5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -1275,7 +1407,7 @@ function AdminSimulationView() {
               {streamData.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="p-8 text-center text-slate-500 dark:text-slate-500 font-sans">
-                    Waiting for operational transaction activity... Trigger a surge, anomaly, or late fee above.
+                    Waiting for operational transaction activity. Use Simulation Studio to generate scenario activity.
                   </td>
                 </tr>
               ) : (
@@ -1346,6 +1478,9 @@ function AdminSimulationView() {
         </div>
 
       </div>
+
+        </>
+      )}
 
       <GcpInfoModal
         isOpen={infoModal === 'monitor'}

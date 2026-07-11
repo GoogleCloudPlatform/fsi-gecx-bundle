@@ -174,7 +174,12 @@ export default function AppRoutes({
       } />
       <Route path="/admin/simulation" element={
         <ProtectedRoute isReady={isReady} fbUser={fbUser}>
-          <AdminSimulationView />
+          <AdminSimulationView mode="studio" />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/monitoring" element={
+        <ProtectedRoute isReady={isReady} fbUser={fbUser}>
+          <AdminSimulationView mode="monitoring" />
         </ProtectedRoute>
       } />
       <Route path="/search" element={
