@@ -15,7 +15,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { MapPin, Search, Navigation, Clock, Phone, ExternalLink, Copy, Check } from 'lucide-react';
 import { getLocations } from '../utils/api.js';
-import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 
 export default function LocatorView() {

@@ -17,7 +17,7 @@ import { useLocation } from 'react-router-dom';
 import { Search, MessageSquare, RotateCcw, ExternalLink } from 'lucide-react';
 
 import { findAnswer, performSearch } from '../utils/api.js';
-import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 
 function SearchView() {
