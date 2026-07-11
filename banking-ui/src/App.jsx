@@ -46,8 +46,8 @@ import {
   getCcaiAuthToken,
   getAccountsSummary
 } from './utils/api.js';
-import GoogleCloudIcon from './components/GoogleCloudIcon.jsx';
-import CloudBuildIcon from './components/CloudBuildIcon.jsx';
+import GoogleCloudIcon from './components/icons/GoogleCloudIcon.jsx';
+import CloudBuildIcon from './components/icons/CloudBuildIcon.jsx';
 import GcpInfoModal from './components/GcpInfoModal.jsx';
 
 
