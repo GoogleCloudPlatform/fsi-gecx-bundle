@@ -391,7 +391,7 @@ function AppContent() {
     if (!window.firebaseNotifications?.requestPermission) return;
     await window.firebaseNotifications.requestPermission();
     setNotificationPermission(window.firebaseNotifications.getPermissionState?.() || Notification.permission);
-  }, []);
+  }, [setNotificationPermission]);
 
   useEffect(() => {
     if (fbUser) {
