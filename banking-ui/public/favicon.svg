@@ -1,14 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
   <defs>
-    <linearGradient id="brand-grad" x1="0" y1="40" x2="40" y2="0" gradientUnits="userSpaceOnUse">
+    <linearGradient id="brand-grad" x1="0" y1="24" x2="24" y2="0" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#10b981" />
       <stop offset="100%" stop-color="#2dd4bf" />
     </linearGradient>
   </defs>
-  <!-- Rounded background box matching the 10x10 tailwind rounded-xl proportions -->
-  <rect width="40" height="40" rx="10" fill="url(#brand-grad)" />
-  <!-- Shield Icon centered 1:1 inside the 40x40 canvas -->
-  <g transform="translate(8, 8)" stroke="#020617" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Rounded background box -->
+  <rect width="24" height="24" rx="6" fill="url(#brand-grad)" />
+  <!-- Shield Icon scaled at 75% and centered -->
+  <g transform="translate(3, 2.91) scale(0.75)" stroke="#020617" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
     <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
   </g>
 </svg>
