@@ -1823,8 +1823,14 @@ function AppContent() {
             <p className="text-xs text-slate-500 leading-relaxed">
               {footerText}
             </p>
+            {window.env?.BUILD_VERSION && window.env.BUILD_VERSION !== 'local-devx' && (
+              <div className="text-[9px] text-slate-400 dark:text-slate-500 flex items-center gap-1 mt-8">
+                <span>Built with Cloud Build</span>
+                <GoogleCloudIcon className="w-2.5 h-2.5" />
+              </div>
+            )}
             {(window.env?.BUILD_VERSION || window.env?.BUILD_COMMIT_ID) && (
-              <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono flex items-center gap-1.5 mt-1">
+              <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono flex items-center gap-1.5 -mt-3">
                 <span>
                   Version: {window.env?.BUILD_VERSION || 'unknown'} (
                   {window.env?.BUILD_COMMIT_ID ? (
