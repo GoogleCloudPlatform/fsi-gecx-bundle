@@ -24,15 +24,14 @@ import {
   triggerSpendSurge,
   planGenerationScenario,
   executeGenerationScenario,
+  enqueueScheduledScenario,
+  listScheduledEvents,
   getDataGeneratorStatus,
   injectFraudAnomaly,
   injectLateFee,
   getGlobalStream,
   getBackendApiUrl,
   getBackendAuthHeaders,
-  provisionMyDemo,
-  resetMyDemo,
-  getCreditCardAccount,
 } from '../utils/api.js';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
@@ -98,6 +97,44 @@ function formatEventAge(ms) {
 
 function formatCurrencyFromCents(cents) {
   return `$${(Math.abs(cents ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatScheduleTime(value) {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function formatScheduledEventType(value) {
+  return String(value || 'event')
+    .replaceAll('_', ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getScheduledEventMerchant(event) {
+  return event?.payload?.authorization_payload?.merchant_name
+    || event?.payload?.merchant_name
+    || event?.payload?.outcome_label
+    || event?.event_id
+    || 'Synthetic event';
+}
+
+function summarizeScheduledEvents(events) {
+  const summary = {
+    upcoming: 0,
+    dispatching: 0,
+    succeeded: 0,
+    failed: 0,
+  };
+  events.forEach((event) => {
+    const status = String(event.status || '').toUpperCase();
+    if (status === 'SCHEDULED') summary.upcoming += 1;
+    if (status === 'DISPATCHING') summary.dispatching += 1;
+    if (status === 'SUCCEEDED') summary.succeeded += 1;
+    if (status === 'FAILED') summary.failed += 1;
+  });
+  return summary;
 }
 
 function formatFraudReason(reason) {
@@ -175,15 +212,16 @@ function AdminSimulationView({ mode = 'studio' }) {
   const [isAnomalyLoading, setIsAnomalyLoading] = useState(false);
   const [isFeeLoading, setIsFeeLoading] = useState(false);
   const [isScenarioLoading, setIsScenarioLoading] = useState(false);
-  const [hasSeededProfile, setHasSeededProfile] = useState(false);
-  const [isProvisioning, setIsProvisioning] = useState(false);
-  const [isResettingDemo, setIsResettingDemo] = useState(false);
+  const [isScheduleLoading, setIsScheduleLoading] = useState(false);
   const [selectedScenarioType, setSelectedScenarioType] = useState(SCENARIO_OPTIONS[0].value);
   const [scenarioIntensity, setScenarioIntensity] = useState('medium');
   const [scenarioSeed, setScenarioSeed] = useState('1841');
   const [scenarioMaxEvents, setScenarioMaxEvents] = useState('8');
   const [scenarioPlan, setScenarioPlan] = useState(null);
   const [scenarioResult, setScenarioResult] = useState(null);
+  const [scheduledEvents, setScheduledEvents] = useState([]);
+  const [scheduleError, setScheduleError] = useState('');
+  const [dispatchReceipt, setDispatchReceipt] = useState(null);
   const [dataGeneratorStatus, setDataGeneratorStatus] = useState(null);
   const [infoModal, setInfoModal] = useState(null);
   const [streamData, setStreamData] = useState([]);
@@ -342,7 +380,12 @@ function AdminSimulationView({ mode = 'studio' }) {
 
   const scenarioPlanSummary = summarizeScenarioPlan(scenarioPlan);
   const scenarioResultSummary = summarizeScenarioResult(scenarioResult);
+  const scheduleSummary = summarizeScheduledEvents(scheduledEvents);
   const ambientProfile = dataGeneratorStatus?.ambient_profile || null;
+  const observedReceiptEvents = dispatchReceipt
+    ? streamData.filter((item) => Number(item.raw_time || 0) >= dispatchReceipt.submittedAtSeconds)
+    : [];
+  const latestObservedEvent = observedReceiptEvents[0] || null;
 
   const applyMonitorSnapshot = (streamSnapshot) => {
     if (streamSnapshot?.stream) {
@@ -374,6 +417,27 @@ function AdminSimulationView({ mode = 'studio' }) {
     } catch (e) {
       console.error("Failed to fetch global stream:", e);
     }
+  };
+
+  const refreshScheduledEvents = async () => {
+    try {
+      const scheduled = await listScheduledEvents({ limit: 20 });
+      setScheduledEvents(Array.isArray(scheduled.events) ? scheduled.events : []);
+      setScheduleError('');
+    } catch (error) {
+      console.error('Failed to fetch scheduled data-generator events:', error);
+      setScheduleError(error.response?.data?.detail || error.message || 'Scheduled events are unavailable.');
+    }
+  };
+
+  const beginDispatchReceipt = (action, expectedEvents = null, message = '') => {
+    setDispatchReceipt({
+      action,
+      expectedEvents,
+      message,
+      submittedAt: new Date().toLocaleTimeString(),
+      submittedAtSeconds: Date.now() / 1000,
+    });
   };
 
   useEffect(() => {
@@ -478,6 +542,16 @@ function AdminSimulationView({ mode = 'studio' }) {
   }, []);
 
   useEffect(() => {
+    if (isMonitoring) {
+      return undefined;
+    }
+
+    refreshScheduledEvents();
+    const intervalId = window.setInterval(refreshScheduledEvents, 8000);
+    return () => window.clearInterval(intervalId);
+  }, [isMonitoring]);
+
+  useEffect(() => {
     if (feedback.message) {
       const timer = setTimeout(() => {
         setFeedback({ type: '', title: '', message: '', data: null });
@@ -486,78 +560,10 @@ function AdminSimulationView({ mode = 'studio' }) {
     }
   }, [feedback]);
 
-  useEffect(() => {
-    if (isMonitoring) {
-      return;
-    }
-
-    async function checkSeededProfile() {
-      try {
-        await getCreditCardAccount(null, false);
-        setHasSeededProfile(true);
-      } catch {
-        setHasSeededProfile(false);
-      }
-    }
-
-    checkSeededProfile();
-  }, [isMonitoring]);
-
-  const handleProvisionDemo = async () => {
-    setIsProvisioning(true);
-    setFeedback({ type: '', title: '', message: '', data: null });
-    try {
-      const res = await provisionMyDemo();
-      setHasSeededProfile(true);
-      setFeedback({
-        type: 'success',
-        title: 'Demo Suite Provisioned',
-        message: res.message || 'Personal demo profile provisioned successfully.',
-        data: res,
-      });
-      fetchGlobalStream();
-    } catch (err) {
-      setFeedback({
-        type: 'error',
-        title: 'Demo Suite Provisioning Failed',
-        message: err.response?.data?.detail || err.message || 'Failed to provision demo profile.',
-        data: null,
-      });
-    } finally {
-      setIsProvisioning(false);
-    }
-  };
-
-  const handleResetDemo = async () => {
-    if (!window.confirm("Are you sure you want to reset your personal demo suite? This will clear your swipe history but won't impact other users.")) {
-      return;
-    }
-    setIsResettingDemo(true);
-    setFeedback({ type: '', title: '', message: '', data: null });
-    try {
-      const res = await resetMyDemo();
-      setFeedback({
-        type: 'success',
-        title: 'Demo Suite Reset',
-        message: res.message || 'Personal demo profile reset successfully.',
-        data: res,
-      });
-      fetchGlobalStream();
-    } catch (err) {
-      setFeedback({
-        type: 'error',
-        title: 'Demo Suite Reset Failed',
-        message: err.response?.data?.detail || err.message || 'Failed to reset demo profile.',
-        data: null,
-      });
-    } finally {
-      setIsResettingDemo(false);
-    }
-  };
-
   const handleSpendSurge = async () => {
     setIsSurgeLoading(true);
     setFeedback({ type: '', title: '', message: '', data: null });
+    beginDispatchReceipt('Spend Velocity Surge', 50, 'Waiting for transaction stream activity...');
     try {
       const res = await triggerSpendSurge();
       setFeedback({
@@ -582,6 +588,7 @@ function AdminSimulationView({ mode = 'studio' }) {
   const handleFraudAnomaly = async () => {
     setIsAnomalyLoading(true);
     setFeedback({ type: '', title: '', message: '', data: null });
+    beginDispatchReceipt('Targeted Fraud Anomaly', 5, 'Waiting for flagged authorization events...');
     try {
       const res = await injectFraudAnomaly();
       setFeedback({
@@ -612,6 +619,7 @@ function AdminSimulationView({ mode = 'studio' }) {
   const handleLateFee = async () => {
     setIsFeeLoading(true);
     setFeedback({ type: '', title: '', message: '', data: null });
+    beginDispatchReceipt('Late Fee Injection', 1, 'Waiting for fee event activity...');
     try {
       const res = await injectLateFee();
       setFeedback({
@@ -671,6 +679,11 @@ function AdminSimulationView({ mode = 'studio' }) {
   };
 
   const executeScenarioPlan = async (plan, mode = 'execute') => {
+    beginDispatchReceipt(
+      mode === 'replay' ? 'Scenario Replay' : 'Scenario Execution',
+      plan?.timeline?.length || null,
+      'Waiting for scenario-backed stream activity...',
+    );
     const result = await executeGenerationScenario({
       plan,
       mode,
@@ -685,6 +698,48 @@ function AdminSimulationView({ mode = 'studio' }) {
       data: result,
     });
     fetchGlobalStream();
+  };
+
+  const handleScenarioSchedule = async () => {
+    setIsScheduleLoading(true);
+    setFeedback({ type: '', title: '', message: '', data: null });
+    try {
+      const plan = scenarioPlan?.scenario_type === selectedScenario.value
+        ? scenarioPlan
+        : await planGenerationScenario(buildScenarioRequest('dry_run'));
+      setScenarioPlan(plan);
+      const scheduleStart = new Date(Date.now() + 30_000);
+      const scheduleResult = await enqueueScheduledScenario({
+        execution_request: {
+          plan,
+          mode: 'execute',
+          idempotency_key: buildScenarioIdempotencyKey('ui-schedule', plan),
+          operator: window.firebaseAuth?.getCurrentUser?.()?.email || 'admin-simulation-ui',
+        },
+        start_at: scheduleStart.toISOString(),
+      });
+      beginDispatchReceipt(
+        'Scheduled Scenario',
+        scheduleResult.created_events?.length || plan.timeline?.length || null,
+        `Queued ${scheduleResult.created_events?.length || 0} durable event${(scheduleResult.created_events?.length || 0) === 1 ? '' : 's'} starting at ${formatScheduleTime(scheduleStart.toISOString())}.`,
+      );
+      setFeedback({
+        type: scheduleResult.warnings?.length ? 'warning' : 'success',
+        title: 'Scenario Scheduled',
+        message: `${scheduleResult.schedule_id} queued ${scheduleResult.created_events?.length || 0} event${(scheduleResult.created_events?.length || 0) === 1 ? '' : 's'} via ${scheduleResult.dispatch_transport}.`,
+        data: scheduleResult,
+      });
+      refreshScheduledEvents();
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        title: 'Scenario Scheduling Failed',
+        message: err.response?.data?.detail || err.message || 'Unable to schedule the synthetic scenario.',
+        data: null,
+      });
+    } finally {
+      setIsScheduleLoading(false);
+    }
   };
 
   const handleScenarioExecute = async () => {
@@ -1047,6 +1102,45 @@ function AdminSimulationView({ mode = 'studio' }) {
         </div>
       </div>
 
+      <div className="mb-10 p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <Activity className="w-4 h-4 text-emerald-500" />
+              Dispatch Feedback
+            </div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              {dispatchReceipt?.action || 'No simulation action submitted yet'}
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              {dispatchReceipt
+                ? `${dispatchReceipt.message || 'Watching the live stream for matching activity.'} Submitted at ${dispatchReceipt.submittedAt}.`
+                : 'Run or schedule a simulation action to see immediate confirmation here.'}
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-[11px] min-w-full md:min-w-[360px]">
+            <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+              <div className="text-slate-400">Expected</div>
+              <div className="font-mono font-black text-slate-900 dark:text-white">{dispatchReceipt?.expectedEvents ?? 'N/A'}</div>
+            </div>
+            <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+              <div className="text-slate-400">Observed</div>
+              <div className="font-mono font-black text-slate-900 dark:text-white">{dispatchReceipt ? observedReceiptEvents.length : 0}</div>
+            </div>
+            <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+              <div className="text-slate-400">Latest</div>
+              <div className="font-mono font-black text-slate-900 dark:text-white truncate">{latestObservedEvent?.timestamp || 'N/A'}</div>
+            </div>
+          </div>
+        </div>
+        {latestObservedEvent && (
+          <div className="mt-4 rounded-2xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/10 px-4 py-3 text-xs text-emerald-700 dark:text-emerald-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className="font-semibold truncate">{latestObservedEvent.merchant_name || 'Recent stream event'}</span>
+            <span className="font-mono">{formatCurrencyFromCents(latestObservedEvent.amount_cents)} · {latestObservedEvent.status || 'STREAM EVENT'}</span>
+          </div>
+        )}
+      </div>
+
       <div className="mb-10 p-6 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5">
         <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
           <div className="min-w-0">
@@ -1238,7 +1332,7 @@ function AdminSimulationView({ mode = 'studio' }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
               <button
                 onClick={handleScenarioDryRun}
                 disabled={isScenarioLoading}
@@ -1266,47 +1360,99 @@ function AdminSimulationView({ mode = 'studio' }) {
                 {isScenarioLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
                 Replay
               </button>
+              <button
+                onClick={handleScenarioSchedule}
+                disabled={isScenarioLoading || isScheduleLoading}
+                className="py-2.5 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-emerald-600"
+                title="Schedule scenario"
+              >
+                {isScheduleLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
+                Schedule
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="mb-10 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">Personal Demo Suite Management</h4>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {hasSeededProfile
-              ? "You have an active personal demo profile. Reset your swipe transactions and restore checking/savings default balances without impacting other presenters."
-              : "You do not have a seeded personal demo profile. Provision a complete account suite with checking, savings, credit cards, credit scoring profiles, and realistic transaction history."}
-          </p>
+      <div className="mb-10 p-6 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5 pb-4 border-b border-slate-200/60 dark:border-slate-800/60">
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <Clock className="w-4 h-4 text-emerald-500" />
+              Scheduled Event Queue
+            </div>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Upcoming Data Generator Work</h2>
+            <p className="text-xs text-slate-500 mt-1">Durable synthetic events persisted by the data-generator scheduler and dispatched by Cloud Tasks.</p>
+          </div>
+          <button
+            onClick={refreshScheduledEvents}
+            className="self-start lg:self-auto px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95 flex items-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
         </div>
-        <div className="flex gap-3 self-start sm:self-auto">
-          {!hasSeededProfile ? (
-            <button
-              onClick={handleProvisionDemo}
-              disabled={isProvisioning}
-              className={`px-5 py-2.5 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
-                isProvisioning
-                  ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                  : 'border-emerald-200 dark:border-emerald-900/30 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100/50 dark:hover:bg-emerald-950/40'
-              }`}
-            >
-              {isProvisioning ? 'Provisioning...' : 'Provision My Demo Profile'}
-            </button>
-          ) : (
-            <button
-              onClick={handleResetDemo}
-              disabled={isResettingDemo}
-              className={`px-5 py-2.5 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
-                isResettingDemo
-                  ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                  : 'border-blue-200 dark:border-blue-900/30 bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100/50 dark:hover:bg-blue-950/40'
-              }`}
-            >
-              {isResettingDemo ? 'Resetting Suite...' : 'Reset My Demo Suite'}
-            </button>
-          )}
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 text-[11px]">
+          <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="text-slate-400">Scheduled</div>
+            <div className="font-mono font-black text-slate-900 dark:text-white">{scheduleSummary.upcoming}</div>
+          </div>
+          <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="text-slate-400">Dispatching</div>
+            <div className="font-mono font-black text-slate-900 dark:text-white">{scheduleSummary.dispatching}</div>
+          </div>
+          <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="text-slate-400">Succeeded</div>
+            <div className="font-mono font-black text-slate-900 dark:text-white">{scheduleSummary.succeeded}</div>
+          </div>
+          <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="text-slate-400">Failed</div>
+            <div className={`font-mono font-black ${scheduleSummary.failed ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'}`}>{scheduleSummary.failed}</div>
+          </div>
         </div>
+
+        {scheduleError ? (
+          <div className="rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/10 px-4 py-3 text-xs font-semibold text-amber-700 dark:text-amber-300">
+            {scheduleError}
+          </div>
+        ) : scheduledEvents.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 px-4 py-6 text-center text-xs text-slate-500">
+            No durable synthetic events are queued yet. Use Schedule to place a scenario on the Cloud Tasks-backed timeline.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {scheduledEvents.slice(0, 10).map((event) => {
+              const statusLabel = String(event.status || 'SCHEDULED').toUpperCase();
+              const statusClass = statusLabel === 'FAILED'
+                ? 'bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-300'
+                : statusLabel === 'SUCCEEDED'
+                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+                : statusLabel === 'DISPATCHING'
+                ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-700 dark:text-cyan-300'
+                : statusLabel === 'CANCELED'
+                ? 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-300'
+                : 'bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300';
+              return (
+                <div key={event.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs font-black text-slate-900 dark:text-white">{formatScheduleTime(event.scheduled_for)}</span>
+                      <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${statusClass}`}>{statusLabel}</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{formatScheduledEventType(event.event_type)}</span>
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{getScheduledEventMerchant(event)}</div>
+                    <div className="mt-0.5 text-[10px] text-slate-400 font-mono truncate">{event.schedule_id}</div>
+                  </div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 md:text-right shrink-0">
+                    <div>Attempts <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{event.attempts || 0}</span></div>
+                    <div className="max-w-xs truncate">{event.last_error || event.persona_id || event.scenario_id || 'Ready'}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
         </>

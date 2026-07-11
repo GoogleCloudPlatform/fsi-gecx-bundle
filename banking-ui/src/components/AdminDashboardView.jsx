@@ -15,7 +15,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings, Bell, ExternalLink, Sparkles, Activity } from 'lucide-react';
-import { resetDatabase, getResetDatabaseAccess, getSystemSettings, updateSystemSettings } from '../utils/api.js';
+import { resetDatabase, getResetDatabaseAccess, getSystemSettings, updateSystemSettings, provisionMyDemo, resetMyDemo, getCreditCardAccount } from '../utils/api.js';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { showInfoModals } from '../utils/constants.js';
@@ -28,6 +28,9 @@ function AdminDashboardView() {
   const [fullResetAccess, setFullResetAccess] = useState({ allowed: false, message: 'Full database reset status is loading.' });
   const [notice, setNotice] = useState({ type: '', text: '' });
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const [hasSeededProfile, setHasSeededProfile] = useState(false);
+  const [isProvisioning, setIsProvisioning] = useState(false);
+  const [isResettingDemo, setIsResettingDemo] = useState(false);
   
   // Settings States
   const [hardTimeoutEnabled, setHardTimeoutEnabled] = useState(false);
@@ -72,6 +75,18 @@ function AdminDashboardView() {
       }
     }
     loadResetAccess();
+  }, []);
+
+  useEffect(() => {
+    async function checkSeededProfile() {
+      try {
+        await getCreditCardAccount(null, false);
+        setHasSeededProfile(true);
+      } catch {
+        setHasSeededProfile(false);
+      }
+    }
+    checkSeededProfile();
   }, []);
 
   const handleSaveSettings = async (e) => {
@@ -129,6 +144,38 @@ function AdminDashboardView() {
       setNotice({ type: 'error', text: err.response?.data?.detail || 'Failed to reset database.' });
     } finally {
       setIsResetting(false);
+    }
+  };
+
+  const handleProvisionDemo = async () => {
+    setIsProvisioning(true);
+    setNotice({ type: '', text: '' });
+    try {
+      const res = await provisionMyDemo();
+      setHasSeededProfile(true);
+      setNotice({ type: 'success', text: res.message || 'Demo profile provisioned successfully!' });
+      setTimeout(() => setNotice({ type: '', text: '' }), 5000);
+    } catch (err) {
+      setNotice({ type: 'error', text: err.response?.data?.detail || 'Failed to provision demo profile.' });
+    } finally {
+      setIsProvisioning(false);
+    }
+  };
+
+  const handleResetDemo = async () => {
+    if (!window.confirm("Are you sure you want to reset your personal demo suite? This will clear your swipe history but won't impact other users.")) {
+      return;
+    }
+    setIsResettingDemo(true);
+    setNotice({ type: '', text: '' });
+    try {
+      const res = await resetMyDemo();
+      setNotice({ type: 'success', text: res.message || 'Demo profile reset successfully!' });
+      setTimeout(() => setNotice({ type: '', text: '' }), 5000);
+    } catch (err) {
+      setNotice({ type: 'error', text: err.response?.data?.detail || 'Failed to reset demo profile.' });
+    } finally {
+      setIsResettingDemo(false);
     }
   };
 
@@ -247,6 +294,44 @@ function AdminDashboardView() {
             </div>
           );
         })}
+      </div>
+
+      <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+        <div>
+          <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">Personal Demo Suite Management</h4>
+          <p className="text-xs text-slate-500 mt-0.5 max-w-3xl">
+            {hasSeededProfile
+              ? "You have an active personal demo profile. Reset your swipe transactions and restore checking/savings default balances without impacting other presenters."
+              : "You do not have a seeded personal demo profile. Provision a complete account suite with checking, savings, credit cards, credit scoring profiles, and realistic transaction history."}
+          </p>
+        </div>
+        <div className="w-full lg:w-auto lg:min-w-[280px]">
+          {!hasSeededProfile ? (
+            <button
+              onClick={handleProvisionDemo}
+              disabled={isProvisioning}
+              className={`w-full px-5 py-3 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
+                isProvisioning
+                  ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                  : 'border-emerald-200 dark:border-emerald-900/30 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100/50 dark:hover:bg-emerald-950/40'
+              }`}
+            >
+              {isProvisioning ? 'Provisioning...' : 'Provision My Demo Profile'}
+            </button>
+          ) : (
+            <button
+              onClick={handleResetDemo}
+              disabled={isResettingDemo}
+              className={`w-full px-5 py-3 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
+                isResettingDemo
+                  ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                  : 'border-blue-200 dark:border-blue-900/30 bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100/50 dark:hover:bg-blue-950/40'
+              }`}
+            >
+              {isResettingDemo ? 'Resetting Suite...' : 'Reset My Demo Suite'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Settings Form */}

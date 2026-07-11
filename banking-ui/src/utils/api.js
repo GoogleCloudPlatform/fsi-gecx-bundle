@@ -399,6 +399,16 @@ export async function executeGenerationScenario(payload) {
   return res.data;
 }
 
+export async function enqueueScheduledScenario(payload) {
+  const res = await dataGeneratorApi.post('scheduled-events/enqueue', payload);
+  return res.data;
+}
+
+export async function listScheduledEvents(params = {}) {
+  const res = await dataGeneratorApi.get('scheduled-events', { params });
+  return res.data;
+}
+
 export async function getGenerationScenarioOutcomes(scenarioId) {
   const res = await dataGeneratorApi.get(`scenarios/${encodeURIComponent(scenarioId)}/outcomes`);
   return res.data;
