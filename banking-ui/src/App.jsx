@@ -1107,7 +1107,7 @@ function AppContent() {
               
               {/* Consolidated Products Menu with Mouseover Dropdown */}
               <div className="relative group py-2">
-                <button className={`hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${['/checking-accounts', '/credit-cards', '/mortgages', '/mortgage-rates'].includes(location.pathname) ? 'text-emerald-600 dark:text-emerald-400 font-bold' : ''}`}>
+                <button className={`hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${['/checking-accounts', '/savings-accounts', '/certificate-accounts', '/credit-cards', '/mortgages', '/mortgage-rates', '/compare-accounts'].includes(location.pathname) ? 'text-emerald-600 dark:text-emerald-400 font-bold' : ''}`}>
                   <span>Products</span>
                   <ChevronDown className="w-3.5 h-3.5 transition-transform duration-300 group-hover:rotate-180" />
                 </button>
@@ -1143,6 +1143,12 @@ function AppContent() {
                   <Link to="/mortgage-rates" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
                     <span>Mortgage Rates</span>
                     {location.pathname === '/mortgage-rates' && <div className="w-1.5 h-1.5 rounded-full bg-cyan-500"></div>}
+                  </Link>
+
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">Product Tools</div>
+                  <Link to="/compare-accounts" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
+                    <span>Compare Accounts</span>
+                    {location.pathname === '/compare-accounts' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                   </Link>
                 </div>
               </div>

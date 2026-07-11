@@ -167,11 +167,11 @@ function HomeView({
                   </span>
                 </h1>
                 
-                <p className="text-lg text-slate-600 dark:text-slate-400 max-w-xl leading-relaxed">
+                <p className="text-lg text-slate-600 dark:text-slate-400 max-w-xl mx-auto leading-relaxed">
                   Experience next-generation retail banking combined with the trusted values of a member-owned credit union. Higher yields, lower rates, zero hidden fees.
                 </p>
 
-                <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex flex-col sm:flex-row justify-center gap-4">
                   <button 
                     className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
                     style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
@@ -179,7 +179,10 @@ function HomeView({
                     <span>Become a Member</span>
                     <ArrowRight className="w-5 h-5" />
                   </button>
-                  <button className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-855 transition-colors cursor-pointer shadow-sm">
+                  <button 
+                    onClick={() => navigate('/compare-accounts')}
+                    className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-855 transition-colors cursor-pointer shadow-sm"
+                  >
                     Compare Accounts
                   </button>
                 </div>
@@ -544,10 +547,15 @@ function HomeView({
               {
                 icon: Globe,
                 title: "Global ATM Access",
-                desc: "Access your cash anywhere with zero ATM fees worldwide. We automatically reimburse all charges."
+                desc: "Access your cash anywhere with zero ATM fees worldwide. We automatically reimburse all charges.",
+                onClick: () => navigate('/locator')
               }
             ].map((item, idx) => (
-              <div key={idx} className="card-themeable hover:border-emerald-500/50 transition-all duration-300 group hover:-translate-y-1">
+              <div 
+                key={idx} 
+                onClick={item.onClick}
+                className={`card-themeable hover:border-emerald-500/50 transition-all duration-300 group hover:-translate-y-1 ${item.onClick ? 'cursor-pointer' : ''}`}
+              >
                 <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 border border-slate-200 dark:border-slate-700/50">
                   <item.icon className="w-6 h-6 text-emerald-500" />
                 </div>

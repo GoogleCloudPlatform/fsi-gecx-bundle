@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
 import AccountOpeningModal from './AccountOpeningModal.jsx';
+import { checkingAccounts as accounts } from '../utils/productData.js';
+import CheckingMatrix from './CheckingMatrix.jsx';
 
 function CheckingAccountsView({ activeBot, setActiveBot }) {
   const { 
@@ -34,100 +36,7 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
   const [selectedAccountIndex, setSelectedAccountIndex] = useState(0);
   const [openingAccount, setOpeningAccount] = useState(null);
 
-  const accounts = [
-    {
-      name: "Nova Classic Everyday",
-      tag: "Core Digital Convenience",
-      apy: "0.02% APY",
-      monthlyFee: "$0",
-      feeWaiver: "No minimum balance or direct deposit required",
-      minOpen: "$0",
-      atmAccess: "Up to 12 out-of-network fee reimbursements monthly",
-      rewards: "Standard rewards points on signature debit purchases",
-      loanDiscount: "None",
-      bestFor: "Students, young professionals, and simple transparent day-to-day banking",
-      cardStyle: "from-slate-900 via-teal-950 to-slate-900 border-teal-500/30 text-teal-400",
-      chipStyle: "bg-teal-400/20 border-teal-500/40 text-teal-300",
-      accentColor: "#14b8a6",
-      badgeBg: "bg-teal-500/10 border-teal-500/20 text-teal-600 dark:text-teal-400",
-      botName: "Checking Support Bot",
-      features: [
-        "Zero monthly maintenance fees or hidden tier thresholds",
-        "Complimentary multi-layer overdraft protection integration",
-        "Instant digital debit card provisioning for Apple Pay® & Google Wallet™",
-        "Free specialized paper check supply for members aged 65 or older"
-      ]
-    },
-    {
-      name: "Horizon Apex Premier",
-      tag: "High-Yield & Elite Rewards",
-      apy: "0.05% APY",
-      monthlyFee: "$15",
-      feeWaiver: "Waived with $15,000 combined balance + $1,000 monthly direct deposit",
-      minOpen: "$0",
-      atmAccess: "Unlimited global out-of-network ATM fee reimbursements",
-      rewards: "Additional 25% bonus reward multiplier on paired credit cards",
-      loanDiscount: "0.25% APR discount on vehicle and home equity lines",
-      bestFor: "Members seeking optimized yield, premium loan rates, and full fee waivers",
-      cardStyle: "from-slate-950 via-emerald-950 to-teal-950 border-emerald-500/30 text-emerald-400",
-      chipStyle: "bg-emerald-400/20 border-emerald-500/40 text-emerald-300",
-      accentColor: "#10b981",
-      badgeBg: "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400",
-      botName: "Premier Wealth Bot",
-      features: [
-        "0.25% automated discount triggers on select consumer lending products",
-        "25% accelerated portfolio reward point accruals credited monthly",
-        "$350 dedicated credit towards primary mortgage origination costs",
-        "Waived incoming wire transfer fees and expedited card replacement delivery"
-      ]
-    },
-    {
-      name: "Vanguard Ascend Teen",
-      tag: "Empowered Early Access",
-      apy: "0.02% APY",
-      monthlyFee: "$0",
-      feeWaiver: "No fees ever for active members aged 13-17",
-      minOpen: "$0",
-      atmAccess: "Access to 30,000+ standard network fee-free machines",
-      rewards: "Gamified savings milestones and automated round-up targets",
-      loanDiscount: "N/A",
-      bestFor: "Ages 13-17 developing strong lifelong budgeting and spending habits",
-      cardStyle: "from-indigo-950 via-slate-900 to-purple-950 border-indigo-500/30 text-indigo-400",
-      chipStyle: "bg-indigo-400/20 border-indigo-500/40 text-indigo-300",
-      accentColor: "#6366f1",
-      badgeBg: "bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400",
-      botName: "Youth Banking Bot",
-      features: [
-        "Joint adult security oversight layer requiring parental/guardian sign-off",
-        "Real-time instant spending threshold alert notifications via SMS/push",
-        "Automated integration with tailored educational micro-literacy chapters",
-        "Zero minimum opening deposit to start building a secure future today"
-      ]
-    },
-    {
-      name: "Aura Health Reserve",
-      tag: "Triple-Tax Advantaged HSA",
-      apy: "Tiered Premium APY",
-      monthlyFee: "$0",
-      feeWaiver: "No maintenance fees when linked to qualifying health plans",
-      minOpen: "$0",
-      atmAccess: "Direct point-of-sale pharmacy network terminal optimization",
-      rewards: "Tax-free principal accumulation and zero-cost investment tier access",
-      loanDiscount: "N/A",
-      bestFor: "Managing high-deductible out-of-pocket clinical and preventative care expenses",
-      cardStyle: "from-cyan-950 via-slate-900 to-sky-950 border-cyan-500/30 text-cyan-400",
-      chipStyle: "bg-cyan-400/20 border-cyan-500/40 text-cyan-300",
-      accentColor: "#06b6d4",
-      badgeBg: "bg-cyan-500/10 border-cyan-500/20 text-cyan-600 dark:text-cyan-400",
-      botName: "Health Advisor Bot",
-      features: [
-        "Contributions, qualified disbursements, and annual interest grow 100% tax-free",
-        "Full account ownership portability that carries forward across career transitions",
-        "Dedicated separate secure healthcare tracking physical Visa® Debit line",
-        "Automated direct deposit splitting to effortlessly build clinical safety reserves"
-      ]
-    }
-  ];
+
 
   const selectedAccount = accounts[selectedAccountIndex];
 
@@ -347,55 +256,7 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
             </p>
           </div>
 
-          <div className="overflow-x-auto border border-slate-200 dark:border-slate-800/80 rounded-2xl bg-white dark:bg-slate-900 shadow-xl">
-            <table className="w-full text-left border-collapse min-w-[850px]">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50">
-                  <th className="p-5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Product Base</th>
-                  <th className="p-5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Yield</th>
-                  <th className="p-5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Monthly Fee</th>
-                  <th className="p-5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Out-of-Network ATMs</th>
-                  <th className="p-5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Lending Edge</th>
-                  <th className="p-5 text-xs font-semibold text-slate-400 uppercase tracking-wider text-center">Trigger</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 text-sm">
-                {accounts.map((acc, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors">
-                    <td className="p-5">
-                      <div className="font-bold text-slate-900 dark:text-white">{acc.name}</div>
-                      <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">{acc.bestFor}</div>
-                    </td>
-                    <td className="p-5 font-bold text-teal-600 dark:text-teal-400">
-                      {acc.apy}
-                    </td>
-                    <td className="p-5">
-                      <div className="font-semibold text-slate-900 dark:text-white">{acc.monthlyFee}</div>
-                      {acc.monthlyFee !== "$0" && (
-                        <div className="text-[10px] text-slate-400 mt-0.5 leading-tight max-w-xs">
-                          {acc.feeWaiver}
-                        </div>
-                      )}
-                    </td>
-                    <td className="p-5 text-slate-600 dark:text-slate-400 text-xs max-w-xs">
-                      {acc.atmAccess}
-                    </td>
-                    <td className="p-5 text-slate-600 dark:text-slate-400 text-xs">
-                      {acc.loanDiscount}
-                    </td>
-                    <td className="p-5 text-center">
-                      <button
-                        onClick={() => setOpeningAccount(acc)}
-                        className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs transition-colors"
-                      >
-                        Open
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <CheckingMatrix onOpenAccount={setOpeningAccount} />
         </div>
       </section>
 
