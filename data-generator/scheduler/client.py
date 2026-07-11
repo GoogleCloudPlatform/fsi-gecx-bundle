@@ -22,7 +22,7 @@ class SyntheticScheduleClient:
         self.client = client
 
     async def _request(self, method: str, path: str, **kwargs) -> Any:
-        url = f"{self.banking_service_url}/api/v1/synthetic-schedule{path}"
+        url = f"{self.banking_service_url}/api/v1/credit-card/synthetic-schedule{path}"
         if self.client:
             response = await self.client.request(
                 method,
