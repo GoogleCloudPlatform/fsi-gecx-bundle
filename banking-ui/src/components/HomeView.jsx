@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { getAccountsSummary, provisionMyDemo, getCreditCardTransactions } from '../utils/api.js';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import BillPayModal from './BillPayModal.jsx';
 import GoogleCloudIcon from './GoogleCloudIcon.jsx';
 
@@ -141,20 +141,20 @@ function HomeView({
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <button 
-                    onClick={() => navigate('/accounts')}
+                  <Link 
+                    to="/accounts"
                     className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
                     style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
                   >
                     <span>View My Accounts</span>
                     <ArrowRight className="w-5 h-5" />
-                  </button>
-                  <button 
-                    onClick={() => navigate('/help-center')}
+                  </Link>
+                  <Link 
+                    to="/help-center"
                     className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 hover:scale-[1.02] active:scale-95 transition-all duration-300 cursor-pointer shadow-sm"
                   >
                     Help & Support
-                  </button>
+                  </Link>
                 </div>
               </>
             ) : (
@@ -179,12 +179,12 @@ function HomeView({
                     <span>Become a Member</span>
                     <ArrowRight className="w-5 h-5" />
                   </button>
-                  <button 
-                    onClick={() => navigate('/compare-products')}
+                  <Link 
+                    to="/compare-products"
                     className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-855 transition-colors cursor-pointer shadow-sm"
                   >
                     Compare Products
-                  </button>
+                  </Link>
                 </div>
               </>
             )}
@@ -354,12 +354,12 @@ function HomeView({
                       Earn interest rates 10x higher than the national average with zero minimum deposit rules and zero monthly maintenance fees.
                     </p>
                   </div>
-                  <button 
-                    onClick={() => navigate('/checking-accounts')}
-                    className="w-full py-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer"
+                  <Link 
+                    to="/checking-accounts"
+                    className="w-full text-center block py-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer no-underline"
                   >
                     Deposit Funds
-                  </button>
+                  </Link>
                 </div>
 
                 {/* Offer 2 */}
@@ -374,12 +374,12 @@ function HomeView({
                       Enjoy unlimited cash back on gas, groceries, and dining with a prime credit limit up to $10,000 and no annual fees.
                     </p>
                   </div>
-                  <button 
-                    onClick={() => navigate('/credit-cards')}
-                    className="w-full py-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer"
+                  <Link 
+                    to="/credit-cards"
+                    className="w-full text-center block py-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer no-underline"
                   >
                     Apply Instantly
-                  </button>
+                  </Link>
                 </div>
 
                 {/* Offer 3 */}
@@ -550,21 +550,40 @@ function HomeView({
                 icon: Globe,
                 title: "Global ATM Access",
                 desc: "Access your cash anywhere with zero ATM fees worldwide. We automatically reimburse all charges.",
-                onClick: () => navigate('/locator')
+                to: '/locator'
               }
-            ].map((item, idx) => (
-              <div 
-                key={idx} 
-                onClick={item.onClick}
-                className={`card-themeable hover:border-emerald-500/50 transition-all duration-300 group hover:-translate-y-1 ${item.onClick ? 'cursor-pointer' : ''}`}
-              >
-                <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 border border-slate-200 dark:border-slate-700/50">
-                  <item.icon className="w-6 h-6 text-emerald-500" />
+            ].map((item, idx) => {
+              const CardContent = (
+                <>
+                  <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 border border-slate-200 dark:border-slate-700/50">
+                    <item.icon className="w-6 h-6 text-emerald-500" />
+                  </div>
+                  <h3 className="text-xl font-semibold mb-3 text-theme-main">{item.title}</h3>
+                  <p className="text-theme-muted text-sm leading-relaxed">{item.desc}</p>
+                </>
+              );
+
+              if (item.to) {
+                return (
+                  <Link
+                    key={idx}
+                    to={item.to}
+                    className="card-themeable hover:border-emerald-500/50 transition-all duration-300 group hover:-translate-y-1 block text-left no-underline cursor-pointer"
+                  >
+                    {CardContent}
+                  </Link>
+                );
+              }
+
+              return (
+                <div 
+                  key={idx} 
+                  className="card-themeable hover:border-emerald-500/50 transition-all duration-300 group hover:-translate-y-1"
+                >
+                  {CardContent}
                 </div>
-                <h3 className="text-xl font-semibold mb-3 text-theme-main">{item.title}</h3>
-                <p className="text-theme-muted text-sm leading-relaxed">{item.desc}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* APY Stats centered at the bottom of Features section */}
