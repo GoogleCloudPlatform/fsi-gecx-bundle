@@ -1190,10 +1190,12 @@ function AppContent() {
                     <span>Find Branch/ATM</span>
                     {location.pathname === '/locator' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                   </Link>
-                  <Link to="/support/voice" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
-                    <span>Credit Card Support</span>
-                    {location.pathname === '/support/voice' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                  </Link>
+                  {fbUser && (
+                    <Link to="/support/voice" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
+                      <span>Credit Card Support</span>
+                      {location.pathname === '/support/voice' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                    </Link>
+                  )}
                   {fbUser && (
                     <Link to="/secure-messaging" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
                       <span>Secure Messages</span>
@@ -1648,6 +1650,16 @@ function AppContent() {
                   {location.pathname === '/mortgage-rates' && <div className="w-1.5 h-1.5 rounded-full bg-cyan-500"></div>}
                 </Link>
 
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Product Tools</div>
+                <Link 
+                  to="/compare-accounts"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/compare-accounts' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                >
+                  <span>Compare Accounts</span>
+                  {location.pathname === '/compare-accounts' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                </Link>
+
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Support & Documentation</div>
                 <Link 
                   to="/help-center"
@@ -1656,14 +1668,16 @@ function AppContent() {
                 >
                   <span>Help Center</span>
                 </Link>
-                <Link 
-                  to="/support/voice"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/support/voice' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
-                >
-                  <span>Credit Card Support</span>
-                  {location.pathname === '/support/voice' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                </Link>
+                {fbUser && (
+                  <Link 
+                    to="/support/voice"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/support/voice' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                  >
+                    <span>Credit Card Support</span>
+                    {location.pathname === '/support/voice' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                  </Link>
+                )}
                 {fbUser && (
                   <Link
                     to="/secure-messaging"
