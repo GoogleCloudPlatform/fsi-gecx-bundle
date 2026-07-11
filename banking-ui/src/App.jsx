@@ -1851,10 +1851,10 @@ function AppContent() {
                       className="cursor-pointer hover:opacity-80 transition-opacity"
                       title="View Build in Google Cloud Console"
                     >
-                      <CloudBuildIcon className="w-3.5 h-3.5" />
+                      <CloudBuildIcon className="w-4 h-4" />
                     </a>
                   ) : (
-                    <CloudBuildIcon className="w-3.5 h-3.5" />
+                    <CloudBuildIcon className="w-4 h-4" />
                   )}
                 </div>
                 <div className="text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5 -mt-3">
