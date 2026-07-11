@@ -1031,11 +1031,53 @@ function AdminSimulationView({ mode = 'studio' }) {
 
       {!isMonitoring && (
         <>
+      <div className="mb-10 p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <Activity className="w-4 h-4 text-emerald-500" />
+              Dispatch Feedback
+            </div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              {dispatchReceipt?.action || 'No simulation action submitted yet'}
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              {dispatchReceipt
+                ? `${dispatchReceipt.message || 'Watching the live stream for activity after submission.'} Submitted at ${dispatchReceipt.submittedAt}.`
+                : 'Run or schedule a simulation action to see immediate confirmation here.'}
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-[11px] min-w-full md:min-w-[360px]">
+            <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+              <div className="text-slate-400">Submitted</div>
+              <div className="font-mono font-black text-slate-900 dark:text-white">{dispatchReceipt?.expectedEvents ?? 'N/A'}</div>
+            </div>
+            <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+              <div className="text-slate-400">Stream Events</div>
+              <div className="font-mono font-black text-slate-900 dark:text-white">{dispatchReceipt ? observedReceiptEvents.length : 0}</div>
+            </div>
+            <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+              <div className="text-slate-400">Latest</div>
+              <div className="font-mono font-black text-slate-900 dark:text-white truncate">{latestObservedEvent?.timestamp || 'N/A'}</div>
+            </div>
+          </div>
+        </div>
+        {latestObservedEvent && (
+          <div className="mt-4 rounded-2xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/10 px-4 py-3 text-xs text-emerald-700 dark:text-emerald-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className="font-semibold truncate">{latestObservedEvent.merchant_name || 'Recent stream event'}</span>
+            <span className="font-mono">{formatCurrencyFromCents(latestObservedEvent.amount_cents)} · {latestObservedEvent.status || 'STREAM EVENT'}</span>
+          </div>
+        )}
+      </div>
+
       <div className="mb-10">
         <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           <Zap className="w-4 h-4 text-amber-500" />
-          Synthetic Transaction Controls
+          Immediate Actions
         </div>
+        <p className="text-xs text-slate-500 mb-3">
+          These controls fire direct simulation requests now. They are useful for quick demos, but they do not create durable scheduled records.
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-950/10">
             <div className="flex items-start gap-3">
@@ -1102,45 +1144,6 @@ function AdminSimulationView({ mode = 'studio' }) {
         </div>
       </div>
 
-      <div className="mb-10 p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              <Activity className="w-4 h-4 text-emerald-500" />
-              Dispatch Feedback
-            </div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-              {dispatchReceipt?.action || 'No simulation action submitted yet'}
-            </h3>
-            <p className="text-xs text-slate-500 mt-1">
-              {dispatchReceipt
-                ? `${dispatchReceipt.message || 'Watching the live stream for matching activity.'} Submitted at ${dispatchReceipt.submittedAt}.`
-                : 'Run or schedule a simulation action to see immediate confirmation here.'}
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-[11px] min-w-full md:min-w-[360px]">
-            <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-              <div className="text-slate-400">Expected</div>
-              <div className="font-mono font-black text-slate-900 dark:text-white">{dispatchReceipt?.expectedEvents ?? 'N/A'}</div>
-            </div>
-            <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-              <div className="text-slate-400">Observed</div>
-              <div className="font-mono font-black text-slate-900 dark:text-white">{dispatchReceipt ? observedReceiptEvents.length : 0}</div>
-            </div>
-            <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-              <div className="text-slate-400">Latest</div>
-              <div className="font-mono font-black text-slate-900 dark:text-white truncate">{latestObservedEvent?.timestamp || 'N/A'}</div>
-            </div>
-          </div>
-        </div>
-        {latestObservedEvent && (
-          <div className="mt-4 rounded-2xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/10 px-4 py-3 text-xs text-emerald-700 dark:text-emerald-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <span className="font-semibold truncate">{latestObservedEvent.merchant_name || 'Recent stream event'}</span>
-            <span className="font-mono">{formatCurrencyFromCents(latestObservedEvent.amount_cents)} · {latestObservedEvent.status || 'STREAM EVENT'}</span>
-          </div>
-        )}
-      </div>
-
       <div className="mb-10 p-6 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5">
         <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
           <div className="min-w-0">
@@ -1149,7 +1152,7 @@ function AdminSimulationView({ mode = 'studio' }) {
               Scenario Studio
             </div>
             <div className="flex items-center gap-3">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Agentic Data Generation Controls</h2>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Scenario Planning & Durable Scheduling</h2>
               {showInfoModals() && (
                 <button
                   onClick={() => setInfoModal('scenario-studio')}
@@ -1161,7 +1164,7 @@ function AdminSimulationView({ mode = 'studio' }) {
               )}
             </div>
             <p className="text-xs text-slate-500 mt-1 max-w-2xl">
-              Plan, execute, or replay scenario-backed synthetic transaction stories through the data-generator service.
+              Dry-run a scenario plan, execute it immediately, or place it onto the durable Cloud Tasks-backed schedule.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-xs min-w-[220px]">
@@ -1173,6 +1176,17 @@ function AdminSimulationView({ mode = 'studio' }) {
               <div className="text-slate-500">Last Result</div>
               <div className="font-mono font-bold text-slate-900 dark:text-white">{scenarioResult?.status || 'None'}</div>
             </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="rounded-2xl border border-violet-200 dark:border-violet-900/40 bg-violet-50 dark:bg-violet-950/10 px-4 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-300">Execute Now</div>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Runs the scenario immediately through the card-network APIs and confirms activity through the live stream.</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/10 px-4 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300">Schedule Durable Run</div>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Persists planned events into the data-generator schedule so Cloud Tasks can dispatch them over time.</p>
           </div>
         </div>
 
@@ -1346,10 +1360,10 @@ function AdminSimulationView({ mode = 'studio' }) {
                 onClick={handleScenarioExecute}
                 disabled={isScenarioLoading}
                 className="py-2.5 px-2 rounded-xl bg-violet-600 hover:bg-violet-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-violet-600"
-                title="Execute scenario"
+                title="Execute scenario immediately"
               >
                 {isScenarioLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                Execute
+                Execute Now
               </button>
               <button
                 onClick={handleScenarioReplay}
@@ -1364,10 +1378,10 @@ function AdminSimulationView({ mode = 'studio' }) {
                 onClick={handleScenarioSchedule}
                 disabled={isScenarioLoading || isScheduleLoading}
                 className="py-2.5 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-emerald-600"
-                title="Schedule scenario"
+                title="Schedule durable scenario"
               >
                 {isScheduleLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
-                Schedule
+                Schedule Durable
               </button>
             </div>
           </div>
@@ -1381,8 +1395,8 @@ function AdminSimulationView({ mode = 'studio' }) {
               <Clock className="w-4 h-4 text-emerald-500" />
               Scheduled Event Queue
             </div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Upcoming Data Generator Work</h2>
-            <p className="text-xs text-slate-500 mt-1">Durable synthetic events persisted by the data-generator scheduler and dispatched by Cloud Tasks.</p>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Durable Scheduled Transactions</h2>
+            <p className="text-xs text-slate-500 mt-1">Synthetic events created by Schedule Durable and dispatched by Cloud Tasks over time.</p>
           </div>
           <button
             onClick={refreshScheduledEvents}
@@ -1418,7 +1432,7 @@ function AdminSimulationView({ mode = 'studio' }) {
           </div>
         ) : scheduledEvents.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 px-4 py-6 text-center text-xs text-slate-500">
-            No durable synthetic events are queued yet. Use Schedule to place a scenario on the Cloud Tasks-backed timeline.
+            No durable synthetic events are queued yet. Use Schedule Durable to place a scenario on the Cloud Tasks-backed timeline.
           </div>
         ) : (
           <div className="space-y-2">
@@ -1797,7 +1811,7 @@ function AdminSimulationView({ mode = 'studio' }) {
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            <strong>Scenario Studio</strong> sends bounded scenario planning and execution requests directly to the data-generator Cloud Run service. Dry runs only return a validated plan; execute and replay let the generator discover eligible active cards and write synthetic authorizations through the normal banking-service card-network path.
+            <strong>Scenario Studio</strong> sends bounded scenario planning and execution requests directly to the data-generator Cloud Run service. Dry runs only return a validated plan, Execute Now uses the immediate card-network path, and Schedule Durable persists future synthetic events for Cloud Tasks dispatch.
           </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
@@ -1805,12 +1819,12 @@ function AdminSimulationView({ mode = 'studio' }) {
               <p className="text-slate-500 dark:text-slate-400 mt-1">The UI calls the Data Generator control surface through the same IAP-protected load balancer used by the banking app.</p>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-cyan-500 dark:text-cyan-400 font-mono font-bold">data-generator ScenarioPlan</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">The generator owns the Pydantic scenario contract, canned templates, idempotency keys, synthetic outcome labels, and future agentic control tools.</p>
+              <div className="text-cyan-500 dark:text-cyan-400 font-mono font-bold">data-generator ScenarioPlan + schedule</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">The generator owns the Pydantic scenario contract, canned templates, idempotency keys, synthetic outcome labels, durable scheduled events, and future agentic control tools.</p>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <div className="text-emerald-500 dark:text-emerald-400 font-mono font-bold">banking-service card-network APIs</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Executed scenarios still use banking-service for authorizations, settlement, reversal, fraud scoring, Redis stream events, and CDC into the lakehouse.</p>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Immediate and scheduled scenarios still use banking-service for authorizations, settlement, reversal, fraud scoring, Redis stream events, and CDC into the lakehouse.</p>
             </div>
           </div>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-start justify-between gap-4">

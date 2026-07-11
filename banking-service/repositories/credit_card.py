@@ -253,11 +253,13 @@ class CreditCardRepository:
         self.save_account(account)
         return account.available_credit_cents
 
-    def get_authorization_by_rrn(self, rrn: str, status: Optional[str] = None) -> Optional[TransactionAuthorization]:
-        """Retrieves a transaction authorization by its retrieval reference number and optional status."""
+    def get_authorization_by_rrn(self, rrn: str, status: Optional[str] = None, statuses: Optional[list[str]] = None) -> Optional[TransactionAuthorization]:
+        """Retrieves a transaction authorization by its retrieval reference number and optional status filter."""
         query = self.db.query(TransactionAuthorization).filter(TransactionAuthorization.retrieval_reference_number == rrn)
         if status:
             query = query.filter(TransactionAuthorization.status == status)
+        if statuses:
+            query = query.filter(TransactionAuthorization.status.in_(statuses))
         return query.first()
 
     def get_credit_product(self, product_code: str) -> Optional[Any]:

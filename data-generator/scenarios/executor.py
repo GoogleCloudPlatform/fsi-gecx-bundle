@@ -217,12 +217,15 @@ async def _settle_authorization(
     amount_cents: int,
     timeout_seconds: float,
 ) -> tuple[bool, dict[str, Any], int]:
-    response = await client.post(
-        f"{banking_service_url}/api/v1/card-network/settle",
-        json={"retrieval_reference_number": rrn, "amount_cents": amount_cents},
-        headers=headers,
-        timeout=timeout_seconds,
-    )
+    try:
+        response = await client.post(
+            f"{banking_service_url}/api/v1/card-network/settle",
+            json={"retrieval_reference_number": rrn, "amount_cents": amount_cents},
+            headers=headers,
+            timeout=timeout_seconds,
+        )
+    except httpx.RequestError as exc:
+        return False, {"detail": f"Settlement request failed: {exc}"}, 0
     try:
         payload = response.json()
     except ValueError:
@@ -238,12 +241,15 @@ async def _reverse_authorization(
     rrn: str,
     timeout_seconds: float,
 ) -> tuple[bool, dict[str, Any], int]:
-    response = await client.post(
-        f"{banking_service_url}/api/v1/card-network/reverse",
-        json={"retrieval_reference_number": rrn},
-        headers=headers,
-        timeout=timeout_seconds,
-    )
+    try:
+        response = await client.post(
+            f"{banking_service_url}/api/v1/card-network/reverse",
+            json={"retrieval_reference_number": rrn},
+            headers=headers,
+            timeout=timeout_seconds,
+        )
+    except httpx.RequestError as exc:
+        return False, {"detail": f"Reversal request failed: {exc}"}, 0
     try:
         payload = response.json()
     except ValueError:
@@ -600,6 +606,9 @@ async def execute_scenario(
             resolution_payload = response_payload
             resolution_status_code = response.status_code
             transaction_id = None
+            retrieval_reference_number = response_payload.get(
+                "retrieval_reference_number"
+            ) or payload["retrieval_reference_number"]
             authorization_id = response_payload.get(
                 "authorization_id"
             ) or response_payload.get("id")
@@ -620,7 +629,7 @@ async def execute_scenario(
                     active_client,
                     banking_service_url=banking_service_url,
                     headers=headers,
-                    rrn=payload["retrieval_reference_number"],
+                    rrn=retrieval_reference_number,
                     amount_cents=event.amount_cents or payload["amount_cents"],
                     timeout_seconds=timeout_seconds,
                 )
@@ -630,9 +639,7 @@ async def execute_scenario(
                         event_type=event.event_type,
                         status=ScenarioStepStatus.FAILED,
                         message="Authorization created, but settlement failed.",
-                        retrieval_reference_number=payload[
-                            "retrieval_reference_number"
-                        ],
+                        retrieval_reference_number=retrieval_reference_number,
                         authorization_id=authorization_id,
                         alert_id=alert_id,
                         status_code=resolution_status_code,
@@ -655,7 +662,7 @@ async def execute_scenario(
                     active_client,
                     banking_service_url=banking_service_url,
                     headers=headers,
-                    rrn=payload["retrieval_reference_number"],
+                    rrn=retrieval_reference_number,
                     timeout_seconds=timeout_seconds,
                 )
                 if not ok:
@@ -664,9 +671,7 @@ async def execute_scenario(
                         event_type=event.event_type,
                         status=ScenarioStepStatus.FAILED,
                         message="Authorization created, but reversal failed.",
-                        retrieval_reference_number=payload[
-                            "retrieval_reference_number"
-                        ],
+                        retrieval_reference_number=retrieval_reference_number,
                         authorization_id=authorization_id,
                         alert_id=alert_id,
                         status_code=resolution_status_code,
@@ -683,7 +688,7 @@ async def execute_scenario(
                 event_type=event.event_type,
                 status=ScenarioStepStatus.SUCCEEDED,
                 message=f"Authorization created and {resolution}.",
-                retrieval_reference_number=payload["retrieval_reference_number"],
+                retrieval_reference_number=retrieval_reference_number,
                 authorization_id=authorization_id,
                 transaction_id=transaction_id,
                 alert_id=alert_id,
