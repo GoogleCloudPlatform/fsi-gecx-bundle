@@ -12,6 +12,7 @@ Specifications covering our transactional database schemas, continuous deploymen
 | **[Apache Iceberg CDC Data Lakehouse](./data-platform/apache_iceberg_cdc_datalake_architecture.md)** | Real-time Datastream CDC replication into BigLake Iceberg Parquet manifests, Hidden Partitioning evolution, and Medallion Silver/Gold curated reporting views. |
 | **[BigQuery OLAP & Compliance Audit Architecture](./data-platform/bigquery_olap_audit_architecture.md)** | SOX/GLBA-compliant immutable audit logging, Pub/Sub Storage Write API streaming, and KMS/Data Catalog PII column masking. |
 | **[Transactional Data Layer Architecture](./data-platform/data_layer_architecture.md)** | PostgreSQL Bounded Context domain schemas (`cards`, `origination`, `identity`, `ledger`), UUID generation, and advisory-locked deployment governance. |
+| **[Data Generator Architecture](./data-platform/data_generator_architecture.md)** | Synthetic transaction generation, durable scheduler ownership, Cloud Tasks dispatch, and FastMCP controls. |
 | **[Pre-Deployment Migrations & CI/CD Strategy](./data-platform/pre_deployment_migrations_plan.md)** | Ephemeral container validation, Alembic migration orchestration in Cloud Build, and zero-downtime schema rollout protocols. |
 | **[Knowledge Catalog Fraud Support Guidance](./data-platform/knowledge_catalog_fraud_support_guidance.md)** | Dataplex Knowledge Catalog entry/aspect model, sync job, fallback behavior, and runtime guidance flow for fraud voice support. |
 
