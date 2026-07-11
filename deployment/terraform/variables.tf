@@ -336,6 +336,12 @@ variable "data_generator_operator_email_domains" {
   default     = ["google.com", "gcp.solutions", "altostrat.com"]
 }
 
+variable "data_generator_synthetic_alert_followup_rate" {
+  type        = number
+  description = "Probability that a synthetic fraud-pattern alert receives a scheduled customer follow-up action."
+  default     = 0.65
+}
+
 variable "seed_mock_user_count" {
   type        = number
   description = "Target base plus generated mock banking users for algorithmic seeding. VIP/demo-script users are added separately."

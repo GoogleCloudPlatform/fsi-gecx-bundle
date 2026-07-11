@@ -67,3 +67,25 @@ resource "google_cloud_scheduler_job" "lakehouse_view_reconcile_daily" {
     google_project_iam_member.lakehouse_reconcile_sa_run_developer,
   ]
 }
+
+resource "google_cloud_tasks_queue" "data_generator_synthetic_schedule" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  name     = "data-generator-synthetic-schedule"
+  location = var.region
+
+  rate_limits {
+    max_dispatches_per_second = 10
+    max_concurrent_dispatches = 5
+  }
+
+  retry_config {
+    max_attempts  = 5
+    min_backoff   = "5s"
+    max_backoff   = "300s"
+    max_doublings = 5
+  }
+
+  depends_on = [
+    google_project_service.cloudtasks_googleapis_com
+  ]
+}

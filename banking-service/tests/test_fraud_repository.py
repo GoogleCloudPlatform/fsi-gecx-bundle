@@ -11,6 +11,7 @@ import models.fraud  # noqa: F401
 import models.identity  # noqa: F401
 from models.credit_card import Base
 from repositories.fraud import FraudAlertRepository, FraudDecisionRepository
+from repositories.synthetic_schedule import SyntheticScheduledEventRepository
 
 
 DATABASE_URL = "sqlite:///:memory:"
@@ -120,6 +121,80 @@ def test_complete_case_action_records_result_and_completion_time(db_session, fra
     assert completed.status == "SUCCEEDED"
     assert completed.result_payload == {"credit_cents": 25000}
     assert completed.completed_at is not None
+
+
+def test_synthetic_scheduled_event_repository_idempotent_lifecycle(db_session):
+    repo = SyntheticScheduledEventRepository(db_session)
+    scheduled_for = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+        minutes=5
+    )
+
+    first = repo.create_event(
+        schedule_id="schedule-1",
+        scenario_id="scenario-1",
+        execution_id="execution-1",
+        event_id="auth-1",
+        event_type="authorization",
+        persona_id="persona-1",
+        scheduled_for=scheduled_for,
+        idempotency_key="schedule-1:auth-1",
+        payload={"amount_cents": 4200},
+    )
+    second = repo.create_event(
+        schedule_id="schedule-1",
+        event_id="auth-1-retry",
+        event_type="authorization",
+        scheduled_for=scheduled_for,
+        idempotency_key="schedule-1:auth-1",
+        payload={"amount_cents": 9999},
+    )
+
+    assert second.id == first.id
+    assert second.event_id == "auth-1"
+
+    dispatching = repo.mark_dispatching(first.id)
+    assert dispatching.status == "DISPATCHING"
+    assert dispatching.attempts == 1
+
+    completed = repo.mark_succeeded(
+        event_record_id=first.id,
+        result_payload={"authorization_id": "auth-result-1"},
+    )
+    assert completed.status == "SUCCEEDED"
+    assert completed.result_payload == {"authorization_id": "auth-result-1"}
+
+    completed_context = repo.list_completed_before(
+        schedule_id="schedule-1", persona_id="persona-1"
+    )
+    assert [event.id for event in completed_context] == [first.id]
+
+
+def test_synthetic_scheduled_event_repository_cancels_future_events(db_session):
+    repo = SyntheticScheduledEventRepository(db_session)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    repo.create_event(
+        schedule_id="schedule-cancel",
+        event_id="future-auth",
+        event_type="authorization",
+        scheduled_for=now + datetime.timedelta(minutes=5),
+        idempotency_key="schedule-cancel:future-auth",
+    )
+    repo.create_event(
+        schedule_id="schedule-cancel",
+        event_id="past-auth",
+        event_type="authorization",
+        scheduled_for=now - datetime.timedelta(minutes=5),
+        idempotency_key="schedule-cancel:past-auth",
+    )
+
+    canceled = repo.cancel_future_events(schedule_id="schedule-cancel")
+    events = repo.list_events(schedule_id="schedule-cancel")
+
+    assert canceled == 1
+    assert {event.event_id: event.status for event in events} == {
+        "past-auth": "SCHEDULED",
+        "future-auth": "CANCELED",
+    }
 
 
 def test_record_model_decision_is_idempotent_for_authorization(db_session):

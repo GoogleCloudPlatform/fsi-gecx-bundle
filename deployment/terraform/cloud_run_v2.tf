@@ -820,6 +820,41 @@ resource "google_cloud_run_v2_service" "data_generator" {
       }
 
       env {
+        name  = "SCHEDULE_DISPATCH_TRANSPORT"
+        value = "cloud_tasks"
+      }
+
+      env {
+        name  = "CLOUD_TASKS_PROJECT_ID"
+        value = var.project_id
+      }
+
+      env {
+        name  = "CLOUD_TASKS_LOCATION"
+        value = var.region
+      }
+
+      env {
+        name  = "CLOUD_TASKS_QUEUE"
+        value = google_cloud_tasks_queue.data_generator_synthetic_schedule[0].name
+      }
+
+      env {
+        name  = "DATA_GENERATOR_DISPATCH_URL"
+        value = "https://data-generator-${data.google_project.project.number}.${var.region}.run.app"
+      }
+
+      env {
+        name  = "DATA_GENERATOR_SERVICE_ACCOUNT_EMAIL"
+        value = google_service_account.data_generator_service_account.email
+      }
+
+      env {
+        name  = "SYNTHETIC_ALERT_FOLLOWUP_RATE"
+        value = tostring(var.data_generator_synthetic_alert_followup_rate)
+      }
+
+      env {
         name  = "REDIS_HOST"
         value = google_redis_instance.banking.host
       }
@@ -856,6 +891,7 @@ resource "google_cloud_run_v2_service" "data_generator" {
 
   depends_on = [
     google_project_service.run_googleapis_com,
+    google_cloud_tasks_queue.data_generator_synthetic_schedule,
     google_secret_manager_secret_iam_member.data_generator_card_network_switch_token_accessor,
     google_secret_manager_secret_iam_member.data_generator_redis_password_accessor,
   ]

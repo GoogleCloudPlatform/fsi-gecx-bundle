@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import asyncio
+import datetime
 import logging
 import os
 import random
@@ -32,7 +33,15 @@ from scenarios import (
     list_scenario_outcomes,
     plan_scenario,
 )
+from scenarios.executor import _auth_payload, _execution_id, _resolution_for_event
 from scenarios.schemas import BehaviorPolicy, PersonaProfile, ScenarioMode, ScenarioType
+from scheduler import (
+    EnqueueScenarioRequest,
+    ScheduledEventDispatchResult,
+    SchedulePlanResult,
+    SyntheticScheduleClient,
+    dispatch_scheduled_event,
+)
 from utils.internal_auth import get_internal_switch_token
 from utils.runtime import get_cors_origins, is_local_dev
 
@@ -109,6 +118,20 @@ FRAUD_PATTERN_ENABLED = os.getenv("FRAUD_PATTERN_ENABLED", "false").lower() in {
 FRAUD_PATTERN_RATE = float(os.getenv("FRAUD_PATTERN_RATE", "0.05"))
 FRAUD_PATTERN_MAX_PER_PULSE = int(os.getenv("FRAUD_PATTERN_MAX_PER_PULSE", "1"))
 FRAUD_PATTERN_TARGET_MODE = os.getenv("FRAUD_PATTERN_TARGET_MODE", "eligible").lower()
+SCHEDULE_DISPATCH_TRANSPORT = os.getenv(
+    "SCHEDULE_DISPATCH_TRANSPORT",
+    "cloud_tasks" if os.getenv("CLOUD_TASKS_QUEUE") else "record_only",
+).lower()
+CLOUD_TASKS_PROJECT_ID = os.getenv("CLOUD_TASKS_PROJECT_ID") or os.getenv(
+    "GOOGLE_CLOUD_PROJECT"
+)
+CLOUD_TASKS_LOCATION = os.getenv("CLOUD_TASKS_LOCATION", os.getenv("REGION", "us-central1"))
+CLOUD_TASKS_QUEUE = os.getenv("CLOUD_TASKS_QUEUE")
+DATA_GENERATOR_DISPATCH_URL = os.getenv("DATA_GENERATOR_DISPATCH_URL")
+DATA_GENERATOR_SERVICE_ACCOUNT_EMAIL = os.getenv("DATA_GENERATOR_SERVICE_ACCOUNT_EMAIL")
+SCHEDULE_FOLLOWUP_MINUTES = int(os.getenv("SCHEDULE_FOLLOWUP_MINUTES", "2"))
+SCHEDULE_SETTLEMENT_DELAY_MINUTES = int(os.getenv("SCHEDULE_SETTLEMENT_DELAY_MINUTES", "1"))
+SYNTHETIC_ALERT_FOLLOWUP_RATE = float(os.getenv("SYNTHETIC_ALERT_FOLLOWUP_RATE", "0.65"))
 FRAUD_PATTERN_NAMES = [
     "cnp_gift_card_burst",
     "electronics_marketplace_burst",
@@ -868,14 +891,38 @@ async def dispatch_fraud_pattern(
             headers=headers,
             timeout=SWIPE_REQUEST_TIMEOUT_SECONDS,
         )
+        response_payload = response.json() if response.status_code == 200 else {}
+        followup = None
+        if response_payload.get("fraud_alert_id"):
+            outcome_label = (
+                "confirmed_fraud"
+                if pattern
+                in {
+                    "cnp_gift_card_burst",
+                    "electronics_marketplace_burst",
+                    "merchant_category_velocity",
+                }
+                else "false_positive"
+            )
+            followup = await schedule_synthetic_alert_followup(
+                fraud_alert_id=response_payload["fraud_alert_id"],
+                authorization_id=response_payload.get("authorization_id")
+                or response_payload.get("id"),
+                card_token=payload.get("card_token"),
+                pattern=pattern,
+                rrn=payload.get("retrieval_reference_number"),
+                outcome_label=outcome_label,
+            )
         results.append(
             {
                 "pattern": pattern,
                 "rrn": payload["retrieval_reference_number"],
                 "status_code": response.status_code,
-                "action_code": response.json().get("action_code")
-                if response.status_code == 200
-                else None,
+                "action_code": response_payload.get("action_code"),
+                "authorization_id": response_payload.get("authorization_id")
+                or response_payload.get("id"),
+                "fraud_alert_id": response_payload.get("fraud_alert_id"),
+                "scheduled_followup": followup,
             }
         )
     return {
@@ -931,6 +978,271 @@ def get_service_headers() -> Dict[str, str]:
                 f"Missing OIDC authorization header for remote banking-service at {BANKING_SERVICE_URL}."
             )
     return headers
+
+
+def _utc_now() -> datetime.datetime:
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def _coerce_utc(value: datetime.datetime | None) -> datetime.datetime:
+    if value is None:
+        return _utc_now()
+    if value.tzinfo is None:
+        return value.replace(tzinfo=datetime.timezone.utc)
+    return value.astimezone(datetime.timezone.utc)
+
+
+def get_schedule_client() -> SyntheticScheduleClient:
+    return SyntheticScheduleClient(
+        banking_service_url=BANKING_SERVICE_URL,
+        headers=get_service_headers(),
+        timeout_seconds=SWIPE_REQUEST_TIMEOUT_SECONDS,
+    )
+
+
+def _cloud_tasks_parent() -> str | None:
+    if not (CLOUD_TASKS_PROJECT_ID and CLOUD_TASKS_LOCATION and CLOUD_TASKS_QUEUE):
+        return None
+    return (
+        f"projects/{CLOUD_TASKS_PROJECT_ID}/locations/{CLOUD_TASKS_LOCATION}/"
+        f"queues/{CLOUD_TASKS_QUEUE}"
+    )
+
+
+def _dispatch_url(event_record_id: str) -> str:
+    base_url = DATA_GENERATOR_DISPATCH_URL
+    if not base_url:
+        base_url = "http://localhost:8080" if is_local_dev() else ""
+    if not base_url:
+        raise RuntimeError("DATA_GENERATOR_DISPATCH_URL is required for Cloud Tasks.")
+    return f"{base_url.rstrip('/')}/scheduled-events/{event_record_id}/dispatch"
+
+
+def enqueue_cloud_task_for_event(event_record: Any) -> bool:
+    parent = _cloud_tasks_parent()
+    if not parent:
+        return False
+    try:
+        from google.cloud import tasks_v2
+        from google.protobuf import timestamp_pb2
+
+        timestamp = timestamp_pb2.Timestamp()
+        timestamp.FromDatetime(_coerce_utc(event_record.scheduled_for))
+        task = {
+            "http_request": {
+                "http_method": tasks_v2.HttpMethod.POST,
+                "url": _dispatch_url(event_record.id),
+                "headers": {
+                    "X-Card-Network-Token": get_card_network_token(),
+                    "Content-Type": "application/json",
+                },
+            },
+            "schedule_time": timestamp,
+        }
+        if DATA_GENERATOR_SERVICE_ACCOUNT_EMAIL:
+            task["http_request"]["oidc_token"] = {
+                "service_account_email": DATA_GENERATOR_SERVICE_ACCOUNT_EMAIL,
+                "audience": DATA_GENERATOR_DISPATCH_URL.rstrip("/")
+                if DATA_GENERATOR_DISPATCH_URL
+                else None,
+            }
+        tasks_v2.CloudTasksClient().create_task(parent=parent, task=task)
+        return True
+    except Exception as exc:
+        logger.warning("Failed to enqueue Cloud Task for scheduled event %s: %s", event_record.id, exc)
+        return False
+
+
+def _policy_for_persona(persona_id: str, policies: list[BehaviorPolicy]) -> BehaviorPolicy:
+    for policy in policies:
+        if persona_id in policy.policy_id:
+            return policy
+    return policies[0]
+
+
+def _event_schedule_time(
+    *,
+    start_at: datetime.datetime,
+    offset_minutes: int,
+    extra_minutes: int = 0,
+) -> datetime.datetime:
+    return start_at + datetime.timedelta(minutes=offset_minutes + extra_minutes)
+
+
+async def enqueue_scenario_schedule(
+    request: EnqueueScenarioRequest,
+) -> SchedulePlanResult:
+    execution_request = request.execution_request
+    plan = execution_request.plan
+    start_at = _coerce_utc(request.start_at)
+    schedule_id = request.schedule_id or f"schedule-{plan.scenario_id}-{uuid.uuid4().hex[:8]}"
+    execution_id = _execution_id(plan.scenario_id, execution_request.idempotency_key)
+    transport = (request.dispatch_transport or SCHEDULE_DISPATCH_TRANSPORT).lower()
+    cards = execution_request.default_card_tokens or (
+        [execution_request.default_card_token] if execution_request.default_card_token else []
+    )
+    if not cards:
+        active_cards = get_spendable_cards(get_generator_eligible_cards(get_active_cards()))
+        cards = [card["card_token"] for card in active_cards]
+    if not cards:
+        raise HTTPException(
+            status_code=409,
+            detail="No eligible active cards available for scheduled scenario execution.",
+        )
+
+    schedule_client = get_schedule_client()
+    created_events = []
+    cloud_tasks_enqueued = 0
+    warnings = []
+    auth_index = 0
+    for event in plan.timeline:
+        if event.event_type.value not in {"authorization", "customer_action"}:
+            continue
+        event_time = _event_schedule_time(
+            start_at=start_at, offset_minutes=event.offset_minutes
+        )
+        if event.event_type.value == "authorization":
+            card_token = cards[auth_index % len(cards)]
+            auth_index += 1
+            auth_payload = _auth_payload(event, plan.scenario_id, card_token)
+            created = await schedule_client.create_event(
+                {
+                    "schedule_id": schedule_id,
+                    "scenario_id": plan.scenario_id,
+                    "execution_id": execution_id,
+                    "event_id": event.event_id,
+                    "event_type": "authorization",
+                    "persona_id": event.persona_id,
+                    "scheduled_for": event_time.isoformat(),
+                    "idempotency_key": f"{schedule_id}:{event.event_id}:authorization",
+                    "payload": {
+                        "authorization_payload": auth_payload,
+                        "outcome_label": event.outcome_label.value,
+                        "expected_reason_codes": event.expected_reason_codes,
+                        "expected_score_band": event.expected_score_band,
+                    },
+                }
+            )
+            created_events.append(created)
+            if transport == "cloud_tasks" and enqueue_cloud_task_for_event(created):
+                cloud_tasks_enqueued += 1
+            elif transport == "cloud_tasks":
+                warnings.append(f"Cloud Task enqueue failed for {created.event_id}.")
+
+            resolution = _resolution_for_event(
+                event, plan.scenario_id, _policy_for_persona(event.persona_id, plan.behavior_policies)
+            )
+            if resolution in {"settled", "reversed"}:
+                resolution_event_type = "settlement" if resolution == "settled" else "reversal"
+                resolution_event = await schedule_client.create_event(
+                    {
+                        "schedule_id": schedule_id,
+                        "scenario_id": plan.scenario_id,
+                        "execution_id": execution_id,
+                        "event_id": f"{event.event_id}:{resolution_event_type}",
+                        "parent_event_id": event.event_id,
+                        "event_type": resolution_event_type,
+                        "persona_id": event.persona_id,
+                        "scheduled_for": _event_schedule_time(
+                            start_at=start_at,
+                            offset_minutes=event.offset_minutes,
+                            extra_minutes=SCHEDULE_SETTLEMENT_DELAY_MINUTES,
+                        ).isoformat(),
+                        "idempotency_key": f"{schedule_id}:{event.event_id}:{resolution_event_type}",
+                        "payload": {"amount_cents": event.amount_cents},
+                    }
+                )
+                created_events.append(resolution_event)
+                if transport == "cloud_tasks" and enqueue_cloud_task_for_event(resolution_event):
+                    cloud_tasks_enqueued += 1
+                elif transport == "cloud_tasks":
+                    warnings.append(f"Cloud Task enqueue failed for {resolution_event.event_id}.")
+        else:
+            created = await schedule_client.create_event(
+                {
+                    "schedule_id": schedule_id,
+                    "scenario_id": plan.scenario_id,
+                    "execution_id": execution_id,
+                    "event_id": event.event_id,
+                    "event_type": "customer_action",
+                    "persona_id": event.persona_id,
+                    "scheduled_for": event_time.isoformat(),
+                    "idempotency_key": f"{schedule_id}:{event.event_id}:customer_action",
+                    "payload": {
+                        "outcome_label": event.outcome_label.value,
+                        "expected_reason_codes": event.expected_reason_codes,
+                        "expected_score_band": event.expected_score_band,
+                    },
+                }
+            )
+            created_events.append(created)
+            if transport == "cloud_tasks" and enqueue_cloud_task_for_event(created):
+                cloud_tasks_enqueued += 1
+            elif transport == "cloud_tasks":
+                warnings.append(f"Cloud Task enqueue failed for {created.event_id}.")
+
+    return SchedulePlanResult(
+        schedule_id=schedule_id,
+        scenario_id=plan.scenario_id,
+        execution_id=execution_id,
+        created_events=created_events,
+        dispatch_transport=transport,
+        cloud_tasks_enqueued=cloud_tasks_enqueued,
+        warnings=warnings,
+    )
+
+
+async def schedule_synthetic_alert_followup(
+    *,
+    fraud_alert_id: str,
+    authorization_id: str | None,
+    card_token: str | None,
+    pattern: str,
+    rrn: str | None,
+    outcome_label: str,
+    delay_minutes: int = SCHEDULE_FOLLOWUP_MINUTES,
+) -> dict[str, Any] | None:
+    if random.random() > SYNTHETIC_ALERT_FOLLOWUP_RATE:
+        return None
+    schedule_id = f"ambient-fraud-followup-{uuid.uuid4().hex[:12]}"
+    event_id = f"{pattern}-customer-followup"
+    scheduled_for = _utc_now() + datetime.timedelta(minutes=delay_minutes)
+    schedule_client = get_schedule_client()
+    event = await schedule_client.create_event(
+        {
+            "schedule_id": schedule_id,
+            "scenario_id": "ambient-fraud-pattern-followup",
+            "execution_id": schedule_id,
+            "event_id": event_id,
+            "event_type": "customer_action",
+            "persona_id": "ambient-cardholder",
+            "scheduled_for": scheduled_for.isoformat(),
+            "idempotency_key": f"{schedule_id}:{event_id}:customer_action",
+            "payload": {
+                "outcome_label": outcome_label,
+                "auth_context": {
+                    "fraud_alert_id": fraud_alert_id,
+                    "authorization_id": authorization_id,
+                    "card_token": card_token,
+                    "retrieval_reference_number": rrn,
+                    "outcome_label": outcome_label,
+                },
+                "expected_reason_codes": [pattern],
+            },
+        }
+    )
+    cloud_task_enqueued = (
+        enqueue_cloud_task_for_event(event)
+        if SCHEDULE_DISPATCH_TRANSPORT == "cloud_tasks"
+        else False
+    )
+    return {
+        "schedule_id": schedule_id,
+        "event_record_id": event.id,
+        "scheduled_for": event.scheduled_for.isoformat(),
+        "cloud_task_enqueued": cloud_task_enqueued,
+        "outcome_label": outcome_label,
+    }
 
 
 def get_spendable_cards(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1676,6 +1988,9 @@ def get_simulation_status():
             "/scenarios/execute",
             "/scenarios/replay",
             "/scenarios/{scenario_id}/outcomes",
+            "/scheduled-events/enqueue",
+            "/scheduled-events",
+            "/scheduled-events/{event_record_id}/dispatch",
         ],
     }
 
@@ -1826,6 +2141,76 @@ def get_generation_scenario_outcomes(scenario_id: str):
         "count": len(outcomes),
         "outcomes": outcomes,
     }
+
+
+@app.post(
+    "/scheduled-events/enqueue",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+async def enqueue_scheduled_scenario(request: EnqueueScenarioRequest):
+    """Persists a scenario timeline as durable synthetic events and optionally queues Cloud Tasks."""
+    return await enqueue_scenario_schedule(request)
+
+
+@app.get(
+    "/scheduled-events",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+async def list_scheduled_events(
+    schedule_id: str | None = None,
+    status_filter: str | None = None,
+    limit: int = 100,
+):
+    """Returns the durable synthetic schedule for GUI, MCP, and operator inspection."""
+    return await get_schedule_client().list_events(
+        schedule_id=schedule_id,
+        status_filter=status_filter,
+        limit=limit,
+    )
+
+
+@app.post(
+    "/scheduled-events/{event_record_id}/cancel",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+async def cancel_scheduled_event_chain(event_record_id: str):
+    """Cancels future events in the same schedule as the supplied event record."""
+    schedule_client = get_schedule_client()
+    event = await schedule_client.get_event(event_record_id)
+    return await schedule_client.cancel_schedule(event.schedule_id)
+
+
+@app.post(
+    "/scheduled-events/schedules/{schedule_id}/cancel",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+async def cancel_scheduled_scenario(schedule_id: str):
+    """Cancels future events for a durable synthetic schedule."""
+    return await get_schedule_client().cancel_schedule(schedule_id)
+
+
+@app.post(
+    "/scheduled-events/{event_record_id}/dispatch",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+async def dispatch_synthetic_scheduled_event(
+    event_record_id: str,
+) -> ScheduledEventDispatchResult:
+    """Idempotently dispatches one durable scheduled event."""
+    schedule_client = get_schedule_client()
+    event = await schedule_client.get_event(event_record_id)
+    return await dispatch_scheduled_event(
+        event=event,
+        schedule_client=schedule_client,
+        banking_service_url=BANKING_SERVICE_URL,
+        headers=get_service_headers(),
+        timeout_seconds=SWIPE_REQUEST_TIMEOUT_SECONDS,
+    )
 
 
 @app.post("/generate", status_code=status.HTTP_200_OK)
@@ -2212,6 +2597,91 @@ async def inject_anomaly(req: Optional[AnomalyRequest] = None):
         "total_fraud_cents": sum(amt for _, amt, _, _, _ in swipes),
         "message": "Targeted fraud anomaly surge successfully dispatched against card-network gateway.",
     }
+
+
+try:
+    from fastmcp import FastMCP
+
+    data_generator_mcp = FastMCP("Data Generator MCP")
+
+    @data_generator_mcp.tool()
+    async def inspect_synthetic_schedule(
+        schedule_id: str | None = None,
+        status_filter: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """Inspect durable synthetic data-generator schedule records."""
+        return await get_schedule_client().list_events(
+            schedule_id=schedule_id,
+            status_filter=status_filter,
+            limit=limit,
+        )
+
+    @data_generator_mcp.tool()
+    async def create_scenario_plan(
+        goal: str,
+        scenario_type: str | None = None,
+        intensity: str = "medium",
+        seed: int = 1841,
+        max_events: int | None = None,
+    ) -> dict[str, Any]:
+        """Create a deterministic synthetic scenario plan without executing it."""
+        request = ScenarioRequest(
+            goal=goal,
+            scenario_type=ScenarioType(scenario_type) if scenario_type else None,
+            intensity=intensity,
+            seed=seed,
+            max_events=max_events,
+        )
+        return plan_scenario(request).model_dump(mode="json")
+
+    @data_generator_mcp.tool()
+    async def enqueue_synthetic_story(
+        goal: str,
+        scenario_type: str,
+        intensity: str = "medium",
+        seed: int = 1841,
+        max_events: int | None = None,
+        dispatch_transport: str | None = None,
+    ) -> dict[str, Any]:
+        """Plan and enqueue a synthetic story onto the durable event schedule."""
+        plan = plan_scenario(
+            ScenarioRequest(
+                goal=goal,
+                scenario_type=ScenarioType(scenario_type),
+                mode=ScenarioMode.EXECUTE,
+                intensity=intensity,
+                seed=seed,
+                max_events=max_events,
+            )
+        )
+        result = await enqueue_scenario_schedule(
+            EnqueueScenarioRequest(
+                execution_request=ScenarioExecutionRequest(
+                    plan=plan,
+                    mode=ScenarioMode.EXECUTE,
+                    idempotency_key=f"mcp:{plan.scenario_id}:{uuid.uuid4().hex}",
+                    operator="data-generator-mcp",
+                ),
+                dispatch_transport=dispatch_transport,
+            )
+        )
+        return result.model_dump(mode="json")
+
+    @data_generator_mcp.tool()
+    async def cancel_future_synthetic_events(schedule_id: str) -> dict[str, Any]:
+        """Cancel future durable events for a synthetic schedule."""
+        return await get_schedule_client().cancel_schedule(schedule_id)
+
+    @data_generator_mcp.tool()
+    async def adjust_ambient_load_profile(update: dict[str, Any]) -> dict[str, Any]:
+        """Adjust bounded ambient data-generator controls."""
+        profile = update_ambient_profile(AmbientLoadProfileUpdate.model_validate(update))
+        return profile.model_dump(mode="json")
+
+    app.mount("/mcp", data_generator_mcp.http_app(path="/", transport="http"))
+except Exception as mcp_exc:
+    logger.warning("Data-generator FastMCP control surface unavailable: %s", mcp_exc)
 
 
 if __name__ == "__main__":
