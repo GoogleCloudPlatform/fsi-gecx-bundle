@@ -19,7 +19,7 @@ import { useSettings } from '../context/SettingsContext.jsx';
 import { createApplication } from '../utils/api.js';
 import { formatPhoneNumber } from '../utils/formatters.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
-import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 
 const CARDS_MAP = {
   'aura-elite-reserve': {

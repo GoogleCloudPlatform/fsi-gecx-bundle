@@ -17,7 +17,7 @@ import { useSettings } from '../context/SettingsContext.jsx';
 import { getAccountsSummary, provisionMyDemo, getCreditCardTransactions } from '../utils/api.js';
 import { useNavigate, Link } from 'react-router-dom';
 import BillPayModal from './BillPayModal.jsx';
-import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 
 function HomeView({
   fbUser,

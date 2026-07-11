@@ -23,7 +23,7 @@ import {
 } from '../utils/api.js';
 import { DataChannelEvent } from '../utils/constants.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
-import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 
 function FraudStep({ label, complete }) {
   return (

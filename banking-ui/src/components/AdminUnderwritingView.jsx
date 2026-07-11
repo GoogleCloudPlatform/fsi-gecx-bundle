@@ -9,7 +9,7 @@ import {
 import { useSettings } from '../context/SettingsContext.jsx';
 import api from '../utils/api.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
-import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 
 const CONFIDENCE_THRESHOLDS = {
   ssn: 0.95,

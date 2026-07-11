@@ -46,7 +46,8 @@ import {
   getCcaiAuthToken,
   getAccountsSummary
 } from './utils/api.js';
-import GoogleCloudIcon from './components/GoogleCloudIcon.jsx';
+import GoogleCloudIcon from './components/icons/GoogleCloudIcon.jsx';
+import CloudBuildIcon from './components/icons/CloudBuildIcon.jsx';
 import GcpInfoModal from './components/GcpInfoModal.jsx';
 
 
@@ -106,6 +107,14 @@ const getCesAppUrl = (path) => {
     return `https://ces.cloud.google.com/projects/${proj}/locations/${loc}/apps/${app}`;
   }
   return '';
+};
+
+const getCloudBuildUrl = (projectId) => {
+  const buildId = window.env?.BUILD_BUILD_ID;
+  const location = window.env?.BUILD_LOCATION || 'us-central1';
+  const buildProject = window.env?.BUILD_PROJECT_ID || projectId;
+  if (!buildId || buildId === 'local-build') return '';
+  return `https://console.cloud.google.com/cloud-build/builds;region=${location}/${buildId}?project=${buildProject}`;
 };
 
 function AppContent() {
@@ -1824,31 +1833,56 @@ function AppContent() {
               {footerText}
             </p>
             {(window.env?.BUILD_VERSION || window.env?.BUILD_COMMIT_ID) && (
-              <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono flex items-center gap-1.5 mt-1">
-                <span>
-                  Version: {window.env?.BUILD_VERSION || 'unknown'} (
-                  {window.env?.BUILD_COMMIT_ID ? (
-                    <a 
-                      href={`https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/commit/${window.env.BUILD_COMMIT_ID}`} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      className="hover:underline text-slate-500 dark:text-slate-400"
+              <>
+                <div className="text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1 mt-8">
+                  <a
+                    href="https://docs.cloud.google.com/build/docs"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:underline hover:text-slate-600 dark:hover:text-slate-300"
+                  >
+                    Built with Cloud Build
+                  </a>
+                  {getCloudBuildUrl(projectId) ? (
+                    <a
+                      href={getCloudBuildUrl(projectId)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="cursor-pointer hover:opacity-80 transition-opacity"
+                      title="View Build in Google Cloud Console"
                     >
-                      {window.env.BUILD_COMMIT_ID}
+                      <CloudBuildIcon className="w-4 h-4" />
                     </a>
                   ) : (
-                    'unknown'
+                    <CloudBuildIcon className="w-4 h-4" />
                   )}
-                  )
-                </span>
-                <button
-                  onClick={() => setIsGcpEnvModalOpen(true)}
-                  className="p-0.5 rounded hover:bg-slate-105 dark:hover:bg-slate-800/80 transition-colors cursor-pointer text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 flex items-center justify-center"
-                  title="View GCP Environment Configuration"
-                >
-                  <GoogleCloudIcon className="w-3 h-3" />
-                </button>
-              </div>
+                </div>
+                <div className="text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5 -mt-3">
+                  <span>
+                    Version: {window.env?.BUILD_VERSION || 'unknown'} (
+                    {window.env?.BUILD_COMMIT_ID ? (
+                      <a 
+                        href={`https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/commit/${window.env.BUILD_COMMIT_ID}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="hover:underline text-slate-500 dark:text-slate-400"
+                      >
+                        {window.env.BUILD_COMMIT_ID}
+                      </a>
+                    ) : (
+                      'unknown'
+                    )}
+                    )
+                  </span>
+                  <button
+                    onClick={() => setIsGcpEnvModalOpen(true)}
+                    className="p-0.5 rounded hover:bg-slate-105 dark:hover:bg-slate-800/80 transition-colors cursor-pointer text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 flex items-center justify-center"
+                    title="View GCP Environment Configuration"
+                  >
+                    <GoogleCloudIcon className="w-3 h-3" />
+                  </button>
+                </div>
+              </>
             )}
           </div>
 
@@ -2123,11 +2157,11 @@ function AppContent() {
                       <span className="font-mono text-slate-800 dark:text-slate-200">{window.env.BUILD_LOCATION}</span>
                     </div>
                   )}
-                  {window.env?.BUILD_BUILD_ID && window.env.BUILD_BUILD_ID !== 'local-build' && (
+                  {getCloudBuildUrl(projectId) && (
                     <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
                       <span className="font-semibold text-slate-500 dark:text-slate-400">Cloud Build Link</span>
                       <a
-                        href={`https://console.cloud.google.com/cloud-build/builds;region=${window.env.BUILD_LOCATION || 'us-central1'}/${window.env.BUILD_BUILD_ID}?project=${window.env.BUILD_PROJECT_ID || projectId}`}
+                        href={getCloudBuildUrl(projectId)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="font-mono text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5"

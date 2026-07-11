@@ -16,7 +16,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings, Bell, ExternalLink, Sparkles } from 'lucide-react';
 import { resetDatabase, getResetDatabaseAccess, getSystemSettings, updateSystemSettings, provisionMyDemo, resetMyDemo, getCreditCardAccount } from '../utils/api.js';
-import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { showInfoModals } from '../utils/constants.js';
 

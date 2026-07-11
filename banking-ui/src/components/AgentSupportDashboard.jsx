@@ -14,7 +14,7 @@ import {
   ExternalLink,
   ArrowLeft
 } from 'lucide-react';
-import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { showInfoModals } from '../utils/constants.js';
 import { 

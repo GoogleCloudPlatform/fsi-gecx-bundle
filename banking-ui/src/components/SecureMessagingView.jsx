@@ -20,7 +20,7 @@ import {
   ArrowLeft, CheckCircle2, Copy, Check, Bug, RefreshCw, ExternalLink
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
-import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { 
   getMessages, 
