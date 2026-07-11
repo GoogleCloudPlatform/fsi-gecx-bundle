@@ -37,7 +37,6 @@ import AccountOpeningModal from './AccountOpeningModal.jsx';
 
 export default function CompareAccounts() {
   const { 
-    bankName, 
     brandColorFrom, 
     brandColorTo 
   } = useSettings();

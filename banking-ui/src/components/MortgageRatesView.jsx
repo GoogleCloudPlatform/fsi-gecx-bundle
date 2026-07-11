@@ -12,7 +12,6 @@ import {
   Calendar
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
-import { mortgageRates as rates } from '../utils/productData.js';
 import MortgageMatrix from './MortgageMatrix.jsx';
 
 function MortgageRatesView() {
