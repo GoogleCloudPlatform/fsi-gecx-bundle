@@ -387,11 +387,19 @@ function AppContent() {
     }
   }, [fbUser]);
 
-  const handleEnableNotifications = async () => {
+  const handleEnableNotifications = useCallback(async () => {
     if (!window.firebaseNotifications?.requestPermission) return;
     await window.firebaseNotifications.requestPermission();
     setNotificationPermission(window.firebaseNotifications.getPermissionState?.() || Notification.permission);
-  };
+  }, [setNotificationPermission]);
+
+  useEffect(() => {
+    if (fbUser) {
+      if (notificationPermission === 'prompt' || notificationPermission === 'default') {
+        handleEnableNotifications();
+      }
+    }
+  }, [fbUser, notificationPermission, handleEnableNotifications]);
 
 
   const userDataRef = useRef({ email: null, sub: null });
@@ -721,7 +729,7 @@ function AppContent() {
           window.firebaseAuth.getRedirectResult()
             .then((result) => {
               if (result) {
-                console.log("Redirect sign-in success:", result.user);
+                console.log("Redirect sign-in success");
               }
             })
             .catch((error) => {
