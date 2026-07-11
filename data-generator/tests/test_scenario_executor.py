@@ -23,7 +23,7 @@ import main
 from main import BANKING_SERVICE_URL, app
 from scenarios import ScenarioExecutionRequest, ScenarioRequest, execute_scenario, plan_scenario
 from scenarios.executor import clear_execution_cache, list_scenario_outcomes
-from scenarios.schemas import ScenarioMode, ScenarioStepStatus, ScenarioType
+from scenarios.schemas import OutcomeLabel, ScenarioMode, ScenarioStepStatus, ScenarioType
 
 client = TestClient(app)
 
@@ -318,3 +318,172 @@ async def test_scenario_outcomes_endpoint_returns_cached_feedback():
     assert body["count"] == len(plan.timeline)
     assert body["outcomes"][0]["authorization_id"] == "auth-endpoint-1"
     assert body["outcomes"][0]["actual_risk_score"] == 78
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_customer_action_resolves_false_positive_alert():
+    plan = plan_scenario(
+        ScenarioRequest(
+            goal="Create a false positive travel story.",
+            scenario_type=ScenarioType.TRAVEL_FALSE_POSITIVE_STORY,
+        )
+    )
+    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "action_code": "00",
+                "authorization_id": "auth-fp-1",
+                "fraud_alert_id": "alert-fp-1",
+                "fraud_risk_score": 72,
+                "fraud_reason_codes": ["INTERNATIONAL_ANOMALY"],
+                "fraud_model_version": "local-deterministic-v1",
+            },
+        )
+    )
+    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
+        return_value=httpx.Response(200, json={"status": "SETTLED", "transaction_id": "txn-fp-1"})
+    )
+    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse").mock(
+        return_value=httpx.Response(200, json={"status": "REVERSED"})
+    )
+    action_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/credit-card/fraud-alert/scenario-action").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "message": "Fraud alert marked as recognized activity.",
+                "outcome": "CUSTOMER_RECOGNIZED",
+                "fraud_alert": {"fraud_alert_id": "alert-fp-1", "status": "RESOLVED_CUSTOMER_RECOGNIZED"},
+            },
+        )
+    )
+
+    result = await execute_scenario(
+        ScenarioExecutionRequest(
+            plan=plan,
+            mode=ScenarioMode.EXECUTE,
+            idempotency_key="execute-false-positive-001",
+            default_card_token="tok_false_positive",
+        ),
+        banking_service_url=BANKING_SERVICE_URL,
+        headers={"X-Card-Network-Token": "test"},
+    )
+
+    customer_action = next(step for step in result.steps if step.event_type == "customer_action")
+    assert customer_action.status == ScenarioStepStatus.SUCCEEDED
+    assert customer_action.resolution == "recognized"
+    assert customer_action.alert_id == "alert-fp-1"
+    assert result.created_alert_ids == ["alert-fp-1"]
+    payload = json.loads(action_route.calls[0].request.content.decode())
+    assert payload["fraud_alert_id"] == "alert-fp-1"
+    assert payload["outcome_label"] == "confirmed_legitimate"
+    assert payload["disputed_authorization_ids"] == []
+    assert payload["issue_replacement"] is False
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_customer_action_triages_disputed_fraud_alert():
+    plan = plan_scenario(
+        ScenarioRequest(
+            goal="Create a fraud story for a traveling executive.",
+            scenario_type=ScenarioType.FRAUD_TRAVEL_STORY,
+        )
+    )
+    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
+        side_effect=[
+            httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-base-1"}),
+            httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-travel-1"}),
+            httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-hotel-1"}),
+            httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-fraud-1", "fraud_alert_id": "alert-fraud-1", "fraud_risk_score": 82}),
+            httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-fraud-2", "fraud_alert_id": "alert-fraud-1", "fraud_risk_score": 91}),
+        ]
+    )
+    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
+        return_value=httpx.Response(200, json={"status": "SETTLED", "transaction_id": "txn-fraud-1"})
+    )
+    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse").mock(
+        return_value=httpx.Response(200, json={"status": "REVERSED"})
+    )
+    action_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/credit-card/fraud-alert/scenario-action").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "message": "Fraud case triaged and pending specialist review.",
+                "outcome": "PENDING_SPECIALIST_REVIEW",
+                "fraud_alert": {"fraud_alert_id": "alert-fraud-1", "status": "TRIAGED_PENDING_REVIEW"},
+            },
+        )
+    )
+
+    result = await execute_scenario(
+        ScenarioExecutionRequest(
+            plan=plan,
+            mode=ScenarioMode.EXECUTE,
+            idempotency_key="execute-disputed-fraud-001",
+            default_card_token="tok_disputed_fraud",
+        ),
+        banking_service_url=BANKING_SERVICE_URL,
+        headers={"X-Card-Network-Token": "test"},
+    )
+
+    customer_action = next(step for step in result.steps if step.event_type == "customer_action")
+    assert customer_action.status == ScenarioStepStatus.SUCCEEDED
+    assert customer_action.resolution == "triaged"
+    payload = json.loads(action_route.calls[0].request.content.decode())
+    assert payload["fraud_alert_id"] == "alert-fraud-1"
+    assert payload["outcome_label"] == "customer_disputed"
+    assert payload["disputed_authorization_ids"] == ["auth-fraud-1", "auth-fraud-2"]
+    assert payload["issue_replacement"] is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_customer_action_unresolved_keeps_alert_open():
+    plan = plan_scenario(
+        ScenarioRequest(
+            goal="Create a fraud story for a traveling executive.",
+            scenario_type=ScenarioType.FRAUD_TRAVEL_STORY,
+        )
+    )
+    plan.timeline[-1].outcome_label = OutcomeLabel.UNRESOLVED
+    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
+        return_value=httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-unresolved-1", "fraud_alert_id": "alert-open-1"})
+    )
+    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
+        return_value=httpx.Response(200, json={"status": "SETTLED", "transaction_id": "txn-open-1"})
+    )
+    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse").mock(
+        return_value=httpx.Response(200, json={"status": "REVERSED"})
+    )
+    action_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/credit-card/fraud-alert/scenario-action").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "message": "Scenario outcome intentionally left the fraud alert open.",
+                "outcome": "UNRESOLVED",
+                "fraud_alert": {"fraud_alert_id": "alert-open-1", "status": "OPEN"},
+            },
+        )
+    )
+
+    result = await execute_scenario(
+        ScenarioExecutionRequest(
+            plan=plan,
+            mode=ScenarioMode.EXECUTE,
+            idempotency_key="execute-unresolved-001",
+            default_card_token="tok_unresolved",
+        ),
+        banking_service_url=BANKING_SERVICE_URL,
+        headers={"X-Card-Network-Token": "test"},
+    )
+
+    customer_action = next(step for step in result.steps if step.event_type == "customer_action")
+    assert customer_action.status == ScenarioStepStatus.SUCCEEDED
+    assert customer_action.resolution == "unresolved"
+    payload = json.loads(action_route.calls[0].request.content.decode())
+    assert payload["outcome_label"] == "unresolved"

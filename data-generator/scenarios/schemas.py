@@ -262,7 +262,7 @@ class ScenarioStepResult(BaseModel):
     transaction_id: str | None = None
     alert_id: str | None = None
     outcome_label: OutcomeLabel | None = None
-    resolution: Literal["settled", "reversed", "pending", "declined", "skipped", "failed"] | None = None
+    resolution: Literal["settled", "reversed", "pending", "declined", "recognized", "triaged", "unresolved", "skipped", "failed"] | None = None
     status_code: int | None = None
     response_payload: dict[str, Any] | None = None
 
@@ -275,6 +275,7 @@ class ScenarioOutcome(BaseModel):
     event_id: str
     authorization_id: str | None = None
     transaction_id: str | None = None
+    fraud_alert_id: str | None = None
     card_token: str | None = None
     outcome_label: OutcomeLabel
     expected_reason_codes: list[str] = Field(default_factory=list)

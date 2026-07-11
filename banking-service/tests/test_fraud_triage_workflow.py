@@ -154,6 +154,36 @@ def test_triage_fraud_case_recognized_activity_resolves_without_remediation(db_s
     assert actions[0].action_type == "FRAUD_CASE_TRIAGED"
 
 
+def test_scenario_customer_action_false_positive_resolves_alert(db_session, fraud_alert):
+    result = FraudAlertService(db_session).execute_scenario_customer_action(
+        fraud_alert_id=str(fraud_alert.id),
+        outcome_label="false_positive",
+        idempotency_key="scenario-false-positive",
+    )
+
+    refreshed = FraudAlertRepository(db_session).get_alert_by_id(fraud_alert_id=fraud_alert.id)
+
+    assert result["success"] is True
+    assert result["outcome"] == "CUSTOMER_RECOGNIZED"
+    assert refreshed.status == "RESOLVED_CUSTOMER_RECOGNIZED"
+    assert refreshed.remediation_status == "CUSTOMER_RECOGNIZED"
+
+
+def test_scenario_customer_action_unresolved_leaves_alert_open(db_session, fraud_alert):
+    result = FraudAlertService(db_session).execute_scenario_customer_action(
+        fraud_alert_id=str(fraud_alert.id),
+        outcome_label="unresolved",
+        idempotency_key="scenario-unresolved",
+    )
+
+    refreshed = FraudAlertRepository(db_session).get_alert_by_id(fraud_alert_id=fraud_alert.id)
+
+    assert result["success"] is True
+    assert result["outcome"] == "UNRESOLVED"
+    assert refreshed.status == "OPEN"
+    assert refreshed.remediation_status == "NOT_STARTED"
+
+
 def test_triage_fraud_case_disputed_activity_applies_remediation_and_message(db_session, fraud_alert):
     result = FraudAlertService(db_session).triage_fraud_case(
         auth_provider_uid="cust-test-xyz",

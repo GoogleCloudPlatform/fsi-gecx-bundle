@@ -442,6 +442,37 @@ class BillPaymentRequest(BaseModel):
     amount_cents: int = Field(..., gt=0, description="Amount in cents")
 
 
+class ScenarioFraudCustomerActionRequest(BaseModel):
+    fraud_alert_id: str = Field(..., description="Fraud alert id produced or updated by a scenario authorization.")
+    outcome_label: str = Field(..., description="Synthetic scenario outcome label.")
+    disputed_authorization_ids: list[str] = Field(default_factory=list)
+    disputed_transaction_ids: list[str] = Field(default_factory=list)
+    issue_replacement: bool = True
+    escalate: bool = False
+    idempotency_key: str | None = Field(None, max_length=128)
+
+
+@router.post("/fraud-alert/scenario-action")
+@apiv1_router.post("/fraud-alert/scenario-action")
+@v1_router.post("/fraud-alert/scenario-action")
+def execute_scenario_fraud_customer_action(
+    request: ScenarioFraudCustomerActionRequest,
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_admin_or_internal_secret),
+):
+    """Executes synthetic scenario customer follow-up through the fraud domain workflow."""
+    ensure_system_writable("scenario fraud customer action")
+    return FraudAlertService(db).execute_scenario_customer_action(
+        fraud_alert_id=request.fraud_alert_id,
+        outcome_label=request.outcome_label,
+        disputed_authorization_ids=request.disputed_authorization_ids,
+        disputed_transaction_ids=request.disputed_transaction_ids,
+        issue_replacement=request.issue_replacement,
+        escalate=request.escalate,
+        idempotency_key=request.idempotency_key,
+    )
+
+
 class AutoPaydownRequest(BaseModel):
     customer_id: str = Field(..., description="Target customer UUID")
     credit_account_id: str = Field(..., description="Target credit account UUID")

@@ -333,6 +333,7 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
                 "model_version": fraud_decision.model_version,
             },
         )
+        fraud_alert_result = None
         if (
             fraud_service.alerts_enabled
             and fraud_decision.is_flagged
@@ -340,7 +341,7 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
         ):
             customer = db.query(User).filter(User.id == account.customer_id).first()
             if customer:
-                FraudAlertService(db).create_or_update_alert_from_model_decision(
+                fraud_alert_result = FraudAlertService(db).create_or_update_alert_from_model_decision(
                     customer=customer,
                     card=card,
                     credit_account=account,
@@ -377,6 +378,8 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
         return {
             "action_code": "00",
             "auth_code": auth_code,
+            "authorization_id": str(auth_hold.id),
+            "fraud_alert_id": fraud_alert_result.get("fraud_alert_id") if fraud_alert_result else None,
             "status": auth_status,
             "fraud_risk_score": risk_score,
             "fraud_decision": fraud_decision.to_dict(),

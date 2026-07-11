@@ -554,6 +554,70 @@ class FraudAlertService:
         self.db.commit()
         return result
 
+    def execute_scenario_customer_action(
+        self,
+        *,
+        fraud_alert_id: str,
+        outcome_label: str,
+        disputed_authorization_ids: list[str] | None = None,
+        disputed_transaction_ids: list[str] | None = None,
+        issue_replacement: bool = True,
+        escalate: bool = False,
+        idempotency_key: str | None = None,
+    ) -> dict:
+        alert = self.repo.get_alert_by_id(fraud_alert_id=fraud_alert_id)
+        if not alert:
+            return {
+                "success": False,
+                "message": "No fraud alert found for scenario customer action.",
+                "fraud_alert": None,
+            }
+
+        normalized_outcome = str(outcome_label or "").strip().lower()
+        if normalized_outcome in {"false_positive", "confirmed_legitimate"}:
+            return self.triage_fraud_case(
+                auth_provider_uid=alert.auth_provider_uid,
+                fraud_alert_id=str(alert.id),
+                disputed_authorization_ids=[],
+                disputed_transaction_ids=[],
+                issue_replacement=False,
+                escalate=False,
+                idempotency_key=idempotency_key,
+            )
+
+        if normalized_outcome == "unresolved":
+            return {
+                "success": True,
+                "message": "Scenario outcome intentionally left the fraud alert open.",
+                "fraud_alert": self._alert_result(alert),
+                "outcome": "UNRESOLVED",
+            }
+
+        if normalized_outcome in {"customer_disputed", "confirmed_fraud", "expected_fraud"}:
+            disputed_authorization_ids = disputed_authorization_ids or list(alert.suspicious_authorization_ids or [])
+            disputed_transaction_ids = disputed_transaction_ids or []
+            if not disputed_authorization_ids and not disputed_transaction_ids:
+                return {
+                    "success": False,
+                    "message": "Scenario disputed-fraud action has no suspicious authorizations or transactions to triage.",
+                    "fraud_alert": self._alert_result(alert),
+                }
+            return self.triage_fraud_case(
+                auth_provider_uid=alert.auth_provider_uid,
+                fraud_alert_id=str(alert.id),
+                disputed_authorization_ids=disputed_authorization_ids,
+                disputed_transaction_ids=disputed_transaction_ids,
+                issue_replacement=issue_replacement,
+                escalate=escalate,
+                idempotency_key=idempotency_key,
+            )
+
+        return {
+            "success": False,
+            "message": f"Unsupported scenario customer action outcome: {outcome_label}",
+            "fraud_alert": self._alert_result(alert),
+        }
+
     @staticmethod
     def _build_customer_message(card_last_four: str, suspicious_transactions: list[dict]) -> str:
         lines = [
