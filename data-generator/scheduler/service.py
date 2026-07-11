@@ -5,8 +5,9 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from models.fraud import SyntheticScheduledEvent
-from repositories.synthetic_schedule import SyntheticScheduledEventRepository
+from .database import SyntheticScheduledEvent
+from .repository import SyntheticScheduledEventRepository
+from .schemas import ScheduledEventRecord
 
 
 def _dt(value: datetime.datetime) -> datetime.datetime:
@@ -49,19 +50,18 @@ class SyntheticScheduleService:
             "canceled_at": _dt(event.canceled_at).isoformat()
             if event.canceled_at
             else None,
-            "created_at": _dt(event.created_at).isoformat()
-            if event.created_at
-            else None,
-            "updated_at": _dt(event.updated_at).isoformat()
-            if event.updated_at
-            else None,
+            "created_at": _dt(event.created_at).isoformat() if event.created_at else None,
+            "updated_at": _dt(event.updated_at).isoformat() if event.updated_at else None,
         }
 
-    def create_event(self, **kwargs) -> dict[str, Any]:
+    def _record(self, event: SyntheticScheduledEvent) -> ScheduledEventRecord:
+        return ScheduledEventRecord.model_validate(self.serialize_event(event))
+
+    def create_event(self, **kwargs) -> ScheduledEventRecord:
         event = self.repo.create_event(**kwargs)
         self.db.commit()
         self.db.refresh(event)
-        return self.serialize_event(event)
+        return self._record(event)
 
     def list_events(
         self,
@@ -75,9 +75,9 @@ class SyntheticScheduleService:
         )
         return {"count": len(events), "events": [self.serialize_event(e) for e in events]}
 
-    def get_event(self, event_record_id: str) -> dict[str, Any] | None:
+    def get_event(self, event_record_id: str) -> ScheduledEventRecord | None:
         event = self.repo.get_by_id(event_record_id)
-        return self.serialize_event(event) if event else None
+        return self._record(event) if event else None
 
     def get_context(
         self,
@@ -90,19 +90,19 @@ class SyntheticScheduleService:
         )
         return {"events": [self.serialize_event(e) for e in events]}
 
-    def mark_dispatching(self, event_record_id: str) -> dict[str, Any] | None:
+    def mark_dispatching(self, event_record_id: str) -> ScheduledEventRecord | None:
         event = self.repo.mark_dispatching(event_record_id)
         self.db.commit()
-        return self.serialize_event(event) if event else None
+        return self._record(event) if event else None
 
     def mark_succeeded(
         self, *, event_record_id: str, result_payload: dict | None = None
-    ) -> dict[str, Any] | None:
+    ) -> ScheduledEventRecord | None:
         event = self.repo.mark_succeeded(
             event_record_id=event_record_id, result_payload=result_payload
         )
         self.db.commit()
-        return self.serialize_event(event) if event else None
+        return self._record(event) if event else None
 
     def mark_failed(
         self,
@@ -110,14 +110,14 @@ class SyntheticScheduleService:
         event_record_id: str,
         error: str,
         result_payload: dict | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> ScheduledEventRecord | None:
         event = self.repo.mark_failed(
             event_record_id=event_record_id,
             error=error,
             result_payload=result_payload,
         )
         self.db.commit()
-        return self.serialize_event(event) if event else None
+        return self._record(event) if event else None
 
     def cancel_future_events(self, *, schedule_id: str) -> dict[str, Any]:
         canceled = self.repo.cancel_future_events(schedule_id=schedule_id)

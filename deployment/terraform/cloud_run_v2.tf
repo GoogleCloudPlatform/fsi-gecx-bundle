@@ -741,12 +741,34 @@ resource "google_cloud_run_v2_service" "data_generator" {
       egress = "PRIVATE_RANGES_ONLY"
     }
 
+    volumes {
+      name = "cloudsql"
+      cloud_sql_instance {
+        instances = [google_sql_database_instance.banking_data.connection_name]
+      }
+    }
+
     containers {
       image = local.data_generator_image_url
+
+      volume_mounts {
+        name       = "cloudsql"
+        mount_path = "/cloudsql"
+      }
 
       env {
         name  = "BANKING_SERVICE_URL"
         value = "https://banking-service-${data.google_project.project.number}.${var.region}.run.app"
+      }
+
+      env {
+        name  = "DATA_GENERATOR_DATABASE_URL"
+        value = "postgresql+psycopg2://${google_sql_user.data_generator_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+      }
+
+      env {
+        name  = "DB_IAM_AUTH"
+        value = "true"
       }
 
       env {
@@ -891,7 +913,10 @@ resource "google_cloud_run_v2_service" "data_generator" {
 
   depends_on = [
     google_project_service.run_googleapis_com,
+    google_sql_user.data_generator_iam_user,
     google_cloud_tasks_queue.data_generator_synthetic_schedule,
+    google_project_iam_member.datagen_sa_cloudsql_client,
+    google_project_iam_member.datagen_sa_cloudsql_instance_user,
     google_secret_manager_secret_iam_member.data_generator_card_network_switch_token_accessor,
     google_secret_manager_secret_iam_member.data_generator_redis_password_accessor,
   ]

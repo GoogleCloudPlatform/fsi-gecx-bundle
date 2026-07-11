@@ -16,6 +16,8 @@ dependencies = [
     "redis>=8.0.1",
     "google-cloud-tasks==2.20.0",
     "fastmcp==3.2.4",
+    "sqlalchemy==2.0.50",
+    "psycopg2-binary==2.9.10",
 ]
 
 [dependency-groups]

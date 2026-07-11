@@ -191,6 +191,18 @@ resource "google_project_iam_member" "datagen_sa_cloudtasks_enqueuer" {
   member  = "serviceAccount:${google_service_account.data_generator_service_account.email}"
 }
 
+resource "google_project_iam_member" "datagen_sa_cloudsql_client" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.data_generator_service_account.email}"
+}
+
+resource "google_project_iam_member" "datagen_sa_cloudsql_instance_user" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = "serviceAccount:${google_service_account.data_generator_service_account.email}"
+}
+
 resource "google_project_iam_member" "developer_cloudsql_client" {
   count   = var.enable_current_user_grants ? 1 : 0
   project = data.google_project.project.project_id

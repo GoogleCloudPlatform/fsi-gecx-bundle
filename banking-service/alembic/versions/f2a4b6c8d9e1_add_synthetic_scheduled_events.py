@@ -11,6 +11,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 import utils.database
+import os
 
 
 revision: str = "f2a4b6c8d9e1"
@@ -66,6 +67,25 @@ def upgrade() -> None:
         ["status", "scheduled_for"],
         schema="operations",
     )
+
+    if op.get_bind().dialect.name == "postgresql" and os.getenv("SKIP_IAM_GRANTS") != "true":
+        try:
+            from utils.gcp import get_project_id
+
+            project_id = get_project_id()
+            if str(project_id) == "None":
+                project_id = os.getenv("PROJECT_ID")
+        except Exception:
+            project_id = os.getenv("PROJECT_ID")
+
+        if project_id and str(project_id) != "None":
+            user = f"data-generator-sa@{project_id}.iam"
+            try:
+                op.execute(f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = \'{user}\') THEN CREATE ROLE "{user}" NOLOGIN; END IF; END $$;')
+                op.execute(f'GRANT USAGE ON SCHEMA operations TO "{user}";')
+                op.execute(f'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE operations.synthetic_scheduled_events TO "{user}";')
+            except Exception:
+                pass
 
 
 def downgrade() -> None:

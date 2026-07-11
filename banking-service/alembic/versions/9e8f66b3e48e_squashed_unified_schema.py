@@ -700,6 +700,7 @@ def upgrade() -> None:
                 users_by_schema[s].append(main_sa)
             users_by_schema["kyc"].append(f"kyc-service-sa@{project_id}.iam")
             users_by_schema["ledger"].append(f"ledger-service-sa@{project_id}.iam")
+            users_by_schema["operations"].append(f"data-generator-sa@{project_id}.iam")
             users_by_schema["ref_data"].extend([f"kyc-service-sa@{project_id}.iam", f"ledger-service-sa@{project_id}.iam"])
             users_by_schema["merchants"].extend([f"kyc-service-sa@{project_id}.iam", f"ledger-service-sa@{project_id}.iam"])
 

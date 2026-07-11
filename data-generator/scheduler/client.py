@@ -1,53 +1,42 @@
 from __future__ import annotations
 
+import datetime
 from typing import Any
 
-import httpx
-
+from .database import SessionLocal
 from .schemas import ScheduledEventRecord
+from .service import SyntheticScheduleService
+
+
+def _coerce_datetime(value: Any) -> Any:
+    if isinstance(value, str):
+        return datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return value
 
 
 class SyntheticScheduleClient:
-    def __init__(
-        self,
-        *,
-        banking_service_url: str,
-        headers: dict[str, str],
-        timeout_seconds: float = 10.0,
-        client: httpx.AsyncClient | None = None,
-    ):
-        self.banking_service_url = banking_service_url.rstrip("/")
-        self.headers = headers
-        self.timeout_seconds = timeout_seconds
-        self.client = client
+    """Data Generator-owned durable schedule access.
 
-    async def _request(self, method: str, path: str, **kwargs) -> Any:
-        url = f"{self.banking_service_url}/api/v1/credit-card/synthetic-schedule{path}"
-        if self.client:
-            response = await self.client.request(
-                method,
-                url,
-                headers=self.headers,
-                timeout=self.timeout_seconds,
-                **kwargs,
-            )
-            response.raise_for_status()
-            return response.json()
+    The scheduler is a Data Generator control surface. It stores records in the
+    shared operational database, but it does not route schedule lifecycle calls
+    through Banking Service.
+    """
 
-        async with httpx.AsyncClient() as client:
-            response = await client.request(
-                method,
-                url,
-                headers=self.headers,
-                timeout=self.timeout_seconds,
-                **kwargs,
-            )
-            response.raise_for_status()
-            return response.json()
+    def __init__(self, *, session_factory=SessionLocal):
+        self.session_factory = session_factory
+
+    def _service(self):
+        db = self.session_factory()
+        return db, SyntheticScheduleService(db)
 
     async def create_event(self, payload: dict[str, Any]) -> ScheduledEventRecord:
-        data = await self._request("POST", "/events", json=payload)
-        return ScheduledEventRecord.model_validate(data)
+        normalized = dict(payload)
+        normalized["scheduled_for"] = _coerce_datetime(normalized.get("scheduled_for"))
+        db, service = self._service()
+        try:
+            return service.create_event(**normalized)
+        finally:
+            db.close()
 
     async def list_events(
         self,
@@ -56,38 +45,58 @@ class SyntheticScheduleClient:
         status_filter: str | None = None,
         limit: int = 100,
     ) -> dict[str, Any]:
-        params: dict[str, Any] = {"limit": limit}
-        if schedule_id:
-            params["schedule_id"] = schedule_id
-        if status_filter:
-            params["status_filter"] = status_filter
-        return await self._request("GET", "/events", params=params)
+        db, service = self._service()
+        try:
+            return service.list_events(
+                schedule_id=schedule_id,
+                status=status_filter,
+                limit=max(1, min(limit, 500)),
+            )
+        finally:
+            db.close()
 
     async def get_event(self, event_record_id: str) -> ScheduledEventRecord:
-        data = await self._request("GET", f"/events/{event_record_id}")
-        return ScheduledEventRecord.model_validate(data)
+        db, service = self._service()
+        try:
+            event = service.get_event(event_record_id)
+            if not event:
+                raise KeyError(f"Scheduled event not found: {event_record_id}")
+            return event
+        finally:
+            db.close()
 
     async def get_context(
         self, *, schedule_id: str, persona_id: str | None = None
     ) -> dict[str, Any]:
-        params = {"persona_id": persona_id} if persona_id else None
-        return await self._request(
-            "GET", f"/schedules/{schedule_id}/context", params=params
-        )
+        db, service = self._service()
+        try:
+            return service.get_context(schedule_id=schedule_id, persona_id=persona_id)
+        finally:
+            db.close()
 
     async def mark_dispatching(self, event_record_id: str) -> ScheduledEventRecord:
-        data = await self._request("POST", f"/events/{event_record_id}/dispatching")
-        return ScheduledEventRecord.model_validate(data)
+        db, service = self._service()
+        try:
+            event = service.mark_dispatching(event_record_id)
+            if not event:
+                raise KeyError(f"Scheduled event not found: {event_record_id}")
+            return event
+        finally:
+            db.close()
 
     async def mark_succeeded(
         self, event_record_id: str, result_payload: dict[str, Any]
     ) -> ScheduledEventRecord:
-        data = await self._request(
-            "POST",
-            f"/events/{event_record_id}/succeeded",
-            json={"result_payload": result_payload},
-        )
-        return ScheduledEventRecord.model_validate(data)
+        db, service = self._service()
+        try:
+            event = service.mark_succeeded(
+                event_record_id=event_record_id, result_payload=result_payload
+            )
+            if not event:
+                raise KeyError(f"Scheduled event not found: {event_record_id}")
+            return event
+        finally:
+            db.close()
 
     async def mark_failed(
         self,
@@ -96,12 +105,22 @@ class SyntheticScheduleClient:
         error: str,
         result_payload: dict[str, Any] | None = None,
     ) -> ScheduledEventRecord:
-        data = await self._request(
-            "POST",
-            f"/events/{event_record_id}/failed",
-            json={"error": error, "result_payload": result_payload or {}},
-        )
-        return ScheduledEventRecord.model_validate(data)
+        db, service = self._service()
+        try:
+            event = service.mark_failed(
+                event_record_id=event_record_id,
+                error=error,
+                result_payload=result_payload or {},
+            )
+            if not event:
+                raise KeyError(f"Scheduled event not found: {event_record_id}")
+            return event
+        finally:
+            db.close()
 
     async def cancel_schedule(self, schedule_id: str) -> dict[str, Any]:
-        return await self._request("POST", f"/schedules/{schedule_id}/cancel")
+        db, service = self._service()
+        try:
+            return service.cancel_future_events(schedule_id=schedule_id)
+        finally:
+            db.close()

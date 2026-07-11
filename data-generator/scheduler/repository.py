@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import datetime
 
 from sqlalchemy.orm import Session
 
-from models.fraud import SyntheticScheduledEvent
+from .database import SyntheticScheduledEvent
 
 
 class SyntheticScheduledEventRepository:

@@ -46,11 +46,6 @@ from services.credit_card import (
     unfreeze_card,
 )
 from services.fraud_alerts import FraudAlertService
-from services.synthetic_schedule import SyntheticScheduleService
-from routers.synthetic_schedule import (
-    SyntheticScheduledEventCreateRequest,
-    SyntheticScheduledEventUpdateRequest,
-)
 from services.taxonomy_service import TaxonomyService
 from services.simulation import SimulationService
 from utils.auth import get_current_user, is_support_staff
@@ -605,116 +600,6 @@ def persist_scenario_fraud_outcomes(
         outcomes=[outcome.model_dump(mode="json") for outcome in request.outcomes],
         operational_status_by_event=request.operational_status_by_event,
     )
-
-
-@apiv1_router.post("/synthetic-schedule/events", status_code=status.HTTP_201_CREATED)
-@v1_router.post("/synthetic-schedule/events", status_code=status.HTTP_201_CREATED)
-def create_credit_card_scheduled_event(
-    request: SyntheticScheduledEventCreateRequest,
-    db: Session = Depends(get_db),
-    _auth: bool = Depends(verify_admin_or_internal_secret),
-):
-    ensure_system_writable("synthetic scheduled event create")
-    return SyntheticScheduleService(db).create_event(**request.model_dump())
-
-
-@apiv1_router.get("/synthetic-schedule/events", status_code=status.HTTP_200_OK)
-@v1_router.get("/synthetic-schedule/events", status_code=status.HTTP_200_OK)
-def list_credit_card_scheduled_events(
-    schedule_id: str | None = None,
-    status_filter: str | None = None,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    _auth: bool = Depends(verify_admin_or_internal_secret),
-):
-    return SyntheticScheduleService(db).list_events(
-        schedule_id=schedule_id,
-        status=status_filter,
-        limit=max(1, min(limit, 500)),
-    )
-
-
-@apiv1_router.get("/synthetic-schedule/events/{event_record_id}", status_code=status.HTTP_200_OK)
-@v1_router.get("/synthetic-schedule/events/{event_record_id}", status_code=status.HTTP_200_OK)
-def get_credit_card_scheduled_event(
-    event_record_id: str,
-    db: Session = Depends(get_db),
-    _auth: bool = Depends(verify_admin_or_internal_secret),
-):
-    event = SyntheticScheduleService(db).get_event(event_record_id)
-    if not event:
-        raise HTTPException(status_code=404, detail="Scheduled event not found.")
-    return event
-
-
-@apiv1_router.get("/synthetic-schedule/schedules/{schedule_id}/context", status_code=status.HTTP_200_OK)
-@v1_router.get("/synthetic-schedule/schedules/{schedule_id}/context", status_code=status.HTTP_200_OK)
-def get_credit_card_schedule_context(
-    schedule_id: str,
-    persona_id: str | None = None,
-    db: Session = Depends(get_db),
-    _auth: bool = Depends(verify_admin_or_internal_secret),
-):
-    return SyntheticScheduleService(db).get_context(
-        schedule_id=schedule_id, persona_id=persona_id
-    )
-
-
-@apiv1_router.post("/synthetic-schedule/events/{event_record_id}/dispatching", status_code=status.HTTP_200_OK)
-@v1_router.post("/synthetic-schedule/events/{event_record_id}/dispatching", status_code=status.HTTP_200_OK)
-def mark_credit_card_scheduled_event_dispatching(
-    event_record_id: str,
-    db: Session = Depends(get_db),
-    _auth: bool = Depends(verify_admin_or_internal_secret),
-):
-    event = SyntheticScheduleService(db).mark_dispatching(event_record_id)
-    if not event:
-        raise HTTPException(status_code=404, detail="Scheduled event not found.")
-    return event
-
-
-@apiv1_router.post("/synthetic-schedule/events/{event_record_id}/succeeded", status_code=status.HTTP_200_OK)
-@v1_router.post("/synthetic-schedule/events/{event_record_id}/succeeded", status_code=status.HTTP_200_OK)
-def mark_credit_card_scheduled_event_succeeded(
-    event_record_id: str,
-    request: SyntheticScheduledEventUpdateRequest,
-    db: Session = Depends(get_db),
-    _auth: bool = Depends(verify_admin_or_internal_secret),
-):
-    event = SyntheticScheduleService(db).mark_succeeded(
-        event_record_id=event_record_id, result_payload=request.result_payload
-    )
-    if not event:
-        raise HTTPException(status_code=404, detail="Scheduled event not found.")
-    return event
-
-
-@apiv1_router.post("/synthetic-schedule/events/{event_record_id}/failed", status_code=status.HTTP_200_OK)
-@v1_router.post("/synthetic-schedule/events/{event_record_id}/failed", status_code=status.HTTP_200_OK)
-def mark_credit_card_scheduled_event_failed(
-    event_record_id: str,
-    request: SyntheticScheduledEventUpdateRequest,
-    db: Session = Depends(get_db),
-    _auth: bool = Depends(verify_admin_or_internal_secret),
-):
-    event = SyntheticScheduleService(db).mark_failed(
-        event_record_id=event_record_id,
-        error=request.error or "Scheduled event dispatch failed.",
-        result_payload=request.result_payload,
-    )
-    if not event:
-        raise HTTPException(status_code=404, detail="Scheduled event not found.")
-    return event
-
-
-@apiv1_router.post("/synthetic-schedule/schedules/{schedule_id}/cancel", status_code=status.HTTP_200_OK)
-@v1_router.post("/synthetic-schedule/schedules/{schedule_id}/cancel", status_code=status.HTTP_200_OK)
-def cancel_credit_card_future_scheduled_events(
-    schedule_id: str,
-    db: Session = Depends(get_db),
-    _auth: bool = Depends(verify_admin_or_internal_secret),
-):
-    return SyntheticScheduleService(db).cancel_future_events(schedule_id=schedule_id)
 
 
 class AutoPaydownRequest(BaseModel):

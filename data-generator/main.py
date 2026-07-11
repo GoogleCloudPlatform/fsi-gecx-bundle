@@ -1010,11 +1010,7 @@ def _coerce_utc(value: datetime.datetime | None) -> datetime.datetime:
 
 
 def get_schedule_client() -> SyntheticScheduleClient:
-    return SyntheticScheduleClient(
-        banking_service_url=BANKING_SERVICE_URL,
-        headers=get_service_headers(),
-        timeout_seconds=SWIPE_REQUEST_TIMEOUT_SECONDS,
-    )
+    return SyntheticScheduleClient()
 
 
 def _cloud_tasks_parent() -> str | None:
@@ -2196,7 +2192,10 @@ async def list_scheduled_events(
 async def cancel_scheduled_event_chain(event_record_id: str):
     """Cancels future events in the same schedule as the supplied event record."""
     schedule_client = get_schedule_client()
-    event = await schedule_client.get_event(event_record_id)
+    try:
+        event = await schedule_client.get_event(event_record_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Scheduled event not found.")
     return await schedule_client.cancel_schedule(event.schedule_id)
 
 
@@ -2220,7 +2219,10 @@ async def dispatch_synthetic_scheduled_event(
 ) -> ScheduledEventDispatchResult:
     """Idempotently dispatches one durable scheduled event."""
     schedule_client = get_schedule_client()
-    event = await schedule_client.get_event(event_record_id)
+    try:
+        event = await schedule_client.get_event(event_record_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Scheduled event not found.")
     return await dispatch_scheduled_event(
         event=event,
         schedule_client=schedule_client,

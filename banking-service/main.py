@@ -47,7 +47,6 @@ from routers.accounts import router as accounts_router, v1_router as accounts_v1
 from routers.fdx import router as fdx_router
 from routers.simulation import router as simulation_router, v1_router as simulation_v1_router, alias_router as simulation_alias_router
 from routers.card_network import router as card_network_router, v1_router as card_network_v1_router
-from routers.synthetic_schedule import router as synthetic_schedule_router
 from routers.merchants import (
     alias_router as merchants_alias_router,
     router as merchants_router,
@@ -163,7 +162,6 @@ app.include_router(credit_card_apiv1_router)
 app.include_router(credit_card_v1_router)
 app.include_router(card_network_router)
 app.include_router(card_network_v1_router)
-app.include_router(synthetic_schedule_router)
 app.include_router(support_router)
 app.include_router(settings_router)
 app.include_router(voice_bidi_router)
