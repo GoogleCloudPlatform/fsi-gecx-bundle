@@ -544,10 +544,15 @@ function HomeView({
               {
                 icon: Globe,
                 title: "Global ATM Access",
-                desc: "Access your cash anywhere with zero ATM fees worldwide. We automatically reimburse all charges."
+                desc: "Access your cash anywhere with zero ATM fees worldwide. We automatically reimburse all charges.",
+                onClick: () => navigate('/locator')
               }
             ].map((item, idx) => (
-              <div key={idx} className="card-themeable hover:border-emerald-500/50 transition-all duration-300 group hover:-translate-y-1">
+              <div 
+                key={idx} 
+                onClick={item.onClick}
+                className={`card-themeable hover:border-emerald-500/50 transition-all duration-300 group hover:-translate-y-1 ${item.onClick ? 'cursor-pointer' : ''}`}
+              >
                 <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 border border-slate-200 dark:border-slate-700/50">
                   <item.icon className="w-6 h-6 text-emerald-500" />
                 </div>
