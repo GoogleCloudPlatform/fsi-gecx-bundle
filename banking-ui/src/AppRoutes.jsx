@@ -92,7 +92,7 @@ export default function AppRoutes({
         <CertificateAccountsView />
       } />
       <Route path="/credit-cards" element={
-        <CreditCardsView activeBot={activeBot} setActiveBot={setActiveBot} />
+        <CreditCardsView fbUser={fbUser} activeBot={activeBot} setActiveBot={setActiveBot} />
       } />
       <Route path="/mortgages" element={
         <MortgagesView activeBot={activeBot} setActiveBot={setActiveBot} />
@@ -116,7 +116,7 @@ export default function AppRoutes({
         <LocatorView />
       } />
       <Route path="/compare-accounts" element={
-        <CompareAccounts />
+        <CompareAccounts fbUser={fbUser} />
       } />
 
       {/* Protected routes gated by fbUser session */}

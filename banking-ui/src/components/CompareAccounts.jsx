@@ -28,6 +28,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
+import { useNavigate } from 'react-router-dom';
 import CheckingMatrix from './CheckingMatrix.jsx';
 import SavingsMatrix from './SavingsMatrix.jsx';
 import CertificateMatrix from './CertificateMatrix.jsx';
@@ -35,13 +36,23 @@ import CreditCardMatrix from './CreditCardMatrix.jsx';
 import MortgageMatrix from './MortgageMatrix.jsx';
 import AccountOpeningModal from './AccountOpeningModal.jsx';
 
-export default function CompareAccounts() {
+export default function CompareAccounts({ fbUser }) {
+  const navigate = useNavigate();
   const { 
     brandColorFrom, 
     brandColorTo 
   } = useSettings();
 
   const [activeTab, setActiveTab] = useState('checking');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  const handleApply = (cardSlug) => {
+    if (!fbUser) {
+      setIsAuthModalOpen(true);
+    } else {
+      navigate(`/apply/credit-card?card=${cardSlug}`);
+    }
+  };
   const [openingAccount, setOpeningAccount] = useState(null);
   const [accountType, setAccountType] = useState('CHECKING');
   
@@ -146,7 +157,7 @@ export default function CompareAccounts() {
             <CertificateMatrix onOpenAccount={handleOpenCertificates} />
           )}
           {activeTab === 'credit' && (
-            <CreditCardMatrix />
+            <CreditCardMatrix onApply={handleApply} />
           )}
           {activeTab === 'mortgage' && (
             <MortgageMatrix onReserveRate={setSimulatingLock} />
@@ -230,6 +241,27 @@ export default function CompareAccounts() {
               )}
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 z-[250] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-sm w-full overflow-hidden shadow-2xl p-6 text-center space-y-4">
+            <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto">
+              <Lock className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white">Sign In Required</h3>
+            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+              To apply for a credit card, please sign in using the profile button in the top-right of the page and then proceed with your application.
+            </p>
+            <button
+              onClick={() => setIsAuthModalOpen(false)}
+              className="w-full py-2.5 rounded-xl text-slate-950 font-bold text-sm shadow-md hover:scale-[1.02] transition-all duration-300 cursor-pointer"
+              style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}
+            >
+              Acknowledge
+            </button>
           </div>
         </div>
       )}

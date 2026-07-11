@@ -22,7 +22,7 @@ import { useSettings } from '../context/SettingsContext.jsx';
 import { creditCards as cards } from '../utils/productData.js';
 import CreditCardMatrix from './CreditCardMatrix.jsx';
 
-function CreditCardsView({ activeBot, setActiveBot }) {
+function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
   const navigate = useNavigate();
   const { 
     bankName, 
@@ -30,9 +30,16 @@ function CreditCardsView({ activeBot, setActiveBot }) {
     brandColorTo
   } = useSettings();
 
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [selectedCardIndex, setSelectedCardIndex] = useState(0);
 
-
+  const handleApply = (cardSlug) => {
+    if (!fbUser) {
+      setIsAuthModalOpen(true);
+    } else {
+      navigate(`/apply/credit-card?card=${cardSlug}`);
+    }
+  };
 
   const selectedCard = cards[selectedCardIndex];
 
@@ -194,7 +201,7 @@ function CreditCardsView({ activeBot, setActiveBot }) {
                 <button
                   onClick={() => {
                     const cardSlug = selectedCard.name.toLowerCase().replace(/ /g, '-');
-                    navigate(`/apply/credit-card?card=${cardSlug}`);
+                    handleApply(cardSlug);
                   }}
                   className="w-full sm:w-auto px-8 py-3.5 rounded-full text-slate-950 font-bold text-sm shadow-lg hover:scale-105 transition-all duration-300 flex items-center justify-center space-x-2"
                   style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 10px 15px -3px ${brandColorFrom}33` }}
@@ -233,7 +240,7 @@ function CreditCardsView({ activeBot, setActiveBot }) {
             </p>
           </div>
 
-          <CreditCardMatrix />
+          <CreditCardMatrix onApply={handleApply} />
         </div>
       </section>
 
@@ -281,10 +288,29 @@ function CreditCardsView({ activeBot, setActiveBot }) {
               </p>
             </div>
           </div>
+          {isAuthModalOpen && (
+            <div className="fixed inset-0 z-[250] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-sm w-full overflow-hidden shadow-2xl p-6 text-center space-y-4">
+                <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto">
+                  <Lock className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Sign In Required</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                  To apply for a credit card, please sign in using the profile button in the top-right of the page and then proceed with your application.
+                </p>
+                <button
+                  onClick={() => setIsAuthModalOpen(false)}
+                  className="w-full py-2.5 rounded-xl text-slate-950 font-bold text-sm shadow-md hover:scale-[1.02] transition-all duration-300 cursor-pointer"
+                  style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}
+                >
+                  Acknowledge
+                </button>
+              </div>
+            </div>
+          )}
+
         </div>
       </section>
-
-
 
     </div>
   );
