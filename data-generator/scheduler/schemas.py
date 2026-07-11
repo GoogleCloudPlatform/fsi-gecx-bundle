@@ -22,6 +22,10 @@ class EnqueueScenarioRequest(BaseModel):
 
     execution_request: ScenarioExecutionRequest
     start_at: datetime.datetime | None = None
+    end_at: datetime.datetime | None = Field(
+        None,
+        description="Optional schedule cutoff; events after this time are not persisted or queued.",
+    )
     schedule_id: str | None = Field(None, max_length=128)
     dispatch_transport: str | None = Field(
         None,

@@ -35,7 +35,7 @@ from scenarios import (
     plan_scenario,
 )
 from scenarios.executor import _auth_payload, _execution_id, _resolution_for_event
-from scenarios.schemas import BehaviorPolicy, PersonaProfile, ScenarioMode, ScenarioType
+from scenarios.schemas import BehaviorPolicy, PersonaProfile, ScenarioMode, ScenarioPlan, ScenarioType
 from scheduler import (
     EnqueueScenarioRequest,
     ScheduledEventDispatchResult,
@@ -1078,8 +1078,35 @@ def _event_schedule_time(
     start_at: datetime.datetime,
     offset_minutes: int,
     extra_minutes: int = 0,
+    scale: float = 1.0,
 ) -> datetime.datetime:
-    return start_at + datetime.timedelta(minutes=offset_minutes + extra_minutes)
+    return start_at + datetime.timedelta(minutes=round((offset_minutes + extra_minutes) * scale))
+
+
+def _timeline_schedule_scale(
+    *,
+    plan: ScenarioPlan,
+    start_at: datetime.datetime,
+    end_at: datetime.datetime | None,
+) -> float:
+    if end_at is None:
+        return 1.0
+
+    max_offset = 0
+    for event in plan.timeline:
+        if event.event_type.value not in {"authorization", "customer_action"}:
+            continue
+        max_offset = max(max_offset, event.offset_minutes)
+        if event.event_type.value == "authorization":
+            max_offset = max(max_offset, event.offset_minutes + SCHEDULE_SETTLEMENT_DELAY_MINUTES)
+
+    if max_offset <= 0:
+        return 1.0
+
+    window_minutes = max(0, int((end_at - start_at).total_seconds() // 60))
+    if window_minutes >= max_offset:
+        return 1.0
+    return window_minutes / max_offset
 
 
 async def enqueue_scenario_schedule(
@@ -1088,6 +1115,13 @@ async def enqueue_scenario_schedule(
     execution_request = request.execution_request
     plan = execution_request.plan
     start_at = _coerce_utc(request.start_at)
+    end_at = _coerce_utc(request.end_at) if request.end_at else None
+    if end_at is not None and end_at < start_at:
+        raise HTTPException(
+            status_code=422,
+            detail="end_at must be greater than or equal to start_at.",
+        )
+    schedule_scale = _timeline_schedule_scale(plan=plan, start_at=start_at, end_at=end_at)
     schedule_id = request.schedule_id or f"schedule-{plan.scenario_id}-{uuid.uuid4().hex[:8]}"
     execution_id = _execution_id(plan.scenario_id, execution_request.idempotency_key)
     transport = (request.dispatch_transport or SCHEDULE_DISPATCH_TRANSPORT).lower()
@@ -1107,12 +1141,18 @@ async def enqueue_scenario_schedule(
     created_events = []
     cloud_tasks_enqueued = 0
     warnings = []
+    if schedule_scale < 1.0:
+        warnings.append(
+            "Scenario timeline was condensed to fit inside the requested schedule window."
+        )
     auth_index = 0
     for event in plan.timeline:
         if event.event_type.value not in {"authorization", "customer_action"}:
             continue
         event_time = _event_schedule_time(
-            start_at=start_at, offset_minutes=event.offset_minutes
+            start_at=start_at,
+            offset_minutes=event.offset_minutes,
+            scale=schedule_scale,
         )
         if event.event_type.value == "authorization":
             card_token = cards[auth_index % len(cards)]
@@ -1147,6 +1187,12 @@ async def enqueue_scenario_schedule(
             )
             if resolution in {"settled", "reversed"}:
                 resolution_event_type = "settlement" if resolution == "settled" else "reversal"
+                resolution_event_time = _event_schedule_time(
+                    start_at=start_at,
+                    offset_minutes=event.offset_minutes,
+                    extra_minutes=SCHEDULE_SETTLEMENT_DELAY_MINUTES,
+                    scale=schedule_scale,
+                )
                 resolution_event = await schedule_client.create_event(
                     {
                         "schedule_id": schedule_id,
@@ -1156,11 +1202,7 @@ async def enqueue_scenario_schedule(
                         "parent_event_id": event.event_id,
                         "event_type": resolution_event_type,
                         "persona_id": event.persona_id,
-                        "scheduled_for": _event_schedule_time(
-                            start_at=start_at,
-                            offset_minutes=event.offset_minutes,
-                            extra_minutes=SCHEDULE_SETTLEMENT_DELAY_MINUTES,
-                        ).isoformat(),
+                        "scheduled_for": resolution_event_time.isoformat(),
                         "idempotency_key": f"{schedule_id}:{event.event_id}:{resolution_event_type}",
                         "payload": {"amount_cents": event.amount_cents},
                     }

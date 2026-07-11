@@ -6,6 +6,19 @@ import respx
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from main import _event_schedule_time, _timeline_schedule_scale
+from scenarios.schemas import (
+    BehaviorPolicy,
+    ExecutionLimits,
+    MerchantContext,
+    OutcomeLabel,
+    PersonaProfile,
+    PlannedCardEvent,
+    PlannedEventType,
+    ScenarioMode,
+    ScenarioPlan,
+    ScenarioType,
+)
 from scheduler import ScheduledEventRecord, SyntheticScheduleClient, dispatch_scheduled_event
 from scheduler.database import Base
 from scheduler.repository import SyntheticScheduledEventRepository
@@ -61,6 +74,76 @@ class FakeScheduleClient:
 
     async def mark_failed(self, event_record_id, *, error, result_payload=None):
         raise AssertionError(f"unexpected failure: {error} {result_payload}")
+
+
+def _test_plan() -> ScenarioPlan:
+    persona = PersonaProfile(persona_id="persona-1", role="traveler")
+    policy = BehaviorPolicy(
+        policy_id="persona-1-policy",
+        settlement_probability=1.0,
+        reversal_probability=0.0,
+        pending_probability=0.0,
+    )
+    merchant = MerchantContext(category="airline", mcc="3000", merchant_name_hint="Test Air")
+    return ScenarioPlan(
+        scenario_id="scenario-condense",
+        scenario_type=ScenarioType.IMPOSSIBLE_TRAVEL_CAMPAIGN,
+        mode=ScenarioMode.DRY_RUN,
+        seed=1841,
+        template_version="test",
+        planner_version="test",
+        goal="test",
+        personas=[persona],
+        behavior_policies=[policy],
+        timeline=[
+            PlannedCardEvent(
+                event_id="auth-1",
+                offset_minutes=0,
+                event_type=PlannedEventType.AUTHORIZATION,
+                persona_id="persona-1",
+                amount_cents=1000,
+                merchant_context=merchant,
+                outcome_label=OutcomeLabel.EXPECTED_FRAUD,
+                description="First auth",
+            ),
+            PlannedCardEvent(
+                event_id="auth-2",
+                offset_minutes=120,
+                event_type=PlannedEventType.AUTHORIZATION,
+                persona_id="persona-1",
+                amount_cents=2000,
+                merchant_context=merchant,
+                outcome_label=OutcomeLabel.EXPECTED_FRAUD,
+                description="Second auth",
+            ),
+        ],
+        limits=ExecutionLimits(max_customers=1, max_cards=1, max_authorizations=2),
+    )
+
+
+def test_timeline_schedule_scale_condenses_to_requested_window():
+    start_at = datetime.datetime(2026, 7, 11, 12, 0, tzinfo=datetime.timezone.utc)
+    end_at = start_at + datetime.timedelta(minutes=30)
+
+    scale = _timeline_schedule_scale(plan=_test_plan(), start_at=start_at, end_at=end_at)
+    scheduled = _event_schedule_time(start_at=start_at, offset_minutes=120, scale=scale)
+    settlement = _event_schedule_time(
+        start_at=start_at,
+        offset_minutes=120,
+        extra_minutes=1,
+        scale=scale,
+    )
+
+    assert scale < 1
+    assert scheduled <= end_at
+    assert settlement <= end_at
+
+
+def test_timeline_schedule_scale_preserves_long_enough_window():
+    start_at = datetime.datetime(2026, 7, 11, 12, 0, tzinfo=datetime.timezone.utc)
+    end_at = start_at + datetime.timedelta(hours=3)
+
+    assert _timeline_schedule_scale(plan=_test_plan(), start_at=start_at, end_at=end_at) == 1.0
 
 
 @pytest.mark.asyncio

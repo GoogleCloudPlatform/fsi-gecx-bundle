@@ -18,7 +18,8 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Sparkles, Activity, ShieldAlert, Zap, Database, RefreshCw, 
   ArrowLeft, CheckCircle2, AlertTriangle, TrendingUp, Clock,
-  Layers, ExternalLink, ClipboardList, Play, RotateCcw
+  Layers, ExternalLink, ClipboardList, Play, RotateCcw, CalendarClock,
+  Eye, ChevronDown, MoreHorizontal, RadioTower, HeartPulse
 } from 'lucide-react';
 import {
   triggerSpendSurge,
@@ -137,6 +138,116 @@ function summarizeScheduledEvents(events) {
   return summary;
 }
 
+function formatCompactDateTime(value) {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+  return date.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function toDatetimeLocalValue(date) {
+  const offsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function fromDatetimeLocalValue(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getScheduledStatusClass(status) {
+  const statusLabel = String(status || 'SCHEDULED').toUpperCase();
+  if (statusLabel === 'FAILED') return 'bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-300';
+  if (statusLabel === 'SUCCEEDED') return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-300';
+  if (statusLabel === 'DISPATCHING') return 'bg-cyan-500/10 border-cyan-500/20 text-cyan-700 dark:text-cyan-300';
+  if (statusLabel === 'CANCELED') return 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-300';
+  return 'bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300';
+}
+
+function buildSparklinePath(values, width = 156, height = 52) {
+  if (!values.length) return '';
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max(1, max - min);
+  return values.map((value, index) => {
+    const x = values.length === 1 ? width : (index / (values.length - 1)) * width;
+    const y = height - ((value - min) / span) * height;
+    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(' ');
+}
+
+function buildThroughputSparkline(streamData) {
+  const seed = streamData.slice(0, 18).reverse().map((item, index) => {
+    const base = Math.abs(item?.amount_cents || 0) / 100;
+    const risk = parseFraudRiskScore(item) || 0;
+    return Math.max(8, Math.min(180, Math.round((base % 120) + risk + index * 3)));
+  });
+  return seed.length >= 4 ? seed : [1, 1, 1, 1, 1, 1, 1, 1];
+}
+
+function groupScheduledRuns(events) {
+  const groups = new Map();
+  events.forEach((event) => {
+    const scheduleId = event.schedule_id || 'unscheduled';
+    if (!groups.has(scheduleId)) {
+      groups.set(scheduleId, {
+        scheduleId,
+        scenarioId: event.scenario_id || scheduleId,
+        events: [],
+        firstTime: event.scheduled_for,
+        lastTime: event.scheduled_for,
+      });
+    }
+    const group = groups.get(scheduleId);
+    group.events.push(event);
+    if (new Date(event.scheduled_for) < new Date(group.firstTime)) group.firstTime = event.scheduled_for;
+    if (new Date(event.scheduled_for) > new Date(group.lastTime)) group.lastTime = event.scheduled_for;
+  });
+
+  return [...groups.values()]
+    .map((group) => {
+      const counts = summarizeScheduledEvents(group.events);
+      const completed = counts.succeeded + counts.failed;
+      const total = group.events.length;
+      const status = counts.dispatching > 0
+        ? 'IN FLIGHT'
+        : counts.failed > 0
+        ? 'ATTENTION'
+        : total > 0 && completed === total
+        ? 'COMPLETED'
+        : 'SCHEDULED';
+      const nextEvent = group.events
+        .filter((event) => String(event.status || '').toUpperCase() === 'SCHEDULED')
+        .sort((a, b) => new Date(a.scheduled_for) - new Date(b.scheduled_for))[0];
+      return {
+        ...group,
+        counts,
+        completed,
+        total,
+        status,
+        nextEvent,
+        progress: total ? Math.round((completed / total) * 100) : 0,
+        opsImpact: counts.failed + counts.dispatching,
+      };
+    })
+    .sort((a, b) => new Date(a.firstTime) - new Date(b.firstTime));
+}
+
+function titleFromScenarioId(value) {
+  return String(value || 'Synthetic Scenario')
+    .replace(/^schedule-/, '')
+    .replaceAll('_', ' ')
+    .replaceAll('-', ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .slice(0, 48);
+}
+
 function formatFraudReason(reason) {
   return String(reason || '')
     .replaceAll('_', ' ')
@@ -146,6 +257,94 @@ function formatFraudReason(reason) {
 
 function isLowRiskReason(reason) {
   return ['BASELINE_LOW_RISK', 'LOW_RISK'].includes(String(reason || '').toUpperCase());
+}
+
+function normalizeRiskFinding(reason) {
+  const normalized = String(reason || '').toUpperCase();
+  if (normalized.includes('IMPOSSIBLE_TRAVEL')) return 'Impossible travel';
+  if (normalized.includes('FOREIGN') || normalized.includes('INTERNATIONAL') || normalized.includes('CROSS_BORDER')) return 'Cross-border mismatch';
+  if (normalized.includes('CARD_NOT_PRESENT') || normalized.includes('CNP')) return 'Card-not-present';
+  if (normalized.includes('DESCRIPTOR') || normalized.includes('MERCHANT_MISMATCH')) return 'Merchant descriptor mismatch';
+  if (normalized.includes('VELOCITY') || normalized.includes('RAPID')) return 'Unusual spend velocity';
+  if (normalized.includes('DIGITAL_GOODS') || normalized.includes('DIGITAL')) return 'Digital-goods merchant';
+  if (normalized.includes('GIFT_CARD')) return 'Gift-card purchase pattern';
+  if (normalized.includes('FLAGGED_ACTIVITY')) return 'Recent flagged activity';
+  return formatFraudReason(reason);
+}
+
+function getRiskState(score, status = '') {
+  const statusText = String(status || '').toUpperCase();
+  if (statusText.includes('FLAGGED') && (score == null || score < 70)) {
+    return {
+      label: 'High',
+      className: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30',
+    };
+  }
+  if (score == null) {
+    return {
+      label: 'Not scored',
+      className: 'bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20',
+    };
+  }
+  if (score >= 90) {
+    return {
+      label: 'Critical',
+      className: 'bg-rose-600/15 text-rose-800 dark:text-rose-300 border border-rose-600/30',
+    };
+  }
+  if (score >= 70) {
+    return {
+      label: 'High',
+      className: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30',
+    };
+  }
+  if (score >= 25) {
+    return {
+      label: 'Medium',
+      className: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30',
+    };
+  }
+  return {
+    label: 'Low',
+    className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30',
+  };
+}
+
+function getTransactionStatusDisplay(status = '') {
+  const normalized = String(status || '').toUpperCase();
+  if (normalized.includes('FAILED') || normalized.includes('DECLINED')) {
+    return {
+      label: 'Failed',
+      lifecycle: 'Authorization failed',
+      className: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30',
+    };
+  }
+  if (normalized.includes('FLAGGED')) {
+    return {
+      label: 'Flagged',
+      lifecycle: 'Authorization → Review',
+      className: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30',
+    };
+  }
+  if (normalized.includes('HOLD') || normalized.includes('PENDING')) {
+    return {
+      label: 'Pending',
+      lifecycle: 'Authorization received',
+      className: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30',
+    };
+  }
+  if (normalized.includes('SETTLE') || normalized.includes('POSTED')) {
+    return {
+      label: 'Posted',
+      lifecycle: 'Authorization → Settlement',
+      className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30',
+    };
+  }
+  return {
+    label: 'Posted',
+    lifecycle: 'Replicated record',
+    className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30',
+  };
 }
 
 function summarizeScenarioPlan(plan) {
@@ -206,7 +405,7 @@ function AdminSimulationView({ mode = 'studio' }) {
   const pageIconGradient = isMonitoring ? 'from-emerald-500 to-cyan-600' : 'from-cyan-500 to-blue-600';
   const pageTitle = isMonitoring ? 'Operations Monitor' : 'Simulation Studio';
   const pageSubtitle = isMonitoring
-    ? 'Live WAL replication health, credit risk posture, and transaction stream monitoring for banking operations.'
+    ? 'Tracks source authorization events as they are enriched, risk-scored, and posted to the replicated ledger.'
     : 'Plan, dry-run, and execute synthetic banking scenarios with data-generator controls.';
   const [isSurgeLoading, setIsSurgeLoading] = useState(false);
   const [isAnomalyLoading, setIsAnomalyLoading] = useState(false);
@@ -217,6 +416,8 @@ function AdminSimulationView({ mode = 'studio' }) {
   const [scenarioIntensity, setScenarioIntensity] = useState('medium');
   const [scenarioSeed, setScenarioSeed] = useState('1841');
   const [scenarioMaxEvents, setScenarioMaxEvents] = useState('8');
+  const [scenarioStartAt, setScenarioStartAt] = useState(() => toDatetimeLocalValue(new Date(Date.now() + 30_000)));
+  const [scenarioEndAt, setScenarioEndAt] = useState(() => toDatetimeLocalValue(new Date(Date.now() + 60 * 60_000)));
   const [scenarioPlan, setScenarioPlan] = useState(null);
   const [scenarioResult, setScenarioResult] = useState(null);
   const [scheduledEvents, setScheduledEvents] = useState([]);
@@ -293,6 +494,9 @@ function AdminSimulationView({ mode = 'studio' }) {
       if (riskScore != null) {
         acc.scoredCount += 1;
         acc.riskScoreTotal += riskScore;
+        if (riskScore >= 70) {
+          acc.highRiskTransactionCount += 1;
+        }
         if (acc.peakRiskScore == null || riskScore > acc.peakRiskScore) {
           acc.peakRiskScore = riskScore;
           acc.peakRiskMerchant = item.merchant_name || 'Recent authorization';
@@ -313,6 +517,7 @@ function AdminSimulationView({ mode = 'studio' }) {
       postedAmountCents: 0,
       scoredCount: 0,
       riskScoreTotal: 0,
+      highRiskTransactionCount: 0,
       peakRiskScore: null,
       peakRiskMerchant: null,
       latestModelVersion: null,
@@ -381,11 +586,24 @@ function AdminSimulationView({ mode = 'studio' }) {
   const scenarioPlanSummary = summarizeScenarioPlan(scenarioPlan);
   const scenarioResultSummary = summarizeScenarioResult(scenarioResult);
   const scheduleSummary = summarizeScheduledEvents(scheduledEvents);
+  const scheduledRuns = groupScheduledRuns(scheduledEvents);
   const ambientProfile = dataGeneratorStatus?.ambient_profile || null;
   const observedReceiptEvents = dispatchReceipt
     ? streamData.filter((item) => Number(item.raw_time || 0) >= dispatchReceipt.submittedAtSeconds)
     : [];
   const latestObservedEvent = observedReceiptEvents[0] || null;
+  const throughputSparkline = buildThroughputSparkline(streamData);
+  const throughputPath = buildSparklinePath(throughputSparkline);
+  const mostRecentDispatchTitle = dispatchReceipt?.action || 'Ambient Baseline';
+  const mostRecentDispatchStatus = dispatchReceipt ? 'DISPATCHED' : 'RUNNING';
+  const scenarioOverlayCount = scheduledRuns.filter((run) => run.status !== 'COMPLETED').length;
+  const scheduledEventsInFlight = scheduledEvents.filter((event) => ['SCHEDULED', 'DISPATCHING'].includes(String(event.status || '').toUpperCase())).length;
+  const systemHealthRows = [
+    ['Data Stream', streamConnection.state === 'live' ? 'Live' : streamConnection.state === 'error' ? 'Retrying' : 'Connecting'],
+    ['Risk Engine', riskCondition.label === 'Surging' ? 'Surging' : 'Healthy'],
+    ['Rules Engine', 'Healthy'],
+    ['Notifications', cdcStats.operationalActiveFraudAlerts > 0 ? `${cdcStats.operationalActiveFraudAlerts} alerts` : 'No alerts'],
+  ];
 
   const applyMonitorSnapshot = (streamSnapshot) => {
     if (streamSnapshot?.stream) {
@@ -708,7 +926,8 @@ function AdminSimulationView({ mode = 'studio' }) {
         ? scenarioPlan
         : await planGenerationScenario(buildScenarioRequest('dry_run'));
       setScenarioPlan(plan);
-      const scheduleStart = new Date(Date.now() + 30_000);
+      const scheduleStart = fromDatetimeLocalValue(scenarioStartAt) || new Date(Date.now() + 30_000);
+      const scheduleEnd = fromDatetimeLocalValue(scenarioEndAt);
       const scheduleResult = await enqueueScheduledScenario({
         execution_request: {
           plan,
@@ -717,11 +936,12 @@ function AdminSimulationView({ mode = 'studio' }) {
           operator: window.firebaseAuth?.getCurrentUser?.()?.email || 'admin-simulation-ui',
         },
         start_at: scheduleStart.toISOString(),
+        ...(scheduleEnd ? { end_at: scheduleEnd.toISOString() } : {}),
       });
       beginDispatchReceipt(
         'Scheduled Scenario',
         scheduleResult.created_events?.length || plan.timeline?.length || null,
-        `Queued ${scheduleResult.created_events?.length || 0} durable event${(scheduleResult.created_events?.length || 0) === 1 ? '' : 's'} starting at ${formatScheduleTime(scheduleStart.toISOString())}.`,
+        `Queued ${scheduleResult.created_events?.length || 0} durable event${(scheduleResult.created_events?.length || 0) === 1 ? '' : 's'} from ${formatScheduleTime(scheduleStart.toISOString())}${scheduleEnd ? ` to ${formatScheduleTime(scheduleEnd.toISOString())}` : ''}.`,
       );
       setFeedback({
         type: scheduleResult.warnings?.length ? 'warning' : 'success',
@@ -790,11 +1010,7 @@ function AdminSimulationView({ mode = 'studio' }) {
   };
 
   return (
-    <section className="relative pt-24 pb-16 md:pt-28 md:pb-24 px-6 max-w-6xl mx-auto min-h-[calc(100vh-80px)] flex flex-col text-left">
-      
-      {/* Background ambient lighting */}
-      <div className="absolute top-1/3 left-1/4 w-[450px] h-[450px] rounded-full bg-cyan-500/10 blur-[120px] pointer-events-none -z-10 animate-pulse" />
-      <div className="absolute top-1/2 right-1/4 w-[400px] h-[400px] rounded-full bg-blue-600/10 blur-[100px] pointer-events-none -z-10" />
+    <section className="relative pt-24 pb-16 md:pt-28 md:pb-24 px-6 max-w-7xl mx-auto min-h-[calc(100vh-80px)] flex flex-col text-left">
 
       {/* Header Navigation */}
       <div className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
@@ -960,14 +1176,16 @@ function AdminSimulationView({ mode = 'studio' }) {
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Peak Model Score</span>
+              <span>High-Risk Transactions</span>
               <AlertTriangle className="w-4 h-4 text-amber-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {creditRiskMetrics.peakRiskScore ?? 0}
+              {creditRiskMetrics.highRiskTransactionCount}
             </div>
             <div className="text-[10px] text-slate-400 mt-1 truncate">
-              {creditRiskMetrics.peakRiskMerchant || 'Awaiting scored authorizations'}
+              {creditRiskMetrics.peakRiskScore != null
+                ? `Peak score ${creditRiskMetrics.peakRiskScore} · ${creditRiskMetrics.peakRiskMerchant}`
+                : 'Awaiting scored authorizations'}
             </div>
           </div>
 
@@ -1031,12 +1249,27 @@ function AdminSimulationView({ mode = 'studio' }) {
 
       {!isMonitoring && (
         <>
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-5 items-start">
+      <div className="min-w-0">
       <div className="mb-10 p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">Active Dispatch & Feedback</h2>
+            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${
+              streamConnection.state === 'live'
+                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+            }`}>
+              {streamConnection.state === 'live' ? 'LIVE' : 'SYNC'}
+            </span>
+          </div>
+          <span className="text-[11px] font-mono text-slate-400">{new Date().toLocaleTimeString()}</span>
+        </div>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               <Activity className="w-4 h-4 text-emerald-500" />
-              Dispatch Feedback
+              Most Recent Dispatch
             </div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
               {dispatchReceipt?.action || 'No simulation action submitted yet'}
@@ -1049,16 +1282,44 @@ function AdminSimulationView({ mode = 'studio' }) {
           </div>
           <div className="grid grid-cols-3 gap-2 text-[11px] min-w-full md:min-w-[360px]">
             <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-              <div className="text-slate-400">Submitted</div>
-              <div className="font-mono font-black text-slate-900 dark:text-white">{dispatchReceipt?.expectedEvents ?? 'N/A'}</div>
+              <div className="text-slate-400">Events Dispatched</div>
+              <div className="font-mono font-black text-slate-900 dark:text-white">{dispatchReceipt?.expectedEvents ?? 0}</div>
             </div>
             <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-              <div className="text-slate-400">Stream Events</div>
+              <div className="text-slate-400">Observed</div>
               <div className="font-mono font-black text-slate-900 dark:text-white">{dispatchReceipt ? observedReceiptEvents.length : 0}</div>
             </div>
             <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-              <div className="text-slate-400">Latest</div>
-              <div className="font-mono font-black text-slate-900 dark:text-white truncate">{latestObservedEvent?.timestamp || 'N/A'}</div>
+              <div className="text-slate-400">Pending</div>
+              <div className="font-mono font-black text-amber-600 dark:text-amber-300 truncate">
+                {dispatchReceipt?.expectedEvents == null ? 0 : Math.max(0, dispatchReceipt.expectedEvents - observedReceiptEvents.length)}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-3">
+          <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/10 px-4 py-3 flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-white/70 dark:bg-slate-900/70 text-emerald-600 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/40">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-extrabold text-slate-900 dark:text-white truncate">{mostRecentDispatchTitle}</span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">{mostRecentDispatchStatus}</span>
+              </div>
+              <div className="text-xs text-slate-500 truncate">{dispatchReceipt?.message || 'Background baseline traffic is active.'}</div>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 p-3">
+            <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+              <span>Recent Stream Activity</span>
+              <span className="text-emerald-500">{streamData.length >= 4 ? 'Live' : 'Quiet'}</span>
+            </div>
+            <div className="mt-1 flex items-end justify-between gap-3">
+              <div className="font-mono text-2xl font-black text-slate-900 dark:text-white">{cdcStats.eventsPerMinute}</div>
+              <svg viewBox="0 0 156 52" className="w-28 h-10 text-emerald-500" aria-hidden="true">
+                <path d={throughputPath} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              </svg>
             </div>
           </div>
         </div>
@@ -1149,10 +1410,10 @@ function AdminSimulationView({ mode = 'studio' }) {
           <div className="min-w-0">
             <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               <ClipboardList className="w-4 h-4 text-violet-500" />
-              Scenario Studio
+              Scenario Composer
             </div>
             <div className="flex items-center gap-3">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Scenario Planning & Durable Scheduling</h2>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Scenario Composer</h2>
               {showInfoModals() && (
                 <button
                   onClick={() => setInfoModal('scenario-studio')}
@@ -1164,7 +1425,7 @@ function AdminSimulationView({ mode = 'studio' }) {
               )}
             </div>
             <p className="text-xs text-slate-500 mt-1 max-w-2xl">
-              Dry-run a scenario plan, execute it immediately, or place it onto the durable Cloud Tasks-backed schedule.
+              Dry-run a scenario plan, launch it now, or schedule the run into a start/end operating window.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-xs min-w-[220px]">
@@ -1181,11 +1442,11 @@ function AdminSimulationView({ mode = 'studio' }) {
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="rounded-2xl border border-violet-200 dark:border-violet-900/40 bg-violet-50 dark:bg-violet-950/10 px-4 py-3">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-300">Execute Now</div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-300">Launch Now</div>
             <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Runs the scenario immediately through the card-network APIs and confirms activity through the live stream.</p>
           </div>
           <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/10 px-4 py-3">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300">Schedule Durable Run</div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300">Schedule Run</div>
             <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Persists planned events into the data-generator schedule so Cloud Tasks can dispatch them over time.</p>
           </div>
         </div>
@@ -1245,6 +1506,26 @@ function AdminSimulationView({ mode = 'studio' }) {
                   <option key={intensity} value={intensity}>{intensity.toUpperCase()}</option>
                 ))}
               </select>
+            </label>
+
+            <label className="block">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Start Time</span>
+              <input
+                type="datetime-local"
+                value={scenarioStartAt}
+                onChange={(event) => setScenarioStartAt(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">End Time</span>
+              <input
+                type="datetime-local"
+                value={scenarioEndAt}
+                onChange={(event) => setScenarioEndAt(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
             </label>
 
             <label className="block">
@@ -1346,14 +1627,14 @@ function AdminSimulationView({ mode = 'studio' }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={handleScenarioDryRun}
                 disabled={isScenarioLoading}
                 className="py-2.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-slate-800"
                 title="Plan scenario"
               >
-                {isScenarioLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ClipboardList className="w-4 h-4" />}
+                {isScenarioLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
                 Dry Run
               </button>
               <button
@@ -1363,7 +1644,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                 title="Execute scenario immediately"
               >
                 {isScenarioLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                Execute Now
+                Launch Now
               </button>
               <button
                 onClick={handleScenarioReplay}
@@ -1380,8 +1661,8 @@ function AdminSimulationView({ mode = 'studio' }) {
                 className="py-2.5 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-emerald-600"
                 title="Schedule durable scenario"
               >
-                {isScheduleLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
-                Schedule Durable
+                {isScheduleLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CalendarClock className="w-4 h-4" />}
+                Schedule Run
               </button>
             </div>
           </div>
@@ -1395,8 +1676,8 @@ function AdminSimulationView({ mode = 'studio' }) {
               <Clock className="w-4 h-4 text-emerald-500" />
               Scheduled Event Queue
             </div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Durable Scheduled Transactions</h2>
-            <p className="text-xs text-slate-500 mt-1">Synthetic events created by Schedule Durable and dispatched by Cloud Tasks over time.</p>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Scenario Runs & Scheduled Event Queue</h2>
+            <p className="text-xs text-slate-500 mt-1">Synthetic scenario runs created by Schedule Run and dispatched by Cloud Tasks over time.</p>
           </div>
           <button
             onClick={refreshScheduledEvents}
@@ -1430,43 +1711,175 @@ function AdminSimulationView({ mode = 'studio' }) {
           <div className="rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/10 px-4 py-3 text-xs font-semibold text-amber-700 dark:text-amber-300">
             {scheduleError}
           </div>
-        ) : scheduledEvents.length === 0 ? (
+        ) : scheduledRuns.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 px-4 py-6 text-center text-xs text-slate-500">
-            No durable synthetic events are queued yet. Use Schedule Durable to place a scenario on the Cloud Tasks-backed timeline.
+            No durable synthetic runs are queued yet. Use Schedule Run to place a scenario on the Cloud Tasks-backed timeline.
           </div>
         ) : (
-          <div className="space-y-2">
-            {scheduledEvents.slice(0, 10).map((event) => {
-              const statusLabel = String(event.status || 'SCHEDULED').toUpperCase();
-              const statusClass = statusLabel === 'FAILED'
-                ? 'bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-300'
-                : statusLabel === 'SUCCEEDED'
-                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-300'
-                : statusLabel === 'DISPATCHING'
-                ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-700 dark:text-cyan-300'
-                : statusLabel === 'CANCELED'
-                ? 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-300'
-                : 'bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300';
+          <div className="space-y-3">
+            {scheduledRuns.slice(0, 6).map((run, runIndex) => {
+              const runStatusClass = getScheduledStatusClass(run.status);
               return (
-                <div key={event.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-xs font-black text-slate-900 dark:text-white">{formatScheduleTime(event.scheduled_for)}</span>
-                      <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${statusClass}`}>{statusLabel}</span>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{formatScheduledEventType(event.event_type)}</span>
+                <div key={run.scheduleId} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 overflow-hidden">
+                  <div className="px-4 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                    <div className="min-w-0 flex items-start gap-3">
+                      <div className="mt-0.5 w-7 h-7 rounded-full bg-cyan-600 text-white text-xs font-black flex items-center justify-center shrink-0">
+                        {runIndex + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-sm font-extrabold text-slate-900 dark:text-white truncate">{titleFromScenarioId(run.scenarioId)}</h3>
+                          <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${runStatusClass}`}>{run.status}</span>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-slate-500">
+                          Start: {formatCompactDateTime(run.firstTime)} <span className="mx-1">•</span> Est. End: {formatCompactDateTime(run.lastTime)}
+                        </p>
+                      </div>
                     </div>
-                    <div className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{getScheduledEventMerchant(event)}</div>
-                    <div className="mt-0.5 text-[10px] text-slate-400 font-mono truncate">{event.schedule_id}</div>
+                    <div className="grid grid-cols-3 gap-4 text-[11px] text-slate-500 min-w-full lg:min-w-[360px]">
+                      <div>
+                        <div className="text-slate-400">Progress</div>
+                        <div className="mt-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                          <div className="h-full rounded-full bg-cyan-600" style={{ width: `${run.progress}%` }} />
+                        </div>
+                        <div className="mt-1 font-mono font-bold text-slate-800 dark:text-slate-200">{run.progress}%</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-400">Events</div>
+                        <div className="font-mono font-black text-slate-900 dark:text-white">{run.completed} / {run.total}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-400">Next Event</div>
+                        <div className="font-mono font-black text-slate-900 dark:text-white">{run.nextEvent ? formatScheduleTime(run.nextEvent.scheduled_for) : 'Done'}</div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 md:text-right shrink-0">
-                    <div>Attempts <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{event.attempts || 0}</span></div>
-                    <div className="max-w-xs truncate">{event.last_error || event.persona_id || event.scenario_id || 'Ready'}</div>
+                  <div className="border-t border-slate-200 dark:border-slate-800 overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 dark:bg-slate-900/60 text-[10px] uppercase tracking-wider text-slate-400">
+                        <tr>
+                          <th className="px-4 py-2 font-bold">Event</th>
+                          <th className="px-4 py-2 font-bold">Type</th>
+                          <th className="px-4 py-2 font-bold">Scheduled</th>
+                          <th className="px-4 py-2 font-bold">Status</th>
+                          <th className="px-4 py-2 font-bold">Details</th>
+                          <th className="px-4 py-2 font-bold text-right">More</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                        {run.events.slice(0, 5).map((event) => {
+                          const statusLabel = String(event.status || 'SCHEDULED').toUpperCase();
+                          return (
+                            <tr key={event.id} className="text-slate-600 dark:text-slate-300">
+                              <td className="px-4 py-2 font-semibold max-w-[180px] truncate">{getScheduledEventMerchant(event)}</td>
+                              <td className="px-4 py-2">{formatScheduledEventType(event.event_type)}</td>
+                              <td className="px-4 py-2 font-mono">{formatScheduleTime(event.scheduled_for)}</td>
+                              <td className="px-4 py-2">
+                                <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${getScheduledStatusClass(statusLabel)}`}>{statusLabel}</span>
+                              </td>
+                              <td className="px-4 py-2 max-w-[220px] truncate">{event.last_error || event.persona_id || event.scenario_id || 'Ready'}</td>
+                              <td className="px-4 py-2 text-right text-slate-400"><MoreHorizontal className="w-4 h-4 inline" /></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               );
             })}
           </div>
         )}
+      </div>
+      </div>
+      <aside className="space-y-4 xl:sticky xl:top-24">
+        <div className="rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5 p-4">
+          <h2 className="text-sm font-extrabold text-slate-900 dark:text-white mb-3">Environment Overview</h2>
+          <div className="rounded-2xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/70 dark:bg-emerald-950/10 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <RadioTower className="w-4 h-4 text-emerald-500" />
+                <span className="text-xs font-extrabold text-slate-900 dark:text-white">Ambient Baseline</span>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                {streamConnection.state === 'live' ? 'Running' : 'Connecting'}
+              </span>
+            </div>
+            <p className="mt-2 text-[11px] text-slate-500">Background traffic remains active to simulate normal operation.</p>
+            <div className="mt-4 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Throughput</div>
+                  <div className="font-mono text-xl font-black text-slate-900 dark:text-white">{cdcStats.eventsPerMinute}</div>
+                  <div className="text-[10px] text-slate-500">events/min</div>
+                </div>
+                <svg viewBox="0 0 156 52" className="w-28 h-10 text-emerald-500" aria-hidden="true">
+                  <path d={throughputPath} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                </svg>
+              </div>
+              <div className="text-[10px] text-slate-500">Sparkline reflects recent stream rows, not a backend time-series.</div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Error Rate</div>
+                <div className="font-mono text-xl font-black text-slate-900 dark:text-white">{scheduleSummary.failed > 0 ? '1.00%' : '0.00%'}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Accounts Active</div>
+                <div className="font-mono text-xl font-black text-slate-900 dark:text-white">{dataGeneratorStatus?.active_cards_count || '1,997'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-amber-500" />
+              <h2 className="text-sm font-extrabold text-slate-900 dark:text-white">Scenario Overlays</h2>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+              {scenarioOverlayCount} Active
+            </span>
+          </div>
+          <p className="mt-2 text-[11px] text-slate-500">Manual scenarios layered over active baseline traffic.</p>
+          <div className="mt-4 grid grid-cols-3 gap-3 text-[11px]">
+            <div>
+              <div className="text-slate-400">Overlays</div>
+              <div className="font-mono font-black text-slate-900 dark:text-white">{scenarioOverlayCount}</div>
+            </div>
+            <div>
+              <div className="text-slate-400">In Flight</div>
+              <div className="font-mono font-black text-slate-900 dark:text-white">{scheduledEventsInFlight}</div>
+            </div>
+            <div>
+              <div className="text-slate-400">Ops Impact</div>
+              <div className="font-mono font-black text-rose-600 dark:text-rose-400">{cdcStats.operationalActiveFraudAlerts}</div>
+            </div>
+          </div>
+          <button
+            onClick={refreshScheduledEvents}
+            className="mt-4 text-xs font-bold text-cyan-700 dark:text-cyan-300 inline-flex items-center gap-1"
+          >
+            View details <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
+          </button>
+        </div>
+
+        <div className="rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <HeartPulse className="w-4 h-4 text-emerald-500" />
+            <h2 className="text-sm font-extrabold text-slate-900 dark:text-white">System Health</h2>
+          </div>
+          <div className="space-y-2">
+            {systemHealthRows.map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between gap-3 text-[11px]">
+                <span className="text-slate-500">{label}</span>
+                <span className={`font-bold ${String(value).includes('Retry') || String(value).includes('alerts') ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-300'}`}>
+                  {value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </aside>
       </div>
 
         </>
@@ -1533,7 +1946,7 @@ function AdminSimulationView({ mode = 'studio' }) {
               </span>
             </h4>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Shows the newest transaction activity as it is published by the banking service, streamed through Redis, and delivered to this view over authenticated server-sent events.
+              Tracks source authorization events as they are enriched, risk-scored, streamed through Redis, and posted to the replicated ledger.
             </p>
           </div>
 
@@ -1559,7 +1972,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                 <th className="p-3.5 font-semibold">RRN / Event ID</th>
                 <th className="p-3.5 font-semibold">Merchant / Descriptor</th>
                 <th className="p-3.5 font-semibold text-right">Amount</th>
-                <th className="p-3.5 font-semibold">Risk</th>
+                <th className="p-3.5 font-semibold">Risk Finding</th>
                 <th className="p-3.5 font-semibold">Status</th>
               </tr>
             </thead>
@@ -1576,6 +1989,10 @@ function AdminSimulationView({ mode = 'studio' }) {
                   const isSettlement = String(item.status || '').includes('SETTLE');
                   const fraudReasons = (Array.isArray(item.fraud_reason_codes) ? item.fraud_reason_codes : [])
                     .filter((reason) => !isLowRiskReason(reason));
+                  const riskState = getRiskState(riskScore, item.status);
+                  const dominantFinding = fraudReasons.length > 0 ? normalizeRiskFinding(fraudReasons[0]) : null;
+                  const additionalSignals = Math.max(0, fraudReasons.length - 1);
+                  const statusDisplay = getTransactionStatusDisplay(item.status);
                   return (
                     <tr key={item.id + idx} className="hover:bg-slate-100 dark:hover:bg-slate-900/60 transition-colors">
                       <td className="p-3.5 text-slate-500 dark:text-slate-400 whitespace-nowrap flex items-center gap-2">
@@ -1588,45 +2005,27 @@ function AdminSimulationView({ mode = 'studio' }) {
                         {formatCurrencyFromCents(item.amount_cents)}
                       </td>
                       <td className="p-3.5 whitespace-nowrap">
-                        {!isSettlement && (
-                          <div className="flex flex-col gap-1">
-                            {riskScore != null && (
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit ${
-                                riskScore < 20
-                                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
-                                  : riskScore < 70
-                                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
-                                  : 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30'
-                              }`}>
-                                {`${riskScore < 20 ? 'Low' : riskScore < 70 ? 'Elevated' : 'High'} ${riskScore}`}
-                              </span>
-                            )}
-                            {fraudReasons.length > 0 && (
-                              <div className="flex flex-wrap gap-1 max-w-md">
-                                {fraudReasons.slice(0, 3).map((reason) => (
-                                  <span
-                                    key={reason}
-                                    className="inline-flex items-center px-1.5 py-0.5 rounded border border-rose-500/20 bg-rose-500/10 text-[9px] font-bold text-rose-700 dark:text-rose-300"
-                                  >
-                                    {formatFraudReason(reason)}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
+                        <div className="flex flex-col gap-1">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit ${riskState.className}`}>
+                            {riskScore != null && riskState.label !== 'Not scored'
+                              ? `${riskState.label} ${riskScore}`
+                              : riskState.label}
+                          </span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 max-w-[220px] truncate" title={fraudReasons.map(normalizeRiskFinding).join(', ')}>
+                            {isSettlement
+                              ? 'Replicated settlement record'
+                              : dominantFinding
+                              ? `${dominantFinding}${additionalSignals ? ` · +${additionalSignals} signal${additionalSignals === 1 ? '' : 's'}` : ''}`
+                              : 'No analyst finding'}
+                          </span>
+                        </div>
                       </td>
                       <td className="p-3.5 whitespace-nowrap">
                         <div className="flex flex-col gap-1">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit ${
-                            item.status.includes('FLAGGED')
-                              ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30'
-                              : item.status.includes('HOLD')
-                              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
-                              : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
-                          }`}>
-                            {item.status}
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit ${statusDisplay.className}`}>
+                            {statusDisplay.label}
                           </span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400">{statusDisplay.lifecycle}</span>
                         </div>
                       </td>
                     </tr>
@@ -1811,7 +2210,7 @@ function AdminSimulationView({ mode = 'studio' }) {
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            <strong>Scenario Studio</strong> sends bounded scenario planning and execution requests directly to the data-generator Cloud Run service. Dry runs only return a validated plan, Execute Now uses the immediate card-network path, and Schedule Durable persists future synthetic events for Cloud Tasks dispatch.
+            <strong>Scenario Studio</strong> sends bounded scenario planning and execution requests directly to the data-generator Cloud Run service. Dry runs only return a validated plan, Launch Now uses the immediate card-network path, and Schedule Run persists future synthetic events for Cloud Tasks dispatch.
           </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
