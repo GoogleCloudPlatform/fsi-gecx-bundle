@@ -871,7 +871,7 @@ export default function VoiceSupportView() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 pt-32 pb-24 md:pt-44 md:pb-32 text-slate-100 min-h-[80vh] flex flex-col justify-between">
+    <div className="max-w-6xl mx-auto px-4 pt-28 pb-12 text-slate-100 min-h-[80vh] flex flex-col justify-between">
       
       {/* Header section */}
       <div className="text-center mb-6 flex flex-col items-center relative w-full">

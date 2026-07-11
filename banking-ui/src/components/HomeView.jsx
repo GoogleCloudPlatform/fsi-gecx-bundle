@@ -150,10 +150,7 @@ function HomeView({
                     <ArrowRight className="w-5 h-5" />
                   </button>
                   <button 
-                    onClick={() => {
-                      const helpSection = document.getElementById('help');
-                      if (helpSection) helpSection.scrollIntoView({ behavior: 'smooth' });
-                    }}
+                    onClick={() => navigate('/help-center')}
                     className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 hover:scale-[1.02] active:scale-95 transition-all duration-300 cursor-pointer shadow-sm"
                   >
                     Help & Support
