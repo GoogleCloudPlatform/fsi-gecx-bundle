@@ -92,6 +92,22 @@ const getInitials = (profile) => {
   return (f + l) || 'C';
 };
 
+const getCesAppUrl = (path) => {
+  if (!path) return '';
+  const parts = path.split('/');
+  const projectIdx = parts.indexOf('projects');
+  const locationIdx = parts.indexOf('locations');
+  const appIdx = parts.indexOf('apps');
+  
+  if (projectIdx !== -1 && locationIdx !== -1 && appIdx !== -1) {
+    const proj = parts[projectIdx + 1];
+    const loc = parts[locationIdx + 1];
+    const app = parts[appIdx + 1];
+    return `https://ces.cloud.google.com/projects/${proj}/locations/${loc}/apps/${app}`;
+  }
+  return '';
+};
+
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -120,6 +136,7 @@ function AppContent() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isGcpInfoModalOpen, setIsGcpInfoModalOpen] = useState(false);
   const [isAuthInfoModalOpen, setIsAuthInfoModalOpen] = useState(false);
+  const [isGcpEnvModalOpen, setIsGcpEnvModalOpen] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
   const projectId = window.firebaseConfig?.projectId;
   const cxParts = (window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME || '').split('/');
@@ -1807,21 +1824,30 @@ function AppContent() {
               {footerText}
             </p>
             {(window.env?.BUILD_VERSION || window.env?.BUILD_COMMIT_ID) && (
-              <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-                Version: {window.env?.BUILD_VERSION || 'unknown'} (
-                {window.env?.BUILD_COMMIT_ID ? (
-                  <a 
-                    href={`https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/commit/${window.env.BUILD_COMMIT_ID}`} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="hover:underline text-slate-500 dark:text-slate-400"
-                  >
-                    {window.env.BUILD_COMMIT_ID}
-                  </a>
-                ) : (
-                  'unknown'
-                )}
-                )
+              <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono flex items-center gap-1.5 mt-1">
+                <span>
+                  Version: {window.env?.BUILD_VERSION || 'unknown'} (
+                  {window.env?.BUILD_COMMIT_ID ? (
+                    <a 
+                      href={`https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/commit/${window.env.BUILD_COMMIT_ID}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="hover:underline text-slate-500 dark:text-slate-400"
+                    >
+                      {window.env.BUILD_COMMIT_ID}
+                    </a>
+                  ) : (
+                    'unknown'
+                  )}
+                  )
+                </span>
+                <button
+                  onClick={() => setIsGcpEnvModalOpen(true)}
+                  className="p-0.5 rounded hover:bg-slate-105 dark:hover:bg-slate-800/80 transition-colors cursor-pointer text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 flex items-center justify-center"
+                  title="View GCP Environment Configuration"
+                >
+                  <GoogleCloudIcon className="w-3 h-3" />
+                </button>
               </div>
             )}
           </div>
@@ -2052,6 +2078,219 @@ function AppContent() {
                 <span>View Docs</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
+            </div>
+          </div>
+        </div>
+      </GcpInfoModal>
+
+       <GcpInfoModal
+        isOpen={isGcpEnvModalOpen}
+        onClose={() => setIsGcpEnvModalOpen(false)}
+        title="GCP Environment Configuration"
+        maxWidthClass="max-w-3xl"
+      >
+        <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed text-left">
+          <p>
+            This application is deployed on <strong>Google Cloud Platform</strong>. Below are the key environment configurations and service integrations currently in use.
+          </p>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans">
+            <div className="space-y-2.5">
+              <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Build Version</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.BUILD_VERSION || 'unknown'}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Build Commit ID</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.BUILD_COMMIT_ID || 'unknown'}</span>
+              </div>
+              {window.env?.BUILD_VERSION !== 'local-dev' && (
+                <>
+                  {window.env?.BUILD_PROJECT_ID && (
+                    <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">Build Project ID</span>
+                      <span className="font-mono text-slate-800 dark:text-slate-200">{window.env.BUILD_PROJECT_ID}</span>
+                    </div>
+                  )}
+                  {window.env?.BUILD_BUILD_ID && (
+                    <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">Build ID</span>
+                      <span className="font-mono text-slate-800 dark:text-slate-200">{window.env.BUILD_BUILD_ID}</span>
+                    </div>
+                  )}
+                  {window.env?.BUILD_LOCATION && (
+                    <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">Build Location</span>
+                      <span className="font-mono text-slate-800 dark:text-slate-200">{window.env.BUILD_LOCATION}</span>
+                    </div>
+                  )}
+                  {window.env?.BUILD_BUILD_ID && window.env.BUILD_BUILD_ID !== 'local-build' && (
+                    <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">Cloud Build Link</span>
+                      <a
+                        href={`https://console.cloud.google.com/cloud-build/builds;region=${window.env.BUILD_LOCATION || 'us-central1'}/${window.env.BUILD_BUILD_ID}?project=${window.env.BUILD_PROJECT_ID || projectId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5"
+                      >
+                        <span>View Build</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  )}
+                </>
+              )}
+              <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                <span className="font-semibold text-slate-500 dark:text-slate-400">GCP Project ID</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200">{projectId || 'unknown'}</span>
+              </div>
+
+
+              <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Banking API URL</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.BANKING_API_URL || 'unknown'}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                <span className="font-semibold text-slate-500 dark:text-slate-400">CCAI Platform Enabled</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.ENABLE_CCAI ? 'Yes' : 'No'}</span>
+              </div>
+              {window.env?.ENABLE_CCAI && (
+                <>
+                  <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                    <span className="font-semibold text-slate-500 dark:text-slate-400">CCAI Host</span>
+                    <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.CCAI_HOST || 'unknown'}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                    <span className="font-semibold text-slate-500 dark:text-slate-400">CCAI Company ID</span>
+                    <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.CCAI_COMPANY_ID || 'unknown'}</span>
+                  </div>
+                </>
+              )}
+              {window.env?.STABLE_ENV_URL && (
+                <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Stable Env URL</span>
+                  <a
+                    href={window.env.STABLE_ENV_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5 break-all text-right max-w-[65%]"
+                  >
+                    <span>{window.env.STABLE_ENV_URL}</span>
+                    <ExternalLink className="w-3 h-3 shrink-0" />
+                  </a>
+                </div>
+              )}
+              {window.env?.FEEDBACK_URL && (
+                <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Feedback URL</span>
+                  <a
+                    href={window.env.FEEDBACK_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5 break-all text-right max-w-[65%]"
+                  >
+                    <span>{window.env.FEEDBACK_URL}</span>
+                    <ExternalLink className="w-3 h-3 shrink-0" />
+                  </a>
+                </div>
+              )}
+              {window.env?.CX_AGENT_STUDIO_VOICE_AGENT_DEPLOYMENT_NAME && (
+                <div className="flex flex-col text-xs space-y-1 pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex justify-between items-center w-full">
+                    <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Credit Card Support Voice Agent Deployment</span>
+                    {getCesAppUrl(window.env.CX_AGENT_STUDIO_VOICE_AGENT_DEPLOYMENT_NAME) && (
+                      <a
+                        href={getCesAppUrl(window.env.CX_AGENT_STUDIO_VOICE_AGENT_DEPLOYMENT_NAME)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5 text-[10px] font-semibold"
+                        title="View Agent in CES Console"
+                      >
+                        <span>View Agent</span>
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    )}
+                  </div>
+                  <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env.CX_AGENT_STUDIO_VOICE_AGENT_DEPLOYMENT_NAME}</span>
+                </div>
+              )}
+              <div className="flex flex-col text-xs space-y-1 pb-2 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex justify-between items-center w-full">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Nova Horizon Bot Agent v2 Deployment</span>
+                  {getCesAppUrl(window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME) && (
+                    <a
+                      href={getCesAppUrl(window.env.CX_AGENT_STUDIO_DEPLOYMENT_NAME)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5 text-[10px] font-semibold"
+                      title="View Agent in CES Console"
+                    >
+                      <span>View Agent</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  )}
+                </div>
+                <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME || 'unknown'}</span>
+              </div>
+              {window.env?.CX_AGENT_STUDIO_UPLOAD_TOOL_NAME && (
+                <div className="flex flex-col text-xs space-y-1 pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex justify-between items-center w-full">
+                    <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Nova Horizon Bot - Upload Tool Name</span>
+                    {getCesAppUrl(window.env.CX_AGENT_STUDIO_UPLOAD_TOOL_NAME) && (
+                      <a
+                        href={getCesAppUrl(window.env.CX_AGENT_STUDIO_UPLOAD_TOOL_NAME)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5 text-[10px] font-semibold"
+                        title="View Agent in CES Console"
+                      >
+                        <span>View Agent</span>
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    )}
+                  </div>
+                  <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env.CX_AGENT_STUDIO_UPLOAD_TOOL_NAME}</span>
+                </div>
+              )}
+              {window.env?.CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME && (
+                <div className="flex flex-col text-xs space-y-1 pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex justify-between items-center w-full">
+                    <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Nova Horizon Bot - Populate Form Content Tool</span>
+                    {getCesAppUrl(window.env.CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME) && (
+                      <a
+                        href={getCesAppUrl(window.env.CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5 text-[10px] font-semibold"
+                        title="View Agent in CES Console"
+                      >
+                        <span>View Agent</span>
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    )}
+                  </div>
+                  <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env.CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME}</span>
+                </div>
+              )}
+              {window.env?.CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME && (
+                <div className="flex flex-col text-xs space-y-1 pb-2">
+                  <div className="flex justify-between items-center w-full">
+                    <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Nova Horizon Bot - Get User Location Tool</span>
+                    {getCesAppUrl(window.env.CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME) && (
+                      <a
+                        href={getCesAppUrl(window.env.CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5 text-[10px] font-semibold"
+                        title="View Agent in CES Console"
+                      >
+                        <span>View Agent</span>
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    )}
+                  </div>
+                  <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env.CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

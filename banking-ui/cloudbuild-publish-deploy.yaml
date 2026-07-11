@@ -69,10 +69,16 @@ steps:
         # Update config.js
         sed -i 's/BUILD_VERSION: "[^"]*"/BUILD_VERSION: "'"$${VERSION}"'"/g' banking-ui/public/config.js
         sed -i 's/BUILD_COMMIT_ID: "[^"]*"/BUILD_COMMIT_ID: "'"$${COMMIT_SHA}"'"/g' banking-ui/public/config.js
+        sed -i 's/BUILD_PROJECT_ID: "[^"]*"/BUILD_PROJECT_ID: "'"$PROJECT_ID"'"/g' banking-ui/public/config.js
+        sed -i 's/BUILD_BUILD_ID: "[^"]*"/BUILD_BUILD_ID: "'"$BUILD_ID"'"/g' banking-ui/public/config.js
+        sed -i 's/BUILD_LOCATION: "[^"]*"/BUILD_LOCATION: "'"$LOCATION"'"/g' banking-ui/public/config.js
         
         # Update config.template.js
         sed -i 's/BUILD_VERSION: "[^"]*"/BUILD_VERSION: "'"$${VERSION}"'"/g' banking-ui/public/config.template.js
         sed -i 's/BUILD_COMMIT_ID: "[^"]*"/BUILD_COMMIT_ID: "'"$${COMMIT_SHA}"'"/g' banking-ui/public/config.template.js
+        sed -i 's/BUILD_PROJECT_ID: "[^"]*"/BUILD_PROJECT_ID: "'"$PROJECT_ID"'"/g' banking-ui/public/config.template.js
+        sed -i 's/BUILD_BUILD_ID: "[^"]*"/BUILD_BUILD_ID: "'"$BUILD_ID"'"/g' banking-ui/public/config.template.js
+        sed -i 's/BUILD_LOCATION: "[^"]*"/BUILD_LOCATION: "'"$LOCATION"'"/g' banking-ui/public/config.template.js
         
         echo "--- Updated config.js ---"
         cat banking-ui/public/config.js
