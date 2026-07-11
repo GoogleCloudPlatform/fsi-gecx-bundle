@@ -2132,31 +2132,31 @@ function AppContent() {
                   </a>
                 </div>
               )}
-              <div className="flex flex-col text-xs space-y-1 pb-2 border-b border-slate-100 dark:border-slate-800">
-                <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Deployment Name</span>
-                <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME || 'unknown'}</span>
-              </div>
               {window.env?.CX_AGENT_STUDIO_VOICE_AGENT_DEPLOYMENT_NAME && (
                 <div className="flex flex-col text-xs space-y-1 pb-2 border-b border-slate-100 dark:border-slate-800">
-                  <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Voice Agent Deployment</span>
+                  <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Credit Card Support Voice Agent Deployment</span>
                   <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env.CX_AGENT_STUDIO_VOICE_AGENT_DEPLOYMENT_NAME}</span>
                 </div>
               )}
+              <div className="flex flex-col text-xs space-y-1 pb-2 border-b border-slate-100 dark:border-slate-800">
+                <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Nova Horizon Bot Agent v2 Deployment</span>
+                <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME || 'unknown'}</span>
+              </div>
               {window.env?.CX_AGENT_STUDIO_UPLOAD_TOOL_NAME && (
                 <div className="flex flex-col text-xs space-y-1 pb-2 border-b border-slate-100 dark:border-slate-800">
-                  <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Upload Tool Name</span>
+                  <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Nova Horizon Bot - Upload Tool Name</span>
                   <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env.CX_AGENT_STUDIO_UPLOAD_TOOL_NAME}</span>
                 </div>
               )}
               {window.env?.CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME && (
                 <div className="flex flex-col text-xs space-y-1 pb-2 border-b border-slate-100 dark:border-slate-800">
-                  <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Populate Form Content Tool</span>
+                  <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Nova Horizon Bot - Populate Form Content Tool</span>
                   <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env.CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME}</span>
                 </div>
               )}
               {window.env?.CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME && (
                 <div className="flex flex-col text-xs space-y-1 pb-2">
-                  <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Get User Location Tool</span>
+                  <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Nova Horizon BotGet User Location Tool</span>
                   <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env.CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME}</span>
                 </div>
               )}
