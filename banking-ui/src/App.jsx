@@ -2133,8 +2133,23 @@ function AppContent() {
           <p>
             This application is deployed on <strong>Google Cloud Platform</strong>. Below are the key environment configurations and service integrations currently in use.
           </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Google Cloud Build is integrated with this repository to automate our continuous integration and continuous delivery (CI/CD) pipelines. Upon code updates, build triggers automatically compile client resources, verify environment configs, bundle the container images, and roll out deployments to Google Cloud.
+          </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans">
             <div className="space-y-2.5">
+              <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Cloud Build Documentation</span>
+                <a
+                  href="https://docs.cloud.google.com/build/docs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5"
+                >
+                  <span>View Docs</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
               <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
                 <span className="font-semibold text-slate-500 dark:text-slate-400">Build Version</span>
                 <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.BUILD_VERSION || 'unknown'}</span>
