@@ -17,6 +17,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 
 import HomeView from './components/HomeView.jsx';
 import AccountsView from './components/AccountsView.jsx';
+import CompareAccounts from './components/CompareAccounts.jsx';
 import SettingsView from './components/SettingsView.jsx';
 import CreditCardsView from './components/CreditCardsView.jsx';
 import CheckingAccountsView from './components/CheckingAccountsView.jsx';
@@ -113,6 +114,9 @@ export default function AppRoutes({
       } />
       <Route path="/locator" element={
         <LocatorView />
+      } />
+      <Route path="/compare-accounts" element={
+        <CompareAccounts />
       } />
 
       {/* Protected routes gated by fbUser session */}

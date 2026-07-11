@@ -163,7 +163,7 @@ function MortgagesView({ activeBot, setActiveBot }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             
             {/* Fixed Rate Card */}
-            <div className="card-slate-900 p-8 md:p-12 rounded-3xl border border-slate-200 dark:border-slate-800/80 shadow-xl relative overflow-hidden flex flex-col justify-between group" style={{ backgroundColor: 'var(--card-bg-color, #0f172a)' }}>
+            <div className="bg-white dark:bg-slate-900/40 p-8 md:p-12 rounded-3xl border border-slate-200 dark:border-slate-800/80 shadow-xl relative overflow-hidden flex flex-col justify-between group">
               <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-2xl transition-all duration-500 group-hover:scale-125"></div>
               
               <div className="relative z-10 space-y-4">
@@ -202,7 +202,7 @@ function MortgagesView({ activeBot, setActiveBot }) {
             </div>
 
             {/* Adjustable Rate Card */}
-            <div className="card-slate-900 p-8 md:p-12 rounded-3xl border border-slate-200 dark:border-slate-800/80 shadow-xl relative overflow-hidden flex flex-col justify-between group" style={{ backgroundColor: 'var(--card-bg-color, #0f172a)' }}>
+            <div className="bg-white dark:bg-slate-900/40 p-8 md:p-12 rounded-3xl border border-slate-200 dark:border-slate-800/80 shadow-xl relative overflow-hidden flex flex-col justify-between group">
               <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/5 rounded-full blur-2xl transition-all duration-500 group-hover:scale-125"></div>
               
               <div className="relative z-10 space-y-4">
@@ -263,8 +263,7 @@ function MortgagesView({ activeBot, setActiveBot }) {
               return (
                 <div 
                   key={idx} 
-                  className="card-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800/60 shadow-lg hover:border-cyan-500/40 transition-all duration-300 flex flex-col justify-between space-y-6"
-                  style={{ backgroundColor: 'var(--card-bg-color, #0f172a)' }}
+                  className="bg-white dark:bg-slate-900/40 p-8 rounded-2xl border border-slate-200 dark:border-slate-800/60 shadow-lg hover:border-cyan-500/40 transition-all duration-300 flex flex-col justify-between space-y-6"
                 >
                   <div className="space-y-4">
                     <div className="flex justify-between items-start gap-4">

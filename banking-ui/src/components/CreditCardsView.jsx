@@ -19,6 +19,8 @@ import {
   Globe
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
+import { creditCards as cards } from '../utils/productData.js';
+import CreditCardMatrix from './CreditCardMatrix.jsx';
 
 function CreditCardsView({ activeBot, setActiveBot }) {
   const navigate = useNavigate();
@@ -30,104 +32,7 @@ function CreditCardsView({ activeBot, setActiveBot }) {
 
   const [selectedCardIndex, setSelectedCardIndex] = useState(0);
 
-  const cards = [
-    {
-      name: "Aura Elite Reserve",
-      tag: "Premium Travel & Lifestyle",
-      bonus: "75,000 Bonus Points",
-      bonusDesc: "After spending $4,000 in the first 3 months",
-      earnRate: "3x Points on Travel & Dining",
-      introApr: "N/A",
-      regApr: "18.99% - 24.99% Variable",
-      annualFee: "$0",
-      balanceTransferFee: "3%",
-      foreignTxFee: "None",
-      bestFor: "Frequent travelers seeking uncompromised luxury",
-      cardStyle: "from-slate-900 via-slate-800 to-slate-950 border-amber-500/30 text-amber-400",
-      chipStyle: "bg-amber-400/20 border-amber-500/40 text-amber-300",
-      accentColor: "#f59e0b",
-      badgeBg: "bg-amber-500/10 border-amber-500/20 text-amber-500 dark:text-amber-400",
-      botName: "Travel Rewards Bot",
-      features: [
-        "Complimentary global airport lounge access",
-        "Annual $200 travel statement credit",
-        "Primary rental car collision damage waiver",
-        "24/7 elite white-glove concierge service"
-      ]
-    },
-    {
-      name: "Velocity Cash Preferred",
-      tag: "Maximum Cash Back",
-      bonus: "$200 Cash Bonus",
-      bonusDesc: "After spending $1,000 in the first 90 days",
-      earnRate: "2% Unlimited Flat Cash Back",
-      introApr: "0% Intro APR for 12 Months",
-      regApr: "16.24% - 22.24% Variable",
-      annualFee: "$0",
-      balanceTransferFee: "$0 Intro Fee",
-      foreignTxFee: "1%",
-      bestFor: "Everyday spending with effortless statement credits",
-      cardStyle: "from-emerald-900 via-teal-900 to-cyan-950 border-emerald-500/30 text-emerald-400",
-      chipStyle: "bg-emerald-400/20 border-emerald-500/40 text-emerald-300",
-      accentColor: "#10b981",
-      badgeBg: "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400",
-      botName: "Cash Back Advisor",
-      features: [
-        "No rotating categories or earning caps",
-        "Instant redemption directly to your checking account",
-        "Purchase protection up to $1,000 per claim",
-        "Extended warranty coverage on eligible items"
-      ]
-    },
-    {
-      name: "Equinox Horizon",
-      tag: "Low APR & Balance Transfers",
-      bonus: "0% Intro APR",
-      bonusDesc: "For 18 months on balance transfers and purchases",
-      earnRate: "1x Points on all purchases",
-      introApr: "0% Intro APR for 18 Months",
-      regApr: "13.99% - 19.99% Variable",
-      annualFee: "$0",
-      balanceTransferFee: "$0 Intro Fee for 60 days",
-      foreignTxFee: "2%",
-      bestFor: "Consolidating existing balances and financing large purchases",
-      cardStyle: "from-sky-900 via-blue-950 to-slate-900 border-sky-500/30 text-sky-400",
-      chipStyle: "bg-sky-400/20 border-sky-500/40 text-sky-300",
-      accentColor: "#0ea5e9",
-      badgeBg: "bg-sky-500/10 border-sky-500/20 text-sky-600 dark:text-sky-400",
-      botName: "Balance Transfer Agent",
-      features: [
-        "Save on interest with our industry-leading low intro rate",
-        "Customizable payment due dates to fit your schedule",
-        "Free access to your live updated FICO® Score",
-        "Zero liability on unauthorized transactions"
-      ]
-    },
-    {
-      name: "Vanguard Builder",
-      tag: "Secured Rebuilding",
-      bonus: "Instant Decision",
-      bonusDesc: "No minimum credit score required to apply",
-      earnRate: "1% Cash Back on Gas & Groceries",
-      introApr: "N/A",
-      regApr: "20.49% Variable",
-      annualFee: "$0",
-      balanceTransferFee: "N/A",
-      foreignTxFee: "3%",
-      bestFor: "Establishing or rebuilding a solid credit history safely",
-      cardStyle: "from-indigo-950 via-slate-900 to-indigo-900 border-indigo-500/30 text-indigo-400",
-      chipStyle: "bg-indigo-400/20 border-indigo-500/40 text-indigo-300",
-      accentColor: "#6366f1",
-      badgeBg: "bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400",
-      botName: "Credit Support Bot",
-      features: [
-        "Credit limit matches your fully refundable security deposit",
-        "Automatic reporting to Equifax, Experian, and TransUnion",
-        "Path to unsecured upgrade review in as little as 6 months",
-        "Complimentary financial literacy tools and personalized insights"
-      ]
-    }
-  ];
+
 
   const selectedCard = cards[selectedCardIndex];
 
@@ -328,54 +233,7 @@ function CreditCardsView({ activeBot, setActiveBot }) {
             </p>
           </div>
 
-          <div className="overflow-x-auto border border-slate-200 dark:border-slate-800/80 rounded-2xl bg-white dark:bg-slate-900 shadow-xl">
-            <table className="w-full text-left border-collapse min-w-[800px]">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50">
-                  <th className="p-5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Card Product</th>
-                  <th className="p-5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Welcome Bonus</th>
-                  <th className="p-5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Earning Tier</th>
-                  <th className="p-5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Intro APR</th>
-                  <th className="p-5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Regular APR</th>
-                  <th className="p-5 text-xs font-semibold text-slate-400 uppercase tracking-wider text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 text-sm">
-                {cards.map((card, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors">
-                    <td className="p-5">
-                      <div className="font-bold text-slate-900 dark:text-white">{card.name}</div>
-                      <div className="text-xs text-slate-500 mt-0.5">{card.bestFor}</div>
-                    </td>
-                    <td className="p-5">
-                      <div className="font-bold text-emerald-600 dark:text-emerald-400">{card.bonus}</div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">{card.bonusDesc.replace('After spending', 'Spend')}</div>
-                    </td>
-                    <td className="p-5 font-medium text-slate-700 dark:text-slate-300">
-                      {card.earnRate}
-                    </td>
-                    <td className="p-5 text-slate-600 dark:text-slate-400">
-                      {card.introApr}
-                    </td>
-                    <td className="p-5 text-slate-600 dark:text-slate-400 font-mono text-xs">
-                      {card.regApr}
-                    </td>
-                    <td className="p-5 text-center">
-                      <button
-                        onClick={() => {
-                          const cardSlug = card.name.toLowerCase().replace(/ /g, '-');
-                          navigate(`/apply/credit-card?card=${cardSlug}`);
-                        }}
-                        className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs transition-colors"
-                      >
-                        Apply
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <CreditCardMatrix />
         </div>
       </section>
 
