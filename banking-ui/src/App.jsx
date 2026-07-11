@@ -2151,9 +2151,9 @@ function AppContent() {
               </div>
               <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
                 <span className="font-semibold text-slate-500 dark:text-slate-400">CCAI Platform Enabled</span>
-                <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.ENABLE_CCAI ? 'Yes' : 'No'}</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200">{enableCcai() ? 'Yes' : 'No'}</span>
               </div>
-              {window.env?.ENABLE_CCAI && (
+              {enableCcai() && (
                 <>
                   <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
                     <span className="font-semibold text-slate-500 dark:text-slate-400">CCAI Host</span>
