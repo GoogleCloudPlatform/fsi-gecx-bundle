@@ -417,6 +417,7 @@ function HomeView({
                 Join thousands of members who are earning more and paying less with {bankName} Credit Union.
               </p>
               <button
+                onClick={() => setIsMemberModalOpen(true)}
                 className="px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
                 style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
               >
