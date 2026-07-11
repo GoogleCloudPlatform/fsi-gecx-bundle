@@ -52,7 +52,7 @@ function CertificateAccountsView() {
       isBelowMin,
       selected
     };
-  }, [depositAmount, selectedTermIndex, ratesData]);
+  }, [depositAmount, selectedTermIndex]);
 
   const [activeTab, setActiveTab] = useState("laddering");
 
