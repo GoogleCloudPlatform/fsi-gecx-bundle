@@ -46,6 +46,7 @@ function HomeView({
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [isSchemaModalOpen, setIsSchemaModalOpen] = useState(false);
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
 
   const fetchAccounts = useCallback(async () => {
     if (!fbUser) {
@@ -514,7 +515,8 @@ function HomeView({
             </div>
 
             <button 
-              className="w-full py-4 rounded-xl text-slate-950 font-bold shadow-lg hover:scale-[1.02] transition-all duration-300"
+              onClick={() => setIsLoanModalOpen(true)}
+              className="w-full py-4 rounded-xl text-slate-950 font-bold shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
               style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 10px 15px -3px ${brandColorFrom}33` }}
             >
               Apply for Loan Now
@@ -752,6 +754,27 @@ function HomeView({
                 </p>
                 <button
                   onClick={() => setIsMemberModalOpen(false)}
+                  className="w-full py-2.5 rounded-xl text-slate-950 font-bold text-sm shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
+                  style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}
+                >
+                  Acknowledge
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isLoanModalOpen && (
+            <div className="fixed inset-0 z-[250] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full overflow-hidden shadow-2xl p-6 text-center space-y-4">
+                <div className="w-12 h-12 rounded-full bg-sky-500/10 text-sky-500 flex items-center justify-center mx-auto">
+                  <Shield className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Apply for a Loan</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                  To apply, please sign in using the top-right profile button and then click the chat icon on the bottom right of the page to launch the CX Agent Studio mortgage preapproval flow.
+                </p>
+                <button
+                  onClick={() => setIsLoanModalOpen(false)}
                   className="w-full py-2.5 rounded-xl text-slate-950 font-bold text-sm shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
                   style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}
                 >
