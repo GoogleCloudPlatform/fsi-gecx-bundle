@@ -1824,6 +1824,7 @@ function AppContent() {
               <li><Link to="/credit-cards" className={getFooterLinkClass('/credit-cards')}>Credit Cards</Link></li>
               <li><Link to="/mortgages" className={getFooterLinkClass('/mortgages')}>Mortgages</Link></li>
               <li><Link to="/mortgage-rates" className={getFooterLinkClass('/mortgage-rates')}>Mortgage Rates</Link></li>
+              <li><Link to="/compare-accounts" className={getFooterLinkClass('/compare-accounts')}>Compare Accounts</Link></li>
             </ul>
           </div>
 
@@ -1833,7 +1834,9 @@ function AppContent() {
               <li><Link to="/help-center" className={getFooterLinkClass('/help-center')}>Help Center</Link></li>
               <li><Link to="/fee-schedule" className={getFooterLinkClass('/fee-schedule')}>Fee Schedule</Link></li>
               <li><Link to="/locator" className={getFooterLinkClass('/locator')}>Find Branch/ATM</Link></li>
-              <li><Link to="/support/voice" className={getFooterLinkClass('/support/voice')}>Credit Card Support</Link></li>
+              {fbUser && (
+                <li><Link to="/support/voice" className={getFooterLinkClass('/support/voice')}>Credit Card Support</Link></li>
+              )}
               {fbUser && (
                 <li><Link to="/secure-messaging" className={getFooterLinkClass('/secure-messaging')}>Secure Messages</Link></li>
               )}
