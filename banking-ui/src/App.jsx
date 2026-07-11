@@ -2071,17 +2071,19 @@ function AppContent() {
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans">
             <div className="space-y-2.5">
               <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Build Version</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.BUILD_VERSION || 'unknown'}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Build Commit ID</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.BUILD_COMMIT_ID || 'unknown'}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
                 <span className="font-semibold text-slate-500 dark:text-slate-400">GCP Project ID</span>
                 <span className="font-mono text-slate-800 dark:text-slate-200">{projectId || 'unknown'}</span>
               </div>
-              <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
-                <span className="font-semibold text-slate-500 dark:text-slate-400">GECX Project ID</span>
-                <span className="font-mono text-slate-800 dark:text-slate-200">{cxProjectId || 'unknown'}</span>
-              </div>
-              <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
-                <span className="font-semibold text-slate-500 dark:text-slate-400">Agent App ID</span>
-                <span className="font-mono text-slate-800 dark:text-slate-200">{appId || 'unknown'}</span>
-              </div>
+
+
               <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
                 <span className="font-semibold text-slate-500 dark:text-slate-400">Banking API URL</span>
                 <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.BANKING_API_URL || 'unknown'}</span>
@@ -2102,13 +2104,9 @@ function AppContent() {
                   </div>
                 </>
               )}
-              <div className="flex flex-col text-xs space-y-1 pb-2 border-b border-slate-100 dark:border-slate-800">
-                <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Deployment Name</span>
-                <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME || 'unknown'}</span>
-              </div>
               {window.env?.STABLE_ENV_URL && (
-                <div className="flex justify-between items-center text-xs pb-2">
-                  <span className="font-semibold text-slate-500 dark:text-slate-400">Production URL</span>
+                <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Stable Env URL</span>
                   <a
                     href={window.env.STABLE_ENV_URL}
                     target="_blank"
@@ -2118,6 +2116,48 @@ function AppContent() {
                     <span>Link</span>
                     <ExternalLink className="w-3 h-3" />
                   </a>
+                </div>
+              )}
+              {window.env?.FEEDBACK_URL && (
+                <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Feedback URL</span>
+                  <a
+                    href={window.env.FEEDBACK_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5"
+                  >
+                    <span>Link</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
+              <div className="flex flex-col text-xs space-y-1 pb-2 border-b border-slate-100 dark:border-slate-800">
+                <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Deployment Name</span>
+                <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME || 'unknown'}</span>
+              </div>
+              {window.env?.CX_AGENT_STUDIO_VOICE_AGENT_DEPLOYMENT_NAME && (
+                <div className="flex flex-col text-xs space-y-1 pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Voice Agent Deployment</span>
+                  <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env.CX_AGENT_STUDIO_VOICE_AGENT_DEPLOYMENT_NAME}</span>
+                </div>
+              )}
+              {window.env?.CX_AGENT_STUDIO_UPLOAD_TOOL_NAME && (
+                <div className="flex flex-col text-xs space-y-1 pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Upload Tool Name</span>
+                  <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env.CX_AGENT_STUDIO_UPLOAD_TOOL_NAME}</span>
+                </div>
+              )}
+              {window.env?.CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME && (
+                <div className="flex flex-col text-xs space-y-1 pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Populate Form Content Tool</span>
+                  <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env.CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME}</span>
+                </div>
+              )}
+              {window.env?.CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME && (
+                <div className="flex flex-col text-xs space-y-1 pb-2">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400 text-left">Get User Location Tool</span>
+                  <span className="font-mono text-[10px] text-slate-800 dark:text-slate-200 break-all text-left">{window.env.CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME}</span>
                 </div>
               )}
             </div>
