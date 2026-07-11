@@ -183,10 +183,10 @@ function HomeView({
                     <ArrowRight className="w-5 h-5" />
                   </button>
                   <button 
-                    onClick={() => navigate('/compare-accounts')}
+                    onClick={() => navigate('/compare-products')}
                     className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-855 transition-colors cursor-pointer shadow-sm"
                   >
-                    Compare Accounts
+                    Compare Products
                   </button>
                 </div>
               </>

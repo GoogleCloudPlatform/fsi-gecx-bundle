@@ -13,17 +13,17 @@
 // limitations under the License.
 
 import React, { useState } from 'react';
-import { 
-  Sparkles, 
-  Wallet, 
-  PiggyBank, 
+import {
+  Sparkles,
+  Wallet,
+  PiggyBank,
   Layers,
-  CreditCard, 
-  Home, 
-  Lock, 
-  X, 
-  CheckCircle2, 
-  Calendar, 
+  CreditCard,
+  Home,
+  Lock,
+  X,
+  CheckCircle2,
+  Calendar,
   ArrowRight,
   RefreshCw
 } from 'lucide-react';
@@ -36,11 +36,11 @@ import CreditCardMatrix from './CreditCardMatrix.jsx';
 import MortgageMatrix from './MortgageMatrix.jsx';
 import AccountOpeningModal from './AccountOpeningModal.jsx';
 
-export default function CompareAccounts({ fbUser }) {
+export default function CompareProducts({ fbUser }) {
   const navigate = useNavigate();
-  const { 
-    brandColorFrom, 
-    brandColorTo 
+  const {
+    brandColorFrom,
+    brandColorTo
   } = useSettings();
 
   const [activeTab, setActiveTab] = useState('checking');
@@ -55,7 +55,7 @@ export default function CompareAccounts({ fbUser }) {
   };
   const [openingAccount, setOpeningAccount] = useState(null);
   const [accountType, setAccountType] = useState('CHECKING');
-  
+
   // Mortgage Rate simulation state
   const [simulatingLock, setSimulatingLock] = useState(null);
   const [isLocked, setIsLocked] = useState(false);
@@ -108,13 +108,13 @@ export default function CompareAccounts({ fbUser }) {
           </div>
 
           <h1 className="text-4xl md:text-6xl lg:text-7xl font-extrabold tracking-tight leading-tight max-w-4xl mx-auto mb-6">
-            Compare all accounts <br />
+            Compare all products <br />
             <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
               side-by-side.
             </span>
           </h1>
 
-          <p className="text-lg text-slate-650 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
+          <p className="text-lg text-slate-655 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
             Review checking APYs, high-yield savings structures, travel rewards rates, and live mortgage interest indices. Make the smart move for your wealth.
           </p>
         </div>
@@ -130,11 +130,10 @@ export default function CompareAccounts({ fbUser }) {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-6 py-4 rounded-2xl font-bold text-sm transition-all duration-300 flex items-center space-x-2.5 border cursor-pointer ${
-                  isActive 
-                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950 border-slate-900 dark:border-white shadow-xl scale-105' 
-                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-800'
-                }`}
+                className={`px-6 py-4 rounded-2xl font-bold text-sm transition-all duration-300 flex items-center space-x-2.5 border cursor-pointer ${isActive
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950 border-slate-900 dark:border-white shadow-xl scale-105'
+                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
               >
                 <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400 dark:text-emerald-600' : ''}`} />
                 <span>{tab.label}</span>
@@ -178,14 +177,14 @@ export default function CompareAccounts({ fbUser }) {
       {simulatingLock && (
         <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full overflow-hidden shadow-2xl">
-            
+
             {/* Header */}
             <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950/50">
               <div>
                 <div className="text-xs font-bold text-sky-500 uppercase tracking-wider">Simulate Rate Reservation Lock</div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">{simulatingLock.type}</h3>
               </div>
-              <button 
+              <button
                 onClick={() => setSimulatingLock(null)}
                 className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors cursor-pointer"
               >
@@ -201,7 +200,7 @@ export default function CompareAccounts({ fbUser }) {
                     <CheckCircle2 className="w-10 h-10 animate-bounce" />
                   </div>
                   <h4 className="text-xl font-bold text-slate-900 dark:text-white">Base Lock-in Guaranteed!</h4>
-                  <p className="text-sm text-slate-600 dark:text-slate-400 max-w-xs mx-auto leading-relaxed">
+                  <p className="text-sm text-slate-655 dark:text-slate-400 max-w-xs mx-auto leading-relaxed">
                     Pricing parameters locked securely at <span className="font-bold text-slate-900 dark:text-white">{simulatingLock.rate}</span> for a continuous 60-day window. Your verified digital lock certificate has been indexed.
                   </p>
                 </div>
