@@ -2,35 +2,37 @@
 
 The Data Generator is the synthetic activity service for the demo banking platform. It produces realistic card activity, scenario-backed fraud signals, and scheduled customer follow-up actions so the UI, fraud workflow, operational database, and lakehouse surfaces have fresh demonstration data.
 
+The service owns synthetic workload orchestration. Banking Service remains the owner of banking-domain writes such as card authorization, settlement, reversal, fraud alert triage, account paydown, and customer state.
+
 ## High-Level Flow
 
 ```mermaid
-flowchart LR
-    admin["Admin GUI / Scenario Studio"]
-    mcp["FastMCP tools"]
-    scheduler["Data Generator Cloud Run service"]
-    planner["Scenario planner and ambient pulse engine"]
-    db["Cloud SQL: operations.synthetic_scheduled_events"]
-    tasks["Cloud Tasks: data-generator-synthetic-schedule"]
-    dispatch["Scheduled event dispatch route"]
-    banking["Banking Service domain APIs"]
-    fraud["Fraud scoring, alerts, and outcomes"]
-    cdc["Datastream CDC and BigQuery lakehouse"]
-    dashboard["Simulation GUI and analytics dashboards"]
+flowchart TD
+    admin[Admin GUI]
+    mcp[FastMCP tools]
+    datagen[Data Generator service]
+    planner[Scenario planner]
+    schedule[(Synthetic schedule table)]
+    tasks[Cloud Tasks queue]
+    dispatch[Dispatch route]
+    banking[Banking Service APIs]
+    fraud[Fraud workflow]
+    lakehouse[CDC and lakehouse]
+    dashboard[Dashboards]
 
-    admin --> scheduler
-    mcp --> scheduler
-    scheduler --> planner
-    planner --> db
+    admin --> datagen
+    mcp --> datagen
+    datagen --> planner
+    planner --> schedule
     planner --> tasks
     tasks --> dispatch
-    dispatch --> db
+    dispatch --> schedule
     dispatch --> banking
     banking --> fraud
-    banking --> cdc
-    fraud --> cdc
-    cdc --> dashboard
+    banking --> lakehouse
+    fraud --> lakehouse
     fraud --> dashboard
+    lakehouse --> dashboard
 ```
 
 ## Service Role
@@ -54,7 +56,7 @@ Data Generator supports four primary workload types:
 
 ## Durable Scheduler
 
-The durable scheduler is owned by Data Generator and stores records in the existing Cloud SQL PostgreSQL database, not in a separate database.
+The durable scheduler is owned by Data Generator and stores records in the existing Cloud SQL PostgreSQL database. It does not use a separate database.
 
 Database:
 
