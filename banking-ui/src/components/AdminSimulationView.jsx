@@ -28,7 +28,7 @@ import {
   getBackendApiUrl,
   getBackendAuthHeaders,
 } from '../utils/api.js';
-import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { showInfoModals } from '../utils/constants.js';
 
