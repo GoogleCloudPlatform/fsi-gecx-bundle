@@ -38,14 +38,14 @@ LAKEHOUSE_SURGE_MERCHANTS = [
     ("BLUE BOTTLE COFFEE SF", "Coffee", "5814", "USA", "San Francisco", "CA", None, None, 0),
     ("GARRETT POPCORN CHICAGO", "Dining", "5812", "USA", "Chicago", "IL", None, None, 0),
     ("PIKE PLACE MARKET SEATTLE", "Retail", "5311", "USA", "Seattle", "WA", None, None, 0),
-    ("HARBOUR TABLE VANCOUVER BC", "Dining", "5812", "CAN", "Vancouver", "BC", 49.2827, -123.1207, 12),
-    ("UNION BISTRO TORONTO ON", "Dining", "5812", "CAN", "Toronto", "ON", 43.6532, -79.3832, 12),
-    ("SOHO MARKET LONDON GBR", "Dining", "5812", "GBR", "London", "ENG", 51.5072, -0.1276, 18),
-    ("RIVE GAUCHE CAFE PARIS FRA", "Coffee", "5814", "FRA", "Paris", "IDF", 48.8566, 2.3522, 18),
-    ("MITTE KAFFEE BERLIN DEU", "Coffee", "5814", "DEU", "Berlin", "BE", 52.52, 13.405, 18),
-    ("GRAN VIA TAPAS MADRID ESP", "Dining", "5812", "ESP", "Madrid", "MD", 40.4168, -3.7038, 18),
-    ("TRASTEVERE OSTERIA ROME ITA", "Dining", "5812", "ITA", "Rome", "RM", 41.9028, 12.4964, 18),
-    ("LAGUNA CICCHETTI VENICE ITA", "Dining", "5812", "ITA", "Venice", "VE", 45.4408, 12.3155, 18),
+    ("TARGET T-0008 SAN JOSE CA", "Retail", "5311", "USA", "San Jose", "CA", None, None, 0),
+    ("CHEVRON 020345 SEATTLE WA", "Fuel", "5541", "USA", "Seattle", "WA", None, None, 0),
+    ("UBER *TRIP NEW YORK NY", "Rideshare", "4121", "USA", "New York", "NY", None, None, 0),
+    ("SWEETGREEN BOSTON MA", "Dining", "5812", "USA", "Boston", "MA", None, None, 0),
+    ("H-E-B AUSTIN TX", "Groceries", "5411", "USA", "Austin", "TX", None, None, 0),
+    ("KING SOOPERS DENVER CO", "Groceries", "5411", "USA", "Denver", "CO", None, None, 0),
+    ("METRO TAP ROOM ATLANTA GA", "Dining", "5812", "USA", "Atlanta", "GA", None, None, 0),
+    ("MIAMI BEACH PARKING FL", "Parking", "7523", "USA", "Miami", "FL", None, None, 0),
 ]
 
 
