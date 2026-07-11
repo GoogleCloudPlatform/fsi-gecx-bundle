@@ -45,6 +45,8 @@ function HomeView({
   const [isBillPayOpen, setIsBillPayOpen] = useState(false);
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [isSchemaModalOpen, setIsSchemaModalOpen] = useState(false);
+  const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
 
   const fetchAccounts = useCallback(async () => {
     if (!fbUser) {
@@ -148,10 +150,7 @@ function HomeView({
                     <ArrowRight className="w-5 h-5" />
                   </button>
                   <button 
-                    onClick={() => {
-                      const helpSection = document.getElementById('help');
-                      if (helpSection) helpSection.scrollIntoView({ behavior: 'smooth' });
-                    }}
+                    onClick={() => navigate('/help-center')}
                     className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 hover:scale-[1.02] active:scale-95 transition-all duration-300 cursor-pointer shadow-sm"
                   >
                     Help & Support
@@ -173,6 +172,7 @@ function HomeView({
 
                 <div className="flex flex-col sm:flex-row justify-center gap-4">
                   <button 
+                    onClick={() => setIsMemberModalOpen(true)}
                     className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
                     style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
                   >
@@ -180,10 +180,10 @@ function HomeView({
                     <ArrowRight className="w-5 h-5" />
                   </button>
                   <button 
-                    onClick={() => navigate('/compare-accounts')}
+                    onClick={() => navigate('/compare-products')}
                     className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-855 transition-colors cursor-pointer shadow-sm"
                   >
-                    Compare Accounts
+                    Compare Products
                   </button>
                 </div>
               </>
@@ -415,6 +415,7 @@ function HomeView({
                 Join thousands of members who are earning more and paying less with {bankName} Credit Union.
               </p>
               <button
+                onClick={() => setIsMemberModalOpen(true)}
                 className="px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
                 style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
               >
@@ -511,7 +512,8 @@ function HomeView({
             </div>
 
             <button 
-              className="w-full py-4 rounded-xl text-slate-950 font-bold shadow-lg hover:scale-[1.02] transition-all duration-300"
+              onClick={() => setIsLoanModalOpen(true)}
+              className="w-full py-4 rounded-xl text-slate-950 font-bold shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
               style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 10px 15px -3px ${brandColorFrom}33` }}
             >
               Apply for Loan Now
@@ -736,6 +738,48 @@ function HomeView({
             accountsData={accountsData}
             onPaymentSuccess={fetchAccounts}
           />
+
+          {isMemberModalOpen && (
+            <div className="fixed inset-0 z-[250] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full overflow-hidden shadow-2xl p-6 text-center space-y-4">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center mx-auto">
+                  <Shield className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Become a Member</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                  To join Nova Horizon, please sign in using the top-right profile controls and then click <strong>Provision Demo Suite</strong> on the home dashboard to initialize your sandbox member profile.
+                </p>
+                <button
+                  onClick={() => setIsMemberModalOpen(false)}
+                  className="w-full py-2.5 rounded-xl text-slate-950 font-bold text-sm shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
+                  style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}
+                >
+                  Acknowledge
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isLoanModalOpen && (
+            <div className="fixed inset-0 z-[250] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full overflow-hidden shadow-2xl p-6 text-center space-y-4">
+                <div className="w-12 h-12 rounded-full bg-sky-500/10 text-sky-500 flex items-center justify-center mx-auto">
+                  <Shield className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Apply for a Loan</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                  To apply, please sign in using the top-right profile button and then click the chat icon on the bottom right of the page to launch the CX Agent Studio mortgage preapproval flow.
+                </p>
+                <button
+                  onClick={() => setIsLoanModalOpen(false)}
+                  className="w-full py-2.5 rounded-xl text-slate-950 font-bold text-sm shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
+                  style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}
+                >
+                  Acknowledge
+                </button>
+              </div>
+            </div>
+          )}
 
         </div>
       </section>

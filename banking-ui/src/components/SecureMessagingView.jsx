@@ -435,9 +435,8 @@ function SecureMessagingView({ fbUser, customerProfile }) {
       return '';
     }
   };
-
   return (
-    <section className="relative pt-32 pb-24 md:pt-48 md:pb-32 px-6 max-w-7xl mx-auto min-h-[calc(100vh-80px)] flex flex-col">
+    <section className="relative pt-28 pb-12 px-6 max-w-7xl mx-auto min-h-[calc(100vh-80px)] flex flex-col">
       {/* Background Glow */}
       <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] rounded-full bg-emerald-500/5 dark:bg-emerald-500/5 blur-[120px] pointer-events-none -z-10" />
       <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] rounded-full bg-cyan-500/5 dark:bg-cyan-500/5 blur-[120px] pointer-events-none -z-10" />

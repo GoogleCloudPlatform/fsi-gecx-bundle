@@ -16,7 +16,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { creditCards } from '../utils/productData.js';
 
-export default function CreditCardMatrix() {
+export default function CreditCardMatrix({ onApply }) {
   const navigate = useNavigate();
 
   return (
@@ -56,7 +56,11 @@ export default function CreditCardMatrix() {
                 <button
                   onClick={() => {
                     const cardSlug = card.name.toLowerCase().replace(/ /g, '-');
-                    navigate(`/apply/credit-card?card=${cardSlug}`);
+                    if (onApply) {
+                      onApply(cardSlug);
+                    } else {
+                      navigate(`/apply/credit-card?card=${cardSlug}`);
+                    }
                   }}
                   className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs transition-colors cursor-pointer"
                 >

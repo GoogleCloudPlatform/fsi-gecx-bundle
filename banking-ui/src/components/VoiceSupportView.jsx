@@ -871,7 +871,7 @@ export default function VoiceSupportView() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 pt-32 pb-24 md:pt-44 md:pb-32 text-slate-100 min-h-[80vh] flex flex-col justify-between">
+    <div className="max-w-6xl mx-auto px-4 pt-28 pb-12 text-slate-100 min-h-[80vh] flex flex-col justify-between">
       
       {/* Header section */}
       <div className="text-center mb-6 flex flex-col items-center relative w-full">
@@ -917,9 +917,22 @@ export default function VoiceSupportView() {
       </div>
 
       {errorMessage && (
-        <div className="bg-red-900/30 border border-red-500/50 rounded-xl p-4 flex items-center gap-3 mb-6">
-          <AlertCircle className="text-red-400 flex-shrink-0" />
-          <span className="text-red-200 text-sm">{errorMessage}</span>
+        <div className="fixed inset-0 z-[250] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-sm w-full overflow-hidden shadow-2xl p-6 text-center space-y-4">
+            <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Connection Error</h3>
+            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+              {errorMessage}
+            </p>
+            <button
+              onClick={() => setErrorMessage('')}
+              className="w-full py-2.5 rounded-xl bg-red-500 hover:bg-red-650 text-white font-bold text-sm shadow-md transition-colors cursor-pointer"
+            >
+              Acknowledge
+            </button>
+          </div>
         </div>
       )}
 

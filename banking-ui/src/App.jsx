@@ -1107,10 +1107,13 @@ function AppContent() {
               
               {/* Consolidated Products Menu with Mouseover Dropdown */}
               <div className="relative group py-2">
-                <button className={`hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${['/checking-accounts', '/savings-accounts', '/certificate-accounts', '/credit-cards', '/mortgages', '/mortgage-rates', '/compare-accounts'].includes(location.pathname) ? 'text-emerald-600 dark:text-emerald-400 font-bold' : ''}`}>
+                <Link 
+                  to="/compare-products"
+                  className={`hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${['/checking-accounts', '/savings-accounts', '/certificate-accounts', '/credit-cards', '/mortgages', '/mortgage-rates', '/compare-products'].includes(location.pathname) ? 'text-emerald-600 dark:text-emerald-400 font-bold' : ''}`}
+                >
                   <span>Products</span>
                   <ChevronDown className="w-3.5 h-3.5 transition-transform duration-300 group-hover:rotate-180" />
-                </button>
+                </Link>
 
                 {/* Dropdown panel */}
                 <div className="absolute left-0 top-full mt-1 w-64 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 shadow-2xl opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 translate-y-2 group-hover:translate-y-0 z-50">
@@ -1146,9 +1149,9 @@ function AppContent() {
                   </Link>
 
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">Product Tools</div>
-                  <Link to="/compare-accounts" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
-                    <span>Compare Accounts</span>
-                    {location.pathname === '/compare-accounts' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                  <Link to="/compare-products" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
+                    <span>Compare Products</span>
+                    {location.pathname === '/compare-products' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                   </Link>
                 </div>
               </div>
@@ -1190,10 +1193,12 @@ function AppContent() {
                     <span>Find Branch/ATM</span>
                     {location.pathname === '/locator' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                   </Link>
-                  <Link to="/support/voice" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
-                    <span>Credit Card Support</span>
-                    {location.pathname === '/support/voice' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                  </Link>
+                  {fbUser && (
+                    <Link to="/support/voice" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
+                      <span>Credit Card Support</span>
+                      {location.pathname === '/support/voice' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                    </Link>
+                  )}
                   {fbUser && (
                     <Link to="/secure-messaging" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
                       <span>Secure Messages</span>
@@ -1648,6 +1653,16 @@ function AppContent() {
                   {location.pathname === '/mortgage-rates' && <div className="w-1.5 h-1.5 rounded-full bg-cyan-500"></div>}
                 </Link>
 
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Product Tools</div>
+                <Link 
+                  to="/compare-products"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/compare-products' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                >
+                  <span>Compare Products</span>
+                  {location.pathname === '/compare-products' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                </Link>
+
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Support & Documentation</div>
                 <Link 
                   to="/help-center"
@@ -1656,14 +1671,16 @@ function AppContent() {
                 >
                   <span>Help Center</span>
                 </Link>
-                <Link 
-                  to="/support/voice"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/support/voice' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
-                >
-                  <span>Credit Card Support</span>
-                  {location.pathname === '/support/voice' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                </Link>
+                {fbUser && (
+                  <Link 
+                    to="/support/voice"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/support/voice' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                  >
+                    <span>Credit Card Support</span>
+                    {location.pathname === '/support/voice' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                  </Link>
+                )}
                 {fbUser && (
                   <Link
                     to="/secure-messaging"
@@ -1810,6 +1827,7 @@ function AppContent() {
               <li><Link to="/credit-cards" className={getFooterLinkClass('/credit-cards')}>Credit Cards</Link></li>
               <li><Link to="/mortgages" className={getFooterLinkClass('/mortgages')}>Mortgages</Link></li>
               <li><Link to="/mortgage-rates" className={getFooterLinkClass('/mortgage-rates')}>Mortgage Rates</Link></li>
+              <li><Link to="/compare-products" className={getFooterLinkClass('/compare-products')}>Compare Products</Link></li>
             </ul>
           </div>
 
@@ -1819,7 +1837,9 @@ function AppContent() {
               <li><Link to="/help-center" className={getFooterLinkClass('/help-center')}>Help Center</Link></li>
               <li><Link to="/fee-schedule" className={getFooterLinkClass('/fee-schedule')}>Fee Schedule</Link></li>
               <li><Link to="/locator" className={getFooterLinkClass('/locator')}>Find Branch/ATM</Link></li>
-              <li><Link to="/support/voice" className={getFooterLinkClass('/support/voice')}>Credit Card Support</Link></li>
+              {fbUser && (
+                <li><Link to="/support/voice" className={getFooterLinkClass('/support/voice')}>Credit Card Support</Link></li>
+              )}
               {fbUser && (
                 <li><Link to="/secure-messaging" className={getFooterLinkClass('/secure-messaging')}>Secure Messages</Link></li>
               )}
