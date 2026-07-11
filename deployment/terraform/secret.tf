@@ -110,6 +110,10 @@ data "external" "database_iam_support_users" {
   program = ["bash", "${path.module}/scripts/get_secret_safe.sh", "database-iam-support-users", var.project_id, "true"]
 }
 
+data "external" "full_reset_operator_emails" {
+  program = ["bash", "${path.module}/scripts/get_secret_safe.sh", "full-reset-operator-emails", var.project_id, "true"]
+}
+
 # Rename the secret
 data "external" "iam_console_viewers" {
   program = ["bash", "${path.module}/scripts/get_secret_safe.sh", "iam_console_viewers", var.project_id, "true"]
@@ -122,6 +126,9 @@ data "external" "additional_cloud_run_iap_members" {
 locals {
   database_iam_support_users_raw = data.external.database_iam_support_users.result.secret_data
   database_iam_support_users     = compact([for s in split(",", local.database_iam_support_users_raw) : trimspace(s)])
+
+  full_reset_operator_emails_raw = data.external.full_reset_operator_emails.result.secret_data
+  full_reset_operator_emails     = compact([for s in split(",", local.full_reset_operator_emails_raw) : trimspace(s)])
 
   iam_console_viewers_raw = data.external.iam_console_viewers.result.secret_data
   iam_console_viewers     = compact([for s in split(",", local.iam_console_viewers_raw) : trimspace(s)])

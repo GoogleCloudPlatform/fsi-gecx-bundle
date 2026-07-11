@@ -220,6 +220,14 @@ resource "google_cloud_run_v2_service" "banking_service" {
         value = join(",", local.database_iam_support_users)
       }
 
+      dynamic "env" {
+        for_each = length(local.full_reset_operator_emails) > 0 ? [1] : []
+        content {
+          name  = "FULL_RESET_OPERATOR_EMAILS"
+          value = join(",", local.full_reset_operator_emails)
+        }
+      }
+
       env {
         name  = "CORS_ALLOWED_ORIGINS"
         value = local.cors_allowed_origins
