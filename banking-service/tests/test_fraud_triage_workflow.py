@@ -210,6 +210,111 @@ def test_scenario_customer_action_unresolved_leaves_alert_open(db_session, fraud
     assert refreshed.remediation_status == "NOT_STARTED"
 
 
+def test_expire_stale_open_alerts_marks_no_customer_response(db_session, fraud_alert):
+    fraud_alert.created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        minutes=45
+    )
+    fraud_alert.source = "MODEL_DETECTED_FRAUD"
+    db_session.add(fraud_alert)
+    db_session.commit()
+
+    result = FraudAlertService(db_session).expire_stale_open_alerts(
+        max_age_minutes=30,
+        limit=10,
+    )
+
+    refreshed = FraudAlertRepository(db_session).get_alert_by_id(
+        fraud_alert_id=fraud_alert.id
+    )
+    action = (
+        db_session.query(FraudCaseAction)
+        .filter_by(fraud_alert_id=fraud_alert.id)
+        .first()
+    )
+    audit_event = (
+        db_session.query(AuditOutbox)
+        .filter_by(event_type="FRAUD_ALERT_RESPONSE_TIMEOUT")
+        .first()
+    )
+
+    assert result["success"] is True
+    assert result["expired_count"] == 1
+    assert refreshed.status == "EXPIRED_NO_CUSTOMER_RESPONSE"
+    assert refreshed.remediation_status == "NO_CUSTOMER_RESPONSE"
+    assert refreshed.resolved_at is not None
+    assert action.action_type == "FRAUD_ALERT_RESPONSE_TIMEOUT"
+    assert action.status == "SUCCEEDED"
+    assert audit_event is not None
+
+
+def test_expire_stale_open_alerts_dry_run_does_not_mutate(db_session, fraud_alert):
+    fraud_alert.created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        minutes=45
+    )
+    fraud_alert.source = "MODEL_DETECTED_FRAUD"
+    db_session.add(fraud_alert)
+    db_session.commit()
+
+    result = FraudAlertService(db_session).expire_stale_open_alerts(
+        max_age_minutes=30,
+        limit=10,
+        dry_run=True,
+    )
+
+    refreshed = FraudAlertRepository(db_session).get_alert_by_id(
+        fraud_alert_id=fraud_alert.id
+    )
+
+    assert result["matched_count"] == 1
+    assert result["expired_count"] == 0
+    assert refreshed.status == "OPEN"
+    assert db_session.query(FraudCaseAction).count() == 0
+
+
+def test_expire_stale_open_alerts_keeps_fresh_or_unsupported_source_open(
+    db_session, fraud_alert
+):
+    fraud_alert.created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        minutes=5
+    )
+    fraud_alert.source = "MODEL_DETECTED_FRAUD"
+    ignored_alert = FraudAlertRepository(db_session).create_alert(
+        customer_id="88888888-8888-4888-8888-222222222222",
+        auth_provider_uid="cust-test-xyz",
+        credit_account_id="12300000-0000-4000-8000-000000000123",
+        card_id="99900000-0000-4000-8000-000000000999",
+        card_last_four="1234",
+        message_thread_id="thread-manual-review",
+        suspicious_authorization_ids=["02000000-0000-4000-8000-000000000002"],
+        suspicious_transactions=[],
+        source="MANUAL_REVIEW",
+    )
+    ignored_alert.created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        minutes=90
+    )
+    db_session.add_all([fraud_alert, ignored_alert])
+    db_session.commit()
+
+    result = FraudAlertService(db_session).expire_stale_open_alerts(
+        max_age_minutes=30,
+        limit=10,
+    )
+
+    assert result["expired_count"] == 0
+    assert (
+        FraudAlertRepository(db_session)
+        .get_alert_by_id(fraud_alert_id=fraud_alert.id)
+        .status
+        == "OPEN"
+    )
+    assert (
+        FraudAlertRepository(db_session)
+        .get_alert_by_id(fraud_alert_id=ignored_alert.id)
+        .status
+        == "OPEN"
+    )
+
+
 def test_record_scenario_outcomes_persists_and_enriches_alert_context(
     db_session, fraud_alert
 ):

@@ -276,6 +276,24 @@ variable "data_generator_cron_schedule" {
   default     = "* * * * *"
 }
 
+variable "fraud_alert_lifecycle_schedule" {
+  type        = string
+  description = "Cron schedule for expiring stale open synthetic fraud alerts that received no customer response."
+  default     = "*/10 * * * *"
+}
+
+variable "fraud_alert_no_response_max_age_minutes" {
+  type        = number
+  description = "Age in minutes after which open synthetic/demo fraud alerts are moved out of OPEN when no customer response arrived."
+  default     = 30
+}
+
+variable "fraud_alert_lifecycle_batch_limit" {
+  type        = number
+  description = "Maximum number of open fraud alerts processed by each lifecycle sweep."
+  default     = 100
+}
+
 variable "data_generator_pulse_window_seconds" {
   type        = number
   description = "Seconds over which each background synthetic card activity pulse is distributed."

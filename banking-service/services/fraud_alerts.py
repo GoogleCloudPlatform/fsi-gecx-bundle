@@ -1,4 +1,5 @@
 import hashlib
+import datetime
 import uuid
 from typing import Iterable
 
@@ -673,6 +674,96 @@ class FraudAlertService:
             "success": False,
             "message": f"Unsupported scenario customer action outcome: {outcome_label}",
             "fraud_alert": self._alert_result(alert),
+        }
+
+    def expire_stale_open_alerts(
+        self,
+        *,
+        max_age_minutes: int = 30,
+        limit: int = 100,
+        sources: list[str] | None = None,
+        dry_run: bool = False,
+    ) -> dict:
+        sources = sources or ["MODEL_DETECTED_FRAUD", "SIMULATION_TARGETED_FRAUD"]
+        now = datetime.datetime.now(datetime.timezone.utc)
+        cutoff = now - datetime.timedelta(minutes=max_age_minutes)
+        alerts = self.repo.list_open_alerts_for_lifecycle_sweep(
+            cutoff=cutoff,
+            sources=sources,
+            limit=limit,
+        )
+        matched = []
+
+        for alert in alerts:
+            matched.append(
+                {
+                    "fraud_alert_id": str(alert.id),
+                    "customer_id": str(alert.customer_id),
+                    "credit_account_id": str(alert.credit_account_id),
+                    "source": alert.source,
+                    "created_at": alert.created_at.isoformat()
+                    if alert.created_at
+                    else None,
+                }
+            )
+            if dry_run:
+                continue
+
+            action_key = f"fraud-alert-timeout:{alert.id}:{max_age_minutes}m"
+            self.repo.create_case_action(
+                fraud_alert_id=alert.id,
+                action_type="FRAUD_ALERT_RESPONSE_TIMEOUT",
+                status="SUCCEEDED",
+                idempotency_key=action_key,
+                request_payload={
+                    "max_age_minutes": max_age_minutes,
+                    "cutoff": cutoff.isoformat(),
+                    "sources": sources,
+                },
+                result_payload={
+                    "status": "EXPIRED_NO_CUSTOMER_RESPONSE",
+                    "remediation_status": "NO_CUSTOMER_RESPONSE",
+                },
+                completed_at=now,
+            )
+            expired_alert = self.repo.expire_no_response(
+                fraud_alert_id=alert.id,
+                triage_summary=(
+                    "Customer did not respond to the fraud alert within the "
+                    f"{max_age_minutes}-minute demo lifecycle window."
+                ),
+            )
+            record_audit_event(
+                self.db,
+                "FRAUD_ALERT_RESPONSE_TIMEOUT",
+                {
+                    "fraud_alert_id": str(alert.id),
+                    "correlation_id": str(alert.id),
+                    "customer_id": str(alert.customer_id),
+                    "credit_account_id": str(alert.credit_account_id),
+                    "card_id": str(alert.card_id),
+                    "source": alert.source,
+                    "max_age_minutes": max_age_minutes,
+                    "cutoff": cutoff.isoformat(),
+                    "status": expired_alert.status if expired_alert else None,
+                    "remediation_status": expired_alert.remediation_status
+                    if expired_alert
+                    else None,
+                },
+            )
+
+        if not dry_run:
+            self.db.commit()
+
+        return {
+            "success": True,
+            "dry_run": dry_run,
+            "max_age_minutes": max_age_minutes,
+            "cutoff": cutoff.isoformat(),
+            "sources": sources,
+            "matched_count": len(alerts),
+            "expired_count": 0 if dry_run else len(matched),
+            "alerts": matched,
         }
 
     def record_scenario_outcomes(

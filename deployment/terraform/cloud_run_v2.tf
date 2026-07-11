@@ -1102,6 +1102,86 @@ resource "google_cloud_run_v2_job" "db_reset_job" {
   ]
 }
 
+resource "google_cloud_run_v2_job" "fraud_alert_lifecycle" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  name     = "banking-fraud-alert-lifecycle"
+  location = var.region
+
+  template {
+    template {
+      max_retries     = 0
+      timeout         = "300s"
+      service_account = google_service_account.banking_service_account.email
+
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.banking_data.connection_name]
+        }
+      }
+
+      containers {
+        image   = local.banking_service_url
+        command = ["python"]
+        args    = ["scripts/expire_stale_fraud_alerts.py"]
+
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+
+        env {
+          name  = "DATABASE_URL"
+          value = "postgresql+psycopg2://${google_sql_user.banking_service_sa_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+        }
+
+        env {
+          name  = "DB_IAM_AUTH"
+          value = "true"
+        }
+
+        env {
+          name  = "PYTHONUNBUFFERED"
+          value = "1"
+        }
+
+        env {
+          name  = "FRAUD_ALERT_NO_RESPONSE_MAX_AGE_MINUTES"
+          value = tostring(var.fraud_alert_no_response_max_age_minutes)
+        }
+
+        env {
+          name  = "FRAUD_ALERT_LIFECYCLE_BATCH_LIMIT"
+          value = tostring(var.fraud_alert_lifecycle_batch_limit)
+        }
+      }
+
+      vpc_access {
+        network_interfaces {
+          network    = google_compute_network.fsi_gecx_vpc.name
+          subnetwork = google_compute_subnetwork.fsi_gecx_subnet.name
+        }
+        egress = "PRIVATE_RANGES_ONLY"
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version
+    ]
+  }
+
+  depends_on = [
+    google_project_service.run_googleapis_com,
+    google_sql_user.banking_service_sa_iam_user,
+    google_project_iam_member.banking_service_sa_cloudsql_client,
+    google_project_iam_member.banking_service_sa_cloudsql_instance_user,
+  ]
+}
+
 resource "google_cloud_run_v2_job" "knowledge_catalog_sync" {
   count    = var.deploy_cloud_run_services ? 1 : 0
   name     = "banking-knowledge-catalog-sync"

@@ -78,6 +78,25 @@ class FraudAlertRepository:
     def count_open_alerts(self) -> int:
         return self.db.query(FraudAlert).filter(FraudAlert.status == "OPEN").count()
 
+    def list_open_alerts_for_lifecycle_sweep(
+        self,
+        *,
+        cutoff: datetime.datetime,
+        sources: list[str],
+        limit: int,
+    ) -> list[FraudAlert]:
+        return (
+            self.db.query(FraudAlert)
+            .filter(
+                FraudAlert.status == "OPEN",
+                FraudAlert.created_at <= cutoff,
+                FraudAlert.source.in_(sources),
+            )
+            .order_by(FraudAlert.created_at.asc())
+            .limit(limit)
+            .all()
+        )
+
     def append_suspicious_authorization(
         self,
         *,
@@ -173,6 +192,29 @@ class FraudAlertRepository:
         if triage_message_id is not None:
             alert.triage_message_id = triage_message_id
 
+        self.db.add(alert)
+        self.db.flush()
+        return alert
+
+    def expire_no_response(
+        self,
+        *,
+        fraud_alert_id,
+        resolved_status: str = "EXPIRED_NO_CUSTOMER_RESPONSE",
+        remediation_status: str = "NO_CUSTOMER_RESPONSE",
+        triage_summary: str | None = None,
+    ) -> FraudAlert | None:
+        alert = (
+            self.db.query(FraudAlert).filter(FraudAlert.id == fraud_alert_id).first()
+        )
+        if not alert:
+            return None
+        now = datetime.datetime.now(datetime.timezone.utc)
+        alert.status = resolved_status
+        alert.remediation_status = remediation_status
+        alert.triaged_at = now
+        alert.resolved_at = now
+        alert.triage_summary = triage_summary
         self.db.add(alert)
         self.db.flush()
         return alert

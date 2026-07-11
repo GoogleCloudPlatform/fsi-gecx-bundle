@@ -68,6 +68,38 @@ resource "google_cloud_scheduler_job" "lakehouse_view_reconcile_daily" {
   ]
 }
 
+resource "google_cloud_scheduler_job" "fraud_alert_lifecycle" {
+  count            = var.deploy_cloud_run_services ? 1 : 0
+  name             = "fraud-alert-lifecycle"
+  description      = "Expire stale open synthetic fraud alerts when no customer response arrives"
+  schedule         = var.fraud_alert_lifecycle_schedule
+  time_zone        = "Etc/UTC"
+  attempt_deadline = "120s"
+  region           = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${data.google_project.project.project_id}/jobs/${google_cloud_run_v2_job.fraud_alert_lifecycle[0].name}:run"
+
+    headers = {
+      "Content-Type" = "application/json"
+    }
+
+    body = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.banking_service_account.email
+      scope                 = "https://www.googleapis.com/auth/cloud-platform"
+    }
+  }
+
+  depends_on = [
+    google_project_service.cloudscheduler_googleapis_com,
+    google_cloud_run_v2_job.fraud_alert_lifecycle,
+    google_project_iam_member.banking_service_sa_run_developer,
+  ]
+}
+
 resource "google_cloud_tasks_queue" "data_generator_synthetic_schedule" {
   count    = var.deploy_cloud_run_services ? 1 : 0
   name     = "data-generator-synthetic-schedule"
