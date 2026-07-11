@@ -2095,37 +2095,41 @@ function AppContent() {
                 <span className="font-semibold text-slate-500 dark:text-slate-400">Build Commit ID</span>
                 <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.BUILD_COMMIT_ID || 'unknown'}</span>
               </div>
-              {window.env?.BUILD_PROJECT_ID && (
-                <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
-                  <span className="font-semibold text-slate-500 dark:text-slate-400">Build Project ID</span>
-                  <span className="font-mono text-slate-800 dark:text-slate-200">{window.env.BUILD_PROJECT_ID}</span>
-                </div>
-              )}
-              {window.env?.BUILD_BUILD_ID && (
-                <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
-                  <span className="font-semibold text-slate-500 dark:text-slate-400">Build ID</span>
-                  <span className="font-mono text-slate-800 dark:text-slate-200">{window.env.BUILD_BUILD_ID}</span>
-                </div>
-              )}
-              {window.env?.BUILD_LOCATION && (
-                <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
-                  <span className="font-semibold text-slate-500 dark:text-slate-400">Build Location</span>
-                  <span className="font-mono text-slate-800 dark:text-slate-200">{window.env.BUILD_LOCATION}</span>
-                </div>
-              )}
-              {window.env?.BUILD_BUILD_ID && window.env.BUILD_BUILD_ID !== 'local-build' && (
-                <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
-                  <span className="font-semibold text-slate-500 dark:text-slate-400">Cloud Build Link</span>
-                  <a
-                    href={`https://console.cloud.google.com/cloud-build/builds;region=${window.env.BUILD_LOCATION || 'us-central1'}/${window.env.BUILD_BUILD_ID}?project=${window.env.BUILD_PROJECT_ID || projectId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-mono text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5"
-                  >
-                    <span>View Build</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
+              {window.env?.BUILD_VERSION !== 'local-dev' && (
+                <>
+                  {window.env?.BUILD_PROJECT_ID && (
+                    <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">Build Project ID</span>
+                      <span className="font-mono text-slate-800 dark:text-slate-200">{window.env.BUILD_PROJECT_ID}</span>
+                    </div>
+                  )}
+                  {window.env?.BUILD_BUILD_ID && (
+                    <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">Build ID</span>
+                      <span className="font-mono text-slate-800 dark:text-slate-200">{window.env.BUILD_BUILD_ID}</span>
+                    </div>
+                  )}
+                  {window.env?.BUILD_LOCATION && (
+                    <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">Build Location</span>
+                      <span className="font-mono text-slate-800 dark:text-slate-200">{window.env.BUILD_LOCATION}</span>
+                    </div>
+                  )}
+                  {window.env?.BUILD_BUILD_ID && window.env.BUILD_BUILD_ID !== 'local-build' && (
+                    <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">Cloud Build Link</span>
+                      <a
+                        href={`https://console.cloud.google.com/cloud-build/builds;region=${window.env.BUILD_LOCATION || 'us-central1'}/${window.env.BUILD_BUILD_ID}?project=${window.env.BUILD_PROJECT_ID || projectId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5"
+                      >
+                        <span>View Build</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  )}
+                </>
               )}
               <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
                 <span className="font-semibold text-slate-500 dark:text-slate-400">GCP Project ID</span>
