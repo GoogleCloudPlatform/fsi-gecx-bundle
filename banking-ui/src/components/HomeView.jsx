@@ -167,11 +167,11 @@ function HomeView({
                   </span>
                 </h1>
                 
-                <p className="text-lg text-slate-600 dark:text-slate-400 max-w-xl leading-relaxed">
+                <p className="text-lg text-slate-600 dark:text-slate-400 max-w-xl mx-auto leading-relaxed">
                   Experience next-generation retail banking combined with the trusted values of a member-owned credit union. Higher yields, lower rates, zero hidden fees.
                 </p>
 
-                <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex flex-col sm:flex-row justify-center gap-4">
                   <button 
                     className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
                     style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
