@@ -1,6 +1,16 @@
 import datetime
 
-from sqlalchemy import BigInteger, Column, DateTime, Index, Integer, JSON, String, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    Index,
+    Integer,
+    JSON,
+    String,
+    UniqueConstraint,
+)
 
 from utils.database import Base
 from utils.database import UniversalUUID as UUID, generate_uuid
@@ -36,7 +46,9 @@ class FraudAlert(Base):
     replacement_card_id = Column(UUID(as_uuid=True), nullable=True)
     triage_message_thread_id = Column(String(128), nullable=True)
     triage_message_id = Column(String(128), nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    created_at = Column(
+        DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
     resolved_at = Column(DateTime, nullable=True)
 
 
@@ -48,7 +60,11 @@ class FraudCaseAction(Base):
         Index("idx_fraud_case_actions_alert", "fraud_alert_id"),
         Index("idx_fraud_case_actions_status", "status"),
         Index("idx_fraud_case_actions_type", "action_type"),
-        UniqueConstraint("fraud_alert_id", "idempotency_key", name="uq_fraud_case_actions_idempotency"),
+        UniqueConstraint(
+            "fraud_alert_id",
+            "idempotency_key",
+            name="uq_fraud_case_actions_idempotency",
+        ),
         {"schema": "operations"},
     )
 
@@ -59,7 +75,9 @@ class FraudCaseAction(Base):
     idempotency_key = Column(String(128), nullable=True)
     request_payload = Column(JSON, nullable=False, default=dict)
     result_payload = Column(JSON, nullable=False, default=dict)
-    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    created_at = Column(
+        DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
     completed_at = Column(DateTime, nullable=True)
 
 
@@ -68,10 +86,18 @@ class FraudModelDecision(Base):
 
     __tablename__ = "fraud_model_decisions"
     __table_args__ = (
-        Index("idx_fraud_model_decisions_customer_created", "customer_id", "created_at"),
-        Index("idx_fraud_model_decisions_account_created", "credit_account_id", "created_at"),
+        Index(
+            "idx_fraud_model_decisions_customer_created", "customer_id", "created_at"
+        ),
+        Index(
+            "idx_fraud_model_decisions_account_created",
+            "credit_account_id",
+            "created_at",
+        ),
         Index("idx_fraud_model_decisions_card_created", "card_id", "created_at"),
-        UniqueConstraint("authorization_id", name="uq_fraud_model_decisions_authorization"),
+        UniqueConstraint(
+            "authorization_id", name="uq_fraud_model_decisions_authorization"
+        ),
         {"schema": "operations"},
     )
 
@@ -92,4 +118,48 @@ class FraudModelDecision(Base):
     merchant_city = Column(String(100), nullable=True)
     merchant_region = Column(String(100), nullable=True)
     model_version = Column(String(64), nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    created_at = Column(
+        DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+
+
+class ScenarioOutcome(Base):
+    """Synthetic scenario feedback label persisted for CDC/lakehouse validation."""
+
+    __tablename__ = "scenario_outcomes"
+    __table_args__ = (
+        Index(
+            "idx_scenario_outcomes_scenario_execution", "scenario_id", "execution_id"
+        ),
+        Index("idx_scenario_outcomes_authorization", "authorization_id"),
+        Index("idx_scenario_outcomes_fraud_alert", "fraud_alert_id"),
+        Index("idx_scenario_outcomes_customer_created", "customer_id", "created_at"),
+        UniqueConstraint(
+            "scenario_id", "execution_id", "event_id", name="uq_scenario_outcomes_event"
+        ),
+        {"schema": "operations"},
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    scenario_id = Column(String(128), nullable=False)
+    execution_id = Column(String(128), nullable=False)
+    event_id = Column(String(128), nullable=False)
+    authorization_id = Column(UUID(as_uuid=True), nullable=True)
+    transaction_id = Column(UUID(as_uuid=True), nullable=True)
+    fraud_alert_id = Column(UUID(as_uuid=True), nullable=True)
+    customer_id = Column(UUID(as_uuid=True), nullable=True)
+    credit_account_id = Column(UUID(as_uuid=True), nullable=True)
+    card_id = Column(UUID(as_uuid=True), nullable=True)
+    card_token = Column(String(128), nullable=True)
+    outcome_label = Column(String(64), nullable=False)
+    expected_reason_codes = Column(JSON, nullable=False, default=list)
+    actual_reason_codes = Column(JSON, nullable=False, default=list)
+    expected_score_band = Column(String(64), nullable=True)
+    actual_risk_score = Column(Integer, nullable=True)
+    model_version = Column(String(64), nullable=True)
+    synthetic_label = Column(Boolean, nullable=False, default=True)
+    operational_action = Column(String(64), nullable=True)
+    operational_status = Column(String(64), nullable=True)
+    created_at = Column(
+        DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )

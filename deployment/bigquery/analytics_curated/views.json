@@ -32,6 +32,15 @@
       ]
     },
     {
+      "name": "scenario_outcome_feedback",
+      "sql": "scenario_outcome_feedback.sql",
+      "sources": [
+        "iceberg_catalog.operations_scenario_outcomes",
+        "iceberg_catalog.operations_fraud_model_decisions",
+        "iceberg_catalog.cards_transaction_authorization"
+      ]
+    },
+    {
       "name": "premium_travel_offer_candidates",
       "sql": "premium_travel_offer_candidates.sql",
       "sources": [

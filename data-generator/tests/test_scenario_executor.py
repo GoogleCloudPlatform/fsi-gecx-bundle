@@ -21,9 +21,19 @@ from fastapi.testclient import TestClient
 
 import main
 from main import BANKING_SERVICE_URL, app
-from scenarios import ScenarioExecutionRequest, ScenarioRequest, execute_scenario, plan_scenario
+from scenarios import (
+    ScenarioExecutionRequest,
+    ScenarioRequest,
+    execute_scenario,
+    plan_scenario,
+)
 from scenarios.executor import clear_execution_cache, list_scenario_outcomes
-from scenarios.schemas import OutcomeLabel, ScenarioMode, ScenarioStepStatus, ScenarioType
+from scenarios.schemas import (
+    OutcomeLabel,
+    ScenarioMode,
+    ScenarioStepStatus,
+    ScenarioType,
+)
 
 client = TestClient(app)
 
@@ -38,9 +48,15 @@ def reset_execution_cache():
 @pytest.mark.asyncio
 @respx.mock
 async def test_dry_run_execution_does_not_write_authorizations():
-    plan = plan_scenario(ScenarioRequest(goal="Run lakehouse spend velocity surge", max_events=2))
-    auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
-        return_value=httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-1"})
+    plan = plan_scenario(
+        ScenarioRequest(goal="Run lakehouse spend velocity surge", max_events=2)
+    )
+    auth_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
+    ).mock(
+        return_value=httpx.Response(
+            200, json={"action_code": "00", "authorization_id": "auth-1"}
+        )
     )
 
     result = await execute_scenario(
@@ -60,19 +76,32 @@ async def test_dry_run_execution_does_not_write_authorizations():
 @pytest.mark.asyncio
 @respx.mock
 async def test_execute_scenario_sends_bounded_authorization_payloads():
-    plan = plan_scenario(ScenarioRequest(goal="Run lakehouse spend velocity surge", max_events=2))
-    auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
-        return_value=httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-123"})
+    plan = plan_scenario(
+        ScenarioRequest(goal="Run lakehouse spend velocity surge", max_events=2)
+    )
+    auth_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
+    ).mock(
+        return_value=httpx.Response(
+            200, json={"action_code": "00", "authorization_id": "auth-123"}
+        )
     )
     settle_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
-        return_value=httpx.Response(200, json={"status": "SETTLED", "transaction_id": "txn-123"})
+        return_value=httpx.Response(
+            200, json={"status": "SETTLED", "transaction_id": "txn-123"}
+        )
     )
-    reverse_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse").mock(
-        return_value=httpx.Response(200, json={"status": "REVERSED"})
-    )
+    reverse_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse"
+    ).mock(return_value=httpx.Response(200, json={"status": "REVERSED"}))
 
     result = await execute_scenario(
-        ScenarioExecutionRequest(plan=plan, mode=ScenarioMode.EXECUTE, idempotency_key="execute-001", default_card_token="tok_scenario"),
+        ScenarioExecutionRequest(
+            plan=plan,
+            mode=ScenarioMode.EXECUTE,
+            idempotency_key="execute-001",
+            default_card_token="tok_scenario",
+        ),
         banking_service_url=BANKING_SERVICE_URL,
         headers={"X-Card-Network-Token": "test"},
     )
@@ -81,7 +110,12 @@ async def test_execute_scenario_sends_bounded_authorization_payloads():
     assert result.attempted_events == 2
     assert result.succeeded_events == 2
     assert result.created_authorization_ids == ["auth-123", "auth-123"]
-    assert result.settlements_created + result.reversals_created + result.pending_holds_created == 2
+    assert (
+        result.settlements_created
+        + result.reversals_created
+        + result.pending_holds_created
+        == 2
+    )
     assert auth_route.call_count == 2
     assert settle_route.call_count + reverse_route.call_count <= 2
 
@@ -96,12 +130,20 @@ async def test_execute_scenario_sends_bounded_authorization_payloads():
 @pytest.mark.asyncio
 @respx.mock
 async def test_execute_scenario_idempotency_returns_cached_result():
-    plan = plan_scenario(ScenarioRequest(goal="Run lakehouse spend velocity surge", max_events=1))
-    auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
-        return_value=httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-123"})
+    plan = plan_scenario(
+        ScenarioRequest(goal="Run lakehouse spend velocity surge", max_events=1)
+    )
+    auth_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
+    ).mock(
+        return_value=httpx.Response(
+            200, json={"action_code": "00", "authorization_id": "auth-123"}
+        )
     )
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
-        return_value=httpx.Response(200, json={"status": "SETTLED", "transaction_id": "txn-123"})
+        return_value=httpx.Response(
+            200, json={"status": "SETTLED", "transaction_id": "txn-123"}
+        )
     )
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse").mock(
         return_value=httpx.Response(200, json={"status": "REVERSED"})
@@ -113,8 +155,16 @@ async def test_execute_scenario_idempotency_returns_cached_result():
         default_card_token="tok_scenario",
     )
 
-    first = await execute_scenario(request, banking_service_url=BANKING_SERVICE_URL, headers={"X-Card-Network-Token": "test"})
-    second = await execute_scenario(request, banking_service_url=BANKING_SERVICE_URL, headers={"X-Card-Network-Token": "test"})
+    first = await execute_scenario(
+        request,
+        banking_service_url=BANKING_SERVICE_URL,
+        headers={"X-Card-Network-Token": "test"},
+    )
+    second = await execute_scenario(
+        request,
+        banking_service_url=BANKING_SERVICE_URL,
+        headers={"X-Card-Network-Token": "test"},
+    )
 
     assert first.execution_id == second.execution_id
     assert auth_route.call_count == 1
@@ -122,7 +172,9 @@ async def test_execute_scenario_idempotency_returns_cached_result():
 
 
 def test_execute_endpoint_dry_run_returns_structured_result():
-    plan = plan_scenario(ScenarioRequest(goal="Run lakehouse spend velocity surge", max_events=2))
+    plan = plan_scenario(
+        ScenarioRequest(goal="Run lakehouse spend velocity surge", max_events=2)
+    )
 
     response = client.post(
         "/scenarios/execute",
@@ -156,7 +208,9 @@ def test_scenario_endpoint_accepts_iap_operator_header_in_deployed_mode(monkeypa
 
     response = client.post(
         "/scenarios/plan",
-        headers={"X-Goog-Authenticated-User-Email": "accounts.google.com:operator@google.com"},
+        headers={
+            "X-Goog-Authenticated-User-Email": "accounts.google.com:operator@google.com"
+        },
         json={
             "goal": "Run lakehouse spend velocity surge",
             "scenario_type": "lakehouse_spend_velocity_surge",
@@ -168,7 +222,9 @@ def test_scenario_endpoint_accepts_iap_operator_header_in_deployed_mode(monkeypa
     assert response.json()["scenario_type"] == "lakehouse_spend_velocity_surge"
 
 
-def test_scenario_endpoint_rejects_missing_operator_context_in_deployed_mode(monkeypatch):
+def test_scenario_endpoint_rejects_missing_operator_context_in_deployed_mode(
+    monkeypatch,
+):
     monkeypatch.setattr(main, "is_local_dev", lambda: False)
 
     response = client.post(
@@ -186,7 +242,9 @@ def test_scenario_endpoint_rejects_missing_operator_context_in_deployed_mode(mon
 def test_dry_run_endpoint_returns_execution_result_with_operator():
     response = client.post(
         "/scenarios/dry-run",
-        headers={"X-Goog-Authenticated-User-Email": "accounts.google.com:operator@google.com"},
+        headers={
+            "X-Goog-Authenticated-User-Email": "accounts.google.com:operator@google.com"
+        },
         json={
             "goal": "Run lakehouse spend velocity surge",
             "scenario_type": "lakehouse_spend_velocity_surge",
@@ -203,7 +261,9 @@ def test_dry_run_endpoint_returns_execution_result_with_operator():
 
 
 def test_replay_endpoint_sets_replay_mode_for_dry_run_plan():
-    plan = plan_scenario(ScenarioRequest(goal="Make something interesting happen", max_events=1))
+    plan = plan_scenario(
+        ScenarioRequest(goal="Make something interesting happen", max_events=1)
+    )
 
     response = client.post(
         "/scenarios/replay",
@@ -240,10 +300,24 @@ async def test_execute_scenario_records_synthetic_outcomes():
         )
     )
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
-        return_value=httpx.Response(200, json={"status": "SETTLED", "transaction_id": "txn-feedback-1"})
+        return_value=httpx.Response(
+            200, json={"status": "SETTLED", "transaction_id": "txn-feedback-1"}
+        )
     )
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse").mock(
         return_value=httpx.Response(200, json={"status": "REVERSED"})
+    )
+    persistence_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/credit-card/fraud-alert/scenario-outcomes"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "persisted_count": len(plan.timeline),
+                "outcome_ids": ["outcome-1"],
+            },
+        )
     )
 
     result = await execute_scenario(
@@ -269,6 +343,11 @@ async def test_execute_scenario_records_synthetic_outcomes():
     assert outcome.actual_risk_score == 86
     assert outcome.model_version == "local-deterministic-v1"
     assert list_scenario_outcomes(plan.scenario_id) == result.outcomes
+    assert persistence_route.called
+    persisted = json.loads(persistence_route.calls[0].request.content.decode())
+    assert persisted["outcomes"][0]["scenario_id"] == plan.scenario_id
+    assert persisted["outcomes"][0]["outcome_label"] == "expected_fraud"
+    assert persisted["outcomes"][0]["authorization_id"] == "auth-feedback-1"
 
 
 @pytest.mark.asyncio
@@ -293,10 +372,24 @@ async def test_scenario_outcomes_endpoint_returns_cached_feedback():
         )
     )
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
-        return_value=httpx.Response(200, json={"status": "SETTLED", "transaction_id": "txn-endpoint-1"})
+        return_value=httpx.Response(
+            200, json={"status": "SETTLED", "transaction_id": "txn-endpoint-1"}
+        )
     )
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse").mock(
         return_value=httpx.Response(200, json={"status": "REVERSED"})
+    )
+    respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/credit-card/fraud-alert/scenario-outcomes"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "persisted_count": len(plan.timeline),
+                "outcome_ids": ["outcome-1"],
+            },
+        )
     )
 
     await execute_scenario(
@@ -343,19 +436,38 @@ async def test_customer_action_resolves_false_positive_alert():
         )
     )
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
-        return_value=httpx.Response(200, json={"status": "SETTLED", "transaction_id": "txn-fp-1"})
+        return_value=httpx.Response(
+            200, json={"status": "SETTLED", "transaction_id": "txn-fp-1"}
+        )
     )
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse").mock(
         return_value=httpx.Response(200, json={"status": "REVERSED"})
     )
-    action_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/credit-card/fraud-alert/scenario-action").mock(
+    action_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/credit-card/fraud-alert/scenario-action"
+    ).mock(
         return_value=httpx.Response(
             200,
             json={
                 "success": True,
                 "message": "Fraud alert marked as recognized activity.",
                 "outcome": "CUSTOMER_RECOGNIZED",
-                "fraud_alert": {"fraud_alert_id": "alert-fp-1", "status": "RESOLVED_CUSTOMER_RECOGNIZED"},
+                "fraud_alert": {
+                    "fraud_alert_id": "alert-fp-1",
+                    "status": "RESOLVED_CUSTOMER_RECOGNIZED",
+                },
+            },
+        )
+    )
+    respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/credit-card/fraud-alert/scenario-outcomes"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "persisted_count": len(plan.timeline),
+                "outcome_ids": ["outcome-1"],
             },
         )
     )
@@ -371,7 +483,9 @@ async def test_customer_action_resolves_false_positive_alert():
         headers={"X-Card-Network-Token": "test"},
     )
 
-    customer_action = next(step for step in result.steps if step.event_type == "customer_action")
+    customer_action = next(
+        step for step in result.steps if step.event_type == "customer_action"
+    )
     assert customer_action.status == ScenarioStepStatus.SUCCEEDED
     assert customer_action.resolution == "recognized"
     assert customer_action.alert_id == "alert-fp-1"
@@ -394,27 +508,68 @@ async def test_customer_action_triages_disputed_fraud_alert():
     )
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
         side_effect=[
-            httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-base-1"}),
-            httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-travel-1"}),
-            httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-hotel-1"}),
-            httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-fraud-1", "fraud_alert_id": "alert-fraud-1", "fraud_risk_score": 82}),
-            httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-fraud-2", "fraud_alert_id": "alert-fraud-1", "fraud_risk_score": 91}),
+            httpx.Response(
+                200, json={"action_code": "00", "authorization_id": "auth-base-1"}
+            ),
+            httpx.Response(
+                200, json={"action_code": "00", "authorization_id": "auth-travel-1"}
+            ),
+            httpx.Response(
+                200, json={"action_code": "00", "authorization_id": "auth-hotel-1"}
+            ),
+            httpx.Response(
+                200,
+                json={
+                    "action_code": "00",
+                    "authorization_id": "auth-fraud-1",
+                    "fraud_alert_id": "alert-fraud-1",
+                    "fraud_risk_score": 82,
+                },
+            ),
+            httpx.Response(
+                200,
+                json={
+                    "action_code": "00",
+                    "authorization_id": "auth-fraud-2",
+                    "fraud_alert_id": "alert-fraud-1",
+                    "fraud_risk_score": 91,
+                },
+            ),
         ]
     )
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
-        return_value=httpx.Response(200, json={"status": "SETTLED", "transaction_id": "txn-fraud-1"})
+        return_value=httpx.Response(
+            200, json={"status": "SETTLED", "transaction_id": "txn-fraud-1"}
+        )
     )
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse").mock(
         return_value=httpx.Response(200, json={"status": "REVERSED"})
     )
-    action_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/credit-card/fraud-alert/scenario-action").mock(
+    action_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/credit-card/fraud-alert/scenario-action"
+    ).mock(
         return_value=httpx.Response(
             200,
             json={
                 "success": True,
                 "message": "Fraud case triaged and pending specialist review.",
                 "outcome": "PENDING_SPECIALIST_REVIEW",
-                "fraud_alert": {"fraud_alert_id": "alert-fraud-1", "status": "TRIAGED_PENDING_REVIEW"},
+                "fraud_alert": {
+                    "fraud_alert_id": "alert-fraud-1",
+                    "status": "TRIAGED_PENDING_REVIEW",
+                },
+            },
+        )
+    )
+    respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/credit-card/fraud-alert/scenario-outcomes"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "persisted_count": len(plan.timeline),
+                "outcome_ids": ["outcome-1"],
             },
         )
     )
@@ -430,7 +585,9 @@ async def test_customer_action_triages_disputed_fraud_alert():
         headers={"X-Card-Network-Token": "test"},
     )
 
-    customer_action = next(step for step in result.steps if step.event_type == "customer_action")
+    customer_action = next(
+        step for step in result.steps if step.event_type == "customer_action"
+    )
     assert customer_action.status == ScenarioStepStatus.SUCCEEDED
     assert customer_action.resolution == "triaged"
     payload = json.loads(action_route.calls[0].request.content.decode())
@@ -451,15 +608,26 @@ async def test_customer_action_unresolved_keeps_alert_open():
     )
     plan.timeline[-1].outcome_label = OutcomeLabel.UNRESOLVED
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
-        return_value=httpx.Response(200, json={"action_code": "00", "authorization_id": "auth-unresolved-1", "fraud_alert_id": "alert-open-1"})
+        return_value=httpx.Response(
+            200,
+            json={
+                "action_code": "00",
+                "authorization_id": "auth-unresolved-1",
+                "fraud_alert_id": "alert-open-1",
+            },
+        )
     )
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
-        return_value=httpx.Response(200, json={"status": "SETTLED", "transaction_id": "txn-open-1"})
+        return_value=httpx.Response(
+            200, json={"status": "SETTLED", "transaction_id": "txn-open-1"}
+        )
     )
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse").mock(
         return_value=httpx.Response(200, json={"status": "REVERSED"})
     )
-    action_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/credit-card/fraud-alert/scenario-action").mock(
+    action_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/credit-card/fraud-alert/scenario-action"
+    ).mock(
         return_value=httpx.Response(
             200,
             json={
@@ -467,6 +635,18 @@ async def test_customer_action_unresolved_keeps_alert_open():
                 "message": "Scenario outcome intentionally left the fraud alert open.",
                 "outcome": "UNRESOLVED",
                 "fraud_alert": {"fraud_alert_id": "alert-open-1", "status": "OPEN"},
+            },
+        )
+    )
+    respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/credit-card/fraud-alert/scenario-outcomes"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "persisted_count": len(plan.timeline),
+                "outcome_ids": ["outcome-1"],
             },
         )
     )
@@ -482,7 +662,9 @@ async def test_customer_action_unresolved_keeps_alert_open():
         headers={"X-Card-Network-Token": "test"},
     )
 
-    customer_action = next(step for step in result.steps if step.event_type == "customer_action")
+    customer_action = next(
+        step for step in result.steps if step.event_type == "customer_action"
+    )
     assert customer_action.status == ScenarioStepStatus.SUCCEEDED
     assert customer_action.resolution == "unresolved"
     payload = json.loads(action_route.calls[0].request.content.decode())

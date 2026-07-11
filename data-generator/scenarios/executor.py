@@ -50,7 +50,9 @@ def _now_iso() -> str:
 
 
 def _execution_id(scenario_id: str, idempotency_key: str) -> str:
-    digest = hashlib.sha256(f"{scenario_id}|{idempotency_key}".encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha256(
+        f"{scenario_id}|{idempotency_key}".encode("utf-8")
+    ).hexdigest()[:16]
     return f"scenario-exec-{digest}"
 
 
@@ -61,7 +63,9 @@ def _rrn(scenario_id: str, event_id: str) -> str:
 
 
 def _fraction(scenario_id: str, event_id: str, salt: str) -> float:
-    digest = hashlib.sha256(f"{scenario_id}|{event_id}|{salt}".encode("utf-8")).hexdigest()[:8]
+    digest = hashlib.sha256(
+        f"{scenario_id}|{event_id}|{salt}".encode("utf-8")
+    ).hexdigest()[:8]
     return int(digest, 16) / 0xFFFFFFFF
 
 
@@ -72,16 +76,25 @@ def _card_token_for_event(
     request: ScenarioExecutionRequest,
     fallback_card_token: str | None,
 ) -> str:
-    tokens = request.default_card_tokens or ([request.default_card_token] if request.default_card_token else [])
+    tokens = request.default_card_tokens or (
+        [request.default_card_token] if request.default_card_token else []
+    )
     if not tokens and fallback_card_token:
         tokens = [fallback_card_token]
     if not tokens:
         return "SCENARIO_CARD_TOKEN_REQUIRED"
-    index = int(hashlib.sha256(f"{scenario_id}|{event.event_id}|card".encode("utf-8")).hexdigest()[:8], 16) % len(tokens)
+    index = int(
+        hashlib.sha256(
+            f"{scenario_id}|{event.event_id}|card".encode("utf-8")
+        ).hexdigest()[:8],
+        16,
+    ) % len(tokens)
     return tokens[index]
 
 
-def _auth_payload(event: PlannedCardEvent, scenario_id: str, card_token: str) -> dict[str, Any]:
+def _auth_payload(
+    event: PlannedCardEvent, scenario_id: str, card_token: str
+) -> dict[str, Any]:
     if not event.merchant_context:
         raise ValueError("authorization events require merchant_context")
     if event.amount_cents is None:
@@ -93,7 +106,8 @@ def _auth_payload(event: PlannedCardEvent, scenario_id: str, card_token: str) ->
         "amount_cents": event.amount_cents,
         "retrieval_reference_number": _rrn(scenario_id, event.event_id),
         "merchant_category_code": merchant.mcc,
-        "merchant_name": merchant.merchant_name_hint or f"SCENARIO {merchant.category}".upper(),
+        "merchant_name": merchant.merchant_name_hint
+        or f"SCENARIO {merchant.category}".upper(),
         "card_network": "VISA",
         "transaction_channel": merchant.transaction_channel,
         "entry_mode": merchant.entry_mode,
@@ -108,7 +122,9 @@ def _auth_payload(event: PlannedCardEvent, scenario_id: str, card_token: str) ->
         "merchant_high_risk_flags": merchant.high_risk_flags,
         "synthetic_scenario_id": scenario_id,
         "synthetic_event_id": event.event_id,
-        "synthetic_outcome_label": event.outcome_label.value if event.outcome_label else None,
+        "synthetic_outcome_label": event.outcome_label.value
+        if event.outcome_label
+        else None,
     }
 
 
@@ -133,13 +149,25 @@ def _outcome_from_step(
     if not step.outcome_label or step.outcome_label.value == "not_applicable":
         return None
     payload = step.response_payload or {}
-    authorization_payload = payload.get("authorization") if isinstance(payload.get("authorization"), dict) else payload
-    actual_reason_codes = authorization_payload.get("fraud_reason_codes") or authorization_payload.get("reason_codes") or []
+    authorization_payload = (
+        payload.get("authorization")
+        if isinstance(payload.get("authorization"), dict)
+        else payload
+    )
+    actual_reason_codes = (
+        authorization_payload.get("fraud_reason_codes")
+        or authorization_payload.get("reason_codes")
+        or []
+    )
     if isinstance(actual_reason_codes, str):
         actual_reason_codes = [actual_reason_codes]
-    actual_risk_score = authorization_payload.get("fraud_risk_score") or authorization_payload.get("risk_score")
+    actual_risk_score = authorization_payload.get(
+        "fraud_risk_score"
+    ) or authorization_payload.get("risk_score")
     try:
-        actual_risk_score = int(actual_risk_score) if actual_risk_score is not None else None
+        actual_risk_score = (
+            int(actual_risk_score) if actual_risk_score is not None else None
+        )
     except (TypeError, ValueError):
         actual_risk_score = None
     return ScenarioOutcome(
@@ -160,14 +188,18 @@ def _outcome_from_step(
     )
 
 
-def _policy_for_event(event: PlannedCardEvent, policies: list[BehaviorPolicy]) -> BehaviorPolicy:
+def _policy_for_event(
+    event: PlannedCardEvent, policies: list[BehaviorPolicy]
+) -> BehaviorPolicy:
     for policy in policies:
         if event.persona_id in policy.policy_id:
             return policy
     return policies[0]
 
 
-def _resolution_for_event(event: PlannedCardEvent, plan_id: str, policy: BehaviorPolicy) -> str:
+def _resolution_for_event(
+    event: PlannedCardEvent, plan_id: str, policy: BehaviorPolicy
+) -> str:
     value = _fraction(plan_id, event.event_id, "resolution")
     if value < policy.settlement_probability:
         return "settled"
@@ -224,7 +256,11 @@ def _customer_action_resolution(event: PlannedCardEvent) -> str:
         return "skipped"
     if event.outcome_label.value in {"false_positive", "confirmed_legitimate"}:
         return "recognized"
-    if event.outcome_label.value in {"customer_disputed", "confirmed_fraud", "expected_fraud"}:
+    if event.outcome_label.value in {
+        "customer_disputed",
+        "confirmed_fraud",
+        "expected_fraud",
+    }:
         return "triaged"
     if event.outcome_label.value == "unresolved":
         return "unresolved"
@@ -243,17 +279,27 @@ async def _execute_customer_action(
     disputed_authorization_ids: list[str],
     timeout_seconds: float,
 ) -> tuple[bool, dict[str, Any], int]:
-    should_dispute = bool(event.outcome_label and event.outcome_label.value in {"customer_disputed", "confirmed_fraud", "expected_fraud"})
-    disputed_authorization_ids = list(dict.fromkeys(disputed_authorization_ids)) if should_dispute else []
+    should_dispute = bool(
+        event.outcome_label
+        and event.outcome_label.value
+        in {"customer_disputed", "confirmed_fraud", "expected_fraud"}
+    )
+    disputed_authorization_ids = (
+        list(dict.fromkeys(disputed_authorization_ids)) if should_dispute else []
+    )
     response = await client.post(
         f"{banking_service_url}/api/v1/credit-card/fraud-alert/scenario-action",
         json={
             "fraud_alert_id": fraud_alert_id,
-            "outcome_label": event.outcome_label.value if event.outcome_label else "not_applicable",
+            "outcome_label": event.outcome_label.value
+            if event.outcome_label
+            else "not_applicable",
             "disputed_authorization_ids": disputed_authorization_ids,
             "disputed_transaction_ids": [],
             "issue_replacement": should_dispute,
-            "escalate": event.outcome_label.value == "confirmed_fraud" if event.outcome_label else False,
+            "escalate": event.outcome_label.value == "confirmed_fraud"
+            if event.outcome_label
+            else False,
             "idempotency_key": f"{scenario_id}:{execution_id}:{event.event_id}",
         },
         headers=headers,
@@ -263,7 +309,53 @@ async def _execute_customer_action(
         payload = response.json()
     except ValueError:
         payload = {"raw": response.text}
-    return response.status_code == 200 and bool(payload.get("success")), payload, response.status_code
+    return (
+        response.status_code == 200 and bool(payload.get("success")),
+        payload,
+        response.status_code,
+    )
+
+
+async def _persist_scenario_outcomes(
+    client: httpx.AsyncClient,
+    *,
+    banking_service_url: str,
+    headers: dict[str, str],
+    outcomes: list[ScenarioOutcome],
+    steps: list[ScenarioStepResult],
+    timeout_seconds: float,
+) -> tuple[bool, dict[str, Any], int | None]:
+    if not outcomes:
+        return True, {"success": True, "persisted_count": 0}, None
+
+    operational_status_by_event = {
+        step.event_id: {
+            "action": step.resolution,
+            "status": step.response_payload.get("outcome")
+            if step.response_payload
+            else step.status.value,
+        }
+        for step in steps
+        if step.event_type == PlannedEventType.CUSTOMER_ACTION
+    }
+    response = await client.post(
+        f"{banking_service_url}/api/v1/credit-card/fraud-alert/scenario-outcomes",
+        json={
+            "outcomes": [outcome.model_dump(mode="json") for outcome in outcomes],
+            "operational_status_by_event": operational_status_by_event,
+        },
+        headers=headers,
+        timeout=timeout_seconds,
+    )
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {"raw": response.text}
+    return (
+        response.status_code == 200 and bool(payload.get("success")),
+        payload,
+        response.status_code,
+    )
 
 
 async def execute_scenario(
@@ -280,7 +372,10 @@ async def execute_scenario(
         cached = _EXECUTION_CACHE[cache_key]
         return cached.model_copy(
             update={
-                "warnings": [*cached.warnings, "Duplicate idempotency key; returning cached scenario execution result."],
+                "warnings": [
+                    *cached.warnings,
+                    "Duplicate idempotency key; returning cached scenario execution result.",
+                ],
             }
         )
 
@@ -355,10 +450,16 @@ async def execute_scenario(
                             resolution="skipped",
                         )
                         steps.append(step)
-                        outcome_events.append((event, step, card_token_by_persona.get(event.persona_id)))
+                        outcome_events.append(
+                            (event, step, card_token_by_persona.get(event.persona_id))
+                        )
                         continue
                     try:
-                        ok, action_payload, action_status_code = await _execute_customer_action(
+                        (
+                            ok,
+                            action_payload,
+                            action_status_code,
+                        ) = await _execute_customer_action(
                             active_client,
                             banking_service_url=banking_service_url,
                             headers=headers,
@@ -366,7 +467,9 @@ async def execute_scenario(
                             execution_id=execution_id,
                             event=event,
                             fraud_alert_id=fraud_alert_id,
-                            disputed_authorization_ids=authorizations_by_alert.get(fraud_alert_id, []),
+                            disputed_authorization_ids=authorizations_by_alert.get(
+                                fraud_alert_id, []
+                            ),
                             timeout_seconds=timeout_seconds,
                         )
                     except httpx.RequestError as exc:
@@ -380,22 +483,35 @@ async def execute_scenario(
                             resolution="failed",
                         )
                         steps.append(step)
-                        outcome_events.append((event, step, card_token_by_persona.get(event.persona_id)))
+                        outcome_events.append(
+                            (event, step, card_token_by_persona.get(event.persona_id))
+                        )
                         continue
 
                     step = ScenarioStepResult(
                         event_id=event.event_id,
                         event_type=event.event_type,
-                        status=ScenarioStepStatus.SUCCEEDED if ok else ScenarioStepStatus.FAILED,
-                        message=action_payload.get("message") or ("Customer action executed." if ok else "Customer action failed."),
+                        status=ScenarioStepStatus.SUCCEEDED
+                        if ok
+                        else ScenarioStepStatus.FAILED,
+                        message=action_payload.get("message")
+                        or (
+                            "Customer action executed."
+                            if ok
+                            else "Customer action failed."
+                        ),
                         alert_id=fraud_alert_id,
                         status_code=action_status_code,
                         response_payload=action_payload,
                         outcome_label=event.outcome_label,
-                        resolution=_customer_action_resolution(event) if ok else "failed",
+                        resolution=_customer_action_resolution(event)
+                        if ok
+                        else "failed",
                     )
                     steps.append(step)
-                    outcome_events.append((event, step, card_token_by_persona.get(event.persona_id)))
+                    outcome_events.append(
+                        (event, step, card_token_by_persona.get(event.persona_id))
+                    )
                     continue
 
                 step = ScenarioStepResult(
@@ -467,7 +583,8 @@ async def execute_scenario(
                     status=ScenarioStepStatus.SKIPPED,
                     message="Authorization declined or skipped.",
                     retrieval_reference_number=payload["retrieval_reference_number"],
-                    authorization_id=response_payload.get("authorization_id") or response_payload.get("id"),
+                    authorization_id=response_payload.get("authorization_id")
+                    or response_payload.get("id"),
                     alert_id=response_payload.get("fraud_alert_id"),
                     status_code=response.status_code,
                     response_payload=response_payload,
@@ -483,15 +600,23 @@ async def execute_scenario(
             resolution_payload = response_payload
             resolution_status_code = response.status_code
             transaction_id = None
-            authorization_id = response_payload.get("authorization_id") or response_payload.get("id")
+            authorization_id = response_payload.get(
+                "authorization_id"
+            ) or response_payload.get("id")
             alert_id = response_payload.get("fraud_alert_id")
             if alert_id:
                 latest_alert_by_persona[event.persona_id] = alert_id
                 if authorization_id:
-                    authorizations_by_alert.setdefault(alert_id, []).append(authorization_id)
+                    authorizations_by_alert.setdefault(alert_id, []).append(
+                        authorization_id
+                    )
 
             if resolution == "settled":
-                ok, resolution_payload, resolution_status_code = await _settle_authorization(
+                (
+                    ok,
+                    resolution_payload,
+                    resolution_status_code,
+                ) = await _settle_authorization(
                     active_client,
                     banking_service_url=banking_service_url,
                     headers=headers,
@@ -505,7 +630,9 @@ async def execute_scenario(
                         event_type=event.event_type,
                         status=ScenarioStepStatus.FAILED,
                         message="Authorization created, but settlement failed.",
-                        retrieval_reference_number=payload["retrieval_reference_number"],
+                        retrieval_reference_number=payload[
+                            "retrieval_reference_number"
+                        ],
                         authorization_id=authorization_id,
                         alert_id=alert_id,
                         status_code=resolution_status_code,
@@ -516,9 +643,15 @@ async def execute_scenario(
                     steps.append(step)
                     outcome_events.append((event, step, card_token))
                     continue
-                transaction_id = resolution_payload.get("transaction_id") or resolution_payload.get("id")
+                transaction_id = resolution_payload.get(
+                    "transaction_id"
+                ) or resolution_payload.get("id")
             elif resolution == "reversed":
-                ok, resolution_payload, resolution_status_code = await _reverse_authorization(
+                (
+                    ok,
+                    resolution_payload,
+                    resolution_status_code,
+                ) = await _reverse_authorization(
                     active_client,
                     banking_service_url=banking_service_url,
                     headers=headers,
@@ -531,7 +664,9 @@ async def execute_scenario(
                         event_type=event.event_type,
                         status=ScenarioStepStatus.FAILED,
                         message="Authorization created, but reversal failed.",
-                        retrieval_reference_number=payload["retrieval_reference_number"],
+                        retrieval_reference_number=payload[
+                            "retrieval_reference_number"
+                        ],
                         authorization_id=authorization_id,
                         alert_id=alert_id,
                         status_code=resolution_status_code,
@@ -562,53 +697,102 @@ async def execute_scenario(
             )
             steps.append(step)
             outcome_events.append((event, step, card_token))
+        succeeded = [
+            step for step in steps if step.status == ScenarioStepStatus.SUCCEEDED
+        ]
+        failed = [step for step in steps if step.status == ScenarioStepStatus.FAILED]
+        skipped = [step for step in steps if step.status == ScenarioStepStatus.SKIPPED]
+        status = (
+            ScenarioExecutionStatus.FAILED
+            if failed and not succeeded
+            else ScenarioExecutionStatus.PARTIAL
+            if failed or skipped
+            else ScenarioExecutionStatus.SUCCEEDED
+        )
+        outcomes = [
+            outcome
+            for event, step, card_token in outcome_events
+            if (
+                outcome := _outcome_from_step(
+                    scenario_id=plan.scenario_id,
+                    execution_id=execution_id,
+                    event=event,
+                    step=step,
+                    card_token=card_token,
+                )
+            )
+        ]
+        warnings = list(plan.warnings)
+        if outcomes:
+            try:
+                (
+                    ok,
+                    persistence_payload,
+                    persistence_status_code,
+                ) = await _persist_scenario_outcomes(
+                    active_client,
+                    banking_service_url=banking_service_url,
+                    headers=headers,
+                    outcomes=outcomes,
+                    steps=steps,
+                    timeout_seconds=timeout_seconds,
+                )
+                if not ok:
+                    warnings.append(
+                        f"Scenario outcome persistence failed with HTTP {persistence_status_code}: {persistence_payload}"
+                    )
+            except Exception as exc:
+                warnings.append(f"Scenario outcome persistence failed: {exc}")
+
+        result = ScenarioExecutionResult(
+            scenario_id=plan.scenario_id,
+            execution_id=execution_id,
+            idempotency_key=request.idempotency_key,
+            mode=mode,
+            status=status,
+            operator=request.operator,
+            started_at=started_at,
+            completed_at=_now_iso(),
+            planned_events=len(plan.timeline),
+            attempted_events=sum(
+                1 for step in steps if step.event_type == PlannedEventType.AUTHORIZATION
+            ),
+            succeeded_events=len(succeeded),
+            skipped_events=len(skipped),
+            failed_events=len(failed),
+            authorizations_created=sum(
+                1
+                for step in succeeded
+                if step.event_type == PlannedEventType.AUTHORIZATION
+            ),
+            settlements_created=sum(
+                1 for step in succeeded if step.resolution == "settled"
+            ),
+            reversals_created=sum(
+                1 for step in succeeded if step.resolution == "reversed"
+            ),
+            pending_holds_created=sum(
+                1 for step in succeeded if step.resolution == "pending"
+            ),
+            created_authorization_ids=[
+                step.authorization_id for step in succeeded if step.authorization_id
+            ],
+            created_transaction_ids=[
+                step.transaction_id for step in succeeded if step.transaction_id
+            ],
+            created_alert_ids=sorted(
+                {step.alert_id for step in succeeded if step.alert_id}
+            ),
+            outcomes=outcomes,
+            steps=steps,
+            warnings=warnings,
+        )
+        _EXECUTION_CACHE[cache_key] = result
+        _OUTCOME_CACHE.setdefault(plan.scenario_id, []).extend(outcomes)
+        return result
     finally:
         if owns_client:
             await active_client.aclose()
-
-    succeeded = [step for step in steps if step.status == ScenarioStepStatus.SUCCEEDED]
-    failed = [step for step in steps if step.status == ScenarioStepStatus.FAILED]
-    skipped = [step for step in steps if step.status == ScenarioStepStatus.SKIPPED]
-    status = (
-        ScenarioExecutionStatus.FAILED
-        if failed and not succeeded
-        else ScenarioExecutionStatus.PARTIAL
-        if failed or skipped
-        else ScenarioExecutionStatus.SUCCEEDED
-    )
-    outcomes = [
-        outcome
-        for event, step, card_token in outcome_events
-        if (outcome := _outcome_from_step(scenario_id=plan.scenario_id, execution_id=execution_id, event=event, step=step, card_token=card_token))
-    ]
-    result = ScenarioExecutionResult(
-        scenario_id=plan.scenario_id,
-        execution_id=execution_id,
-        idempotency_key=request.idempotency_key,
-        mode=mode,
-        status=status,
-        operator=request.operator,
-        started_at=started_at,
-        completed_at=_now_iso(),
-        planned_events=len(plan.timeline),
-        attempted_events=sum(1 for step in steps if step.event_type == PlannedEventType.AUTHORIZATION),
-        succeeded_events=len(succeeded),
-        skipped_events=len(skipped),
-        failed_events=len(failed),
-        authorizations_created=sum(1 for step in succeeded if step.event_type == PlannedEventType.AUTHORIZATION),
-        settlements_created=sum(1 for step in succeeded if step.resolution == "settled"),
-        reversals_created=sum(1 for step in succeeded if step.resolution == "reversed"),
-        pending_holds_created=sum(1 for step in succeeded if step.resolution == "pending"),
-        created_authorization_ids=[step.authorization_id for step in succeeded if step.authorization_id],
-        created_transaction_ids=[step.transaction_id for step in succeeded if step.transaction_id],
-        created_alert_ids=sorted({step.alert_id for step in succeeded if step.alert_id}),
-        outcomes=outcomes,
-        steps=steps,
-        warnings=plan.warnings,
-    )
-    _EXECUTION_CACHE[cache_key] = result
-    _OUTCOME_CACHE.setdefault(plan.scenario_id, []).extend(outcomes)
-    return result
 
 
 def scenario_execution_idempotency_key(plan_id: str) -> str:
