@@ -47,6 +47,7 @@ import {
   getAccountsSummary
 } from './utils/api.js';
 import GoogleCloudIcon from './components/GoogleCloudIcon.jsx';
+import CloudBuildIcon from './components/CloudBuildIcon.jsx';
 import GcpInfoModal from './components/GcpInfoModal.jsx';
 
 
@@ -1826,7 +1827,7 @@ function AppContent() {
             {window.env?.BUILD_VERSION && window.env.BUILD_VERSION !== 'local-devx' && (
               <div className="text-[9px] text-slate-400 dark:text-slate-500 flex items-center gap-1 mt-8">
                 <span>Built with Cloud Build</span>
-                <GoogleCloudIcon className="w-2.5 h-2.5" />
+                <CloudBuildIcon className="w-2.5 h-2.5" />
               </div>
             )}
             {(window.env?.BUILD_VERSION || window.env?.BUILD_COMMIT_ID) && (
