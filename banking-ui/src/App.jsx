@@ -117,6 +117,12 @@ const getCloudBuildUrl = (projectId) => {
   return `https://console.cloud.google.com/cloud-build/builds;region=${location}/${buildId}?project=${buildProject}`;
 };
 
+const getGithubCommitUrl = () => {
+  const commitId = window.env?.BUILD_COMMIT_ID;
+  if (!commitId || commitId === 'ABCDEFG') return '';
+  return `https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/commit/${commitId}`;
+};
+
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -1860,9 +1866,9 @@ function AppContent() {
                 <div className="text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5 -mt-3">
                   <span>
                     Version: {window.env?.BUILD_VERSION || 'unknown'} (
-                    {window.env?.BUILD_COMMIT_ID ? (
+                    {getGithubCommitUrl() ? (
                       <a 
-                        href={`https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/commit/${window.env.BUILD_COMMIT_ID}`} 
+                        href={getGithubCommitUrl()} 
                         target="_blank" 
                         rel="noopener noreferrer" 
                         className="hover:underline text-slate-500 dark:text-slate-400"
@@ -1870,7 +1876,7 @@ function AppContent() {
                         {window.env.BUILD_COMMIT_ID}
                       </a>
                     ) : (
-                      'unknown'
+                      window.env?.BUILD_COMMIT_ID || 'unknown'
                     )}
                     )
                   </span>
@@ -2135,7 +2141,19 @@ function AppContent() {
               </div>
               <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
                 <span className="font-semibold text-slate-500 dark:text-slate-400">Build Commit ID</span>
-                <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.BUILD_COMMIT_ID || 'unknown'}</span>
+                {getGithubCommitUrl() ? (
+                  <a
+                    href={getGithubCommitUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5"
+                  >
+                    <span>{window.env.BUILD_COMMIT_ID}</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : (
+                  <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.BUILD_COMMIT_ID || 'unknown'}</span>
+                )}
               </div>
               {window.env?.BUILD_VERSION !== 'local-dev' && (
                 <>
