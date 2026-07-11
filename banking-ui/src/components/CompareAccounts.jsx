@@ -17,6 +17,7 @@ import {
   Sparkles, 
   Wallet, 
   PiggyBank, 
+  Layers,
   CreditCard, 
   Home, 
   Lock, 
@@ -29,6 +30,7 @@ import {
 import { useSettings } from '../context/SettingsContext.jsx';
 import CheckingMatrix from './CheckingMatrix.jsx';
 import SavingsMatrix from './SavingsMatrix.jsx';
+import CertificateMatrix from './CertificateMatrix.jsx';
 import CreditCardMatrix from './CreditCardMatrix.jsx';
 import MortgageMatrix from './MortgageMatrix.jsx';
 import AccountOpeningModal from './AccountOpeningModal.jsx';
@@ -58,6 +60,11 @@ export default function CompareAccounts() {
     setOpeningAccount(prod);
   };
 
+  const handleOpenCertificates = (prod) => {
+    setAccountType('CERTIFICATE');
+    setOpeningAccount(prod);
+  };
+
   const handleSimulateLockSubmit = (e) => {
     e.preventDefault();
     setIsLocked(true);
@@ -70,6 +77,7 @@ export default function CompareAccounts() {
   const tabs = [
     { id: 'checking', label: 'Checking Tiers', icon: Wallet },
     { id: 'savings', label: 'Savings Milestones', icon: PiggyBank },
+    { id: 'certificates', label: 'Certificates', icon: Layers },
     { id: 'credit', label: 'Credit Cards', icon: CreditCard },
     { id: 'mortgage', label: 'Mortgage Rates', icon: Home }
   ];
@@ -134,6 +142,9 @@ export default function CompareAccounts() {
           )}
           {activeTab === 'savings' && (
             <SavingsMatrix onOpenAccount={handleOpenSavings} />
+          )}
+          {activeTab === 'certificates' && (
+            <CertificateMatrix onOpenAccount={handleOpenCertificates} />
           )}
           {activeTab === 'credit' && (
             <CreditCardMatrix />

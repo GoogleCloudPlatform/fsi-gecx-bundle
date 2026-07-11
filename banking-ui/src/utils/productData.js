@@ -302,3 +302,70 @@ export const mortgageRates = [
     notesIndex: [1, 5, 3]
   }
 ];
+
+export const certificateAccounts = [
+  {
+    name: "3-Month Certificate",
+    term: 3,
+    baseApy: 0.20,
+    minDeposit: 500,
+    isFlex: false,
+    tag: "Short-Term Savings"
+  },
+  {
+    name: "6-Month Certificate",
+    term: 6,
+    baseApy: 0.50,
+    minDeposit: 500,
+    isFlex: false,
+    tag: "Liquid Savings"
+  },
+  {
+    name: "12-Month Certificate",
+    term: 12,
+    baseApy: 3.40,
+    minDeposit: 500,
+    isFlex: false,
+    tag: "Standard Yield"
+  },
+  {
+    name: "12-Month Flex Certificate",
+    term: 12,
+    baseApy: 3.64,
+    minDeposit: 750,
+    isFlex: true,
+    tag: "Variable quarterly adjustment"
+  },
+  {
+    name: "24-Month Certificate",
+    term: 24,
+    baseApy: 3.50,
+    minDeposit: 500,
+    isFlex: false,
+    tag: "Mid-Term Growth"
+  },
+  {
+    name: "36-Month Certificate",
+    term: 36,
+    baseApy: 3.60,
+    minDeposit: 500,
+    isFlex: false,
+    tag: "Extended Term"
+  },
+  {
+    name: "48-Month Certificate",
+    term: 48,
+    baseApy: 3.60,
+    minDeposit: 500,
+    isFlex: false,
+    tag: "High Yield Guarantee"
+  },
+  {
+    name: "60-Month Certificate",
+    term: 60,
+    baseApy: 3.65,
+    minDeposit: 500,
+    isFlex: false,
+    tag: "Maximum Guaranteed Yield"
+  }
+];
