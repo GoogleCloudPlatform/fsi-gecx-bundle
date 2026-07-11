@@ -1220,25 +1220,25 @@ function AppContent() {
                   ))}
 
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">Documentation</div>
-                  <Link to="/fee-schedule" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
-                    <span>Fee Schedule</span>
-                    {location.pathname === '/fee-schedule' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                  </Link>
                   <Link to="/disclosures" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
                     <span>Disclosures</span>
                     {location.pathname === '/disclosures' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                   </Link>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">Customer Service</div>
-                  <Link to="/locator" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
-                    <span>Find Branch/ATM</span>
-                    {location.pathname === '/locator' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                  <Link to="/fee-schedule" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
+                    <span>Fee Schedule</span>
+                    {location.pathname === '/fee-schedule' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                   </Link>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">Customer Service</div>
                   {fbUser && (
                     <Link to="/support/voice" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
                       <span>Credit Card Support</span>
                       {location.pathname === '/support/voice' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                     </Link>
                   )}
+                  <Link to="/locator" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
+                    <span>Find Branch/ATM</span>
+                    {location.pathname === '/locator' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                  </Link>
                   {fbUser && (
                     <Link to="/secure-messaging" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
                       <span>Secure Messages</span>
@@ -1703,7 +1703,7 @@ function AppContent() {
                   {location.pathname === '/compare-products' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                 </Link>
 
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Support & Documentation</div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Knowledge Base</div>
                 <Link 
                   to="/help-center"
                   onClick={() => setIsMobileMenuOpen(false)}
@@ -1711,6 +1711,24 @@ function AppContent() {
                 >
                   <span>Help Center</span>
                 </Link>
+
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Documentation</div>
+                <Link 
+                  to="/disclosures"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/disclosures' ? 'bg-slate-100 dark:bg-slate-800 text-sky-600 dark:text-sky-400' : 'text-slate-600 dark:text-slate-400'}`}
+                >
+                  <span>Disclosures</span>
+                </Link>
+                <Link 
+                  to="/fee-schedule"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/fee-schedule' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                >
+                  <span>Fee Schedule</span>
+                </Link>
+
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Customer Service</div>
                 {fbUser && (
                   <Link 
                     to="/support/voice"
@@ -1721,6 +1739,14 @@ function AppContent() {
                     {location.pathname === '/support/voice' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                   </Link>
                 )}
+                <Link 
+                  to="/locator"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/locator' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                >
+                  <span>Find Branch/ATM</span>
+                  {location.pathname === '/locator' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                </Link>
                 {fbUser && (
                   <Link
                     to="/secure-messaging"
@@ -1731,28 +1757,6 @@ function AppContent() {
                     {location.pathname === '/secure-messaging' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                   </Link>
                 )}
-                <Link 
-                  to="/fee-schedule"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/fee-schedule' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
-                >
-                  <span>Fee Schedule</span>
-                </Link>
-                <Link 
-                  to="/disclosures"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/disclosures' ? 'bg-slate-100 dark:bg-slate-800 text-sky-600 dark:text-sky-400' : 'text-slate-600 dark:text-slate-400'}`}
-                >
-                  <span>Disclosures</span>
-                </Link>
-                <Link 
-                  to="/locator"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/locator' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
-                >
-                  <span>Find Branch/ATM</span>
-                  {location.pathname === '/locator' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                </Link>
                 {fbUser && (
                   <>
                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Admin</div>
@@ -1765,16 +1769,6 @@ function AppContent() {
                       {location.pathname === '/admin' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                     </Link>
                   </>
-                )}
-                {fbUser && (
-                  <Link
-                    to="/search"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/search' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-600 dark:text-slate-400'}`}
-                  >
-                    <span>Search Site</span>
-                    {location.pathname === '/search' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                  </Link>
                 )}
 
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Preferences</div>
