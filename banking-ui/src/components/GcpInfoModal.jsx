@@ -14,7 +14,7 @@
 
 import React from 'react';
 import { X } from 'lucide-react';
-import GoogleCloudIcon from './GoogleCloudIcon.jsx';
+import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 
 export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Integration", maxWidthClass = "max-w-lg", children }) {
   if (!isOpen) return null;
