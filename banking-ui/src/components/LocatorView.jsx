@@ -431,7 +431,12 @@ export default function LocatorView() {
         <Joyride
           key={tourKey}
           run={tourRun}
-          scrollOffset={120}
+          scrollOffset={225}
+          floatingOptions={{
+            beaconOptions: {
+              offset: -45,       // Distance from target (default: -18)
+            },
+          }}
           steps={[
             {
               target: '#locator-search-input',
