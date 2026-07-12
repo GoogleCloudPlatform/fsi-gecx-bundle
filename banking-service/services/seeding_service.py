@@ -464,6 +464,8 @@ def clean_database(db: Session) -> None:
         AccountLedgerEntry,
         Transaction,
         Account,
+        CreditProduct,
+        DepositProduct,
         ApplicationArtifact,
         MortgageApplication,
         CreditCardApplication,
@@ -504,6 +506,8 @@ def clean_database(db: Session) -> None:
     db.query(AccountLedgerEntry).delete(synchronize_session=False)
     db.query(Transaction).delete(synchronize_session=False)
     db.query(Account).delete(synchronize_session=False)
+    db.query(CreditProduct).delete(synchronize_session=False)
+    db.query(DepositProduct).delete(synchronize_session=False)
 
     db.query(ApplicationArtifact).delete(synchronize_session=False)
     db.query(MortgageApplication).delete(synchronize_session=False)
