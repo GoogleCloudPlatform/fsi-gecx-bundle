@@ -17740,25 +17740,29 @@
   },
   {
     "mcc": "4121",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "TRAVEL",
+    "detailed_category": "GROUND_TRANSPORTATION",
+    "ui_label": "Transportation",
     "canonical_title": "Taxicabs and Limousines",
-    "canonical_group": "OTHER",
+    "canonical_group": "TRAVEL",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
     "recurrence_likelihood": "medium",
     "velocity_risk": "medium",
     "chargeback_prone": false,
-    "is_travel": false,
+    "is_travel": true,
     "is_subscription_common": false,
     "is_luxury": false,
     "is_essential": false,
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "taxi",
+        "rideshare",
+        "ground_transportation"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -17794,11 +17798,11 @@
   },
   {
     "mcc": "4214",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "SERVICES",
+    "detailed_category": "FREIGHT_SHIPPING",
+    "ui_label": "Shipping",
     "canonical_title": "Motor Freight Carriers and Trucking",
-    "canonical_group": "OTHER",
+    "canonical_group": "SERVICES",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -17812,7 +17816,10 @@
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "shipping",
+        "freight"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -17821,11 +17828,11 @@
   },
   {
     "mcc": "4215",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "SERVICES",
+    "detailed_category": "COURIER_DELIVERY",
+    "ui_label": "Shipping",
     "canonical_title": "Courier Services",
-    "canonical_group": "OTHER",
+    "canonical_group": "SERVICES",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -17839,7 +17846,11 @@
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "shipping",
+        "courier",
+        "delivery"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -18010,25 +18021,28 @@
   },
   {
     "mcc": "4722",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "TRAVEL",
+    "detailed_category": "TRAVEL_AGENCY",
+    "ui_label": "Travel",
     "canonical_title": "Travel Agencies and Tour Operators",
-    "canonical_group": "OTHER",
+    "canonical_group": "TRAVEL",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
     "recurrence_likelihood": "medium",
     "velocity_risk": "medium",
     "chargeback_prone": false,
-    "is_travel": false,
+    "is_travel": true,
     "is_subscription_common": false,
     "is_luxury": false,
     "is_essential": false,
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "travel_agency",
+        "tour_operator"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -18145,11 +18159,11 @@
   },
   {
     "mcc": "4814",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "TELECOM",
+    "detailed_category": "MOBILE_PHONE_SERVICE",
+    "ui_label": "Telecom",
     "canonical_title": "Telecommunication Services, including Local and Long-Distance Calls, Credit Card Calls, Calls Through Use of Magnetic-",
-    "canonical_group": "OTHER",
+    "canonical_group": "TELECOM",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -18163,7 +18177,11 @@
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "telecom",
+        "mobile_phone",
+        "utility"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -18172,11 +18190,11 @@
   },
   {
     "mcc": "4816",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "TELECOM",
+    "detailed_category": "INTERNET_SERVICE",
+    "ui_label": "Telecom",
     "canonical_title": "Computer Network/Information Services",
-    "canonical_group": "OTHER",
+    "canonical_group": "TELECOM",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -18190,7 +18208,11 @@
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "internet",
+        "network_services",
+        "utility"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -18256,11 +18278,11 @@
   },
   {
     "mcc": "4899",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "ENTERTAINMENT",
+    "detailed_category": "STREAMING_SUBSCRIPTION",
+    "ui_label": "Entertainment",
     "canonical_title": "Cable, Satellite and Other Pay Television/Radio/Streaming Services",
-    "canonical_group": "OTHER",
+    "canonical_group": "ENTERTAINMENT",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -18268,13 +18290,17 @@
     "velocity_risk": "medium",
     "chargeback_prone": false,
     "is_travel": false,
-    "is_subscription_common": false,
+    "is_subscription_common": true,
     "is_luxury": false,
     "is_essential": false,
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "streaming",
+        "subscription",
+        "media"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -19228,11 +19254,11 @@
   },
   {
     "mcc": "5311",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "MERCHANDISE",
+    "detailed_category": "DEPARTMENT_STORE",
+    "ui_label": "Merchandise",
     "canonical_title": "Department Stores",
-    "canonical_group": "OTHER",
+    "canonical_group": "MERCHANDISE",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -19246,7 +19272,10 @@
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "retail",
+        "department_store"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -19579,11 +19608,11 @@
   },
   {
     "mcc": "5541",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "GAS_AUTOMOTIVE",
+    "detailed_category": "FUEL",
+    "ui_label": "Gas/Automotive",
     "canonical_title": "Service Stations (With or without Ancillary Services)",
-    "canonical_group": "OTHER",
+    "canonical_group": "GAS_AUTOMOTIVE",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -19597,7 +19626,11 @@
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "fuel",
+        "gas_station",
+        "automotive"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -20281,11 +20314,11 @@
   },
   {
     "mcc": "5732",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "MERCHANDISE",
+    "detailed_category": "ELECTRONICS",
+    "ui_label": "Electronics",
     "canonical_title": "Electronics Stores",
-    "canonical_group": "OTHER",
+    "canonical_group": "MERCHANDISE",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -20299,7 +20332,11 @@
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "electronics",
+        "devices",
+        "retail"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -20335,11 +20372,11 @@
   },
   {
     "mcc": "5734",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "DIGITAL_GOODS",
+    "detailed_category": "SOFTWARE",
+    "ui_label": "Digital Goods",
     "canonical_title": "Computer Software Stores",
-    "canonical_group": "OTHER",
+    "canonical_group": "DIGITAL_GOODS",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -20353,7 +20390,10 @@
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "software",
+        "digital_goods"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -20497,11 +20537,11 @@
   },
   {
     "mcc": "5815",
-    "primary_category": "DINING",
-    "detailed_category": "DINING",
-    "ui_label": "Dining",
+    "primary_category": "DIGITAL_GOODS",
+    "detailed_category": "DIGITAL_MEDIA",
+    "ui_label": "Digital Goods",
     "canonical_title": "Digital Goods Media",
-    "canonical_group": "DINING",
+    "canonical_group": "DIGITAL_GOODS",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -20515,7 +20555,10 @@
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "digital_goods",
+        "media"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -20524,11 +20567,11 @@
   },
   {
     "mcc": "5816",
-    "primary_category": "DINING",
-    "detailed_category": "DINING",
-    "ui_label": "Dining",
+    "primary_category": "DIGITAL_GOODS",
+    "detailed_category": "DIGITAL_GOODS",
+    "ui_label": "Digital Goods",
     "canonical_title": "Digital Goods",
-    "canonical_group": "DINING",
+    "canonical_group": "DIGITAL_GOODS",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -20542,7 +20585,10 @@
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "digital_goods",
+        "app_store"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -20551,11 +20597,11 @@
   },
   {
     "mcc": "5817",
-    "primary_category": "DINING",
-    "detailed_category": "DINING",
-    "ui_label": "Dining",
+    "primary_category": "DIGITAL_GOODS",
+    "detailed_category": "DIGITAL_GAMES",
+    "ui_label": "Digital Goods",
     "canonical_title": "Digital Goods",
-    "canonical_group": "DINING",
+    "canonical_group": "DIGITAL_GOODS",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -20569,7 +20615,10 @@
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "digital_goods",
+        "games"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -20578,11 +20627,11 @@
   },
   {
     "mcc": "5818",
-    "primary_category": "DINING",
-    "detailed_category": "DINING",
-    "ui_label": "Dining",
+    "primary_category": "DIGITAL_GOODS",
+    "detailed_category": "DIGITAL_CONTENT",
+    "ui_label": "Digital Goods",
     "canonical_title": "Digital Goods",
-    "canonical_group": "DINING",
+    "canonical_group": "DIGITAL_GOODS",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -20596,7 +20645,10 @@
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "digital_goods",
+        "content"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -20605,11 +20657,11 @@
   },
   {
     "mcc": "5912",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "HEALTHCARE",
+    "detailed_category": "PHARMACY",
+    "ui_label": "Pharmacy",
     "canonical_title": "Drug Stores and Pharmacies",
-    "canonical_group": "OTHER",
+    "canonical_group": "HEALTHCARE",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -20619,11 +20671,15 @@
     "is_travel": false,
     "is_subscription_common": false,
     "is_luxury": false,
-    "is_essential": false,
+    "is_essential": true,
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "pharmacy",
+        "drug_store",
+        "healthcare"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -21280,11 +21336,11 @@
   },
   {
     "mcc": "5968",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "ENTERTAINMENT",
+    "detailed_category": "SUBSCRIPTION",
+    "ui_label": "Subscription",
     "canonical_title": "Subscription",
-    "canonical_group": "OTHER",
+    "canonical_group": "ENTERTAINMENT",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -21292,13 +21348,15 @@
     "velocity_risk": "medium",
     "chargeback_prone": false,
     "is_travel": false,
-    "is_subscription_common": false,
+    "is_subscription_common": true,
     "is_luxury": false,
     "is_essential": false,
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "subscription"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -23020,25 +23078,28 @@
   },
   {
     "mcc": "7512",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "TRAVEL",
+    "detailed_category": "RENTAL_CAR",
+    "ui_label": "Travel",
     "canonical_title": "Automobile Rental Agency",
-    "canonical_group": "OTHER",
+    "canonical_group": "TRAVEL",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
     "recurrence_likelihood": "medium",
     "velocity_risk": "medium",
     "chargeback_prone": false,
-    "is_travel": false,
+    "is_travel": true,
     "is_subscription_common": false,
     "is_luxury": false,
     "is_essential": false,
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "rental_car",
+        "ground_transportation"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -23967,11 +24028,11 @@
   },
   {
     "mcc": "7997",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "FITNESS",
+    "detailed_category": "FITNESS_CLUB",
+    "ui_label": "Fitness",
     "canonical_title": "Membership Clubs (Sports, Recreation, Athletic), Country Clubs, and Private Golf Courses",
-    "canonical_group": "OTHER",
+    "canonical_group": "FITNESS",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -23979,13 +24040,17 @@
     "velocity_risk": "medium",
     "chargeback_prone": false,
     "is_travel": false,
-    "is_subscription_common": false,
+    "is_subscription_common": true,
     "is_luxury": false,
     "is_essential": false,
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "fitness",
+        "gym",
+        "membership"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -24048,11 +24113,11 @@
   },
   {
     "mcc": "8011",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "HEALTHCARE",
+    "detailed_category": "MEDICAL_SERVICES",
+    "ui_label": "Healthcare",
     "canonical_title": "Doctors and Physicians (Not Elsewhere Classified)",
-    "canonical_group": "OTHER",
+    "canonical_group": "HEALTHCARE",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -24062,11 +24127,15 @@
     "is_travel": false,
     "is_subscription_common": false,
     "is_luxury": false,
-    "is_essential": false,
+    "is_essential": true,
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "healthcare",
+        "physician",
+        "medical"
+      ],
       "behavior_channels": [
         "mixed"
       ],

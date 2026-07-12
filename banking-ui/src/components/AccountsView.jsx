@@ -846,13 +846,20 @@ function AccountsView({ fbUser, customerProfile }) {
                           {[
                             { id: 'ALL', label: 'All Categories' },
                             { id: 'GROCERY', label: 'Grocery' },
+                            { id: 'GROCERIES', label: 'Groceries' },
                             { id: 'DINING', label: 'Dining' },
-                            { id: 'OTHER_TRAVEL', label: 'Travel & Flights' },
+                            { id: 'TRAVEL', label: 'Travel & Flights' },
+                            { id: 'OTHER_TRAVEL', label: 'Other Travel' },
                             { id: 'GAS_AUTOMOTIVE', label: 'Gas / Automotive' },
                             { id: 'MERCHANDISE', label: 'Merchandise & Stores' },
                             { id: 'HEALTHCARE', label: 'Healthcare' },
+                            { id: 'ENTERTAINMENT', label: 'Entertainment' },
+                            { id: 'DIGITAL_GOODS', label: 'Digital Goods' },
+                            { id: 'TELECOM', label: 'Telecom' },
+                            { id: 'FITNESS', label: 'Fitness' },
+                            { id: 'SERVICES', label: 'Services' },
                             { id: 'FEES', label: 'Fees & Interest' },
-                            { id: 'OTHER', label: 'Other & Entertainment' }
+                            { id: 'OTHER', label: 'Other' }
                           ].map(cat => (
                             <button
                               key={cat.id}

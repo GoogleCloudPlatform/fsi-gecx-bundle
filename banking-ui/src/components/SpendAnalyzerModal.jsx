@@ -3,11 +3,17 @@ import React, { useState, useMemo } from 'react';
 const CATEGORY_COLORS = {
   MERCHANDISE: '#3b82f6',      // Vibrant Blue
   GROCERY: '#10b981',          // Emerald Green
+  GROCERIES: '#10b981',
   DINING: '#f59e0b',           // Amber Gold
   OTHER_TRAVEL: '#06b6d4',     // Cyan Sky
   TRAVEL: '#06b6d4',
   HEALTHCARE: '#f43f5e',       // Rose Red
   GAS_AUTOMOTIVE: '#8b5cf6',   // Violet Purple
+  ENTERTAINMENT: '#ec4899',
+  DIGITAL_GOODS: '#6366f1',
+  TELECOM: '#14b8a6',
+  FITNESS: '#84cc16',
+  SERVICES: '#64748b',
   OTHER: '#6366f1',            // Indigo
   FEES: '#64748b',             // Slate Grey
   GENERAL: '#475569'
@@ -16,12 +22,18 @@ const CATEGORY_COLORS = {
 const CATEGORY_LABELS = {
   MERCHANDISE: 'Merchandise',
   GROCERY: 'Grocery',
+  GROCERIES: 'Groceries',
   DINING: 'Dining',
   OTHER: 'Other',
   HEALTHCARE: 'Healthcare',
   GAS_AUTOMOTIVE: 'Gas/Automotive',
   OTHER_TRAVEL: 'Other Travel',
   TRAVEL: 'Travel',
+  ENTERTAINMENT: 'Entertainment',
+  DIGITAL_GOODS: 'Digital Goods',
+  TELECOM: 'Telecom',
+  FITNESS: 'Fitness',
+  SERVICES: 'Services',
   FEES: 'Fees & Interest',
   GENERAL: 'General Spending'
 };

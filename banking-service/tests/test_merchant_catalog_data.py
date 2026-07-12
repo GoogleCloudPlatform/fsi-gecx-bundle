@@ -88,6 +88,54 @@ def test_demo_travel_mcc_categories_are_not_generic_other():
     assert mcc_rows["7298"]["detailed_category"] == "PERSONAL_CARE"
 
 
+def test_catalog_mcc_taxonomy_uses_specific_categories_for_common_spend():
+    mcc_rows = {row["mcc"]: row for row in json.loads(MCC_PATH.read_text())}
+
+    expected = {
+        "4121": ("TRAVEL", "GROUND_TRANSPORTATION"),
+        "4215": ("SERVICES", "COURIER_DELIVERY"),
+        "4814": ("TELECOM", "MOBILE_PHONE_SERVICE"),
+        "4899": ("ENTERTAINMENT", "STREAMING_SUBSCRIPTION"),
+        "5311": ("MERCHANDISE", "DEPARTMENT_STORE"),
+        "5541": ("GAS_AUTOMOTIVE", "FUEL"),
+        "5732": ("MERCHANDISE", "ELECTRONICS"),
+        "5816": ("DIGITAL_GOODS", "DIGITAL_GOODS"),
+        "5912": ("HEALTHCARE", "PHARMACY"),
+        "7512": ("TRAVEL", "RENTAL_CAR"),
+        "7997": ("FITNESS", "FITNESS_CLUB"),
+        "8011": ("HEALTHCARE", "MEDICAL_SERVICES"),
+    }
+
+    for mcc, (primary, detailed) in expected.items():
+        assert mcc_rows[mcc]["primary_category"] == primary
+        assert mcc_rows[mcc]["detailed_category"] == detailed
+
+
+def test_google_products_are_first_class_catalog_merchants():
+    catalog = {item["merchant_id"]: item for item in _load_catalog()}
+    intelligence = {item["name"]: item for item in json.loads(MERCHANT_INTELLIGENCE_PATH.read_text())}
+
+    expected_catalog = {
+        "google_play_store": "5817",
+        "youtube_tv": "4899",
+        "google_fi": "4814",
+        "google_store": "5732",
+    }
+    expected_intelligence = {
+        "GOOGLE PLAY": "5817",
+        "YOUTUBE TV": "4899",
+        "GOOGLE FI": "4814",
+        "GOOGLE STORE": "5732",
+    }
+
+    for merchant_id, mcc in expected_catalog.items():
+        assert catalog[merchant_id]["default_mcc"] == mcc
+        assert catalog[merchant_id]["stores"]
+
+    for merchant_name, mcc in expected_intelligence.items():
+        assert mcc in intelligence[merchant_name]["mccs"]
+
+
 def test_merchant_catalog_slugs_generate_unique_stable_uuid_relationships():
     catalog = _load_catalog()
     slugs = [item["merchant_id"] for item in catalog]

@@ -600,5 +600,36 @@
             "card_not_present",
             "subscription"
         ]
+    },
+    {
+        "name": "GOOGLE FI",
+        "aliases": [
+            "GOOGLE FI",
+            "GOOGLE FI WIRELESS"
+        ],
+        "type": "telecom",
+        "mccs": [
+            "4814"
+        ],
+        "risk": 25,
+        "flags": [
+            "subscription",
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "GOOGLE STORE",
+        "aliases": [
+            "GOOGLE STORE",
+            "STORE.GOOGLE.COM"
+        ],
+        "type": "retail",
+        "mccs": [
+            "5732"
+        ],
+        "risk": 30,
+        "flags": [
+            "card_not_present"
+        ]
     }
 ]
