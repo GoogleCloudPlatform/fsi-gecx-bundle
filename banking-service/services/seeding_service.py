@@ -403,6 +403,39 @@ def clean_database(db: Session) -> None:
     from models.identity import UserDevice, UserSecureMessage
     from models.origination import Application, MortgageApplication, CreditCardApplication, DepositApplication, ApplicationArtifact
 
+    reset_models = [
+        Escalation,
+        FraudCaseAction,
+        FraudAlert,
+        UserSecureMessage,
+        UserDevice,
+        PostedTransaction,
+        TransactionAuthorization,
+        IssuedCard,
+        CreditAccount,
+        AccountLedgerEntry,
+        Transaction,
+        Account,
+        ApplicationArtifact,
+        MortgageApplication,
+        CreditCardApplication,
+        DepositApplication,
+        Application,
+        UserCreditProfile,
+        KYCRecord,
+        UserAddress,
+        User,
+    ]
+    if db.bind and db.bind.dialect.name == "postgresql":
+        preparer = db.bind.dialect.identifier_preparer
+        table_names = [
+            f"{preparer.quote_schema(model.__table__.schema)}.{preparer.quote(model.__table__.name)}"
+            for model in reset_models
+        ]
+        db.execute(text(f"TRUNCATE TABLE {', '.join(table_names)} CASCADE"))
+        db.flush()
+        return
+
     db.query(Escalation).delete(synchronize_session=False)
     db.query(FraudCaseAction).delete(synchronize_session=False)
     db.query(FraudAlert).delete(synchronize_session=False)
