@@ -627,6 +627,17 @@ export default function VoiceSupportView() {
     setTranscripts([{ author: 'system', text: 'Connecting to voice room...' }]);
 
     try {
+      // Verify microphone access before establishing network connection
+      try {
+        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStream.getTracks().forEach(track => track.stop());
+      } catch (micErr) {
+        console.error("Microphone check failed:", micErr);
+        setErrorMessage('Microphone permission denied. Enable microphone access in browser settings.');
+        setIsConnecting(false);
+        return;
+      }
+
       // 1. Fetch token and room name from server
       const { token, room_name, fraud_context } = await getCreditCardVoiceToken(mode);
       console.log(`LiveKit token received. Room: ${room_name}`);
