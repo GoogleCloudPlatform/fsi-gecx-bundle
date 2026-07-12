@@ -19,7 +19,7 @@ import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
-import { Joyride } from 'react-joyride';
+import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 
 export default function LocatorView() {
@@ -475,7 +475,12 @@ export default function LocatorView() {
           showCloseButton={true}
           onEvent={(data) => {
             const { status, type, action } = data;
-            if (['finished', 'skipped'].includes(status) || type === 'tour:end' || action === 'close' || action === 'skip') {
+            if (
+              [STATUS.FINISHED, STATUS.SKIPPED].includes(status) ||
+              type === EVENTS.TOUR_END ||
+              action === ACTIONS.CLOSE ||
+              action === ACTIONS.SKIP
+            ) {
               setTourRun(false);
               localStorage.setItem('locator-tour-completed', 'true');
             }
