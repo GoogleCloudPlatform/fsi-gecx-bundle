@@ -40,6 +40,7 @@ from models.kyc import KYCRecord, UserCreditProfile
 from models.origination import Account, AccountLedgerEntry, Transaction
 from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, CreditProduct, TransactionAuthorization
 from models.fraud import FraudAlert, FraudCaseAction
+from models.merchant import MerchantMaster, MerchantStore
 from models.origination import DepositProduct
 from models.settings import SystemSetting
 from models.reference import MerchantCategoryCode
@@ -392,7 +393,7 @@ def clear_synthetic_scheduler_artifacts(db: Session) -> dict[str, Any]:
 
 
 def clean_database(db: Session) -> None:
-    """Removes all transactional and customer-related tables while preserving catalogs."""
+    """Removes reset-owned demo tables so they can be rebuilt from source seeds."""
     logger.info("Purging transactional and profile database tables...")
     
     enable_session_rbac_override(db)
@@ -425,6 +426,9 @@ def clean_database(db: Session) -> None:
         KYCRecord,
         UserAddress,
         User,
+        MerchantStore,
+        MerchantMaster,
+        MerchantCategoryCode,
     ]
     if db.bind and db.bind.dialect.name == "postgresql":
         preparer = db.bind.dialect.identifier_preparer
@@ -464,6 +468,10 @@ def clean_database(db: Session) -> None:
     db.query(KYCRecord).delete(synchronize_session=False)
     db.query(UserAddress).delete(synchronize_session=False)
     db.query(User).delete(synchronize_session=False)
+
+    db.query(MerchantStore).delete(synchronize_session=False)
+    db.query(MerchantMaster).delete(synchronize_session=False)
+    db.query(MerchantCategoryCode).delete(synchronize_session=False)
 
     db.flush()
 
