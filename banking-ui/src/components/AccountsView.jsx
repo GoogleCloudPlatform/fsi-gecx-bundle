@@ -11,7 +11,18 @@ import {
   Lock,
   Sparkles,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  Bell,
+  CalendarDays,
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  Plane,
+  RefreshCw,
+  Search,
+  ShieldAlert,
+  SlidersHorizontal,
+  Wallet
 } from 'lucide-react';
 import { 
   getAccountsSummary, 
@@ -38,6 +49,8 @@ function AccountsView({ fbUser, customerProfile }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   const [activeFilterTab, setActiveFilterTab] = useState('category');
+  const [activeLedgerTab, setActiveLedgerTab] = useState('ALL');
+  const [expandedTransactionKey, setExpandedTransactionKey] = useState(null);
   const [filters, setFilters] = useState({
     category: 'ALL',
     minAmount: '',
@@ -166,29 +179,68 @@ function AccountsView({ fbUser, customerProfile }) {
     return `${tx.cardholder_name || 'Cardholder'} ...${lastFour}`;
   };
 
-  const formatWalletProvider = (provider) => {
-    if (!provider) return 'Wallet';
-    return provider.replaceAll('_', ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  const formatMoneyFromCents = (cents = 0) => (
+    (Math.abs(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  );
+
+  const formatDateShort = (value) => {
+    if (!value) return 'Not set';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Not set';
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const formatCardStatusLabel = (card) => {
-    if (card.wallet_provisioning_status) {
-      return `${formatWalletProvider(card.wallet_provider || 'GOOGLE_WALLET')} ${String(card.wallet_provisioning_status).toLowerCase()}`;
-    }
-    if (card.is_virtual) return 'Available now';
-    return card.is_active === false ? 'Inactive' : 'Primary card';
+  const getTransactionAmountCents = (tx) => (
+    tx.amount_cents !== undefined ? tx.amount_cents : Math.round((tx.amount || 0) * 100)
+  );
+
+  const getTransactionKey = (tx, idx, prefix = 'tx') => (
+    tx.transaction_id || tx.authorization_id || tx.retrieval_reference_number || tx.id || `${prefix}-${idx}`
+  );
+
+  const formatCategoryLabel = (tx, fallback = 'General') => {
+    const rawCat = tx.personal_finance_category?.primary || fallback;
+    return rawCat.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
+  };
+
+  const isTravelTransaction = (tx) => {
+    const haystack = `${tx.description || ''} ${tx.merchant_category_code || ''} ${tx.personal_finance_category?.primary || ''}`.toUpperCase();
+    return haystack.includes('TRAVEL') || ['4511', '7011', '4121'].includes(String(tx.merchant_category_code || ''));
+  };
+
+  const isSubscriptionTransaction = (tx) => {
+    const haystack = `${tx.description || ''} ${tx.merchant_slug || ''} ${tx.personal_finance_category?.primary || ''}`.toUpperCase();
+    return haystack.includes('SUBSCRIPTION') || haystack.includes('STREAMING') || haystack.includes('NETFLIX') || haystack.includes('SPOTIFY') || haystack.includes('PEACOCK');
+  };
+
+  const isDisputeCandidate = (tx) => {
+    const haystack = `${tx.status || ''} ${tx.description || ''}`.toUpperCase();
+    return haystack.includes('DISPUTE') || haystack.includes('FRAUD');
   };
 
   const filteredTransactions = useMemo(() => {
     let result = transactions;
 
+    if (activeLedgerTab !== 'ALL') {
+      result = result.filter(tx => {
+        const amountCents = Math.abs(getTransactionAmountCents(tx));
+        if (activeLedgerTab === 'PENDING') return Boolean(tx.pending);
+        if (activeLedgerTab === 'POSTED') return !tx.pending;
+        if (activeLedgerTab === 'DISPUTES') return isDisputeCandidate(tx);
+        if (activeLedgerTab === 'SUBSCRIPTIONS') return isSubscriptionTransaction(tx);
+        if (activeLedgerTab === 'TRAVEL') return isTravelTransaction(tx);
+        if (activeLedgerTab === 'LARGE') return amountCents >= 50000;
+        return true;
+      });
+    }
+
     // 1. Search Query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(tx => {
-        const desc = (tx.description || '').toLowerCase();
+        const desc = `${tx.description || ''} ${tx.merchant_slug || ''} ${tx.merchant_id || ''} ${tx.merchant_store_id || ''}`.toLowerCase();
         const cat = (tx.personal_finance_category?.primary || '').toLowerCase();
-        const amount = String(tx.amount || (tx.amount_cents ? Math.abs(tx.amount_cents)/100 : ''));
+        const amount = String(Math.abs(getTransactionAmountCents(tx)) / 100);
         return desc.includes(q) || cat.includes(q) || amount.includes(q);
       });
     }
@@ -206,7 +258,7 @@ function AccountsView({ fbUser, customerProfile }) {
       const minVal = parseFloat(filters.minAmount);
       if (!isNaN(minVal)) {
         result = result.filter(tx => {
-          const amt = tx.amount_cents !== undefined ? Math.abs(tx.amount_cents)/100 : Math.abs(tx.amount || 0);
+          const amt = Math.abs(getTransactionAmountCents(tx)) / 100;
           return amt >= minVal;
         });
       }
@@ -215,7 +267,7 @@ function AccountsView({ fbUser, customerProfile }) {
       const maxVal = parseFloat(filters.maxAmount);
       if (!isNaN(maxVal)) {
         result = result.filter(tx => {
-          const amt = tx.amount_cents !== undefined ? Math.abs(tx.amount_cents)/100 : Math.abs(tx.amount || 0);
+          const amt = Math.abs(getTransactionAmountCents(tx)) / 100;
           return amt <= maxVal;
         });
       }
@@ -273,7 +325,52 @@ function AccountsView({ fbUser, customerProfile }) {
     }
 
     return result;
-  }, [transactions, searchQuery, filters, cardFilterOptions]);
+  }, [transactions, activeLedgerTab, searchQuery, filters, cardFilterOptions]);
+
+  const ledgerQuickTabs = useMemo(() => {
+    const counts = transactions.reduce((acc, tx) => {
+      acc.ALL += 1;
+      if (tx.pending) acc.PENDING += 1;
+      if (!tx.pending) acc.POSTED += 1;
+      if (isDisputeCandidate(tx)) acc.DISPUTES += 1;
+      if (isSubscriptionTransaction(tx)) acc.SUBSCRIPTIONS += 1;
+      if (isTravelTransaction(tx)) acc.TRAVEL += 1;
+      if (Math.abs(getTransactionAmountCents(tx)) >= 50000) acc.LARGE += 1;
+      return acc;
+    }, { ALL: 0, PENDING: 0, POSTED: 0, DISPUTES: 0, SUBSCRIPTIONS: 0, TRAVEL: 0, LARGE: 0 });
+
+    return [
+      { id: 'ALL', label: 'All', count: counts.ALL },
+      { id: 'PENDING', label: 'Pending', count: counts.PENDING },
+      { id: 'POSTED', label: 'Posted', count: counts.POSTED },
+      { id: 'DISPUTES', label: 'Disputes', count: counts.DISPUTES },
+      { id: 'SUBSCRIPTIONS', label: 'Subscriptions', count: counts.SUBSCRIPTIONS },
+      { id: 'TRAVEL', label: 'Travel', count: counts.TRAVEL },
+      { id: 'LARGE', label: 'Large purchases', count: counts.LARGE },
+    ];
+  }, [transactions]);
+
+  const creditSummary = useMemo(() => {
+    if (selectedAccountType !== 'credit' || !activeAccountObj) return null;
+    const creditLimitCents = activeAccountObj.credit_limit_cents || 0;
+    const currentBalanceCents = activeAccountObj.cleared_balance_cents || 0;
+    const statementBalanceCents = activeAccountObj.statement_balance_cents ?? currentBalanceCents;
+    const minimumDueCents = activeAccountObj.minimum_due_cents ?? Math.min(3500, Math.max(0, statementBalanceCents));
+    const availableCreditCents = activeAccountObj.available_credit_cents || 0;
+    const utilization = creditLimitCents > 0
+      ? Math.min(100, Math.max(0, Math.round(((creditLimitCents - availableCreditCents) / creditLimitCents) * 100)))
+      : 0;
+    return {
+      currentBalanceCents,
+      statementBalanceCents,
+      minimumDueCents,
+      availableCreditCents,
+      creditLimitCents,
+      utilization,
+      paymentDueDate: activeAccountObj.payment_due_date,
+      statementCloseDate: activeAccountObj.statement_close_date,
+    };
+  }, [selectedAccountType, activeAccountObj]);
 
   const handleBackToMaster = () => {
     setSearchParams({});
@@ -471,54 +568,73 @@ function AccountsView({ fbUser, customerProfile }) {
             <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-850 rounded-3xl p-8 shadow-sm dark:shadow-none">
               {selectedAccountType === 'credit' ? (
                 /* CREDIT ACCOUNT DETAILS HEADER */
-                <div className="space-y-8">
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="space-y-6">
+                  <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-5">
                     <div>
                       <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Nova Everyday Visa</h2>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Status: <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{activeAccountObj?.status}</span></p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                        <span className="rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 px-2.5 py-1 font-bold uppercase">
+                          {activeAccountObj?.status}
+                        </span>
+                        <span className="text-slate-500 dark:text-slate-400">
+                          Statement closes {formatDateShort(creditSummary?.statementCloseDate)}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                       <button 
                         onClick={() => setIsBillPayOpen(true)}
-                        className="px-6 py-2.5 rounded-full bg-emerald-500 text-slate-955 font-bold hover:scale-[1.02] active:scale-95 transition-all text-sm cursor-pointer"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 text-slate-955 font-bold hover:bg-emerald-400 active:scale-95 transition-all text-sm cursor-pointer shadow-sm"
                       >
-                        Pay Bill
+                        <CreditCard className="w-4 h-4" />
+                        <span>Pay Bill</span>
                       </button>
                       <button 
                         onClick={() => setShowDocModal(true)}
-                        className="px-6 py-2.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-205 dark:hover:bg-slate-700 transition text-sm flex items-center gap-1.5 cursor-pointer"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-205 dark:hover:bg-slate-700 transition text-sm cursor-pointer"
                       >
-                        <span>View Details</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
+                        <FileText className="w-4 h-4" />
+                        <span>Statements</span>
                       </button>
                     </div>
                   </div>
 
-                  {/* 4 Balances Grid */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6 pt-6 border-t border-slate-205 dark:border-slate-850/80">
-                    <div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Last Statement Balance</div>
-                      <div className="text-xl font-bold text-slate-800 dark:text-slate-350 mt-1">
-                        ${(Math.abs(transactions.find(tx => tx.description === "LATE_FEE")?.amount_cents || 3500) / 100).toFixed(2)}
+                  <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 pt-6 border-t border-slate-205 dark:border-slate-850/80">
+                    {[
+                      { label: 'Current balance', value: `$${formatMoneyFromCents(creditSummary?.currentBalanceCents)}`, strong: true },
+                      { label: 'Statement balance', value: `$${formatMoneyFromCents(creditSummary?.statementBalanceCents)}` },
+                      { label: 'Minimum due', value: `$${formatMoneyFromCents(creditSummary?.minimumDueCents)}`, strong: true },
+                      { label: 'Payment due', value: formatDateShort(creditSummary?.paymentDueDate), accent: true },
+                      { label: 'Available credit', value: `$${formatMoneyFromCents(creditSummary?.availableCreditCents)}`, positive: true },
+                      { label: 'Credit limit', value: `$${formatMoneyFromCents(creditSummary?.creditLimitCents)}` },
+                    ].map(metric => (
+                      <div key={metric.label} className="min-h-24 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/30 p-4">
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wide">{metric.label}</div>
+                        <div className={`mt-2 text-xl font-extrabold ${
+                          metric.positive
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : metric.accent
+                              ? 'text-blue-650 dark:text-blue-300'
+                              : metric.strong
+                                ? 'text-slate-950 dark:text-white'
+                                : 'text-slate-800 dark:text-slate-300'
+                        }`}>
+                          {metric.value}
+                        </div>
                       </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      <span>Credit utilization</span>
+                      <span className="text-slate-800 dark:text-slate-200">{creditSummary?.utilization || 0}%</span>
                     </div>
-                    <div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Current Balance</div>
-                      <div className="text-xl font-extrabold text-slate-900 dark:text-white mt-1">
-                        ${((activeAccountObj?.cleared_balance_cents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Available Credit</div>
-                      <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-                        ${((activeAccountObj?.available_credit_cents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Credit Line</div>
-                      <div className="text-xl font-bold text-slate-800 dark:text-slate-300 mt-1">
-                        ${((activeAccountObj?.credit_limit_cents || 0) / 100).toLocaleString()}
-                      </div>
+                    <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-emerald-500"
+                        style={{ width: `${creditSummary?.utilization || 0}%` }}
+                      />
                     </div>
                   </div>
                 </div>
@@ -545,86 +661,135 @@ function AccountsView({ fbUser, customerProfile }) {
               )}
             </div>
 
-            {selectedAccountType === 'credit' && (activeAccountObj?.cards || []).length > 0 && (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {(activeAccountObj.cards || []).map((card) => (
-                  <div
-                    key={card.card_id || card.card_token || card.last_four}
-                    className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/40 p-4 shadow-sm dark:shadow-none"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-slate-900 dark:text-white">
-                          {card.is_virtual ? 'Virtual card' : 'Physical card'} ending in {card.last_four}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                          {card.cardholder_name || 'Cardholder'}
-                        </p>
-                      </div>
-                      <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase ${
-                        card.status === 'ACTIVE'
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                          : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                      }`}>
-                        {card.status}
-                      </span>
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 px-2 py-1 text-[10px] font-bold uppercase">
-                        {card.is_virtual ? 'Virtual' : 'Physical'}
-                      </span>
-                      <span className="rounded-full bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 px-2 py-1 text-[10px] font-bold uppercase">
-                        {formatCardStatusLabel(card)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* 2. Personalized Offers Banner (Credit Card only - between balances and blotter) */}
             {selectedAccountType === 'credit' && (
-              <div className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/25 rounded-3xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 flex-shrink-0">
-                    <Sparkles className="w-6 h-6 animate-pulse" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-slate-900 dark:text-white text-sm">Boost your savings yields with 4.85% APY</h4>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Maximize returns on your excess checking funds. Zero fees, zero limits.</p>
+              <div className="grid gap-4 lg:grid-cols-[1.1fr_1.4fr]">
+                <div className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-850 rounded-2xl p-5 shadow-sm dark:shadow-none">
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: 'Autopay', value: 'Off', icon: RefreshCw },
+                      { label: 'Statement period', value: `${formatDateShort(creditSummary?.statementCloseDate)} - ${formatDateShort(creditSummary?.paymentDueDate)}`, icon: CalendarDays },
+                      { label: 'Rewards', value: '$42.18', icon: Sparkles },
+                      { label: 'Pending holds', value: `${transactions.filter(tx => tx.pending).length}`, icon: Activity },
+                    ].map(item => {
+                      const Icon = item.icon;
+                      return (
+                        <div key={item.label} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/30 p-3">
+                          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                            <Icon className="w-4 h-4" />
+                            <span className="text-[11px] font-bold uppercase">{item.label}</span>
+                          </div>
+                          <div className="mt-2 text-sm font-extrabold text-slate-900 dark:text-white">{item.value}</div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-                <button 
-                  onClick={() => {
-                    const firstSavings = accountsData?.deposit_accounts?.find(a => a.account_type === 'SAVINGS');
-                    if (firstSavings) {
-                      handleSelectAccount(firstSavings.account_id, 'savings');
-                    }
-                  }}
-                  className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all cursor-pointer flex-shrink-0"
-                >
-                  Boost Yield Now
-                </button>
+
+                {(activeAccountObj?.cards || []).length > 0 && (
+                  <div className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-850 rounded-2xl p-5 shadow-sm dark:shadow-none">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Card controls</h3>
+                      <button
+                        onClick={() => setShowDocModal(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Manage</span>
+                      </button>
+                    </div>
+                    <div className="mt-4 grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
+                      <div className="min-h-32 rounded-xl bg-slate-950 text-white p-4 flex flex-col justify-between shadow-sm">
+                        <div className="text-xs font-bold tracking-widest">NOVA</div>
+                        <div>
+                          <div className="text-xs text-slate-400">Physical card</div>
+                          <div className="mt-1 text-sm font-bold">•••• •••• •••• {(activeAccountObj.cards.find(card => !card.is_virtual) || activeAccountObj.cards[0])?.last_four}</div>
+                        </div>
+                        <div className="text-xs font-black">VISA</div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { label: 'Lock card', icon: Lock },
+                          { label: 'Replace card', icon: RefreshCw },
+                          { label: 'Set alerts', icon: Bell },
+                          { label: 'Travel notice', icon: Plane },
+                          { label: 'Lost or stolen', icon: ShieldAlert },
+                          { label: 'Wallet', icon: Wallet },
+                        ].map(action => {
+                          const Icon = action.icon;
+                          return (
+                            <button
+                              key={action.label}
+                              onClick={() => setShowDocModal(true)}
+                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/30 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-blue-400 dark:hover:border-blue-500 hover:text-blue-650 dark:hover:text-blue-300 transition cursor-pointer"
+                            >
+                              <Icon className="w-4 h-4" />
+                              <span>{action.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* 3. Transaction Blotter View */}
+            {/* 2. Transaction Blotter View */}
             <div className="bg-white dark:bg-slate-900/40 border border-slate-205 dark:border-slate-850 rounded-3xl p-6 md:p-8 shadow-sm dark:shadow-none">
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Transaction History</h3>
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">Transaction History</h3>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Pending authorizations and posted ledger entries stay separated for review.
+                  </p>
+                </div>
+                {selectedAccountType === 'credit' && (
+                  <button
+                    onClick={() => setIsSpendAnalyzerOpen(true)}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold shadow-sm hover:shadow transition-all cursor-pointer"
+                  >
+                    <TrendingUp className="w-4 h-4" />
+                    <span>Spend analyzer</span>
+                  </button>
+                )}
+              </div>
+
+              {selectedAccountType === 'credit' && (
+                <div className="mb-5 flex gap-2 overflow-x-auto pb-1">
+                  {ledgerQuickTabs.map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveLedgerTab(tab.id)}
+                      className={`inline-flex min-h-10 items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                        activeLedgerTab === tab.id
+                          ? 'border-emerald-500 bg-emerald-500 text-slate-950'
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/30 text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <span>{tab.label}</span>
+                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                        activeLedgerTab === tab.id
+                          ? 'bg-slate-950/15 text-slate-950'
+                          : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                      }`}>
+                        {tab.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Capital One inspired Sleek Search & Filter Top Bar */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6">
                 <div className="relative flex-1">
                   <input
                     type="text"
-                    placeholder="Search/filter transactions..."
+                    placeholder="Search transactions, merchants, categories, amounts..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:focus:ring-blue-400/50 transition-all shadow-sm"
                   />
-                  <svg className="w-4 h-4 text-slate-400 absolute left-3 top-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   {searchQuery && (
                     <button
                       onClick={() => setSearchQuery('')}
@@ -644,9 +809,7 @@ function AccountsView({ fbUser, customerProfile }) {
                         : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
                     }`}
                   >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                    </svg>
+                    <SlidersHorizontal className="w-4 h-4" />
                     <span>Filter</span>
                     {activeFilterCount > 0 && (
                       <span className="ml-1 px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[11px] font-bold">
@@ -654,19 +817,6 @@ function AccountsView({ fbUser, customerProfile }) {
                       </span>
                     )}
                   </button>
-
-                  {selectedAccountType === 'credit' && (
-                    <button
-                      onClick={() => setIsSpendAnalyzerOpen(true)}
-                      className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold shadow-sm hover:shadow transition-all cursor-pointer"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
-                      </svg>
-                      <span>View spend analyzer</span>
-                    </button>
-                  )}
                 </div>
               </div>
 
@@ -942,31 +1092,57 @@ function AccountsView({ fbUser, customerProfile }) {
                                 {filteredTransactions.filter(t => t.pending).map((tx, idx) => {
                                   const isLateFee = tx.description === "LATE_FEE" || tx.merchant_name === "LATE_FEE";
                                   const isCredit = (tx.amount_cents !== undefined && tx.amount_cents < 0) || tx.description?.toUpperCase().includes('OFFER');
-                                  const catLabel = tx.personal_finance_category?.primary 
-                                    ? tx.personal_finance_category.primary.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')
-                                    : "Fees";
-                                  const amountVal = Math.abs(tx.amount || (tx.amount_cents ? tx.amount_cents / 100 : 0));
+                                  const catLabel = formatCategoryLabel(tx, "Fees");
+                                  const amountVal = Math.abs(getTransactionAmountCents(tx)) / 100;
+                                  const rowKey = getTransactionKey(tx, idx, 'pending');
+                                  const isExpanded = expandedTransactionKey === rowKey;
                                   return (
-                                    <tr key={`pending-${idx}`} className="hover:bg-slate-100/50 dark:hover:bg-slate-900/20 transition-colors">
-                                      <td className="py-3 text-xs text-slate-500 dark:text-slate-400 italic w-[14%]">Pending</td>
-                                      <td className="py-3 font-medium text-slate-800 dark:text-slate-300 flex items-center gap-2 w-[32%]">
-                                        <span>{tx.description}</span>
-                                        {isLateFee && (
-                                          <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400">Action Required</span>
-                                        )}
-                                      </td>
-                                      <td className="py-3 w-[22%]">
-                                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300">
-                                          {catLabel}
-                                        </span>
-                                      </td>
-                                      <td className="py-3 text-xs text-slate-500 dark:text-slate-400 font-medium w-[18%]">
-                                        {formatTransactionCardLabel(tx)}
-                                      </td>
-                                      <td className={`py-3 text-right font-bold text-sm w-[14%] ${isCredit ? 'text-emerald-600 dark:text-emerald-400 italic' : isLateFee ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-300'}`}>
-                                        {isCredit ? '-' : ''}${amountVal.toFixed(2)}
-                                      </td>
-                                    </tr>
+                                    <React.Fragment key={rowKey}>
+                                      <tr className="hover:bg-slate-100/50 dark:hover:bg-slate-900/20 transition-colors">
+                                        <td className="py-3 text-xs text-slate-500 dark:text-slate-400 italic w-[14%]">Pending</td>
+                                        <td className="py-3 font-medium text-slate-800 dark:text-slate-300 w-[32%]">
+                                          <button
+                                            onClick={() => setExpandedTransactionKey(isExpanded ? null : rowKey)}
+                                            className="flex min-w-0 items-center gap-2 text-left cursor-pointer"
+                                          >
+                                            {isExpanded ? <ChevronDown className="w-4 h-4 flex-shrink-0 text-slate-400" /> : <ChevronRight className="w-4 h-4 flex-shrink-0 text-slate-400" />}
+                                            <span className="truncate">{tx.description}</span>
+                                            {isLateFee && (
+                                              <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400">Action Required</span>
+                                            )}
+                                          </button>
+                                        </td>
+                                        <td className="py-3 w-[22%]">
+                                          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300">
+                                            {catLabel}
+                                          </span>
+                                        </td>
+                                        <td className="py-3 text-xs text-slate-500 dark:text-slate-400 font-medium w-[18%]">
+                                          {formatTransactionCardLabel(tx)}
+                                        </td>
+                                        <td className={`py-3 text-right font-bold text-sm w-[14%] ${isCredit ? 'text-emerald-600 dark:text-emerald-400 italic' : isLateFee ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-300'}`}>
+                                          {isCredit ? '-' : ''}${amountVal.toFixed(2)}
+                                        </td>
+                                      </tr>
+                                      {isExpanded && (
+                                        <tr>
+                                          <td colSpan={5} className="pb-4">
+                                            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-4 text-xs text-slate-600 dark:text-slate-300">
+                                              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                                <span><strong>Authorized:</strong> {formatDateShort(tx.created_at || tx.timestamp)}</span>
+                                                <span><strong>Descriptor:</strong> {tx.description}</span>
+                                                <span><strong>MCC:</strong> {tx.merchant_category_code || 'N/A'}</span>
+                                                <span><strong>Card:</strong> {formatTransactionCardLabel(tx)}</span>
+                                                <span><strong>Merchant slug:</strong> {tx.merchant_slug || 'Unresolved'}</span>
+                                                <span><strong>Merchant ID:</strong> {tx.merchant_id || 'Snapshot only'}</span>
+                                                <span><strong>Store ID:</strong> {tx.merchant_store_id || 'Snapshot only'}</span>
+                                                <button className="text-left font-bold text-blue-650 dark:text-blue-300 hover:underline cursor-pointer">Report or dispute</button>
+                                              </div>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </React.Fragment>
                                   );
                                 })}
                               </tbody>
@@ -992,28 +1168,56 @@ function AccountsView({ fbUser, customerProfile }) {
                             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
                               {filteredTransactions.filter(t => !t.pending).map((tx, idx) => {
                                 const isPayment = tx.transaction_type === "DIRECTDEPOSIT" || (tx.amount_cents !== undefined ? tx.amount_cents > 0 : tx.amount < 0) || tx.description?.toUpperCase().includes('PAYMENT');
-                                const catLabel = tx.personal_finance_category?.primary 
-                                  ? tx.personal_finance_category.primary.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')
-                                  : "General";
-                                const amountVal = Math.abs(tx.amount || (tx.amount_cents ? tx.amount_cents / 100 : 0));
+                                const catLabel = formatCategoryLabel(tx, "General");
+                                const amountVal = Math.abs(getTransactionAmountCents(tx)) / 100;
+                                const rowKey = getTransactionKey(tx, idx, 'posted');
+                                const isExpanded = expandedTransactionKey === rowKey;
                                 return (
-                                  <tr key={`posted-${idx}`} className="hover:bg-slate-100/50 dark:hover:bg-slate-900/30 transition-colors">
-                                    <td className="py-4 text-xs text-slate-500 dark:text-slate-400 w-[14%]">
-                                      {tx.posted_timestamp || tx.posted_at ? new Date(tx.posted_timestamp || tx.posted_at).toLocaleDateString() : "Pending"}
-                                    </td>
-                                    <td className="py-4 font-medium text-slate-800 dark:text-slate-200 w-[32%]">{tx.description}</td>
-                                    <td className="py-4 w-[22%]">
-                                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300">
-                                        {catLabel}
-                                      </span>
-                                    </td>
-                                    <td className="py-4 text-xs text-slate-500 dark:text-slate-400 font-medium w-[18%]">
-                                      {formatTransactionCardLabel(tx)}
-                                    </td>
-                                    <td className={`py-4 text-right font-bold text-sm w-[14%] ${isPayment ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                                      {isPayment ? '-' : ''}${amountVal.toFixed(2)}
-                                    </td>
-                                  </tr>
+                                  <React.Fragment key={rowKey}>
+                                    <tr className="hover:bg-slate-100/50 dark:hover:bg-slate-900/30 transition-colors">
+                                      <td className="py-4 text-xs text-slate-500 dark:text-slate-400 w-[14%]">
+                                        {tx.posted_timestamp || tx.posted_at ? new Date(tx.posted_timestamp || tx.posted_at).toLocaleDateString() : "Pending"}
+                                      </td>
+                                      <td className="py-4 font-medium text-slate-800 dark:text-slate-200 w-[32%]">
+                                        <button
+                                          onClick={() => setExpandedTransactionKey(isExpanded ? null : rowKey)}
+                                          className="flex min-w-0 items-center gap-2 text-left cursor-pointer"
+                                        >
+                                          {isExpanded ? <ChevronDown className="w-4 h-4 flex-shrink-0 text-slate-400" /> : <ChevronRight className="w-4 h-4 flex-shrink-0 text-slate-400" />}
+                                          <span className="truncate">{tx.description}</span>
+                                        </button>
+                                      </td>
+                                      <td className="py-4 w-[22%]">
+                                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300">
+                                          {catLabel}
+                                        </span>
+                                      </td>
+                                      <td className="py-4 text-xs text-slate-500 dark:text-slate-400 font-medium w-[18%]">
+                                        {formatTransactionCardLabel(tx)}
+                                      </td>
+                                      <td className={`py-4 text-right font-bold text-sm w-[14%] ${isPayment ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                                        {isPayment ? '-' : ''}${amountVal.toFixed(2)}
+                                      </td>
+                                    </tr>
+                                    {isExpanded && (
+                                      <tr>
+                                        <td colSpan={5} className="pb-4">
+                                          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-4 text-xs text-slate-600 dark:text-slate-300">
+                                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                              <span><strong>Authorized:</strong> {formatDateShort(tx.created_at || tx.timestamp)}</span>
+                                              <span><strong>Posted:</strong> {formatDateShort(tx.posted_timestamp || tx.posted_at)}</span>
+                                              <span><strong>MCC:</strong> {tx.merchant_category_code || 'N/A'}</span>
+                                              <span><strong>Card:</strong> {formatTransactionCardLabel(tx)}</span>
+                                              <span><strong>Merchant slug:</strong> {tx.merchant_slug || 'Unresolved'}</span>
+                                              <span><strong>Merchant ID:</strong> {tx.merchant_id || 'Snapshot only'}</span>
+                                              <span><strong>Store ID:</strong> {tx.merchant_store_id || 'Snapshot only'}</span>
+                                              <button className="text-left font-bold text-blue-650 dark:text-blue-300 hover:underline cursor-pointer">Report or dispute</button>
+                                            </div>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </React.Fragment>
                                 );
                               })}
                             </tbody>
@@ -1101,6 +1305,31 @@ function AccountsView({ fbUser, customerProfile }) {
                 </div>
               )}
             </div>
+
+            {selectedAccountType === 'credit' && (
+              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-600 dark:text-emerald-300 flex-shrink-0">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 dark:text-white text-sm">Earn 4.85% APY on savings</h4>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Move idle cash when you are done reviewing this card ledger.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    const firstSavings = accountsData?.deposit_accounts?.find(a => a.account_type === 'SAVINGS');
+                    if (firstSavings) {
+                      handleSelectAccount(firstSavings.account_id, 'savings');
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-all cursor-pointer flex-shrink-0"
+                >
+                  Learn More
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

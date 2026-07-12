@@ -459,6 +459,10 @@ async def test_accounts_summary_and_pay_success(async_client, db_session):
     assert summary_data["deposit_accounts"][0]["cleared_balance_cents"] == 50000
     assert len(summary_data["credit_accounts"]) == 1
     assert summary_data["credit_accounts"][0]["cleared_balance_cents"] == 15000
+    assert summary_data["credit_accounts"][0]["statement_balance_cents"] == 15000
+    assert summary_data["credit_accounts"][0]["minimum_due_cents"] == 3500
+    assert summary_data["credit_accounts"][0]["payment_due_date"] is not None
+    assert summary_data["credit_accounts"][0]["statement_close_date"] is not None
     summary_card = summary_data["credit_accounts"][0]["cards"][0]
     assert summary_card["card_token"] == card.card_token
     assert summary_card["wallet_provider"] == "GOOGLE_WALLET"
