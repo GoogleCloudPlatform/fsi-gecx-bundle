@@ -17,8 +17,15 @@ import { MapPin, Search, Navigation, Clock, Phone, ExternalLink, Copy, Check } f
 import { getLocations } from '../utils/api.js';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
+import { useSettings } from '../context/SettingsContext.jsx';
+import { Joyride } from 'react-joyride';
 
 export default function LocatorView() {
+  const {
+    brandColorFrom,
+    resolvedTheme
+  } = useSettings();
+
   const [address, setAddress] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [locations, setLocations] = useState([]);
@@ -29,6 +36,27 @@ export default function LocatorView() {
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [copiedQuery, setCopiedQuery] = useState(false);
   const projectId = window.firebaseConfig?.projectId;
+
+  const [tourRun, setTourRun] = useState(false);
+  const [tourKey, setTourKey] = useState(0);
+  const [domReady, setDomReady] = useState(false);
+
+  useEffect(() => {
+    const isCompleted = localStorage.getItem('locator-tour-completed') === 'true';
+    if (!isCompleted) {
+      setTourRun(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    const checkElement = setInterval(() => {
+      if (document.querySelector('#locator-search-input')) {
+        setDomReady(true);
+        clearInterval(checkElement);
+      }
+    }, 50);
+    return () => clearInterval(checkElement);
+  }, []);
 
   // Helper to determine if a location is open right now
   const isLocationOpen = (hours) => {
@@ -135,7 +163,8 @@ export default function LocatorView() {
   }, [typeFilter]);
 
   return (
-    <div className="max-w-7xl mx-auto pt-28 pb-12 px-6 min-h-screen flex flex-col animate-fade-in w-full">
+    <>
+      <div className="max-w-7xl mx-auto pt-28 pb-12 px-6 min-h-screen flex flex-col animate-fade-in w-full">
       {/* Header */}
       <div className="w-full text-center space-y-3 mb-8 shrink-0 relative">
         <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-5xl">
@@ -143,8 +172,20 @@ export default function LocatorView() {
         </h1>
         <p className="max-w-2xl mx-auto text-base text-slate-500 dark:text-slate-400">
           Locate your nearest bank branches and ATMs. Get directions, hours, contact info, and more.
+            {' '}
+            <button
+              onClick={() => {
+                localStorage.removeItem('locator-tour-completed');
+                setTourKey(prev => prev + 1);
+                setTourRun(true);
+              }}
+              className="text-emerald-500 hover:text-emerald-600 font-semibold cursor-pointer underline text-xs ml-1"
+            >
+              Take the Tour
+            </button>
         </p>
         <button
+            id="locator-info-btn"
           onClick={() => setIsInfoModalOpen(true)}
           className="absolute right-0 top-1/2 -translate-y-1/2 p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm"
           title="GCP App Integration Info"
@@ -164,6 +205,7 @@ export default function LocatorView() {
             <form onSubmit={handleSearchSubmit} className="relative flex-1">
               <Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" />
               <input
+                  id="locator-search-input"
                 type="text"
                 placeholder="Enter city, state, address, or zip code"
                 value={address}
@@ -179,6 +221,7 @@ export default function LocatorView() {
             </form>
 
             <button
+                id="locator-gps-btn"
               onClick={fetchByGPS}
               className="px-5 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md hover:shadow-lg transition-all"
             >
@@ -190,7 +233,7 @@ export default function LocatorView() {
           {/* Filters & Toggle */}
           <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-end">
             {/* Type Filters */}
-            <div className="flex justify-end gap-1.5 bg-slate-100 dark:bg-slate-900 p-1.5 rounded-2xl h-[44px] items-center">
+              <div id="locator-type-filters" className="flex justify-end gap-1.5 bg-slate-100 dark:bg-slate-900 p-1.5 rounded-2xl h-[44px] items-center">
               {["ALL", "BRANCH", "ATM"].map((t) => (
                 <button
                   key={t}
@@ -207,7 +250,7 @@ export default function LocatorView() {
             </div>
 
             {/* Open Now Toggle */}
-            <label className="flex items-center gap-2.5 cursor-pointer select-none shrink-0 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 py-2 bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-855 transition-all h-[44px]">
+              <label id="locator-open-only-toggle" className="flex items-center gap-2.5 cursor-pointer select-none shrink-0 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 py-2 bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-855 transition-all h-[44px]">
               <div className="relative">
                 <input
                   type="checkbox"
@@ -382,5 +425,118 @@ export default function LocatorView() {
         </div>
       </GcpInfoModal>
     </div>
+
+      {/* Joyride Onboarding Tour */}
+      {tourRun && domReady && (
+        <Joyride
+          key={tourKey}
+          run={tourRun}
+          scrollOffset={120}
+          steps={[
+            {
+              target: '#locator-search-input',
+              content: 'Search for specific branches or ATMs by entering an city, state, address, or zip code.',
+              placement: 'top',
+              skipBeacon: true,
+            },
+            {
+              target: '#locator-gps-btn',
+              content: "Or click here to search for nearby branches and ATMs instantly using your device's GPS location.",
+              placement: 'top',
+              skipBeacon: true,
+            },
+            {
+              target: '#locator-type-filters',
+              content: 'Filter locations by service type: view Branches, ATMs, or both.',
+              placement: 'top',
+              skipBeacon: true,
+            },
+            {
+              target: '#locator-open-only-toggle',
+              content: 'Toggle this switch to only show locations that are currently open.',
+              placement: 'top',
+              skipBeacon: true,
+            },
+            {
+              target: '#locator-info-btn',
+              content: 'Curious about the tech stack? Click this cloud icon to view details about the underlying Cloud SQL table schema and run query analysis.',
+              placement: 'left',
+              skipBeacon: true,
+            }
+          ]}
+          continuous={true}
+          showSkipButton={true}
+          callback={(data) => {
+            const { status, type } = data;
+            if (['finished', 'skipped'].includes(status) || type === 'tour:end') {
+              setTourRun(false);
+              localStorage.setItem('locator-tour-completed', 'true');
+            }
+          }}
+          styles={{
+            options: {
+              arrowColor: resolvedTheme === 'dark' ? '#0f172a' : '#ffffff',
+              backgroundColor: resolvedTheme === 'dark' ? '#0f172a' : '#ffffff',
+              overlayColor: 'rgba(0, 0, 0, 0.55)',
+              primaryColor: brandColorFrom || '#10b981',
+              textColor: resolvedTheme === 'dark' ? '#f8fafc' : '#0f172a',
+              zIndex: 1000,
+            },
+            tooltip: {
+              borderRadius: '24px',
+              padding: '20px 24px',
+            },
+            tooltipContainer: {
+              textAlign: 'left',
+              fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+              borderRadius: '24px',
+              border: resolvedTheme === 'dark' ? '1px solid #1e293b' : '1px solid #e2e8f0',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            },
+            tooltipContent: {
+              padding: '12px 0 16px',
+              fontSize: '14px',
+              lineHeight: '1.6',
+              color: resolvedTheme === 'dark' ? '#cbd5e1' : '#334155',
+            },
+            tooltipFooter: {
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              marginTop: '8px',
+            },
+            buttonPrimary: {
+              borderRadius: '16px',
+              fontSize: '13px',
+              fontWeight: 'bold',
+              padding: '10px 24px',
+              backgroundColor: brandColorFrom || '#10b981',
+              color: '#ffffff',
+              outline: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              boxShadow: resolvedTheme === 'dark' ? 'none' : '0 4px 6px -1px rgba(16, 185, 129, 0.2)',
+            },
+            buttonBack: {
+              marginRight: '12px',
+              fontSize: '13px',
+              fontWeight: '600',
+              color: resolvedTheme === 'dark' ? '#94a3b8' : '#64748b',
+              outline: 'none',
+              border: 'none',
+              cursor: 'pointer',
+            },
+            buttonSkip: {
+              fontSize: '13px',
+              fontWeight: '600',
+              color: resolvedTheme === 'dark' ? '#94a3b8' : '#64748b',
+              outline: 'none',
+              border: 'none',
+              cursor: 'pointer',
+            }
+          }}
+        />
+      )}
+    </>
   );
 }
