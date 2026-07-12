@@ -490,17 +490,18 @@ export default function LocatorView() {
             tooltip: {
               borderRadius: '24px',
               padding: '20px 24px',
+              backgroundColor: resolvedTheme === 'dark' ? '#0f172a' : '#ffffff',
+              border: resolvedTheme === 'dark' ? '1px solid #1e293b' : '1px solid #e2e8f0',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
             },
             tooltipContainer: {
               textAlign: 'left',
               fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-              borderRadius: '24px',
-              border: resolvedTheme === 'dark' ? '1px solid #1e293b' : '1px solid #e2e8f0',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
             },
             tooltipContent: {
-              padding: '12px 0 16px',
+              padding: '12px 32px 16px 0',
               fontSize: '14px',
+              fontWeight: '500',
               lineHeight: '1.6',
               color: resolvedTheme === 'dark' ? '#cbd5e1' : '#334155',
             },
@@ -538,6 +539,10 @@ export default function LocatorView() {
               outline: 'none',
               border: 'none',
               cursor: 'pointer',
+            },
+            buttonClose: {
+              top: '16px',
+              right: '16px',
             }
           }}
         />
