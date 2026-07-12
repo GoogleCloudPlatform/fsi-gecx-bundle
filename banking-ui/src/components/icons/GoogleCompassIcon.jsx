@@ -20,7 +20,7 @@ export const GoogleCompassIcon = ({ className }) => (
     viewBox="0 0 24 24" 
     fill="none" 
     stroke="url(#google-compass-rainbow)" 
-    strokeWidth="2" 
+    strokeWidth="2.5" 
     strokeLinecap="round" 
     strokeLinejoin="round" 
     className={className}
