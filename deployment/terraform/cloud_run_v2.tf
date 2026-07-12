@@ -220,6 +220,14 @@ resource "google_cloud_run_v2_service" "banking_service" {
         value = join(",", local.database_iam_support_users)
       }
 
+      dynamic "env" {
+        for_each = length(local.full_reset_operator_emails) > 0 ? [1] : []
+        content {
+          name  = "FULL_RESET_OPERATOR_EMAILS"
+          value = join(",", local.full_reset_operator_emails)
+        }
+      }
+
       env {
         name  = "CORS_ALLOWED_ORIGINS"
         value = local.cors_allowed_origins
@@ -373,6 +381,10 @@ resource "google_cloud_run_v2_service" "banking_ui" {
       env {
         name  = "VITE_BANKING_API_URL"
         value = "https://${var.custom_domain}/api"
+      }
+      env {
+        name  = "VITE_DATA_GENERATOR_API_URL"
+        value = "https://${var.custom_domain}/data-generator"
       }
       dynamic "env" {
         for_each = var.stable_env_url != null && var.stable_env_url != "" ? [1] : []
@@ -729,12 +741,34 @@ resource "google_cloud_run_v2_service" "data_generator" {
       egress = "PRIVATE_RANGES_ONLY"
     }
 
+    volumes {
+      name = "cloudsql"
+      cloud_sql_instance {
+        instances = [google_sql_database_instance.banking_data.connection_name]
+      }
+    }
+
     containers {
       image = local.data_generator_image_url
+
+      volume_mounts {
+        name       = "cloudsql"
+        mount_path = "/cloudsql"
+      }
 
       env {
         name  = "BANKING_SERVICE_URL"
         value = "https://banking-service-${data.google_project.project.number}.${var.region}.run.app"
+      }
+
+      env {
+        name  = "DATA_GENERATOR_DATABASE_URL"
+        value = "postgresql+psycopg2://${google_sql_user.data_generator_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+      }
+
+      env {
+        name  = "DB_IAM_AUTH"
+        value = "true"
       }
 
       env {
@@ -803,6 +837,46 @@ resource "google_cloud_run_v2_service" "data_generator" {
       }
 
       env {
+        name  = "DATA_GENERATOR_OPERATOR_EMAIL_DOMAINS"
+        value = join(",", var.data_generator_operator_email_domains)
+      }
+
+      env {
+        name  = "SCHEDULE_DISPATCH_TRANSPORT"
+        value = "cloud_tasks"
+      }
+
+      env {
+        name  = "CLOUD_TASKS_PROJECT_ID"
+        value = var.project_id
+      }
+
+      env {
+        name  = "CLOUD_TASKS_LOCATION"
+        value = var.region
+      }
+
+      env {
+        name  = "CLOUD_TASKS_QUEUE"
+        value = google_cloud_tasks_queue.data_generator_synthetic_schedule[0].name
+      }
+
+      env {
+        name  = "DATA_GENERATOR_DISPATCH_URL"
+        value = "https://data-generator-${data.google_project.project.number}.${var.region}.run.app"
+      }
+
+      env {
+        name  = "DATA_GENERATOR_SERVICE_ACCOUNT_EMAIL"
+        value = google_service_account.data_generator_service_account.email
+      }
+
+      env {
+        name  = "SYNTHETIC_ALERT_FOLLOWUP_RATE"
+        value = tostring(var.data_generator_synthetic_alert_followup_rate)
+      }
+
+      env {
         name  = "REDIS_HOST"
         value = google_redis_instance.banking.host
       }
@@ -839,6 +913,11 @@ resource "google_cloud_run_v2_service" "data_generator" {
 
   depends_on = [
     google_project_service.run_googleapis_com,
+    google_sql_user.data_generator_iam_user,
+    google_cloud_tasks_queue.data_generator_synthetic_schedule,
+    google_service_account_iam_member.datagen_sa_cloudtasks_oidc_act_as_self,
+    google_project_iam_member.datagen_sa_cloudsql_client,
+    google_project_iam_member.datagen_sa_cloudsql_instance_user,
     google_secret_manager_secret_iam_member.data_generator_card_network_switch_token_accessor,
     google_secret_manager_secret_iam_member.data_generator_redis_password_accessor,
   ]
@@ -980,6 +1059,21 @@ resource "google_cloud_run_v2_job" "db_reset_job" {
           name  = "SEED_MOCK_USER_COUNT"
           value = tostring(var.seed_mock_user_count)
         }
+
+        env {
+          name  = "DATA_GENERATOR_CLOUD_TASKS_PROJECT_ID"
+          value = var.project_id
+        }
+
+        env {
+          name  = "DATA_GENERATOR_CLOUD_TASKS_LOCATION"
+          value = var.region
+        }
+
+        env {
+          name  = "DATA_GENERATOR_CLOUD_TASKS_QUEUE"
+          value = google_cloud_tasks_queue.data_generator_synthetic_schedule[0].name
+        }
       }
 
       vpc_access {
@@ -1003,6 +1097,88 @@ resource "google_cloud_run_v2_job" "db_reset_job" {
   depends_on = [
     google_project_service.run_googleapis_com,
     google_sql_user.banking_db_reset_iam_user,
+    google_cloud_tasks_queue.data_generator_synthetic_schedule,
+    google_project_iam_member.banking_reset_sa_cloudtasks_queue_admin,
+  ]
+}
+
+resource "google_cloud_run_v2_job" "fraud_alert_lifecycle" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  name     = "banking-fraud-alert-lifecycle"
+  location = var.region
+
+  template {
+    template {
+      max_retries     = 0
+      timeout         = "300s"
+      service_account = google_service_account.banking_service_account.email
+
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.banking_data.connection_name]
+        }
+      }
+
+      containers {
+        image   = local.banking_service_url
+        command = ["python"]
+        args    = ["scripts/expire_stale_fraud_alerts.py"]
+
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+
+        env {
+          name  = "DATABASE_URL"
+          value = "postgresql+psycopg2://${google_sql_user.banking_service_sa_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+        }
+
+        env {
+          name  = "DB_IAM_AUTH"
+          value = "true"
+        }
+
+        env {
+          name  = "PYTHONUNBUFFERED"
+          value = "1"
+        }
+
+        env {
+          name  = "FRAUD_ALERT_NO_RESPONSE_MAX_AGE_MINUTES"
+          value = tostring(var.fraud_alert_no_response_max_age_minutes)
+        }
+
+        env {
+          name  = "FRAUD_ALERT_LIFECYCLE_BATCH_LIMIT"
+          value = tostring(var.fraud_alert_lifecycle_batch_limit)
+        }
+      }
+
+      vpc_access {
+        network_interfaces {
+          network    = google_compute_network.fsi_gecx_vpc.name
+          subnetwork = google_compute_subnetwork.fsi_gecx_subnet.name
+        }
+        egress = "PRIVATE_RANGES_ONLY"
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version
+    ]
+  }
+
+  depends_on = [
+    google_project_service.run_googleapis_com,
+    google_sql_user.banking_service_sa_iam_user,
+    google_project_iam_member.banking_service_sa_cloudsql_client,
+    google_project_iam_member.banking_service_sa_cloudsql_instance_user,
   ]
 }
 

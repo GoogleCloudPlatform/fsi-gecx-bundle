@@ -82,6 +82,8 @@ When a decision is high enough to alert, the system creates or updates one open 
 
 Customer triage can resolve the alert as recognized activity or continue into remediation. Remediation can void suspicious authorization holds, apply provisional credits for posted transactions, issue a replacement card, escalate to specialist review, and write durable case actions with idempotency keys.
 
+If no customer response arrives within the configured demo lifecycle window, a scheduled Banking Service job moves stale synthetic/demo alerts out of `OPEN` into `EXPIRED_NO_CUSTOMER_RESPONSE`. The transition records a `FRAUD_ALERT_RESPONSE_TIMEOUT` case action and audit event; it does not mark the activity as customer-recognized or confirmed fraud.
+
 ---
 
 ## 3. Feature Model
@@ -120,6 +122,8 @@ There are two runtime thresholds:
 | :--- | :--- | :--- |
 | `FRAUD_FLAG_THRESHOLD` | `20` | Marks the authorization as `FLAGGED` and records the risk score on the hold. |
 | `FRAUD_ALERT_THRESHOLD` | `70` | Creates or updates an operational fraud alert and customer notification. |
+| `FRAUD_ALERT_NO_RESPONSE_MAX_AGE_MINUTES` | `30` | Lifecycle job age threshold for moving stale synthetic/demo alerts out of `OPEN` when no customer response arrives. |
+| `FRAUD_ALERT_LIFECYCLE_BATCH_LIMIT` | `100` | Maximum alerts processed by one lifecycle sweep. |
 
 This split lets the platform show lower-risk anomalies in analytical views without opening a customer-facing case for every suspicious signal. `FRAUD_MODEL_ALERTS_ENABLED=false` can disable alert creation while preserving scoring and decision history.
 

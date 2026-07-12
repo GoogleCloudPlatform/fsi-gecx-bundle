@@ -64,6 +64,14 @@ resource "google_cloud_run_service_iam_member" "banking_ui_iap_invoker_role" {
   member   = local.iap_service_account
 }
 
+resource "google_cloud_run_service_iam_member" "data_generator_iap_invoker_role" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  service  = google_cloud_run_v2_service.data_generator[0].name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = local.iap_service_account
+}
+
 resource "google_cloud_run_service_iam_member" "banking_service_invokes_voice_agent" {
   count    = var.deploy_cloud_run_services ? 1 : 0
   service  = google_cloud_run_v2_service.credit_support_agent[0].name
@@ -78,6 +86,14 @@ resource "google_cloud_run_service_iam_member" "banking_service_invokes_data_gen
   location = var.region
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
+resource "google_cloud_run_service_iam_member" "data_generator_invokes_self" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  service  = google_cloud_run_v2_service.data_generator[0].name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.data_generator_service_account.email}"
 }
 
 resource "google_cloud_run_service_iam_member" "data_generator_invokes_banking_service" {
@@ -133,6 +149,17 @@ resource "google_iap_web_backend_service_iam_member" "banking_service_access" {
 resource "google_iap_web_backend_service_iam_member" "banking_ui_access" {
   for_each            = var.deploy_cloud_run_services ? toset(local.cloud_run_iap_members) : toset([])
   web_backend_service = google_compute_backend_service.ui_backend[0].name
+  role                = "roles/iap.httpsResourceAccessor"
+  member              = each.key
+
+  depends_on = [
+    google_project_service.iap_googleapis_com
+  ]
+}
+
+resource "google_iap_web_backend_service_iam_member" "data_generator_access" {
+  for_each            = var.deploy_cloud_run_services ? toset(local.cloud_run_iap_members) : toset([])
+  web_backend_service = google_compute_backend_service.data_generator_backend[0].name
   role                = "roles/iap.httpsResourceAccessor"
   member              = each.key
 

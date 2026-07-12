@@ -31,7 +31,7 @@ from models.origination import Account
 from models.credit_card import CreditAccount, IssuedCard, TransactionAuthorization, PostedTransaction
 from models.audit import AuditOutbox
 from models.fraud import FraudAlert, FraudModelDecision
-from services.card_network import process_authorization
+from services.card_network import process_authorization, process_settlement
 from services.credit_card import queue_wallet_provisioning
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -242,6 +242,42 @@ def test_process_authorization_publishes_structured_fraud_decision(db_session):
     assert event_payload["transaction_channel"] == "ECOMMERCE"
     assert event_payload["merchant_country_code"] == "USA"
     assert event_payload["fraud_features"]["recent_auth_count_10m"] == 1
+
+
+def test_process_settlement_allows_flagged_authorization_hold(db_session):
+    user, checking, credit_acc, card = setup_test_cardholder_suite(db_session)
+    payload = {
+        "card_token": "tok_visa_swipe_tester",
+        "amount_cents": 95000,
+        "retrieval_reference_number": "888777666555",
+        "merchant_category_code": "5947",
+        "merchant_name": "RAZER GOLD GIFT CARD",
+        "card_network": "VISA",
+        "transaction_channel": "ECOMMERCE",
+        "entry_mode": "ECOMMERCE",
+        "merchant_country_code": "USA",
+        "is_digital_goods": True,
+        "is_fraud_simulation": True,
+        "risk_score": 91,
+        "created_at": datetime.datetime(2026, 7, 10, 12, 0, tzinfo=datetime.timezone.utc),
+    }
+
+    with patch("services.card_network._publish_redis_event"):
+        auth_result = process_authorization(db_session, payload)
+        settlement_result = process_settlement(
+            db_session,
+            {
+                "retrieval_reference_number": auth_result["retrieval_reference_number"],
+                "amount_cents": payload["amount_cents"],
+            },
+        )
+
+    auth = db_session.query(TransactionAuthorization).filter_by(retrieval_reference_number="888777666555").first()
+    posted = db_session.query(PostedTransaction).filter_by(retrieval_reference_number="888777666555").first()
+    assert auth is not None
+    assert auth.status == "SETTLED"
+    assert posted is not None
+    assert settlement_result["status"] == "SETTLED"
 
 @pytest.mark.asyncio
 async def test_card_network_authorize_success(async_client, db_session):

@@ -7,6 +7,7 @@ import logging
 import os
 import random
 import uuid
+from typing import Any
 
 import httpx
 from fastapi import HTTPException, status
@@ -213,6 +214,92 @@ class SimulationService:
                 detail="Could not connect to synthetic data generator.",
             ) from exc
 
+    async def plan_generation_scenario(self, request_payload: dict[str, Any]) -> dict:
+        return await self._dispatch_generation_scenario_request(
+            "/scenarios/plan",
+            request_payload,
+            action_name="scenario plan",
+        )
+
+    async def execute_generation_scenario(self, request_payload: dict[str, Any]) -> dict:
+        payload = dict(request_payload)
+        mode = str(payload.get("mode") or payload.get("plan", {}).get("mode") or "").lower()
+        if mode in {"execute", "replay"} and not (payload.get("default_card_token") or payload.get("default_card_tokens")):
+            active_cards = self.list_active_cards_for_simulation()
+            card_tokens = [
+                card["card_token"]
+                for card in active_cards.get("active_cards", [])
+                if card.get("generator_eligible", True)
+            ]
+            if not card_tokens:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No eligible active cards are available for scenario execution.")
+            payload["default_card_tokens"] = card_tokens
+
+        return await self._dispatch_generation_scenario_request(
+            "/scenarios/execute",
+            payload,
+            action_name="scenario execution",
+            read_timeout_seconds=max(SURGE_DISPATCH_READ_TIMEOUT_SECONDS, 20.0),
+        )
+
+    async def get_generation_scenario_outcomes(self, scenario_id: str) -> dict:
+        return await self._dispatch_generation_scenario_request(
+            f"/scenarios/{scenario_id}/outcomes",
+            None,
+            method="GET",
+            action_name="scenario outcomes",
+        )
+
+    async def _dispatch_generation_scenario_request(
+        self,
+        path: str,
+        request_payload: dict[str, Any] | None,
+        *,
+        method: str = "POST",
+        action_name: str,
+        read_timeout_seconds: float | None = None,
+    ) -> dict:
+        target_url = f"{DATA_GENERATOR_URL}{path}"
+        headers = self._build_service_headers(DATA_GENERATOR_URL)
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.request(
+                    method,
+                    target_url,
+                    json=request_payload,
+                    headers=headers,
+                    timeout=httpx.Timeout(
+                        connect=SURGE_DISPATCH_CONNECT_TIMEOUT_SECONDS,
+                        read=read_timeout_seconds or SURGE_DISPATCH_READ_TIMEOUT_SECONDS,
+                        write=10.0,
+                        pool=5.0,
+                    ),
+                )
+        except httpx.RequestError as exc:
+            logger.error("Network error trying to dispatch %s to data generator at %s: %s", action_name, target_url, exc)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Could not connect to synthetic data generator for {action_name}.",
+            ) from exc
+
+        try:
+            body = response.json()
+        except ValueError:
+            body = {"raw": response.text}
+
+        if response.status_code >= 400:
+            logger.warning(
+                "Data generator %s request failed. status=%s body=%s",
+                action_name,
+                response.status_code,
+                response.text,
+            )
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=body.get("detail") if isinstance(body, dict) else f"Data generator {action_name} request failed.",
+            )
+        return body
+
     def inject_targeted_fraud(self, token: ValidatedToken) -> dict:
         user = self._resolve_demo_user(token)
         self._enable_simulation_db_access()
@@ -390,6 +477,11 @@ class SimulationService:
             "stream_metrics": service.get_operational_stream_metrics(),
             "cdc_metrics": service.get_cached_datastream_metrics(),
         }
+
+    def get_operations_monitor_summary(self, window_minutes: int = 15) -> dict:
+        return CdcMonitoringService(self.db).get_operations_monitor_summary(
+            window_minutes=window_minutes
+        )
 
     def get_cdc_status(self) -> dict:
         return CdcMonitoringService(self.db).get_cdc_status()

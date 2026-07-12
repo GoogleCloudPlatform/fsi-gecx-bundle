@@ -166,6 +166,11 @@ resource "google_project_service" "cloudscheduler_googleapis_com" {
   disable_on_destroy = false
 }
 
+resource "google_project_service" "cloudtasks_googleapis_com" {
+  service            = "cloudtasks.googleapis.com"
+  disable_on_destroy = false
+}
+
 resource "google_project_service" "speech_googleapis_com" {
   service            = "speech.googleapis.com"
   disable_on_destroy = false

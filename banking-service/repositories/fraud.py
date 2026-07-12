@@ -2,7 +2,13 @@ import datetime
 
 from sqlalchemy.orm import Session
 
-from models.fraud import FraudAlert, FraudCaseAction, FraudModelDecision
+from models.credit_card import CreditAccount, TransactionAuthorization
+from models.fraud import (
+    FraudAlert,
+    FraudCaseAction,
+    FraudModelDecision,
+    ScenarioOutcome,
+)
 
 
 class FraudAlertRepository:
@@ -69,6 +75,28 @@ class FraudAlertRepository:
             .first()
         )
 
+    def count_open_alerts(self) -> int:
+        return self.db.query(FraudAlert).filter(FraudAlert.status == "OPEN").count()
+
+    def list_open_alerts_for_lifecycle_sweep(
+        self,
+        *,
+        cutoff: datetime.datetime,
+        sources: list[str],
+        limit: int,
+    ) -> list[FraudAlert]:
+        return (
+            self.db.query(FraudAlert)
+            .filter(
+                FraudAlert.status == "OPEN",
+                FraudAlert.created_at <= cutoff,
+                FraudAlert.source.in_(sources),
+            )
+            .order_by(FraudAlert.created_at.asc())
+            .limit(limit)
+            .all()
+        )
+
     def append_suspicious_authorization(
         self,
         *,
@@ -76,7 +104,9 @@ class FraudAlertRepository:
         authorization_id: str,
         suspicious_transaction: dict,
     ) -> FraudAlert | None:
-        alert = self.db.query(FraudAlert).filter(FraudAlert.id == fraud_alert_id).first()
+        alert = (
+            self.db.query(FraudAlert).filter(FraudAlert.id == fraud_alert_id).first()
+        )
         if not alert:
             return None
 
@@ -114,7 +144,9 @@ class FraudAlertRepository:
         fraud_alert_id,
         resolved_status: str,
     ) -> FraudAlert | None:
-        alert = self.db.query(FraudAlert).filter(FraudAlert.id == fraud_alert_id).first()
+        alert = (
+            self.db.query(FraudAlert).filter(FraudAlert.id == fraud_alert_id).first()
+        )
         if not alert:
             return None
         alert.status = resolved_status
@@ -136,7 +168,9 @@ class FraudAlertRepository:
         triage_message_thread_id: str | None = None,
         triage_message_id: str | None = None,
     ) -> FraudAlert | None:
-        alert = self.db.query(FraudAlert).filter(FraudAlert.id == fraud_alert_id).first()
+        alert = (
+            self.db.query(FraudAlert).filter(FraudAlert.id == fraud_alert_id).first()
+        )
         if not alert:
             return None
 
@@ -144,7 +178,9 @@ class FraudAlertRepository:
         alert.triaged_at = datetime.datetime.now(datetime.timezone.utc)
         alert.triage_summary = triage_summary
         if selected_disputed_authorization_ids is not None:
-            alert.selected_disputed_authorization_ids = selected_disputed_authorization_ids
+            alert.selected_disputed_authorization_ids = (
+                selected_disputed_authorization_ids
+            )
         if selected_disputed_transaction_ids is not None:
             alert.selected_disputed_transaction_ids = selected_disputed_transaction_ids
         if provisional_credit_cents is not None:
@@ -156,6 +192,29 @@ class FraudAlertRepository:
         if triage_message_id is not None:
             alert.triage_message_id = triage_message_id
 
+        self.db.add(alert)
+        self.db.flush()
+        return alert
+
+    def expire_no_response(
+        self,
+        *,
+        fraud_alert_id,
+        resolved_status: str = "EXPIRED_NO_CUSTOMER_RESPONSE",
+        remediation_status: str = "NO_CUSTOMER_RESPONSE",
+        triage_summary: str | None = None,
+    ) -> FraudAlert | None:
+        alert = (
+            self.db.query(FraudAlert).filter(FraudAlert.id == fraud_alert_id).first()
+        )
+        if not alert:
+            return None
+        now = datetime.datetime.now(datetime.timezone.utc)
+        alert.status = resolved_status
+        alert.remediation_status = remediation_status
+        alert.triaged_at = now
+        alert.resolved_at = now
+        alert.triage_summary = triage_summary
         self.db.add(alert)
         self.db.flush()
         return alert
@@ -223,7 +282,11 @@ class FraudAlertRepository:
         status: str,
         result_payload: dict | None = None,
     ) -> FraudCaseAction | None:
-        action = self.db.query(FraudCaseAction).filter(FraudCaseAction.id == action_id).first()
+        action = (
+            self.db.query(FraudCaseAction)
+            .filter(FraudCaseAction.id == action_id)
+            .first()
+        )
         if not action:
             return None
         action.status = status
@@ -282,9 +345,105 @@ class FraudDecisionRepository:
         self.db.flush()
         return record
 
-    def get_decision_for_authorization(self, *, authorization_id) -> FraudModelDecision | None:
+    def get_decision_for_authorization(
+        self, *, authorization_id
+    ) -> FraudModelDecision | None:
         return (
             self.db.query(FraudModelDecision)
             .filter(FraudModelDecision.authorization_id == authorization_id)
             .first()
         )
+
+
+class ScenarioOutcomeRepository:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def record_outcome(
+        self,
+        *,
+        scenario_id: str,
+        execution_id: str,
+        event_id: str,
+        outcome_label: str,
+        authorization_id=None,
+        transaction_id=None,
+        fraud_alert_id=None,
+        card_token: str | None = None,
+        expected_reason_codes: list[str] | None = None,
+        actual_reason_codes: list[str] | None = None,
+        expected_score_band: str | None = None,
+        actual_risk_score: int | None = None,
+        model_version: str | None = None,
+        synthetic_label: bool = True,
+        operational_action: str | None = None,
+        operational_status: str | None = None,
+    ) -> ScenarioOutcome:
+        existing = (
+            self.db.query(ScenarioOutcome)
+            .filter(
+                ScenarioOutcome.scenario_id == scenario_id,
+                ScenarioOutcome.execution_id == execution_id,
+                ScenarioOutcome.event_id == event_id,
+            )
+            .first()
+        )
+        if existing:
+            return existing
+
+        customer_id = None
+        credit_account_id = None
+        card_id = None
+        if fraud_alert_id:
+            alert = (
+                self.db.query(FraudAlert)
+                .filter(FraudAlert.id == fraud_alert_id)
+                .first()
+            )
+            if alert:
+                customer_id = alert.customer_id
+                credit_account_id = alert.credit_account_id
+                card_id = alert.card_id
+        if authorization_id and (
+            customer_id is None or credit_account_id is None or card_id is None
+        ):
+            authorization = (
+                self.db.query(TransactionAuthorization)
+                .filter(TransactionAuthorization.id == authorization_id)
+                .first()
+            )
+            if authorization:
+                credit_account_id = credit_account_id or authorization.account_id
+                card_id = card_id or authorization.card_id
+                account = (
+                    self.db.query(CreditAccount)
+                    .filter(CreditAccount.id == authorization.account_id)
+                    .first()
+                )
+                if account:
+                    customer_id = customer_id or account.customer_id
+
+        record = ScenarioOutcome(
+            scenario_id=scenario_id,
+            execution_id=execution_id,
+            event_id=event_id,
+            authorization_id=authorization_id,
+            transaction_id=transaction_id,
+            fraud_alert_id=fraud_alert_id,
+            customer_id=customer_id,
+            credit_account_id=credit_account_id,
+            card_id=card_id,
+            card_token=card_token,
+            outcome_label=outcome_label,
+            expected_reason_codes=expected_reason_codes or [],
+            actual_reason_codes=actual_reason_codes or [],
+            expected_score_band=expected_score_band,
+            actual_risk_score=actual_risk_score,
+            model_version=model_version,
+            synthetic_label=synthetic_label,
+            operational_action=operational_action,
+            operational_status=operational_status,
+        )
+        self.db.add(record)
+        self.db.flush()
+        return record

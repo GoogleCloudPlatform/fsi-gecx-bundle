@@ -42,21 +42,6 @@ steps:
         /workspace/terraform apply -auto-approve -var-file=./environment/${PROJECT_ID}/terraform.tfvars
     dir: "deployment/terraform"
 
-  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    id: "run-db-migration-job"
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |
-        if gcloud run jobs describe banking-db-migrate --region "${_REGION}" >/dev/null 2>&1; then
-          echo "Executing database migrations after Terraform apply so IAM DB users receive grants..."
-          gcloud run jobs execute banking-db-migrate \
-            --region "${_REGION}" \
-            --wait
-        else
-          echo "banking-db-migrate job not found; skipping post-apply migration."
-        fi
-
 options:
   pool:
     name: "projects/${PROJECT_ID}/locations/${_REGION}/workerPools/build-pool"

@@ -15,11 +15,20 @@
 import axios from 'axios';
 
 const backendUrl = window.env?.BANKING_API_URL || import.meta.env.VITE_BANKING_API_URL || "http://localhost:8080";
+const defaultDataGeneratorUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:8001'
+  : `${window.location.origin}/data-generator`;
+const dataGeneratorUrl = window.env?.DATA_GENERATOR_API_URL || import.meta.env.VITE_DATA_GENERATOR_API_URL || defaultDataGeneratorUrl;
 const REQUEST_TIMEOUT_MS = 20000;
 const TOKEN_TIMEOUT_MS = 8000;
 
 const api = axios.create({
   baseURL: backendUrl,
+  timeout: REQUEST_TIMEOUT_MS,
+});
+
+const dataGeneratorApi = axios.create({
+  baseURL: dataGeneratorUrl,
   timeout: REQUEST_TIMEOUT_MS,
 });
 
@@ -70,8 +79,39 @@ api.interceptors.request.use(
   }
 );
 
+dataGeneratorApi.interceptors.request.use(
+  async (config) => {
+    const isAbsolute = config.url.startsWith('http://') || config.url.startsWith('https://');
+    const isDataGenerator = !isAbsolute || config.url.startsWith(dataGeneratorUrl);
+
+    if (isDataGenerator) {
+      if (window.firebaseAuth && typeof window.firebaseAuth.getCurrentUser === 'function') {
+        const user = window.firebaseAuth.getCurrentUser();
+        if (user) {
+          try {
+            const token = await getFirebaseIdTokenWithTimeout(user);
+            if (token) {
+              config.headers.Authorization = `Bearer ${token}`;
+            }
+          } catch (error) {
+            console.error('Error getting Firebase ID token:', error);
+          }
+        }
+      }
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 export function getBackendApiUrl() {
   return backendUrl;
+}
+
+export function getDataGeneratorApiUrl() {
+  return dataGeneratorUrl;
 }
 
 export async function getBackendAuthHeaders(initialHeaders = {}) {
@@ -348,6 +388,52 @@ export async function triggerSpendSurge() {
   return res.data;
 }
 
+export async function planGenerationScenario(payload) {
+  const res = await dataGeneratorApi.post('scenarios/plan', payload);
+  return res.data;
+}
+
+export async function executeGenerationScenario(payload) {
+  const route = payload?.mode === 'replay' ? 'scenarios/replay' : 'scenarios/execute';
+  const res = await dataGeneratorApi.post(route, payload);
+  return res.data;
+}
+
+export async function enqueueScheduledScenario(payload) {
+  const res = await dataGeneratorApi.post('scheduled-events/enqueue', payload);
+  return res.data;
+}
+
+export async function listScheduledEvents(params = {}) {
+  const res = await dataGeneratorApi.get('scheduled-events', { params });
+  return res.data;
+}
+
+export async function getGenerationScenarioOutcomes(scenarioId) {
+  const res = await dataGeneratorApi.get(`scenarios/${encodeURIComponent(scenarioId)}/outcomes`);
+  return res.data;
+}
+
+export async function getDataGeneratorStatus() {
+  const res = await dataGeneratorApi.get('simulation/status');
+  return res.data;
+}
+
+export async function getAmbientLoadProfile() {
+  const res = await dataGeneratorApi.get('ambient/profile');
+  return res.data;
+}
+
+export async function updateAmbientLoadProfile(payload) {
+  const res = await dataGeneratorApi.put('ambient/profile', payload);
+  return res.data;
+}
+
+export async function resetAmbientLoadProfile() {
+  const res = await dataGeneratorApi.post('ambient/profile/reset');
+  return res.data;
+}
+
 export async function injectFraudAnomaly() {
   const res = await api.post('v1/simulation/inject-anomaly');
   return res.data;
@@ -360,6 +446,13 @@ export async function injectLateFee() {
 
 export async function getGlobalStream() {
   const res = await api.get('v1/simulation/global-stream');
+  return res.data;
+}
+
+export async function getOperationsMonitorSummary({ windowMinutes = 15 } = {}) {
+  const res = await api.get('v1/simulation/operations-summary', {
+    params: { window_minutes: windowMinutes },
+  });
   return res.data;
 }
 

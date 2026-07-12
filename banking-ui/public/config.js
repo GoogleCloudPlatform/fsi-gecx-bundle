@@ -16,6 +16,7 @@
 
 window.env = {
   BANKING_API_URL: "http://localhost:8080",
+  DATA_GENERATOR_API_URL: "http://localhost:8001",
   ENABLE_CCAI: false,
   CCAI_COMPANY_ID: "17762261086439462b8f0b64f6cd0d5e3",
   CCAI_HOST: "https://fsi-test-4000-jz3ioz1.uc1.ccaiplatform.com",

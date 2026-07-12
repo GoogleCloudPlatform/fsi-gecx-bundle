@@ -112,20 +112,6 @@
     "fico_score": 810
   },
   {
-    "name": "Demis Hassabis",
-    "email": "demis.hassabis@nova.horizon.test",
-    "role": "CEO, Google DeepMind",
-    "home_metro": "MOUNTAIN VIEW CA",
-    "residential_address": {
-      "street": "700 Castro St",
-      "city": "Mountain View",
-      "state": "CA",
-      "postal_code": "94041"
-    },
-    "credit_tier": "PRIME_EXCELLENT",
-    "fico_score": 845
-  },
-  {
     "name": "Sanjay Ghemawat",
     "email": "sanjay.ghemawat@nova.horizon.test",
     "role": "Google Distinguished Fellow",

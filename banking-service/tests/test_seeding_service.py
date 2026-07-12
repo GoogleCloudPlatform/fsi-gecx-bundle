@@ -14,6 +14,7 @@
 
 import pytest
 import json
+from types import SimpleNamespace
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from utils.database import Base
@@ -78,6 +79,67 @@ def test_perform_algorithmic_seeding_can_reset_existing_card_data(db_session):
     assert len(second_manifest) >= 19
     assert db_session.query(User).count() >= 19
     assert db_session.query(IssuedCard).count() >= 19
+
+
+def test_purge_synthetic_cloud_tasks_queue_skips_when_unconfigured(monkeypatch):
+    monkeypatch.delenv("DATA_GENERATOR_CLOUD_TASKS_PROJECT_ID", raising=False)
+    monkeypatch.delenv("DATA_GENERATOR_CLOUD_TASKS_LOCATION", raising=False)
+    monkeypatch.delenv("DATA_GENERATOR_CLOUD_TASKS_QUEUE", raising=False)
+    monkeypatch.delenv("CLOUD_TASKS_PROJECT_ID", raising=False)
+    monkeypatch.delenv("CLOUD_TASKS_LOCATION", raising=False)
+    monkeypatch.delenv("CLOUD_TASKS_QUEUE", raising=False)
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("PROJECT_ID", raising=False)
+
+    assert seeding_service.purge_synthetic_cloud_tasks_queue() is False
+
+
+def test_purge_synthetic_cloud_tasks_queue_calls_cloud_tasks_purge(monkeypatch):
+    calls = []
+
+    class FakeCredentials:
+        def refresh(self, request):
+            self.refreshed = True
+
+    class FakeSession:
+        def __init__(self, credentials):
+            self.credentials = credentials
+
+        def post(self, url, timeout):
+            calls.append({"url": url, "timeout": timeout})
+            return SimpleNamespace(status_code=200, text="{}")
+
+    monkeypatch.setenv("DATA_GENERATOR_CLOUD_TASKS_PROJECT_ID", "demo-project")
+    monkeypatch.setenv("DATA_GENERATOR_CLOUD_TASKS_LOCATION", "us-central1")
+    monkeypatch.setenv("DATA_GENERATOR_CLOUD_TASKS_QUEUE", "data-generator-synthetic-schedule")
+    monkeypatch.setattr(
+        seeding_service.google.auth,
+        "default",
+        lambda scopes: (FakeCredentials(), "demo-project"),
+    )
+    monkeypatch.setattr(seeding_service, "AuthorizedSession", FakeSession)
+
+    assert seeding_service.purge_synthetic_cloud_tasks_queue() is True
+    assert calls == [
+        {
+            "url": "https://cloudtasks.googleapis.com/v2/projects/demo-project/locations/us-central1/queues/data-generator-synthetic-schedule:purge",
+            "timeout": 30,
+        }
+    ]
+
+
+def test_clean_database_invokes_synthetic_scheduler_cleanup(monkeypatch, db_session):
+    called = {}
+
+    def fake_cleanup(db):
+        called["db"] = db
+        return {"deleted_rows": 3, "purged_cloud_tasks_queue": True}
+
+    monkeypatch.setattr(seeding_service, "clear_synthetic_scheduler_artifacts", fake_cleanup)
+
+    seeding_service.clean_database(db_session)
+
+    assert called["db"] is db_session
 
 
 def test_provision_user_suite_generates_unique_card_tokens_for_same_name(db_session):

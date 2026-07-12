@@ -168,6 +168,8 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
             return {
                 "action_code": action_code,
                 "auth_code": existing_auth.auth_code,
+                "authorization_id": str(existing_auth.id),
+                "retrieval_reference_number": existing_auth.retrieval_reference_number,
                 "status": existing_auth.status,
                 "decline_reason": existing_auth.decline_reason
             }
@@ -333,6 +335,7 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
                 "model_version": fraud_decision.model_version,
             },
         )
+        fraud_alert_result = None
         if (
             fraud_service.alerts_enabled
             and fraud_decision.is_flagged
@@ -340,7 +343,7 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
         ):
             customer = db.query(User).filter(User.id == account.customer_id).first()
             if customer:
-                FraudAlertService(db).create_or_update_alert_from_model_decision(
+                fraud_alert_result = FraudAlertService(db).create_or_update_alert_from_model_decision(
                     customer=customer,
                     card=card,
                     credit_account=account,
@@ -377,6 +380,9 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
         return {
             "action_code": "00",
             "auth_code": auth_code,
+            "authorization_id": str(auth_hold.id),
+            "retrieval_reference_number": auth_hold.retrieval_reference_number,
+            "fraud_alert_id": fraud_alert_result.get("fraud_alert_id") if fraud_alert_result else None,
             "status": auth_status,
             "fraud_risk_score": risk_score,
             "fraud_decision": fraud_decision.to_dict(),
@@ -401,11 +407,12 @@ def process_settlement(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
         repo = CreditCardRepository(db)
         rrn = payload.get("retrieval_reference_number")
         settle_amount = payload.get("amount_cents")
-        # Find active pending authorization hold
-        auth = repo.get_authorization_by_rrn(rrn, status="PENDING")
+        # Find an active authorization hold. Fraud-scored holds may be FLAGGED
+        # while still awaiting customer confirmation or network clearing.
+        auth = repo.get_authorization_by_rrn(rrn, statuses=["PENDING", "FLAGGED"])
 
         if not auth:
-            raise ValueError(f"No pending authorization hold found with RRN: {rrn}")
+            raise ValueError(f"No active authorization hold found with RRN: {rrn}")
 
         # Mark authorization as SETTLED
         auth.status = "SETTLED"
@@ -474,10 +481,10 @@ def process_reversal(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
         repo = CreditCardRepository(db)
         rrn = payload.get("retrieval_reference_number")
 
-        auth = repo.get_authorization_by_rrn(rrn, status="PENDING")
+        auth = repo.get_authorization_by_rrn(rrn, statuses=["PENDING", "FLAGGED"])
 
         if not auth:
-            raise ValueError(f"No pending authorization hold found with RRN: {rrn} to reverse.")
+            raise ValueError(f"No active authorization hold found with RRN: {rrn} to reverse.")
 
         # Void hold
         auth.status = "REVERSED"

@@ -47,6 +47,7 @@ class FakeRedis:
     def delete(self, key):
         self.store.pop(key, None)
 
+
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
@@ -161,21 +162,192 @@ def test_get_merchants_falls_back_to_legacy_route_shape(monkeypatch):
         }
     ]
 
+
+def test_build_persona_profile_and_behavior_policy_shapes_card_usage():
+    ypro = main.build_persona_profile(
+        {"persona": "YPRO", "cardholder_name": "Ava Taylor"}
+    )
+    ypro_policy = main.build_behavior_policy(
+        {"persona": "YPRO", "amount_min": 400, "amount_max": 3500}, ypro
+    )
+    hnw = main.build_persona_profile(
+        {"persona": "HNW", "cardholder_name": "Executive Traveler"}
+    )
+
+    assert ypro.persona_id == "young_professional_digital"
+    assert ypro.digital_commerce_propensity > ypro.travel_propensity
+    assert "4899" in ypro_policy.preferred_mccs
+    assert ypro_policy.ecommerce_context
+    assert hnw.persona_id == "hnw_travel"
+    assert hnw.travel_propensity > ypro.travel_propensity
+
+
+def test_ambient_profile_control_surface_updates_runtime_knobs():
+    client.post("/ambient/profile/reset")
+
+    response = client.put(
+        "/ambient/profile",
+        json={
+            "profile_name": "agent-travel-warmup",
+            "pulse_min_events": 3,
+            "pulse_max_events": 3,
+            "pulse_window_seconds": 12,
+            "workflow_concurrency": 2,
+            "persona_weights": {"YPRO": 1, "HNW": 4},
+            "travel_multiplier": 2.5,
+            "ecommerce_multiplier": 0.5,
+            "fraud_pattern_enabled": True,
+            "fraud_pattern_rate": 0.25,
+            "fraud_pattern_max_per_pulse": 2,
+            "auto_paydown_max_accounts_per_pulse": 1,
+            "updated_by": "agentic-test",
+        },
+    )
+
+    assert response.status_code == 200
+    profile = response.json()
+    assert profile["profile_name"] == "agent-travel-warmup"
+    assert profile["pulse_min_events"] == 3
+    assert profile["persona_weights"] == {"YPRO": 1.0, "HNW": 4.0}
+
+    status_response = client.get("/simulation/status")
+    assert status_response.status_code == 200
+    status_body = status_response.json()
+    assert status_body["pulse"]["min_events"] == 3
+    assert status_body["fraud_patterns"]["enabled"] is True
+    assert "/ambient/profile" in status_body["supported_routes"]
+    assert status_body["ambient_profile"]["updated_by"] == "agentic-test"
+
+    client.post("/ambient/profile/reset")
+
+
+def test_select_ambient_card_uses_persona_weights(monkeypatch):
+    cards = [
+        {"card_token": "tok_prime", "persona": "PRIME"},
+        {"card_token": "tok_ypro", "persona": "YPRO"},
+    ]
+    profile = main.AmbientLoadProfile(persona_weights={"PRIME": 1, "YPRO": 9})
+
+    def fake_choices(population, weights=None, k=1):
+        assert population == cards
+        assert weights == [1.0, 9.0]
+        assert k == 1
+        return [cards[1]]
+
+    monkeypatch.setattr(main.random, "choices", fake_choices)
+
+    assert main.select_ambient_card(cards, profile)["card_token"] == "tok_ypro"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_simulate_swipe_event_uses_persona_ecommerce_context(monkeypatch):
+    monkeypatch.setattr(
+        main,
+        "get_merchants",
+        lambda: [
+            {
+                "merchant": "Streaming Merchant",
+                "descriptor": "STREAMING MERCHANT*ONLINE",
+                "category": "Streaming & Entertainment",
+                "mcc": "4899",
+                "country_code": "USA",
+                "city": None,
+                "region": None,
+                "postal_code": None,
+                "latitude": None,
+                "longitude": None,
+                "card_present_capable": False,
+                "ecommerce_capable": True,
+                "high_risk_flags": [],
+                "is_international": False,
+                "risk_score": 0,
+            },
+            {
+                "merchant": "Coffee Shop",
+                "descriptor": "COFFEE SHOP",
+                "category": "Coffee",
+                "mcc": "5814",
+                "country_code": "USA",
+                "city": "Mountain View",
+                "region": "CA",
+                "postal_code": "94043",
+                "latitude": 37.4,
+                "longitude": -122.1,
+                "card_present_capable": True,
+                "ecommerce_capable": False,
+                "high_risk_flags": [],
+                "is_international": False,
+                "risk_score": 0,
+            },
+        ],
+    )
+    random_values = iter([0.5, 0.0])
+    monkeypatch.setattr(main.random, "random", lambda: next(random_values, 0.5))
+    monkeypatch.setattr(main.random, "choice", lambda seq: seq[0])
+    monkeypatch.setattr(
+        main.random, "choices", lambda population, weights=None, k=1: ["PENDING"]
+    )
+
+    auth_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
+    ).mock(
+        return_value=httpx.Response(
+            200, json={"action_code": "00", "auth_code": "123456", "status": "PENDING"}
+        )
+    )
+
+    async with httpx.AsyncClient() as async_client:
+        result = await main.simulate_swipe_event(
+            async_client,
+            {
+                "card_token": "tok_ypro",
+                "cardholder_name": "Ava Taylor",
+                "persona": "YPRO",
+                "mccs": ["4899", "5814"],
+                "amount_min": 400,
+                "amount_max": 3500,
+                "available_credit_cents": 100000,
+            },
+        )
+
+    assert result["authorized"] is True
+    payload = json.loads(auth_route.calls[0].request.content.decode())
+    assert payload["merchant_category_code"] == "4899"
+    assert payload["transaction_channel"] == "ECOMMERCE"
+    assert payload["entry_mode"] == "ECOMMERCE"
+
+
 @pytest.mark.asyncio
 @respx.mock
 async def test_simulate_pulse_success():
     original_plan_builder = main.build_randomized_pulse_plan
     original_randint = main.random.randint
     original_auto_paydown = main.auto_paydown_high_utilization_cards
-    main.build_randomized_pulse_plan = lambda total_events, window_seconds=58: [0.0, 0.0, 0.0, 0.0]
-    main.random.randint = lambda a, b: 4 if (a, b) == (8, 12) else original_randint(a, b)
-    async def noop_auto_paydown(client, cards, trigger_utilization=0.65, target_utilization=0.35):
+    main.build_randomized_pulse_plan = lambda total_events, window_seconds=58: [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ]
+    main.random.randint = lambda a, b: (
+        4 if (a, b) == (8, 12) else original_randint(a, b)
+    )
+
+    async def noop_auto_paydown(
+        client, cards, trigger_utilization=0.65, target_utilization=0.35, **kwargs
+    ):
         return []
+
     main.auto_paydown_high_utilization_cards = noop_auto_paydown
 
     # Mock Gateway Endpoints
-    auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
-        return_value=httpx.Response(200, json={"action_code": "00", "auth_code": "123456", "status": "PENDING"})
+    auth_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
+    ).mock(
+        return_value=httpx.Response(
+            200, json={"action_code": "00", "auth_code": "123456", "status": "PENDING"}
+        )
     )
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
         return_value=httpx.Response(200, json={"status": "SETTLED"})
@@ -183,7 +355,7 @@ async def test_simulate_pulse_success():
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse").mock(
         return_value=httpx.Response(200, json={"status": "REVERSED"})
     )
-    
+
     # Trigger simulation pulse
     try:
         response = client.post("/simulate-pulse")
@@ -197,19 +369,80 @@ async def test_simulate_pulse_success():
         main.build_randomized_pulse_plan = original_plan_builder
         main.random.randint = original_randint
         main.auto_paydown_high_utilization_cards = original_auto_paydown
-    
+
     # Assert auth requests were sent with the correct headers
     assert auth_route.called
     for request in auth_route.calls:
-        assert request[0].headers.get("X-Card-Network-Token") == main.get_card_network_token()
+        assert (
+            request[0].headers.get("X-Card-Network-Token")
+            == main.get_card_network_token()
+        )
         payload = request[0].read().decode()
         parsed = json.loads(payload)
         assert "card_token" in parsed
         assert "amount_cents" in parsed
         assert "retrieval_reference_number" in parsed
         assert parsed["transaction_channel"] in {"CARD_PRESENT", "WALLET", "ECOMMERCE"}
-        assert parsed["entry_mode"] in {"CHIP", "CONTACTLESS", "MAG_STRIPE", "ECOMMERCE"}
+        assert parsed["entry_mode"] in {
+            "CHIP",
+            "CONTACTLESS",
+            "MAG_STRIPE",
+            "ECOMMERCE",
+        }
         assert parsed["merchant_country_code"] == "USA"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_simulate_pulse_uses_runtime_ambient_profile(monkeypatch):
+    client.post("/ambient/profile/reset")
+    client.put(
+        "/ambient/profile",
+        json={
+            "profile_name": "agent-quiet",
+            "pulse_min_events": 2,
+            "pulse_max_events": 2,
+            "pulse_window_seconds": 9,
+            "workflow_concurrency": 1,
+            "fraud_pattern_enabled": False,
+            "auto_paydown_max_accounts_per_pulse": 0,
+        },
+    )
+    original_plan_builder = main.build_randomized_pulse_plan
+    observed = {}
+
+    def fake_plan(total_events, window_seconds=58):
+        observed["total_events"] = total_events
+        observed["window_seconds"] = window_seconds
+        return [0.0, 0.0]
+
+    async def noop_auto_paydown(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(main, "build_randomized_pulse_plan", fake_plan)
+    monkeypatch.setattr(main, "auto_paydown_high_utilization_cards", noop_auto_paydown)
+
+    auth_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
+    ).mock(
+        return_value=httpx.Response(
+            200, json={"action_code": "00", "auth_code": "123456", "status": "PENDING"}
+        )
+    )
+
+    try:
+        response = client.post("/simulate-pulse")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["scheduled_events"] == 2
+        assert body["distribution_window_seconds"] == 9
+        assert body["ambient_profile"]["profile_name"] == "agent-quiet"
+        assert observed == {"total_events": 2, "window_seconds": 9}
+        assert auth_route.call_count == 2
+    finally:
+        main.build_randomized_pulse_plan = original_plan_builder
+        client.post("/ambient/profile/reset")
+
 
 @pytest.mark.asyncio
 @respx.mock
@@ -217,20 +450,41 @@ async def test_simulate_pulse_declined():
     original_plan_builder = main.build_randomized_pulse_plan
     original_randint = main.random.randint
     original_auto_paydown = main.auto_paydown_high_utilization_cards
-    main.build_randomized_pulse_plan = lambda total_events, window_seconds=58: [0.0, 0.0, 0.0, 0.0]
-    main.random.randint = lambda a, b: 4 if (a, b) == (8, 12) else original_randint(a, b)
-    async def noop_auto_paydown(client, cards, trigger_utilization=0.65, target_utilization=0.35):
+    main.build_randomized_pulse_plan = lambda total_events, window_seconds=58: [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ]
+    main.random.randint = lambda a, b: (
+        4 if (a, b) == (8, 12) else original_randint(a, b)
+    )
+
+    async def noop_auto_paydown(
+        client, cards, trigger_utilization=0.65, target_utilization=0.35, **kwargs
+    ):
         return []
+
     main.auto_paydown_high_utilization_cards = noop_auto_paydown
 
     # Mock Gateway declines swipes (action_code = 51)
-    auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
-        return_value=httpx.Response(200, json={"action_code": "51", "auth_code": "000000", "status": "DECLINED", "decline_reason": "INSUFFICIENT_FUNDS"})
+    auth_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "action_code": "51",
+                "auth_code": "000000",
+                "status": "DECLINED",
+                "decline_reason": "INSUFFICIENT_FUNDS",
+            },
+        )
     )
     settle_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
         return_value=httpx.Response(200, json={"status": "SETTLED"})
     )
-    
+
     try:
         response = client.post("/simulate-pulse")
         assert response.status_code == 200
@@ -245,10 +499,15 @@ async def test_simulate_pulse_declined():
         main.random.randint = original_randint
         main.auto_paydown_high_utilization_cards = original_auto_paydown
 
+
 @respx.mock
 def test_simulate_surge_success():
-    respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
-        return_value=httpx.Response(200, json={"action_code": "00", "auth_code": "123456", "status": "PENDING"})
+    auth_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
+    ).mock(
+        return_value=httpx.Response(
+            200, json={"action_code": "00", "auth_code": "123456", "status": "PENDING"}
+        )
     )
     respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/settle").mock(
         return_value=httpx.Response(200, json={"status": "SETTLED"})
@@ -258,24 +517,40 @@ def test_simulate_surge_success():
     )
     response = client.post("/simulate-surge", json={})
     assert response.status_code == 200
-    assert response.json()["status"] == "SUCCESS"
-    assert response.json()["swipes_attempted"] == 50
+    body = response.json()
+    assert body["status"] == "SUCCESS"
+    assert body["swipes_attempted"] == 50
+    assert body["planned_event_count"] == 50
+    assert body["scenario_id"].startswith("lakehouse_spend_velocity_surge-")
+    assert (
+        body["settlements_created"]
+        + body["reversals_created"]
+        + body["pending_holds_created"]
+        == 50
+    )
+    assert body["validation_hints"]
+    first_payload = json.loads(auth_route.calls[0].request.content.decode())
+    assert first_payload["synthetic_scenario_id"] == body["scenario_id"]
+    assert first_payload["synthetic_event_id"].startswith("surge-event-")
 
 
 def test_simulate_surge_fails_without_spendable_cards():
-    response = client.post("/simulate-surge", json={
-        "active_cards": [
-            {
-                "card_token": "tok_dead",
-                "cardholder_name": "Declined User",
-                "persona": "PRIME",
-                "mccs": ["5411"],
-                "amount_min": 1500,
-                "amount_max": 15000,
-                "available_credit_cents": 0,
-            }
-        ]
-    })
+    response = client.post(
+        "/simulate-surge",
+        json={
+            "active_cards": [
+                {
+                    "card_token": "tok_dead",
+                    "cardholder_name": "Declined User",
+                    "persona": "PRIME",
+                    "mccs": ["5411"],
+                    "amount_min": 1500,
+                    "amount_max": 15000,
+                    "available_credit_cents": 0,
+                }
+            ]
+        },
+    )
 
     assert response.status_code == 409
     assert "No spendable active cards" in response.json()["detail"]
@@ -355,7 +630,9 @@ def test_generate_skips_active_distributed_pulse_without_generating(monkeypatch)
     assert response.json()["event_id"] == "event-active"
 
 
-def test_generate_skips_when_admission_control_unavailable_in_deployed_mode(monkeypatch):
+def test_generate_skips_when_admission_control_unavailable_in_deployed_mode(
+    monkeypatch,
+):
     monkeypatch.setenv("K_SERVICE", "data-generator")
     monkeypatch.setattr(main, "PULSE_ADMISSION_REDIS_REQUIRED", True)
     monkeypatch.setattr(main, "get_pulse_redis_client", lambda: None)
@@ -380,7 +657,11 @@ def test_simulate_surge_returns_503_during_maintenance(monkeypatch):
         return_value=httpx.Response(503, json={"detail": {"status": "MAINTENANCE"}})
     )
 
-    response = client.post("/simulate-surge", json={}, headers={"X-Card-Network-Token": main.get_card_network_token()})
+    response = client.post(
+        "/simulate-surge",
+        json={},
+        headers={"X-Card-Network-Token": main.get_card_network_token()},
+    )
 
     assert response.status_code == 503
     assert "reset is in progress" in response.json()["detail"]
@@ -445,8 +726,12 @@ def test_build_fraud_pattern_payloads_supports_impossible_travel_sequence():
 @pytest.mark.asyncio
 @respx.mock
 async def test_auto_paydown_high_utilization_cards_calls_internal_endpoint():
-    route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/credit-card/internal/auto-paydown").mock(
-        return_value=httpx.Response(200, json={"status": "SUCCESS", "paid_amount_cents": 25000})
+    route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/credit-card/internal/auto-paydown"
+    ).mock(
+        return_value=httpx.Response(
+            200, json={"status": "SUCCESS", "paid_amount_cents": 25000}
+        )
     )
 
     async with httpx.AsyncClient() as async_client:
@@ -479,8 +764,12 @@ async def test_auto_paydown_high_utilization_cards_calls_internal_endpoint():
 async def test_auto_paydown_high_utilization_cards_caps_accounts_per_pulse(monkeypatch):
     monkeypatch.setattr(main, "AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE", 2)
     monkeypatch.setattr(main.random, "shuffle", lambda items: None)
-    route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/credit-card/internal/auto-paydown").mock(
-        return_value=httpx.Response(200, json={"status": "SUCCESS", "paid_amount_cents": 25000})
+    route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/credit-card/internal/auto-paydown"
+    ).mock(
+        return_value=httpx.Response(
+            200, json={"status": "SUCCESS", "paid_amount_cents": 25000}
+        )
     )
 
     cards = [
@@ -499,13 +788,18 @@ async def test_auto_paydown_high_utilization_cards_caps_accounts_per_pulse(monke
     assert route.call_count == 2
     assert len(results) == 2
 
+
 @pytest.mark.asyncio
 @respx.mock
 async def test_inject_anomaly_success():
-    auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
-        return_value=httpx.Response(200, json={"action_code": "00", "auth_code": "999999", "status": "PENDING"})
+    auth_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
+    ).mock(
+        return_value=httpx.Response(
+            200, json={"action_code": "00", "auth_code": "999999", "status": "PENDING"}
+        )
     )
-    
+
     response = client.post("/inject-anomaly", json={"card_token": "tok_visa_test"})
     assert response.status_code == 200
     data = response.json()
@@ -518,13 +812,21 @@ async def test_inject_anomaly_success():
 @pytest.mark.asyncio
 @respx.mock
 async def test_simulate_fraud_patterns_dispatches_labeled_payloads_without_overrides():
-    auth_route = respx.post(f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize").mock(
-        return_value=httpx.Response(200, json={"action_code": "00", "auth_code": "999999", "status": "FLAGGED"})
+    auth_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
+    ).mock(
+        return_value=httpx.Response(
+            200, json={"action_code": "00", "auth_code": "999999", "status": "FLAGGED"}
+        )
     )
 
     response = client.post(
         "/simulate-fraud-patterns",
-        json={"card_token": "tok_visa_pattern", "pattern": "cnp_gift_card_burst", "count": 1},
+        json={
+            "card_token": "tok_visa_pattern",
+            "pattern": "cnp_gift_card_burst",
+            "count": 1,
+        },
     )
 
     assert response.status_code == 200

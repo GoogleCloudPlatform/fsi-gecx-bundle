@@ -276,6 +276,24 @@ variable "data_generator_cron_schedule" {
   default     = "* * * * *"
 }
 
+variable "fraud_alert_lifecycle_schedule" {
+  type        = string
+  description = "Cron schedule for expiring stale open synthetic fraud alerts that received no customer response."
+  default     = "*/10 * * * *"
+}
+
+variable "fraud_alert_no_response_max_age_minutes" {
+  type        = number
+  description = "Age in minutes after which open synthetic/demo fraud alerts are moved out of OPEN when no customer response arrived."
+  default     = 30
+}
+
+variable "fraud_alert_lifecycle_batch_limit" {
+  type        = number
+  description = "Maximum number of open fraud alerts processed by each lifecycle sweep."
+  default     = 100
+}
+
 variable "data_generator_pulse_window_seconds" {
   type        = number
   description = "Seconds over which each background synthetic card activity pulse is distributed."
@@ -330,6 +348,18 @@ variable "data_generator_fraud_pattern_target_mode" {
   default     = "eligible"
 }
 
+variable "data_generator_operator_email_domains" {
+  type        = list(string)
+  description = "Email domains allowed to call the direct Data Generator operator control surface through IAP."
+  default     = ["google.com", "gcp.solutions", "altostrat.com"]
+}
+
+variable "data_generator_synthetic_alert_followup_rate" {
+  type        = number
+  description = "Probability that a synthetic fraud-pattern alert receives a scheduled customer follow-up action."
+  default     = 0.65
+}
+
 variable "seed_mock_user_count" {
   type        = number
   description = "Target base plus generated mock banking users for algorithmic seeding. VIP/demo-script users are added separately."
@@ -371,4 +401,3 @@ variable "feedback_url" {
   description = "URL for the buganizer feedback link to show on the stable environment banner (leave empty to disable)"
   default     = null
 }
-

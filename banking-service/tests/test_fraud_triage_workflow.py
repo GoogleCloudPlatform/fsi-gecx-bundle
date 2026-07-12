@@ -8,8 +8,15 @@ from sqlalchemy.orm import sessionmaker
 import models.audit  # noqa: F401
 import models.fraud  # noqa: F401
 from models.audit import AuditOutbox
-from models.credit_card import AccountLedger, Base, CreditAccount, CreditProduct, IssuedCard, TransactionAuthorization
-from models.fraud import FraudCaseAction
+from models.credit_card import (
+    AccountLedger,
+    Base,
+    CreditAccount,
+    CreditProduct,
+    IssuedCard,
+    TransactionAuthorization,
+)
+from models.fraud import FraudCaseAction, ScenarioOutcome
 from models.identity import User, UserSecureMessage
 from repositories.fraud import FraudAlertRepository
 from services.fraud_alerts import FraudAlertService
@@ -72,7 +79,8 @@ def fixture_db_session():
             account_id=account.id,
             amount_cents=-3500,
             description="FRAUD_POSTED_TEST",
-            posted_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1),
+            posted_at=datetime.datetime.now(datetime.timezone.utc)
+            - datetime.timedelta(days=1),
         )
         auth = TransactionAuthorization(
             id="02000000-0000-4000-8000-000000000002",
@@ -86,7 +94,8 @@ def fixture_db_session():
             card_network="VISA",
             merchant_category_code="5999",
             merchant_name="TEST FRAUD MERCHANT",
-            expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7),
+            expires_at=datetime.datetime.now(datetime.timezone.utc)
+            + datetime.timedelta(days=7),
         )
         db.add_all([account, card, posted, auth])
         db.commit()
@@ -118,9 +127,10 @@ def fraud_alert(db_session):
 
 @pytest.fixture(autouse=True)
 def mock_firebase():
-    with patch("services.messaging.messaging.send", return_value="topic-message-id"), patch(
-        "services.messaging.messaging.send_each_for_multicast"
-    ) as mock_multicast:
+    with (
+        patch("services.messaging.messaging.send", return_value="topic-message-id"),
+        patch("services.messaging.messaging.send_each_for_multicast") as mock_multicast,
+    ):
         batch = MagicMock()
         batch.success_count = 0
         batch.failure_count = 0
@@ -128,7 +138,9 @@ def mock_firebase():
         yield
 
 
-def test_triage_fraud_case_recognized_activity_resolves_without_remediation(db_session, fraud_alert):
+def test_triage_fraud_case_recognized_activity_resolves_without_remediation(
+    db_session, fraud_alert
+):
     result = FraudAlertService(db_session).triage_fraud_case(
         auth_provider_uid="cust-test-xyz",
         fraud_alert_id=str(fraud_alert.id),
@@ -138,9 +150,17 @@ def test_triage_fraud_case_recognized_activity_resolves_without_remediation(db_s
         idempotency_key="recognized-flow",
     )
 
-    refreshed = FraudAlertRepository(db_session).get_alert_by_id(fraud_alert_id=fraud_alert.id)
-    messages = db_session.query(UserSecureMessage).filter_by(thread_id="thread-fraud-workflow").all()
-    actions = db_session.query(FraudCaseAction).filter_by(fraud_alert_id=fraud_alert.id).all()
+    refreshed = FraudAlertRepository(db_session).get_alert_by_id(
+        fraud_alert_id=fraud_alert.id
+    )
+    messages = (
+        db_session.query(UserSecureMessage)
+        .filter_by(thread_id="thread-fraud-workflow")
+        .all()
+    )
+    actions = (
+        db_session.query(FraudCaseAction).filter_by(fraud_alert_id=fraud_alert.id).all()
+    )
 
     assert result["success"] is True
     assert result["outcome"] == "CUSTOMER_RECOGNIZED"
@@ -154,7 +174,202 @@ def test_triage_fraud_case_recognized_activity_resolves_without_remediation(db_s
     assert actions[0].action_type == "FRAUD_CASE_TRIAGED"
 
 
-def test_triage_fraud_case_disputed_activity_applies_remediation_and_message(db_session, fraud_alert):
+def test_scenario_customer_action_false_positive_resolves_alert(
+    db_session, fraud_alert
+):
+    result = FraudAlertService(db_session).execute_scenario_customer_action(
+        fraud_alert_id=str(fraud_alert.id),
+        outcome_label="false_positive",
+        idempotency_key="scenario-false-positive",
+    )
+
+    refreshed = FraudAlertRepository(db_session).get_alert_by_id(
+        fraud_alert_id=fraud_alert.id
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "CUSTOMER_RECOGNIZED"
+    assert refreshed.status == "RESOLVED_CUSTOMER_RECOGNIZED"
+    assert refreshed.remediation_status == "CUSTOMER_RECOGNIZED"
+
+
+def test_scenario_customer_action_unresolved_leaves_alert_open(db_session, fraud_alert):
+    result = FraudAlertService(db_session).execute_scenario_customer_action(
+        fraud_alert_id=str(fraud_alert.id),
+        outcome_label="unresolved",
+        idempotency_key="scenario-unresolved",
+    )
+
+    refreshed = FraudAlertRepository(db_session).get_alert_by_id(
+        fraud_alert_id=fraud_alert.id
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "UNRESOLVED"
+    assert refreshed.status == "OPEN"
+    assert refreshed.remediation_status == "NOT_STARTED"
+
+
+def test_expire_stale_open_alerts_marks_no_customer_response(db_session, fraud_alert):
+    fraud_alert.created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        minutes=45
+    )
+    fraud_alert.source = "MODEL_DETECTED_FRAUD"
+    db_session.add(fraud_alert)
+    db_session.commit()
+
+    result = FraudAlertService(db_session).expire_stale_open_alerts(
+        max_age_minutes=30,
+        limit=10,
+    )
+
+    refreshed = FraudAlertRepository(db_session).get_alert_by_id(
+        fraud_alert_id=fraud_alert.id
+    )
+    action = (
+        db_session.query(FraudCaseAction)
+        .filter_by(fraud_alert_id=fraud_alert.id)
+        .first()
+    )
+    audit_event = (
+        db_session.query(AuditOutbox)
+        .filter_by(event_type="FRAUD_ALERT_RESPONSE_TIMEOUT")
+        .first()
+    )
+
+    assert result["success"] is True
+    assert result["expired_count"] == 1
+    assert refreshed.status == "EXPIRED_NO_CUSTOMER_RESPONSE"
+    assert refreshed.remediation_status == "NO_CUSTOMER_RESPONSE"
+    assert refreshed.resolved_at is not None
+    assert action.action_type == "FRAUD_ALERT_RESPONSE_TIMEOUT"
+    assert action.status == "SUCCEEDED"
+    assert audit_event is not None
+
+
+def test_expire_stale_open_alerts_dry_run_does_not_mutate(db_session, fraud_alert):
+    fraud_alert.created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        minutes=45
+    )
+    fraud_alert.source = "MODEL_DETECTED_FRAUD"
+    db_session.add(fraud_alert)
+    db_session.commit()
+
+    result = FraudAlertService(db_session).expire_stale_open_alerts(
+        max_age_minutes=30,
+        limit=10,
+        dry_run=True,
+    )
+
+    refreshed = FraudAlertRepository(db_session).get_alert_by_id(
+        fraud_alert_id=fraud_alert.id
+    )
+
+    assert result["matched_count"] == 1
+    assert result["expired_count"] == 0
+    assert refreshed.status == "OPEN"
+    assert db_session.query(FraudCaseAction).count() == 0
+
+
+def test_expire_stale_open_alerts_keeps_fresh_or_unsupported_source_open(
+    db_session, fraud_alert
+):
+    fraud_alert.created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        minutes=5
+    )
+    fraud_alert.source = "MODEL_DETECTED_FRAUD"
+    ignored_alert = FraudAlertRepository(db_session).create_alert(
+        customer_id="88888888-8888-4888-8888-222222222222",
+        auth_provider_uid="cust-test-xyz",
+        credit_account_id="12300000-0000-4000-8000-000000000123",
+        card_id="99900000-0000-4000-8000-000000000999",
+        card_last_four="1234",
+        message_thread_id="thread-manual-review",
+        suspicious_authorization_ids=["02000000-0000-4000-8000-000000000002"],
+        suspicious_transactions=[],
+        source="MANUAL_REVIEW",
+    )
+    ignored_alert.created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        minutes=90
+    )
+    db_session.add_all([fraud_alert, ignored_alert])
+    db_session.commit()
+
+    result = FraudAlertService(db_session).expire_stale_open_alerts(
+        max_age_minutes=30,
+        limit=10,
+    )
+
+    assert result["expired_count"] == 0
+    assert (
+        FraudAlertRepository(db_session)
+        .get_alert_by_id(fraud_alert_id=fraud_alert.id)
+        .status
+        == "OPEN"
+    )
+    assert (
+        FraudAlertRepository(db_session)
+        .get_alert_by_id(fraud_alert_id=ignored_alert.id)
+        .status
+        == "OPEN"
+    )
+
+
+def test_record_scenario_outcomes_persists_and_enriches_alert_context(
+    db_session, fraud_alert
+):
+    service = FraudAlertService(db_session)
+    payload = {
+        "scenario_id": "fraud_travel_story-1841-test",
+        "execution_id": "scenario-exec-test",
+        "event_id": "customer-dispute-001",
+        "authorization_id": "02000000-0000-4000-8000-000000000002",
+        "fraud_alert_id": str(fraud_alert.id),
+        "card_token": "tok_test_john_doe",
+        "outcome_label": "customer_disputed",
+        "expected_reason_codes": ["VELOCITY_SPIKE_1H"],
+        "actual_reason_codes": ["RECENT_FLAGGED_ACTIVITY"],
+        "expected_score_band": "high",
+        "actual_risk_score": 91,
+        "model_version": "local-deterministic-v1",
+        "synthetic_label": True,
+    }
+
+    first = service.record_scenario_outcomes(
+        outcomes=[payload],
+        operational_status_by_event={
+            "customer-dispute-001": {
+                "action": "triaged",
+                "status": "PENDING_SPECIALIST_REVIEW",
+            }
+        },
+    )
+    second = service.record_scenario_outcomes(
+        outcomes=[payload],
+        operational_status_by_event={
+            "customer-dispute-001": {
+                "action": "triaged",
+                "status": "PENDING_SPECIALIST_REVIEW",
+            }
+        },
+    )
+
+    records = db_session.query(ScenarioOutcome).all()
+
+    assert first["success"] is True
+    assert first["outcome_ids"] == second["outcome_ids"]
+    assert len(records) == 1
+    assert records[0].customer_id == fraud_alert.customer_id
+    assert records[0].credit_account_id == fraud_alert.credit_account_id
+    assert records[0].card_id == fraud_alert.card_id
+    assert records[0].outcome_label == "customer_disputed"
+    assert records[0].operational_action == "triaged"
+    assert records[0].operational_status == "PENDING_SPECIALIST_REVIEW"
+
+
+def test_triage_fraud_case_disputed_activity_applies_remediation_and_message(
+    db_session, fraud_alert
+):
     result = FraudAlertService(db_session).triage_fraud_case(
         auth_provider_uid="cust-test-xyz",
         fraud_alert_id=str(fraud_alert.id),
@@ -164,12 +379,32 @@ def test_triage_fraud_case_disputed_activity_applies_remediation_and_message(db_
         idempotency_key="confirmed-fraud-flow",
     )
 
-    refreshed = FraudAlertRepository(db_session).get_alert_by_id(fraud_alert_id=fraud_alert.id)
-    account = db_session.query(CreditAccount).filter_by(id="12300000-0000-4000-8000-000000000123").first()
-    original_card = db_session.query(IssuedCard).filter_by(id="99900000-0000-4000-8000-000000000999").first()
-    messages = db_session.query(UserSecureMessage).filter_by(thread_id="thread-fraud-workflow").all()
-    triage_event = db_session.query(AuditOutbox).filter_by(event_type="FRAUD_CASE_TRIAGED").first()
-    message_event = db_session.query(AuditOutbox).filter_by(event_type="FRAUD_TRIAGE_MESSAGE_SENT").first()
+    refreshed = FraudAlertRepository(db_session).get_alert_by_id(
+        fraud_alert_id=fraud_alert.id
+    )
+    account = (
+        db_session.query(CreditAccount)
+        .filter_by(id="12300000-0000-4000-8000-000000000123")
+        .first()
+    )
+    original_card = (
+        db_session.query(IssuedCard)
+        .filter_by(id="99900000-0000-4000-8000-000000000999")
+        .first()
+    )
+    messages = (
+        db_session.query(UserSecureMessage)
+        .filter_by(thread_id="thread-fraud-workflow")
+        .all()
+    )
+    triage_event = (
+        db_session.query(AuditOutbox).filter_by(event_type="FRAUD_CASE_TRIAGED").first()
+    )
+    message_event = (
+        db_session.query(AuditOutbox)
+        .filter_by(event_type="FRAUD_TRIAGE_MESSAGE_SENT")
+        .first()
+    )
 
     assert result["success"] is True
     assert result["outcome"] == "PENDING_SPECIALIST_REVIEW"
@@ -178,10 +413,16 @@ def test_triage_fraud_case_disputed_activity_applies_remediation_and_message(db_
     assert result["replacement_card"]["new_card_id"]
     assert refreshed.status == "TRIAGED_PENDING_REVIEW"
     assert refreshed.remediation_status == "PENDING_SPECIALIST_REVIEW"
-    assert refreshed.selected_disputed_authorization_ids == ["02000000-0000-4000-8000-000000000002"]
-    assert refreshed.selected_disputed_transaction_ids == ["01000000-0000-4000-8000-000000000001"]
+    assert refreshed.selected_disputed_authorization_ids == [
+        "02000000-0000-4000-8000-000000000002"
+    ]
+    assert refreshed.selected_disputed_transaction_ids == [
+        "01000000-0000-4000-8000-000000000001"
+    ]
     assert refreshed.provisional_credit_cents == 3500
-    assert str(refreshed.replacement_card_id) == result["replacement_card"]["new_card_id"]
+    assert (
+        str(refreshed.replacement_card_id) == result["replacement_card"]["new_card_id"]
+    )
     assert account.cleared_balance_cents == 0
     assert account.available_credit_cents == 500000
     assert original_card.status == "BLOCKED"
@@ -215,14 +456,29 @@ def test_triage_fraud_case_is_idempotent(db_session, fraud_alert):
         idempotency_key="retry-flow",
     )
 
-    messages = db_session.query(UserSecureMessage).filter_by(thread_id="thread-fraud-workflow").all()
-    replacements = db_session.query(IssuedCard).filter(IssuedCard.card_token.like("tok_visa_reissue_%")).all()
-    workflow_actions = db_session.query(FraudCaseAction).filter_by(
-        fraud_alert_id=fraud_alert.id,
-        action_type="FRAUD_CASE_TRIAGED",
-    ).all()
+    messages = (
+        db_session.query(UserSecureMessage)
+        .filter_by(thread_id="thread-fraud-workflow")
+        .all()
+    )
+    replacements = (
+        db_session.query(IssuedCard)
+        .filter(IssuedCard.card_token.like("tok_visa_reissue_%"))
+        .all()
+    )
+    workflow_actions = (
+        db_session.query(FraudCaseAction)
+        .filter_by(
+            fraud_alert_id=fraud_alert.id,
+            action_type="FRAUD_CASE_TRIAGED",
+        )
+        .all()
+    )
 
-    assert first["replacement_card"]["new_card_id"] == second["replacement_card"]["new_card_id"]
+    assert (
+        first["replacement_card"]["new_card_id"]
+        == second["replacement_card"]["new_card_id"]
+    )
     assert second["idempotent_replay"] is True
     assert len(messages) == 1
     assert len(replacements) == 1

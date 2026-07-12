@@ -13,18 +13,36 @@
 # limitations under the License.
 
 import asyncio
+import datetime
 import logging
 import os
 import random
 import sys
 import uuid
+from contextlib import asynccontextmanager
 from typing import List, Dict, Any, Optional
 
 import httpx
 from fastapi import FastAPI, HTTPException, status, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator, model_validator
 
+from scenarios import (
+    ScenarioExecutionRequest,
+    ScenarioRequest,
+    execute_scenario,
+    list_scenario_outcomes,
+    plan_scenario,
+)
+from scenarios.executor import _auth_payload, _execution_id, _resolution_for_event
+from scenarios.schemas import BehaviorPolicy, PersonaProfile, ScenarioMode, ScenarioPlan, ScenarioType
+from scheduler import (
+    EnqueueScenarioRequest,
+    ScheduledEventDispatchResult,
+    SchedulePlanResult,
+    SyntheticScheduleClient,
+    dispatch_scheduled_event,
+)
 from utils.internal_auth import get_internal_switch_token
 from utils.runtime import get_cors_origins, is_local_dev
 
@@ -55,10 +73,29 @@ class FraudPatternRequest(BaseModel):
     pattern: Optional[str] = None
     count: int = 1
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
 logger = logging.getLogger("data-generator")
 
-app = FastAPI(title="Modernized Synthetic Transaction Data Generator")
+data_generator_mcp_app = None
+
+
+@asynccontextmanager
+async def app_lifespan(parent_app: FastAPI):
+    if data_generator_mcp_app is None:
+        yield
+        return
+
+    async with data_generator_mcp_app.lifespan(parent_app):
+        yield
+
+
+app = FastAPI(
+    title="Modernized Synthetic Transaction Data Generator",
+    lifespan=app_lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -76,16 +113,42 @@ PULSE_MAX_EVENTS = int(os.getenv("PULSE_MAX_EVENTS", "12"))
 SWIPE_WORKFLOW_CONCURRENCY = int(os.getenv("SWIPE_WORKFLOW_CONCURRENCY", "4"))
 SURGE_TOTAL_EVENTS = int(os.getenv("SURGE_TOTAL_EVENTS", "50"))
 SURGE_STAGGER_SECONDS = float(os.getenv("SURGE_STAGGER_SECONDS", "0.2"))
-ACTIVE_CARD_FETCH_TIMEOUT_SECONDS = float(os.getenv("ACTIVE_CARD_FETCH_TIMEOUT_SECONDS", "10"))
-AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE = int(os.getenv("AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE", "6"))
+ACTIVE_CARD_FETCH_TIMEOUT_SECONDS = float(
+    os.getenv("ACTIVE_CARD_FETCH_TIMEOUT_SECONDS", "10")
+)
+AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE = int(
+    os.getenv("AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE", "6")
+)
 SWIPE_REQUEST_TIMEOUT_SECONDS = float(os.getenv("SWIPE_REQUEST_TIMEOUT_SECONDS", "10"))
-PULSE_ACTIVE_LOCK_TTL_SECONDS = int(os.getenv("PULSE_ACTIVE_LOCK_TTL_SECONDS", str(max(PULSE_WINDOW_SECONDS + 90, 180))))
+PULSE_ACTIVE_LOCK_TTL_SECONDS = int(
+    os.getenv("PULSE_ACTIVE_LOCK_TTL_SECONDS", str(max(PULSE_WINDOW_SECONDS + 90, 180)))
+)
 PULSE_EVENT_DEDUP_TTL_SECONDS = int(os.getenv("PULSE_EVENT_DEDUP_TTL_SECONDS", "3600"))
-PULSE_ADMISSION_REDIS_REQUIRED = os.getenv("PULSE_ADMISSION_REDIS_REQUIRED", "true").lower() not in {"0", "false", "no"}
-FRAUD_PATTERN_ENABLED = os.getenv("FRAUD_PATTERN_ENABLED", "false").lower() in {"1", "true", "yes"}
+PULSE_ADMISSION_REDIS_REQUIRED = os.getenv(
+    "PULSE_ADMISSION_REDIS_REQUIRED", "true"
+).lower() not in {"0", "false", "no"}
+FRAUD_PATTERN_ENABLED = os.getenv("FRAUD_PATTERN_ENABLED", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 FRAUD_PATTERN_RATE = float(os.getenv("FRAUD_PATTERN_RATE", "0.05"))
 FRAUD_PATTERN_MAX_PER_PULSE = int(os.getenv("FRAUD_PATTERN_MAX_PER_PULSE", "1"))
 FRAUD_PATTERN_TARGET_MODE = os.getenv("FRAUD_PATTERN_TARGET_MODE", "eligible").lower()
+SCHEDULE_DISPATCH_TRANSPORT = os.getenv(
+    "SCHEDULE_DISPATCH_TRANSPORT",
+    "cloud_tasks" if os.getenv("CLOUD_TASKS_QUEUE") else "record_only",
+).lower()
+CLOUD_TASKS_PROJECT_ID = os.getenv("CLOUD_TASKS_PROJECT_ID") or os.getenv(
+    "GOOGLE_CLOUD_PROJECT"
+)
+CLOUD_TASKS_LOCATION = os.getenv("CLOUD_TASKS_LOCATION", os.getenv("REGION", "us-central1"))
+CLOUD_TASKS_QUEUE = os.getenv("CLOUD_TASKS_QUEUE")
+DATA_GENERATOR_DISPATCH_URL = os.getenv("DATA_GENERATOR_DISPATCH_URL")
+DATA_GENERATOR_SERVICE_ACCOUNT_EMAIL = os.getenv("DATA_GENERATOR_SERVICE_ACCOUNT_EMAIL")
+SCHEDULE_FOLLOWUP_MINUTES = int(os.getenv("SCHEDULE_FOLLOWUP_MINUTES", "2"))
+SCHEDULE_SETTLEMENT_DELAY_MINUTES = int(os.getenv("SCHEDULE_SETTLEMENT_DELAY_MINUTES", "1"))
+SYNTHETIC_ALERT_FOLLOWUP_RATE = float(os.getenv("SYNTHETIC_ALERT_FOLLOWUP_RATE", "0.65"))
 FRAUD_PATTERN_NAMES = [
     "cnp_gift_card_burst",
     "electronics_marketplace_burst",
@@ -96,9 +159,105 @@ FRAUD_PATTERN_NAMES = [
     "near_limit_pressure",
 ]
 
+
+class AmbientLoadProfile(BaseModel):
+    """Runtime ambient-load controls for scheduled pulses and future agentic operators."""
+
+    profile_name: str = Field(default="steady", max_length=64)
+    pulse_window_seconds: int = Field(default=PULSE_WINDOW_SECONDS, ge=5, le=300)
+    pulse_min_events: int = Field(default=PULSE_MIN_EVENTS, ge=0, le=100)
+    pulse_max_events: int = Field(default=PULSE_MAX_EVENTS, ge=0, le=200)
+    workflow_concurrency: int = Field(default=SWIPE_WORKFLOW_CONCURRENCY, ge=1, le=25)
+    persona_weights: Dict[str, float] = Field(
+        default_factory=lambda: {"HNW": 1.0, "PRIME": 5.0, "YPRO": 3.0}
+    )
+    travel_multiplier: float = Field(default=1.0, ge=0.0, le=5.0)
+    ecommerce_multiplier: float = Field(default=1.0, ge=0.0, le=5.0)
+    settlement_probability: float | None = Field(default=None, ge=0.0, le=1.0)
+    reversal_probability: float | None = Field(default=None, ge=0.0, le=1.0)
+    pending_probability: float | None = Field(default=None, ge=0.0, le=1.0)
+    fraud_pattern_enabled: bool = FRAUD_PATTERN_ENABLED
+    fraud_pattern_rate: float = Field(default=FRAUD_PATTERN_RATE, ge=0.0, le=1.0)
+    fraud_pattern_max_per_pulse: int = Field(
+        default=FRAUD_PATTERN_MAX_PER_PULSE, ge=0, le=25
+    )
+    fraud_pattern_target_mode: str = Field(
+        default=FRAUD_PATTERN_TARGET_MODE, max_length=32
+    )
+    auto_paydown_max_accounts_per_pulse: int = Field(
+        default=AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE, ge=0, le=100
+    )
+    updated_by: str | None = Field(default=None, max_length=128)
+
+    @field_validator("persona_weights")
+    @classmethod
+    def validate_persona_weights(cls, value: Dict[str, float]) -> Dict[str, float]:
+        cleaned = {
+            str(key).upper(): float(weight)
+            for key, weight in value.items()
+            if float(weight) > 0
+        }
+        if not cleaned:
+            raise ValueError(
+                "persona_weights must include at least one positive weight"
+            )
+        return cleaned
+
+    @model_validator(mode="after")
+    def validate_ranges(self):
+        if self.pulse_max_events < self.pulse_min_events:
+            raise ValueError(
+                "pulse_max_events must be greater than or equal to pulse_min_events"
+            )
+        specified_outcomes = [
+            value
+            for value in (
+                self.settlement_probability,
+                self.reversal_probability,
+                self.pending_probability,
+            )
+            if value is not None
+        ]
+        if specified_outcomes and abs(sum(specified_outcomes) - 1.0) > 0.01:
+            raise ValueError(
+                "settlement/reversal/pending probabilities must sum to 1.0 when overridden"
+            )
+        return self
+
+
+class AmbientLoadProfileUpdate(BaseModel):
+    profile_name: str | None = Field(default=None, max_length=64)
+    pulse_window_seconds: int | None = Field(default=None, ge=5, le=300)
+    pulse_min_events: int | None = Field(default=None, ge=0, le=100)
+    pulse_max_events: int | None = Field(default=None, ge=0, le=200)
+    workflow_concurrency: int | None = Field(default=None, ge=1, le=25)
+    persona_weights: Dict[str, float] | None = None
+    travel_multiplier: float | None = Field(default=None, ge=0.0, le=5.0)
+    ecommerce_multiplier: float | None = Field(default=None, ge=0.0, le=5.0)
+    settlement_probability: float | None = Field(default=None, ge=0.0, le=1.0)
+    reversal_probability: float | None = Field(default=None, ge=0.0, le=1.0)
+    pending_probability: float | None = Field(default=None, ge=0.0, le=1.0)
+    fraud_pattern_enabled: bool | None = None
+    fraud_pattern_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    fraud_pattern_max_per_pulse: int | None = Field(default=None, ge=0, le=25)
+    fraud_pattern_target_mode: str | None = Field(default=None, max_length=32)
+    auto_paydown_max_accounts_per_pulse: int | None = Field(default=None, ge=0, le=100)
+    updated_by: str | None = Field(default=None, max_length=128)
+
+
+OPERATOR_EMAIL_DOMAINS = [
+    domain.strip().lower()
+    for domain in os.getenv(
+        "DATA_GENERATOR_OPERATOR_EMAIL_DOMAINS",
+        "google.com,gcp.solutions,altostrat.com",
+    ).split(",")
+    if domain.strip()
+]
+
 _pulse_lock = asyncio.Lock()
 _redis_client = None
 _redis_disabled = False
+_ambient_profile = AmbientLoadProfile()
 
 
 class MaintenanceModeError(RuntimeError):
@@ -244,7 +403,9 @@ def admit_pulse(event_id: str | None) -> PulseAdmission:
                 redis_client=redis_client,
             )
     except Exception as exc:
-        logger.warning("Pulse admission failed; skipping pulse to avoid duplicate traffic: %s", exc)
+        logger.warning(
+            "Pulse admission failed; skipping pulse to avoid duplicate traffic: %s", exc
+        )
         return PulseAdmission(
             admitted=False,
             status="SKIPPED_ADMISSION_UNAVAILABLE",
@@ -277,14 +438,47 @@ def get_card_network_token() -> str:
     return get_internal_switch_token()
 
 
+def _normalize_iap_email(header_value: str | None) -> str | None:
+    if not header_value:
+        return None
+    return header_value.replace("accounts.google.com:", "").strip().lower() or None
+
+
+def _is_allowed_operator_email(email: str | None) -> bool:
+    if not email or "@" not in email:
+        return False
+    domain = email.rsplit("@", 1)[-1]
+    return domain in OPERATOR_EMAIL_DOMAINS
+
+
+def extract_operator_identity(request: Request) -> str | None:
+    iap_email = _normalize_iap_email(
+        request.headers.get("x-goog-authenticated-user-email")
+    )
+    if iap_email:
+        return iap_email
+    return None
+
+
 def verify_switch_or_presenter_token(
-    x_card_network_token: Optional[str] = Header(None, alias="X-Card-Network-Token")
+    x_card_network_token: Optional[str] = Header(None, alias="X-Card-Network-Token"),
+    x_goog_authenticated_user_email: Optional[str] = Header(
+        None, alias="X-Goog-Authenticated-User-Email"
+    ),
 ):
     if x_card_network_token and x_card_network_token == get_card_network_token():
         return True
+    if _is_allowed_operator_email(
+        _normalize_iap_email(x_goog_authenticated_user_email)
+    ):
+        return True
     if is_local_dev():
         return True
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized access to data generator.")
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Unauthorized access to data generator.",
+    )
+
 
 CATEGORY_MCC_MAP = {
     "Airlines & Travel": "4511",
@@ -308,7 +502,9 @@ _cached_oidc_token = None
 _cached_token_time = 0
 
 
-def build_generic_merchant(mcc: str = "5311", country_code: str = "USA", is_international: bool = False) -> Dict[str, Any]:
+def build_generic_merchant(
+    mcc: str = "5311", country_code: str = "USA", is_international: bool = False
+) -> Dict[str, Any]:
     return {
         "merchant": "Generic Merchant",
         "descriptor": "GENERIC MERCHANT",
@@ -328,12 +524,157 @@ def build_generic_merchant(mcc: str = "5311", country_code: str = "USA", is_inte
     }
 
 
-def infer_channel_context(merchant: Dict[str, Any], formatted_merchant: str) -> Dict[str, Any]:
+def build_persona_profile(card: Dict[str, Any]) -> PersonaProfile:
+    persona = str(card.get("persona") or "PRIME").upper()
+    cardholder_name = str(card.get("cardholder_name") or "")
+    home_metros = [
+        "Mountain View, CA",
+        "San Francisco, CA",
+        "New York, NY",
+        "Chicago, IL",
+        "Seattle, WA",
+        "Dallas, TX",
+        "Los Angeles, CA",
+    ]
+    home_metro = home_metros[
+        hash(cardholder_name or card.get("card_token", "default")) % len(home_metros)
+    ]
+
+    if persona == "HNW":
+        return PersonaProfile(
+            persona_id="hnw_travel",
+            role="high net worth travel cardholder",
+            home_metro=home_metro,
+            card_profile="premium_travel_card",
+            typical_mccs=["4511", "7011", "5812", "4121"],
+            travel_propensity=0.45,
+            digital_commerce_propensity=0.30,
+            card_present_propensity=0.78,
+        )
+    if persona == "YPRO":
+        return PersonaProfile(
+            persona_id="young_professional_digital",
+            role="young professional digital-first cardholder",
+            home_metro=home_metro,
+            card_profile="everyday_rewards_card",
+            typical_mccs=["5814", "4899", "5812", "4121"],
+            travel_propensity=0.12,
+            digital_commerce_propensity=0.65,
+            card_present_propensity=0.55,
+        )
+    return PersonaProfile(
+        persona_id="prime_everyday",
+        role="prime everyday cardholder",
+        home_metro=home_metro,
+        card_profile="prime_cashback_card",
+        typical_mccs=["5411", "5541", "5311", "4121", "5812"],
+        travel_propensity=0.18,
+        digital_commerce_propensity=0.35,
+        card_present_propensity=0.82,
+    )
+
+
+def get_ambient_profile() -> AmbientLoadProfile:
+    return _ambient_profile
+
+
+def update_ambient_profile(update: AmbientLoadProfileUpdate) -> AmbientLoadProfile:
+    global _ambient_profile
+    payload = update.model_dump(exclude_unset=True)
+    if not payload:
+        return _ambient_profile
+    _ambient_profile = AmbientLoadProfile(
+        **{**_ambient_profile.model_dump(), **payload}
+    )
+    return _ambient_profile
+
+
+def reset_ambient_profile() -> AmbientLoadProfile:
+    global _ambient_profile
+    _ambient_profile = AmbientLoadProfile()
+    return _ambient_profile
+
+
+def select_ambient_card(
+    cards: List[Dict[str, Any]], profile: AmbientLoadProfile
+) -> Dict[str, Any]:
+    weights = []
+    for card in cards:
+        persona = str(card.get("persona") or "PRIME").upper()
+        weights.append(
+            profile.persona_weights.get(
+                persona, profile.persona_weights.get("PRIME", 1.0)
+            )
+        )
+    return random.choices(cards, weights=weights, k=1)[0]
+
+
+def build_behavior_policy(
+    card: Dict[str, Any],
+    persona: PersonaProfile,
+    ambient_profile: AmbientLoadProfile | None = None,
+) -> BehaviorPolicy:
+    amount_min = int(card.get("amount_min", 1500))
+    amount_max = int(card.get("amount_max", 15000))
+    if persona.persona_id == "hnw_travel":
+        settlement, reversal, pending = 0.82, 0.05, 0.13
+    elif persona.persona_id == "young_professional_digital":
+        settlement, reversal, pending = 0.76, 0.08, 0.16
+    else:
+        settlement, reversal, pending = 0.80, 0.10, 0.10
+
+    if ambient_profile:
+        settlement = (
+            ambient_profile.settlement_probability
+            if ambient_profile.settlement_probability is not None
+            else settlement
+        )
+        reversal = (
+            ambient_profile.reversal_probability
+            if ambient_profile.reversal_probability is not None
+            else reversal
+        )
+        pending = (
+            ambient_profile.pending_probability
+            if ambient_profile.pending_probability is not None
+            else pending
+        )
+
+    return BehaviorPolicy(
+        policy_id=f"{persona.persona_id}_baseline_policy",
+        preferred_mccs=list(card.get("mccs") or persona.typical_mccs),
+        spend_min_cents=max(100, amount_min),
+        spend_max_cents=max(max(100, amount_min), amount_max),
+        settlement_probability=settlement,
+        reversal_probability=reversal,
+        pending_probability=pending,
+        utilization_trigger=0.65,
+        target_utilization=0.35,
+        travel_context="Low-rate merchant-geography travel activity."
+        if persona.travel_propensity > 0.2
+        else None,
+        ecommerce_context="Normal ecommerce/subscription activity."
+        if persona.digital_commerce_propensity > 0.3
+        else None,
+    )
+
+
+def infer_channel_context(
+    merchant: Dict[str, Any], formatted_merchant: str
+) -> Dict[str, Any]:
     descriptor = formatted_merchant.upper()
     ecommerce_capable = bool(merchant.get("ecommerce_capable"))
     is_ecommerce = ecommerce_capable or any(
         token in descriptor
-        for token in ["ONLINE", ".COM", "MKTPLACE", "STREAMING", "SUBSCRIPTION", "DIGITAL", "GIFT CARD"]
+        for token in [
+            "ONLINE",
+            ".COM",
+            "MKTPLACE",
+            "STREAMING",
+            "SUBSCRIPTION",
+            "DIGITAL",
+            "GIFT CARD",
+        ]
     )
 
     if is_ecommerce:
@@ -343,11 +684,18 @@ def infer_channel_context(merchant: Dict[str, Any], formatted_merchant: str) -> 
             "entry_mode": "ECOMMERCE",
             "ip_country_code": country_code,
             "shipping_country_code": country_code,
-            "is_digital_goods": "DIGITAL_GOODS" in merchant.get("high_risk_flags", []) or "GIFT CARD" in descriptor,
+            "is_digital_goods": "DIGITAL_GOODS" in merchant.get("high_risk_flags", [])
+            or "GIFT CARD" in descriptor,
         }
 
-    entry_mode = random.choices(["CHIP", "CONTACTLESS", "MAG_STRIPE"], weights=[65, 25, 10], k=1)[0]
-    channel = "WALLET" if entry_mode == "CONTACTLESS" and random.random() < 0.25 else "CARD_PRESENT"
+    entry_mode = random.choices(
+        ["CHIP", "CONTACTLESS", "MAG_STRIPE"], weights=[65, 25, 10], k=1
+    )[0]
+    channel = (
+        "WALLET"
+        if entry_mode == "CONTACTLESS" and random.random() < 0.25
+        else "CARD_PRESENT"
+    )
     return {
         "transaction_channel": channel,
         "entry_mode": entry_mode,
@@ -357,7 +705,9 @@ def infer_channel_context(merchant: Dict[str, Any], formatted_merchant: str) -> 
     }
 
 
-def build_fraud_pattern_payloads(card: Dict[str, Any], pattern: str) -> List[Dict[str, Any]]:
+def build_fraud_pattern_payloads(
+    card: Dict[str, Any], pattern: str
+) -> List[Dict[str, Any]]:
     token = card["card_token"]
     available_credit = int(card.get("available_credit_cents") or 150000)
     base_amount = max(1000, min(available_credit // 3, 95000))
@@ -382,7 +732,9 @@ def build_fraud_pattern_payloads(card: Dict[str, Any], pattern: str) -> List[Dic
     ) -> Dict[str, Any]:
         return {
             "card_token": token,
-            "amount_cents": max(100, min(amount_cents, max(available_credit - 100, 100))),
+            "amount_cents": max(
+                100, min(amount_cents, max(available_credit - 100, 100))
+            ),
             "retrieval_reference_number": "".join(random.choices("0123456789", k=12)),
             "merchant_category_code": mcc,
             "merchant_name": merchant_name,
@@ -405,67 +757,202 @@ def build_fraud_pattern_payloads(card: Dict[str, Any], pattern: str) -> List[Dic
 
     if pattern == "cnp_gift_card_burst":
         return [
-            payload(merchant_name=name, amount_cents=amt, mcc="5947", channel="ECOMMERCE", entry_mode="ECOMMERCE", digital_goods=True, flags=["DIGITAL_GOODS", "GIFT_CARD"], sequence=idx)
+            payload(
+                merchant_name=name,
+                amount_cents=amt,
+                mcc="5947",
+                channel="ECOMMERCE",
+                entry_mode="ECOMMERCE",
+                digital_goods=True,
+                flags=["DIGITAL_GOODS", "GIFT_CARD"],
+                sequence=idx,
+            )
             for idx, (name, amt) in enumerate(
-                [("RAZER GOLD GIFT CARD ONLINE", base_amount), ("TARGET.COM GIFT CARDS", base_amount - 500), ("GAME*TEST TOKEN ONLINE", 4900)],
+                [
+                    ("RAZER GOLD GIFT CARD ONLINE", base_amount),
+                    ("TARGET.COM GIFT CARDS", base_amount - 500),
+                    ("GAME*TEST TOKEN ONLINE", 4900),
+                ],
                 start=1,
             )
         ]
     if pattern == "electronics_marketplace_burst":
         return [
-            payload(merchant_name=name, amount_cents=amt, mcc="5311", channel="ECOMMERCE", entry_mode="ECOMMERCE", digital_goods=False, flags=["ELECTRONICS"], sequence=idx)
+            payload(
+                merchant_name=name,
+                amount_cents=amt,
+                mcc="5311",
+                channel="ECOMMERCE",
+                entry_mode="ECOMMERCE",
+                digital_goods=False,
+                flags=["ELECTRONICS"],
+                sequence=idx,
+            )
             for idx, (name, amt) in enumerate(
-                [("BEST BUY*MKTPLACE", base_amount), ("APPLE.COM*ONLINE", base_amount - 1000), ("AMAZON.COM*MKTPLACE ELECTRONICS", base_amount - 2000)],
+                [
+                    ("BEST BUY*MKTPLACE", base_amount),
+                    ("APPLE.COM*ONLINE", base_amount - 1000),
+                    ("AMAZON.COM*MKTPLACE ELECTRONICS", base_amount - 2000),
+                ],
                 start=1,
             )
         ]
     if pattern == "international_amount_outlier":
         return [
-            payload(merchant_name="CANCUN RESORT POS", amount_cents=base_amount, mcc="7011", channel="CARD_PRESENT", entry_mode="CHIP", country="MEX", city="Cancun", region="QR", lat=21.1619, lon=-86.8515, sequence=1)
+            payload(
+                merchant_name="CANCUN RESORT POS",
+                amount_cents=base_amount,
+                mcc="7011",
+                channel="CARD_PRESENT",
+                entry_mode="CHIP",
+                country="MEX",
+                city="Cancun",
+                region="QR",
+                lat=21.1619,
+                lon=-86.8515,
+                sequence=1,
+            )
         ]
     if pattern == "impossible_travel_card_present":
         return [
-            payload(merchant_name="LOCAL MARKET - SAN FRANCISCO CA", amount_cents=2400, mcc="5411", channel="CARD_PRESENT", entry_mode="CHIP", country="USA", city="San Francisco", region="CA", lat=37.7749, lon=-122.4194, sequence=1),
-            payload(merchant_name="GROCERY - NEW YORK NY", amount_cents=4500, mcc="5411", channel="CARD_PRESENT", entry_mode="CHIP", country="USA", city="New York", region="NY", lat=40.7128, lon=-74.0060, sequence=2),
+            payload(
+                merchant_name="LOCAL MARKET - SAN FRANCISCO CA",
+                amount_cents=2400,
+                mcc="5411",
+                channel="CARD_PRESENT",
+                entry_mode="CHIP",
+                country="USA",
+                city="San Francisco",
+                region="CA",
+                lat=37.7749,
+                lon=-122.4194,
+                sequence=1,
+            ),
+            payload(
+                merchant_name="GROCERY - NEW YORK NY",
+                amount_cents=4500,
+                mcc="5411",
+                channel="CARD_PRESENT",
+                entry_mode="CHIP",
+                country="USA",
+                city="New York",
+                region="NY",
+                lat=40.7128,
+                lon=-74.0060,
+                sequence=2,
+            ),
         ]
     if pattern == "unusual_ecommerce_country":
         return [
-            payload(merchant_name="LONDON DIGITAL MARKETPLACE", amount_cents=base_amount, mcc="5816", channel="ECOMMERCE", entry_mode="ECOMMERCE", country="GBR", ip_country="USA", shipping_country="USA", digital_goods=True, flags=["DIGITAL_GOODS", "ONLINE"], sequence=1)
+            payload(
+                merchant_name="LONDON DIGITAL MARKETPLACE",
+                amount_cents=base_amount,
+                mcc="5816",
+                channel="ECOMMERCE",
+                entry_mode="ECOMMERCE",
+                country="GBR",
+                ip_country="USA",
+                shipping_country="USA",
+                digital_goods=True,
+                flags=["DIGITAL_GOODS", "ONLINE"],
+                sequence=1,
+            )
         ]
     if pattern == "merchant_category_velocity":
         return [
-            payload(merchant_name=f"COFFEE SHOP VELOCITY {idx}", amount_cents=1800 + idx * 100, mcc="5814", channel="CARD_PRESENT", entry_mode="CONTACTLESS", country="USA", city="Seattle", region="WA", lat=47.6062, lon=-122.3321, sequence=idx)
+            payload(
+                merchant_name=f"COFFEE SHOP VELOCITY {idx}",
+                amount_cents=1800 + idx * 100,
+                mcc="5814",
+                channel="CARD_PRESENT",
+                entry_mode="CONTACTLESS",
+                country="USA",
+                city="Seattle",
+                region="WA",
+                lat=47.6062,
+                lon=-122.3321,
+                sequence=idx,
+            )
             for idx in range(1, 5)
         ]
     if pattern == "near_limit_pressure":
         amount = max(1000, min(int(available_credit * 0.9), available_credit - 100))
         return [
-            payload(merchant_name="HIGH VALUE MARKETPLACE ONLINE", amount_cents=amount, mcc="5311", channel="ECOMMERCE", entry_mode="ECOMMERCE", country="USA", ip_country="USA", shipping_country="USA", flags=["ONLINE"], sequence=1)
+            payload(
+                merchant_name="HIGH VALUE MARKETPLACE ONLINE",
+                amount_cents=amount,
+                mcc="5311",
+                channel="ECOMMERCE",
+                entry_mode="ECOMMERCE",
+                country="USA",
+                ip_country="USA",
+                shipping_country="USA",
+                flags=["ONLINE"],
+                sequence=1,
+            )
         ]
     raise ValueError(f"Unknown fraud pattern: {pattern}")
 
 
-async def dispatch_fraud_pattern(client: httpx.AsyncClient, card: Dict[str, Any], pattern: str) -> Dict[str, Any]:
+async def dispatch_fraud_pattern(
+    client: httpx.AsyncClient, card: Dict[str, Any], pattern: str
+) -> Dict[str, Any]:
     headers = get_service_headers()
     auth_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
     payloads = build_fraud_pattern_payloads(card, pattern)
     results = []
     for payload in payloads:
-        response = await client.post(auth_url, json=payload, headers=headers, timeout=SWIPE_REQUEST_TIMEOUT_SECONDS)
+        response = await client.post(
+            auth_url,
+            json=payload,
+            headers=headers,
+            timeout=SWIPE_REQUEST_TIMEOUT_SECONDS,
+        )
+        response_payload = response.json() if response.status_code == 200 else {}
+        followup = None
+        if response_payload.get("fraud_alert_id"):
+            outcome_label = (
+                "confirmed_fraud"
+                if pattern
+                in {
+                    "cnp_gift_card_burst",
+                    "electronics_marketplace_burst",
+                    "merchant_category_velocity",
+                }
+                else "false_positive"
+            )
+            followup = await schedule_synthetic_alert_followup(
+                fraud_alert_id=response_payload["fraud_alert_id"],
+                authorization_id=response_payload.get("authorization_id")
+                or response_payload.get("id"),
+                card_token=payload.get("card_token"),
+                pattern=pattern,
+                rrn=payload.get("retrieval_reference_number"),
+                outcome_label=outcome_label,
+            )
         results.append(
             {
                 "pattern": pattern,
                 "rrn": payload["retrieval_reference_number"],
                 "status_code": response.status_code,
-                "action_code": response.json().get("action_code") if response.status_code == 200 else None,
+                "action_code": response_payload.get("action_code"),
+                "authorization_id": response_payload.get("authorization_id")
+                or response_payload.get("id"),
+                "fraud_alert_id": response_payload.get("fraud_alert_id"),
+                "scheduled_followup": followup,
             }
         )
     return {
         "pattern": pattern,
         "attempted": len(payloads),
-        "authorized": sum(1 for result in results if result["status_code"] == 200 and result["action_code"] == "00"),
+        "authorized": sum(
+            1
+            for result in results
+            if result["status_code"] == 200 and result["action_code"] == "00"
+        ),
         "results": results,
     }
+
 
 def get_service_headers() -> Dict[str, str]:
     """
@@ -475,18 +962,23 @@ def get_service_headers() -> Dict[str, str]:
     """
     global _cached_oidc_token, _cached_token_time
     import time
-    
+
     headers = {"X-Card-Network-Token": get_card_network_token()}
-    if BANKING_SERVICE_URL and "localhost" not in BANKING_SERVICE_URL and "127.0.0.1" not in BANKING_SERVICE_URL:
+    if (
+        BANKING_SERVICE_URL
+        and "localhost" not in BANKING_SERVICE_URL
+        and "127.0.0.1" not in BANKING_SERVICE_URL
+    ):
         # Cache token for 50 minutes (expires in 60 min)
         if _cached_oidc_token and (time.time() - _cached_token_time) < 3000:
             headers["Authorization"] = f"Bearer {_cached_oidc_token}"
             return headers
-            
+
         try:
             import google.auth
             import google.auth.transport.requests
             from google.oauth2 import id_token
+
             auth_req = google.auth.transport.requests.Request()
             oidc_token = id_token.fetch_id_token(auth_req, BANKING_SERVICE_URL)
             if oidc_token:
@@ -503,6 +995,309 @@ def get_service_headers() -> Dict[str, str]:
                 f"Missing OIDC authorization header for remote banking-service at {BANKING_SERVICE_URL}."
             )
     return headers
+
+
+def _utc_now() -> datetime.datetime:
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def _coerce_utc(value: datetime.datetime | None) -> datetime.datetime:
+    if value is None:
+        return _utc_now()
+    if value.tzinfo is None:
+        return value.replace(tzinfo=datetime.timezone.utc)
+    return value.astimezone(datetime.timezone.utc)
+
+
+def get_schedule_client() -> SyntheticScheduleClient:
+    return SyntheticScheduleClient()
+
+
+def _cloud_tasks_parent() -> str | None:
+    if not (CLOUD_TASKS_PROJECT_ID and CLOUD_TASKS_LOCATION and CLOUD_TASKS_QUEUE):
+        return None
+    return (
+        f"projects/{CLOUD_TASKS_PROJECT_ID}/locations/{CLOUD_TASKS_LOCATION}/"
+        f"queues/{CLOUD_TASKS_QUEUE}"
+    )
+
+
+def _dispatch_url(event_record_id: str) -> str:
+    base_url = DATA_GENERATOR_DISPATCH_URL
+    if not base_url:
+        base_url = "http://localhost:8080" if is_local_dev() else ""
+    if not base_url:
+        raise RuntimeError("DATA_GENERATOR_DISPATCH_URL is required for Cloud Tasks.")
+    return f"{base_url.rstrip('/')}/scheduled-events/{event_record_id}/dispatch"
+
+
+def enqueue_cloud_task_for_event(event_record: Any) -> bool:
+    parent = _cloud_tasks_parent()
+    if not parent:
+        return False
+    try:
+        from google.cloud import tasks_v2
+        from google.protobuf import timestamp_pb2
+
+        timestamp = timestamp_pb2.Timestamp()
+        timestamp.FromDatetime(_coerce_utc(event_record.scheduled_for))
+        task = {
+            "http_request": {
+                "http_method": tasks_v2.HttpMethod.POST,
+                "url": _dispatch_url(event_record.id),
+                "headers": {
+                    "X-Card-Network-Token": get_card_network_token(),
+                    "Content-Type": "application/json",
+                },
+            },
+            "schedule_time": timestamp,
+        }
+        if DATA_GENERATOR_SERVICE_ACCOUNT_EMAIL:
+            task["http_request"]["oidc_token"] = {
+                "service_account_email": DATA_GENERATOR_SERVICE_ACCOUNT_EMAIL,
+                "audience": DATA_GENERATOR_DISPATCH_URL.rstrip("/")
+                if DATA_GENERATOR_DISPATCH_URL
+                else None,
+            }
+        tasks_v2.CloudTasksClient().create_task(parent=parent, task=task)
+        return True
+    except Exception as exc:
+        logger.warning("Failed to enqueue Cloud Task for scheduled event %s: %s", event_record.id, exc)
+        return False
+
+
+def _policy_for_persona(persona_id: str, policies: list[BehaviorPolicy]) -> BehaviorPolicy:
+    for policy in policies:
+        if persona_id in policy.policy_id:
+            return policy
+    return policies[0]
+
+
+def _event_schedule_time(
+    *,
+    start_at: datetime.datetime,
+    offset_minutes: int,
+    extra_minutes: int = 0,
+    scale: float = 1.0,
+) -> datetime.datetime:
+    return start_at + datetime.timedelta(minutes=round((offset_minutes + extra_minutes) * scale))
+
+
+def _timeline_schedule_scale(
+    *,
+    plan: ScenarioPlan,
+    start_at: datetime.datetime,
+    end_at: datetime.datetime | None,
+) -> float:
+    if end_at is None:
+        return 1.0
+
+    max_offset = 0
+    for event in plan.timeline:
+        if event.event_type.value not in {"authorization", "customer_action"}:
+            continue
+        max_offset = max(max_offset, event.offset_minutes)
+        if event.event_type.value == "authorization":
+            max_offset = max(max_offset, event.offset_minutes + SCHEDULE_SETTLEMENT_DELAY_MINUTES)
+
+    if max_offset <= 0:
+        return 1.0
+
+    window_minutes = max(0, int((end_at - start_at).total_seconds() // 60))
+    if window_minutes >= max_offset:
+        return 1.0
+    return window_minutes / max_offset
+
+
+async def enqueue_scenario_schedule(
+    request: EnqueueScenarioRequest,
+) -> SchedulePlanResult:
+    execution_request = request.execution_request
+    plan = execution_request.plan
+    start_at = _coerce_utc(request.start_at)
+    end_at = _coerce_utc(request.end_at) if request.end_at else None
+    if end_at is not None and end_at < start_at:
+        raise HTTPException(
+            status_code=422,
+            detail="end_at must be greater than or equal to start_at.",
+        )
+    schedule_scale = _timeline_schedule_scale(plan=plan, start_at=start_at, end_at=end_at)
+    schedule_id = request.schedule_id or f"schedule-{plan.scenario_id}-{uuid.uuid4().hex[:8]}"
+    execution_id = _execution_id(plan.scenario_id, execution_request.idempotency_key)
+    transport = (request.dispatch_transport or SCHEDULE_DISPATCH_TRANSPORT).lower()
+    cards = execution_request.default_card_tokens or (
+        [execution_request.default_card_token] if execution_request.default_card_token else []
+    )
+    if not cards:
+        active_cards = get_spendable_cards(get_generator_eligible_cards(get_active_cards()))
+        cards = [card["card_token"] for card in active_cards]
+    if not cards:
+        raise HTTPException(
+            status_code=409,
+            detail="No eligible active cards available for scheduled scenario execution.",
+        )
+
+    schedule_client = get_schedule_client()
+    created_events = []
+    cloud_tasks_enqueued = 0
+    warnings = []
+    if schedule_scale < 1.0:
+        warnings.append(
+            "Scenario timeline was condensed to fit inside the requested schedule window."
+        )
+    auth_index = 0
+    for event in plan.timeline:
+        if event.event_type.value not in {"authorization", "customer_action"}:
+            continue
+        event_time = _event_schedule_time(
+            start_at=start_at,
+            offset_minutes=event.offset_minutes,
+            scale=schedule_scale,
+        )
+        if event.event_type.value == "authorization":
+            card_token = cards[auth_index % len(cards)]
+            auth_index += 1
+            auth_payload = _auth_payload(event, plan.scenario_id, card_token)
+            created = await schedule_client.create_event(
+                {
+                    "schedule_id": schedule_id,
+                    "scenario_id": plan.scenario_id,
+                    "execution_id": execution_id,
+                    "event_id": event.event_id,
+                    "event_type": "authorization",
+                    "persona_id": event.persona_id,
+                    "scheduled_for": event_time.isoformat(),
+                    "idempotency_key": f"{schedule_id}:{event.event_id}:authorization",
+                    "payload": {
+                        "authorization_payload": auth_payload,
+                        "outcome_label": event.outcome_label.value,
+                        "expected_reason_codes": event.expected_reason_codes,
+                        "expected_score_band": event.expected_score_band,
+                    },
+                }
+            )
+            created_events.append(created)
+            if transport == "cloud_tasks" and enqueue_cloud_task_for_event(created):
+                cloud_tasks_enqueued += 1
+            elif transport == "cloud_tasks":
+                warnings.append(f"Cloud Task enqueue failed for {created.event_id}.")
+
+            resolution = _resolution_for_event(
+                event, plan.scenario_id, _policy_for_persona(event.persona_id, plan.behavior_policies)
+            )
+            if resolution in {"settled", "reversed"}:
+                resolution_event_type = "settlement" if resolution == "settled" else "reversal"
+                resolution_event_time = _event_schedule_time(
+                    start_at=start_at,
+                    offset_minutes=event.offset_minutes,
+                    extra_minutes=SCHEDULE_SETTLEMENT_DELAY_MINUTES,
+                    scale=schedule_scale,
+                )
+                resolution_event = await schedule_client.create_event(
+                    {
+                        "schedule_id": schedule_id,
+                        "scenario_id": plan.scenario_id,
+                        "execution_id": execution_id,
+                        "event_id": f"{event.event_id}:{resolution_event_type}",
+                        "parent_event_id": event.event_id,
+                        "event_type": resolution_event_type,
+                        "persona_id": event.persona_id,
+                        "scheduled_for": resolution_event_time.isoformat(),
+                        "idempotency_key": f"{schedule_id}:{event.event_id}:{resolution_event_type}",
+                        "payload": {"amount_cents": event.amount_cents},
+                    }
+                )
+                created_events.append(resolution_event)
+                if transport == "cloud_tasks" and enqueue_cloud_task_for_event(resolution_event):
+                    cloud_tasks_enqueued += 1
+                elif transport == "cloud_tasks":
+                    warnings.append(f"Cloud Task enqueue failed for {resolution_event.event_id}.")
+        else:
+            created = await schedule_client.create_event(
+                {
+                    "schedule_id": schedule_id,
+                    "scenario_id": plan.scenario_id,
+                    "execution_id": execution_id,
+                    "event_id": event.event_id,
+                    "event_type": "customer_action",
+                    "persona_id": event.persona_id,
+                    "scheduled_for": event_time.isoformat(),
+                    "idempotency_key": f"{schedule_id}:{event.event_id}:customer_action",
+                    "payload": {
+                        "outcome_label": event.outcome_label.value,
+                        "expected_reason_codes": event.expected_reason_codes,
+                        "expected_score_band": event.expected_score_band,
+                    },
+                }
+            )
+            created_events.append(created)
+            if transport == "cloud_tasks" and enqueue_cloud_task_for_event(created):
+                cloud_tasks_enqueued += 1
+            elif transport == "cloud_tasks":
+                warnings.append(f"Cloud Task enqueue failed for {created.event_id}.")
+
+    return SchedulePlanResult(
+        schedule_id=schedule_id,
+        scenario_id=plan.scenario_id,
+        execution_id=execution_id,
+        created_events=created_events,
+        dispatch_transport=transport,
+        cloud_tasks_enqueued=cloud_tasks_enqueued,
+        warnings=warnings,
+    )
+
+
+async def schedule_synthetic_alert_followup(
+    *,
+    fraud_alert_id: str,
+    authorization_id: str | None,
+    card_token: str | None,
+    pattern: str,
+    rrn: str | None,
+    outcome_label: str,
+    delay_minutes: int = SCHEDULE_FOLLOWUP_MINUTES,
+) -> dict[str, Any] | None:
+    if random.random() > SYNTHETIC_ALERT_FOLLOWUP_RATE:
+        return None
+    schedule_id = f"ambient-fraud-followup-{uuid.uuid4().hex[:12]}"
+    event_id = f"{pattern}-customer-followup"
+    scheduled_for = _utc_now() + datetime.timedelta(minutes=delay_minutes)
+    schedule_client = get_schedule_client()
+    event = await schedule_client.create_event(
+        {
+            "schedule_id": schedule_id,
+            "scenario_id": "ambient-fraud-pattern-followup",
+            "execution_id": schedule_id,
+            "event_id": event_id,
+            "event_type": "customer_action",
+            "persona_id": "ambient-cardholder",
+            "scheduled_for": scheduled_for.isoformat(),
+            "idempotency_key": f"{schedule_id}:{event_id}:customer_action",
+            "payload": {
+                "outcome_label": outcome_label,
+                "auth_context": {
+                    "fraud_alert_id": fraud_alert_id,
+                    "authorization_id": authorization_id,
+                    "card_token": card_token,
+                    "retrieval_reference_number": rrn,
+                    "outcome_label": outcome_label,
+                },
+                "expected_reason_codes": [pattern],
+            },
+        }
+    )
+    cloud_task_enqueued = (
+        enqueue_cloud_task_for_event(event)
+        if SCHEDULE_DISPATCH_TRANSPORT == "cloud_tasks"
+        else False
+    )
+    return {
+        "schedule_id": schedule_id,
+        "event_record_id": event.id,
+        "scheduled_for": event.scheduled_for.isoformat(),
+        "cloud_task_enqueued": cloud_task_enqueued,
+        "outcome_label": outcome_label,
+    }
 
 
 def get_spendable_cards(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -538,6 +1333,7 @@ async def auto_paydown_high_utilization_cards(
     cards: List[Dict[str, Any]],
     trigger_utilization: float = 0.65,
     target_utilization: float = 0.35,
+    max_accounts: int | None = None,
 ) -> List[Dict[str, Any]]:
     """Pays down highly utilized mock credit cards from checking first, then savings."""
     results = []
@@ -550,7 +1346,12 @@ async def auto_paydown_high_utilization_cards(
         customer_id = card.get("customer_id")
         credit_account_id = card.get("credit_account_id")
 
-        if not credit_limit_cents or available_credit_cents is None or not customer_id or not credit_account_id:
+        if (
+            not credit_limit_cents
+            or available_credit_cents is None
+            or not customer_id
+            or not credit_account_id
+        ):
             continue
 
         utilization = 1 - (available_credit_cents / credit_limit_cents)
@@ -563,8 +1364,11 @@ async def auto_paydown_high_utilization_cards(
         return results
 
     random.shuffle(eligible_cards)
-    if AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE > 0:
-        eligible_cards = eligible_cards[:AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE]
+    account_limit = (
+        AUTO_PAYDOWN_MAX_ACCOUNTS_PER_PULSE if max_accounts is None else max_accounts
+    )
+    if account_limit > 0:
+        eligible_cards = eligible_cards[:account_limit]
 
     for card in eligible_cards:
         customer_id = card.get("customer_id")
@@ -599,7 +1403,10 @@ async def auto_paydown_high_utilization_cards(
             continue
 
         if _is_maintenance_response(response):
-            logger.info("Skipping auto-paydown during banking-service maintenance for credit account %s.", credit_account_id)
+            logger.info(
+                "Skipping auto-paydown during banking-service maintenance for credit account %s.",
+                credit_account_id,
+            )
             results.append(
                 {
                     "credit_account_id": credit_account_id,
@@ -634,6 +1441,7 @@ async def auto_paydown_high_utilization_cards(
 
     return results
 
+
 def get_merchants() -> List[Dict[str, Any]]:
     """Fetches merchant catalog from banking-service and uses a single generic fallback only for local dev."""
     global merchants_list
@@ -656,42 +1464,55 @@ def get_merchants() -> List[Dict[str, Any]]:
                 loaded = []
                 for item in data:
                     clean_name = item.get("clean_name", "Unknown")
-                    loaded.append({
-                        "merchant": clean_name,
-                        "descriptor": item.get(
-                            "raw_descriptor_pattern",
-                            item.get("raw_descriptor", clean_name),
-                        ),
-                        "category": item.get("category", "Retail"),
-                        "mcc": item.get("mcc", item.get("default_mcc", "5311")),
-                        "country_code": item.get("country_code", "USA"),
-                        "city": item.get("city"),
-                        "region": item.get("region"),
-                        "postal_code": item.get("postal_code"),
-                        "latitude": item.get("latitude"),
-                        "longitude": item.get("longitude"),
-                        "card_present_capable": item.get("card_present_capable", True),
-                        "ecommerce_capable": item.get("ecommerce_capable", False),
-                        "high_risk_flags": item.get("high_risk_flags", []),
-                        "is_international": item.get("is_international", False),
-                        "risk_score": item.get("risk_score", 0),
-                    })
+                    loaded.append(
+                        {
+                            "merchant": clean_name,
+                            "descriptor": item.get(
+                                "raw_descriptor_pattern",
+                                item.get("raw_descriptor", clean_name),
+                            ),
+                            "category": item.get("category", "Retail"),
+                            "mcc": item.get("mcc", item.get("default_mcc", "5311")),
+                            "country_code": item.get("country_code", "USA"),
+                            "city": item.get("city"),
+                            "region": item.get("region"),
+                            "postal_code": item.get("postal_code"),
+                            "latitude": item.get("latitude"),
+                            "longitude": item.get("longitude"),
+                            "card_present_capable": item.get(
+                                "card_present_capable", True
+                            ),
+                            "ecommerce_capable": item.get("ecommerce_capable", False),
+                            "high_risk_flags": item.get("high_risk_flags", []),
+                            "is_international": item.get("is_international", False),
+                            "risk_score": item.get("risk_score", 0),
+                        }
+                    )
                 if loaded:
                     merchants_list = loaded
-                    logger.info("Retrieved %s merchants via HTTP from %s.", len(merchants_list), endpoint)
+                    logger.info(
+                        "Retrieved %s merchants via HTTP from %s.",
+                        len(merchants_list),
+                        endpoint,
+                    )
                     return merchants_list
     except Exception as e:
-        logger.warning(f"Could not fetch merchants via HTTP from {BANKING_SERVICE_URL}: {e}")
+        logger.warning(
+            f"Could not fetch merchants via HTTP from {BANKING_SERVICE_URL}: {e}"
+        )
 
     if is_local_dev():
         merchants_list = [build_generic_merchant()]
-        logger.info("Using single generic local merchant fallback because banking-service catalog is unavailable.")
+        logger.info(
+            "Using single generic local merchant fallback because banking-service catalog is unavailable."
+        )
         return merchants_list
 
     raise HTTPException(
         status_code=status.HTTP_502_BAD_GATEWAY,
         detail="Unable to resolve merchant catalog from banking-service.",
     )
+
 
 # Static local-only personas for offline development.
 DEFAULT_PERSONAS = [
@@ -726,8 +1547,9 @@ DEFAULT_PERSONAS = [
         "mccs": ["5814", "4899", "5812"],
         "amount_min": 400,
         "amount_max": 3500,
-    }
+    },
 ]
+
 
 def get_active_cards() -> List[Dict[str, Any]]:
     """
@@ -736,52 +1558,95 @@ def get_active_cards() -> List[Dict[str, Any]]:
     """
     try:
         with httpx.Client(timeout=ACTIVE_CARD_FETCH_TIMEOUT_SECONDS) as client:
-            res = client.get(f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards", headers=get_service_headers())
+            res = client.get(
+                f"{BANKING_SERVICE_URL}/api/v1/credit-card/active-cards",
+                headers=get_service_headers(),
+            )
             if res.status_code == 200:
                 data = res.json()
                 cards = get_generator_eligible_cards(data.get("active_cards", []))
                 if cards:
-                    logger.info(f"Retrieved {len(cards)} active card tokens via HTTP from banking-service.")
+                    logger.info(
+                        f"Retrieved {len(cards)} active card tokens via HTTP from banking-service."
+                    )
                     return cards
             if _is_maintenance_response(res):
                 raise MaintenanceModeError("banking-service reset is in progress")
-            logger.warning(f"Active card discovery failed. HTTP {res.status_code}: {res.text}")
+            logger.warning(
+                f"Active card discovery failed. HTTP {res.status_code}: {res.text}"
+            )
     except Exception as e:
         if isinstance(e, MaintenanceModeError):
             raise
-        logger.warning(f"Could not fetch active cards via HTTP from {BANKING_SERVICE_URL}: {e}")
+        logger.warning(
+            f"Could not fetch active cards via HTTP from {BANKING_SERVICE_URL}: {e}"
+        )
 
     if is_local_dev():
-        logger.info("Using static DEFAULT_PERSONAS fallback for local active-card simulation.")
+        logger.info(
+            "Using static DEFAULT_PERSONAS fallback for local active-card simulation."
+        )
         return get_generator_eligible_cards(DEFAULT_PERSONAS)
     raise HTTPException(
         status_code=status.HTTP_502_BAD_GATEWAY,
-        detail="Unable to resolve active cards from banking-service; refusing to use static fallback in deployed mode."
+        detail="Unable to resolve active cards from banking-service; refusing to use static fallback in deployed mode.",
     )
 
-async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) -> Dict[str, Any]:
+
+async def simulate_swipe_event(
+    client: httpx.AsyncClient,
+    card: Dict[str, Any],
+    ambient_profile: AmbientLoadProfile | None = None,
+) -> Dict[str, Any]:
     """Simulates a single credit card auth/settle/reverse workflow against the issuing bank gateway."""
     merchants = get_merchants()
-    mccs = card.get("mccs", ["5311", "5411", "5541", "4121"])
+    persona = build_persona_profile(card)
+    behavior_policy = build_behavior_policy(
+        card, persona, ambient_profile=ambient_profile
+    )
+    mccs = behavior_policy.preferred_mccs or ["5311", "5411", "5541", "4121"]
     default_mcc = next((mcc for mcc in mccs if mcc), "5311")
     matching_merchants = [m for m in merchants if m.get("mcc") in mccs]
     if not matching_merchants:
         matching_merchants = [build_generic_merchant(mcc=default_mcc)]
-        
-    is_googler = "GOOGLE" in str(card.get("cardholder_name", "")).upper() or "PRESENTER" in str(card.get("cardholder_name", "")).upper() or "DEMO" in str(card.get("cardholder_name", "")).upper()
-    metros = ["MOUNTAIN VIEW CA", "SAN FRANCISCO CA", "NEW YORK NY", "CHICAGO IL", "SEATTLE WA", "DALLAS TX", "LOS ANGELES CA"]
-    if is_googler:
-        home_metro = ["MOUNTAIN VIEW CA", "SAN FRANCISCO CA"][hash(card.get("cardholder_name", "default")) % 2]
-    else:
-        home_metro = metros[hash(card.get("cardholder_name", "default")) % len(metros)]
 
-    is_intl_swipe = is_googler and (random.random() < 0.25)
+    home_metro = (persona.home_metro or "Mountain View, CA").upper().replace(",", "")
+    travel_multiplier = ambient_profile.travel_multiplier if ambient_profile else 1.0
+    ecommerce_multiplier = (
+        ambient_profile.ecommerce_multiplier if ambient_profile else 1.0
+    )
+    is_intl_swipe = random.random() < min(
+        persona.travel_propensity * travel_multiplier, 1.0
+    )
+    prefer_ecommerce = random.random() < min(
+        persona.digital_commerce_propensity * ecommerce_multiplier, 1.0
+    )
     if is_intl_swipe:
-        region_merchants = [m for m in merchants if m.get("is_international") and m.get("country_code") == "MEX" and m.get("mcc") in mccs]
+        region_merchants = [
+            m
+            for m in merchants
+            if m.get("is_international")
+            and m.get("country_code") == "MEX"
+            and m.get("mcc") in mccs
+        ]
         if not region_merchants:
-            region_merchants = [m for m in merchants if m.get("is_international") and m.get("country_code") == "MEX"]
+            region_merchants = [
+                m
+                for m in merchants
+                if m.get("is_international") and m.get("country_code") == "MEX"
+            ]
+    elif prefer_ecommerce:
+        region_merchants = [
+            m for m in merchants if m.get("ecommerce_capable") and m.get("mcc") in mccs
+        ]
+        if not region_merchants:
+            region_merchants = [m for m in merchants if m.get("ecommerce_capable")]
     else:
-        region_merchants = [m for m in merchants if not m.get("is_international") and m.get("mcc") in mccs]
+        region_merchants = [
+            m
+            for m in merchants
+            if not m.get("is_international") and m.get("mcc") in mccs
+        ]
         if not region_merchants:
             region_merchants = [m for m in merchants if not m.get("is_international")]
 
@@ -797,8 +1662,8 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
         ]
     merchant = random.choice(matching_merchants)
     available_credit = card.get("available_credit_cents")
-    amount_min = card.get("amount_min", 1500)
-    amount_max = card.get("amount_max", 15000)
+    amount_min = behavior_policy.spend_min_cents
+    amount_max = behavior_policy.spend_max_cents
 
     if available_credit is not None:
         amount_max = min(amount_max, int(available_credit))
@@ -818,25 +1683,32 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
     if amount_max < amount_floor:
         amount_floor = amount_max
     amount_cents = random.randint(amount_floor, amount_max)
-    
-    if merchant.get("mcc") == "5814": # Coffee
+
+    if merchant.get("mcc") == "5814":  # Coffee
         amount_cents = min(amount_cents, 5000)
-    elif merchant.get("mcc") == "5812": # Dining
+    elif merchant.get("mcc") == "5812":  # Dining
         amount_cents = min(amount_cents, 30000)
-    elif merchant.get("mcc") == "5541": # Gas
+    elif merchant.get("mcc") == "5541":  # Gas
         amount_cents = min(amount_cents, 10000)
 
     raw_name = merchant.get("merchant", "Store")
     if merchant.get("descriptor") and merchant["descriptor"] != raw_name:
         formatted_merchant = merchant["descriptor"]
-    elif merchant.get("category") in ["Streaming & Entertainment", "Electronics & Software"] or raw_name in ["Amazon", "Netflix", "Spotify", "Apple"]:
-        formatted_merchant = f"{raw_name.upper()}*ONLINE" if "Amazon" not in raw_name else "AMAZON.COM*MKTPLACE"
+    elif merchant.get("category") in [
+        "Streaming & Entertainment",
+        "Electronics & Software",
+    ] or raw_name in ["Amazon", "Netflix", "Spotify", "Apple"]:
+        formatted_merchant = (
+            f"{raw_name.upper()}*ONLINE"
+            if "Amazon" not in raw_name
+            else "AMAZON.COM*MKTPLACE"
+        )
     else:
         formatted_merchant = f"{raw_name.upper()} - {home_metro}"
     channel_context = infer_channel_context(merchant, formatted_merchant)
 
     rrn = "".join(random.choices("0123456789", k=12))
-    
+
     headers = get_service_headers()
     auth_payload = {
         "card_token": card["card_token"],
@@ -858,13 +1730,20 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
         "is_digital_goods": channel_context["is_digital_goods"],
         "merchant_high_risk_flags": merchant.get("high_risk_flags", []),
     }
-    
+
     auth_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
-    
+
     try:
-        auth_resp = await client.post(auth_url, json=auth_payload, headers=headers, timeout=SWIPE_REQUEST_TIMEOUT_SECONDS)
+        auth_resp = await client.post(
+            auth_url,
+            json=auth_payload,
+            headers=headers,
+            timeout=SWIPE_REQUEST_TIMEOUT_SECONDS,
+        )
         if _is_maintenance_response(auth_resp):
-            logger.info("Skipping swipe because banking-service is in maintenance mode.")
+            logger.info(
+                "Skipping swipe because banking-service is in maintenance mode."
+            )
             return {
                 "card_token": card.get("card_token"),
                 "rrn": rrn,
@@ -875,7 +1754,9 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
                 "error": None,
             }
         if auth_resp.status_code != 200:
-            logger.warning(f"Auth request failed. HTTP {auth_resp.status_code}: {auth_resp.text}")
+            logger.warning(
+                f"Auth request failed. HTTP {auth_resp.status_code}: {auth_resp.text}"
+            )
             return {
                 "card_token": card.get("card_token"),
                 "rrn": rrn,
@@ -885,10 +1766,12 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
                 "decline_reason": f"HTTP_{auth_resp.status_code}",
                 "error": auth_resp.text,
             }
-            
+
         auth_data = auth_resp.json()
         if auth_data.get("action_code") != "00":
-            logger.info(f"Swipe declined by gateway: card={card.get('cardholder_name')}, reason={auth_data.get('decline_reason')}")
+            logger.info(
+                f"Swipe declined by gateway: card={card.get('cardholder_name')}, reason={auth_data.get('decline_reason')}"
+            )
             return {
                 "card_token": card.get("card_token"),
                 "rrn": rrn,
@@ -898,23 +1781,38 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
                 "decline_reason": auth_data.get("decline_reason"),
                 "error": None,
             }
-            
-        resolution = random.choices(["SETTLE", "REVERSE", "PENDING"], weights=[80, 10, 10], k=1)[0]
-        
+
+        resolution = random.choices(
+            ["SETTLE", "REVERSE", "PENDING"],
+            weights=[
+                behavior_policy.settlement_probability,
+                behavior_policy.reversal_probability,
+                behavior_policy.pending_probability,
+            ],
+            k=1,
+        )[0]
+
         if resolution == "SETTLE":
             final_amount = amount_cents
             if merchant.get("mcc") in ["5812", "5814"] and random.random() < 0.8:
                 tip = int(amount_cents * random.choice([0.15, 0.18, 0.20]))
                 final_amount += tip
-                
+
             settle_payload = {
                 "retrieval_reference_number": rrn,
                 "amount_cents": final_amount,
             }
             settle_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/settle"
-            settle_resp = await client.post(settle_url, json=settle_payload, headers=headers, timeout=SWIPE_REQUEST_TIMEOUT_SECONDS)
+            settle_resp = await client.post(
+                settle_url,
+                json=settle_payload,
+                headers=headers,
+                timeout=SWIPE_REQUEST_TIMEOUT_SECONDS,
+            )
             if _is_maintenance_response(settle_resp):
-                logger.info("Skipping settlement because banking-service entered maintenance mode.")
+                logger.info(
+                    "Skipping settlement because banking-service entered maintenance mode."
+                )
                 return {
                     "card_token": card.get("card_token"),
                     "rrn": rrn,
@@ -925,7 +1823,9 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
                     "error": None,
                 }
             if settle_resp.status_code == 200:
-                logger.info(f"Swipe settled successfully. Card: {card.get('cardholder_name')}, Merchant: {merchant.get('merchant')}, Amount: ${final_amount/100:.2f} (Hold: ${amount_cents/100:.2f})")
+                logger.info(
+                    f"Swipe settled successfully. Card: {card.get('cardholder_name')}, Merchant: {merchant.get('merchant')}, Amount: ${final_amount / 100:.2f} (Hold: ${amount_cents / 100:.2f})"
+                )
                 return {
                     "card_token": card.get("card_token"),
                     "rrn": rrn,
@@ -936,7 +1836,9 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
                     "error": None,
                 }
             else:
-                logger.error(f"Settlement failed. HTTP {settle_resp.status_code}: {settle_resp.text}")
+                logger.error(
+                    f"Settlement failed. HTTP {settle_resp.status_code}: {settle_resp.text}"
+                )
                 return {
                     "card_token": card.get("card_token"),
                     "rrn": rrn,
@@ -946,13 +1848,20 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
                     "decline_reason": None,
                     "error": f"SETTLE_HTTP_{settle_resp.status_code}: {settle_resp.text}",
                 }
-                
+
         elif resolution == "REVERSE":
             rev_payload = {"retrieval_reference_number": rrn}
             reverse_url = f"{BANKING_SERVICE_URL}/api/v1/card-network/reverse"
-            rev_resp = await client.post(reverse_url, json=rev_payload, headers=headers, timeout=SWIPE_REQUEST_TIMEOUT_SECONDS)
+            rev_resp = await client.post(
+                reverse_url,
+                json=rev_payload,
+                headers=headers,
+                timeout=SWIPE_REQUEST_TIMEOUT_SECONDS,
+            )
             if _is_maintenance_response(rev_resp):
-                logger.info("Skipping reversal because banking-service entered maintenance mode.")
+                logger.info(
+                    "Skipping reversal because banking-service entered maintenance mode."
+                )
                 return {
                     "card_token": card.get("card_token"),
                     "rrn": rrn,
@@ -963,7 +1872,9 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
                     "error": None,
                 }
             if rev_resp.status_code == 200:
-                logger.info(f"Swipe hold reversed successfully. Card: {card.get('cardholder_name')}, RRN: {rrn}")
+                logger.info(
+                    f"Swipe hold reversed successfully. Card: {card.get('cardholder_name')}, RRN: {rrn}"
+                )
                 return {
                     "card_token": card.get("card_token"),
                     "rrn": rrn,
@@ -974,7 +1885,9 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
                     "error": None,
                 }
             else:
-                logger.error(f"Reversal failed. HTTP {rev_resp.status_code}: {rev_resp.text}")
+                logger.error(
+                    f"Reversal failed. HTTP {rev_resp.status_code}: {rev_resp.text}"
+                )
                 return {
                     "card_token": card.get("card_token"),
                     "rrn": rrn,
@@ -984,9 +1897,11 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
                     "decline_reason": None,
                     "error": f"REVERSE_HTTP_{rev_resp.status_code}: {rev_resp.text}",
                 }
-                
+
         else:
-            logger.info(f"Swipe hold left PENDING (active hold). Card: {card.get('cardholder_name')}, Amount: ${amount_cents/100:.2f}")
+            logger.info(
+                f"Swipe hold left PENDING (active hold). Card: {card.get('cardholder_name')}, Amount: ${amount_cents / 100:.2f}"
+            )
             return {
                 "card_token": card.get("card_token"),
                 "rrn": rrn,
@@ -996,9 +1911,11 @@ async def simulate_swipe_event(client: httpx.AsyncClient, card: Dict[str, Any]) 
                 "decline_reason": None,
                 "error": None,
             }
-            
+
     except Exception as exc:
-        logger.error(f"Failed to execute simulation cycle for card {card.get('cardholder_name')}: {repr(exc)}")
+        logger.error(
+            f"Failed to execute simulation cycle for card {card.get('cardholder_name')}: {repr(exc)}"
+        )
         return {
             "card_token": card.get("card_token"),
             "rrn": rrn,
@@ -1021,26 +1938,40 @@ def summarize_swipe_results(results: List[Dict[str, Any]]) -> Dict[str, int]:
     }
 
 
-def build_randomized_pulse_plan(total_events: int, window_seconds: int = 58) -> List[float]:
+def build_randomized_pulse_plan(
+    total_events: int, window_seconds: int = 58
+) -> List[float]:
     """Distributes swipe events across the minute using randomized offsets."""
     if total_events <= 0:
         return []
     return sorted(random.uniform(0, window_seconds) for _ in range(total_events))
 
-async def run_activity_surge_task(active_cards: Optional[List[Dict[str, Any]]] = None) -> Dict[str, int]:
+
+async def run_activity_surge_task(
+    active_cards: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, int]:
     """Fires 50 rapid-fire swipes staggered over 10 seconds."""
-    logger.info("Starting activity surge simulation (%s swipes over staggered intervals)...", SURGE_TOTAL_EVENTS)
+    logger.info(
+        "Starting activity surge simulation (%s swipes over staggered intervals)...",
+        SURGE_TOTAL_EVENTS,
+    )
     cards = active_cards or get_active_cards()
     cards = get_spendable_cards(cards)
     if not cards:
         logger.warning("No spendable cards resolved. Surge aborted.")
-        raise HTTPException(status_code=409, detail="No spendable active cards resolved. Surge aborted.")
+        raise HTTPException(
+            status_code=409, detail="No spendable active cards resolved. Surge aborted."
+        )
 
     semaphore = asyncio.Semaphore(SWIPE_WORKFLOW_CONCURRENCY)
 
-    async def bounded_swipe(client: httpx.AsyncClient, card: Dict[str, Any]) -> Dict[str, Any]:
+    async def bounded_swipe(
+        client: httpx.AsyncClient, card: Dict[str, Any]
+    ) -> Dict[str, Any]:
         async with semaphore:
-            return await simulate_swipe_event(client, card)
+            return await simulate_swipe_event(
+                client, card, ambient_profile=get_ambient_profile()
+            )
 
     async with httpx.AsyncClient() as client:
         tasks = []
@@ -1049,15 +1980,23 @@ async def run_activity_surge_task(active_cards: Optional[List[Dict[str, Any]]] =
             tasks.append(bounded_swipe(client, card))
             await asyncio.sleep(SURGE_STAGGER_SECONDS)
         results = await asyncio.gather(*tasks, return_exceptions=False)
-        paydown_results = await auto_paydown_high_utilization_cards(client, cards)
+        paydown_results = await auto_paydown_high_utilization_cards(
+            client,
+            cards,
+            max_accounts=get_ambient_profile().auto_paydown_max_accounts_per_pulse,
+        )
     summary = summarize_swipe_results(results)
-    summary["auto_paydowns_processed"] = sum(1 for result in paydown_results if result.get("status") == "SUCCESS")
+    summary["auto_paydowns_processed"] = sum(
+        1 for result in paydown_results if result.get("status") == "SUCCESS"
+    )
     logger.info(f"Activity surge simulation completed: {summary}")
     return summary
+
 
 @app.get("/health")
 def health():
     from utils.version import BUILD_VERSION, BUILD_COMMIT_ID
+
     return {
         "status": "ok",
         "service": "data-generator",
@@ -1065,20 +2004,300 @@ def health():
         "commit": BUILD_COMMIT_ID,
     }
 
+
+@app.get(
+    "/simulation/status",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+def get_simulation_status():
+    """Returns current generator control-surface status for direct GUI and future agentic clients."""
+    ambient_profile = get_ambient_profile()
+    return {
+        "status": "READY",
+        "service": "data-generator",
+        "control_surface": "direct-fastapi",
+        "banking_service_url_configured": bool(BANKING_SERVICE_URL),
+        "pulse": {
+            "window_seconds": ambient_profile.pulse_window_seconds,
+            "min_events": ambient_profile.pulse_min_events,
+            "max_events": ambient_profile.pulse_max_events,
+            "workflow_concurrency": ambient_profile.workflow_concurrency,
+            "admission_redis_required": PULSE_ADMISSION_REDIS_REQUIRED,
+        },
+        "surge": {
+            "total_events": SURGE_TOTAL_EVENTS,
+            "stagger_seconds": SURGE_STAGGER_SECONDS,
+        },
+        "fraud_patterns": {
+            "enabled": ambient_profile.fraud_pattern_enabled,
+            "rate": ambient_profile.fraud_pattern_rate,
+            "max_per_pulse": ambient_profile.fraud_pattern_max_per_pulse,
+            "target_mode": ambient_profile.fraud_pattern_target_mode,
+        },
+        "ambient_profile": ambient_profile,
+        "supported_routes": [
+            "/ambient/profile",
+            "/scenarios/plan",
+            "/scenarios/dry-run",
+            "/scenarios/execute",
+            "/scenarios/replay",
+            "/scenarios/{scenario_id}/outcomes",
+            "/scheduled-events/enqueue",
+            "/scheduled-events",
+            "/scheduled-events/{event_record_id}/dispatch",
+        ],
+    }
+
+
+@app.get(
+    "/ambient/profile",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+def get_ambient_load_profile():
+    """Returns runtime ambient-load knobs for GUI and future agentic control."""
+    return get_ambient_profile()
+
+
+@app.put(
+    "/ambient/profile",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+def update_ambient_load_profile(request: AmbientLoadProfileUpdate):
+    """Updates bounded runtime ambient-load knobs without requiring Terraform changes."""
+    return update_ambient_profile(request)
+
+
+@app.post(
+    "/ambient/profile/reset",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+def reset_ambient_load_profile():
+    """Restores runtime ambient-load controls to environment-derived defaults."""
+    return reset_ambient_profile()
+
+
+@app.post(
+    "/scenarios/plan",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+def plan_generation_scenario(request: ScenarioRequest):
+    """Returns a validated dry-run scenario plan without writing synthetic data."""
+    plan = plan_scenario(request)
+    logger.info(
+        "Planned data-generator scenario %s (%s).", plan.scenario_id, plan.scenario_type
+    )
+    return plan
+
+
+@app.post(
+    "/scenarios/dry-run",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+async def dry_run_generation_scenario(request: ScenarioRequest, http_request: Request):
+    """Plans and dry-runs a scenario through the same execution result contract without writing data."""
+    plan = plan_scenario(request.model_copy(update={"mode": ScenarioMode.DRY_RUN}))
+    operator = extract_operator_identity(http_request)
+    result = await execute_scenario(
+        ScenarioExecutionRequest(
+            plan=plan,
+            mode=ScenarioMode.DRY_RUN,
+            idempotency_key=f"dry-run:{plan.scenario_id}:{uuid.uuid4().hex}",
+            operator=operator,
+        ),
+        banking_service_url=BANKING_SERVICE_URL,
+        headers={},
+        timeout_seconds=SWIPE_REQUEST_TIMEOUT_SECONDS,
+    )
+    logger.info(
+        "Scenario dry-run %s prepared by %s.",
+        result.execution_id,
+        operator or "unknown-operator",
+    )
+    return result
+
+
+@app.post(
+    "/scenarios/execute",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+async def execute_generation_scenario(
+    request: ScenarioExecutionRequest, http_request: Request
+):
+    """Executes a validated scenario plan through bounded data-generator primitives."""
+    operator = request.operator or extract_operator_identity(http_request)
+    if operator and request.operator != operator:
+        request = request.model_copy(update={"operator": operator})
+    default_card_token = request.default_card_token
+    default_card_tokens = request.default_card_tokens
+    if (request.mode or request.plan.mode).value in {"execute", "replay"} and not (
+        default_card_token or default_card_tokens
+    ):
+        cards = get_spendable_cards(get_generator_eligible_cards(get_active_cards()))
+        if not cards:
+            raise HTTPException(
+                status_code=409,
+                detail="No eligible active cards available for scenario execution.",
+            )
+        default_card_tokens = [card["card_token"] for card in cards]
+        request = request.model_copy(
+            update={"default_card_tokens": default_card_tokens}
+        )
+
+    result = await execute_scenario(
+        request,
+        banking_service_url=BANKING_SERVICE_URL,
+        headers=get_service_headers(),
+        default_card_token=default_card_token,
+        timeout_seconds=SWIPE_REQUEST_TIMEOUT_SECONDS,
+    )
+    logger.info(
+        "Scenario execution %s finished with status %s.",
+        result.execution_id,
+        result.status,
+    )
+    return result
+
+
+@app.post(
+    "/scenarios/replay",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+async def replay_generation_scenario(
+    request: ScenarioExecutionRequest, http_request: Request
+):
+    """Replays a validated scenario plan with an explicit replay mode and idempotency key."""
+    replay_request = request.model_copy(
+        update={
+            "mode": ScenarioMode.REPLAY,
+            "operator": request.operator or extract_operator_identity(http_request),
+        }
+    )
+    return await execute_generation_scenario(replay_request, http_request)
+
+
+@app.get(
+    "/scenarios/{scenario_id}/outcomes",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+def get_generation_scenario_outcomes(scenario_id: str):
+    """Returns synthetic feedback labels captured for a scenario execution."""
+    outcomes = list_scenario_outcomes(scenario_id)
+    return {
+        "scenario_id": scenario_id,
+        "count": len(outcomes),
+        "outcomes": outcomes,
+    }
+
+
+@app.post(
+    "/scheduled-events/enqueue",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+async def enqueue_scheduled_scenario(request: EnqueueScenarioRequest):
+    """Persists a scenario timeline as durable synthetic events and optionally queues Cloud Tasks."""
+    return await enqueue_scenario_schedule(request)
+
+
+@app.get(
+    "/scheduled-events",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+async def list_scheduled_events(
+    schedule_id: str | None = None,
+    status_filter: str | None = None,
+    limit: int = 100,
+):
+    """Returns the durable synthetic schedule for GUI, MCP, and operator inspection."""
+    return await get_schedule_client().list_events(
+        schedule_id=schedule_id,
+        status_filter=status_filter,
+        limit=limit,
+    )
+
+
+@app.post(
+    "/scheduled-events/{event_record_id}/cancel",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+async def cancel_scheduled_event_chain(event_record_id: str):
+    """Cancels future events in the same schedule as the supplied event record."""
+    schedule_client = get_schedule_client()
+    try:
+        event = await schedule_client.get_event(event_record_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Scheduled event not found.")
+    return await schedule_client.cancel_schedule(event.schedule_id)
+
+
+@app.post(
+    "/scheduled-events/schedules/{schedule_id}/cancel",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+async def cancel_scheduled_scenario(schedule_id: str):
+    """Cancels future events for a durable synthetic schedule."""
+    return await get_schedule_client().cancel_schedule(schedule_id)
+
+
+@app.post(
+    "/scheduled-events/{event_record_id}/dispatch",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+async def dispatch_synthetic_scheduled_event(
+    event_record_id: str,
+) -> ScheduledEventDispatchResult:
+    """Idempotently dispatches one durable scheduled event."""
+    schedule_client = get_schedule_client()
+    try:
+        event = await schedule_client.get_event(event_record_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Scheduled event not found.")
+    return await dispatch_scheduled_event(
+        event=event,
+        schedule_client=schedule_client,
+        banking_service_url=BANKING_SERVICE_URL,
+        headers=get_service_headers(),
+        timeout_seconds=SWIPE_REQUEST_TIMEOUT_SECONDS,
+    )
+
+
 @app.post("/generate", status_code=status.HTTP_200_OK)
-@app.post("/simulate-pulse", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
+@app.post(
+    "/simulate-pulse",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
 async def simulate_pulse(request: Request):
     """Wakes up once a minute and fans transactions across the next 58 seconds."""
     request_body = await parse_request_json(request)
     event_id = extract_pulse_event_id(request, request_body)
     admission = admit_pulse(event_id)
     if not admission.admitted:
-        logger.info("Skipping simulation pulse during admission: %s event_id=%s", admission.status, event_id)
+        logger.info(
+            "Skipping simulation pulse during admission: %s event_id=%s",
+            admission.status,
+            event_id,
+        )
         return admission.skipped_response()
 
     try:
         if _pulse_lock.locked():
-            logger.info("Skipping pulse because another simulation pulse is already running.")
+            logger.info(
+                "Skipping pulse because another simulation pulse is already running."
+            )
             return {
                 "status": "SKIPPED_ACTIVE_PULSE",
                 "message": "Another simulation pulse is already in progress.",
@@ -1093,7 +2312,12 @@ async def simulate_pulse(request: Request):
 
 async def execute_simulation_pulse(event_id: str | None = None) -> Dict[str, Any]:
     """Execute one admitted synthetic activity pulse."""
-    logger.info("Triggered randomized simulation pulse for the next %s seconds.", PULSE_WINDOW_SECONDS)
+    ambient_profile = get_ambient_profile()
+    logger.info(
+        "Triggered %s ambient simulation pulse for the next %s seconds.",
+        ambient_profile.profile_name,
+        ambient_profile.pulse_window_seconds,
+    )
     try:
         cards = get_spendable_cards(get_active_cards())
     except MaintenanceModeError:
@@ -1104,7 +2328,10 @@ async def execute_simulation_pulse(event_id: str | None = None) -> Dict[str, Any
             "event_id": event_id,
         }
     except HTTPException as exc:
-        logger.warning("Skipping simulation pulse because active card discovery is unavailable: %s", exc.detail)
+        logger.warning(
+            "Skipping simulation pulse because active card discovery is unavailable: %s",
+            exc.detail,
+        )
         return {
             "status": "SKIPPED",
             "message": "Active card discovery is temporarily unavailable.",
@@ -1120,34 +2347,60 @@ async def execute_simulation_pulse(event_id: str | None = None) -> Dict[str, Any
             "event_id": event_id,
         }
 
-    total_events = random.randint(PULSE_MIN_EVENTS, PULSE_MAX_EVENTS)
-    event_offsets = build_randomized_pulse_plan(total_events=total_events, window_seconds=PULSE_WINDOW_SECONDS)
-    semaphore = asyncio.Semaphore(SWIPE_WORKFLOW_CONCURRENCY)
+    total_events = random.randint(
+        ambient_profile.pulse_min_events, ambient_profile.pulse_max_events
+    )
+    event_offsets = build_randomized_pulse_plan(
+        total_events=total_events,
+        window_seconds=ambient_profile.pulse_window_seconds,
+    )
+    semaphore = asyncio.Semaphore(ambient_profile.workflow_concurrency)
 
-    async def dispatch_after_offset(client: httpx.AsyncClient, offset_seconds: float, card: Dict[str, Any]) -> Dict[str, Any]:
+    async def dispatch_after_offset(
+        client: httpx.AsyncClient, offset_seconds: float, card: Dict[str, Any]
+    ) -> Dict[str, Any]:
         await asyncio.sleep(offset_seconds)
         async with semaphore:
-            return await simulate_swipe_event(client, card)
+            return await simulate_swipe_event(
+                client, card, ambient_profile=ambient_profile
+            )
 
     async with httpx.AsyncClient() as client:
         tasks = [
-            dispatch_after_offset(client, offset, random.choice(cards))
+            dispatch_after_offset(
+                client, offset, select_ambient_card(cards, ambient_profile)
+            )
             for offset in event_offsets
         ]
         all_results = await asyncio.gather(*tasks, return_exceptions=False)
         fraud_pattern_results = []
-        if FRAUD_PATTERN_ENABLED and random.random() < FRAUD_PATTERN_RATE:
-            fraud_count = max(0, min(FRAUD_PATTERN_MAX_PER_PULSE, len(cards)))
+        if (
+            ambient_profile.fraud_pattern_enabled
+            and random.random() < ambient_profile.fraud_pattern_rate
+        ):
+            fraud_count = max(
+                0, min(ambient_profile.fraud_pattern_max_per_pulse, len(cards))
+            )
             target_cards = random.sample(cards, fraud_count) if fraud_count else []
             for card in target_cards:
                 pattern = random.choice(FRAUD_PATTERN_NAMES)
-                fraud_pattern_results.append(await dispatch_fraud_pattern(client, card, pattern))
-        paydown_results = await auto_paydown_high_utilization_cards(client, cards)
+                fraud_pattern_results.append(
+                    await dispatch_fraud_pattern(client, card, pattern)
+                )
+        paydown_results = await auto_paydown_high_utilization_cards(
+            client,
+            cards,
+            max_accounts=ambient_profile.auto_paydown_max_accounts_per_pulse,
+        )
 
     summary = summarize_swipe_results(all_results)
     summary["fraud_patterns_attempted"] = len(fraud_pattern_results)
-    summary["fraud_pattern_authorizations_created"] = sum(result["authorized"] for result in fraud_pattern_results)
-    summary["auto_paydowns_processed"] = sum(1 for result in paydown_results if result.get("status") == "SUCCESS")
+    summary["fraud_pattern_authorizations_created"] = sum(
+        result["authorized"] for result in fraud_pattern_results
+    )
+    summary["auto_paydowns_processed"] = sum(
+        1 for result in paydown_results if result.get("status") == "SUCCESS"
+    )
     status_label = "SUCCESS" if summary["authorizations_created"] > 0 else "NOOP"
     message = (
         "Simulation pulse completed."
@@ -1157,17 +2410,25 @@ async def execute_simulation_pulse(event_id: str | None = None) -> Dict[str, Any
     return {
         "status": status_label,
         "message": message,
-        "distribution_window_seconds": PULSE_WINDOW_SECONDS,
+        "ambient_profile": ambient_profile.model_dump(),
+        "distribution_window_seconds": ambient_profile.pulse_window_seconds,
         "scheduled_events": total_events,
         **summary,
         "active_cards_count": len(cards),
         "event_id": event_id,
     }
 
-@app.post("/simulate-surge", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
+
+@app.post(
+    "/simulate-surge",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
 async def simulate_surge(payload: SurgeRequest):
-    """Triggers an async rapid-fire activity surge of 50 swipes."""
-    active_cards = [c.model_dump() for c in payload.active_cards] if payload.active_cards else None
+    """Triggers a scenario-backed lakehouse spend velocity surge."""
+    active_cards = (
+        [c.model_dump() for c in payload.active_cards] if payload.active_cards else None
+    )
     if not active_cards:
         try:
             active_cards = get_active_cards()
@@ -1178,41 +2439,121 @@ async def simulate_surge(payload: SurgeRequest):
             )
     active_cards = get_spendable_cards(get_generator_eligible_cards(active_cards))
     if not active_cards:
-        raise HTTPException(status_code=409, detail="No spendable active cards supplied or discovered for surge.")
-    summary = await run_activity_surge_task(active_cards)
+        raise HTTPException(
+            status_code=409,
+            detail="No spendable active cards supplied or discovered for surge.",
+        )
+
+    plan = plan_scenario(
+        ScenarioRequest(
+            goal="Run the Active Lakehouse spend velocity surge.",
+            scenario_type=ScenarioType.LAKEHOUSE_SPEND_VELOCITY_SURGE,
+            mode=ScenarioMode.EXECUTE,
+            seed=random.randint(1, 999_999),
+            max_events=SURGE_TOTAL_EVENTS,
+            target_cohort_size=len(active_cards),
+        )
+    )
+    execution = await execute_scenario(
+        ScenarioExecutionRequest(
+            plan=plan,
+            mode=ScenarioMode.EXECUTE,
+            idempotency_key=f"surge:{plan.scenario_id}:{uuid.uuid4().hex}",
+            default_card_tokens=[card["card_token"] for card in active_cards],
+        ),
+        banking_service_url=BANKING_SERVICE_URL,
+        headers=get_service_headers(),
+        timeout_seconds=SWIPE_REQUEST_TIMEOUT_SECONDS,
+    )
+    async with httpx.AsyncClient() as paydown_client:
+        paydown_results = await auto_paydown_high_utilization_cards(
+            paydown_client, active_cards
+        )
+
+    summary = {
+        "swipes_attempted": execution.attempted_events,
+        "authorizations_created": execution.authorizations_created,
+        "settlements_created": execution.settlements_created,
+        "reversals_created": execution.reversals_created,
+        "declines": sum(1 for step in execution.steps if step.resolution == "declined"),
+        "failures": execution.failed_events,
+        "auto_paydowns_processed": sum(
+            1 for result in paydown_results if result.get("status") == "SUCCESS"
+        ),
+    }
     if summary["authorizations_created"] == 0:
-        raise HTTPException(status_code=502, detail={"message": "No transaction authorizations were created.", **summary})
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": "No transaction authorizations were created.",
+                **summary,
+            },
+        )
     return {
         "status": "SUCCESS",
-        "message": "Simulation surge completed against active card pool.",
+        "message": "Scenario-backed lakehouse spend velocity surge completed against active card pool.",
+        "scenario_id": plan.scenario_id,
+        "execution_id": execution.execution_id,
+        "planned_event_count": len(plan.timeline),
+        "pending_holds_created": execution.pending_holds_created,
+        "validation_hints": [
+            validation.model_dump(mode="json")
+            for validation in plan.expected_validations
+        ],
         "active_cards_count": len(active_cards),
         **summary,
     }
 
 
-@app.post("/simulate-fraud-patterns", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
+@app.post(
+    "/simulate-fraud-patterns",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
 async def simulate_fraud_patterns(req: FraudPatternRequest):
     """Runs labeled model-detection fraud patterns without explicit risk-score overrides."""
-    pattern_count = max(1, min(req.count, FRAUD_PATTERN_MAX_PER_PULSE if FRAUD_PATTERN_MAX_PER_PULSE > 0 else 1))
+    pattern_count = max(
+        1,
+        min(
+            req.count,
+            FRAUD_PATTERN_MAX_PER_PULSE if FRAUD_PATTERN_MAX_PER_PULSE > 0 else 1,
+        ),
+    )
     patterns = [req.pattern] if req.pattern else []
     for _ in range(pattern_count - len(patterns)):
         patterns.append(random.choice(FRAUD_PATTERN_NAMES))
 
     for pattern in patterns:
         if pattern not in FRAUD_PATTERN_NAMES:
-            raise HTTPException(status_code=400, detail=f"Unknown fraud pattern: {pattern}")
+            raise HTTPException(
+                status_code=400, detail=f"Unknown fraud pattern: {pattern}"
+            )
 
     if req.card_token:
-        cards = [{"card_token": req.card_token, "available_credit_cents": 150000, "generator_eligible": True}]
+        cards = [
+            {
+                "card_token": req.card_token,
+                "available_credit_cents": 150000,
+                "generator_eligible": True,
+            }
+        ]
     else:
         try:
-            cards = get_spendable_cards(get_generator_eligible_cards(get_active_cards()))
+            cards = get_spendable_cards(
+                get_generator_eligible_cards(get_active_cards())
+            )
         except MaintenanceModeError:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="banking-service reset is in progress.")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="banking-service reset is in progress.",
+            )
         if FRAUD_PATTERN_TARGET_MODE == "eligible":
             cards = get_generator_eligible_cards(cards)
         if not cards:
-            raise HTTPException(status_code=409, detail="No eligible active cards found for fraud pattern simulation.")
+            raise HTTPException(
+                status_code=409,
+                detail="No eligible active cards found for fraud pattern simulation.",
+            )
 
     async with httpx.AsyncClient() as client:
         results = []
@@ -1228,7 +2569,12 @@ async def simulate_fraud_patterns(req: FraudPatternRequest):
         "message": "Labeled fraud-pattern traffic dispatched without explicit risk-score overrides.",
     }
 
-@app.post("/inject-anomaly", status_code=status.HTTP_200_OK, dependencies=[Depends(verify_switch_or_presenter_token)])
+
+@app.post(
+    "/inject-anomaly",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
 async def inject_anomaly(req: Optional[AnomalyRequest] = None):
     """
     Accepts a card token (or defaults to CE presenter) and fires 5 rapid-fire digital fraud authorizations
@@ -1244,10 +2590,17 @@ async def inject_anomaly(req: Optional[AnomalyRequest] = None):
                 detail="banking-service reset is in progress.",
             )
         if not cards:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active cards found to target for anomaly.")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active cards found to target for anomaly.",
+            )
         for c in cards:
             name_upper = str(c.get("cardholder_name", "")).upper()
-            if "PRESENTER" in name_upper or "SERVEDIO" in name_upper or "MARCUS" in name_upper:
+            if (
+                "PRESENTER" in name_upper
+                or "SERVEDIO" in name_upper
+                or "MARCUS" in name_upper
+            ):
                 target_token = c["card_token"]
                 break
         if not target_token:
@@ -1280,15 +2633,21 @@ async def inject_anomaly(req: Optional[AnomalyRequest] = None):
                 "ip_country_code": country,
                 "shipping_country_code": country,
                 "is_digital_goods": "GIFT" in desc.upper() or "ONLINE" in desc.upper(),
-                "merchant_high_risk_flags": ["DIGITAL_GOODS"] if "ONLINE" in desc.upper() or "GIFT" in desc.upper() else [],
+                "merchant_high_risk_flags": ["DIGITAL_GOODS"]
+                if "ONLINE" in desc.upper() or "GIFT" in desc.upper()
+                else [],
             }
             try:
-                res = await client.post(auth_url, json=payload, headers=headers, timeout=5.0)
+                res = await client.post(
+                    auth_url, json=payload, headers=headers, timeout=5.0
+                )
                 if res.status_code == 200:
                     data = res.json()
                     injected_auths.append(data)
                 else:
-                    logger.warning(f"Anomaly auth hold failed for {desc}: HTTP {res.status_code} - {res.text}")
+                    logger.warning(
+                        f"Anomaly auth hold failed for {desc}: HTTP {res.status_code} - {res.text}"
+                    )
             except Exception as e:
                 logger.error(f"Error injecting anomaly auth hold for {desc}: {e}")
 
@@ -1297,19 +2656,110 @@ async def inject_anomaly(req: Optional[AnomalyRequest] = None):
         "card_token": target_token,
         "injected_swipes_count": len(injected_auths),
         "total_fraud_cents": sum(amt for _, amt, _, _, _ in swipes),
-        "message": "Targeted fraud anomaly surge successfully dispatched against card-network gateway."
+        "message": "Targeted fraud anomaly surge successfully dispatched against card-network gateway.",
     }
+
+
+try:
+    from fastmcp import FastMCP
+
+    data_generator_mcp = FastMCP("Data Generator MCP")
+
+    @data_generator_mcp.tool()
+    async def inspect_synthetic_schedule(
+        schedule_id: str | None = None,
+        status_filter: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """Inspect durable synthetic data-generator schedule records."""
+        return await get_schedule_client().list_events(
+            schedule_id=schedule_id,
+            status_filter=status_filter,
+            limit=limit,
+        )
+
+    @data_generator_mcp.tool()
+    async def create_scenario_plan(
+        goal: str,
+        scenario_type: str | None = None,
+        intensity: str = "medium",
+        seed: int = 1841,
+        max_events: int | None = None,
+    ) -> dict[str, Any]:
+        """Create a deterministic synthetic scenario plan without executing it."""
+        request = ScenarioRequest(
+            goal=goal,
+            scenario_type=ScenarioType(scenario_type) if scenario_type else None,
+            intensity=intensity,
+            seed=seed,
+            max_events=max_events,
+        )
+        return plan_scenario(request).model_dump(mode="json")
+
+    @data_generator_mcp.tool()
+    async def enqueue_synthetic_story(
+        goal: str,
+        scenario_type: str,
+        intensity: str = "medium",
+        seed: int = 1841,
+        max_events: int | None = None,
+        dispatch_transport: str | None = None,
+    ) -> dict[str, Any]:
+        """Plan and enqueue a synthetic story onto the durable event schedule."""
+        plan = plan_scenario(
+            ScenarioRequest(
+                goal=goal,
+                scenario_type=ScenarioType(scenario_type),
+                mode=ScenarioMode.EXECUTE,
+                intensity=intensity,
+                seed=seed,
+                max_events=max_events,
+            )
+        )
+        result = await enqueue_scenario_schedule(
+            EnqueueScenarioRequest(
+                execution_request=ScenarioExecutionRequest(
+                    plan=plan,
+                    mode=ScenarioMode.EXECUTE,
+                    idempotency_key=f"mcp:{plan.scenario_id}:{uuid.uuid4().hex}",
+                    operator="data-generator-mcp",
+                ),
+                dispatch_transport=dispatch_transport,
+            )
+        )
+        return result.model_dump(mode="json")
+
+    @data_generator_mcp.tool()
+    async def cancel_future_synthetic_events(schedule_id: str) -> dict[str, Any]:
+        """Cancel future durable events for a synthetic schedule."""
+        return await get_schedule_client().cancel_schedule(schedule_id)
+
+    @data_generator_mcp.tool()
+    async def adjust_ambient_load_profile(update: dict[str, Any]) -> dict[str, Any]:
+        """Adjust bounded ambient data-generator controls."""
+        profile = update_ambient_profile(AmbientLoadProfileUpdate.model_validate(update))
+        return profile.model_dump(mode="json")
+
+    data_generator_mcp_app = data_generator_mcp.http_app(path="/", transport="http")
+    app.mount("/mcp", data_generator_mcp_app)
+except Exception as mcp_exc:
+    logger.warning("Data-generator FastMCP control surface unavailable: %s", mcp_exc)
+
 
 if __name__ == "__main__":
     # Support running as a simple standalone script to trigger a pulse
     import sys
+
     if len(sys.argv) > 1 and sys.argv[1] == "--pulse":
+
         async def run_cli_pulse():
             cards = get_active_cards()
             async with httpx.AsyncClient() as client:
                 await simulate_swipe_event(client, random.choice(cards))
+
         asyncio.run(run_cli_pulse())
     else:
         import uvicorn
+
         port = int(os.getenv("PORT", "8001"))
         uvicorn.run(app, host="0.0.0.0", port=port)
