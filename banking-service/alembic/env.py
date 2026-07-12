@@ -296,7 +296,7 @@ def run_migrations_online() -> None:
 
                 cdc_replication_user = os.getenv("CDC_REPLICATION_USER", "banking_bq_connector")
                 require_cdc_bootstrap = os.getenv("REQUIRE_CDC_BOOTSTRAP", "").lower() in {"1", "true", "yes", "on"}
-                cdc_schemas = ["cards", "origination", "identity", "kyc", "merchants", "operations"]
+                cdc_schemas = ["catalog", "cards", "origination", "identity", "kyc", "ledger", "merchants", "operations"]
                 try:
                     cdc_user_exists = connection.execute(
                         sa.text("SELECT 1 FROM pg_roles WHERE rolname = :username"),
