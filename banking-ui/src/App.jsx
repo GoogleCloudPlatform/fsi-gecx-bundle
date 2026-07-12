@@ -209,6 +209,9 @@ function AppContent() {
   const [isReady, setIsReady] = useState(false);
   const [isChatSdkReady, setIsChatSdkReady] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobileAccountsOpen, setIsMobileAccountsOpen] = useState(false);
+  const [isMobileProductsOpen, setIsMobileProductsOpen] = useState(false);
+  const [isMobileHelpOpen, setIsMobileHelpOpen] = useState(false);
   const [customerProfile, setCustomerProfile] = useState(null);
   const [activeNotification, setActiveNotification] = useState(null);
   const [fcmToken, setFcmToken] = useState(null);
@@ -218,6 +221,25 @@ function AppContent() {
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
   );
   const [fbUser, setFbUser] = useState(null);
+
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      const path = location.pathname;
+      if (path === '/accounts') {
+        setIsMobileAccountsOpen(true);
+      }
+      if (['/checking-accounts', '/savings-accounts', '/certificate-accounts', '/credit-cards', '/mortgages', '/mortgage-rates', '/compare-products', '/apply/credit-card'].includes(path)) {
+        setIsMobileProductsOpen(true);
+      }
+      if (['/help-center', '/fee-schedule', '/disclosures', '/locator', '/support/voice', '/secure-messaging', '/admin'].includes(path)) {
+        setIsMobileHelpOpen(true);
+      }
+    } else {
+      setIsMobileAccountsOpen(false);
+      setIsMobileProductsOpen(false);
+      setIsMobileHelpOpen(false);
+    }
+  }, [isMobileMenuOpen, location.pathname]);
 
   useEffect(() => {
     // Scroll to top on route change
@@ -1171,7 +1193,7 @@ function AppContent() {
                     {location.pathname === '/certificate-accounts' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                   </Link>
                   
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">Credit & Cards</div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">Credit Cards</div>
                   <Link to="/credit-cards" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
                     <span>Credit Cards</span>
                     {location.pathname === '/credit-cards' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
@@ -1640,138 +1662,298 @@ function AppContent() {
                   {location.pathname === '/' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                 </Link>
 
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Deposit Accounts</div>
-                <Link 
-                  to="/checking-accounts"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/checking-accounts' ? 'bg-slate-100 dark:bg-slate-800 text-teal-600 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}
-                >
-                  <span>Checking</span>
-                  {location.pathname === '/checking-accounts' && <div className="w-1.5 h-1.5 rounded-full bg-teal-500"></div>}
-                </Link>
-                <Link 
-                  to="/savings-accounts"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/savings-accounts' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
-                >
-                  <span>Savings</span>
-                  {location.pathname === '/savings-accounts' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                </Link>
-                <Link 
-                  to="/certificate-accounts"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/certificate-accounts' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
-                >
-                  <span>Certificate Accounts</span>
-                  {location.pathname === '/certificate-accounts' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                </Link>
-
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Credit & Cards</div>
-                <Link 
-                  to="/credit-cards"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/credit-cards' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
-                >
-                  <span>Credit Cards</span>
-                  {location.pathname === '/credit-cards' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                </Link>
-
-
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Home Financing</div>
-                <Link 
-                  to="/mortgages"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/mortgages' ? 'bg-slate-100 dark:bg-slate-800 text-cyan-600 dark:text-cyan-400' : 'text-slate-600 dark:text-slate-400'}`}
-                >
-                  <span>Mortgages</span>
-                  {location.pathname === '/mortgages' && <div className="w-1.5 h-1.5 rounded-full bg-cyan-500"></div>}
-                </Link>
-                <Link 
-                  to="/mortgage-rates"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/mortgage-rates' ? 'bg-slate-100 dark:bg-slate-800 text-cyan-600 dark:text-cyan-400' : 'text-slate-600 dark:text-slate-400'}`}
-                >
-                  <span>Mortgage Rates</span>
-                  {location.pathname === '/mortgage-rates' && <div className="w-1.5 h-1.5 rounded-full bg-cyan-500"></div>}
-                </Link>
-
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Product Tools</div>
-                <Link 
-                  to="/compare-products"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/compare-products' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
-                >
-                  <span>Compare Products</span>
-                  {location.pathname === '/compare-products' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                </Link>
-
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Knowledge Base</div>
-                <Link 
-                  to="/help-center"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/help-center' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
-                >
-                  <span>Help Center</span>
-                </Link>
-
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Documentation</div>
-                <Link 
-                  to="/disclosures"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/disclosures' ? 'bg-slate-100 dark:bg-slate-800 text-sky-600 dark:text-sky-400' : 'text-slate-600 dark:text-slate-400'}`}
-                >
-                  <span>Disclosures</span>
-                </Link>
-                <Link 
-                  to="/fee-schedule"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/fee-schedule' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
-                >
-                  <span>Fee Schedule</span>
-                </Link>
-
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Customer Service</div>
-                {fbUser && (
-                  <Link 
-                    to="/support/voice"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/support/voice' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
-                  >
-                    <span>Credit Card Support</span>
-                    {location.pathname === '/support/voice' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                  </Link>
+                 {fbUser && (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between w-full rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+                      <Link 
+                        to="/accounts"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`flex-grow text-left px-4 py-3 transition-colors flex items-center gap-2 ${location.pathname === '/accounts' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                      >
+                        <span>Accounts</span>
+                        {location.pathname === '/accounts' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                      </Link>
+                      {accountsSummary && (checkingAccs.length > 0 || savingsAccs.length > 0 || creditAccs.length > 0) && (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsMobileAccountsOpen(!isMobileAccountsOpen);
+                          }}
+                          className="p-3 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+                        >
+                          <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isMobileAccountsOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                      )}
+                    </div>
+                    {isMobileAccountsOpen && accountsSummary && (
+                      <div className="pl-4 space-y-1 border-l-2 border-slate-100 dark:border-slate-800 ml-6">
+                        {checkingAccs.length > 0 && (
+                          <>
+                            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1">Checking</div>
+                            {checkingAccs.map(acc => {
+                              const isActive = location.pathname === '/accounts' && location.search.includes(`id=${acc.account_id}`);
+                              return (
+                                <Link 
+                                  key={acc.account_id}
+                                  to={`/accounts?id=${acc.account_id}&type=checking`} 
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                  className={`w-full text-left px-4 py-2.5 rounded-xl text-xs hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold flex items-center justify-between ${
+                                    isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'
+                                  }`}
+                                >
+                                  <span className="truncate">{acc.product_name}</span>
+                                  {isActive && <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0 ml-2"></div>}
+                                </Link>
+                              );
+                            })}
+                          </>
+                        )}
+                        {savingsAccs.length > 0 && (
+                          <>
+                            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Savings</div>
+                            {savingsAccs.map(acc => {
+                              const isActive = location.pathname === '/accounts' && location.search.includes(`id=${acc.account_id}`);
+                              return (
+                                <Link 
+                                  key={acc.account_id}
+                                  to={`/accounts?id=${acc.account_id}&type=savings`} 
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                  className={`w-full text-left px-4 py-2.5 rounded-xl text-xs hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold flex items-center justify-between ${
+                                    isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'
+                                  }`}
+                                >
+                                  <span className="truncate">{acc.product_name}</span>
+                                  {isActive && <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0 ml-2"></div>}
+                                </Link>
+                              );
+                            })}
+                          </>
+                        )}
+                        {creditAccs.length > 0 && (
+                          <>
+                            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Credit Cards</div>
+                            {creditAccs.map(acc => {
+                              const isActive = location.pathname === '/accounts' && location.search.includes(`id=${acc.account_id}`);
+                              return (
+                                <Link 
+                                  key={acc.account_id}
+                                  to={`/accounts?id=${acc.account_id}&type=credit`} 
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                  className={`w-full text-left px-4 py-2.5 rounded-xl text-xs hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold flex items-center justify-between ${
+                                    isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'
+                                  }`}
+                                >
+                                  <span className="truncate">{acc.product_name || "Nova Everyday Visa"}</span>
+                                  {isActive && <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0 ml-2"></div>}
+                                </Link>
+                              );
+                            })}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
-                <Link 
-                  to="/locator"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/locator' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
-                >
-                  <span>Find Branch/ATM</span>
-                  {location.pathname === '/locator' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                </Link>
-                {fbUser && (
-                  <Link
-                    to="/secure-messaging"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/secure-messaging' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-600 dark:text-slate-400'}`}
-                  >
-                    <span>Secure Messages</span>
-                    {location.pathname === '/secure-messaging' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
-                  </Link>
-                )}
-                {fbUser && (
-                  <>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Admin</div>
-                    <Link
-                      to="/admin"
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between w-full rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+                    <Link 
+                      to="/compare-products"
                       onClick={() => setIsMobileMenuOpen(false)}
-                      className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/admin' ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-600 dark:text-slate-400'}`}
+                      className={`flex-grow text-left px-4 py-3 transition-colors ${['/checking-accounts', '/savings-accounts', '/certificate-accounts', '/credit-cards', '/mortgages', '/mortgage-rates', '/compare-products'].includes(location.pathname) ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
                     >
-                      <span>Admin Portal</span>
-                      {location.pathname === '/admin' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                      Products
                     </Link>
-                  </>
-                )}
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsMobileProductsOpen(!isMobileProductsOpen);
+                      }}
+                      className="p-3 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    >
+                      <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isMobileProductsOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+                  {isMobileProductsOpen && (
+                    <div className="pl-4 space-y-1 border-l-2 border-slate-100 dark:border-slate-800 ml-6">
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1">Deposit Accounts</div>
+                      <Link 
+                        to="/checking-accounts"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/checking-accounts' ? 'text-teal-600 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}
+                      >
+                        <span>Checking</span>
+                        {location.pathname === '/checking-accounts' && <div className="w-1 h-1 rounded-full bg-teal-500"></div>}
+                      </Link>
+                      <Link 
+                        to="/savings-accounts"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/savings-accounts' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                      >
+                        <span>Savings</span>
+                        {location.pathname === '/savings-accounts' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
+                      </Link>
+                      <Link 
+                        to="/certificate-accounts"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/certificate-accounts' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                      >
+                        <span>Certificate Accounts</span>
+                        {location.pathname === '/certificate-accounts' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
+                      </Link>
+
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Credit Cards</div>
+                      <Link 
+                        to="/credit-cards"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/credit-cards' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                      >
+                        <span>Credit Cards</span>
+                        {location.pathname === '/credit-cards' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
+                      </Link>
+
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Home Financing</div>
+                      <Link 
+                        to="/mortgages"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/mortgages' ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-600 dark:text-slate-400'}`}
+                      >
+                        <span>Mortgages</span>
+                        {location.pathname === '/mortgages' && <div className="w-1 h-1 rounded-full bg-cyan-500"></div>}
+                      </Link>
+                      <Link 
+                        to="/mortgage-rates"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/mortgage-rates' ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-600 dark:text-slate-400'}`}
+                      >
+                        <span>Mortgage Rates</span>
+                        {location.pathname === '/mortgage-rates' && <div className="w-1 h-1 rounded-full bg-cyan-500"></div>}
+                      </Link>
+
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Product Tools</div>
+                      <Link 
+                        to="/compare-products"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/compare-products' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                      >
+                        <span>Compare Products</span>
+                        {location.pathname === '/compare-products' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
+                      </Link>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between w-full rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+                    <Link 
+                      to="/help-center"
+                      state={{ category: 'All' }}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={`flex-grow text-left px-4 py-3 transition-colors ${['/help-center', '/fee-schedule', '/disclosures', '/locator', '/support/voice', '/secure-messaging'].includes(location.pathname) ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                    >
+                      Help Center
+                    </Link>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsMobileHelpOpen(!isMobileHelpOpen);
+                      }}
+                      className="p-3 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    >
+                      <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isMobileHelpOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+                  {isMobileHelpOpen && (
+                    <div className="pl-4 space-y-1 border-l-2 border-slate-100 dark:border-slate-800 ml-6">
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1">Knowledge Base</div>
+                      <Link 
+                        to="/help-center"
+                        state={{ category: 'All' }}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/help-center' && (!location.state?.category || location.state?.category === 'All') ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                      >
+                        <span>All Topics</span>
+                        {location.pathname === '/help-center' && (!location.state?.category || location.state?.category === 'All') && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
+                      </Link>
+
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Filter Topics</div>
+                      {HELP_CATEGORIES.filter(cat => cat !== 'All').map((cat) => (
+                        <Link 
+                          key={cat} 
+                          to="/help-center" 
+                          state={{ category: cat }} 
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/help-center' && location.state?.category === cat ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                        >
+                          <span>{cat}</span>
+                          {location.pathname === '/help-center' && location.state?.category === cat && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
+                        </Link>
+                      ))}
+
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Documentation</div>
+                      <Link 
+                        to="/disclosures"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/disclosures' ? 'text-sky-600 dark:text-sky-400' : 'text-slate-600 dark:text-slate-400'}`}
+                      >
+                        <span>Disclosures</span>
+                        {location.pathname === '/disclosures' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
+                      </Link>
+                      <Link 
+                        to="/fee-schedule"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/fee-schedule' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                      >
+                        <span>Fee Schedule</span>
+                        {location.pathname === '/fee-schedule' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
+                      </Link>
+
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Customer Service</div>
+                      {fbUser && (
+                        <Link 
+                          to="/support/voice"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/support/voice' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                        >
+                          <span>Credit Card Support</span>
+                          {location.pathname === '/support/voice' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
+                        </Link>
+                      )}
+                      <Link 
+                        to="/locator"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/locator' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                      >
+                        <span>Find Branch/ATM</span>
+                        {location.pathname === '/locator' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
+                      </Link>
+                      {fbUser && (
+                        <Link 
+                          to="/secure-messaging"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/secure-messaging' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                        >
+                          <span>Secure Messages</span>
+                          {location.pathname === '/secure-messaging' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
+                        </Link>
+                      )}
+
+                      {fbUser && (
+                        <>
+                          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Admin</div>
+                          <Link 
+                            to="/admin"
+                            onClick={() => setIsMobileMenuOpen(false)}
+                            className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/admin' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                          >
+                            <span>Admin Portal</span>
+                            {location.pathname === '/admin' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
+                          </Link>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Preferences</div>
                 <button 
