@@ -27,7 +27,7 @@ export function getJoyrideStyles(resolvedTheme, brandColorFrom) {
   return {
     options: {
       arrowColor: isDark ? '#0f172a' : '#ffffff',
-      backgroundColor: isDark ? '#0f172a' : '#ffffff',
+      backgroundColor: isDark ? 'rgba(15, 23, 42, 0.8)' : 'rgba(255, 255, 255, 0.9)',
       overlayColor: 'rgba(0, 0, 0, 0.55)',
       primaryColor: brandColor,
       textColor: isDark ? '#f8fafc' : '#0f172a',
@@ -36,9 +36,11 @@ export function getJoyrideStyles(resolvedTheme, brandColorFrom) {
     tooltip: {
       borderRadius: '24px',
       padding: '20px 24px',
-      backgroundColor: isDark ? '#0f172a' : '#ffffff',
-      border: isDark ? '1px solid #1e293b' : '1px solid #e2e8f0',
+      backgroundColor: isDark ? 'rgba(15, 23, 42, 0.8)' : 'rgba(255, 255, 255, 0.9)',
+      border: isDark ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid rgba(0, 0, 0, 0.08)',
       boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+      backdropFilter: 'blur(16px)',
+      WebkitBackdropFilter: 'blur(16px)',
     },
     tooltipContainer: {
       textAlign: 'left',
