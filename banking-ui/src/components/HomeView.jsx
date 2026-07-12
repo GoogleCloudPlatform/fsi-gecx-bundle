@@ -195,7 +195,6 @@ function HomeView({
         });
       }
 
-
       authSteps.push({
         target: '#help-support-link',
         content: 'Have any questions? Access our documentation, user guides, and FAQs here.',
