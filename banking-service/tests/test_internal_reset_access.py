@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from main import app
 from models.authentication import ValidatedToken
+from routers import internal
 from routers.internal import RESET_DATA_LAKE_TABLES
 from utils.auth import get_current_user
 
@@ -114,3 +115,41 @@ def test_full_reset_data_lake_purge_covers_ledger_and_merchant_cdc_tables():
         "merchants_merchant_master",
         "merchants_merchant_stores",
     }.issubset(RESET_DATA_LAKE_TABLES)
+
+
+def test_full_reset_data_lake_purge_uses_truncate(monkeypatch):
+    class FakeTableRow:
+        def __init__(self, table_name):
+            self.table_name = table_name
+
+    class FakeQueryResult:
+        def __init__(self, rows=()):
+            self._rows = rows
+
+        def result(self):
+            return self._rows
+
+    class FakeBigQueryClient:
+        def __init__(self):
+            self.queries = []
+
+        def query(self, sql):
+            self.queries.append(sql)
+            if "INFORMATION_SCHEMA.TABLES" in sql:
+                return FakeQueryResult(
+                    [
+                        FakeTableRow("cards_transaction_authorization"),
+                        FakeTableRow("merchants_merchant_master"),
+                    ]
+                )
+            return FakeQueryResult()
+
+    fake_client = FakeBigQueryClient()
+    monkeypatch.setattr(internal.bq_client, "query", fake_client.query)
+
+    purged = internal._purge_biglake_tables("demo-project")
+
+    assert purged == ["cards_transaction_authorization", "merchants_merchant_master"]
+    assert "TRUNCATE TABLE `demo-project.iceberg_catalog.cards_transaction_authorization`" in fake_client.queries
+    assert "TRUNCATE TABLE `demo-project.iceberg_catalog.merchants_merchant_master`" in fake_client.queries
+    assert all("DELETE FROM" not in query for query in fake_client.queries)

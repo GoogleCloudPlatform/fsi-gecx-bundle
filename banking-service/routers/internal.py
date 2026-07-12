@@ -136,7 +136,7 @@ def _purge_biglake_tables(project_id: str) -> list[str]:
     ).result()
     existing_tables = [row.table_name for row in table_rows]
     for lake_tbl in existing_tables:
-        bq_client.query(f"DELETE FROM `{project_id}.iceberg_catalog.{lake_tbl}` WHERE true").result()
+        bq_client.query(f"TRUNCATE TABLE `{project_id}.iceberg_catalog.{lake_tbl}`").result()
     return existing_tables
 
 
