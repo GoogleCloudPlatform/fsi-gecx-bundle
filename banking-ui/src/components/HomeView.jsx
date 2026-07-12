@@ -255,33 +255,31 @@ function HomeView({
                   <Link 
                     to="/accounts"
                     id="view-accounts-link"
-                    className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer w-full sm:w-auto text-center"
+                    className="flex items-center justify-center px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer w-full sm:w-auto text-center"
                     style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
                   >
-                    <span>View My Accounts</span>
-                    <ArrowRight className="w-5 h-5" />
+                    View My Accounts
                   </Link>
-                  <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
-                    <Link 
-                      to="/help-center"
-                      id="help-support-link"
-                      className="flex-1 sm:flex-initial flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 hover:scale-[1.02] active:scale-95 transition-all duration-300 cursor-pointer shadow-sm text-center"
-                    >
-                      Help & Support
-                    </Link>
-                    <button
-                      id="home-tour-btn-auth"
-                      onClick={() => {
-                        localStorage.removeItem('home-tour-auth-completed');
-                        setTourKey(prev => prev + 1);
-                        setTourRun(true);
-                      }}
-                      className="p-4 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white shrink-0"
-                      title="Take the Tour"
-                    >
-                      <GoogleCompassIcon className="w-5 h-5" />
-                    </button>
-                  </div>
+                  <Link 
+                    to="/help-center"
+                    id="help-support-link"
+                    className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer shadow-sm w-full sm:w-auto text-center"
+                  >
+                    Help & Support
+                  </Link>
+                  <button
+                    id="home-tour-btn-auth"
+                    onClick={() => {
+                      localStorage.removeItem('home-tour-auth-completed');
+                      setTourKey(prev => prev + 1);
+                      setTourRun(true);
+                    }}
+                    className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer shadow-sm shrink-0 w-full sm:w-auto"
+                    title="Take the Tour"
+                  >
+                    <GoogleCompassIcon className="w-5 h-5" />
+                    <span>Take Tour</span>
+                  </button>
                 </div>
               </>
             ) : (
@@ -298,37 +296,35 @@ function HomeView({
                 </p>
 
                   <div className="flex flex-col sm:flex-row justify-center gap-4 items-center">
-                  <button 
+                    <button 
                       id="become-member-btn"
-                    onClick={() => setIsMemberModalOpen(true)}
-                      className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer w-full sm:w-auto"
-                    style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
-                  >
-                    <span>Become a Member</span>
-                    <ArrowRight className="w-5 h-5" />
-                  </button>
-                    <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
-                      <Link
-                        to="/compare-products"
-                        id="compare-products-link"
-                        className="flex-1 sm:flex-initial flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer shadow-sm"
-                      >
-                        Compare Products
-                      </Link>
-                      <button
-                        id="home-tour-btn"
-                        onClick={() => {
-                          localStorage.removeItem('home-tour-completed');
-                          setTourKey(prev => prev + 1);
-                          setTourRun(true);
-                        }}
-                        className="p-4 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white shrink-0"
-                        title="Take the Tour"
-                      >
-                        <GoogleCompassIcon className="w-5 h-5" />
-                      </button>
-                    </div>
-                </div>
+                      onClick={() => setIsMemberModalOpen(true)}
+                      className="flex items-center justify-center px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer w-full sm:w-auto"
+                      style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
+                    >
+                      Become a Member
+                    </button>
+                    <Link
+                      to="/compare-products"
+                      id="compare-products-link"
+                      className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer shadow-sm w-full sm:w-auto text-center"
+                    >
+                      Compare Products
+                    </Link>
+                    <button
+                      id="home-tour-btn"
+                      onClick={() => {
+                        localStorage.removeItem('home-tour-completed');
+                        setTourKey(prev => prev + 1);
+                        setTourRun(true);
+                      }}
+                      className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer shadow-sm shrink-0 w-full sm:w-auto"
+                      title="Take the Tour"
+                    >
+                      <GoogleCompassIcon className="w-5 h-5" />
+                      <span>Take Tour</span>
+                    </button>
+                  </div>
               </>
             )}
 
