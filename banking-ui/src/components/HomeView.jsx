@@ -195,12 +195,6 @@ function HomeView({
         });
       }
 
-      authSteps.push({
-        target: '#ccaas-widget',
-        content: 'Click here to launch the CCaaS Web Widget and chat with the Nova Horizon mortgage preapproval assistant using voice or text.',
-        placement: 'left',
-        skipBeacon: true
-      });
 
       authSteps.push({
         target: '#help-support-link',
