@@ -225,7 +225,7 @@ class CdcMonitoringService:
         authorizations: list[TransactionAuthorization],
         posted_transactions: list[PostedTransaction],
     ) -> list[dict]:
-        bucket_count = 24
+        bucket_count = min(24, max(2, int(window_minutes)))
         now = datetime.datetime.now(datetime.timezone.utc)
         start_at = now - datetime.timedelta(minutes=window_minutes)
         bucket_seconds = max(60, int((window_minutes * 60) / bucket_count))
