@@ -1282,6 +1282,7 @@ function AppContent() {
           <div className="flex items-center space-x-2 sm:space-x-4 shrink-0">
             {!fbUser && (
               <button
+                id="header-signin-btn"
                 onClick={() => window.firebaseAuth ? window.firebaseAuth.signInWithGoogle() : window.location.href = '/?gcp-iap-mode=CLEAR_LOGIN_COOKIE'}
                 className="px-3 sm:px-4 text-xs sm:text-sm font-semibold rounded-full transition-all duration-300 hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer shadow-sm border border-slate-200/80 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-850 dark:text-slate-200 h-9"
                 title="Sign In"

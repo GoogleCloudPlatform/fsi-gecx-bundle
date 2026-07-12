@@ -18,6 +18,9 @@ import { getAccountsSummary, provisionMyDemo, getCreditCardTransactions } from '
 import { useNavigate, Link } from 'react-router-dom';
 import BillPayModal from './BillPayModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
+import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
+import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
+import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 
 function HomeView({
   fbUser,
@@ -34,7 +37,8 @@ function HomeView({
   const { 
     bankName,
     brandColorFrom,
-    brandColorTo
+    brandColorTo,
+    resolvedTheme
   } = useSettings();
 
   const navigate = useNavigate();
@@ -47,6 +51,34 @@ function HomeView({
   const [isSchemaModalOpen, setIsSchemaModalOpen] = useState(false);
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
+
+  const [tourRun, setTourRun] = useState(false);
+  const [tourKey, setTourKey] = useState(0);
+  const [domReady, setDomReady] = useState(false);
+
+  useEffect(() => {
+    if (!fbUser) {
+      const params = new URLSearchParams(window.location.search);
+      const forceTour = params.get('tour') === 'true';
+      const isCompleted = localStorage.getItem('home-tour-completed') === 'true';
+      if (forceTour || !isCompleted) {
+        setTourRun(true);
+      }
+    } else {
+      setTourRun(false);
+    }
+  }, [fbUser]);
+
+  useEffect(() => {
+    if (fbUser) return;
+    const checkElement = setInterval(() => {
+      if (document.querySelector('#become-member-btn')) {
+        setDomReady(true);
+        clearInterval(checkElement);
+      }
+    }, 50);
+    return () => clearInterval(checkElement);
+  }, [fbUser]);
 
   const fetchAccounts = useCallback(async () => {
     if (!fbUser) {
@@ -170,21 +202,37 @@ function HomeView({
                   Experience next-generation retail banking combined with the trusted values of a member-owned credit union. Higher yields, lower rates, zero hidden fees.
                 </p>
 
-                <div className="flex flex-col sm:flex-row justify-center gap-4">
+                  <div className="flex flex-col sm:flex-row justify-center gap-4 items-center">
                   <button 
+                      id="become-member-btn"
                     onClick={() => setIsMemberModalOpen(true)}
-                    className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
+                      className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer w-full sm:w-auto"
                     style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
                   >
                     <span>Become a Member</span>
                     <ArrowRight className="w-5 h-5" />
                   </button>
-                  <Link 
-                    to="/compare-products"
-                    className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-855 transition-colors cursor-pointer shadow-sm"
-                  >
-                    Compare Products
-                  </Link>
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
+                      <Link
+                        to="/compare-products"
+                        id="compare-products-link"
+                        className="flex-1 sm:flex-initial flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer shadow-sm"
+                      >
+                        Compare Products
+                      </Link>
+                      <button
+                        id="home-tour-btn"
+                        onClick={() => {
+                          localStorage.removeItem('home-tour-completed');
+                          setTourKey(prev => prev + 1);
+                          setTourRun(true);
+                        }}
+                        className="p-4 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white shrink-0"
+                        title="Take the Tour"
+                      >
+                        <GoogleCompassIcon className="w-5 h-5" />
+                      </button>
+                    </div>
                 </div>
               </>
             )}
@@ -802,6 +850,59 @@ function HomeView({
 
         </div>
       </section>
+
+      {/* Joyride Landing Page Onboarding Tour */}
+      {!fbUser && tourRun && domReady && (
+        <Joyride
+          key={tourKey}
+          run={tourRun}
+          options={{
+            scrollOffset: 120
+          }}
+          steps={[
+            {
+              target: '#home-tour-btn',
+              content: "Welcome to Nova Horizon Bank! Let's take a quick tour of how to get started.",
+              placement: 'top',
+              skipBeacon: true
+            },
+            {
+              target: '#become-member-btn',
+              content: 'Click here to learn about how you can become a member and provision your sandbox demo suite.',
+              placement: 'bottom',
+              skipBeacon: true
+            },
+            {
+              target: '#compare-products-link',
+              content: 'Explore credit card features, rates, and benefits in our product comparison portal.',
+              placement: 'bottom',
+              skipBeacon: true
+            },
+            {
+              target: '#header-signin-btn',
+              content: 'To access your secure dashboard, view balances, get support, and apply for products, click the Sign In button here!',
+              placement: 'bottom-end',
+              skipBeacon: true
+            }
+          ]}
+          continuous={true}
+          showSkipButton={true}
+          showCloseButton={true}
+          onEvent={(data) => {
+            const { status, type, action } = data;
+            if (
+              [STATUS.FINISHED, STATUS.SKIPPED].includes(status) ||
+              type === EVENTS.TOUR_END ||
+              action === ACTIONS.CLOSE ||
+              action === ACTIONS.SKIP
+            ) {
+              setTourRun(false);
+              localStorage.setItem('home-tour-completed', 'true');
+            }
+          }}
+          styles={getJoyrideStyles(resolvedTheme, brandColorFrom)}
+        />
+      )}
     </>
   );
 }
