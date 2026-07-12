@@ -42,6 +42,15 @@ export function getJoyrideStyles(resolvedTheme, brandColorFrom) {
       backdropFilter: 'blur(16px)',
       WebkitBackdropFilter: 'blur(16px)',
     },
+    arrow: {
+      color: isDark ? '#0f172a' : '#ffffff',
+      stroke: isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)',
+      strokeWidth: 1,
+      opacity: isDark ? 0.8 : 0.9,
+      backdropFilter: 'blur(16px)',
+      WebkitBackdropFilter: 'blur(16px)',
+      filter: 'drop-shadow(0 4px 10px rgba(0, 0, 0, 0.15))',
+    },
     tooltipContainer: {
       textAlign: 'left',
       fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
@@ -91,6 +100,7 @@ export function getJoyrideStyles(resolvedTheme, brandColorFrom) {
     buttonClose: {
       top: '16px',
       right: '16px',
+      color: isDark ? '#f8fafc' : '#475569',
     }
   };
 }
