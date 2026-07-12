@@ -24,7 +24,6 @@ from .schemas import (
     PersonaProfile,
     PlannedCardEvent,
     PlannedEventType,
-    ScenarioIntensity,
     ScenarioPlan,
     ScenarioRequest,
     ScenarioType,
