@@ -13,7 +13,6 @@ import {
   TrendingUp,
   AlertCircle,
   Bell,
-  CalendarDays,
   ChevronDown,
   ChevronRight,
   FileText,
@@ -175,6 +174,12 @@ function AccountsView({ fbUser, customerProfile }) {
 
   const formatTransactionCardLabel = (tx) => {
     const lastFour = tx.last_four || tx.card_last_four;
+    if (!lastFour) return 'Card';
+    return `...${lastFour}`;
+  };
+
+  const formatTransactionCardDetailLabel = (tx) => {
+    const lastFour = tx.last_four || tx.card_last_four;
     if (!lastFour) return 'Card unavailable';
     return `${tx.cardholder_name || 'Cardholder'} ...${lastFour}`;
   };
@@ -201,6 +206,12 @@ function AccountsView({ fbUser, customerProfile }) {
   const formatCategoryLabel = (tx, fallback = 'General') => {
     const rawCat = tx.personal_finance_category?.primary || fallback;
     return rawCat.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
+  };
+
+  const formatTransactionStatusLabel = (tx, fallback) => {
+    const rawStatus = tx.status || fallback;
+    if (!rawStatus) return fallback;
+    return String(rawStatus).replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
   };
 
   const isTravelTransaction = (tx) => {
@@ -602,7 +613,7 @@ function AccountsView({ fbUser, customerProfile }) {
                   <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 pt-6 border-t border-slate-205 dark:border-slate-850/80">
                     {[
                       { label: 'Current balance', value: `$${formatMoneyFromCents(creditSummary?.currentBalanceCents)}`, strong: true },
-                      { label: 'Statement balance', value: `$${formatMoneyFromCents(creditSummary?.statementBalanceCents)}` },
+                      { label: 'Statement period', value: `${formatDateShort(creditSummary?.statementCloseDate)} - ${formatDateShort(creditSummary?.paymentDueDate)}` },
                       { label: 'Minimum due', value: `$${formatMoneyFromCents(creditSummary?.minimumDueCents)}`, strong: true },
                       { label: 'Payment due', value: formatDateShort(creditSummary?.paymentDueDate), accent: true },
                       { label: 'Available credit', value: `$${formatMoneyFromCents(creditSummary?.availableCreditCents)}`, positive: true },
@@ -667,8 +678,6 @@ function AccountsView({ fbUser, customerProfile }) {
                   <div className="grid grid-cols-2 gap-3">
                     {[
                       { label: 'Autopay', value: 'Off', icon: RefreshCw },
-                      { label: 'Statement period', value: `${formatDateShort(creditSummary?.statementCloseDate)} - ${formatDateShort(creditSummary?.paymentDueDate)}`, icon: CalendarDays },
-                      { label: 'Rewards', value: '$42.18', icon: Sparkles },
                       { label: 'Pending holds', value: `${transactions.filter(tx => tx.pending).length}`, icon: Activity },
                     ].map(item => {
                       const Icon = item.icon;
@@ -698,13 +707,13 @@ function AccountsView({ fbUser, customerProfile }) {
                       </button>
                     </div>
                     <div className="mt-4 grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
-                      <div className="min-h-32 rounded-xl bg-slate-950 text-white p-4 flex flex-col justify-between shadow-sm">
-                        <div className="text-xs font-bold tracking-widest">NOVA</div>
+                      <div className="min-h-32 rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-100 p-4 text-slate-900 shadow-sm dark:border-slate-700 dark:from-slate-950 dark:to-slate-800 dark:text-white">
+                        <div className="text-xs font-bold tracking-widest text-slate-700 dark:text-slate-200">NOVA</div>
                         <div>
-                          <div className="text-xs text-slate-400">Physical card</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">Physical card</div>
                           <div className="mt-1 text-sm font-bold">•••• •••• •••• {(activeAccountObj.cards.find(card => !card.is_virtual) || activeAccountObj.cards[0])?.last_four}</div>
                         </div>
-                        <div className="text-xs font-black">VISA</div>
+                        <div className="text-xs font-black text-slate-800 dark:text-white">VISA</div>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         {[
@@ -1081,10 +1090,10 @@ function AccountsView({ fbUser, customerProfile }) {
                             <table className="w-full text-left text-sm border-collapse table-fixed">
                               <thead>
                                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold text-xs">
-                                  <th className="pb-2 font-semibold w-[14%]">Date</th>
-                                  <th className="pb-2 font-semibold w-[32%]">Description</th>
-                                  <th className="pb-2 font-semibold w-[22%]">Category</th>
-                                  <th className="pb-2 font-semibold w-[18%]">Card</th>
+                                  <th className="pb-2 font-semibold w-[16%]">Date</th>
+                                  <th className="pb-2 font-semibold w-[44%]">Description</th>
+                                  <th className="pb-2 font-semibold w-[16%]">Category</th>
+                                  <th className="pb-2 font-semibold w-[10%]">Card</th>
                                   <th className="pb-2 font-semibold text-right w-[14%]">Amount</th>
                                 </tr>
                               </thead>
@@ -1099,25 +1108,25 @@ function AccountsView({ fbUser, customerProfile }) {
                                   return (
                                     <React.Fragment key={rowKey}>
                                       <tr className="hover:bg-slate-100/50 dark:hover:bg-slate-900/20 transition-colors">
-                                        <td className="py-3 text-xs text-slate-500 dark:text-slate-400 italic w-[14%]">Pending</td>
-                                        <td className="py-3 font-medium text-slate-800 dark:text-slate-300 w-[32%]">
+                                        <td className="py-3 text-xs text-slate-500 dark:text-slate-400 italic w-[16%]">Pending</td>
+                                        <td className="py-3 font-medium text-slate-800 dark:text-slate-300 w-[44%]">
                                           <button
                                             onClick={() => setExpandedTransactionKey(isExpanded ? null : rowKey)}
-                                            className="flex min-w-0 items-center gap-2 text-left cursor-pointer"
+                                            className="flex w-full min-w-0 items-center gap-2 text-left cursor-pointer"
                                           >
                                             {isExpanded ? <ChevronDown className="w-4 h-4 flex-shrink-0 text-slate-400" /> : <ChevronRight className="w-4 h-4 flex-shrink-0 text-slate-400" />}
-                                            <span className="truncate">{tx.description}</span>
+                                            <span className="min-w-0 truncate">{tx.description}</span>
                                             {isLateFee && (
-                                              <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400">Action Required</span>
+                                              <span className="hidden xl:inline text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400">Action Required</span>
                                             )}
                                           </button>
                                         </td>
-                                        <td className="py-3 w-[22%]">
-                                          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300">
+                                        <td className="py-3 w-[16%]">
+                                          <span className="inline-block max-w-full truncate text-xs font-semibold px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300">
                                             {catLabel}
                                           </span>
                                         </td>
-                                        <td className="py-3 text-xs text-slate-500 dark:text-slate-400 font-medium w-[18%]">
+                                        <td className="py-3 text-xs text-slate-500 dark:text-slate-400 font-medium w-[10%] whitespace-nowrap">
                                           {formatTransactionCardLabel(tx)}
                                         </td>
                                         <td className={`py-3 text-right font-bold text-sm w-[14%] ${isCredit ? 'text-emerald-600 dark:text-emerald-400 italic' : isLateFee ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-300'}`}>
@@ -1128,14 +1137,12 @@ function AccountsView({ fbUser, customerProfile }) {
                                         <tr>
                                           <td colSpan={5} className="pb-4">
                                             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-4 text-xs text-slate-600 dark:text-slate-300">
-                                              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                                 <span><strong>Authorized:</strong> {formatDateShort(tx.created_at || tx.timestamp)}</span>
-                                                <span><strong>Descriptor:</strong> {tx.description}</span>
-                                                <span><strong>MCC:</strong> {tx.merchant_category_code || 'N/A'}</span>
-                                                <span><strong>Card:</strong> {formatTransactionCardLabel(tx)}</span>
-                                                <span><strong>Merchant slug:</strong> {tx.merchant_slug || 'Unresolved'}</span>
-                                                <span><strong>Merchant ID:</strong> {tx.merchant_id || 'Snapshot only'}</span>
-                                                <span><strong>Store ID:</strong> {tx.merchant_store_id || 'Snapshot only'}</span>
+                                                <span><strong>Status:</strong> {formatTransactionStatusLabel(tx, 'Authorization hold')}</span>
+                                                <span><strong>Card:</strong> {formatTransactionCardDetailLabel(tx)}</span>
+                                                <span className="sm:col-span-2"><strong>Descriptor:</strong> {tx.description}</span>
+                                                <span><strong>Category:</strong> {catLabel}</span>
                                                 <button className="text-left font-bold text-blue-650 dark:text-blue-300 hover:underline cursor-pointer">Report or dispute</button>
                                               </div>
                                             </div>
@@ -1158,10 +1165,10 @@ function AccountsView({ fbUser, customerProfile }) {
                           <table className="w-full text-left text-sm border-collapse table-fixed">
                             <thead>
                               <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold text-xs">
-                                <th className="pb-4 font-semibold w-[14%]">Posting Date</th>
-                                <th className="pb-4 font-semibold w-[32%]">Description</th>
-                                <th className="pb-4 font-semibold w-[22%]">Category</th>
-                                <th className="pb-4 font-semibold w-[18%]">Card</th>
+                                <th className="pb-4 font-semibold w-[16%]">Posting Date</th>
+                                <th className="pb-4 font-semibold w-[44%]">Description</th>
+                                <th className="pb-4 font-semibold w-[16%]">Category</th>
+                                <th className="pb-4 font-semibold w-[10%]">Card</th>
                                 <th className="pb-4 font-semibold text-right w-[14%]">Amount</th>
                               </tr>
                             </thead>
@@ -1175,24 +1182,24 @@ function AccountsView({ fbUser, customerProfile }) {
                                 return (
                                   <React.Fragment key={rowKey}>
                                     <tr className="hover:bg-slate-100/50 dark:hover:bg-slate-900/30 transition-colors">
-                                      <td className="py-4 text-xs text-slate-500 dark:text-slate-400 w-[14%]">
+                                      <td className="py-4 text-xs text-slate-500 dark:text-slate-400 w-[16%]">
                                         {tx.posted_timestamp || tx.posted_at ? new Date(tx.posted_timestamp || tx.posted_at).toLocaleDateString() : "Pending"}
                                       </td>
-                                      <td className="py-4 font-medium text-slate-800 dark:text-slate-200 w-[32%]">
+                                      <td className="py-4 font-medium text-slate-800 dark:text-slate-200 w-[44%]">
                                         <button
                                           onClick={() => setExpandedTransactionKey(isExpanded ? null : rowKey)}
-                                          className="flex min-w-0 items-center gap-2 text-left cursor-pointer"
+                                          className="flex w-full min-w-0 items-center gap-2 text-left cursor-pointer"
                                         >
                                           {isExpanded ? <ChevronDown className="w-4 h-4 flex-shrink-0 text-slate-400" /> : <ChevronRight className="w-4 h-4 flex-shrink-0 text-slate-400" />}
-                                          <span className="truncate">{tx.description}</span>
+                                          <span className="min-w-0 truncate">{tx.description}</span>
                                         </button>
                                       </td>
-                                      <td className="py-4 w-[22%]">
-                                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300">
+                                      <td className="py-4 w-[16%]">
+                                        <span className="inline-block max-w-full truncate text-xs font-semibold px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300">
                                           {catLabel}
                                         </span>
                                       </td>
-                                      <td className="py-4 text-xs text-slate-500 dark:text-slate-400 font-medium w-[18%]">
+                                      <td className="py-4 text-xs text-slate-500 dark:text-slate-400 font-medium w-[10%] whitespace-nowrap">
                                         {formatTransactionCardLabel(tx)}
                                       </td>
                                       <td className={`py-4 text-right font-bold text-sm w-[14%] ${isPayment ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>
@@ -1203,14 +1210,12 @@ function AccountsView({ fbUser, customerProfile }) {
                                       <tr>
                                         <td colSpan={5} className="pb-4">
                                           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-4 text-xs text-slate-600 dark:text-slate-300">
-                                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                               <span><strong>Authorized:</strong> {formatDateShort(tx.created_at || tx.timestamp)}</span>
-                                              <span><strong>Posted:</strong> {formatDateShort(tx.posted_timestamp || tx.posted_at)}</span>
-                                              <span><strong>MCC:</strong> {tx.merchant_category_code || 'N/A'}</span>
-                                              <span><strong>Card:</strong> {formatTransactionCardLabel(tx)}</span>
-                                              <span><strong>Merchant slug:</strong> {tx.merchant_slug || 'Unresolved'}</span>
-                                              <span><strong>Merchant ID:</strong> {tx.merchant_id || 'Snapshot only'}</span>
-                                              <span><strong>Store ID:</strong> {tx.merchant_store_id || 'Snapshot only'}</span>
+                                              <span><strong>Status:</strong> {formatTransactionStatusLabel(tx, 'Posted')}</span>
+                                              <span><strong>Card:</strong> {formatTransactionCardDetailLabel(tx)}</span>
+                                              <span className="sm:col-span-2"><strong>Description:</strong> {tx.description}</span>
+                                              <span><strong>Category:</strong> {catLabel}</span>
                                               <button className="text-left font-bold text-blue-650 dark:text-blue-300 hover:underline cursor-pointer">Report or dispute</button>
                                             </div>
                                           </div>
