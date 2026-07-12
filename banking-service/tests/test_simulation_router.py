@@ -538,6 +538,25 @@ async def test_inject_anomaly_success(mock_get_tokens, mock_send_multicast, mock
     from models.identity import UserSecureMessage
     auths = db_session.query(TransactionAuthorization).filter(TransactionAuthorization.merchant_name == "TARGET.COM GIFT CARDS").all()
     assert len(auths) == 1
+    anomaly_auths = {
+        auth.merchant_name: auth.merchant_category_code
+        for auth in db_session.query(TransactionAuthorization)
+        .filter(TransactionAuthorization.merchant_name.in_([
+            "GAME*TEST TOKEN ONLINE",
+            "APPLE.COM*ONLINE",
+            "BEST BUY*MKTPLACE",
+            "RAZER GOLD GIFT CARD",
+            "TARGET.COM GIFT CARDS",
+        ]))
+        .all()
+    }
+    assert anomaly_auths == {
+        "GAME*TEST TOKEN ONLINE": "5817",
+        "APPLE.COM*ONLINE": "5816",
+        "BEST BUY*MKTPLACE": "5732",
+        "RAZER GOLD GIFT CARD": "5947",
+        "TARGET.COM GIFT CARDS": "5311",
+    }
     fraud_alert = db_session.query(FraudAlert).filter(FraudAlert.id == data["fraud_alert_id"]).first()
     assert fraud_alert is not None
     assert fraud_alert.status == "OPEN"

@@ -336,9 +336,9 @@ class SimulationService:
             )
 
         swipes = [
-            ("GAME*TEST TOKEN ONLINE", 499, "5814", "USA", 45),
-            ("APPLE.COM*ONLINE", 149900, "4899", "USA", 72),
-            ("BEST BUY*MKTPLACE", 215000, "5311", "USA", 78),
+            ("GAME*TEST TOKEN ONLINE", 499, "5817", "USA", 45),
+            ("APPLE.COM*ONLINE", 149900, "5816", "USA", 72),
+            ("BEST BUY*MKTPLACE", 215000, "5732", "USA", 78),
             ("RAZER GOLD GIFT CARD", 125000, "5947", "USA", 91),
             ("TARGET.COM GIFT CARDS", 95000, "5311", "USA", 89),
         ]

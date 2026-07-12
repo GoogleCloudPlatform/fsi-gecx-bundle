@@ -21039,11 +21039,11 @@
   },
   {
     "mcc": "5947",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "MERCHANDISE",
+    "detailed_category": "GIFT_CARD_SHOP",
+    "ui_label": "Gift Cards",
     "canonical_title": "Gift, Card, Novelty and Souvenir Shops",
-    "canonical_group": "OTHER",
+    "canonical_group": "MERCHANDISE",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -21057,7 +21057,11 @@
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "gift_card",
+        "gift_shop",
+        "retail"
+      ],
       "behavior_channels": [
         "mixed"
       ],

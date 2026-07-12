@@ -99,6 +99,7 @@ def test_catalog_mcc_taxonomy_uses_specific_categories_for_common_spend():
         "5311": ("MERCHANDISE", "DEPARTMENT_STORE"),
         "5541": ("GAS_AUTOMOTIVE", "FUEL"),
         "5732": ("MERCHANDISE", "ELECTRONICS"),
+        "5947": ("MERCHANDISE", "GIFT_CARD_SHOP"),
         "5816": ("DIGITAL_GOODS", "DIGITAL_GOODS"),
         "5912": ("HEALTHCARE", "PHARMACY"),
         "7512": ("TRAVEL", "RENTAL_CAR"),
