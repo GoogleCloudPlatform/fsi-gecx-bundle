@@ -842,7 +842,7 @@ def upgrade() -> None:
                             required=require_cdc_bootstrap,
                             exc=exc,
                         )
-                    cdc_schemas = ["cards", "origination", "identity", "kyc", "merchants", "operations"]
+                    cdc_schemas = ["catalog", "cards", "origination", "identity", "kyc", "ledger", "merchants", "operations"]
                     for schema_name in cdc_schemas:
                         try:
                             with conn.begin_nested():

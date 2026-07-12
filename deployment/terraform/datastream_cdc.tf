@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Divergence A & B: Replace scheduled federated queries with real-time Google Cloud Datastream CDC
-# streaming directly from PostgreSQL WAL into our BigLake Iceberg catalog for bounded domain tables.
+# streaming directly from PostgreSQL WAL into BigQuery for bounded domain tables.
 
 resource "google_datastream_private_connection" "vpc_connection" {
   display_name          = "VPC Peering Connection for Datastream"
@@ -64,7 +64,7 @@ resource "google_datastream_connection_profile" "bigquery_destination" {
 }
 
 resource "google_datastream_stream" "banking_cdc_stream" {
-  display_name = "Banking CDC Stream to Iceberg Data Lake"
+  display_name = "Banking CDC Stream to BigQuery Data Lake"
   location     = var.region
   stream_id    = "banking-cdc-stream"
   # Create the stream without auto-starting so fresh environments can finish
@@ -80,6 +80,15 @@ resource "google_datastream_stream" "banking_cdc_stream" {
       publication      = "datastream_publication"
       replication_slot = "datastream_replication_slot"
       include_objects {
+        postgresql_schemas {
+          schema = "catalog"
+          postgresql_tables {
+            table = "credit_products"
+          }
+          postgresql_tables {
+            table = "deposit_products"
+          }
+        }
         postgresql_schemas {
           schema = "cards"
           postgresql_tables {
@@ -106,6 +115,12 @@ resource "google_datastream_stream" "banking_cdc_stream" {
           postgresql_tables {
             table = "mortgage_applications"
           }
+          postgresql_tables {
+            table = "deposit_applications"
+          }
+          postgresql_tables {
+            table = "application_artifacts"
+          }
         }
         postgresql_schemas {
           schema = "identity"
@@ -115,11 +130,29 @@ resource "google_datastream_stream" "banking_cdc_stream" {
           postgresql_tables {
             table = "user_addresses"
           }
+          postgresql_tables {
+            table = "user_devices"
+          }
+          postgresql_tables {
+            table = "user_secure_messages"
+          }
         }
         postgresql_schemas {
           schema = "kyc"
           postgresql_tables {
             table = "user_credit_profiles"
+          }
+        }
+        postgresql_schemas {
+          schema = "ledger"
+          postgresql_tables {
+            table = "accounts"
+          }
+          postgresql_tables {
+            table = "transactions"
+          }
+          postgresql_tables {
+            table = "account_ledger"
           }
         }
         postgresql_schemas {
@@ -138,6 +171,21 @@ resource "google_datastream_stream" "banking_cdc_stream" {
           schema = "operations"
           postgresql_tables {
             table = "fraud_model_decisions"
+          }
+          postgresql_tables {
+            table = "fraud_alerts"
+          }
+          postgresql_tables {
+            table = "fraud_case_actions"
+          }
+          postgresql_tables {
+            table = "scenario_outcomes"
+          }
+          postgresql_tables {
+            table = "support_escalations"
+          }
+          postgresql_tables {
+            table = "retail_locations"
           }
         }
       }

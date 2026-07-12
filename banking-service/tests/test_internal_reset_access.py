@@ -104,17 +104,41 @@ def test_full_reset_access_does_not_treat_group_principal_as_membership_claim(mo
 
 def test_full_reset_data_lake_purge_covers_ledger_and_merchant_cdc_tables():
     assert {
+        "catalog_credit_products",
+        "catalog_deposit_products",
         "cards_credit_accounts",
         "cards_issued_card",
         "cards_posted_transactions",
         "cards_transaction_authorization",
         "identity_user_addresses",
+        "identity_user_devices",
+        "identity_user_secure_messages",
         "identity_users",
         "kyc_user_credit_profiles",
+        "ledger_account_ledger",
+        "ledger_accounts",
+        "ledger_transactions",
         "merchants_merchant_category_codes",
         "merchants_merchant_master",
         "merchants_merchant_stores",
+        "operations_fraud_alerts",
+        "operations_fraud_case_actions",
+        "operations_fraud_model_decisions",
+        "operations_retail_locations",
+        "operations_scenario_outcomes",
+        "operations_support_escalations",
+        "origination_application_artifacts",
+        "origination_deposit_applications",
     }.issubset(RESET_DATA_LAKE_TABLES)
+
+
+def test_full_reset_data_lake_purge_uses_schema_prefixed_cdc_table_names():
+    assert {
+        "credit_products",
+        "deposit_products",
+        "kyc_records",
+        "user_credit_profiles",
+    }.isdisjoint(RESET_DATA_LAKE_TABLES)
 
 
 def test_full_reset_data_lake_purge_uses_truncate(monkeypatch):
@@ -147,7 +171,7 @@ def test_full_reset_data_lake_purge_uses_truncate(monkeypatch):
     fake_client = FakeBigQueryClient()
     monkeypatch.setattr(internal.bq_client, "query", fake_client.query)
 
-    purged = internal._purge_biglake_tables("demo-project")
+    purged = internal._purge_data_lake_tables("demo-project")
 
     assert purged == ["cards_transaction_authorization", "merchants_merchant_master"]
     assert "TRUNCATE TABLE `demo-project.iceberg_catalog.cards_transaction_authorization`" in fake_client.queries
