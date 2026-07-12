@@ -50,12 +50,10 @@ def upgrade() -> None:
 
     user = f"datagen-service-sa@{project_id}.iam"
     op.execute(
-        f"DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{user}') "
-        f'THEN CREATE ROLE "{user}" NOLOGIN; END IF; END $$;'
-    )
-    op.execute(f'GRANT USAGE ON SCHEMA operations TO "{user}";')
-    op.execute(
-        f'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE operations.synthetic_scheduled_events TO "{user}";'
+        f"DO $$ BEGIN IF EXISTS (SELECT FROM pg_roles WHERE rolname = '{user}') THEN "
+        f'GRANT USAGE ON SCHEMA operations TO "{user}"; '
+        f'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE operations.synthetic_scheduled_events TO "{user}"; '
+        "END IF; END $$;"
     )
 
 
