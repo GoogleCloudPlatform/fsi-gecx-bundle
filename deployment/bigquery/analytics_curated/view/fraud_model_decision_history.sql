@@ -17,8 +17,6 @@ WITH decisions AS (
     merchant_country_code,
     merchant_city,
     merchant_region,
-    merchant_latitude,
-    merchant_longitude,
     model_version,
     created_at AS decision_timestamp
   FROM `__PROJECT_ID__.iceberg_catalog.operations_fraud_model_decisions`
@@ -33,6 +31,8 @@ authorizations AS (
     transaction_currency,
     fraud_risk_score,
     status AS authorization_status,
+    merchant_latitude AS authorization_merchant_latitude,
+    merchant_longitude AS authorization_merchant_longitude,
     created_at AS authorization_timestamp
   FROM `__PROJECT_ID__.iceberg_catalog.cards_transaction_authorization`
 )
@@ -63,8 +63,14 @@ SELECT
   d.merchant_country_code,
   d.merchant_city,
   d.merchant_region,
-  d.merchant_latitude,
-  d.merchant_longitude,
+  COALESCE(
+    SAFE_CAST(JSON_VALUE(d.feature_snapshot, '$.merchant_latitude') AS NUMERIC),
+    a.authorization_merchant_latitude
+  ) AS merchant_latitude,
+  COALESCE(
+    SAFE_CAST(JSON_VALUE(d.feature_snapshot, '$.merchant_longitude') AS NUMERIC),
+    a.authorization_merchant_longitude
+  ) AS merchant_longitude,
   a.transaction_amount_cents / 100.0 AS amount_dollars,
   a.transaction_currency,
   a.fraud_risk_score,
