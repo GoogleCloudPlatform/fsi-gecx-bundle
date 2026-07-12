@@ -44,8 +44,10 @@ export default function LocatorView() {
   const [domReady, setDomReady] = useState(false);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const forceTour = params.get('tour') === 'true';
     const isCompleted = localStorage.getItem('locator-tour-completed') === 'true';
-    if (!isCompleted) {
+    if (forceTour || !isCompleted) {
       setTourRun(true);
     }
   }, []);
