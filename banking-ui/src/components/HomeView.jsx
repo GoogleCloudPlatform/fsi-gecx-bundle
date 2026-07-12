@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Shield, 
   ArrowRight, 
@@ -18,6 +18,9 @@ import { getAccountsSummary, provisionMyDemo, getCreditCardTransactions } from '
 import { useNavigate, Link } from 'react-router-dom';
 import BillPayModal from './BillPayModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
+import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
+import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
+import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 
 function HomeView({
   fbUser,
@@ -34,7 +37,8 @@ function HomeView({
   const { 
     bankName,
     brandColorFrom,
-    brandColorTo
+    brandColorTo,
+    resolvedTheme
   } = useSettings();
 
   const navigate = useNavigate();
@@ -47,6 +51,36 @@ function HomeView({
   const [isSchemaModalOpen, setIsSchemaModalOpen] = useState(false);
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
+
+  const [tourRun, setTourRun] = useState(false);
+  const [tourKey, setTourKey] = useState(0);
+  const [domReady, setDomReady] = useState(false);
+
+  useEffect(() => {
+    const isCompleted = fbUser 
+      ? localStorage.getItem('home-tour-auth-completed') === 'true'
+      : localStorage.getItem('home-tour-completed') === 'true';
+    
+    const params = new URLSearchParams(window.location.search);
+    const forceTour = params.get('tour') === 'true';
+
+    if (forceTour || !isCompleted) {
+      setTourRun(true);
+    } else {
+      setTourRun(false);
+    }
+  }, [fbUser]);
+
+  useEffect(() => {
+    const checkElement = setInterval(() => {
+      const targetId = fbUser ? '#home-tour-btn-auth' : '#become-member-btn';
+      if (document.querySelector(targetId)) {
+        setDomReady(true);
+        clearInterval(checkElement);
+      }
+    }, 50);
+    return () => clearInterval(checkElement);
+  }, [fbUser]);
 
   const fetchAccounts = useCallback(async () => {
     if (!fbUser) {
@@ -95,6 +129,83 @@ function HomeView({
     (accountsData.credit_accounts && accountsData.credit_accounts.length > 0)
   );
 
+  const steps = useMemo(() => {
+    if (!fbUser) {
+      return [
+        {
+          target: '#home-tour-btn',
+          content: "Welcome to Nova Horizon Bank! Let's take a quick tour of how to get started.",
+          placement: 'top',
+          skipBeacon: true
+        },
+        {
+          target: '#become-member-btn',
+          content: 'Click here to learn about how you can become a member and provision your sandbox demo suite.',
+          placement: 'bottom',
+          skipBeacon: true
+        },
+        {
+          target: '#compare-products-link',
+          content: 'Explore credit card features, rates, and benefits in our product comparison portal.',
+          placement: 'bottom',
+          skipBeacon: true
+        },
+        {
+          target: '#header-signin-btn',
+          content: 'To access your secure dashboard, view balances, get support, and apply for products, click the Sign In button here!',
+          placement: 'bottom-end',
+          skipBeacon: true
+        }
+      ];
+    } else {
+      const authSteps = [
+        {
+          target: '#home-tour-btn-auth',
+          content: "Welcome to your personal dashboard! Let's tour the tools available to you as an active member.",
+          placement: 'top',
+          skipBeacon: true
+        },
+        {
+          target: '#view-accounts-link',
+          content: 'Click here to navigate to your accounts page where you can check balances, transaction histories, and transfer funds.',
+          placement: 'bottom',
+          skipBeacon: true
+        },
+        {
+          target: '#header-search-input',
+          content: 'Use this search bar to search the entire banking web site content using Agent Search.',
+          placement: 'bottom',
+          skipBeacon: true
+        }
+      ];
+
+      if (hasAccounts) {
+        authSteps.push({
+          target: '#dashboard-schema-btn',
+          content: 'Click these cloud buttons to get insights into the underlying technical implementation throughout the site.',
+          placement: 'left',
+          skipBeacon: true
+        });
+      } else {
+        authSteps.push({
+          target: '#provision-demo-btn',
+          content: "It looks like you don't have active accounts yet. Click here to instantly seed your sandbox database with checking, savings, and credit cards.",
+          placement: 'left',
+          skipBeacon: true
+        });
+      }
+
+      authSteps.push({
+        target: '#help-support-link',
+        content: 'Have any questions? Access our documentation, user guides, and FAQs here.',
+        placement: 'bottom',
+        skipBeacon: true
+      });
+
+      return authSteps;
+    }
+  }, [fbUser, hasAccounts]);
+
   return (
     <>
       {/* Hero Section */}
@@ -140,21 +251,37 @@ function HomeView({
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex flex-col sm:flex-row gap-4 items-center">
                   <Link 
                     to="/accounts"
-                    className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
+                    id="view-accounts-link"
+                    className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer w-full sm:w-auto text-center"
                     style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
                   >
                     <span>View My Accounts</span>
                     <ArrowRight className="w-5 h-5" />
                   </Link>
-                  <Link 
-                    to="/help-center"
-                    className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 hover:scale-[1.02] active:scale-95 transition-all duration-300 cursor-pointer shadow-sm"
-                  >
-                    Help & Support
-                  </Link>
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
+                    <Link 
+                      to="/help-center"
+                      id="help-support-link"
+                      className="flex-1 sm:flex-initial flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 hover:scale-[1.02] active:scale-95 transition-all duration-300 cursor-pointer shadow-sm text-center"
+                    >
+                      Help & Support
+                    </Link>
+                    <button
+                      id="home-tour-btn-auth"
+                      onClick={() => {
+                        localStorage.removeItem('home-tour-auth-completed');
+                        setTourKey(prev => prev + 1);
+                        setTourRun(true);
+                      }}
+                      className="p-4 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white shrink-0"
+                      title="Take the Tour"
+                    >
+                      <GoogleCompassIcon className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
               </>
             ) : (
@@ -170,21 +297,37 @@ function HomeView({
                   Experience next-generation retail banking combined with the trusted values of a member-owned credit union. Higher yields, lower rates, zero hidden fees.
                 </p>
 
-                <div className="flex flex-col sm:flex-row justify-center gap-4">
+                  <div className="flex flex-col sm:flex-row justify-center gap-4 items-center">
                   <button 
+                      id="become-member-btn"
                     onClick={() => setIsMemberModalOpen(true)}
-                    className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
+                      className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer w-full sm:w-auto"
                     style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
                   >
                     <span>Become a Member</span>
                     <ArrowRight className="w-5 h-5" />
                   </button>
-                  <Link 
-                    to="/compare-products"
-                    className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-855 transition-colors cursor-pointer shadow-sm"
-                  >
-                    Compare Products
-                  </Link>
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
+                      <Link
+                        to="/compare-products"
+                        id="compare-products-link"
+                        className="flex-1 sm:flex-initial flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer shadow-sm"
+                      >
+                        Compare Products
+                      </Link>
+                      <button
+                        id="home-tour-btn"
+                        onClick={() => {
+                          localStorage.removeItem('home-tour-completed');
+                          setTourKey(prev => prev + 1);
+                          setTourRun(true);
+                        }}
+                        className="p-4 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white shrink-0"
+                        title="Take the Tour"
+                      >
+                        <GoogleCompassIcon className="w-5 h-5" />
+                      </button>
+                    </div>
                 </div>
               </>
             )}
@@ -214,6 +357,7 @@ function HomeView({
                     </div>
                     {/* Schema trigger button on top right */}
                     <button 
+                      id="dashboard-schema-btn"
                       onClick={() => setIsSchemaModalOpen(true)}
                       className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 cursor-pointer flex items-center justify-center shrink-0"
                       title="View Schema Details"
@@ -311,6 +455,7 @@ function HomeView({
                     </p>
                   </div>
                   <button
+                    id="provision-demo-btn"
                     onClick={handleProvision}
                     disabled={isProvisioning}
                     className="w-full py-3.5 rounded-xl text-slate-950 font-bold text-sm bg-gradient-to-r from-emerald-400 to-cyan-400 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all duration-300 shadow-lg shadow-emerald-500/10"
@@ -802,6 +947,35 @@ function HomeView({
 
         </div>
       </section>
+
+      {/* Joyride Landing Page Onboarding Tour */}
+      {tourRun && domReady && steps.length > 0 && (
+        <Joyride
+          key={tourKey}
+          run={tourRun}
+          options={{
+            scrollOffset: 120
+          }}
+          steps={steps}
+          continuous={true}
+          showSkipButton={true}
+          showCloseButton={true}
+          onEvent={(data) => {
+            const { status, type, action } = data;
+            if (
+              [STATUS.FINISHED, STATUS.SKIPPED].includes(status) ||
+              type === EVENTS.TOUR_END ||
+              action === ACTIONS.CLOSE ||
+              action === ACTIONS.SKIP
+            ) {
+              setTourRun(false);
+              const key = fbUser ? 'home-tour-auth-completed' : 'home-tour-completed';
+              localStorage.setItem(key, 'true');
+            }
+          }}
+          styles={getJoyrideStyles(resolvedTheme, brandColorFrom)}
+        />
+      )}
     </>
   );
 }

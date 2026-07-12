@@ -1265,6 +1265,7 @@ function AppContent() {
             <div className="relative hidden md:block flex-1 max-w-lg mx-6">
               <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
               <input
+                id="header-search-input"
                 type="text"
                 placeholder="Search site..."
                 className="w-full pl-8 pr-4 py-1.5 text-xs rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-all cursor-pointer shadow-sm hover:border-slate-300 dark:hover:border-slate-700"
@@ -1282,6 +1283,7 @@ function AppContent() {
           <div className="flex items-center space-x-2 sm:space-x-4 shrink-0">
             {!fbUser && (
               <button
+                id="header-signin-btn"
                 onClick={() => window.firebaseAuth ? window.firebaseAuth.signInWithGoogle() : window.location.href = '/?gcp-iap-mode=CLEAR_LOGIN_COOKIE'}
                 className="px-3 sm:px-4 text-xs sm:text-sm font-semibold rounded-full transition-all duration-300 hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer shadow-sm border border-slate-200/80 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-850 dark:text-slate-200 h-9"
                 title="Sign In"
