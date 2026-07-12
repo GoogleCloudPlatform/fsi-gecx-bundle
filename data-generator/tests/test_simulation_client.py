@@ -16,6 +16,7 @@ import httpx
 import json
 import pytest
 import respx
+from uuid import UUID
 from fastapi.testclient import TestClient
 
 import main
@@ -66,6 +67,9 @@ def test_get_merchants_prefers_canonical_api_shape(monkeypatch):
             200,
             json=[
                 {
+                    "merchant_id": "36d183e2-a902-53e0-a761-1ea6d078da9f",
+                    "merchant_slug": "canonical_merchant",
+                    "merchant_store_id": "81c84671-7dec-5e79-a141-9c02f774b6bf",
                     "clean_name": "Canonical Merchant",
                     "raw_descriptor_pattern": "CANONICAL MERCHANT%",
                     "category": "Retail",
@@ -90,6 +94,9 @@ def test_get_merchants_prefers_canonical_api_shape(monkeypatch):
 
     assert merchants == [
         {
+            "merchant_id": "36d183e2-a902-53e0-a761-1ea6d078da9f",
+            "merchant_slug": "canonical_merchant",
+            "merchant_store_id": "81c84671-7dec-5e79-a141-9c02f774b6bf",
             "merchant": "Canonical Merchant",
             "descriptor": "CANONICAL MERCHANT%",
             "category": "Retail",
@@ -144,6 +151,9 @@ def test_get_merchants_falls_back_to_legacy_route_shape(monkeypatch):
 
     assert merchants == [
         {
+            "merchant_id": None,
+            "merchant_slug": None,
+            "merchant_store_id": None,
             "merchant": "Legacy Merchant",
             "descriptor": "LEGACY MERCHANT%",
             "category": "Dining",
@@ -247,6 +257,9 @@ async def test_simulate_swipe_event_uses_persona_ecommerce_context(monkeypatch):
         "get_merchants",
         lambda: [
             {
+                "merchant_id": "36d183e2-a902-53e0-a761-1ea6d078da9f",
+                "merchant_slug": "streaming_merchant",
+                "merchant_store_id": "81c84671-7dec-5e79-a141-9c02f774b6bf",
                 "merchant": "Streaming Merchant",
                 "descriptor": "STREAMING MERCHANT*ONLINE",
                 "category": "Streaming & Entertainment",
@@ -264,6 +277,9 @@ async def test_simulate_swipe_event_uses_persona_ecommerce_context(monkeypatch):
                 "risk_score": 0,
             },
             {
+                "merchant_id": "acbce33d-2eee-5473-9631-0882b0631098",
+                "merchant_slug": "coffee_shop",
+                "merchant_store_id": "8701f624-d5fb-5e11-a3fd-8a57c7b0bb7f",
                 "merchant": "Coffee Shop",
                 "descriptor": "COFFEE SHOP",
                 "category": "Coffee",
@@ -313,6 +329,9 @@ async def test_simulate_swipe_event_uses_persona_ecommerce_context(monkeypatch):
 
     assert result["authorized"] is True
     payload = json.loads(auth_route.calls[0].request.content.decode())
+    assert UUID(payload["merchant_id"])
+    assert UUID(payload["merchant_store_id"])
+    assert payload["merchant_slug"] == "streaming_merchant"
     assert payload["merchant_category_code"] == "4899"
     assert payload["transaction_channel"] == "ECOMMERCE"
     assert payload["entry_mode"] == "ECOMMERCE"

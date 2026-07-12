@@ -40,6 +40,7 @@ from models.kyc import KYCRecord, UserCreditProfile
 from models.origination import Account, AccountLedgerEntry, Transaction
 from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, CreditProduct, TransactionAuthorization
 from models.fraud import FraudAlert, FraudCaseAction
+from models.merchant import MerchantMaster, MerchantStore
 from models.origination import DepositProduct
 from models.settings import SystemSetting
 from models.reference import MerchantCategoryCode
@@ -119,6 +120,28 @@ def _resolve_demo_script_charge(
     return resolved
 
 
+def _demo_account_baseline_cents(email: str | None) -> dict[str, int]:
+    """Return stable, non-round presenter balances for demo reset/provisioning."""
+    email_lower = (email or "").lower()
+    overrides = {
+        "erikvoit@google.com": {
+            "checking": 4_584_237,
+            "savings": 14_876_291,
+        },
+        "mservedio@google.com": {
+            "checking": 5_947_820,
+            "savings": 2_184_665,
+        },
+    }
+    return overrides.get(
+        email_lower,
+        {
+            "checking": 874_236,
+            "savings": 2_138_974,
+        },
+    )
+
+
 def _load_json_resource(filename: str) -> Any:
     path = Path(RESOURCE_DIR) / filename
     with path.open("r", encoding="utf-8") as handle:
@@ -129,6 +152,31 @@ def _load_jsonl_resource(filename: str) -> list[dict[str, Any]]:
     path = Path(RESOURCE_DIR) / filename
     with path.open("r", encoding="utf-8") as handle:
         return [json.loads(line) for line in handle if line.strip()]
+
+
+def _mcc_seed_row(item: dict[str, Any]) -> dict[str, Any]:
+    """Map the enriched MCC seed resource into the reference-table schema."""
+    return {
+        "id": uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-category-code:{item['mcc']}"),
+        "mcc": item["mcc"],
+        "primary_category": item["primary_category"],
+        "detailed_category": item["detailed_category"],
+        "ui_label": item.get("ui_label"),
+        "canonical_title": item.get("canonical_title"),
+        "canonical_group": item.get("canonical_group"),
+        "risk_level": item.get("risk_level"),
+        "risk_score": item.get("risk_score"),
+        "spend_type": item.get("spend_type"),
+        "recurrence_likelihood": item.get("recurrence_likelihood"),
+        "velocity_risk": item.get("velocity_risk"),
+        "chargeback_prone": item.get("chargeback_prone", False),
+        "is_travel": item.get("is_travel", False),
+        "is_subscription_common": item.get("is_subscription_common", False),
+        "is_luxury": item.get("is_luxury", False),
+        "is_essential": item.get("is_essential", False),
+        "metadata_json": item.get("metadata") or {},
+    }
+
 
 def get_base_personas():
     path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "static_personas.json")
@@ -392,7 +440,7 @@ def clear_synthetic_scheduler_artifacts(db: Session) -> dict[str, Any]:
 
 
 def clean_database(db: Session) -> None:
-    """Removes all transactional and customer-related tables while preserving catalogs."""
+    """Removes reset-owned demo tables so they can be rebuilt from source seeds."""
     logger.info("Purging transactional and profile database tables...")
     
     enable_session_rbac_override(db)
@@ -402,6 +450,42 @@ def clean_database(db: Session) -> None:
     from models.support import Escalation
     from models.identity import UserDevice, UserSecureMessage
     from models.origination import Application, MortgageApplication, CreditCardApplication, DepositApplication, ApplicationArtifact
+
+    reset_models = [
+        Escalation,
+        FraudCaseAction,
+        FraudAlert,
+        UserSecureMessage,
+        UserDevice,
+        PostedTransaction,
+        TransactionAuthorization,
+        IssuedCard,
+        CreditAccount,
+        AccountLedgerEntry,
+        Transaction,
+        Account,
+        ApplicationArtifact,
+        MortgageApplication,
+        CreditCardApplication,
+        DepositApplication,
+        Application,
+        UserCreditProfile,
+        KYCRecord,
+        UserAddress,
+        User,
+        MerchantStore,
+        MerchantMaster,
+        MerchantCategoryCode,
+    ]
+    if db.bind and db.bind.dialect.name == "postgresql":
+        preparer = db.bind.dialect.identifier_preparer
+        table_names = [
+            f"{preparer.quote_schema(model.__table__.schema)}.{preparer.quote(model.__table__.name)}"
+            for model in reset_models
+        ]
+        db.execute(text(f"TRUNCATE TABLE {', '.join(table_names)} CASCADE"))
+        db.flush()
+        return
 
     db.query(Escalation).delete(synchronize_session=False)
     db.query(FraudCaseAction).delete(synchronize_session=False)
@@ -432,6 +516,10 @@ def clean_database(db: Session) -> None:
     db.query(UserAddress).delete(synchronize_session=False)
     db.query(User).delete(synchronize_session=False)
 
+    db.query(MerchantStore).delete(synchronize_session=False)
+    db.query(MerchantMaster).delete(synchronize_session=False)
+    db.query(MerchantCategoryCode).delete(synchronize_session=False)
+
     db.flush()
 
 def seed_catalogs_if_missing(db: Session) -> None:
@@ -451,14 +539,7 @@ def seed_catalogs_if_missing(db: Session) -> None:
     if db.query(MerchantCategoryCode).count() == 0:
         logger.info("Seeding MerchantCategoryCode merchants catalog...")
         mcc_seed_data = _load_json_resource("merchant_category_codes.json")
-        mcc_records = [
-            MerchantCategoryCode(
-                mcc=item["mcc"],
-                primary_category=item["primary_category"],
-                detailed_category=item["detailed_category"]
-            )
-            for item in mcc_seed_data
-        ]
+        mcc_records = [MerchantCategoryCode(**_mcc_seed_row(item)) for item in mcc_seed_data]
         db.add_all(mcc_records)
         db.flush()
         TaxonomyService.invalidate_cache()
@@ -1131,8 +1212,7 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
         db.flush()
 
         # 6. Provision checking/savings deposit accounts with harmonized default balances
-        chk_balance = 4500000 if email == "erikvoit@google.com" else (6000000 if email == "mservedio@google.com" else 1000000)
-        sav_balance = 15000000 if email == "erikvoit@google.com" else 2000000
+        demo_baseline = _demo_account_baseline_cents(email)
         checking_acc = Account(
             id=uuid.uuid4(),
             user_id=user_uuid,
@@ -1140,7 +1220,7 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             account_type="CHECKING",
             product_name="Nova Signature Checking",
             product_code="CHECKING_SIGNATURE",
-            cleared_balance_cents=chk_balance,
+            cleared_balance_cents=demo_baseline["checking"],
             routing_number="021000021",
             status="ACTIVE"
         )
@@ -1151,7 +1231,7 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             account_type="SAVINGS",
             product_name="Nova High Yield Savings",
             product_code="SAVINGS_HIGH_YIELD",
-            cleared_balance_cents=sav_balance,
+            cleared_balance_cents=demo_baseline["savings"],
             routing_number="021000021",
             status="ACTIVE"
         )
@@ -1283,8 +1363,7 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
         if acc.account_type in ("CHECKING", "SAVINGS") and acc.status == "ACTIVE":
             acc.status = "CLOSED"
 
-    checking_balance = 4500000 if user.email == "erikvoit@google.com" else (6000000 if user.email == "mservedio@google.com" else 1000000)
-    savings_balance = 15000000 if user.email == "erikvoit@google.com" else 2000000
+    demo_baseline = _demo_account_baseline_cents(user.email)
 
     checking_acc = Account(
         id=uuid.uuid4(),
@@ -1293,7 +1372,7 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
         account_type="CHECKING",
         product_name="Nova Signature Checking",
         product_code="CHECKING_SIGNATURE",
-        cleared_balance_cents=checking_balance,
+        cleared_balance_cents=demo_baseline["checking"],
         routing_number="021000021",
         status="ACTIVE",
     )
@@ -1307,7 +1386,7 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
         account_type="SAVINGS",
         product_name="Nova High Yield Savings",
         product_code="SAVINGS_HIGH_YIELD",
-        cleared_balance_cents=savings_balance,
+        cleared_balance_cents=demo_baseline["savings"],
         routing_number="021000021",
         status="ACTIVE",
     )

@@ -3,11 +3,17 @@ import React, { useState, useMemo } from 'react';
 const CATEGORY_COLORS = {
   MERCHANDISE: '#3b82f6',      // Vibrant Blue
   GROCERY: '#10b981',          // Emerald Green
+  GROCERIES: '#10b981',
   DINING: '#f59e0b',           // Amber Gold
   OTHER_TRAVEL: '#06b6d4',     // Cyan Sky
   TRAVEL: '#06b6d4',
   HEALTHCARE: '#f43f5e',       // Rose Red
   GAS_AUTOMOTIVE: '#8b5cf6',   // Violet Purple
+  ENTERTAINMENT: '#ec4899',
+  DIGITAL_GOODS: '#6366f1',
+  TELECOM: '#14b8a6',
+  FITNESS: '#84cc16',
+  SERVICES: '#64748b',
   OTHER: '#6366f1',            // Indigo
   FEES: '#64748b',             // Slate Grey
   GENERAL: '#475569'
@@ -16,12 +22,18 @@ const CATEGORY_COLORS = {
 const CATEGORY_LABELS = {
   MERCHANDISE: 'Merchandise',
   GROCERY: 'Grocery',
+  GROCERIES: 'Groceries',
   DINING: 'Dining',
   OTHER: 'Other',
   HEALTHCARE: 'Healthcare',
   GAS_AUTOMOTIVE: 'Gas/Automotive',
   OTHER_TRAVEL: 'Other Travel',
   TRAVEL: 'Travel',
+  ENTERTAINMENT: 'Entertainment',
+  DIGITAL_GOODS: 'Digital Goods',
+  TELECOM: 'Telecom',
+  FITNESS: 'Fitness',
+  SERVICES: 'Services',
   FEES: 'Fees & Interest',
   GENERAL: 'General Spending'
 };
@@ -160,23 +172,23 @@ export default function SpendAnalyzerModal({ isOpen, onClose, transactions = [],
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fadeIn">
       <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-4xl w-full overflow-hidden border border-slate-200 dark:border-slate-800 animate-scaleUp">
         {/* Sleek Theme Header Banner */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-800 p-6 sm:p-8 text-white relative">
+        <div className="bg-gradient-to-r from-emerald-50 via-white to-blue-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 border-b border-slate-200 dark:border-slate-800 p-6 sm:p-8 relative">
           <button
             onClick={onClose}
-            className="absolute top-6 right-6 text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 p-2.5 rounded-full transition-all cursor-pointer"
+            className="absolute top-6 right-6 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white bg-white/80 hover:bg-white dark:bg-slate-800/80 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 p-2.5 rounded-full transition-all cursor-pointer shadow-sm"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-1.5">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse"></span>
             <span>{accountName}</span>
             <span>&bull;</span>
             <span>Spend Analyzer</span>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Spend Analyzer</h2>
-          <p className="text-sm text-slate-300 mt-1">
+          <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-950 dark:text-white">Spend Analyzer</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
             Real-time categorization computed from your posted account ledger transactions.
           </p>
         </div>

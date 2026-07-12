@@ -772,6 +772,9 @@ def get_transaction_history_dto(repo: Any, customer_id: str) -> Optional[List[Di
                 "confidence_level": cat.confidence_level
             },
             "merchant_category_code": auth.merchant_category_code,
+            "merchant_id": str(auth.merchant_id) if auth.merchant_id else None,
+            "merchant_slug": auth.merchant_slug,
+            "merchant_store_id": str(auth.merchant_store_id) if auth.merchant_store_id else None,
             "cardholder_name": auth.card.cardholder_name if auth.card else "Cardholder",
             "last_four": auth.card.last_four if auth.card else None,
         })
@@ -793,6 +796,9 @@ def get_transaction_history_dto(repo: Any, customer_id: str) -> Optional[List[Di
                 "confidence_level": cat.confidence_level
             },
             "merchant_category_code": mcc,
+            "merchant_id": str(entry.authorization.merchant_id) if entry.authorization and entry.authorization.merchant_id else None,
+            "merchant_slug": entry.authorization.merchant_slug if entry.authorization else None,
+            "merchant_store_id": str(entry.authorization.merchant_store_id) if entry.authorization and entry.authorization.merchant_store_id else None,
             "cardholder_name": entry.authorization.card.cardholder_name if entry.authorization and entry.authorization.card else "Cardholder",
             "last_four": entry.authorization.card.last_four if entry.authorization and entry.authorization.card else None,
         })

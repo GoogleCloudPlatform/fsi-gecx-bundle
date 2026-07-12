@@ -14,6 +14,8 @@
 
 import logging
 import threading
+import json
+from pathlib import Path
 from typing import Dict, Optional
 from cachetools import TTLCache
 from models.fdx import PersonalFinanceCategory
@@ -38,6 +40,23 @@ DEFAULT_TAXONOMY_MAP: Dict[str, Dict[str, str]] = {
     "4899": {"primary": "OTHER", "detailed": "OTHER_ENTERTAINMENT"},
     "FEE": {"primary": "FEES", "detailed": "FEES_LATE"},
 }
+
+RESOURCE_MCC_PATH = Path(__file__).resolve().parents[1] / "resources" / "data" / "merchant_category_codes.json"
+
+
+def _load_resource_taxonomy_map() -> Dict[str, Dict[str, str]]:
+    try:
+        rows = json.loads(RESOURCE_MCC_PATH.read_text(encoding="utf-8"))
+        return {
+            item["mcc"]: {
+                "primary": item["primary_category"],
+                "detailed": item["detailed_category"],
+            }
+            for item in rows
+        }
+    except Exception as exc:
+        logger.warning("Could not load MCC taxonomy resource fallback: %s", exc)
+        return DEFAULT_TAXONOMY_MAP
 
 
 class TaxonomyService:
@@ -66,7 +85,7 @@ class TaxonomyService:
                     close_db = True
                 except Exception as e:
                     logger.warning(f"Could not connect to DB for taxonomy lookup: {e}")
-                    cls._cache["map"] = DEFAULT_TAXONOMY_MAP
+                    cls._cache["map"] = _load_resource_taxonomy_map()
                     return cls._cache["map"]
             
             try:
@@ -80,11 +99,11 @@ class TaxonomyService:
                     cls._cache["map"] = mapping
                     return mapping
                 else:
-                    cls._cache["map"] = DEFAULT_TAXONOMY_MAP
+                    cls._cache["map"] = _load_resource_taxonomy_map()
                     return cls._cache["map"]
             except Exception as e:
                 logger.warning(f"Could not load taxonomy from ref_data database: {e}. Falling back to default map.")
-                return DEFAULT_TAXONOMY_MAP
+                return _load_resource_taxonomy_map()
             finally:
                 if close_db and db:
                     db.close()

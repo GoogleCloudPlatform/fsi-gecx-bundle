@@ -17,8 +17,6 @@ WITH decisions AS (
     merchant_country_code,
     merchant_city,
     merchant_region,
-    merchant_latitude,
-    merchant_longitude,
     model_version,
     created_at AS decision_timestamp
   FROM `__PROJECT_ID__.iceberg_catalog.operations_fraud_model_decisions`
@@ -33,6 +31,8 @@ authorizations AS (
     transaction_currency,
     fraud_risk_score,
     status AS authorization_status,
+    merchant_latitude AS authorization_merchant_latitude,
+    merchant_longitude AS authorization_merchant_longitude,
     created_at AS authorization_timestamp
   FROM `__PROJECT_ID__.iceberg_catalog.cards_transaction_authorization`
 )
@@ -56,6 +56,20 @@ SELECT
     ', '
   ) AS reason_summary,
   d.feature_snapshot,
+  JSON_VALUE(d.feature_snapshot, '$.mcc_primary_category') AS mcc_primary_category,
+  JSON_VALUE(d.feature_snapshot, '$.mcc_detailed_category') AS mcc_detailed_category,
+  JSON_VALUE(d.feature_snapshot, '$.mcc_risk_level') AS mcc_risk_level,
+  SAFE_CAST(JSON_VALUE(d.feature_snapshot, '$.mcc_risk_score') AS INT64) AS mcc_risk_score,
+  JSON_VALUE(d.feature_snapshot, '$.mcc_velocity_risk') AS mcc_velocity_risk,
+  SAFE_CAST(JSON_VALUE(d.feature_snapshot, '$.mcc_chargeback_prone') AS BOOL) AS mcc_chargeback_prone,
+  JSON_VALUE_ARRAY(d.feature_snapshot, '$.mcc_risk_flags') AS mcc_risk_flags,
+  SAFE_CAST(JSON_VALUE(d.feature_snapshot, '$.merchant_intelligence_matched') AS BOOL) AS merchant_intelligence_matched,
+  JSON_VALUE(d.feature_snapshot, '$.normalized_merchant') AS normalized_merchant,
+  JSON_VALUE(d.feature_snapshot, '$.merchant_type') AS merchant_type,
+  SAFE_CAST(JSON_VALUE(d.feature_snapshot, '$.merchant_intelligence_risk_score') AS INT64) AS merchant_intelligence_risk_score,
+  JSON_VALUE_ARRAY(d.feature_snapshot, '$.merchant_intelligence_flags') AS merchant_intelligence_flags,
+  JSON_VALUE(d.feature_snapshot, '$.merchant_intelligence_match_type') AS merchant_intelligence_match_type,
+  SAFE_CAST(JSON_VALUE(d.feature_snapshot, '$.merchant_intelligence_mcc_match') AS BOOL) AS merchant_intelligence_mcc_match,
   d.model_version,
   COALESCE(d.decision_merchant_name, a.authorization_merchant_name) AS merchant_name,
   COALESCE(d.decision_mcc, a.authorization_mcc) AS merchant_category_code,
@@ -63,8 +77,14 @@ SELECT
   d.merchant_country_code,
   d.merchant_city,
   d.merchant_region,
-  d.merchant_latitude,
-  d.merchant_longitude,
+  COALESCE(
+    SAFE_CAST(JSON_VALUE(d.feature_snapshot, '$.merchant_latitude') AS NUMERIC),
+    a.authorization_merchant_latitude
+  ) AS merchant_latitude,
+  COALESCE(
+    SAFE_CAST(JSON_VALUE(d.feature_snapshot, '$.merchant_longitude') AS NUMERIC),
+    a.authorization_merchant_longitude
+  ) AS merchant_longitude,
   a.transaction_amount_cents / 100.0 AS amount_dollars,
   a.transaction_currency,
   a.fraud_risk_score,

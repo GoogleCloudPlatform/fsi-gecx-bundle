@@ -145,6 +145,9 @@ class TransactionAuthorization(Base):
     retrieval_reference_number = Column(String(12), nullable=False)
     
     card_network = Column(String(30), nullable=False) # 'VISA', 'MASTERCARD'
+    merchant_id = Column(UUID(as_uuid=True), ForeignKey("merchants.merchant_master.id", ondelete="SET NULL"), nullable=True)
+    merchant_store_id = Column(UUID(as_uuid=True), ForeignKey("merchants.merchant_stores.id", ondelete="SET NULL"), nullable=True)
+    merchant_slug = Column(String(100), nullable=True)
     merchant_category_code = Column(String(4), nullable=False) # MCC
     merchant_name = Column(String(255), nullable=True)
     transaction_channel = Column(String(32), nullable=True)

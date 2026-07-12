@@ -15,6 +15,7 @@
 import datetime
 import logging
 import random
+import uuid
 from typing import Dict, Any
 from sqlalchemy.orm import Session
 
@@ -35,6 +36,15 @@ logger = logging.getLogger(__name__)
 ONLINE_DESCRIPTOR_TOKENS = ("ONLINE", ".COM", "MKTPLACE", "STREAMING", "SUBSCRIPTION", "DIGITAL", "GIFT CARD")
 CARD_PRESENT_ENTRY_MODES = {"CHIP", "CONTACTLESS", "MAG_STRIPE"}
 CARD_NOT_PRESENT_CHANNELS = {"CARD_NOT_PRESENT", "ECOMMERCE"}
+
+
+def _uuid_or_none(value: Any) -> str | None:
+    if not value:
+        return None
+    try:
+        return str(uuid.UUID(str(value)))
+    except (TypeError, ValueError):
+        return None
 
 
 def _normalize_transaction_channel(payload: Dict[str, Any], merchant_name: str) -> tuple[str, str]:
@@ -64,6 +74,9 @@ def _normalize_transaction_channel(payload: Dict[str, Any], merchant_name: str) 
 def _build_authorization_context(db: Session, payload: Dict[str, Any], merchant_name: str, mcc: str) -> Dict[str, Any]:
     merchant_country = str(payload.get("merchant_country_code") or payload.get("country_code") or "").upper() or None
     context = {
+        "merchant_id": _uuid_or_none(payload.get("merchant_id")),
+        "merchant_slug": payload.get("merchant_slug"),
+        "merchant_store_id": _uuid_or_none(payload.get("merchant_store_id")),
         "transaction_channel": payload.get("transaction_channel"),
         "entry_mode": payload.get("entry_mode"),
         "merchant_country_code": merchant_country,
@@ -76,24 +89,29 @@ def _build_authorization_context(db: Session, payload: Dict[str, Any], merchant_
         "shipping_country_code": payload.get("shipping_country_code"),
         "is_digital_goods": bool(payload.get("is_digital_goods", False)),
         "merchant_high_risk_flags": payload.get("merchant_high_risk_flags") or [],
+        "merchant_intelligence": payload.get("merchant_intelligence"),
         "synthetic_fraud_label": payload.get("synthetic_fraud_label"),
         "fraud_pattern_label": payload.get("fraud_pattern_label"),
         "fraud_pattern_sequence": payload.get("fraud_pattern_sequence"),
     }
 
-    if not merchant_country:
+    if not merchant_country or not context["merchant_id"] or not context["merchant_store_id"]:
         try:
             enriched = MerchantEnrichmentService.enrich_transaction(db, raw_descriptor=merchant_name, mcc=mcc)
             context.update(
                 {
-                    "merchant_country_code": enriched.get("country_code"),
-                    "merchant_city": enriched.get("city"),
-                    "merchant_region": enriched.get("region"),
-                    "merchant_postal_code": enriched.get("postal_code"),
-                    "merchant_latitude": enriched.get("latitude"),
-                    "merchant_longitude": enriched.get("longitude"),
+                    "merchant_id": context["merchant_id"] or _uuid_or_none(enriched.get("merchant_id")),
+                    "merchant_slug": context["merchant_slug"] or enriched.get("merchant_slug"),
+                    "merchant_store_id": context["merchant_store_id"] or _uuid_or_none(enriched.get("merchant_store_id")),
+                    "merchant_country_code": context["merchant_country_code"] or enriched.get("country_code"),
+                    "merchant_city": context["merchant_city"] or enriched.get("city"),
+                    "merchant_region": context["merchant_region"] or enriched.get("region"),
+                    "merchant_postal_code": context["merchant_postal_code"] or enriched.get("postal_code"),
+                    "merchant_latitude": context["merchant_latitude"] or enriched.get("latitude"),
+                    "merchant_longitude": context["merchant_longitude"] or enriched.get("longitude"),
                     "is_digital_goods": context["is_digital_goods"] or ("DIGITAL_GOODS" in enriched.get("high_risk_flags", [])),
                     "merchant_high_risk_flags": context["merchant_high_risk_flags"] or enriched.get("high_risk_flags", []),
+                    "merchant_intelligence": context["merchant_intelligence"] or enriched.get("merchant_intelligence"),
                 }
             )
         except Exception as exc:
@@ -233,6 +251,9 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
                 card_network=card_network,
                 merchant_category_code=mcc,
                 merchant_name=merchant_name,
+                merchant_id=auth_context["merchant_id"],
+                merchant_slug=auth_context["merchant_slug"],
+                merchant_store_id=auth_context["merchant_store_id"],
                 transaction_channel=auth_context["transaction_channel"],
                 entry_mode=auth_context["entry_mode"],
                 merchant_country_code=auth_context["merchant_country_code"],
@@ -290,6 +311,9 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
             card_network=card_network,
             merchant_category_code=mcc,
             merchant_name=merchant_name,
+            merchant_id=auth_context["merchant_id"],
+            merchant_slug=auth_context["merchant_slug"],
+            merchant_store_id=auth_context["merchant_store_id"],
             transaction_channel=auth_context["transaction_channel"],
             entry_mode=auth_context["entry_mode"],
             merchant_country_code=auth_context["merchant_country_code"],

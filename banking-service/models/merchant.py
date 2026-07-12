@@ -22,7 +22,7 @@ from models.reference import MerchantCategoryCode
 class MerchantMaster(Base):
     """
     Normalized 3NF Corporate Brand Catalog (`merchants.merchant_master`).
-    Stores canonical parent entities (e.g. Uber, Starbucks, Target) uniquely by MID.
+    Stores canonical parent entities (e.g. Uber, Starbucks, Target).
     """
     __tablename__ = "merchant_master"
     __table_args__ = (
@@ -32,7 +32,7 @@ class MerchantMaster(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    merchant_id = Column(String(100), unique=True, nullable=False, index=True)
+    merchant_slug = Column(String(100), unique=True, nullable=False, index=True)
     clean_name = Column(String(100), nullable=False)
     default_mcc = Column(String(10), nullable=False)
     merchant_domain = Column(String(100), nullable=True)
@@ -62,7 +62,7 @@ class MerchantStore(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    merchant_id = Column(String(100), ForeignKey("merchants.merchant_master.merchant_id", ondelete="CASCADE"), nullable=False, index=True)
+    merchant_id = Column(UUID(as_uuid=True), ForeignKey("merchants.merchant_master.id", ondelete="CASCADE"), nullable=False, index=True)
     location_name = Column(String(100), nullable=False)
     raw_descriptor = Column(String(150), nullable=False, index=True)
     country_code = Column(String(3), nullable=False, default="USA")
@@ -84,6 +84,10 @@ class MerchantStore(Base):
     @property
     def clean_name(self) -> str:
         return self.merchant.clean_name if self.merchant else self.location_name
+
+    @property
+    def merchant_slug(self) -> str:
+        return self.merchant.merchant_slug if self.merchant else ""
 
     @property
     def mcc(self) -> str:

@@ -506,6 +506,9 @@ def build_generic_merchant(
     mcc: str = "5311", country_code: str = "USA", is_international: bool = False
 ) -> Dict[str, Any]:
     return {
+        "merchant_id": None,
+        "merchant_slug": None,
+        "merchant_store_id": None,
         "merchant": "Generic Merchant",
         "descriptor": "GENERIC MERCHANT",
         "category": "Retail",
@@ -1466,6 +1469,9 @@ def get_merchants() -> List[Dict[str, Any]]:
                     clean_name = item.get("clean_name", "Unknown")
                     loaded.append(
                         {
+                            "merchant_id": item.get("merchant_id"),
+                            "merchant_slug": item.get("merchant_slug"),
+                            "merchant_store_id": item.get("merchant_store_id"),
                             "merchant": clean_name,
                             "descriptor": item.get(
                                 "raw_descriptor_pattern",
@@ -1714,6 +1720,9 @@ async def simulate_swipe_event(
         "card_token": card["card_token"],
         "amount_cents": amount_cents,
         "retrieval_reference_number": rrn,
+        "merchant_id": merchant.get("merchant_id"),
+        "merchant_slug": merchant.get("merchant_slug"),
+        "merchant_store_id": merchant.get("merchant_store_id"),
         "merchant_category_code": merchant.get("mcc", "5311"),
         "merchant_name": formatted_merchant,
         "card_network": "VISA",

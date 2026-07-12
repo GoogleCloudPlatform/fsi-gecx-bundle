@@ -294,6 +294,7 @@ class AccountsService:
             str(cred_acc.id): get_wallet_status_by_card_token(self.db, str(cred_acc.id))
             for cred_acc in credit_accounts
         }
+        now = datetime.datetime.now(datetime.timezone.utc)
 
         return {
             "deposit_accounts": [
@@ -315,8 +316,11 @@ class AccountsService:
                     "status": cred_acc.status,
                     "credit_limit_cents": cred_acc.credit_limit_cents,
                     "cleared_balance_cents": cred_acc.cleared_balance_cents,
+                    "statement_balance_cents": max(0, cred_acc.cleared_balance_cents),
+                    "minimum_due_cents": min(3500, max(0, cred_acc.cleared_balance_cents)),
                     "available_credit_cents": cred_acc.available_credit_cents,
-                    "payment_due_date": cred_acc.payment_due_date.isoformat() if cred_acc.payment_due_date else None,
+                    "payment_due_date": (cred_acc.payment_due_date or (now + datetime.timedelta(days=15))).isoformat(),
+                    "statement_close_date": (cred_acc.statement_close_date or (now - datetime.timedelta(days=15))).isoformat(),
                     "cards": [
                         {
                             "card_id": str(card.id),

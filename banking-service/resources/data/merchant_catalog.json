@@ -475,7 +475,7 @@
   {
     "merchant_id": "hertz",
     "clean_name": "Hertz Car Rental",
-    "default_mcc": "4121",
+    "default_mcc": "7512",
     "merchant_domain": "hertz.com",
     "logo_url": "https://logo.clearbit.com/hertz.com",
     "is_subscription": false,
@@ -9086,6 +9086,116 @@
     ]
   },
   {
+    "merchant_id": "google_play_store",
+    "clean_name": "Google Play Store",
+    "default_mcc": "5817",
+    "merchant_domain": "play.google.com",
+    "logo_url": "https://logo.clearbit.com/google.com",
+    "is_subscription": false,
+    "stores": [
+      {
+        "location_name": "Google Play Store Online",
+        "raw_descriptor": "GOOGLE *PLAY STORE",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Google Play App Purchase",
+        "raw_descriptor": "GOOGLE *APP GOOGLE PLAY",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Google Play Digital Content",
+        "raw_descriptor": "GOOGLE PLAY DIGITAL CONTENT",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      }
+    ]
+  },
+  {
+    "merchant_id": "youtube_tv",
+    "clean_name": "YouTube TV",
+    "default_mcc": "4899",
+    "merchant_domain": "tv.youtube.com",
+    "logo_url": "https://logo.clearbit.com/youtube.com",
+    "is_subscription": true,
+    "stores": [
+      {
+        "location_name": "YouTube TV Online",
+        "raw_descriptor": "YOUTUBE TV*ONLINE",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "YouTube TV Monthly Billing",
+        "raw_descriptor": "YOUTUBE TV*SUBSCRIPTION",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      }
+    ]
+  },
+  {
+    "merchant_id": "google_fi",
+    "clean_name": "Google Fi Wireless",
+    "default_mcc": "4814",
+    "merchant_domain": "fi.google.com",
+    "logo_url": "https://logo.clearbit.com/google.com",
+    "is_subscription": true,
+    "stores": [
+      {
+        "location_name": "Google Fi Online",
+        "raw_descriptor": "GOOGLE FI*ONLINE",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Google Fi Wireless Monthly Billing",
+        "raw_descriptor": "GOOGLE FI*WIRELESS",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      }
+    ]
+  },
+  {
+    "merchant_id": "google_store",
+    "clean_name": "Google Store",
+    "default_mcc": "5732",
+    "merchant_domain": "store.google.com",
+    "logo_url": "https://logo.clearbit.com/google.com",
+    "is_subscription": false,
+    "stores": [
+      {
+        "location_name": "Google Store Online",
+        "raw_descriptor": "GOOGLE STORE*ONLINE",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Google Store Mountain View",
+        "raw_descriptor": "GOOGLE STORE MOUNTAIN VIEW CA",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      },
+      {
+        "location_name": "Google Store Chelsea",
+        "raw_descriptor": "GOOGLE STORE CHELSEA NY",
+        "country_code": "USA",
+        "is_international": false,
+        "risk_score": 0
+      }
+    ]
+  },
+  {
     "merchant_id": "amazon_prime_video",
     "clean_name": "Amazon Prime Video",
     "default_mcc": "4899",
@@ -9592,7 +9702,7 @@
   {
     "merchant_id": "cvs_pharmacy",
     "clean_name": "CVS Pharmacy",
-    "default_mcc": "8011",
+    "default_mcc": "5912",
     "merchant_domain": "cvs.com",
     "logo_url": "https://logo.clearbit.com/cvs.com",
     "is_subscription": false,
@@ -9623,7 +9733,7 @@
   {
     "merchant_id": "walgreens",
     "clean_name": "Walgreens",
-    "default_mcc": "8011",
+    "default_mcc": "5912",
     "merchant_domain": "walgreens.com",
     "logo_url": "https://logo.clearbit.com/walgreens.com",
     "is_subscription": false,
@@ -9654,7 +9764,7 @@
   {
     "merchant_id": "rite_aid",
     "clean_name": "Rite Aid",
-    "default_mcc": "8011",
+    "default_mcc": "5912",
     "merchant_domain": "riteaid.com",
     "logo_url": "https://logo.clearbit.com/riteaid.com",
     "is_subscription": false,
@@ -10185,7 +10295,7 @@
   {
     "merchant_id": "planet_fitness",
     "clean_name": "Planet Fitness",
-    "default_mcc": "8011",
+    "default_mcc": "7997",
     "merchant_domain": "planetfitness.com",
     "logo_url": "https://logo.clearbit.com/planetfitness.com",
     "is_subscription": true,
@@ -10209,7 +10319,7 @@
   {
     "merchant_id": "anytime_fitness",
     "clean_name": "Anytime Fitness",
-    "default_mcc": "8011",
+    "default_mcc": "7997",
     "merchant_domain": "anytimefitness.com",
     "logo_url": "https://logo.clearbit.com/anytimefitness.com",
     "is_subscription": true,
@@ -10541,7 +10651,7 @@
   {
     "merchant_id": "fedex",
     "clean_name": "FedEx",
-    "default_mcc": "4814",
+    "default_mcc": "4215",
     "merchant_domain": "fedex.com",
     "logo_url": "https://logo.clearbit.com/fedex.com",
     "is_subscription": false,
@@ -10565,7 +10675,7 @@
   {
     "merchant_id": "ups",
     "clean_name": "UPS (United Parcel Service)",
-    "default_mcc": "4814",
+    "default_mcc": "4215",
     "merchant_domain": "ups.com",
     "logo_url": "https://logo.clearbit.com/ups.com",
     "is_subscription": false,
@@ -10589,7 +10699,7 @@
   {
     "merchant_id": "usps",
     "clean_name": "United States Postal Service",
-    "default_mcc": "4814",
+    "default_mcc": "4215",
     "merchant_domain": "usps.com",
     "logo_url": "https://logo.clearbit.com/usps.com",
     "is_subscription": false,

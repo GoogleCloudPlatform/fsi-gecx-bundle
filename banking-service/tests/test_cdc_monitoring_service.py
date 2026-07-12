@@ -253,6 +253,8 @@ def test_operations_monitor_summary_builds_windowed_operational_view():
     ]
     assert {"label": "High", "count": 1, "percentage": 100} in result["risk_distribution"]
     assert result["event_mix"][0]["label"] == "Authorization"
+    assert len(result["activity_series"]) == 15
+    assert result["activity_series"][-1]["timestamp"] == (now - datetime.timedelta(minutes=1)).isoformat()
     assert result["scenario_impact"][0] == {
         "label": "Impossible Travel Campaign",
         "events": 1,

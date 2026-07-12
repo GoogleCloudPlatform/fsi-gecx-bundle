@@ -94,15 +94,15 @@ The Datastream replication stream (`banking-cdc-stream`) filters and mirrors our
 | **Cards & Ledgers** | `cards` | `cards.posted_transactions` | `iceberg_catalog.cards_posted_transactions` | Base posted ledger entries and authorization links. |
 | **Cards & Ledgers** | `cards` | `cards.credit_accounts` | `iceberg_catalog.cards_credit_accounts` | Credit account ownership, status, limits, and customer linkage for offer and servicing analytics. |
 | **Cards & Ledgers** | `cards` | `cards.issued_card` | `iceberg_catalog.cards_issued_card` | Issued card instruments, PAN tokens, last 4 digits, and status. |
-| **Cards & Ledgers** | `cards` | `cards.transaction_authorization` | `iceberg_catalog.cards_transaction_authorization` | ISO-8583 authorization holds, MCC codes, merchant names, and FX rates. |
+| **Cards & Ledgers** | `cards` | `cards.transaction_authorization` | `iceberg_catalog.cards_transaction_authorization` | ISO-8583 authorization holds, immutable merchant snapshots, optional merchant/store UUIDs, MCC codes, and FX rates. |
 | **Origination & Loans** | `origination` | `origination.applications` | `iceberg_catalog.origination_applications` | Core applicant funnel, workflow status, and customer links. |
 | **Origination & Loans** | `origination` | `origination.credit_card_applications` | `iceberg_catalog.origination_credit_card_applications` | Requested credit limits and card product selections. |
 | **Origination & Loans** | `origination` | `origination.mortgage_applications` | `iceberg_catalog.origination_mortgage_applications` | Requested mortgage loan amounts, property addresses, and valuations when the mortgage flow is exercised. |
 | **Identity & IAM** | `identity` | `identity.users` | `iceberg_catalog.identity_users` | Customer demographics and email addresses. |
 | **Identity & IAM** | `identity` | `identity.user_addresses` | `iceberg_catalog.identity_user_addresses` | Primary residential geography used for home-metro cohort analysis. |
 | **KYC & Credit Profile** | `kyc` | `kyc.user_credit_profiles` | `iceberg_catalog.kyc_user_credit_profiles` | Credit tier, score, and stated income fields for governed offer eligibility analytics. |
-| **Merchant Reference** | `merchants` | `merchants.merchant_master` | `iceberg_catalog.merchants_merchant_master` | Canonical merchant brands and default MCC mapping. |
-| **Merchant Reference** | `merchants` | `merchants.merchant_stores` | `iceberg_catalog.merchants_merchant_stores` | POS descriptors, international country codes, and merchant location risk scores. |
+| **Merchant Reference** | `merchants` | `merchants.merchant_master` | `iceberg_catalog.merchants_merchant_master` | Canonical merchant brands keyed by UUID, with `merchant_slug` retaining the stable demo/catalog slug and default MCC mapping. |
+| **Merchant Reference** | `merchants` | `merchants.merchant_stores` | `iceberg_catalog.merchants_merchant_stores` | POS descriptors, international country codes, merchant location risk scores, and `merchant_id` as the UUID FK to `merchant_master.id`. |
 | **Merchant Reference** | `merchants` | `merchants.merchant_category_codes` | `iceberg_catalog.merchants_merchant_category_codes` | MCC category labels for business-friendly spend grouping. |
 
 ### B. Silver/Gold Tier: Curated BigQuery Semantic Layer (`analytics_curated`)
@@ -111,6 +111,8 @@ Rather than forcing data scientists or business analysts to write complex multi-
 * **`analytics_curated.realtime_spend_velocity`**: Aggregates recent authorization volume and ticket size directly from the schema-prefixed CDC transaction stream.
 * **`analytics_curated.international_fraud_anomalies`**: Surfaces high-risk or flagged card authorizations from the live CDC stream.
 * **`analytics_curated.premium_travel_offer_candidates`**: Rolls up recent international travel activity by customer/card, joins home geography, credit profile, and merchant context, and exposes a Data Canvas-friendly audience for Premium Travel Rewards offer activation.
+
+Merchant reference joins should use UUID identity: `merchants_merchant_stores.merchant_id = merchants_merchant_master.id`. The prior seed/catalog slug remains available only as `merchant_slug`. Curated transaction views intentionally continue to use authorization-time snapshot fields such as `merchant_name` and `merchant_category_code` so ledger and fraud history do not change when reference data is reseeded.
 
 Because these views query directly against the underlying BigLake Iceberg Parquet manifests, queries benefit from **zero data duplication**, **zero batch ETL latency**, and automatic manifest-level partition pruning!
 

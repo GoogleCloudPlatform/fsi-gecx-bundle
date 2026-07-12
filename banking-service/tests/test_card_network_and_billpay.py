@@ -193,6 +193,8 @@ def test_process_authorization_publishes_structured_fraud_decision(db_session):
     assert result["fraud_decision"]["features"]["is_digital_goods"] is True
     assert result["fraud_decision"]["features"]["recent_auth_count_10m"] == 1
     assert result["fraud_decision"]["features"]["amount_to_recent_average_ratio"] == 95.0
+    assert result["fraud_decision"]["features"]["mcc_risk_score"] is not None
+    assert result["fraud_decision"]["features"]["merchant_intelligence_matched"] is False
 
     auth = db_session.query(TransactionAuthorization).filter_by(retrieval_reference_number="777777777777").first()
     assert auth is not None
@@ -210,6 +212,8 @@ def test_process_authorization_publishes_structured_fraud_decision(db_session):
     assert decision_record.decision == "FLAGGED"
     assert decision_record.reason_codes == ["EXPLICIT_SIMULATION_OVERRIDE"]
     assert decision_record.feature_snapshot["recent_auth_count_10m"] == 1
+    assert "mcc_primary_category" in decision_record.feature_snapshot
+    assert "merchant_intelligence_matched" in decision_record.feature_snapshot
     assert decision_record.transaction_channel == "ECOMMERCE"
 
     audit_event = db_session.query(AuditOutbox).filter_by(event_type="FRAUD_MODEL_DECISION_RECORDED").first()
@@ -242,6 +246,8 @@ def test_process_authorization_publishes_structured_fraud_decision(db_session):
     assert event_payload["transaction_channel"] == "ECOMMERCE"
     assert event_payload["merchant_country_code"] == "USA"
     assert event_payload["fraud_features"]["recent_auth_count_10m"] == 1
+    assert "mcc_risk_score" in event_payload["fraud_features"]
+    assert "merchant_intelligence_matched" in event_payload["fraud_features"]
 
 
 def test_process_settlement_allows_flagged_authorization_hold(db_session):
@@ -282,12 +288,17 @@ def test_process_settlement_allows_flagged_authorization_hold(db_session):
 @pytest.mark.asyncio
 async def test_card_network_authorize_success(async_client, db_session):
     user, checking, credit_acc, card = setup_test_cardholder_suite(db_session)
+    merchant_id = str(uuid.uuid4())
+    merchant_store_id = str(uuid.uuid4())
     
     headers = {"X-Card-Network-Token": "switch-secret-key-12345"}
     payload = {
         "card_token": "tok_visa_swipe_tester",
         "amount_cents": 1500, # $15.00 hold
         "retrieval_reference_number": "123456789012",
+        "merchant_id": merchant_id,
+        "merchant_slug": "local_restaurant",
+        "merchant_store_id": merchant_store_id,
         "merchant_category_code": "5812",
         "merchant_name": "Local Restaurant"
     }
@@ -308,6 +319,9 @@ async def test_card_network_authorize_success(async_client, db_session):
     assert auth is not None
     assert auth.status == "PENDING"
     assert auth.transaction_amount_cents == 1500
+    assert str(auth.merchant_id) == merchant_id
+    assert auth.merchant_slug == "local_restaurant"
+    assert str(auth.merchant_store_id) == merchant_store_id
 
 @pytest.mark.asyncio
 async def test_card_network_authorize_returns_503_during_maintenance(async_client, db_session):
@@ -451,6 +465,10 @@ async def test_accounts_summary_and_pay_success(async_client, db_session):
     assert summary_data["deposit_accounts"][0]["cleared_balance_cents"] == 50000
     assert len(summary_data["credit_accounts"]) == 1
     assert summary_data["credit_accounts"][0]["cleared_balance_cents"] == 15000
+    assert summary_data["credit_accounts"][0]["statement_balance_cents"] == 15000
+    assert summary_data["credit_accounts"][0]["minimum_due_cents"] == 3500
+    assert summary_data["credit_accounts"][0]["payment_due_date"] is not None
+    assert summary_data["credit_accounts"][0]["statement_close_date"] is not None
     summary_card = summary_data["credit_accounts"][0]["cards"][0]
     assert summary_card["card_token"] == card.card_token
     assert summary_card["wallet_provider"] == "GOOGLE_WALLET"
