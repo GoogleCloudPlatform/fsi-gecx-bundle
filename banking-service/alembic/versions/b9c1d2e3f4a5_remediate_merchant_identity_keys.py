@@ -18,6 +18,7 @@ revision: str = "b9c1d2e3f4a5"
 down_revision: Union[str, Sequence[str], None] = "e6f7a8b9c0d1"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
+REMEDIATION_MARKER = "remediated_by:b9c1d2e3f4a5"
 
 
 def upgrade() -> None:
@@ -43,6 +44,7 @@ def upgrade() -> None:
             existing_nullable=False,
             schema="merchants",
         )
+        op.execute(f"COMMENT ON COLUMN merchants.merchant_master.merchant_slug IS '{REMEDIATION_MARKER}'")
         op.drop_column("merchant_stores", "merchant_id", schema="merchants")
         op.add_column(
             "merchant_stores",
@@ -105,6 +107,21 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Restore prior slug-based merchant_id relationship. Destructive for merchant refs."""
+    bind = op.get_bind()
+    marker = bind.execute(
+        sa.text(
+            """
+            SELECT col_description('merchants.merchant_master'::regclass, ordinal_position)
+            FROM information_schema.columns
+            WHERE table_schema = 'merchants'
+              AND table_name = 'merchant_master'
+              AND column_name = 'merchant_slug'
+            """
+        )
+    ).scalar()
+    if marker != REMEDIATION_MARKER:
+        return
+
     op.drop_constraint("transaction_authorization_merchant_store_id_fkey", "transaction_authorization", schema="cards", type_="foreignkey")
     op.drop_constraint("transaction_authorization_merchant_id_fkey", "transaction_authorization", schema="cards", type_="foreignkey")
     op.drop_column("transaction_authorization", "merchant_slug", schema="cards")
@@ -132,6 +149,7 @@ def downgrade() -> None:
         existing_nullable=False,
         schema="merchants",
     )
+    op.execute("COMMENT ON COLUMN merchants.merchant_master.merchant_id IS NULL")
 
     op.create_index(
         op.f("ix_merchants_merchant_master_merchant_id"),
