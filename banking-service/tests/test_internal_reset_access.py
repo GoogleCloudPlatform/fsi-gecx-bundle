@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from main import app
 from models.authentication import ValidatedToken
+from routers.internal import RESET_DATA_LAKE_TABLES
 from utils.auth import get_current_user
 
 
@@ -98,3 +99,18 @@ def test_full_reset_access_does_not_treat_group_principal_as_membership_claim(mo
     assert response.status_code == 200
     assert response.json()["allowed"] is False
     assert response.json()["reason"] == "OPERATOR_NOT_ALLOWLISTED"
+
+
+def test_full_reset_data_lake_purge_covers_ledger_and_merchant_cdc_tables():
+    assert {
+        "cards_credit_accounts",
+        "cards_issued_card",
+        "cards_posted_transactions",
+        "cards_transaction_authorization",
+        "identity_user_addresses",
+        "identity_users",
+        "kyc_user_credit_profiles",
+        "merchants_merchant_category_codes",
+        "merchants_merchant_master",
+        "merchants_merchant_stores",
+    }.issubset(RESET_DATA_LAKE_TABLES)

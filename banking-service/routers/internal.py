@@ -33,6 +33,22 @@ logger = logging.getLogger(__name__)
 bq_client = LazyClient(bigquery.Client)
 router = APIRouter(prefix="/internal", tags=["internal"])
 
+RESET_DATA_LAKE_TABLES = {
+    "cards_credit_accounts",
+    "cards_issued_card",
+    "cards_posted_transactions",
+    "cards_transaction_authorization",
+    "identity_user_addresses",
+    "identity_users",
+    "kyc_user_credit_profiles",
+    "merchants_merchant_category_codes",
+    "merchants_merchant_master",
+    "merchants_merchant_stores",
+    "origination_applications",
+    "origination_credit_card_applications",
+    "origination_mortgage_applications",
+}
+
 
 def _env_flag(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)
@@ -108,6 +124,20 @@ def clear_operational_transaction_stream() -> None:
         redis_client.delete("recent_transactions", "datastream_metrics", "cdc_status")
     except Exception as exc:
         logger.warning("Could not clear Redis transaction or metrics cache during reset: %s", exc)
+
+
+def _purge_biglake_tables(project_id: str) -> list[str]:
+    table_rows = bq_client.query(
+        f"""
+        SELECT table_name
+        FROM `{project_id}.iceberg_catalog.INFORMATION_SCHEMA.TABLES`
+        WHERE table_name IN ({", ".join(f"'{table}'" for table in sorted(RESET_DATA_LAKE_TABLES))})
+        """
+    ).result()
+    existing_tables = [row.table_name for row in table_rows]
+    for lake_tbl in existing_tables:
+        bq_client.query(f"DELETE FROM `{project_id}.iceberg_catalog.{lake_tbl}` WHERE true").result()
+    return existing_tables
 
 
 def _run_cloud_run_reset_job() -> dict | None:
@@ -301,6 +331,14 @@ def reset_database(
                 ttl_seconds=300,
             )
             try:
+                if purge_data_lake:
+                    try:
+                        project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
+                        purged_tables = _purge_biglake_tables(project_id)
+                        logger.info("Purged BigLake Apache Iceberg catalog tables before async reset job: %s", purged_tables)
+                    except Exception as lake_ex:
+                        logger.warning(f"Could not purge BigLake Iceberg tables before async reset job: {lake_ex}")
+                        warnings.append(f"BigLake purge skipped: {lake_ex}")
                 reset_job_operation = _run_cloud_run_reset_job()
             except Exception:
                 disable_maintenance_mode()
@@ -312,8 +350,8 @@ def reset_database(
             time.sleep(2.0)
             clear_operational_transaction_stream()
             logger.info("Database reset started via Cloud Run job operation: %s", reset_job_operation.get("name"))
-            if purge_audit_logs or purge_data_lake:
-                warnings.append("Audit and data lake purge are skipped for asynchronous Cloud Run reset jobs.")
+            if purge_audit_logs:
+                warnings.append("Audit purge is skipped for asynchronous Cloud Run reset jobs.")
             return {
                 "status": "SUCCESS",
                 "message": "Database reset job started. Demo data will be rebuilt shortly.",
@@ -355,26 +393,8 @@ def reset_database(
                 logger.info("Purging BigLake Apache Iceberg catalog tables...")
                 try:
                     project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
-                    candidate_tables = {
-                        "cards_posted_transactions",
-                        "cards_transaction_authorization",
-                        "cards_issued_card",
-                        "origination_applications",
-                        "origination_credit_card_applications",
-                        "origination_mortgage_applications",
-                        "identity_users",
-                    }
-                    table_rows = bq_client.query(
-                        f"""
-                        SELECT table_name
-                        FROM `{project_id}.iceberg_catalog.INFORMATION_SCHEMA.TABLES`
-                        WHERE table_name IN ({", ".join(f"'{table}'" for table in sorted(candidate_tables))})
-                        """
-                    ).result()
-                    existing_tables = [row.table_name for row in table_rows]
-                    for lake_tbl in existing_tables:
-                        bq_client.query(f"DELETE FROM `{project_id}.iceberg_catalog.{lake_tbl}` WHERE true").result()
-                    logger.info("Purged BigLake Apache Iceberg catalog tables.")
+                    purged_tables = _purge_biglake_tables(project_id)
+                    logger.info("Purged BigLake Apache Iceberg catalog tables: %s", purged_tables)
                 except Exception as lake_ex:
                     logger.warning(f"Could not purge BigLake Iceberg tables: {lake_ex}")
                     warnings.append(f"BigLake purge skipped: {lake_ex}")
