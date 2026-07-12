@@ -445,25 +445,25 @@ export default function LocatorView() {
             {
               target: '#locator-search-input',
               content: 'Search for specific branches or ATMs by entering an city, state, address, or zip code.',
-              placement: 'top',
+              placement: 'right',
               skipBeacon: true,
             },
             {
               target: '#locator-gps-btn',
               content: "Or click here to search for nearby branches and ATMs instantly using your device's GPS location.",
-              placement: 'top',
+              placement: 'bottom',
               skipBeacon: true,
             },
             {
               target: '#locator-type-filters',
               content: 'Filter locations by service type: view Branches, ATMs, or both.',
-              placement: 'top',
+              placement: 'left',
               skipBeacon: true,
             },
             {
               target: '#locator-open-only-toggle',
               content: 'Toggle this switch to only show locations that are currently open.',
-              placement: 'top',
+              placement: 'bottom',
               skipBeacon: true,
             },
             {
@@ -475,9 +475,10 @@ export default function LocatorView() {
           ]}
           continuous={true}
           showSkipButton={true}
-          callback={(data) => {
-            const { status, type } = data;
-            if (['finished', 'skipped'].includes(status) || type === 'tour:end') {
+          showCloseButton={true}
+          onEvent={(data) => {
+            const { status, type, action } = data;
+            if (['finished', 'skipped'].includes(status) || type === 'tour:end' || action === 'close' || action === 'skip') {
               setTourRun(false);
               localStorage.setItem('locator-tour-completed', 'true');
             }
