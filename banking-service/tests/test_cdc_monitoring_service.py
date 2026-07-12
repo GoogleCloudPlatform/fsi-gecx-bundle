@@ -258,5 +258,9 @@ def test_operations_monitor_summary_builds_windowed_operational_view():
         "events": 1,
         "high_risk": 1,
     }
-    assert result["transactions"][0]["risk_state"] == "High"
-    assert result["transactions"][0]["risk_score"] == 87
+    settlement_row = next(item for item in result["transactions"] if item["event_type"] == "settlement")
+    auth_row = next(item for item in result["transactions"] if item["event_type"] == "authorization")
+    assert settlement_row["risk_state"] == "Not Scored"
+    assert settlement_row["risk_score"] is None
+    assert auth_row["risk_state"] == "High"
+    assert auth_row["risk_score"] == 87

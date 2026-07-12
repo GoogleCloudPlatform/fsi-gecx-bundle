@@ -274,8 +274,7 @@ class CdcMonitoringService:
     ) -> dict:
         if event_type == "settlement":
             auth = event.authorization
-            auth_id = str(event.authorization_id) if event.authorization_id else None
-            decision = decision_by_auth_id.get(auth_id) if auth_id else None
+            decision = None
             event_time = self._ensure_aware(event.posted_at)
             amount_cents = abs(event.amount_cents or 0)
             merchant_name = event.description

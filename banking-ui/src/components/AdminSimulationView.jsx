@@ -363,6 +363,15 @@ function getRiskBandStyle(label) {
   };
 }
 
+function getRiskBandStroke(label) {
+  const normalized = String(label || '').toLowerCase();
+  if (normalized.includes('critical')) return '#e11d48';
+  if (normalized.includes('high')) return '#f43f5e';
+  if (normalized.includes('medium')) return '#f59e0b';
+  if (normalized.includes('low')) return '#10b981';
+  return '#94a3b8';
+}
+
 function getTransactionStatusDisplay(status = '') {
   const normalized = String(status || '').toUpperCase();
   if (normalized.includes('FAILED') || normalized.includes('DECLINED')) {
@@ -653,6 +662,24 @@ function AdminSimulationView({ mode = 'studio' }) {
   const summarySeriesValues = buildSeriesValues(operationsSummary?.activity_series, 'events');
   const summaryLinePath = buildSparklinePath(summarySeriesValues, 640, 160);
   const summaryAreaPath = buildAreaPath(summarySeriesValues, 640, 160);
+  const activeRiskDistribution = summaryRiskDistribution.filter((item) => Number(item.count || 0) > 0);
+  const scoredRiskTotal = activeRiskDistribution.reduce((sum, item) => sum + Number(item.count || 0), 0);
+  const highPlusRiskTotal = activeRiskDistribution
+    .filter((item) => ['critical', 'high'].includes(String(item.label || '').toLowerCase()))
+    .reduce((sum, item) => sum + Number(item.count || 0), 0);
+  const riskPieSegments = activeRiskDistribution.reduce((segments, item) => {
+    const percent = scoredRiskTotal ? (Number(item.count || 0) / scoredRiskTotal) * 100 : 0;
+    const offset = segments.reduce((sum, segment) => sum + segment.percent, 0);
+    return [
+      ...segments,
+      {
+      ...item,
+      percent,
+      offset,
+      stroke: getRiskBandStroke(item.label),
+      },
+    ];
+  }, []);
   const replicationHealthCards = [
     {
       label: 'Stream Status',
@@ -1217,15 +1244,6 @@ function AdminSimulationView({ mode = 'studio' }) {
             >
               <RefreshCw className="w-4 h-4" />
             </button>
-            {showInfoModals() && (
-              <button
-                onClick={() => setInfoModal('monitor')}
-                className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
-                title="Operations monitor info"
-              >
-                <GoogleCloudIcon className="w-4 h-4 text-indigo-400" />
-              </button>
-            )}
           </div>
         )}
       </div>
@@ -1238,7 +1256,18 @@ function AdminSimulationView({ mode = 'studio' }) {
                 <div className="text-[11px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">Replication Engine Health</div>
                 <p className="text-xs text-slate-500 mt-1">Authenticated event stream, operational write freshness, and lakehouse replication posture.</p>
               </div>
-              <span className={`px-3 py-1 rounded-full border text-[10px] font-black ${walStatus.className}`}>{walStatus.label}</span>
+              <div className="flex items-center gap-2">
+                <span className={`px-3 py-1 rounded-full border text-[10px] font-black ${walStatus.className}`}>{walStatus.label}</span>
+                {showInfoModals() && (
+                  <button
+                    onClick={() => setInfoModal('wal')}
+                    className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    title="Replication engine health info"
+                  >
+                    <GoogleCloudIcon className="w-4 h-4 text-indigo-400" />
+                  </button>
+                )}
+              </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               {replicationHealthCards.map((card) => {
@@ -1309,29 +1338,55 @@ function AdminSimulationView({ mode = 'studio' }) {
                 <div className="text-[11px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">Impact At A Glance</div>
                 <p className="text-xs text-slate-500 mt-1">Risk-band distribution for scored decisions in this window.</p>
               </div>
-              <div className="space-y-3">
-                {summaryRiskDistribution.filter((item) => item.count > 0).length === 0 ? (
+              <div>
+                {activeRiskDistribution.length === 0 ? (
                   <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 p-4 text-xs text-slate-500">
                     No scored risk distribution yet for this window.
                   </div>
                 ) : (
-                  summaryRiskDistribution.filter((item) => item.count > 0).map((item) => {
-                    const style = getRiskBandStyle(item.label);
-                    return (
-                      <div key={item.label}>
-                        <div className="flex items-center justify-between gap-3 text-xs">
-                          <span className={`font-bold flex items-center gap-2 ${style.text}`}>
-                            <span className={`w-2 h-2 rounded-full ${style.dot}`} />
-                            {item.label}
-                          </span>
-                          <span className="font-mono font-black text-slate-900 dark:text-white">{item.count} <span className="text-slate-400 font-normal">({item.percentage}%)</span></span>
-                        </div>
-                        <div className="mt-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                          <div className={`h-full rounded-full ${style.bar}`} style={{ width: `${Math.max(4, item.percentage)}%` }} />
-                        </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-[176px_1fr] gap-5 items-center">
+                    <div className="relative mx-auto w-44 h-44">
+                      <svg viewBox="0 0 120 120" className="w-44 h-44 -rotate-90" aria-label="Risk distribution pie chart">
+                        <circle cx="60" cy="60" r="44" fill="none" stroke="currentColor" strokeWidth="18" className="text-slate-100 dark:text-slate-800" />
+                        {riskPieSegments.map((segment) => (
+                          <circle
+                            key={segment.label}
+                            cx="60"
+                            cy="60"
+                            r="44"
+                            fill="none"
+                            stroke={segment.stroke}
+                            strokeWidth="18"
+                            strokeLinecap="butt"
+                            pathLength="100"
+                            strokeDasharray={`${segment.percent} ${100 - segment.percent}`}
+                            strokeDashoffset={-segment.offset}
+                          />
+                        ))}
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                        <div className="font-mono text-3xl font-black text-slate-900 dark:text-white">{formatCompactNumber(highPlusRiskTotal)}</div>
+                        <div className="text-[10px] uppercase tracking-wider font-bold text-slate-500">High+</div>
+                        <div className="text-[10px] text-slate-400">{formatCompactNumber(scoredRiskTotal)} scored</div>
                       </div>
-                    );
-                  })
+                    </div>
+                    <div className="space-y-3">
+                      {activeRiskDistribution.map((item) => {
+                        const style = getRiskBandStyle(item.label);
+                        return (
+                          <div key={item.label} className="flex items-center justify-between gap-3 text-xs">
+                            <span className={`font-bold flex items-center gap-2 ${style.text}`}>
+                              <span className={`w-2 h-2 rounded-full ${style.dot}`} />
+                              {item.label}
+                            </span>
+                            <span className="font-mono font-black text-slate-900 dark:text-white">
+                              {item.count} <span className="text-slate-400 font-normal">{item.percentage}%</span>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -2105,7 +2160,8 @@ function AdminSimulationView({ mode = 'studio' }) {
                       </tr>
                     ) : (
                       summaryTransactions.map((item, idx) => {
-                        const riskState = getRiskState(item.risk_score, item.status);
+                        const isSettlement = item.event_type === 'settlement';
+                        const riskState = getRiskState(isSettlement ? null : item.risk_score, item.status);
                         const statusDisplay = getTransactionStatusDisplay(item.status);
                         return (
                           <tr key={`${item.id}-${item.event_type}-${idx}`} className="hover:bg-slate-100 dark:hover:bg-slate-900/60 transition-colors">
@@ -2121,9 +2177,13 @@ function AdminSimulationView({ mode = 'studio' }) {
                               {formatCurrencyFromCents(item.amount_cents)}
                             </td>
                             <td className="px-3 py-3 whitespace-nowrap">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${riskState.className}`}>
-                                {item.risk_score != null && riskState.label !== 'Not scored' ? `${riskState.label} ${item.risk_score}` : riskState.label}
-                              </span>
+                              {isSettlement ? (
+                                <span className="text-slate-400">-</span>
+                              ) : (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${riskState.className}`}>
+                                  {item.risk_score != null && riskState.label !== 'Not scored' ? `${riskState.label} ${item.risk_score}` : riskState.label}
+                                </span>
+                              )}
                             </td>
                             <td className="px-3 py-3 whitespace-nowrap">
                               <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${statusDisplay.className}`}>
@@ -2265,14 +2325,14 @@ function AdminSimulationView({ mode = 'studio' }) {
       <GcpInfoModal
         isOpen={infoModal === 'wal'}
         onClose={() => setInfoModal(null)}
-        title="Datastream Replication Engine"
+        title="Replication Engine Health"
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            The <strong>Datastream WAL Replication Engine</strong> panel summarizes operational stream health and downstream CDC freshness for transaction writes.
+            The <strong>Replication Engine Health</strong> monitor shows recent card activity, live stream status, and downstream CDC freshness for transaction writes.
           </p>
           <p>
-            In practical terms, this panel helps confirm that new transaction events are reaching the admin console and that writes are moving from PostgreSQL WAL into Datastream CDC tables and curated analytical views.
+            In practical terms, this tile helps confirm that new authorization and settlement events are reaching the admin console while writes continue moving from PostgreSQL WAL into Datastream CDC tables and curated analytical views.
           </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
