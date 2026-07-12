@@ -7,21 +7,14 @@ import {
   Shield,
   Activity,
   Plus,
-  ExternalLink,
-  Lock,
   Sparkles,
   TrendingUp,
   AlertCircle,
-  Bell,
   ChevronDown,
   ChevronRight,
   FileText,
-  Plane,
-  RefreshCw,
   Search,
-  ShieldAlert,
   SlidersHorizontal,
-  Wallet
 } from 'lucide-react';
 import { 
   getAccountsSummary, 
@@ -673,74 +666,28 @@ function AccountsView({ fbUser, customerProfile }) {
             </div>
 
             {selectedAccountType === 'credit' && (
-              <div className="grid gap-4 lg:grid-cols-[1.1fr_1.4fr]">
-                <div className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-850 rounded-2xl p-5 shadow-sm dark:shadow-none">
-                  <div className="grid grid-cols-2 gap-3">
-                    {[
-                      { label: 'Autopay', value: 'Off', icon: RefreshCw },
-                      { label: 'Pending holds', value: `${transactions.filter(tx => tx.pending).length}`, icon: Activity },
-                    ].map(item => {
-                      const Icon = item.icon;
-                      return (
-                        <div key={item.label} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/30 p-3">
-                          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                            <Icon className="w-4 h-4" />
-                            <span className="text-[11px] font-bold uppercase">{item.label}</span>
-                          </div>
-                          <div className="mt-2 text-sm font-extrabold text-slate-900 dark:text-white">{item.value}</div>
-                        </div>
-                      );
-                    })}
+              (activeAccountObj?.cards || []).length > 0 && (
+                <div className="max-w-sm rounded-2xl border border-violet-200 bg-violet-100 p-5 text-slate-900 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-extrabold">Physical card ending in {(activeAccountObj.cards.find(card => !card.is_virtual) || activeAccountObj.cards[0])?.last_four}</h3>
+                      <p className="mt-1 text-xs font-medium text-slate-600">
+                        {(activeAccountObj.cards.find(card => !card.is_virtual) || activeAccountObj.cards[0])?.cardholder_name || customerProfile?.display_name || 'Primary card'}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-emerald-200 px-2 py-1 text-[10px] font-bold uppercase text-emerald-800">
+                      {(activeAccountObj.cards.find(card => !card.is_virtual) || activeAccountObj.cards[0])?.status || 'Active'}
+                    </span>
+                  </div>
+                  <div className="mt-4 min-h-24 rounded-xl bg-violet-200 p-4 text-slate-950 shadow-inner">
+                    <div className="flex h-full min-h-16 flex-col justify-between">
+                      <div className="text-xs font-bold tracking-widest">NOVA</div>
+                      <div className="text-sm font-bold">•••• •••• •••• {(activeAccountObj.cards.find(card => !card.is_virtual) || activeAccountObj.cards[0])?.last_four}</div>
+                      <div className="text-xs font-black">VISA</div>
+                    </div>
                   </div>
                 </div>
-
-                {(activeAccountObj?.cards || []).length > 0 && (
-                  <div className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-850 rounded-2xl p-5 shadow-sm dark:shadow-none">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Card controls</h3>
-                      <button
-                        onClick={() => setShowDocModal(true)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>Manage</span>
-                      </button>
-                    </div>
-                    <div className="mt-4 grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
-                      <div className="min-h-32 rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-100 p-4 text-slate-900 shadow-sm dark:border-slate-700 dark:from-slate-950 dark:to-slate-800 dark:text-white">
-                        <div className="text-xs font-bold tracking-widest text-slate-700 dark:text-slate-200">NOVA</div>
-                        <div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">Physical card</div>
-                          <div className="mt-1 text-sm font-bold">•••• •••• •••• {(activeAccountObj.cards.find(card => !card.is_virtual) || activeAccountObj.cards[0])?.last_four}</div>
-                        </div>
-                        <div className="text-xs font-black text-slate-800 dark:text-white">VISA</div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { label: 'Lock card', icon: Lock },
-                          { label: 'Replace card', icon: RefreshCw },
-                          { label: 'Set alerts', icon: Bell },
-                          { label: 'Travel notice', icon: Plane },
-                          { label: 'Lost or stolen', icon: ShieldAlert },
-                          { label: 'Wallet', icon: Wallet },
-                        ].map(action => {
-                          const Icon = action.icon;
-                          return (
-                            <button
-                              key={action.label}
-                              onClick={() => setShowDocModal(true)}
-                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/30 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-blue-400 dark:hover:border-blue-500 hover:text-blue-650 dark:hover:text-blue-300 transition cursor-pointer"
-                            >
-                              <Icon className="w-4 h-4" />
-                              <span>{action.label}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              )
             )}
 
             {/* 2. Transaction Blotter View */}
