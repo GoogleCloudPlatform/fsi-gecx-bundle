@@ -138,6 +138,14 @@ steps:
             --args "upgrade,head" \
             --update-env-vars "^|^IAM_DBA_USERS=${_IAM_DBA_USERS}|IAM_DB_VIEWER_USERS=${_IAM_DB_VIEWER_USERS}|REQUIRE_CDC_BOOTSTRAP=true" \
             --region "${_REGION}"
+          if gcloud run jobs describe banking-db-reset --region "${_REGION}" >/dev/null 2>&1; then
+            echo "Registering latest image with Cloud Run Reset Job..."
+            gcloud run jobs update banking-db-reset \
+              --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
+              --region "${_REGION}"
+          else
+            echo "Cloud Run reset job banking-db-reset not found; skipping reset job image update."
+          fi
           echo "Executing pre-deployment database schema migrations..."
           gcloud run jobs execute banking-db-migrate \
             --region "${_REGION}" \
