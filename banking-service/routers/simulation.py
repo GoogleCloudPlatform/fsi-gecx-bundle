@@ -171,6 +171,21 @@ def get_global_stream(
     return SimulationService(db).get_global_stream()
 
 
+@router.get("/operations-summary", status_code=status.HTTP_200_OK)
+@v1_router.get("/operations-summary", status_code=status.HTTP_200_OK)
+@alias_router.get("/operations-summary", status_code=status.HTTP_200_OK)
+def get_operations_monitor_summary(
+    window_minutes: int = 15,
+    token: ValidatedToken = Depends(verify_presenter_domain),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns a windowed operations monitor summary for the replication console.
+    """
+    del token
+    return SimulationService(db).get_operations_monitor_summary(window_minutes)
+
+
 @router.get("/cdc-status", status_code=status.HTTP_200_OK)
 @v1_router.get("/cdc-status", status_code=status.HTTP_200_OK)
 @alias_router.get("/cdc-status", status_code=status.HTTP_200_OK)

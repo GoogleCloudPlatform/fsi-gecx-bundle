@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -28,6 +28,7 @@ import {
   enqueueScheduledScenario,
   listScheduledEvents,
   getDataGeneratorStatus,
+  getOperationsMonitorSummary,
   injectFraudAnomaly,
   injectLateFee,
   getGlobalStream,
@@ -42,6 +43,14 @@ const MIN_RISK_CONDITION_SCORED_EVENTS = 5;
 const ELEVATED_AVERAGE_RISK_SCORE = 25;
 const SURGING_AVERAGE_RISK_SCORE = 70;
 const FEEDBACK_DISMISS_MS = 30000;
+const MONITOR_WINDOW_OPTIONS = [
+  { label: 'Last 15 minutes', value: 15 },
+  { label: 'Last 1 hour', value: 60 },
+  { label: 'Last 4 hours', value: 240 },
+  { label: 'Last 8 hours', value: 480 },
+  { label: 'Last 12 hours', value: 720 },
+  { label: 'Last 24 hours', value: 1440 },
+];
 
 const SCENARIO_OPTIONS = [
   {
@@ -98,6 +107,21 @@ function formatEventAge(ms) {
 
 function formatCurrencyFromCents(cents) {
   return `$${(Math.abs(cents ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatCompactNumber(value) {
+  return Number(value || 0).toLocaleString();
+}
+
+function formatShortTimestamp(value) {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function formatWindowLabel(minutes) {
+  return MONITOR_WINDOW_OPTIONS.find((option) => option.value === Number(minutes))?.label || `Last ${minutes} minutes`;
 }
 
 function formatScheduleTime(value) {
@@ -182,6 +206,17 @@ function buildSparklinePath(values, width = 156, height = 52) {
   }).join(' ');
 }
 
+function buildAreaPath(values, width = 640, height = 160) {
+  const line = buildSparklinePath(values, width, height);
+  if (!line) return '';
+  return `${line} L ${width} ${height} L 0 ${height} Z`;
+}
+
+function buildSeriesValues(series, key = 'events') {
+  const values = (series || []).map((point) => Number(point?.[key] || 0));
+  return values.length ? values : [0, 0, 0, 0, 0, 0];
+}
+
 function buildThroughputSparkline(streamData) {
   const seed = streamData.slice(0, 18).reverse().map((item, index) => {
     const base = Math.abs(item?.amount_cents || 0) / 100;
@@ -248,30 +283,6 @@ function titleFromScenarioId(value) {
     .slice(0, 48);
 }
 
-function formatFraudReason(reason) {
-  return String(reason || '')
-    .replaceAll('_', ' ')
-    .toLowerCase()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function isLowRiskReason(reason) {
-  return ['BASELINE_LOW_RISK', 'LOW_RISK'].includes(String(reason || '').toUpperCase());
-}
-
-function normalizeRiskFinding(reason) {
-  const normalized = String(reason || '').toUpperCase();
-  if (normalized.includes('IMPOSSIBLE_TRAVEL')) return 'Impossible travel';
-  if (normalized.includes('FOREIGN') || normalized.includes('INTERNATIONAL') || normalized.includes('CROSS_BORDER')) return 'Cross-border mismatch';
-  if (normalized.includes('CARD_NOT_PRESENT') || normalized.includes('CNP')) return 'Card-not-present';
-  if (normalized.includes('DESCRIPTOR') || normalized.includes('MERCHANT_MISMATCH')) return 'Merchant descriptor mismatch';
-  if (normalized.includes('VELOCITY') || normalized.includes('RAPID')) return 'Unusual spend velocity';
-  if (normalized.includes('DIGITAL_GOODS') || normalized.includes('DIGITAL')) return 'Digital-goods merchant';
-  if (normalized.includes('GIFT_CARD')) return 'Gift-card purchase pattern';
-  if (normalized.includes('FLAGGED_ACTIVITY')) return 'Recent flagged activity';
-  return formatFraudReason(reason);
-}
-
 function getRiskState(score, status = '') {
   const statusText = String(status || '').toUpperCase();
   if (statusText.includes('FLAGGED') && (score == null || score < 70)) {
@@ -307,6 +318,48 @@ function getRiskState(score, status = '') {
   return {
     label: 'Low',
     className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30',
+  };
+}
+
+function getRiskBandStyle(label) {
+  const normalized = String(label || '').toLowerCase();
+  if (normalized.includes('critical')) {
+    return {
+      dot: 'bg-rose-600',
+      text: 'text-rose-700 dark:text-rose-300',
+      bg: 'bg-rose-500/10 border-rose-500/20',
+      bar: 'bg-rose-600',
+    };
+  }
+  if (normalized.includes('high')) {
+    return {
+      dot: 'bg-rose-500',
+      text: 'text-rose-600 dark:text-rose-300',
+      bg: 'bg-rose-500/10 border-rose-500/20',
+      bar: 'bg-rose-500',
+    };
+  }
+  if (normalized.includes('medium')) {
+    return {
+      dot: 'bg-amber-500',
+      text: 'text-amber-600 dark:text-amber-300',
+      bg: 'bg-amber-500/10 border-amber-500/20',
+      bar: 'bg-amber-500',
+    };
+  }
+  if (normalized.includes('low')) {
+    return {
+      dot: 'bg-emerald-500',
+      text: 'text-emerald-600 dark:text-emerald-300',
+      bg: 'bg-emerald-500/10 border-emerald-500/20',
+      bar: 'bg-emerald-500',
+    };
+  }
+  return {
+    dot: 'bg-slate-400',
+    text: 'text-slate-500 dark:text-slate-400',
+    bg: 'bg-slate-500/10 border-slate-500/20',
+    bar: 'bg-slate-400',
   };
 }
 
@@ -426,6 +479,9 @@ function AdminSimulationView({ mode = 'studio' }) {
   const [dataGeneratorStatus, setDataGeneratorStatus] = useState(null);
   const [infoModal, setInfoModal] = useState(null);
   const [streamData, setStreamData] = useState([]);
+  const [monitorWindowMinutes, setMonitorWindowMinutes] = useState(15);
+  const [operationsSummary, setOperationsSummary] = useState(null);
+  const [operationsSummaryError, setOperationsSummaryError] = useState('');
   const [feedback, setFeedback] = useState({ type: '', title: '', message: '', data: null });
   const [streamConnection, setStreamConnection] = useState({ state: 'connecting', message: 'Negotiating secure stream...' });
   const [cdcStats, setCdcStats] = useState({
@@ -565,24 +621,6 @@ function AdminSimulationView({ mode = 'studio' }) {
     };
   })();
 
-  const anomalySeverity = cdcStats.operationalActiveFraudAlerts >= 5
-    ? {
-        cardClass: 'bg-rose-50 dark:bg-rose-950/10 border-rose-100 dark:border-rose-900/40',
-        textClass: 'text-rose-700 dark:text-rose-300',
-        iconClass: 'text-rose-500',
-      }
-    : cdcStats.operationalActiveFraudAlerts > 0
-    ? {
-        cardClass: 'bg-amber-50 dark:bg-amber-950/10 border-amber-100 dark:border-amber-900/40',
-        textClass: 'text-amber-700 dark:text-amber-300',
-        iconClass: 'text-amber-500',
-      }
-    : {
-        cardClass: 'bg-emerald-50 dark:bg-emerald-950/10 border-emerald-100 dark:border-emerald-900/40',
-        textClass: 'text-emerald-700 dark:text-emerald-300',
-        iconClass: 'text-emerald-500',
-      };
-
   const scenarioPlanSummary = summarizeScenarioPlan(scenarioPlan);
   const scenarioResultSummary = summarizeScenarioResult(scenarioResult);
   const scheduleSummary = summarizeScheduledEvents(scheduledEvents);
@@ -603,6 +641,106 @@ function AdminSimulationView({ mode = 'studio' }) {
     ['Risk Engine', riskCondition.label === 'Surging' ? 'Surging' : 'Healthy'],
     ['Rules Engine', 'Healthy'],
     ['Notifications', cdcStats.operationalActiveFraudAlerts > 0 ? `${cdcStats.operationalActiveFraudAlerts} alerts` : 'No alerts'],
+  ];
+  const summaryHealth = operationsSummary?.replication_health || {};
+  const summaryImpact = operationsSummary?.impact || {};
+  const summaryTransactions = operationsSummary?.transactions || [];
+  const summaryRiskSignals = operationsSummary?.risk_signals || [];
+  const summaryScenarioImpact = operationsSummary?.scenario_impact || [];
+  const summaryEventMix = operationsSummary?.event_mix || [];
+  const summarySystemHealth = operationsSummary?.system_health || [];
+  const summaryRiskDistribution = operationsSummary?.risk_distribution || [];
+  const summarySeriesValues = buildSeriesValues(operationsSummary?.activity_series, 'events');
+  const summaryLinePath = buildSparklinePath(summarySeriesValues, 640, 160);
+  const summaryAreaPath = buildAreaPath(summarySeriesValues, 640, 160);
+  const replicationHealthCards = [
+    {
+      label: 'Stream Status',
+      value: streamConnection.state === 'live' ? 'LIVE' : streamConnection.state === 'error' ? 'RETRY' : 'SYNC',
+      detail: streamConnection.state === 'live' ? 'Connected to Redis event feed' : streamConnection.message,
+      icon: Activity,
+      className: streamConnection.state === 'live'
+        ? 'text-emerald-600 dark:text-emerald-300'
+        : 'text-amber-600 dark:text-amber-300',
+    },
+    {
+      label: 'Last Event Age',
+      value: formatEventAge(summaryHealth.latest_event_age_ms ?? cdcStats.latestEventAgeMs),
+      detail: 'Age of newest event',
+      icon: Clock,
+      className: 'text-slate-900 dark:text-white',
+    },
+    {
+      label: 'Event Throughput',
+      value: `${formatCompactNumber(summaryHealth.events_per_minute ?? cdcStats.eventsPerMinute)} / min`,
+      detail: formatWindowLabel(monitorWindowMinutes),
+      icon: Layers,
+      className: 'text-slate-900 dark:text-white',
+    },
+    {
+      label: 'Replication Lag',
+      value: formatLatency(summaryHealth.replication_lag_ms ?? cdcStats.systemLagMs),
+      detail: 'Operational to lakehouse',
+      icon: Database,
+      className: 'text-slate-900 dark:text-white',
+    },
+    {
+      label: 'Datastream Freshness',
+      value: formatLatency(summaryHealth.data_freshness_ms ?? cdcStats.dataFreshnessMs),
+      detail: 'Managed CDC destination',
+      icon: ShieldAlert,
+      className: 'text-slate-900 dark:text-white',
+    },
+  ];
+  const riskOverviewCards = [
+    {
+      label: 'Open Fraud Alerts',
+      value: formatCompactNumber(summaryImpact.open_fraud_alerts ?? cdcStats.operationalActiveFraudAlerts),
+      detail: 'Cases awaiting review',
+      className: 'bg-emerald-50 dark:bg-emerald-950/10 border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300',
+    },
+    {
+      label: 'High Risk Transactions',
+      value: formatCompactNumber(summaryImpact.high_risk_transactions ?? creditRiskMetrics.highRiskTransactionCount),
+      detail: formatWindowLabel(monitorWindowMinutes),
+      className: 'bg-rose-50 dark:bg-rose-950/10 border-rose-200 dark:border-rose-900/40 text-rose-700 dark:text-rose-300',
+    },
+    {
+      label: 'Accounts Impacted',
+      value: formatCompactNumber(summaryImpact.accounts_impacted),
+      detail: 'Unique account IDs',
+      className: 'bg-cyan-50 dark:bg-cyan-950/10 border-cyan-200 dark:border-cyan-900/40 text-cyan-700 dark:text-cyan-300',
+    },
+    {
+      label: 'Pending Exposure',
+      value: formatCurrencyFromCents(summaryImpact.pending_exposure_cents),
+      detail: 'Pending or flagged holds',
+      className: 'bg-amber-50 dark:bg-amber-950/10 border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-300',
+    },
+    {
+      label: 'Active Scenarios',
+      value: formatCompactNumber(summaryImpact.active_scenarios ?? scenarioOverlayCount),
+      detail: 'Windowed synthetic overlays',
+      className: 'bg-slate-50 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300',
+    },
+    {
+      label: 'Peak Risk Score',
+      value: summaryImpact.peak_risk_score ?? creditRiskMetrics.peakRiskScore ?? 'N/A',
+      detail: 'Highest scored event',
+      className: 'bg-slate-50 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300',
+    },
+    {
+      label: 'Rules Triggered',
+      value: formatCompactNumber(summaryImpact.rules_triggered),
+      detail: 'Distinct reason codes',
+      className: 'bg-slate-50 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300',
+    },
+    {
+      label: 'Alerts Generated',
+      value: formatCompactNumber(summaryImpact.alerts_generated),
+      detail: formatWindowLabel(monitorWindowMinutes),
+      className: 'bg-slate-50 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300',
+    },
   ];
 
   const applyMonitorSnapshot = (streamSnapshot) => {
@@ -636,6 +774,17 @@ function AdminSimulationView({ mode = 'studio' }) {
       console.error("Failed to fetch global stream:", e);
     }
   };
+
+  const refreshOperationsSummary = useCallback(async (windowMinutes) => {
+    try {
+      const summary = await getOperationsMonitorSummary({ windowMinutes });
+      setOperationsSummary(summary);
+      setOperationsSummaryError('');
+    } catch (error) {
+      console.error('Failed to fetch operations monitor summary:', error);
+      setOperationsSummaryError(error.response?.data?.detail || error.message || 'Operations summary is unavailable.');
+    }
+  }, []);
 
   const refreshScheduledEvents = async () => {
     try {
@@ -758,6 +907,19 @@ function AdminSimulationView({ mode = 'studio' }) {
       controller.abort();
     };
   }, []);
+
+  useEffect(() => {
+    if (!isMonitoring) {
+      return undefined;
+    }
+
+    refreshOperationsSummary(monitorWindowMinutes);
+    const intervalId = window.setInterval(
+      () => refreshOperationsSummary(monitorWindowMinutes),
+      15000,
+    );
+    return () => window.clearInterval(intervalId);
+  }, [isMonitoring, monitorWindowMinutes, refreshOperationsSummary]);
 
   useEffect(() => {
     if (isMonitoring) {
@@ -1036,213 +1198,181 @@ function AdminSimulationView({ mode = 'studio' }) {
             </div>
           </div>
         </div>
+        {isMonitoring && (
+          <div className="flex items-center gap-2 self-start md:self-end">
+            <select
+              value={monitorWindowMinutes}
+              onChange={(event) => setMonitorWindowMinutes(Number(event.target.value))}
+              className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              title="Operations monitor time window"
+            >
+              {MONITOR_WINDOW_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => refreshOperationsSummary(monitorWindowMinutes)}
+              className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+              title="Refresh operations summary"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+            {showInfoModals() && (
+              <button
+                onClick={() => setInfoModal('monitor')}
+                className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+                title="Operations monitor info"
+              >
+                <GoogleCloudIcon className="w-4 h-4 text-indigo-400" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {isMonitoring && (
         <>
-      {/* Section 1: Datastream & WAL CDC Replication Status */}
-      <div className="mb-10 p-6 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5">
-        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200/60 dark:border-slate-800/60">
-          <div className="flex items-center gap-3">
-            <Database className="w-6 h-6 text-cyan-500" />
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                Datastream WAL Replication Engine
-              </h2>
-              <p className="text-xs text-slate-500">
-                PostgreSQL Outbox WAL &rarr; Datastream CDC tables in `iceberg_catalog` &rarr; curated views in `analytics_curated`
-              </p>
+          <div className="mb-6 p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">Replication Engine Health</div>
+                <p className="text-xs text-slate-500 mt-1">Authenticated event stream, operational write freshness, and lakehouse replication posture.</p>
+              </div>
+              <span className={`px-3 py-1 rounded-full border text-[10px] font-black ${walStatus.className}`}>{walStatus.label}</span>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold ${walStatus.className}`}>
-              <span className={`w-2 h-2 rounded-full ${walStatus.dotClassName} ${walStatus.animate ? 'animate-ping' : ''}`} />
-              <span className={`w-2 h-2 rounded-full ${walStatus.dotClassName} ${walStatus.animate ? '-ml-4' : ''}`} />
-              {walStatus.label}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              {replicationHealthCards.map((card) => {
+                const CardIcon = card.icon;
+                return (
+                  <div key={card.label} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 p-4 min-h-[116px]">
+                    <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
+                      <span>{card.label}</span>
+                      <CardIcon className="w-4 h-4 text-cyan-500" />
+                    </div>
+                    <div className={`font-mono text-2xl font-black ${card.className}`}>{card.value}</div>
+                    <div className="mt-1 text-[10px] text-slate-500 truncate">{card.detail}</div>
+                  </div>
+                );
+              })}
             </div>
-            {showInfoModals() && (
-              <button
-                onClick={() => setInfoModal('wal')}
-                className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
-                title="Datastream replication info"
-              >
-                <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
-              </button>
+            <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-slate-500">
+              <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                Buffered events: <span className="font-mono text-slate-700 dark:text-slate-300">{formatCompactNumber(summaryHealth.backlog_depth ?? cdcStats.recentBufferedEvents)}</span>
+              </span>
+              <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                System lag: <span className="font-mono text-slate-700 dark:text-slate-300">{formatLatency(summaryHealth.system_lag_ms ?? cdcStats.systemLagMs)}</span>
+              </span>
+              <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                Error rate: <span className="font-mono text-slate-700 dark:text-slate-300">{summaryHealth.error_rate ? `${summaryHealth.error_rate}.00%` : '0.00%'}</span>
+              </span>
+              <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                Last sync: <span className="font-mono text-slate-700 dark:text-slate-300">{cdcStats.lastSyncTime}</span>
+              </span>
+            </div>
+            {operationsSummaryError && (
+              <div className="mt-4 rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/10 px-4 py-3 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                {operationsSummaryError}
+              </div>
             )}
           </div>
-        </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>SSE Connection</span>
-              <Clock className="w-4 h-4 text-cyan-500" />
+          <div className="mb-6 grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-5">
+            <div className="p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">Risk & Alerts Overview</div>
+                  <p className="text-xs text-slate-500 mt-1">{formatWindowLabel(monitorWindowMinutes)} operational risk posture.</p>
+                </div>
+                {showInfoModals() && (
+                  <button
+                    onClick={() => setInfoModal('credit-risk')}
+                    className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    title="Credit risk metrics info"
+                  >
+                    <GoogleCloudIcon className="w-4 h-4 text-indigo-400" />
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {riskOverviewCards.map((card) => (
+                  <div key={card.label} className={`rounded-2xl border p-4 ${card.className}`}>
+                    <div className="text-[11px] font-bold">{card.label}</div>
+                    <div className="mt-2 font-mono text-2xl font-black">{card.value}</div>
+                    <div className="mt-1 text-[10px] opacity-80 truncate">{card.detail}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className={`text-2xl font-black font-mono ${
-              streamConnection.state === 'live'
-                ? 'text-emerald-600 dark:text-emerald-400'
-                : streamConnection.state === 'error'
-                ? 'text-amber-600 dark:text-amber-400'
-                : 'text-slate-900 dark:text-white'
-            }`}>
-              {streamConnection.state === 'live' ? 'LIVE' : streamConnection.state === 'error' ? 'RETRY' : 'SYNC'}
-            </div>
-            <div className="text-[10px] text-slate-500 mt-1">Browser connection to the live Redis-backed event feed</div>
-          </div>
 
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Last Event Age</span>
-              <Activity className="w-4 h-4 text-emerald-500" />
-            </div>
-            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {formatEventAge(cdcStats.latestEventAgeMs)}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-1">Age of the newest Redis event</div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Event Throughput</span>
-              <Layers className="w-4 h-4 text-blue-500" />
-            </div>
-            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {cdcStats.eventsPerMinute} <span className="text-sm font-normal text-slate-500">/ min</span>
-            </div>
-            <div className="text-[10px] text-slate-400 mt-1">
-              {cdcStats.authorizationEventsPerMinute} auth, {cdcStats.postedEventsPerMinute} posted, {cdcStats.flaggedEventsPerMinute} flagged
-            </div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Datastream Freshness</span>
-              <ShieldAlert className="w-4 h-4 text-rose-500" />
-            </div>
-            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {formatLatency(cdcStats.dataFreshnessMs)}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-1">Managed CDC destination freshness</div>
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-slate-500">
-          <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-            System lag: <span className="font-mono text-slate-700 dark:text-slate-300">{formatLatency(cdcStats.systemLagMs)}</span>
-          </span>
-          <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-            Buffered events: <span className="font-mono text-slate-700 dark:text-slate-300">{cdcStats.recentBufferedEvents}</span>
-          </span>
-          <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-            Last sync: <span className="font-mono text-slate-700 dark:text-slate-300">{cdcStats.lastSyncTime}</span>
-          </span>
-        </div>
-      </div>
-
-      {/* Section 2: Credit Risk Metrics */}
-      <div className="mb-10 p-6 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5">
-        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200/60 dark:border-slate-800/60">
-          <div className="flex items-center gap-3">
-            <ShieldAlert className="w-6 h-6 text-rose-500" />
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                Credit Risk Metrics
-              </h2>
-              <p className="text-xs text-slate-500">
-                Fraud anomaly posture, pending exposure, and authorization-to-posting flow from the live card stream.
-              </p>
-            </div>
-          </div>
-          {showInfoModals() && (
-            <button
-              onClick={() => setInfoModal('credit-risk')}
-              className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
-              title="Credit risk metrics info"
-            >
-              <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
-            </button>
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className={`p-4 rounded-2xl border ${anomalySeverity.cardClass}`}>
-            <div className={`flex items-center justify-between text-xs mb-1 ${anomalySeverity.textClass}`}>
-              <span>Open Fraud Alerts</span>
-              <ShieldAlert className={`w-4 h-4 ${anomalySeverity.iconClass}`} />
-            </div>
-            <div className={`text-2xl font-black font-mono ${anomalySeverity.textClass}`}>{cdcStats.operationalActiveFraudAlerts}</div>
-            <div className={`text-[10px] mt-1 ${anomalySeverity.textClass}`}>Customer-facing cases awaiting review</div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>High-Risk Transactions</span>
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
-            </div>
-            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {creditRiskMetrics.highRiskTransactionCount}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-1 truncate">
-              {creditRiskMetrics.peakRiskScore != null
-                ? `Peak score ${creditRiskMetrics.peakRiskScore} · ${creditRiskMetrics.peakRiskMerchant}`
-                : 'Awaiting scored authorizations'}
+            <div className="p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5">
+              <div className="mb-4">
+                <div className="text-[11px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">Impact At A Glance</div>
+                <p className="text-xs text-slate-500 mt-1">Risk-band distribution for scored decisions in this window.</p>
+              </div>
+              <div className="space-y-3">
+                {summaryRiskDistribution.filter((item) => item.count > 0).length === 0 ? (
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 p-4 text-xs text-slate-500">
+                    No scored risk distribution yet for this window.
+                  </div>
+                ) : (
+                  summaryRiskDistribution.filter((item) => item.count > 0).map((item) => {
+                    const style = getRiskBandStyle(item.label);
+                    return (
+                      <div key={item.label}>
+                        <div className="flex items-center justify-between gap-3 text-xs">
+                          <span className={`font-bold flex items-center gap-2 ${style.text}`}>
+                            <span className={`w-2 h-2 rounded-full ${style.dot}`} />
+                            {item.label}
+                          </span>
+                          <span className="font-mono font-black text-slate-900 dark:text-white">{item.count} <span className="text-slate-400 font-normal">({item.percentage}%)</span></span>
+                        </div>
+                        <div className="mt-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                          <div className={`h-full rounded-full ${style.bar}`} style={{ width: `${Math.max(4, item.percentage)}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
 
-          <div className={`p-4 rounded-2xl border ${riskCondition.className}`}>
-            <div className={`flex items-center justify-between text-xs mb-1 ${riskCondition.textClass}`}>
-              <span>Risk Condition</span>
-              <ShieldAlert className={`w-4 h-4 ${riskCondition.iconClass}`} />
+          <div className="mb-10 grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-5">
+            <div className="p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">Live Activity</div>
+                  <p className="text-xs text-slate-500 mt-1">Windowed activity from authorizations and posted transactions.</p>
+                </div>
+                <span className="px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 text-[10px] font-black border border-cyan-500/20">Event Throughput</span>
+              </div>
+              <svg viewBox="0 0 640 160" className="w-full h-44 text-cyan-500" aria-hidden="true">
+                {summaryAreaPath && <path d={summaryAreaPath} fill="currentColor" opacity="0.10" />}
+                {summaryLinePath && <path d={summaryLinePath} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />}
+              </svg>
             </div>
-            <div className={`text-2xl font-black font-mono ${riskCondition.textClass}`}>
-              {riskCondition.label}
-            </div>
-            <div className={`text-[10px] mt-1 ${riskCondition.textClass}`}>Live model posture</div>
-          </div>
 
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Flagged Exposure</span>
-              <Clock className="w-4 h-4 text-amber-500" />
-            </div>
-            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {formatCurrencyFromCents(creditRiskMetrics.flaggedAmountCents)}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-1">
-              {creditRiskMetrics.flaggedCount} flagged auth{creditRiskMetrics.flaggedCount === 1 ? '' : 's'}
-              {creditRiskMetrics.averageFlaggedRiskScore != null ? `, avg score ${creditRiskMetrics.averageFlaggedRiskScore}` : ''}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between gap-3 text-[11px]">
-              <span className="text-slate-500">Live event mix</span>
-              <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                {cdcStats.authorizationEventsPerMinute} auth / {cdcStats.postedEventsPerMinute} posted / {cdcStats.flaggedEventsPerMinute} flagged
-              </span>
+            <div className="p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5">
+              <div className="mb-4 text-[11px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">Stream Event Mix</div>
+              <div className="space-y-3">
+                {summaryEventMix.map((item) => (
+                  <div key={item.label}>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{item.label}</span>
+                      <span className="font-mono font-bold text-slate-900 dark:text-white">{item.percentage}%</span>
+                    </div>
+                    <div className="mt-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div className="h-full rounded-full bg-cyan-500" style={{ width: `${Math.max(3, item.percentage)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-5 pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+                <span className="text-slate-500">Total Events</span>
+                <span className="font-mono font-black text-slate-900 dark:text-white">{formatCompactNumber(summaryEventMix.reduce((sum, item) => sum + Number(item.count || 0), 0))}</span>
+              </div>
             </div>
           </div>
-          <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between gap-3 text-[11px]">
-              <span className="text-slate-500">Pending exposure</span>
-              <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                {formatCurrencyFromCents(creditRiskMetrics.pendingAmountCents)} across {creditRiskMetrics.pendingCount} hold{creditRiskMetrics.pendingCount === 1 ? '' : 's'}
-              </span>
-            </div>
-          </div>
-          <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between gap-3 text-[11px]">
-              <span className="text-slate-500">Model signal</span>
-              <span className="font-mono font-bold text-slate-800 dark:text-slate-200 truncate">
-                {creditRiskMetrics.latestModelVersion || 'Awaiting model events'}
-                {creditRiskMetrics.averageRiskScore != null ? `, avg ${creditRiskMetrics.averageRiskScore}` : ''}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
 
         </>
       )}
@@ -1921,122 +2051,155 @@ function AdminSimulationView({ mode = 'studio' }) {
 
       {isMonitoring && (
         <>
-      {/* Section 4: Live Transaction Activity Streams */}
-      <div className="p-7 rounded-3xl bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-2xl shadow-slate-950/5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <div>
-            <h4 className="text-slate-900 dark:text-white font-extrabold text-lg flex items-center gap-2 flex-wrap">
-              <Database className="w-5 h-5 text-cyan-500 dark:text-cyan-400 animate-pulse" />
-              Live Transaction Replication Monitor
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border shadow-sm ${
-                streamConnection.state === 'live'
-                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                  : streamConnection.state === 'error'
-                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                  : 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 border-cyan-500/20'
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${
-                  streamConnection.state === 'live'
-                    ? 'bg-emerald-500 animate-ping'
-                  : streamConnection.state === 'error'
-                    ? 'bg-amber-500'
-                    : 'bg-cyan-500 dark:bg-cyan-300 animate-pulse'
-                }`} />
-                {streamConnection.state === 'live' ? 'AUTHENTICATED SSE LIVE' : streamConnection.state === 'error' ? 'STREAM RETRYING' : 'CONNECTING'}
-              </span>
-            </h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Tracks source authorization events as they are enriched, risk-scored, streamed through Redis, and posted to the replicated ledger.
-            </p>
-          </div>
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-5">
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-2xl shadow-slate-950/5 min-w-0">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
+                <div>
+                  <h4 className="text-slate-900 dark:text-white font-extrabold text-lg flex items-center gap-2 flex-wrap">
+                    <Database className="w-5 h-5 text-cyan-500 dark:text-cyan-400" />
+                    Live Transaction Stream
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border shadow-sm ${
+                      streamConnection.state === 'live'
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                        : streamConnection.state === 'error'
+                        ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                        : 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 border-cyan-500/20'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        streamConnection.state === 'live'
+                          ? 'bg-emerald-500 animate-ping'
+                        : streamConnection.state === 'error'
+                        ? 'bg-amber-500'
+                        : 'bg-cyan-500 dark:bg-cyan-300 animate-pulse'
+                      }`} />
+                      {streamConnection.state === 'live' ? 'LIVE' : streamConnection.state === 'error' ? 'RETRYING' : 'CONNECTING'}
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Compact one-line stream of recent authorizations and postings for the selected window.
+                  </p>
+                </div>
+                <div className="text-[11px] text-slate-500 font-mono">
+                  Auto-refresh: 15s
+                </div>
+              </div>
 
-          <div className="flex items-center gap-3 self-start md:self-auto">
-            {showInfoModals() && (
-              <button
-                onClick={() => setInfoModal('monitor')}
-                className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
-                title="Live monitor info"
-              >
-                <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        <h5 className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-500 font-bold mb-3">Live Unified Event Stream (Redis Bus)</h5>
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/70 mb-7">
-          <table className="w-full text-left border-collapse font-mono text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 bg-white/80 dark:bg-slate-900/50">
-                <th className="p-3.5 font-semibold">Timestamp</th>
-                <th className="p-3.5 font-semibold">RRN / Event ID</th>
-                <th className="p-3.5 font-semibold">Merchant / Descriptor</th>
-                <th className="p-3.5 font-semibold text-right">Amount</th>
-                <th className="p-3.5 font-semibold">Risk Finding</th>
-                <th className="p-3.5 font-semibold">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
-              {streamData.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="p-8 text-center text-slate-500 dark:text-slate-500 font-sans">
-                    Waiting for operational transaction activity. Use Simulation Studio to generate scenario activity.
-                  </td>
-                </tr>
-              ) : (
-                streamData.map((item, idx) => {
-                  const riskScore = parseFraudRiskScore(item);
-                  const isSettlement = String(item.status || '').includes('SETTLE');
-                  const fraudReasons = (Array.isArray(item.fraud_reason_codes) ? item.fraud_reason_codes : [])
-                    .filter((reason) => !isLowRiskReason(reason));
-                  const riskState = getRiskState(riskScore, item.status);
-                  const dominantFinding = fraudReasons.length > 0 ? normalizeRiskFinding(fraudReasons[0]) : null;
-                  const additionalSignals = Math.max(0, fraudReasons.length - 1);
-                  const statusDisplay = getTransactionStatusDisplay(item.status);
-                  return (
-                    <tr key={item.id + idx} className="hover:bg-slate-100 dark:hover:bg-slate-900/60 transition-colors">
-                      <td className="p-3.5 text-slate-500 dark:text-slate-400 whitespace-nowrap flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        {item.timestamp}
-                      </td>
-                      <td className="p-3.5 text-slate-800 dark:text-slate-300 font-bold whitespace-nowrap">{item.rrn}</td>
-                      <td className="p-3.5 text-slate-900 dark:text-white font-sans font-medium truncate max-w-xs">{item.merchant_name}</td>
-                      <td className="p-3.5 text-right text-slate-900 dark:text-slate-100 font-bold whitespace-nowrap">
-                        {formatCurrencyFromCents(item.amount_cents)}
-                      </td>
-                      <td className="p-3.5 whitespace-nowrap">
-                        <div className="flex flex-col gap-1">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit ${riskState.className}`}>
-                            {riskScore != null && riskState.label !== 'Not scored'
-                              ? `${riskState.label} ${riskScore}`
-                              : riskState.label}
-                          </span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400 max-w-[220px] truncate" title={fraudReasons.map(normalizeRiskFinding).join(', ')}>
-                            {isSettlement
-                              ? 'Replicated settlement record'
-                              : dominantFinding
-                              ? `${dominantFinding}${additionalSignals ? ` · +${additionalSignals} signal${additionalSignals === 1 ? '' : 's'}` : ''}`
-                              : 'No analyst finding'}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="p-3.5 whitespace-nowrap">
-                        <div className="flex flex-col gap-1">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold w-fit ${statusDisplay.className}`}>
-                            {statusDisplay.label}
-                          </span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">{statusDisplay.lifecycle}</span>
-                        </div>
-                      </td>
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/70">
+                <table className="w-full text-left border-collapse font-mono text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 bg-white/80 dark:bg-slate-900/50">
+                      <th className="px-3 py-3 font-semibold">Time</th>
+                      <th className="px-3 py-3 font-semibold">Event</th>
+                      <th className="px-3 py-3 font-semibold">Merchant / Descriptor</th>
+                      <th className="px-3 py-3 font-semibold text-right">Amount</th>
+                      <th className="px-3 py-3 font-semibold">Risk</th>
+                      <th className="px-3 py-3 font-semibold">Status</th>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
+                    {summaryTransactions.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="p-8 text-center text-slate-500 dark:text-slate-500 font-sans">
+                          Waiting for operational transaction activity. Use Simulation Studio to generate scenario activity.
+                        </td>
+                      </tr>
+                    ) : (
+                      summaryTransactions.map((item, idx) => {
+                        const riskState = getRiskState(item.risk_score, item.status);
+                        const statusDisplay = getTransactionStatusDisplay(item.status);
+                        return (
+                          <tr key={`${item.id}-${item.event_type}-${idx}`} className="hover:bg-slate-100 dark:hover:bg-slate-900/60 transition-colors">
+                            <td className="px-3 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">{formatShortTimestamp(item.timestamp)}</td>
+                            <td className="px-3 py-3 whitespace-nowrap">
+                              <span className="font-bold text-slate-800 dark:text-slate-200">{item.event_type === 'settlement' ? 'SETTLE' : 'AUTH'}</span>
+                              <span className="ml-2 text-slate-400">{item.rrn || item.id}</span>
+                            </td>
+                            <td className="px-3 py-3 text-slate-900 dark:text-white font-sans font-semibold max-w-[260px] truncate" title={item.raw_descriptor || item.merchant_name}>
+                              {item.merchant_name || 'Unknown merchant'}
+                            </td>
+                            <td className="px-3 py-3 text-right text-slate-900 dark:text-slate-100 font-bold whitespace-nowrap">
+                              {formatCurrencyFromCents(item.amount_cents)}
+                            </td>
+                            <td className="px-3 py-3 whitespace-nowrap">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${riskState.className}`}>
+                                {item.risk_score != null && riskState.label !== 'Not scored' ? `${riskState.label} ${item.risk_score}` : riskState.label}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3 whitespace-nowrap">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${statusDisplay.className}`}>
+                                {statusDisplay.label}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-      </div>
+            <aside className="space-y-5">
+              <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-950/5">
+                <div className="mb-4 text-[11px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">Top Risk Signals</div>
+                <div className="space-y-3">
+                  {summaryRiskSignals.length === 0 ? (
+                    <div className="text-xs text-slate-500">No elevated risk signals in this window.</div>
+                  ) : (
+                    summaryRiskSignals.map((signal, index) => (
+                      <div key={signal.label} className="flex items-center justify-between gap-3 text-xs">
+                        <span className="min-w-0 flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-300">
+                          <span className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-black flex items-center justify-center shrink-0">{index + 1}</span>
+                          <span className="truncate">{signal.label}</span>
+                        </span>
+                        <span className="font-mono font-black text-slate-900 dark:text-white">{signal.count}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-950/5">
+                <div className="mb-4 text-[11px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">Scenario Impact</div>
+                <div className="space-y-3">
+                  {summaryScenarioImpact.length === 0 ? (
+                    <div className="text-xs text-slate-500">No scenario-linked outcomes in this window.</div>
+                  ) : (
+                    summaryScenarioImpact.map((scenario) => (
+                      <div key={scenario.label} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 p-3">
+                        <div className="text-xs font-bold text-slate-900 dark:text-white truncate">{scenario.label}</div>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+                          <div>
+                            <div className="text-slate-400">Events</div>
+                            <div className="font-mono font-black text-slate-900 dark:text-white">{scenario.events}</div>
+                          </div>
+                          <div>
+                            <div className="text-slate-400">High Risk</div>
+                            <div className="font-mono font-black text-rose-600 dark:text-rose-300">{scenario.high_risk}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </aside>
+          </div>
+
+          <div className="mt-5 p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-950/5">
+            <div className="mb-4 text-[11px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">System Health</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+              {summarySystemHealth.map((item) => (
+                <div key={item.label} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 p-3">
+                  <div className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate">{item.label}</div>
+                  <div className={`mt-2 text-sm font-black ${String(item.status).toUpperCase() === 'SUCCESS' || String(item.status).toUpperCase() === 'HEALTHY' ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300'}`}>
+                    {item.status}
+                  </div>
+                  <div className="mt-1 text-[10px] text-slate-500 truncate">{item.detail}</div>
+                </div>
+              ))}
+            </div>
+          </div>
 
         </>
       )}

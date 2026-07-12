@@ -449,6 +449,13 @@ export async function getGlobalStream() {
   return res.data;
 }
 
+export async function getOperationsMonitorSummary({ windowMinutes = 15 } = {}) {
+  const res = await api.get('v1/simulation/operations-summary', {
+    params: { window_minutes: windowMinutes },
+  });
+  return res.data;
+}
+
 export async function getLakehouseStream() {
   const res = await api.get('v1/simulation/lakehouse-stream');
   return res.data;

@@ -774,3 +774,30 @@ async def test_inject_late_fee_and_global_stream(async_client, db_session):
     assert len(data["stream"]) > 0
     merchant_names = [item["merchant_name"] for item in data["stream"]]
     assert "LATE_FEE" in merchant_names
+
+
+@pytest.mark.asyncio
+async def test_operations_summary_accepts_window_parameter(async_client):
+    mocked_summary = {
+        "status": "SUCCESS",
+        "window_minutes": 60,
+        "replication_health": {"events_per_minute": 12},
+        "impact": {"open_fraud_alerts": 1},
+        "event_mix": [],
+        "risk_distribution": [],
+        "risk_signals": [],
+        "scenario_impact": [],
+        "activity_series": [],
+        "transactions": [],
+        "system_health": [],
+    }
+
+    with patch(
+        "routers.simulation.SimulationService.get_operations_monitor_summary",
+        return_value=mocked_summary,
+    ) as mock_summary:
+        response = await async_client.get("/api/v1/simulation/operations-summary?window_minutes=60")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["window_minutes"] == 60
+    mock_summary.assert_called_once_with(60)

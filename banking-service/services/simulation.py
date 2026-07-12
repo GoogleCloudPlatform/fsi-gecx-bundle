@@ -478,6 +478,11 @@ class SimulationService:
             "cdc_metrics": service.get_cached_datastream_metrics(),
         }
 
+    def get_operations_monitor_summary(self, window_minutes: int = 15) -> dict:
+        return CdcMonitoringService(self.db).get_operations_monitor_summary(
+            window_minutes=window_minutes
+        )
+
     def get_cdc_status(self) -> dict:
         return CdcMonitoringService(self.db).get_cdc_status()
 
