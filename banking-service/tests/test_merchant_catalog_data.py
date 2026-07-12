@@ -78,6 +78,16 @@ def test_international_travel_catalog_has_air_and_everyday_merchants():
     assert hotel_mccs == {"7011"}
 
 
+def test_demo_travel_mcc_categories_are_not_generic_other():
+    mcc_rows = {row["mcc"]: row for row in json.loads(MCC_PATH.read_text())}
+
+    assert mcc_rows["7011"]["primary_category"] == "TRAVEL"
+    assert mcc_rows["7011"]["detailed_category"] == "LODGING"
+    assert mcc_rows["7011"]["is_travel"] is True
+    assert mcc_rows["7298"]["primary_category"] == "HEALTHCARE"
+    assert mcc_rows["7298"]["detailed_category"] == "PERSONAL_CARE"
+
+
 def test_merchant_catalog_slugs_generate_unique_stable_uuid_relationships():
     catalog = _load_catalog()
     slugs = [item["merchant_id"] for item in catalog]

@@ -153,6 +153,24 @@ def test_provision_user_suite_generates_unique_card_tokens_for_same_name(db_sess
     assert first["card_token"] != second["card_token"]
 
 
+def test_provision_user_suite_uses_realistic_presenter_balances(db_session):
+    summary = provision_user_suite(db_session, "balances.presenter@google.com", "uid-realistic-balances")
+
+    accounts = {
+        account.account_type: account
+        for account in db_session.query(Account).filter(Account.user_id == summary["user_id"]).all()
+    }
+    credit_account = (
+        db_session.query(CreditAccount)
+        .filter(CreditAccount.customer_id == summary["user_id"])
+        .one()
+    )
+
+    assert accounts["CHECKING"].cleared_balance_cents == 874236
+    assert accounts["SAVINGS"].cleared_balance_cents == 2138974
+    assert credit_account.credit_limit_cents == 1000000
+
+
 def test_provision_user_suite_structures_demo_travel_country(db_session):
     summary = provision_user_suite(db_session, "travel.presenter@google.com", "uid-travel-presenter")
 

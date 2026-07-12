@@ -22015,25 +22015,28 @@
   },
   {
     "mcc": "7011",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "TRAVEL",
+    "detailed_category": "LODGING",
+    "ui_label": "Travel",
     "canonical_title": "Lodging",
-    "canonical_group": "OTHER",
+    "canonical_group": "TRAVEL",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
     "recurrence_likelihood": "medium",
     "velocity_risk": "medium",
     "chargeback_prone": false,
-    "is_travel": false,
+    "is_travel": true,
     "is_subscription_common": false,
     "is_luxury": false,
     "is_essential": false,
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "lodging",
+        "hotel"
+      ],
       "behavior_channels": [
         "mixed"
       ],
@@ -22501,11 +22504,11 @@
   },
   {
     "mcc": "7298",
-    "primary_category": "OTHER",
-    "detailed_category": "OTHER",
-    "ui_label": "Other",
+    "primary_category": "HEALTHCARE",
+    "detailed_category": "PERSONAL_CARE",
+    "ui_label": "Personal Care",
     "canonical_title": "Health and Beauty Spas",
-    "canonical_group": "OTHER",
+    "canonical_group": "HEALTHCARE",
     "risk_level": "low",
     "risk_score": 10,
     "spend_type": "discretionary",
@@ -22519,7 +22522,10 @@
     "metadata": {
       "risk_flags": [],
       "fraud_vectors": [],
-      "tags": [],
+      "tags": [
+        "spa",
+        "personal_care"
+      ],
       "behavior_channels": [
         "mixed"
       ],

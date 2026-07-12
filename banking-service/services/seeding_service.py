@@ -120,6 +120,28 @@ def _resolve_demo_script_charge(
     return resolved
 
 
+def _demo_account_baseline_cents(email: str | None) -> dict[str, int]:
+    """Return stable, non-round presenter balances for demo reset/provisioning."""
+    email_lower = (email or "").lower()
+    overrides = {
+        "erikvoit@google.com": {
+            "checking": 4_584_237,
+            "savings": 14_876_291,
+        },
+        "mservedio@google.com": {
+            "checking": 5_947_820,
+            "savings": 2_184_665,
+        },
+    }
+    return overrides.get(
+        email_lower,
+        {
+            "checking": 874_236,
+            "savings": 2_138_974,
+        },
+    )
+
+
 def _load_json_resource(filename: str) -> Any:
     path = Path(RESOURCE_DIR) / filename
     with path.open("r", encoding="utf-8") as handle:
@@ -1190,8 +1212,7 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
         db.flush()
 
         # 6. Provision checking/savings deposit accounts with harmonized default balances
-        chk_balance = 4500000 if email == "erikvoit@google.com" else (6000000 if email == "mservedio@google.com" else 1000000)
-        sav_balance = 15000000 if email == "erikvoit@google.com" else 2000000
+        demo_baseline = _demo_account_baseline_cents(email)
         checking_acc = Account(
             id=uuid.uuid4(),
             user_id=user_uuid,
@@ -1199,7 +1220,7 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             account_type="CHECKING",
             product_name="Nova Signature Checking",
             product_code="CHECKING_SIGNATURE",
-            cleared_balance_cents=chk_balance,
+            cleared_balance_cents=demo_baseline["checking"],
             routing_number="021000021",
             status="ACTIVE"
         )
@@ -1210,7 +1231,7 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             account_type="SAVINGS",
             product_name="Nova High Yield Savings",
             product_code="SAVINGS_HIGH_YIELD",
-            cleared_balance_cents=sav_balance,
+            cleared_balance_cents=demo_baseline["savings"],
             routing_number="021000021",
             status="ACTIVE"
         )
@@ -1342,8 +1363,7 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
         if acc.account_type in ("CHECKING", "SAVINGS") and acc.status == "ACTIVE":
             acc.status = "CLOSED"
 
-    checking_balance = 4500000 if user.email == "erikvoit@google.com" else (6000000 if user.email == "mservedio@google.com" else 1000000)
-    savings_balance = 15000000 if user.email == "erikvoit@google.com" else 2000000
+    demo_baseline = _demo_account_baseline_cents(user.email)
 
     checking_acc = Account(
         id=uuid.uuid4(),
@@ -1352,7 +1372,7 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
         account_type="CHECKING",
         product_name="Nova Signature Checking",
         product_code="CHECKING_SIGNATURE",
-        cleared_balance_cents=checking_balance,
+        cleared_balance_cents=demo_baseline["checking"],
         routing_number="021000021",
         status="ACTIVE",
     )
@@ -1366,7 +1386,7 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
         account_type="SAVINGS",
         product_name="Nova High Yield Savings",
         product_code="SAVINGS_HIGH_YIELD",
-        cleared_balance_cents=savings_balance,
+        cleared_balance_cents=demo_baseline["savings"],
         routing_number="021000021",
         status="ACTIVE",
     )
