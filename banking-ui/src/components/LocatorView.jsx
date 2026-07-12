@@ -435,42 +435,44 @@ export default function LocatorView() {
         <Joyride
           key={tourKey}
           run={tourRun}
-          scrollOffset={225}
           floatingOptions={{
             beaconOptions: {
-              offset: -45,       // Distance from target (default: -18)
+              offset: -45,
             },
+          }}
+          options={{
+            scrollOffset: 175
           }}
           steps={[
             {
               target: '#locator-search-input',
               content: 'Search for specific branches or ATMs by entering an city, state, address, or zip code.',
               placement: 'right',
-              skipBeacon: true,
+              skipBeacon: true
             },
             {
               target: '#locator-gps-btn',
               content: "Or click here to search for nearby branches and ATMs instantly using your device's GPS location.",
               placement: 'bottom',
-              skipBeacon: true,
+              skipBeacon: true
             },
             {
               target: '#locator-type-filters',
               content: 'Filter locations by service type: view Branches, ATMs, or both.',
               placement: 'left',
-              skipBeacon: true,
+              skipBeacon: true
             },
             {
               target: '#locator-open-only-toggle',
               content: 'Toggle this switch to only show locations that are currently open.',
               placement: 'bottom',
-              skipBeacon: true,
+              skipBeacon: true
             },
             {
               target: '#locator-info-btn',
               content: 'Curious about the tech stack? Click this cloud icon to view details about the underlying Cloud SQL table schema and run query analysis.',
               placement: 'left',
-              skipBeacon: true,
+              skipBeacon: true
             }
           ]}
           continuous={true}
