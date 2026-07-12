@@ -115,9 +115,20 @@ function formatCompactNumber(value) {
 
 function formatShortTimestamp(value) {
   if (!value) return 'N/A';
+  if (/^\d{2}:\d{2}(:\d{2})?$/.test(String(value))) return value;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'N/A';
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function getStreamTimestamp(item) {
+  if (item?.raw_time != null) {
+    const rawTime = Number(item.raw_time);
+    if (!Number.isNaN(rawTime)) {
+      return new Date(rawTime * 1000).toISOString();
+    }
+  }
+  return item?.timestamp;
 }
 
 function formatWindowLabel(minutes) {
@@ -654,6 +665,7 @@ function AdminSimulationView({ mode = 'studio' }) {
   const summaryHealth = operationsSummary?.replication_health || {};
   const summaryImpact = operationsSummary?.impact || {};
   const summaryTransactions = operationsSummary?.transactions || [];
+  const liveTransactions = streamData.length ? streamData : summaryTransactions;
   const summaryRiskSignals = operationsSummary?.risk_signals || [];
   const summaryScenarioImpact = operationsSummary?.scenario_impact || [];
   const summaryEventMix = operationsSummary?.event_mix || [];
@@ -1231,7 +1243,7 @@ function AdminSimulationView({ mode = 'studio' }) {
               value={monitorWindowMinutes}
               onChange={(event) => setMonitorWindowMinutes(Number(event.target.value))}
               className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              title="Operations monitor time window"
+              title="Choose the reporting window for summary metrics and charts. The transaction stream remains live from Redis SSE."
             >
               {MONITOR_WINDOW_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
@@ -1240,7 +1252,7 @@ function AdminSimulationView({ mode = 'studio' }) {
             <button
               onClick={() => refreshOperationsSummary(monitorWindowMinutes)}
               className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
-              title="Refresh operations summary"
+              title="Refresh summary metrics now. Live transaction rows continue streaming from Redis SSE."
             >
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -1262,7 +1274,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                   <button
                     onClick={() => setInfoModal('wal')}
                     className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
-                    title="Replication engine health info"
+                    title="Explain live stream status, CDC freshness, event age, and throughput metrics."
                   >
                     <GoogleCloudIcon className="w-4 h-4 text-indigo-400" />
                   </button>
@@ -1316,7 +1328,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                   <button
                     onClick={() => setInfoModal('credit-risk')}
                     className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
-                    title="Credit risk metrics info"
+                    title="Explain flagged activity, risk scoring, pending exposure, and model-version signals."
                   >
                     <GoogleCloudIcon className="w-4 h-4 text-indigo-400" />
                   </button>
@@ -1603,7 +1615,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                 <button
                   onClick={() => setInfoModal('scenario-studio')}
                   className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
-                  title="Scenario Studio info"
+                  title="Explain dry runs, immediate launches, replays, and scheduled scenario execution."
                 >
                   <GoogleCloudIcon className="w-4 h-4 text-indigo-400" />
                 </button>
@@ -1817,7 +1829,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                 onClick={handleScenarioDryRun}
                 disabled={isScenarioLoading}
                 className="py-2.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-slate-800"
-                title="Plan scenario"
+                title="Generate and validate a scenario plan without writing transactions."
               >
                 {isScenarioLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
                 Dry Run
@@ -1826,7 +1838,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                 onClick={handleScenarioExecute}
                 disabled={isScenarioLoading}
                 className="py-2.5 px-2 rounded-xl bg-violet-600 hover:bg-violet-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-violet-600"
-                title="Execute scenario immediately"
+                title="Create the scenario transactions immediately through banking-service."
               >
                 {isScenarioLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                 Launch Now
@@ -1835,7 +1847,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                 onClick={handleScenarioReplay}
                 disabled={isScenarioLoading || !scenarioPlan}
                 className="py-2.5 px-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-cyan-600"
-                title="Replay last plan"
+                title="Run the most recent dry-run plan again without generating a new plan."
               >
                 {isScenarioLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
                 Replay
@@ -1844,7 +1856,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                 onClick={handleScenarioSchedule}
                 disabled={isScenarioLoading || isScheduleLoading}
                 className="py-2.5 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-emerald-600"
-                title="Schedule durable scenario"
+                title="Queue the scenario through Cloud Tasks so events are dispatched over time."
               >
                 {isScheduleLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CalendarClock className="w-4 h-4" />}
                 Schedule Run
@@ -1867,6 +1879,7 @@ function AdminSimulationView({ mode = 'studio' }) {
           <button
             onClick={refreshScheduledEvents}
             className="self-start lg:self-auto px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95 flex items-center gap-2"
+            title="Refresh scheduled scenario run status from banking-service."
           >
             <RefreshCw className="w-4 h-4" />
             Refresh
@@ -2135,7 +2148,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                   </p>
                 </div>
                 <div className="text-[11px] text-slate-500 font-mono">
-                  Auto-refresh: 15s
+                  Redis SSE live · summary refresh: 15s
                 </div>
               </div>
 
@@ -2152,25 +2165,28 @@ function AdminSimulationView({ mode = 'studio' }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
-                    {summaryTransactions.length === 0 ? (
+                    {liveTransactions.length === 0 ? (
                       <tr>
                         <td colSpan="6" className="p-8 text-center text-slate-500 dark:text-slate-500 font-sans">
                           Waiting for operational transaction activity. Use Simulation Studio to generate scenario activity.
                         </td>
                       </tr>
                     ) : (
-                      summaryTransactions.map((item, idx) => {
-                        const isSettlement = item.event_type === 'settlement';
-                        const riskState = getRiskState(isSettlement ? null : item.risk_score, item.status);
+                      liveTransactions.map((item, idx) => {
+                        const statusText = String(item.status || '').toUpperCase();
+                        const eventType = item.event_type || (statusText.includes('SETTLE') ? 'settlement' : 'authorization');
+                        const isSettlement = eventType === 'settlement';
+                        const riskScore = item.risk_score ?? parseFraudRiskScore(item);
+                        const riskState = getRiskState(isSettlement ? null : riskScore, item.status);
                         const statusDisplay = getTransactionStatusDisplay(item.status);
                         return (
-                          <tr key={`${item.id}-${item.event_type}-${idx}`} className="hover:bg-slate-100 dark:hover:bg-slate-900/60 transition-colors">
-                            <td className="px-3 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">{formatShortTimestamp(item.timestamp)}</td>
+                          <tr key={`${item.id}-${eventType}-${idx}`} className="hover:bg-slate-100 dark:hover:bg-slate-900/60 transition-colors">
+                            <td className="px-3 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">{formatShortTimestamp(getStreamTimestamp(item))}</td>
                             <td className="px-3 py-3 whitespace-nowrap">
-                              <span className="font-bold text-slate-800 dark:text-slate-200">{item.event_type === 'settlement' ? 'SETTLE' : 'AUTH'}</span>
+                              <span className="font-bold text-slate-800 dark:text-slate-200">{isSettlement ? 'SETTLE' : 'AUTH'}</span>
                               <span className="ml-2 text-slate-400">{item.rrn || item.id}</span>
                             </td>
-                            <td className="px-3 py-3 text-slate-900 dark:text-white font-sans font-semibold max-w-[260px] truncate" title={item.raw_descriptor || item.merchant_name}>
+                            <td className="px-3 py-3 text-slate-900 dark:text-white font-sans font-semibold max-w-[260px] truncate" title={item.raw_descriptor ? `Raw descriptor: ${item.raw_descriptor}` : `Merchant: ${item.merchant_name || 'Unknown merchant'}`}>
                               {item.merchant_name || 'Unknown merchant'}
                             </td>
                             <td className="px-3 py-3 text-right text-slate-900 dark:text-slate-100 font-bold whitespace-nowrap">
@@ -2181,7 +2197,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                                 <span className="text-slate-400">-</span>
                               ) : (
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${riskState.className}`}>
-                                  {item.risk_score != null && riskState.label !== 'Not scored' ? `${riskState.label} ${item.risk_score}` : riskState.label}
+                                  {riskScore != null && riskState.label !== 'Not scored' ? `${riskState.label} ${riskScore}` : riskState.label}
                                 </span>
                               )}
                             </td>
