@@ -173,7 +173,7 @@ function HomeView({
         },
         {
           target: '#header-search-input',
-          content: 'Use this search bar to search the entire banking system for transactions, transfer logs, help guides, and features.',
+          content: 'Use this search bar to search the entire banking web site content using Agent Search.',
           placement: 'bottom',
           skipBeacon: true
         }
