@@ -19,6 +19,7 @@ import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride } from 'react-joyride';
+import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 
 export default function LocatorView() {
   const {
@@ -478,73 +479,7 @@ export default function LocatorView() {
               localStorage.setItem('locator-tour-completed', 'true');
             }
           }}
-          styles={{
-            options: {
-              arrowColor: resolvedTheme === 'dark' ? '#0f172a' : '#ffffff',
-              backgroundColor: resolvedTheme === 'dark' ? '#0f172a' : '#ffffff',
-              overlayColor: 'rgba(0, 0, 0, 0.55)',
-              primaryColor: brandColorFrom || '#10b981',
-              textColor: resolvedTheme === 'dark' ? '#f8fafc' : '#0f172a',
-              zIndex: 1000,
-            },
-            tooltip: {
-              borderRadius: '24px',
-              padding: '20px 24px',
-              backgroundColor: resolvedTheme === 'dark' ? '#0f172a' : '#ffffff',
-              border: resolvedTheme === 'dark' ? '1px solid #1e293b' : '1px solid #e2e8f0',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-            },
-            tooltipContainer: {
-              textAlign: 'left',
-              fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-            },
-            tooltipContent: {
-              padding: '12px 32px 16px 0',
-              fontSize: '14px',
-              fontWeight: '500',
-              lineHeight: '1.6',
-              color: resolvedTheme === 'dark' ? '#cbd5e1' : '#334155',
-            },
-            tooltipFooter: {
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              marginTop: '8px',
-            },
-            buttonPrimary: {
-              borderRadius: '16px',
-              fontSize: '13px',
-              fontWeight: 'bold',
-              padding: '10px 24px',
-              backgroundColor: brandColorFrom || '#10b981',
-              color: '#ffffff',
-              outline: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              boxShadow: resolvedTheme === 'dark' ? 'none' : '0 4px 6px -1px rgba(16, 185, 129, 0.2)',
-            },
-            buttonBack: {
-              marginRight: '12px',
-              fontSize: '13px',
-              fontWeight: '600',
-              color: resolvedTheme === 'dark' ? '#94a3b8' : '#64748b',
-              outline: 'none',
-              border: 'none',
-              cursor: 'pointer',
-            },
-            buttonSkip: {
-              fontSize: '13px',
-              fontWeight: '600',
-              color: resolvedTheme === 'dark' ? '#94a3b8' : '#64748b',
-              outline: 'none',
-              border: 'none',
-              cursor: 'pointer',
-            },
-            buttonClose: {
-              top: '16px',
-              right: '16px',
-            }
-          }}
+          styles={getJoyrideStyles(resolvedTheme, brandColorFrom)}
         />
       )}
     </>
