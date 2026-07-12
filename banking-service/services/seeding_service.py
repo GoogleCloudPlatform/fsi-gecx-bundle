@@ -131,6 +131,31 @@ def _load_jsonl_resource(filename: str) -> list[dict[str, Any]]:
     with path.open("r", encoding="utf-8") as handle:
         return [json.loads(line) for line in handle if line.strip()]
 
+
+def _mcc_seed_row(item: dict[str, Any]) -> dict[str, Any]:
+    """Map the enriched MCC seed resource into the reference-table schema."""
+    return {
+        "id": uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-category-code:{item['mcc']}"),
+        "mcc": item["mcc"],
+        "primary_category": item["primary_category"],
+        "detailed_category": item["detailed_category"],
+        "ui_label": item.get("ui_label"),
+        "canonical_title": item.get("canonical_title"),
+        "canonical_group": item.get("canonical_group"),
+        "risk_level": item.get("risk_level"),
+        "risk_score": item.get("risk_score"),
+        "spend_type": item.get("spend_type"),
+        "recurrence_likelihood": item.get("recurrence_likelihood"),
+        "velocity_risk": item.get("velocity_risk"),
+        "chargeback_prone": item.get("chargeback_prone", False),
+        "is_travel": item.get("is_travel", False),
+        "is_subscription_common": item.get("is_subscription_common", False),
+        "is_luxury": item.get("is_luxury", False),
+        "is_essential": item.get("is_essential", False),
+        "metadata_json": item.get("metadata") or {},
+    }
+
+
 def get_base_personas():
     path = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "static_personas.json")
     if not os.path.exists(path):
@@ -492,14 +517,7 @@ def seed_catalogs_if_missing(db: Session) -> None:
     if db.query(MerchantCategoryCode).count() == 0:
         logger.info("Seeding MerchantCategoryCode merchants catalog...")
         mcc_seed_data = _load_json_resource("merchant_category_codes.json")
-        mcc_records = [
-            MerchantCategoryCode(
-                mcc=item["mcc"],
-                primary_category=item["primary_category"],
-                detailed_category=item["detailed_category"]
-            )
-            for item in mcc_seed_data
-        ]
+        mcc_records = [MerchantCategoryCode(**_mcc_seed_row(item)) for item in mcc_seed_data]
         db.add_all(mcc_records)
         db.flush()
         TaxonomyService.invalidate_cache()

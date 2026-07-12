@@ -13,12 +13,14 @@
 # limitations under the License.
 
 import json
+import re
 import uuid
 from pathlib import Path
 
 
 CATALOG_PATH = Path(__file__).resolve().parents[1] / "resources" / "data" / "merchant_catalog.json"
 MCC_PATH = Path(__file__).resolve().parents[1] / "resources" / "data" / "merchant_category_codes.json"
+REPO_ROOT = Path(__file__).resolve().parents[2]
 TRAVEL_CITIES = {"Vancouver", "Toronto", "London", "Paris", "Berlin", "Madrid", "Rome", "Venice"}
 
 
@@ -98,3 +100,39 @@ def test_merchant_catalog_default_mccs_are_covered_by_taxonomy_seed():
 
     assert catalog_mccs
     assert catalog_mccs.issubset(taxonomy_mccs)
+
+
+def test_enriched_mcc_taxonomy_has_stable_identity_and_metadata():
+    taxonomy = json.loads(MCC_PATH.read_text())
+    mccs = [item["mcc"] for item in taxonomy]
+
+    assert len(taxonomy) >= 900
+    assert len(mccs) == len(set(mccs))
+    assert all(re.fullmatch(r"\d{4}", mcc) for mcc in mccs)
+    assert all(uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-category-code:{mcc}") for mcc in mccs)
+
+    sample = next(item for item in taxonomy if item["mcc"] == "5411")
+    assert sample["primary_category"]
+    assert sample["detailed_category"]
+    assert isinstance(sample["risk_score"], int)
+    assert isinstance(sample["metadata"], dict)
+    assert "risk_flags" in sample["metadata"]
+
+
+def test_simulator_mcc_literals_are_covered_by_taxonomy_seed():
+    taxonomy = json.loads(MCC_PATH.read_text())
+    taxonomy_mccs = {item["mcc"] for item in taxonomy}
+    source_paths = [
+        REPO_ROOT / "data-generator" / "main.py",
+        REPO_ROOT / "data-generator" / "scenarios" / "templates.py",
+        REPO_ROOT / "banking-service" / "services" / "simulation.py",
+    ]
+    emitted_mccs = set()
+    for path in source_paths:
+        for line in path.read_text().splitlines():
+            if "mcc" not in line.lower():
+                continue
+            emitted_mccs.update(re.findall(r'"([0-9]{4})"', line))
+
+    assert emitted_mccs
+    assert emitted_mccs.issubset(taxonomy_mccs)

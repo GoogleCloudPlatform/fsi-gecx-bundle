@@ -54,6 +54,30 @@ def _load_jsonl_resource(filename: str) -> list[dict]:
         return [json.loads(line) for line in handle if line.strip()]
 
 
+def _mcc_seed_row(item: dict, now: datetime.datetime) -> dict:
+    return {
+        "id": uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-category-code:{item['mcc']}"),
+        "mcc": item["mcc"],
+        "primary_category": item["primary_category"],
+        "detailed_category": item["detailed_category"],
+        "ui_label": item.get("ui_label"),
+        "canonical_title": item.get("canonical_title"),
+        "canonical_group": item.get("canonical_group"),
+        "risk_level": item.get("risk_level"),
+        "risk_score": item.get("risk_score"),
+        "spend_type": item.get("spend_type"),
+        "recurrence_likelihood": item.get("recurrence_likelihood"),
+        "velocity_risk": item.get("velocity_risk"),
+        "chargeback_prone": item.get("chargeback_prone", False),
+        "is_travel": item.get("is_travel", False),
+        "is_subscription_common": item.get("is_subscription_common", False),
+        "is_luxury": item.get("is_luxury", False),
+        "is_essential": item.get("is_essential", False),
+        "metadata_json": item.get("metadata") or {},
+        "updated_at": now,
+    }
+
+
 def _seed_reference_tables() -> None:
     credit_products = sa.table(
         "credit_products",
@@ -82,9 +106,24 @@ def _seed_reference_tables() -> None:
     )
     merchant_category_codes = sa.table(
         "merchant_category_codes",
+        sa.column("id", utils.database.UniversalUUID()),
         sa.column("mcc", sa.String),
         sa.column("primary_category", sa.String),
         sa.column("detailed_category", sa.String),
+        sa.column("ui_label", sa.String),
+        sa.column("canonical_title", sa.String),
+        sa.column("canonical_group", sa.String),
+        sa.column("risk_level", sa.String),
+        sa.column("risk_score", sa.Integer),
+        sa.column("spend_type", sa.String),
+        sa.column("recurrence_likelihood", sa.String),
+        sa.column("velocity_risk", sa.String),
+        sa.column("chargeback_prone", sa.Boolean),
+        sa.column("is_travel", sa.Boolean),
+        sa.column("is_subscription_common", sa.Boolean),
+        sa.column("is_luxury", sa.Boolean),
+        sa.column("is_essential", sa.Boolean),
+        sa.column("metadata_json", sa.JSON),
         sa.column("updated_at", sa.DateTime),
         schema="merchants",
     )
@@ -159,13 +198,7 @@ def _seed_reference_tables() -> None:
     )
     op.bulk_insert(
         merchant_category_codes,
-        [
-            {
-                **item,
-                "updated_at": now,
-            }
-            for item in _load_json_resource("merchant_category_codes.json")
-        ],
+        [_mcc_seed_row(item, now) for item in _load_json_resource("merchant_category_codes.json")],
     )
 
     merchant_catalog = _load_json_resource("merchant_catalog.json")
@@ -333,14 +366,30 @@ def upgrade() -> None:
     op.create_index(op.f('ix_identity_users_auth_provider_uid'), 'users', ['auth_provider_uid'], unique=True, schema='identity')
     op.create_index(op.f('ix_identity_users_email'), 'users', ['email'], unique=False, schema='identity')
     op.create_table('merchant_category_codes',
+    sa.Column('id', utils.database.UniversalUUID(), nullable=False),
     sa.Column('mcc', sa.String(length=10), nullable=False),
     sa.Column('primary_category', sa.String(length=50), nullable=False),
     sa.Column('detailed_category', sa.String(length=100), nullable=False),
+    sa.Column('ui_label', sa.String(length=100), nullable=True),
+    sa.Column('canonical_title', sa.String(length=150), nullable=True),
+    sa.Column('canonical_group', sa.String(length=100), nullable=True),
+    sa.Column('risk_level', sa.String(length=20), nullable=True),
+    sa.Column('risk_score', sa.Integer(), nullable=True),
+    sa.Column('spend_type', sa.String(length=50), nullable=True),
+    sa.Column('recurrence_likelihood', sa.String(length=20), nullable=True),
+    sa.Column('velocity_risk', sa.String(length=20), nullable=True),
+    sa.Column('chargeback_prone', sa.Boolean(), nullable=False),
+    sa.Column('is_travel', sa.Boolean(), nullable=False),
+    sa.Column('is_subscription_common', sa.Boolean(), nullable=False),
+    sa.Column('is_luxury', sa.Boolean(), nullable=False),
+    sa.Column('is_essential', sa.Boolean(), nullable=False),
+    sa.Column('metadata_json', sa.JSON(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
-    sa.PrimaryKeyConstraint('mcc'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('mcc'),
     schema='merchants'
     )
-    op.create_index(op.f('ix_merchants_merchant_category_codes_mcc'), 'merchant_category_codes', ['mcc'], unique=False, schema='merchants')
+    op.create_index(op.f('ix_merchants_merchant_category_codes_mcc'), 'merchant_category_codes', ['mcc'], unique=True, schema='merchants')
     op.create_table('merchant_master',
     sa.Column('id', utils.database.UniversalUUID(), nullable=False),
     sa.Column('merchant_slug', sa.String(length=100), nullable=False),

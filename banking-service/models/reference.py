@@ -13,15 +13,30 @@
 # limitations under the License.
 
 import datetime
-from sqlalchemy import Column, String, DateTime
-from utils.database import Base
+from sqlalchemy import Boolean, Column, DateTime, Integer, JSON, String
+from utils.database import Base, UniversalUUID as UUID, generate_uuid
 
 class MerchantCategoryCode(Base):
     """Authoritative industry reference mapping of MCC codes to FDX spend categories (`merchants.merchant_category_codes`)."""
     __tablename__ = "merchant_category_codes"
     __table_args__ = {'schema': 'merchants'}
 
-    mcc = Column(String(10), primary_key=True, index=True)
+    id = Column(UUID(), primary_key=True, default=generate_uuid)
+    mcc = Column(String(10), nullable=False, unique=True, index=True)
     primary_category = Column(String(50), nullable=False)
     detailed_category = Column(String(100), nullable=False)
+    ui_label = Column(String(100), nullable=True)
+    canonical_title = Column(String(150), nullable=True)
+    canonical_group = Column(String(100), nullable=True)
+    risk_level = Column(String(20), nullable=True)
+    risk_score = Column(Integer, nullable=True)
+    spend_type = Column(String(50), nullable=True)
+    recurrence_likelihood = Column(String(20), nullable=True)
+    velocity_risk = Column(String(20), nullable=True)
+    chargeback_prone = Column(Boolean, nullable=False, default=False)
+    is_travel = Column(Boolean, nullable=False, default=False)
+    is_subscription_common = Column(Boolean, nullable=False, default=False)
+    is_luxury = Column(Boolean, nullable=False, default=False)
+    is_essential = Column(Boolean, nullable=False, default=False)
+    metadata_json = Column(JSON, nullable=False, default=dict)
     updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
