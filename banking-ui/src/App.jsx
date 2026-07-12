@@ -1265,6 +1265,7 @@ function AppContent() {
             <div className="relative hidden md:block flex-1 max-w-lg mx-6">
               <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
               <input
+                id="header-search-input"
                 type="text"
                 placeholder="Search site..."
                 className="w-full pl-8 pr-4 py-1.5 text-xs rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-all cursor-pointer shadow-sm hover:border-slate-300 dark:hover:border-slate-700"

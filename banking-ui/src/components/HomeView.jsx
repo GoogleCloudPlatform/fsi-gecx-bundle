@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Shield, 
   ArrowRight, 
@@ -57,22 +57,24 @@ function HomeView({
   const [domReady, setDomReady] = useState(false);
 
   useEffect(() => {
-    if (!fbUser) {
-      const params = new URLSearchParams(window.location.search);
-      const forceTour = params.get('tour') === 'true';
-      const isCompleted = localStorage.getItem('home-tour-completed') === 'true';
-      if (forceTour || !isCompleted) {
-        setTourRun(true);
-      }
+    const isCompleted = fbUser 
+      ? localStorage.getItem('home-tour-auth-completed') === 'true'
+      : localStorage.getItem('home-tour-completed') === 'true';
+    
+    const params = new URLSearchParams(window.location.search);
+    const forceTour = params.get('tour') === 'true';
+
+    if (forceTour || !isCompleted) {
+      setTourRun(true);
     } else {
       setTourRun(false);
     }
   }, [fbUser]);
 
   useEffect(() => {
-    if (fbUser) return;
     const checkElement = setInterval(() => {
-      if (document.querySelector('#become-member-btn')) {
+      const targetId = fbUser ? '#home-tour-btn-auth' : '#become-member-btn';
+      if (document.querySelector(targetId)) {
         setDomReady(true);
         clearInterval(checkElement);
       }
@@ -127,6 +129,90 @@ function HomeView({
     (accountsData.credit_accounts && accountsData.credit_accounts.length > 0)
   );
 
+  const steps = useMemo(() => {
+    if (!fbUser) {
+      return [
+        {
+          target: '#home-tour-btn',
+          content: "Welcome to Nova Horizon Bank! Let's take a quick tour of how to get started.",
+          placement: 'top',
+          skipBeacon: true
+        },
+        {
+          target: '#become-member-btn',
+          content: 'Click here to learn about how you can become a member and provision your sandbox demo suite.',
+          placement: 'bottom',
+          skipBeacon: true
+        },
+        {
+          target: '#compare-products-link',
+          content: 'Explore credit card features, rates, and benefits in our product comparison portal.',
+          placement: 'bottom',
+          skipBeacon: true
+        },
+        {
+          target: '#header-signin-btn',
+          content: 'To access your secure dashboard, view balances, get support, and apply for products, click the Sign In button here!',
+          placement: 'bottom-end',
+          skipBeacon: true
+        }
+      ];
+    } else {
+      const authSteps = [
+        {
+          target: '#home-tour-btn-auth',
+          content: "Welcome to your personal dashboard! Let's tour the tools available to you as an active member.",
+          placement: 'top',
+          skipBeacon: true
+        },
+        {
+          target: '#view-accounts-link',
+          content: 'Click here to navigate to your accounts page where you can check balances, transaction histories, and transfer funds.',
+          placement: 'bottom',
+          skipBeacon: true
+        },
+        {
+          target: '#header-search-input',
+          content: 'Use this search bar to search the entire banking system for transactions, transfer logs, help guides, and features.',
+          placement: 'bottom',
+          skipBeacon: true
+        }
+      ];
+
+      if (hasAccounts) {
+        authSteps.push({
+          target: '#dashboard-schema-btn',
+          content: 'Click this cloud button to inspect the active Cloud SQL database schema definitions and examine operation queries.',
+          placement: 'left',
+          skipBeacon: true
+        });
+      } else {
+        authSteps.push({
+          target: '#provision-demo-btn',
+          content: "It looks like you don't have active accounts yet. Click here to instantly seed your sandbox database with checking, savings, and credit cards.",
+          placement: 'left',
+          skipBeacon: true
+        });
+      }
+
+      authSteps.push({
+        target: '#ccaas-widget',
+        content: 'Click here to launch the CCaaS Web Widget and chat with the Nova Horizon mortgage preapproval assistant using voice or text.',
+        placement: 'left',
+        skipBeacon: true
+      });
+
+      authSteps.push({
+        target: '#help-support-link',
+        content: 'Have any questions? Access our documentation, user guides, and FAQs here.',
+        placement: 'bottom',
+        skipBeacon: true
+      });
+
+      return authSteps;
+    }
+  }, [fbUser, hasAccounts]);
+
   return (
     <>
       {/* Hero Section */}
@@ -172,21 +258,37 @@ function HomeView({
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex flex-col sm:flex-row gap-4 items-center">
                   <Link 
                     to="/accounts"
-                    className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer"
+                    id="view-accounts-link"
+                    className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer w-full sm:w-auto text-center"
                     style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
                   >
                     <span>View My Accounts</span>
                     <ArrowRight className="w-5 h-5" />
                   </Link>
-                  <Link 
-                    to="/help-center"
-                    className="flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 hover:scale-[1.02] active:scale-95 transition-all duration-300 cursor-pointer shadow-sm"
-                  >
-                    Help & Support
-                  </Link>
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
+                    <Link 
+                      to="/help-center"
+                      id="help-support-link"
+                      className="flex-1 sm:flex-initial flex items-center justify-center px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 hover:scale-[1.02] active:scale-95 transition-all duration-300 cursor-pointer shadow-sm text-center"
+                    >
+                      Help & Support
+                    </Link>
+                    <button
+                      id="home-tour-btn-auth"
+                      onClick={() => {
+                        localStorage.removeItem('home-tour-auth-completed');
+                        setTourKey(prev => prev + 1);
+                        setTourRun(true);
+                      }}
+                      className="p-4 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white shrink-0"
+                      title="Take the Tour"
+                    >
+                      <GoogleCompassIcon className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
               </>
             ) : (
@@ -262,6 +364,7 @@ function HomeView({
                     </div>
                     {/* Schema trigger button on top right */}
                     <button 
+                      id="dashboard-schema-btn"
                       onClick={() => setIsSchemaModalOpen(true)}
                       className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 cursor-pointer flex items-center justify-center shrink-0"
                       title="View Schema Details"
@@ -359,6 +462,7 @@ function HomeView({
                     </p>
                   </div>
                   <button
+                    id="provision-demo-btn"
                     onClick={handleProvision}
                     disabled={isProvisioning}
                     className="w-full py-3.5 rounded-xl text-slate-950 font-bold text-sm bg-gradient-to-r from-emerald-400 to-cyan-400 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all duration-300 shadow-lg shadow-emerald-500/10"
@@ -852,39 +956,14 @@ function HomeView({
       </section>
 
       {/* Joyride Landing Page Onboarding Tour */}
-      {!fbUser && tourRun && domReady && (
+      {tourRun && domReady && steps.length > 0 && (
         <Joyride
           key={tourKey}
           run={tourRun}
           options={{
             scrollOffset: 120
           }}
-          steps={[
-            {
-              target: '#home-tour-btn',
-              content: "Welcome to Nova Horizon Bank! Let's take a quick tour of how to get started.",
-              placement: 'top',
-              skipBeacon: true
-            },
-            {
-              target: '#become-member-btn',
-              content: 'Click here to learn about how you can become a member and provision your sandbox demo suite.',
-              placement: 'bottom',
-              skipBeacon: true
-            },
-            {
-              target: '#compare-products-link',
-              content: 'Explore credit card features, rates, and benefits in our product comparison portal.',
-              placement: 'bottom',
-              skipBeacon: true
-            },
-            {
-              target: '#header-signin-btn',
-              content: 'To access your secure dashboard, view balances, get support, and apply for products, click the Sign In button here!',
-              placement: 'bottom-end',
-              skipBeacon: true
-            }
-          ]}
+          steps={steps}
           continuous={true}
           showSkipButton={true}
           showCloseButton={true}
@@ -897,7 +976,8 @@ function HomeView({
               action === ACTIONS.SKIP
             ) {
               setTourRun(false);
-              localStorage.setItem('home-tour-completed', 'true');
+              const key = fbUser ? 'home-tour-auth-completed' : 'home-tour-completed';
+              localStorage.setItem(key, 'true');
             }
           }}
           styles={getJoyrideStyles(resolvedTheme, brandColorFrom)}
