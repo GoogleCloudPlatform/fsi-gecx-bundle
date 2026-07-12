@@ -126,7 +126,7 @@ resource "google_bigquery_table" "identity_access_audit_log" {
 resource "google_bigquery_connection" "iceberg" {
   connection_id = "iceberg-warehouse"
   location      = "US"
-  friendly_name = "Iceberg Connection"
+  friendly_name = "Lakehouse Warehouse Connection"
   cloud_resource {}
 
   depends_on = [google_project_service.bigqueryconnection_googleapis_com]
@@ -134,7 +134,7 @@ resource "google_bigquery_connection" "iceberg" {
 
 resource "google_bigquery_dataset" "iceberg_catalog" {
   dataset_id    = "iceberg_catalog"
-  friendly_name = "Iceberg Catalog Dataset"
+  friendly_name = "Datastream CDC Catalog Dataset"
   location      = "US"
 
   # Security Finding 1.1: Do not enable delete_contents_on_destroy for production financial data lakes
@@ -145,79 +145,9 @@ resource "google_bigquery_dataset" "iceberg_catalog" {
 resource "google_bigquery_dataset" "analytics_curated" {
   dataset_id                 = "analytics_curated"
   friendly_name              = "Curated Lakehouse Analytics"
-  description                = "Business-facing Silver/Gold analytical views joining raw Bronze Datastream CDC Iceberg tables"
+  description                = "Business-facing Silver/Gold analytical views joining raw Bronze Datastream CDC tables"
   location                   = "US"
   delete_contents_on_destroy = false
-}
-
-resource "google_bigquery_table" "credit_products" {
-  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
-  table_id            = "credit_products"
-  deletion_protection = false
-
-  biglake_configuration {
-    connection_id = google_bigquery_connection.iceberg.name
-    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/catalog/credit_products/"
-    file_format   = "PARQUET"
-    table_format  = "ICEBERG"
-  }
-
-  schema = file("${path.module}/../bigquery/iceberg_catalog/table/credit_products.json")
-
-  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
-}
-
-resource "google_bigquery_table" "deposit_products" {
-  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
-  table_id            = "deposit_products"
-  deletion_protection = false
-
-  biglake_configuration {
-    connection_id = google_bigquery_connection.iceberg.name
-    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/catalog/deposit_products/"
-    file_format   = "PARQUET"
-    table_format  = "ICEBERG"
-  }
-
-  schema = file("${path.module}/../bigquery/iceberg_catalog/table/deposit_products.json")
-
-  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
-}
-
-resource "google_bigquery_table" "user_credit_profiles" {
-  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
-  table_id            = "user_credit_profiles"
-  deletion_protection = false
-
-  biglake_configuration {
-    connection_id = google_bigquery_connection.iceberg.name
-    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/user_credit_profiles/"
-    file_format   = "PARQUET"
-    table_format  = "ICEBERG"
-  }
-
-  schema = templatefile("${path.module}/../bigquery/iceberg_catalog/table/user_credit_profiles.json.tftpl", {
-    policy_tag_id = google_data_catalog_policy_tag.sensitive_npi.id
-  })
-
-  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
-}
-
-resource "google_bigquery_table" "kyc_records" {
-  dataset_id          = google_bigquery_dataset.iceberg_catalog.dataset_id
-  table_id            = "kyc_records"
-  deletion_protection = false
-
-  biglake_configuration {
-    connection_id = google_bigquery_connection.iceberg.name
-    storage_uri   = "${google_storage_bucket.iceberg_warehouse.url}/kyc_records/"
-    file_format   = "PARQUET"
-    table_format  = "ICEBERG"
-  }
-
-  schema = file("${path.module}/../bigquery/iceberg_catalog/table/kyc_records.json")
-
-  depends_on = [google_storage_bucket_iam_member.iceberg_connection_access]
 }
 
 resource "google_bigquery_table" "system_config_audit_log" {

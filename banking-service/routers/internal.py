@@ -34,18 +34,33 @@ bq_client = LazyClient(bigquery.Client)
 router = APIRouter(prefix="/internal", tags=["internal"])
 
 RESET_DATA_LAKE_TABLES = {
+    "catalog_credit_products",
+    "catalog_deposit_products",
     "cards_credit_accounts",
     "cards_issued_card",
     "cards_posted_transactions",
     "cards_transaction_authorization",
     "identity_user_addresses",
+    "identity_user_devices",
+    "identity_user_secure_messages",
     "identity_users",
     "kyc_user_credit_profiles",
+    "ledger_account_ledger",
+    "ledger_accounts",
+    "ledger_transactions",
     "merchants_merchant_category_codes",
     "merchants_merchant_master",
     "merchants_merchant_stores",
+    "operations_fraud_alerts",
+    "operations_fraud_case_actions",
+    "operations_fraud_model_decisions",
+    "operations_retail_locations",
+    "operations_scenario_outcomes",
+    "operations_support_escalations",
+    "origination_application_artifacts",
     "origination_applications",
     "origination_credit_card_applications",
+    "origination_deposit_applications",
     "origination_mortgage_applications",
 }
 
@@ -126,7 +141,7 @@ def clear_operational_transaction_stream() -> None:
         logger.warning("Could not clear Redis transaction or metrics cache during reset: %s", exc)
 
 
-def _purge_biglake_tables(project_id: str) -> list[str]:
+def _purge_data_lake_tables(project_id: str) -> list[str]:
     table_rows = bq_client.query(
         f"""
         SELECT table_name
@@ -311,7 +326,7 @@ def reset_database(
     """
     Deletes all rows in the database and re-seeds it with baseline cardholder data.
     Optionally purges PostgreSQL and BigQuery compliance audit logs if purge_audit_logs=True.
-    Optionally purges Apache Iceberg BigLake analytical tables if purge_data_lake=True.
+    Optionally purges BigQuery CDC data lake tables if purge_data_lake=True.
     """
     require_full_reset_access(_admin)
     logger.info(f"Internal Debug request: Resetting database (purge_audit_logs={purge_audit_logs}, purge_data_lake={purge_data_lake})...")
@@ -334,11 +349,11 @@ def reset_database(
                 if purge_data_lake:
                     try:
                         project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
-                        purged_tables = _purge_biglake_tables(project_id)
-                        logger.info("Purged BigLake Apache Iceberg catalog tables before async reset job: %s", purged_tables)
+                        purged_tables = _purge_data_lake_tables(project_id)
+                        logger.info("Purged BigQuery CDC data lake tables before async reset job: %s", purged_tables)
                     except Exception as lake_ex:
-                        logger.warning(f"Could not purge BigLake Iceberg tables before async reset job: {lake_ex}")
-                        warnings.append(f"BigLake purge skipped: {lake_ex}")
+                        logger.warning(f"Could not purge BigQuery CDC data lake tables before async reset job: {lake_ex}")
+                        warnings.append(f"Data lake purge skipped: {lake_ex}")
                 reset_job_operation = _run_cloud_run_reset_job()
             except Exception:
                 disable_maintenance_mode()
@@ -390,14 +405,14 @@ def reset_database(
                     warnings.append(f"BigQuery audit purge skipped: {bq_ex}")
 
             if purge_data_lake:
-                logger.info("Purging BigLake Apache Iceberg catalog tables...")
+                logger.info("Purging BigQuery CDC data lake tables...")
                 try:
                     project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "evo-genai-workspace")
-                    purged_tables = _purge_biglake_tables(project_id)
-                    logger.info("Purged BigLake Apache Iceberg catalog tables: %s", purged_tables)
+                    purged_tables = _purge_data_lake_tables(project_id)
+                    logger.info("Purged BigQuery CDC data lake tables: %s", purged_tables)
                 except Exception as lake_ex:
-                    logger.warning(f"Could not purge BigLake Iceberg tables: {lake_ex}")
-                    warnings.append(f"BigLake purge skipped: {lake_ex}")
+                    logger.warning(f"Could not purge BigQuery CDC data lake tables: {lake_ex}")
+                    warnings.append(f"Data lake purge skipped: {lake_ex}")
 
             db.commit()
         msg = "Database reset and re-seeded successfully."

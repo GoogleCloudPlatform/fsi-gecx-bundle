@@ -298,7 +298,7 @@ resource "google_storage_bucket_iam_member" "iceberg_connection_access" {
   member = "serviceAccount:${google_bigquery_connection.iceberg.cloud_resource[0].service_account_id}"
 }
 
-# Dev Manager Finding 3.2: Grant connectionUser on BigLake connection
+# Dev Manager Finding 3.2: Grant connectionUser on the warehouse connection
 resource "google_bigquery_connection_iam_member" "reporting_iceberg_connection_user" {
   location      = google_bigquery_connection.iceberg.location
   connection_id = google_bigquery_connection.iceberg.id
