@@ -1662,15 +1662,16 @@ function AppContent() {
                   {location.pathname === '/' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                 </Link>
 
-                {fbUser && (
+                 {fbUser && (
                   <div className="space-y-1">
                     <div className="flex items-center justify-between w-full rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
                       <Link 
                         to="/accounts"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className={`flex-grow text-left px-4 py-3 transition-colors ${location.pathname === '/accounts' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                        className={`flex-grow text-left px-4 py-3 transition-colors flex items-center gap-2 ${location.pathname === '/accounts' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
                       >
-                        Accounts
+                        <span>Accounts</span>
+                        {location.pathname === '/accounts' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                       </Link>
                       {accountsSummary && (checkingAccs.length > 0 || savingsAccs.length > 0 || creditAccs.length > 0) && (
                         <button 
@@ -1688,47 +1689,65 @@ function AppContent() {
                       <div className="pl-4 space-y-1 border-l-2 border-slate-100 dark:border-slate-800 ml-6">
                         {checkingAccs.length > 0 && (
                           <>
-                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-2 pr-4 pt-2 pb-1">Checking</div>
-                            {checkingAccs.map(acc => (
-                              <Link 
-                                key={acc.account_id}
-                                to={`/accounts?id=${acc.account_id}&type=checking`} 
-                                onClick={() => setIsMobileMenuOpen(false)}
-                                className="w-full text-left px-4 py-2.5 rounded-xl text-xs text-slate-650 dark:text-slate-355 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold block truncate"
-                              >
-                                {acc.product_name}
-                              </Link>
-                            ))}
+                            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1">Checking</div>
+                            {checkingAccs.map(acc => {
+                              const isActive = location.pathname === '/accounts' && location.search.includes(`id=${acc.account_id}`);
+                              return (
+                                <Link 
+                                  key={acc.account_id}
+                                  to={`/accounts?id=${acc.account_id}&type=checking`} 
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                  className={`w-full text-left px-4 py-2.5 rounded-xl text-xs hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold flex items-center justify-between ${
+                                    isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-605 dark:text-slate-355'
+                                  }`}
+                                >
+                                  <span className="truncate">{acc.product_name}</span>
+                                  {isActive && <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0 ml-2"></div>}
+                                </Link>
+                              );
+                            })}
                           </>
                         )}
                         {savingsAccs.length > 0 && (
                           <>
-                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-2 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Savings</div>
-                            {savingsAccs.map(acc => (
-                              <Link 
-                                key={acc.account_id}
-                                to={`/accounts?id=${acc.account_id}&type=savings`} 
-                                onClick={() => setIsMobileMenuOpen(false)}
-                                className="w-full text-left px-4 py-2.5 rounded-xl text-xs text-slate-650 dark:text-slate-355 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold block truncate"
-                              >
-                                {acc.product_name}
-                              </Link>
-                            ))}
+                            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Savings</div>
+                            {savingsAccs.map(acc => {
+                              const isActive = location.pathname === '/accounts' && location.search.includes(`id=${acc.account_id}`);
+                              return (
+                                <Link 
+                                  key={acc.account_id}
+                                  to={`/accounts?id=${acc.account_id}&type=savings`} 
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                  className={`w-full text-left px-4 py-2.5 rounded-xl text-xs hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold flex items-center justify-between ${
+                                    isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-605 dark:text-slate-355'
+                                  }`}
+                                >
+                                  <span className="truncate">{acc.product_name}</span>
+                                  {isActive && <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0 ml-2"></div>}
+                                </Link>
+                              );
+                            })}
                           </>
                         )}
                         {creditAccs.length > 0 && (
                           <>
-                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-2 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Credit Cards</div>
-                            {creditAccs.map(acc => (
-                              <Link 
-                                key={acc.account_id}
-                                to={`/accounts?id=${acc.account_id}&type=credit`} 
-                                onClick={() => setIsMobileMenuOpen(false)}
-                                className="w-full text-left px-4 py-2.5 rounded-xl text-xs text-slate-650 dark:text-slate-355 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold block truncate"
-                              >
-                                {acc.product_name || "Nova Everyday Visa"}
-                              </Link>
-                            ))}
+                            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Credit Cards</div>
+                            {creditAccs.map(acc => {
+                              const isActive = location.pathname === '/accounts' && location.search.includes(`id=${acc.account_id}`);
+                              return (
+                                <Link 
+                                  key={acc.account_id}
+                                  to={`/accounts?id=${acc.account_id}&type=credit`} 
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                  className={`w-full text-left px-4 py-2.5 rounded-xl text-xs hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold flex items-center justify-between ${
+                                    isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-605 dark:text-slate-355'
+                                  }`}
+                                >
+                                  <span className="truncate">{acc.product_name || "Nova Everyday Visa"}</span>
+                                  {isActive && <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0 ml-2"></div>}
+                                </Link>
+                              );
+                            })}
                           </>
                         )}
                       </div>
@@ -1757,7 +1776,7 @@ function AppContent() {
                   </div>
                   {isMobileProductsOpen && (
                     <div className="pl-4 space-y-1 border-l-2 border-slate-100 dark:border-slate-800 ml-6">
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-2 pr-4 pt-2 pb-1">Deposit Accounts</div>
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1">Deposit Accounts</div>
                       <Link 
                         to="/checking-accounts"
                         onClick={() => setIsMobileMenuOpen(false)}
@@ -1783,7 +1802,7 @@ function AppContent() {
                         {location.pathname === '/certificate-accounts' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
                       </Link>
 
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-2 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Credit & Cards</div>
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Credit & Cards</div>
                       <Link 
                         to="/credit-cards"
                         onClick={() => setIsMobileMenuOpen(false)}
@@ -1793,7 +1812,7 @@ function AppContent() {
                         {location.pathname === '/credit-cards' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
                       </Link>
 
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-2 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Home Financing</div>
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Home Financing</div>
                       <Link 
                         to="/mortgages"
                         onClick={() => setIsMobileMenuOpen(false)}
@@ -1811,7 +1830,7 @@ function AppContent() {
                         {location.pathname === '/mortgage-rates' && <div className="w-1 h-1 rounded-full bg-cyan-500"></div>}
                       </Link>
 
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-2 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Product Tools</div>
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Product Tools</div>
                       <Link 
                         to="/compare-products"
                         onClick={() => setIsMobileMenuOpen(false)}
@@ -1846,7 +1865,7 @@ function AppContent() {
                   </div>
                   {isMobileHelpOpen && (
                     <div className="pl-4 space-y-1 border-l-2 border-slate-100 dark:border-slate-800 ml-6">
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-2 pr-4 pt-2 pb-1">Knowledge Base</div>
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1">Knowledge Base</div>
                       <Link 
                         to="/help-center"
                         state={{ category: 'All' }}
@@ -1857,7 +1876,7 @@ function AppContent() {
                         {location.pathname === '/help-center' && (!location.state?.category || location.state?.category === 'All') && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
                       </Link>
 
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-2 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Filter Topics</div>
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Filter Topics</div>
                       {HELP_CATEGORIES.filter(cat => cat !== 'All').map((cat) => (
                         <Link 
                           key={cat} 
@@ -1871,7 +1890,7 @@ function AppContent() {
                         </Link>
                       ))}
 
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-2 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Documentation</div>
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Documentation</div>
                       <Link 
                         to="/disclosures"
                         onClick={() => setIsMobileMenuOpen(false)}
@@ -1889,7 +1908,7 @@ function AppContent() {
                         {location.pathname === '/fee-schedule' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
                       </Link>
 
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-2 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Customer Service</div>
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Customer Service</div>
                       {fbUser && (
                         <Link 
                           to="/support/voice"
@@ -1921,7 +1940,7 @@ function AppContent() {
 
                       {fbUser && (
                         <>
-                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-2 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Admin</div>
+                          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Admin</div>
                           <Link 
                             to="/admin"
                             onClick={() => setIsMobileMenuOpen(false)}
