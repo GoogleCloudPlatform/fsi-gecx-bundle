@@ -435,11 +435,6 @@ export default function LocatorView() {
         <Joyride
           key={tourKey}
           run={tourRun}
-          floatingOptions={{
-            beaconOptions: {
-              offset: -45,
-            },
-          }}
           options={{
             scrollOffset: 175
           }}
@@ -447,7 +442,7 @@ export default function LocatorView() {
             {
               target: '#locator-search-input',
               content: 'Search for specific branches or ATMs by entering an city, state, address, or zip code.',
-              placement: 'right',
+              placement: 'top',
               skipBeacon: true
             },
             {
