@@ -1193,7 +1193,7 @@ function AppContent() {
                     {location.pathname === '/certificate-accounts' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                   </Link>
                   
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">Credit & Cards</div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">Credit Cards</div>
                   <Link to="/credit-cards" className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
                     <span>Credit Cards</span>
                     {location.pathname === '/credit-cards' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
@@ -1802,7 +1802,7 @@ function AppContent() {
                         {location.pathname === '/certificate-accounts' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
                       </Link>
 
-                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Credit & Cards</div>
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-0 pr-4 pt-2 pb-1 border-t border-slate-100/50 dark:border-slate-800/50 mt-1 pt-1">Credit Cards</div>
                       <Link 
                         to="/credit-cards"
                         onClick={() => setIsMobileMenuOpen(false)}
