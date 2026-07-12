@@ -1,0 +1,604 @@
+[
+    {
+        "name": "AMAZON",
+        "aliases": [
+            "AMZN",
+            "AMAZON.COM",
+            "AMAZON MKTPLACE"
+        ],
+        "type": "marketplace",
+        "mccs": [
+            "5311",
+            "5399"
+        ],
+        "risk": 45,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "WALMART",
+        "aliases": [
+            "WALMART",
+            "WAL-MART"
+        ],
+        "type": "retailer",
+        "mccs": [
+            "5411",
+            "5311"
+        ],
+        "risk": 10,
+        "flags": []
+    },
+    {
+        "name": "TARGET",
+        "aliases": [
+            "TARGET"
+        ],
+        "type": "retailer",
+        "mccs": [
+            "5311"
+        ],
+        "risk": 10,
+        "flags": []
+    },
+    {
+        "name": "COSTCO",
+        "aliases": [
+            "COSTCO"
+        ],
+        "type": "wholesale_club",
+        "mccs": [
+            "5300"
+        ],
+        "risk": 10,
+        "flags": []
+    },
+    {
+        "name": "KROGER",
+        "aliases": [
+            "KROGER"
+        ],
+        "type": "grocery",
+        "mccs": [
+            "5411"
+        ],
+        "risk": 5,
+        "flags": []
+    },
+    {
+        "name": "SAFEWAY",
+        "aliases": [
+            "SAFEWAY"
+        ],
+        "type": "grocery",
+        "mccs": [
+            "5411"
+        ],
+        "risk": 5,
+        "flags": []
+    },
+    {
+        "name": "DOORDASH",
+        "aliases": [
+            "DD *DOORDASH",
+            "DOORDASH"
+        ],
+        "type": "aggregator",
+        "mccs": [
+            "5812"
+        ],
+        "risk": 65,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "UBER",
+        "aliases": [
+            "UBER",
+            "UBER TRIP"
+        ],
+        "type": "platform",
+        "mccs": [
+            "4121"
+        ],
+        "risk": 50,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "LYFT",
+        "aliases": [
+            "LYFT"
+        ],
+        "type": "platform",
+        "mccs": [
+            "4121"
+        ],
+        "risk": 50,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "UBER EATS",
+        "aliases": [
+            "UBER EATS"
+        ],
+        "type": "aggregator",
+        "mccs": [
+            "5812"
+        ],
+        "risk": 60,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "NETFLIX",
+        "aliases": [
+            "NETFLIX"
+        ],
+        "type": "subscription",
+        "mccs": [
+            "4899"
+        ],
+        "risk": 30,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "SPOTIFY",
+        "aliases": [
+            "SPOTIFY"
+        ],
+        "type": "subscription",
+        "mccs": [
+            "4899"
+        ],
+        "risk": 30,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "APPLE",
+        "aliases": [
+            "APPLE.COM/BILL",
+            "APPLE"
+        ],
+        "type": "platform",
+        "mccs": [
+            "5817",
+            "5818"
+        ],
+        "risk": 55,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "GOOGLE",
+        "aliases": [
+            "GOOGLE *",
+            "GOOGLE"
+        ],
+        "type": "platform",
+        "mccs": [
+            "5817",
+            "5818"
+        ],
+        "risk": 55,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "MICROSOFT",
+        "aliases": [
+            "MICROSOFT"
+        ],
+        "type": "subscription",
+        "mccs": [
+            "5817"
+        ],
+        "risk": 40,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "DELTA",
+        "aliases": [
+            "DELTA AIR",
+            "DELTA"
+        ],
+        "type": "airline",
+        "mccs": [
+            "4511"
+        ],
+        "risk": 40,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "UNITED",
+        "aliases": [
+            "UNITED AIR",
+            "UNITED"
+        ],
+        "type": "airline",
+        "mccs": [
+            "4511"
+        ],
+        "risk": 40,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "AMERICAN AIRLINES",
+        "aliases": [
+            "AMERICAN AIR"
+        ],
+        "type": "airline",
+        "mccs": [
+            "4511"
+        ],
+        "risk": 40,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "HILTON",
+        "aliases": [
+            "HILTON"
+        ],
+        "type": "hotel",
+        "mccs": [
+            "7011"
+        ],
+        "risk": 35,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "MARRIOTT",
+        "aliases": [
+            "MARRIOTT"
+        ],
+        "type": "hotel",
+        "mccs": [
+            "7011"
+        ],
+        "risk": 35,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "AIRBNB",
+        "aliases": [
+            "AIRBNB"
+        ],
+        "type": "marketplace",
+        "mccs": [
+            "7011"
+        ],
+        "risk": 60,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "BOOKING.COM",
+        "aliases": [
+            "BOOKING.COM"
+        ],
+        "type": "aggregator",
+        "mccs": [
+            "4722"
+        ],
+        "risk": 55,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "EXPEDIA",
+        "aliases": [
+            "EXPEDIA"
+        ],
+        "type": "aggregator",
+        "mccs": [
+            "4722"
+        ],
+        "risk": 55,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "COINBASE",
+        "aliases": [
+            "COINBASE",
+            "CB *COINBASE"
+        ],
+        "type": "crypto_exchange",
+        "mccs": [
+            "6051"
+        ],
+        "risk": 95,
+        "flags": [
+            "crypto",
+            "cash_like"
+        ]
+    },
+    {
+        "name": "KRAKEN",
+        "aliases": [
+            "KRAKEN"
+        ],
+        "type": "crypto_exchange",
+        "mccs": [
+            "6051"
+        ],
+        "risk": 95,
+        "flags": [
+            "crypto",
+            "cash_like"
+        ]
+    },
+    {
+        "name": "BINANCE",
+        "aliases": [
+            "BINANCE"
+        ],
+        "type": "crypto_exchange",
+        "mccs": [
+            "6051"
+        ],
+        "risk": 95,
+        "flags": [
+            "crypto",
+            "cash_like"
+        ]
+    },
+    {
+        "name": "PAYPAL",
+        "aliases": [
+            "PAYPAL"
+        ],
+        "type": "payment_platform",
+        "mccs": [
+            "4829"
+        ],
+        "risk": 70,
+        "flags": [
+            "money_movement"
+        ]
+    },
+    {
+        "name": "VENMO",
+        "aliases": [
+            "VENMO"
+        ],
+        "type": "payment_platform",
+        "mccs": [
+            "4829"
+        ],
+        "risk": 75,
+        "flags": [
+            "money_movement"
+        ]
+    },
+    {
+        "name": "CASH APP",
+        "aliases": [
+            "CASH APP"
+        ],
+        "type": "payment_platform",
+        "mccs": [
+            "4829"
+        ],
+        "risk": 80,
+        "flags": [
+            "money_movement"
+        ]
+    },
+    {
+        "name": "STRIPE",
+        "aliases": [
+            "STRIPE"
+        ],
+        "type": "payment_processor",
+        "mccs": [
+            "7399"
+        ],
+        "risk": 60,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "SQUARE",
+        "aliases": [
+            "SQ *",
+            "SQUARE"
+        ],
+        "type": "payment_processor",
+        "mccs": [
+            "7399"
+        ],
+        "risk": 60,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "STARBUCKS",
+        "aliases": [
+            "STARBUCKS"
+        ],
+        "type": "restaurant",
+        "mccs": [
+            "5814"
+        ],
+        "risk": 10,
+        "flags": []
+    },
+    {
+        "name": "MCDONALDS",
+        "aliases": [
+            "MCDONALD",
+            "MCDONALDS"
+        ],
+        "type": "restaurant",
+        "mccs": [
+            "5814"
+        ],
+        "risk": 10,
+        "flags": []
+    },
+    {
+        "name": "SUBWAY",
+        "aliases": [
+            "SUBWAY"
+        ],
+        "type": "restaurant",
+        "mccs": [
+            "5814"
+        ],
+        "risk": 10,
+        "flags": []
+    },
+    {
+        "name": "BEST BUY",
+        "aliases": [
+            "BEST BUY"
+        ],
+        "type": "retailer",
+        "mccs": [
+            "5732"
+        ],
+        "risk": 20,
+        "flags": []
+    },
+    {
+        "name": "HOME DEPOT",
+        "aliases": [
+            "HOME DEPOT"
+        ],
+        "type": "retailer",
+        "mccs": [
+            "5200"
+        ],
+        "risk": 15,
+        "flags": []
+    },
+    {
+        "name": "LOWES",
+        "aliases": [
+            "LOWES"
+        ],
+        "type": "retailer",
+        "mccs": [
+            "5200"
+        ],
+        "risk": 15,
+        "flags": []
+    },
+    {
+        "name": "CVS",
+        "aliases": [
+            "CVS"
+        ],
+        "type": "pharmacy",
+        "mccs": [
+            "5912"
+        ],
+        "risk": 10,
+        "flags": []
+    },
+    {
+        "name": "WALGREENS",
+        "aliases": [
+            "WALGREENS"
+        ],
+        "type": "pharmacy",
+        "mccs": [
+            "5912"
+        ],
+        "risk": 10,
+        "flags": []
+    },
+    {
+        "name": "GOOGLE PLAY",
+        "aliases": [
+            "GOOGLE PLAY",
+            "GOOGLE *PLAY"
+        ],
+        "type": "digital_marketplace",
+        "mccs": [
+            "5817",
+            "5818"
+        ],
+        "risk": 60,
+        "flags": [
+            "card_not_present",
+            "digital_goods"
+        ]
+    },
+    {
+        "name": "YOUTUBE",
+        "aliases": [
+            "YOUTUBE",
+            "YOUTUBE.COM"
+        ],
+        "type": "platform",
+        "mccs": [
+            "4899",
+            "5815"
+        ],
+        "risk": 45,
+        "flags": [
+            "card_not_present"
+        ]
+    },
+    {
+        "name": "YOUTUBE TV",
+        "aliases": [
+            "YOUTUBE TV"
+        ],
+        "type": "subscription",
+        "mccs": [
+            "4899"
+        ],
+        "risk": 50,
+        "flags": [
+            "card_not_present",
+            "subscription"
+        ]
+    },
+    {
+        "name": "YOUTUBE PREMIUM",
+        "aliases": [
+            "YOUTUBE PREMIUM"
+        ],
+        "type": "subscription",
+        "mccs": [
+            "4899"
+        ],
+        "risk": 50,
+        "flags": [
+            "card_not_present",
+            "subscription"
+        ]
+    }
+]

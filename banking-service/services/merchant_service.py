@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from sqlalchemy.orm import Session
 from models.merchant import MerchantMaster, MerchantStore
+from services.merchant_intelligence_service import MerchantIntelligenceService
 
 logger = logging.getLogger("banking_service.merchants")
 
@@ -351,6 +352,7 @@ class MerchantEnrichmentService:
         """
         cls.load_cache_if_needed(db)
         upper_desc = raw_descriptor.upper()
+        intelligence = MerchantIntelligenceService.lookup(raw_descriptor, mcc=mcc)
 
         matched_dto: Optional[MerchantDTO] = None
         for dto in cls._stores_list:
@@ -382,15 +384,18 @@ class MerchantEnrichmentService:
                 "is_subscription": matched_dto.is_subscription,
                 "is_international": matched_dto.is_international,
                 "risk_score": matched_dto.risk_score,
+                "merchant_intelligence": intelligence,
             }
 
         # Fallback for unrecognized local merchants
         fallback_mcc = mcc or "0000"
+        normalized_name = intelligence.get("normalized_merchant") if intelligence.get("matched") else None
+        display_name = normalized_name or raw_descriptor.strip() or "Unrecognized Merchant"
         return {
             "merchant_id": "generic-merchant",
             "merchant_slug": f"generic-{fallback_mcc}",
             "merchant_store_id": None,
-            "clean_name": raw_descriptor.strip() or "Unrecognized Merchant",
+            "clean_name": display_name,
             "raw_descriptor": raw_descriptor.strip() or "Unrecognized Merchant",
             "merchant_domain": None,
             "logo_url": None,
@@ -408,6 +413,7 @@ class MerchantEnrichmentService:
             "is_subscription": False,
             "is_international": country != "USA",
             "risk_score": 30 if country != "USA" else 0,
+            "merchant_intelligence": intelligence,
         }
 
     @classmethod

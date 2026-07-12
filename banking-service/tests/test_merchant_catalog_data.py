@@ -20,6 +20,7 @@ from pathlib import Path
 
 CATALOG_PATH = Path(__file__).resolve().parents[1] / "resources" / "data" / "merchant_catalog.json"
 MCC_PATH = Path(__file__).resolve().parents[1] / "resources" / "data" / "merchant_category_codes.json"
+MERCHANT_INTELLIGENCE_PATH = Path(__file__).resolve().parents[1] / "resources" / "data" / "merchant_intelligence.json"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRAVEL_CITIES = {"Vancouver", "Toronto", "London", "Paris", "Berlin", "Madrid", "Rome", "Venice"}
 
@@ -136,3 +137,18 @@ def test_simulator_mcc_literals_are_covered_by_taxonomy_seed():
 
     assert emitted_mccs
     assert emitted_mccs.issubset(taxonomy_mccs)
+
+
+def test_merchant_intelligence_resource_has_covered_mccs_and_aliases():
+    taxonomy_mccs = {item["mcc"] for item in json.loads(MCC_PATH.read_text())}
+    intelligence = json.loads(MERCHANT_INTELLIGENCE_PATH.read_text())
+    names = [item["name"] for item in intelligence]
+
+    assert len(intelligence) >= 40
+    assert len(names) == len(set(names))
+    for item in intelligence:
+        assert item["name"]
+        assert item["aliases"]
+        assert item["type"]
+        assert isinstance(item["risk"], int)
+        assert set(item["mccs"]).issubset(taxonomy_mccs)
