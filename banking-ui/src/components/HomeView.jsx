@@ -182,7 +182,7 @@ function HomeView({
       if (hasAccounts) {
         authSteps.push({
           target: '#dashboard-schema-btn',
-          content: 'Click this cloud button to inspect the active Cloud SQL database schema definitions and examine operation queries.',
+          content: 'Click these cloud buttons to get insights into the underlying technical implementation throughout the site.',
           placement: 'left',
           skipBeacon: true
         });
