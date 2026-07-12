@@ -27,6 +27,8 @@ alias_router = APIRouter(prefix="/merchants", tags=["Merchant Intelligence & Enr
 
 class MerchantResponse(BaseModel):
     merchant_id: str
+    merchant_slug: str
+    merchant_store_id: Optional[str] = None
     clean_name: str
     raw_descriptor_pattern: str
     mcc: str
@@ -57,7 +59,7 @@ class EnrichRequest(BaseModel):
 
 
 class CreateMerchantRequest(BaseModel):
-    merchant_id: str = Field(..., description="Unique MID e.g. 'MID-CUSTOM-001'")
+    merchant_slug: str = Field(..., description="Stable catalog key e.g. 'acme_corp'")
     clean_name: str = Field(..., description="Normalized brand name e.g. 'Acme Corp'")
     raw_descriptor_pattern: str = Field(..., description="SQL LIKE regex pattern e.g. 'ACME CORP%'")
     mcc: str = Field(..., description="4-digit ISO Merchant Category Code e.g. '5311'")
@@ -94,15 +96,25 @@ def list_merchants(
     return MerchantEnrichmentService.list_merchants(db, category=category, country=country, is_international=is_international)
 
 
+@router.get("/by-slug/{merchant_slug}", response_model=MerchantResponse, summary="Get Merchant Details by Catalog Slug")
+@v1_router.get("/by-slug/{merchant_slug}", response_model=MerchantResponse, summary="Get Merchant Details by Catalog Slug")
+@alias_router.get("/by-slug/{merchant_slug}", response_model=MerchantResponse, summary="Get Merchant Details by Catalog Slug")
+def get_merchant_by_slug(merchant_slug: str, db: Session = Depends(get_db)):
+    """Retrieves merchant intelligence using the stable seed/catalog slug."""
+    dto = MerchantEnrichmentService.get_by_slug(db, merchant_slug)
+    if not dto:
+        raise HTTPException(status_code=404, detail=f"Merchant slug '{merchant_slug}' not found in Master Merchant Database.")
+    return dto
+
+
 @router.get("/{merchant_id}", response_model=MerchantResponse, summary="Get Single Merchant Details")
 @v1_router.get("/{merchant_id}", response_model=MerchantResponse, summary="Get Single Merchant Details")
 @alias_router.get("/{merchant_id}", response_model=MerchantResponse, summary="Get Single Merchant Details")
 def get_merchant(merchant_id: str, db: Session = Depends(get_db)):
-    """Retrieves authoritative brand intelligence and CDN logo mapping for a specific MID."""
-    MerchantEnrichmentService.load_cache_if_needed(db)
-    dto = MerchantEnrichmentService._merchants_by_id.get(merchant_id)
+    """Retrieves authoritative brand intelligence and CDN logo mapping for a specific merchant UUID."""
+    dto = MerchantEnrichmentService.get_by_id(db, merchant_id)
     if not dto:
-        raise HTTPException(status_code=404, detail=f"Merchant ID '{merchant_id}' not found in Master Merchant Database.")
+        raise HTTPException(status_code=404, detail=f"Merchant UUID '{merchant_id}' not found in Master Merchant Database.")
     return dto
 
 
@@ -128,12 +140,12 @@ def create_custom_merchant(req: CreateMerchantRequest, db: Session = Depends(get
     Ideal for live client presentations or sales engineer customizations.
     """
     from models.merchant import MerchantStore
-    existing = db.query(MerchantMaster).filter(MerchantMaster.merchant_id == req.merchant_id).first()
+    existing = db.query(MerchantMaster).filter(MerchantMaster.merchant_slug == req.merchant_slug).first()
     if existing:
-        raise HTTPException(status_code=409, detail=f"Merchant ID '{req.merchant_id}' already exists.")
+        raise HTTPException(status_code=409, detail=f"Merchant slug '{req.merchant_slug}' already exists.")
 
     merchant = MerchantMaster(
-        merchant_id=req.merchant_id,
+        merchant_slug=req.merchant_slug,
         clean_name=req.clean_name,
         default_mcc=req.mcc,
         merchant_domain=req.merchant_domain,
@@ -141,9 +153,10 @@ def create_custom_merchant(req: CreateMerchantRequest, db: Session = Depends(get
         is_subscription=req.is_subscription
     )
     db.add(merchant)
+    db.flush()
     
     store = MerchantStore(
-        merchant_id=req.merchant_id,
+        merchant_id=merchant.id,
         location_name=req.clean_name,
         raw_descriptor=req.raw_descriptor_pattern,
         country_code=req.country_code,
@@ -165,8 +178,10 @@ def create_custom_merchant(req: CreateMerchantRequest, db: Session = Depends(get
     
     from services.merchant_service import MerchantDTO
     return MerchantDTO(
-        id=merchant.id,
-        merchant_id=merchant.merchant_id,
+        id=store.id,
+        merchant_id=str(merchant.id),
+        merchant_slug=merchant.merchant_slug,
+        merchant_store_id=str(store.id),
         clean_name=merchant.clean_name,
         location_name=store.location_name,
         raw_descriptor_pattern=store.raw_descriptor,

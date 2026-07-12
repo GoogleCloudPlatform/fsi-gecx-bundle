@@ -91,7 +91,7 @@ def _seed_reference_tables() -> None:
     merchant_master = sa.table(
         "merchant_master",
         sa.column("id", utils.database.UniversalUUID()),
-        sa.column("merchant_id", sa.String),
+        sa.column("merchant_slug", sa.String),
         sa.column("clean_name", sa.String),
         sa.column("default_mcc", sa.String),
         sa.column("merchant_domain", sa.String),
@@ -104,7 +104,7 @@ def _seed_reference_tables() -> None:
     merchant_stores = sa.table(
         "merchant_stores",
         sa.column("id", utils.database.UniversalUUID()),
-        sa.column("merchant_id", sa.String),
+        sa.column("merchant_id", utils.database.UniversalUUID()),
         sa.column("location_name", sa.String),
         sa.column("raw_descriptor", sa.String),
         sa.column("country_code", sa.String),
@@ -174,7 +174,7 @@ def _seed_reference_tables() -> None:
         [
             {
                 "id": uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-master:{item['merchant_id']}"),
-                "merchant_id": item["merchant_id"],
+                "merchant_slug": item["merchant_id"],
                 "clean_name": item["clean_name"],
                 "default_mcc": item["default_mcc"],
                 "merchant_domain": item.get("merchant_domain"),
@@ -199,7 +199,7 @@ def _seed_reference_tables() -> None:
                             uuid.NAMESPACE_DNS,
                             f"merchant-store:{item['merchant_id']}:{store['raw_descriptor']}",
                         ),
-                        "merchant_id": item["merchant_id"],
+                        "merchant_id": uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-master:{item['merchant_id']}"),
                         "location_name": store["location_name"],
                         "raw_descriptor": store["raw_descriptor"],
                         "country_code": store.get("country_code", "USA"),
@@ -217,7 +217,7 @@ def _seed_reference_tables() -> None:
                             uuid.NAMESPACE_DNS,
                             f"merchant-store:{item['merchant_id']}:{descriptor}",
                         ),
-                        "merchant_id": item["merchant_id"],
+                        "merchant_id": uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-master:{item['merchant_id']}"),
                         "location_name": f"{item['clean_name']} #{idx}",
                         "raw_descriptor": descriptor,
                         "country_code": "USA",
@@ -234,7 +234,7 @@ def _seed_reference_tables() -> None:
                         uuid.NAMESPACE_DNS,
                         f"merchant-store:{item['merchant_id']}:{item['clean_name'].upper()}",
                     ),
-                    "merchant_id": item["merchant_id"],
+                    "merchant_id": uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-master:{item['merchant_id']}"),
                     "location_name": item["clean_name"],
                     "raw_descriptor": item["clean_name"].upper(),
                     "country_code": "USA",
@@ -343,7 +343,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_merchants_merchant_category_codes_mcc'), 'merchant_category_codes', ['mcc'], unique=False, schema='merchants')
     op.create_table('merchant_master',
     sa.Column('id', utils.database.UniversalUUID(), nullable=False),
-    sa.Column('merchant_id', sa.String(length=100), nullable=False),
+    sa.Column('merchant_slug', sa.String(length=100), nullable=False),
     sa.Column('clean_name', sa.String(length=100), nullable=False),
     sa.Column('default_mcc', sa.String(length=10), nullable=False),
     sa.Column('merchant_domain', sa.String(length=100), nullable=True),
@@ -356,7 +356,7 @@ def upgrade() -> None:
     )
     op.create_index('idx_merchants_domain', 'merchant_master', ['merchant_domain'], unique=False, schema='merchants')
     op.create_index('idx_merchants_mcc', 'merchant_master', ['default_mcc'], unique=False, schema='merchants')
-    op.create_index(op.f('ix_merchants_merchant_master_merchant_id'), 'merchant_master', ['merchant_id'], unique=True, schema='merchants')
+    op.create_index(op.f('ix_merchants_merchant_master_merchant_slug'), 'merchant_master', ['merchant_slug'], unique=True, schema='merchants')
     op.create_table('retail_locations',
     sa.Column('id', utils.database.UniversalUUID(), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
@@ -516,7 +516,7 @@ def upgrade() -> None:
     op.create_index('idx_transactions_user_id', 'transactions', ['user_id'], unique=False, schema='ledger')
     op.create_table('merchant_stores',
     sa.Column('id', utils.database.UniversalUUID(), nullable=False),
-    sa.Column('merchant_id', sa.String(length=100), nullable=False),
+    sa.Column('merchant_id', utils.database.UniversalUUID(), nullable=False),
     sa.Column('location_name', sa.String(length=100), nullable=False),
     sa.Column('raw_descriptor', sa.String(length=150), nullable=False),
     sa.Column('country_code', sa.String(length=3), nullable=False),
@@ -524,7 +524,7 @@ def upgrade() -> None:
     sa.Column('risk_score', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
-    sa.ForeignKeyConstraint(['merchant_id'], ['merchants.merchant_master.merchant_id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['merchant_id'], ['merchants.merchant_master.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     schema='merchants'
     )
@@ -651,6 +651,9 @@ def upgrade() -> None:
     sa.Column('auth_code', sa.String(length=6), nullable=False),
     sa.Column('retrieval_reference_number', sa.String(length=12), nullable=False),
     sa.Column('card_network', sa.String(length=30), nullable=False),
+    sa.Column('merchant_id', utils.database.UniversalUUID(), nullable=True),
+    sa.Column('merchant_store_id', utils.database.UniversalUUID(), nullable=True),
+    sa.Column('merchant_slug', sa.String(length=100), nullable=True),
     sa.Column('merchant_category_code', sa.String(length=4), nullable=False),
     sa.Column('merchant_name', sa.String(length=255), nullable=True),
     sa.Column('fraud_risk_score', sa.Integer(), nullable=True),
@@ -658,6 +661,8 @@ def upgrade() -> None:
     sa.Column('expires_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['account_id'], ['cards.credit_accounts.id'], ondelete='RESTRICT'),
     sa.ForeignKeyConstraint(['card_id'], ['cards.issued_card.id'], ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['merchant_id'], ['merchants.merchant_master.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['merchant_store_id'], ['merchants.merchant_stores.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id'),
     schema='cards'
     )
@@ -897,7 +902,7 @@ def downgrade() -> None:
     op.drop_table('credit_accounts', schema='cards')
     op.drop_table('support_escalations', schema='operations')
     op.drop_table('retail_locations', schema='operations')
-    op.drop_index(op.f('ix_merchants_merchant_master_merchant_id'), table_name='merchant_master', schema='merchants')
+    op.drop_index(op.f('ix_merchants_merchant_master_merchant_slug'), table_name='merchant_master', schema='merchants')
     op.drop_index('idx_merchants_mcc', table_name='merchant_master', schema='merchants')
     op.drop_index('idx_merchants_domain', table_name='merchant_master', schema='merchants')
     op.drop_table('merchant_master', schema='merchants')

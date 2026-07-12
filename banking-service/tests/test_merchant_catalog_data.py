@@ -13,20 +13,40 @@
 # limitations under the License.
 
 import json
+import uuid
 from pathlib import Path
 
 
 CATALOG_PATH = Path(__file__).resolve().parents[1] / "resources" / "data" / "merchant_catalog.json"
+MCC_PATH = Path(__file__).resolve().parents[1] / "resources" / "data" / "merchant_category_codes.json"
 TRAVEL_CITIES = {"Vancouver", "Toronto", "London", "Paris", "Berlin", "Madrid", "Rome", "Venice"}
 
 
-def _merchant_by_id(merchant_id: str) -> dict:
+def _load_catalog() -> list[dict]:
+    return json.loads(CATALOG_PATH.read_text())
+
+
+def _merchant_by_slug(merchant_slug: str) -> dict:
     catalog = json.loads(CATALOG_PATH.read_text())
-    return next(item for item in catalog if item["merchant_id"] == merchant_id)
+    return next(item for item in catalog if item["merchant_id"] == merchant_slug)
+
+
+def _deterministic_merchant_uuid(merchant_slug: str) -> uuid.UUID:
+    return uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-master:{merchant_slug}")
+
+
+def _store_descriptors(item: dict) -> list[str]:
+    stores = item.get("stores") or []
+    if stores:
+        return [store["raw_descriptor"] for store in stores]
+    variations = item.get("store_variations") or []
+    if variations:
+        return variations
+    return [item["clean_name"].upper()]
 
 
 def test_international_travel_catalog_has_dining_depth_by_city():
-    dining = _merchant_by_id("global_travel_dining")
+    dining = _merchant_by_slug("global_travel_dining")
     stores_by_city = {
         city: [store for store in dining["stores"] if store.get("city") == city]
         for city in TRAVEL_CITIES
@@ -38,9 +58,9 @@ def test_international_travel_catalog_has_dining_depth_by_city():
 
 
 def test_international_travel_catalog_has_air_and_everyday_merchants():
-    everyday = _merchant_by_id("global_travel_everyday")
-    air = _merchant_by_id("international_air_travel")
-    hotels = _merchant_by_id("international_hotels")
+    everyday = _merchant_by_slug("global_travel_everyday")
+    air = _merchant_by_slug("international_air_travel")
+    hotels = _merchant_by_slug("international_hotels")
 
     everyday_cities = {store.get("city") for store in everyday["stores"]}
     air_cities = {store.get("city") for store in air["stores"]}
@@ -53,3 +73,28 @@ def test_international_travel_catalog_has_air_and_everyday_merchants():
     assert TRAVEL_CITIES.issubset(hotel_cities)
     assert air_mccs == {"4511"}
     assert hotel_mccs == {"7011"}
+
+
+def test_merchant_catalog_slugs_generate_unique_stable_uuid_relationships():
+    catalog = _load_catalog()
+    slugs = [item["merchant_id"] for item in catalog]
+    merchant_ids = [_deterministic_merchant_uuid(slug) for slug in slugs]
+    store_ids = [
+        uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-store:{item['merchant_id']}:{descriptor}")
+        for item in catalog
+        for descriptor in _store_descriptors(item)
+    ]
+
+    assert len(slugs) == len(set(slugs))
+    assert len(merchant_ids) == len(set(merchant_ids))
+    assert len(store_ids) == len(set(store_ids))
+    assert all(isinstance(merchant_id, uuid.UUID) for merchant_id in merchant_ids)
+
+
+def test_merchant_catalog_default_mccs_are_covered_by_taxonomy_seed():
+    catalog_mccs = {item["default_mcc"] for item in _load_catalog()}
+    taxonomy = json.loads(MCC_PATH.read_text())
+    taxonomy_mccs = {item["mcc"] for item in taxonomy}
+
+    assert catalog_mccs
+    assert catalog_mccs.issubset(taxonomy_mccs)

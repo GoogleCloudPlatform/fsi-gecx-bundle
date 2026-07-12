@@ -282,12 +282,17 @@ def test_process_settlement_allows_flagged_authorization_hold(db_session):
 @pytest.mark.asyncio
 async def test_card_network_authorize_success(async_client, db_session):
     user, checking, credit_acc, card = setup_test_cardholder_suite(db_session)
+    merchant_id = str(uuid.uuid4())
+    merchant_store_id = str(uuid.uuid4())
     
     headers = {"X-Card-Network-Token": "switch-secret-key-12345"}
     payload = {
         "card_token": "tok_visa_swipe_tester",
         "amount_cents": 1500, # $15.00 hold
         "retrieval_reference_number": "123456789012",
+        "merchant_id": merchant_id,
+        "merchant_slug": "local_restaurant",
+        "merchant_store_id": merchant_store_id,
         "merchant_category_code": "5812",
         "merchant_name": "Local Restaurant"
     }
@@ -308,6 +313,9 @@ async def test_card_network_authorize_success(async_client, db_session):
     assert auth is not None
     assert auth.status == "PENDING"
     assert auth.transaction_amount_cents == 1500
+    assert str(auth.merchant_id) == merchant_id
+    assert auth.merchant_slug == "local_restaurant"
+    assert str(auth.merchant_store_id) == merchant_store_id
 
 @pytest.mark.asyncio
 async def test_card_network_authorize_returns_503_during_maintenance(async_client, db_session):

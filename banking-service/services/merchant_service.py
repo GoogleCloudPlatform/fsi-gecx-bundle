@@ -16,6 +16,7 @@ import os
 import json
 import random
 import logging
+import uuid
 from typing import List, Dict, Any, Optional, Tuple, Union
 from dataclasses import dataclass
 from decimal import Decimal
@@ -81,6 +82,8 @@ class MerchantDTO:
     """Pure Python DTO decoupled from SQLAlchemy ORM session state for robust in-memory caching."""
     id: Any
     merchant_id: str
+    merchant_slug: str
+    merchant_store_id: Optional[str]
     clean_name: str
     location_name: str
     raw_descriptor_pattern: str
@@ -110,6 +113,7 @@ class MerchantEnrichmentService:
     """
     _cache_initialized: bool = False
     _merchants_by_id: Dict[str, MerchantDTO] = {}
+    _merchants_by_slug: Dict[str, MerchantDTO] = {}
     _stores_list: List[MerchantDTO] = []
     _domestic_merchants: List[MerchantDTO] = []
     _international_merchants: List[MerchantDTO] = []
@@ -122,7 +126,9 @@ class MerchantEnrichmentService:
     ) -> MerchantDTO:
         return MerchantDTO(
             id="generic-merchant",
-            merchant_id=f"generic-{mcc.lower()}",
+            merchant_id="generic-merchant",
+            merchant_slug=f"generic-{mcc.lower()}",
+            merchant_store_id=None,
             clean_name="Generic Merchant",
             location_name="Generic Merchant",
             raw_descriptor_pattern="GENERIC MERCHANT",
@@ -149,6 +155,7 @@ class MerchantEnrichmentService:
         """Clears in-memory merchant catalog cache."""
         cls._cache_initialized = False
         cls._merchants_by_id.clear()
+        cls._merchants_by_slug.clear()
         cls._stores_list.clear()
         cls._domestic_merchants.clear()
         cls._international_merchants.clear()
@@ -178,8 +185,12 @@ class MerchantEnrichmentService:
             legacy_vars = item.pop("store_variations", [])
             mcc_val = item.pop("default_mcc", item.pop("mcc", "0000"))
             
+            merchant_slug = item["merchant_id"]
+            merchant_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-master:{merchant_slug}")
+
             m = MerchantMaster(
-                merchant_id=item["merchant_id"],
+                id=merchant_uuid,
+                merchant_slug=merchant_slug,
                 clean_name=item["clean_name"],
                 default_mcc=mcc_val,
                 merchant_domain=item.get("merchant_domain"),
@@ -195,7 +206,8 @@ class MerchantEnrichmentService:
                     geo = _infer_store_geo(s_dict["location_name"], s_dict["raw_descriptor"], s_dict.get("country_code", "USA"))
                     ecommerce_capable = s_dict.get("ecommerce_capable", _is_ecommerce_descriptor(s_dict["raw_descriptor"]))
                     s = MerchantStore(
-                        merchant_id=m.merchant_id,
+                        id=uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-store:{merchant_slug}:{s_dict['raw_descriptor']}"),
+                        merchant_id=m.id,
                         location_name=s_dict["location_name"],
                         raw_descriptor=s_dict["raw_descriptor"],
                         country_code=s_dict.get("country_code", "USA"),
@@ -216,7 +228,8 @@ class MerchantEnrichmentService:
                     geo = _infer_store_geo(f"{m.clean_name} #{idx+1}", v, "USA")
                     ecommerce_capable = _is_ecommerce_descriptor(v)
                     s = MerchantStore(
-                        merchant_id=m.merchant_id,
+                        id=uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-store:{merchant_slug}:{v}"),
+                        merchant_id=m.id,
                         location_name=f"{m.clean_name} #{idx+1}",
                         raw_descriptor=v,
                         country_code="USA",
@@ -235,7 +248,8 @@ class MerchantEnrichmentService:
             else:
                 ecommerce_capable = _is_ecommerce_descriptor(m.clean_name)
                 s = MerchantStore(
-                    merchant_id=m.merchant_id,
+                    id=uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-store:{merchant_slug}:{m.clean_name.upper()}"),
+                    merchant_id=m.id,
                     location_name=m.clean_name,
                     raw_descriptor=m.clean_name.upper(),
                     country_code="USA",
@@ -267,7 +281,8 @@ class MerchantEnrichmentService:
         tax_map = TaxonomyService.get_taxonomy_map(db=db)
 
         detached_stores = []
-        merchants_map = {}
+        merchants_by_id = {}
+        merchants_by_slug = {}
         for s in all_stores:
             m = s.merchant
             mcc_val = m.default_mcc if m else "0000"
@@ -278,7 +293,9 @@ class MerchantEnrichmentService:
             
             dto = MerchantDTO(
                 id=s.id,
-                merchant_id=s.merchant_id,
+                merchant_id=str(m.id) if m else str(s.merchant_id),
+                merchant_slug=m.merchant_slug if m else "",
+                merchant_store_id=str(s.id),
                 clean_name=m.clean_name if m else s.location_name,
                 location_name=s.location_name,
                 raw_descriptor_pattern=s.raw_descriptor,
@@ -300,16 +317,31 @@ class MerchantEnrichmentService:
                 risk_score=s.risk_score,
             )
             detached_stores.append(dto)
-            if s.merchant_id not in merchants_map:
-                merchants_map[s.merchant_id] = dto
+            if dto.merchant_id not in merchants_by_id:
+                merchants_by_id[dto.merchant_id] = dto
+            if dto.merchant_slug and dto.merchant_slug not in merchants_by_slug:
+                merchants_by_slug[dto.merchant_slug] = dto
 
         cls._stores_list = detached_stores
-        cls._merchants_by_id = merchants_map
+        cls._merchants_by_id = merchants_by_id
+        cls._merchants_by_slug = merchants_by_slug
         cls._domestic_merchants = [dto for dto in detached_stores if not dto.is_international]
         cls._international_merchants = [dto for dto in detached_stores if dto.is_international]
 
         cls._cache_initialized = True
-        logger.debug(f"Merchant cache warmed with {len(merchants_map)} parent brands and {len(detached_stores)} store locations.")
+        logger.debug(f"Merchant cache warmed with {len(merchants_by_id)} parent brands and {len(detached_stores)} store locations.")
+
+    @classmethod
+    def get_by_id(cls, db: Session, merchant_id: str) -> Optional[MerchantDTO]:
+        """Looks up a canonical merchant by internal UUID string."""
+        cls.load_cache_if_needed(db)
+        return cls._merchants_by_id.get(str(merchant_id))
+
+    @classmethod
+    def get_by_slug(cls, db: Session, merchant_slug: str) -> Optional[MerchantDTO]:
+        """Looks up a canonical merchant by stable catalog slug."""
+        cls.load_cache_if_needed(db)
+        return cls._merchants_by_slug.get(merchant_slug)
 
     @classmethod
     def enrich_transaction(cls, db: Session, raw_descriptor: str, mcc: Optional[str] = None, country: str = "USA") -> Dict[str, Any]:
@@ -330,7 +362,10 @@ class MerchantEnrichmentService:
         if matched_dto:
             return {
                 "merchant_id": str(matched_dto.merchant_id),
+                "merchant_slug": matched_dto.merchant_slug,
+                "merchant_store_id": matched_dto.merchant_store_id,
                 "clean_name": matched_dto.clean_name,
+                "raw_descriptor": matched_dto.raw_descriptor_pattern,
                 "merchant_domain": matched_dto.merchant_domain,
                 "logo_url": matched_dto.logo_url,
                 "mcc": matched_dto.mcc,
@@ -352,8 +387,11 @@ class MerchantEnrichmentService:
         # Fallback for unrecognized local merchants
         fallback_mcc = mcc or "0000"
         return {
-            "merchant_id": f"MID-GENERIC-{fallback_mcc}",
+            "merchant_id": "generic-merchant",
+            "merchant_slug": f"generic-{fallback_mcc}",
+            "merchant_store_id": None,
             "clean_name": raw_descriptor.strip() or "Unrecognized Merchant",
+            "raw_descriptor": raw_descriptor.strip() or "Unrecognized Merchant",
             "merchant_domain": None,
             "logo_url": None,
             "mcc": fallback_mcc,

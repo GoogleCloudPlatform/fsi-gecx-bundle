@@ -13,12 +13,14 @@
 # limitations under the License.
 
 import pytest
+import uuid
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from utils.database import Base
 from services.seeding_service import perform_algorithmic_seeding, provision_user_suite
 from models.identity import User, UserAddress
 from models.credit_card import CreditAccount, TransactionAuthorization
+from models.merchant import MerchantMaster, MerchantStore
 
 DATABASE_URL = "sqlite:///:memory:"
 
@@ -59,3 +61,18 @@ def test_3nf_relational_join_integrity(db_session):
     assert cred_acc.customer_id == user.id
     assert user.id == addr.user_id
     assert addr.address_type == "RESIDENTIAL"
+
+    merchant_join = (
+        db_session.query(MerchantStore, MerchantMaster)
+        .join(MerchantMaster, MerchantStore.merchant_id == MerchantMaster.id)
+        .all()
+    )
+    stores = db_session.query(MerchantStore).all()
+    masters = db_session.query(MerchantMaster).all()
+
+    assert stores
+    assert masters
+    assert len(merchant_join) == len(stores)
+    assert all(isinstance(store.merchant_id, uuid.UUID) for store in stores)
+    assert all(master.merchant_slug for master in masters)
+    assert all(store.merchant_id == master.id for store, master in merchant_join)

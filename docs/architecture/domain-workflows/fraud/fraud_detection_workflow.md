@@ -139,14 +139,14 @@ Fraud workflow tables live in the `operations` schema.
 | `operations.fraud_alerts` | Customer-facing alert/case record for suspicious card activity. Stores card/account linkage, secure-message thread, suspicious authorizations, remediation status, triage results, provisional credit totals, and replacement-card linkage. |
 | `operations.fraud_case_actions` | Durable idempotent action history for triage and remediation steps. |
 
-Authorization records also carry fraud and merchant context in `cards.transaction_authorization`, including risk score, channel, entry mode, merchant country/city/region/postal code, coordinates, IP/shipping country, and digital-goods marker.
+Authorization records also carry fraud and merchant context in `cards.transaction_authorization`, including risk score, channel, entry mode, merchant country/city/region/postal code, coordinates, IP/shipping country, digital-goods marker, immutable merchant snapshots, and optional merchant/store UUIDs when descriptor enrichment resolves a catalog match.
 
 Merchant context is sourced from normalized merchant tables in the `merchants` schema:
 
 | Table | Purpose |
 | :--- | :--- |
-| `merchants.merchant_master` | Parent merchant brand, clean name, category, domain, and MCC linkage. |
-| `merchants.merchant_stores` | Store or ecommerce descriptor, country, city, region, postal code, coordinates, channel capability, high-risk flags, and risk score. |
+| `merchants.merchant_master` | Parent merchant brand keyed by UUID, clean name, stable `merchant_slug`, category/domain attributes, and MCC linkage. |
+| `merchants.merchant_stores` | Store or ecommerce descriptor keyed by UUID, `merchant_id` UUID FK to `merchant_master.id`, country, city, region, postal code, coordinates, channel capability, high-risk flags, and risk score. |
 
 ---
 
@@ -162,7 +162,7 @@ Fraud decision history is part of the CDC stream. Datastream replicates the foll
 | `merchants` | `merchant_master`, `merchant_stores`, `merchant_category_codes` |
 | `operations` | `fraud_model_decisions` |
 
-Curated BigQuery views can join authorization events, model decisions, users, credit profiles, and merchant stores without parsing geography out of merchant descriptor strings. Demo surfaces can use these views for real-time spend velocity, international fraud anomalies, Mexico travel offer candidates, and fraud support context.
+Curated BigQuery views can join authorization events, model decisions, users, credit profiles, and merchant stores without parsing geography out of merchant descriptor strings. When reference joins are needed, store rows join to merchant master rows with `merchant_stores.merchant_id = merchant_master.id`; `merchant_slug` is the retained seed/catalog key, not the relational FK. Demo surfaces can use these views for real-time spend velocity, international fraud anomalies, Mexico travel offer candidates, and fraud support context.
 
 See also:
 
