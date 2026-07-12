@@ -672,27 +672,32 @@ function AccountsView({ fbUser, customerProfile }) {
                     ? (activeAccountObj.cards || []).filter(card => card.status === 'ACTIVE')
                     : activeAccountObj.cards || []
                   ).map((card) => (
-                    <div key={card.card_id || card.id || card.card_token || card.last_four} className="rounded-2xl border border-violet-200 bg-violet-100 p-5 text-slate-900 shadow-sm">
+                    <div
+                      key={card.card_id || card.id || card.card_token || card.last_four}
+                      className="rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm dark:border-slate-800 dark:bg-slate-900/50 dark:text-white"
+                    >
                       <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <h3 className="text-sm font-extrabold">{card.is_virtual ? 'Virtual card' : 'Physical card'} ending in {card.last_four}</h3>
-                          <p className="mt-1 text-xs font-medium text-slate-600">
+                        <div className="min-w-0">
+                          <h3 className="truncate text-sm font-extrabold">
+                            {card.is_virtual ? 'Virtual card' : 'Physical card'} ending in {card.last_four}
+                          </h3>
+                          <p className="mt-1 truncate text-xs font-medium text-slate-600 dark:text-slate-400">
                             {card.cardholder_name || customerProfile?.display_name || (card.is_virtual ? 'Virtual card' : 'Primary card')}
                           </p>
                         </div>
-                        <span className="rounded-full bg-emerald-200 px-2 py-1 text-[10px] font-bold uppercase text-emerald-800">
+                        <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
                           {card.status || 'Active'}
                         </span>
                       </div>
-                      <div className="mt-4 min-h-24 rounded-xl bg-violet-200 p-4 text-slate-950 shadow-inner">
-                        <div className="flex h-full min-h-16 flex-col justify-between">
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-xs font-bold tracking-widest">NOVA</span>
-                            {card.is_virtual && <span className="rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-black uppercase text-violet-700">Virtual</span>}
-                          </div>
-                          <div className="text-sm font-bold">•••• •••• •••• {card.last_four}</div>
-                          <div className="text-xs font-black">VISA</div>
-                        </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <span className="rounded-full bg-indigo-100 px-2.5 py-1 text-[10px] font-bold uppercase text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                          {card.is_virtual ? 'Virtual' : 'Physical'}
+                        </span>
+                        {!card.is_virtual && (
+                          <span className="rounded-full bg-slate-200 px-2.5 py-1 text-[10px] font-bold uppercase text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                            Primary card
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}
