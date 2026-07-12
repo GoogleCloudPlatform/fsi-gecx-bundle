@@ -23,6 +23,8 @@ def test_evaluate_authorization_returns_deterministic_baseline_decision():
     assert first.reason_codes == ["BASELINE_LOW_RISK"]
     assert first.features["amount_cents"] == 1500
     assert first.features["merchant_category_code"] == "5812"
+    assert first.features["mcc_primary_category"] is not None
+    assert "merchant_intelligence_matched" in first.features
     assert first.model_version == "local-deterministic-v1"
 
 
@@ -68,6 +70,32 @@ def test_extract_authorization_features_handles_empty_history():
     assert features["amount_to_recent_average_ratio"] is None
     assert features["distance_from_recent_card_present_location"] is None
     assert features["transaction_channel"] == "CARD_PRESENT"
+    assert features["mcc_primary_category"]
+    assert isinstance(features["mcc_risk_score"], int)
+    assert features["merchant_intelligence_matched"] is False
+
+
+def test_merchant_intelligence_features_are_metadata_only_for_now():
+    service = FraudScoringService()
+
+    decision = service.evaluate_authorization(
+        {
+            "amount_cents": 4200,
+            "merchant_category_code": "5814",
+            "merchant_name": "DD *DOORDASH 12345",
+        },
+        context={"transaction_channel": "ECOMMERCE", "merchant_country_code": "USA"},
+    )
+
+    assert decision.score == 3
+    assert decision.decision == "APPROVED"
+    assert decision.reason_codes == ["BASELINE_LOW_RISK"]
+    assert decision.features["merchant_intelligence_matched"] is True
+    assert decision.features["normalized_merchant"] == "DOORDASH"
+    assert decision.features["merchant_type"] == "aggregator"
+    assert decision.features["merchant_intelligence_risk_score"] == 65
+    assert "CARD_NOT_PRESENT" in decision.features["merchant_intelligence_flags"]
+    assert decision.features["merchant_intelligence_mcc_match"] is False
 
 
 def test_extract_authorization_features_computes_velocity_amount_and_location():

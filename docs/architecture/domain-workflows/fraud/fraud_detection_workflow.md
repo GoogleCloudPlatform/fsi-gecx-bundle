@@ -94,6 +94,8 @@ The fraud scorer uses a deterministic feature snapshot so every decision is expl
 | :--- | :--- | :--- |
 | Transaction amount | `amount_cents`, amount-to-recent-average ratio | Detects outlier ticket sizes relative to recent account behavior. |
 | Merchant context | MCC, descriptor flags, high-risk merchant flags | Flags known risky categories such as gift cards, digital goods, gaming, brokerage, and gambling-like activity. |
+| MCC taxonomy metadata | MCC category, MCC risk level/score, velocity risk, chargeback flag, risk flags | Preserves enriched MCC context for audit and future feature engineering. These values are metadata-only in `local-deterministic-v1`. |
+| Merchant intelligence metadata | Normalized merchant, merchant type, merchant intelligence risk score, intelligence flags, MCC match | Preserves descriptor normalization and merchant-specific context for audit and future risk-model upgrades. These values are metadata-only in `local-deterministic-v1`. |
 | Channel context | `transaction_channel`, `entry_mode`, ecommerce/card-present markers | Distinguishes chip/contactless/wallet activity from card-not-present ecommerce behavior. |
 | Location context | Merchant country, city, region, lat/lon | Supports international anomaly and impossible-travel detection. |
 | Ecommerce context | IP country, shipping country, digital goods flag | Detects country mismatch and digital-goods risk. |
@@ -111,6 +113,8 @@ The scorer returns:
 | `reason_codes` | Explainable rule triggers such as `IMPOSSIBLE_TRAVEL`, `VELOCITY_SPIKE_10M`, or `GIFT_CARD_OR_DIGITAL_GOODS`. |
 | `feature_snapshot` | JSON payload persisted with the decision for audit and analytics. |
 | `model_version` | Scorer version for future model comparison and replay. |
+
+The current deterministic score does not use MCC taxonomy risk scores or merchant intelligence risk scores as active weights. They are emitted in `feature_snapshot` and the curated fraud decision view so a future model can adopt them without changing the authorization contract.
 
 ---
 

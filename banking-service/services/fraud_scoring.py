@@ -2,8 +2,13 @@ import logging
 import os
 import datetime
 import math
+import json
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
+
+from services.merchant_intelligence_service import MerchantIntelligenceService
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +29,61 @@ DESCRIPTOR_FLAG_KEYWORDS = {
     "APPLE": "ELECTRONICS",
     "CRYPTO": "CRYPTO_LIKE",
 }
+MCC_RESOURCE_PATH = Path(__file__).resolve().parents[1] / "resources" / "data" / "merchant_category_codes.json"
+
+
+@lru_cache(maxsize=1)
+def _load_mcc_feature_map() -> dict[str, dict[str, Any]]:
+    try:
+        rows = json.loads(MCC_RESOURCE_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("Could not load MCC feature resource for fraud snapshots: %s", exc)
+        return {}
+    return {str(row.get("mcc")): row for row in rows if row.get("mcc")}
+
+
+def _mcc_snapshot_features(mcc: str) -> dict[str, Any]:
+    row = _load_mcc_feature_map().get(str(mcc))
+    if not row:
+        return {
+            "mcc_primary_category": None,
+            "mcc_detailed_category": None,
+            "mcc_risk_level": None,
+            "mcc_risk_score": None,
+            "mcc_velocity_risk": None,
+            "mcc_chargeback_prone": None,
+            "mcc_risk_flags": [],
+        }
+    metadata = row.get("metadata") or {}
+    return {
+        "mcc_primary_category": row.get("primary_category"),
+        "mcc_detailed_category": row.get("detailed_category"),
+        "mcc_risk_level": row.get("risk_level"),
+        "mcc_risk_score": row.get("risk_score"),
+        "mcc_velocity_risk": row.get("velocity_risk"),
+        "mcc_chargeback_prone": row.get("chargeback_prone"),
+        "mcc_risk_flags": list(metadata.get("risk_flags") or []),
+    }
+
+
+def _merchant_intelligence_snapshot_features(
+    merchant_name: str,
+    mcc: str,
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    intelligence = context.get("merchant_intelligence")
+    if not isinstance(intelligence, dict):
+        intelligence = MerchantIntelligenceService.lookup(merchant_name, mcc=mcc)
+    return {
+        "merchant_intelligence_matched": bool(intelligence.get("matched")),
+        "normalized_merchant": intelligence.get("normalized_merchant"),
+        "merchant_type": intelligence.get("merchant_type"),
+        "merchant_intelligence_mccs": list(intelligence.get("mccs") or []),
+        "merchant_intelligence_risk_score": intelligence.get("merchant_risk_score"),
+        "merchant_intelligence_flags": list(intelligence.get("flags") or []),
+        "merchant_intelligence_match_type": intelligence.get("match_type"),
+        "merchant_intelligence_mcc_match": bool(intelligence.get("mcc_match")),
+    }
 
 
 def _coerce_datetime(value: Any) -> datetime.datetime | None:
@@ -110,6 +170,8 @@ class FraudScoringService:
             {flag for keyword, flag in DESCRIPTOR_FLAG_KEYWORDS.items() if keyword in descriptor}
             | set(context.get("merchant_high_risk_flags") or [])
         )
+        mcc_features = _mcc_snapshot_features(mcc)
+        merchant_intelligence_features = _merchant_intelligence_snapshot_features(merchant_name, mcc, context)
 
         merchant_country = (context.get("merchant_country_code") or payload.get("merchant_country_code") or "USA")
         merchant_country = str(merchant_country).upper()
@@ -197,6 +259,8 @@ class FraudScoringService:
             "fraud_pattern_label": context.get("fraud_pattern_label") or payload.get("fraud_pattern_label"),
             "fraud_pattern_sequence": context.get("fraud_pattern_sequence") or payload.get("fraud_pattern_sequence"),
         }
+        features.update(mcc_features)
+        features.update(merchant_intelligence_features)
         return features
 
     def score_features(self, features: dict[str, Any]) -> tuple[int, list[str]]:

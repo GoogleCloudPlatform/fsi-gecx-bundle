@@ -193,6 +193,8 @@ def test_process_authorization_publishes_structured_fraud_decision(db_session):
     assert result["fraud_decision"]["features"]["is_digital_goods"] is True
     assert result["fraud_decision"]["features"]["recent_auth_count_10m"] == 1
     assert result["fraud_decision"]["features"]["amount_to_recent_average_ratio"] == 95.0
+    assert result["fraud_decision"]["features"]["mcc_risk_score"] is not None
+    assert result["fraud_decision"]["features"]["merchant_intelligence_matched"] is False
 
     auth = db_session.query(TransactionAuthorization).filter_by(retrieval_reference_number="777777777777").first()
     assert auth is not None
@@ -210,6 +212,8 @@ def test_process_authorization_publishes_structured_fraud_decision(db_session):
     assert decision_record.decision == "FLAGGED"
     assert decision_record.reason_codes == ["EXPLICIT_SIMULATION_OVERRIDE"]
     assert decision_record.feature_snapshot["recent_auth_count_10m"] == 1
+    assert "mcc_primary_category" in decision_record.feature_snapshot
+    assert "merchant_intelligence_matched" in decision_record.feature_snapshot
     assert decision_record.transaction_channel == "ECOMMERCE"
 
     audit_event = db_session.query(AuditOutbox).filter_by(event_type="FRAUD_MODEL_DECISION_RECORDED").first()
@@ -242,6 +246,8 @@ def test_process_authorization_publishes_structured_fraud_decision(db_session):
     assert event_payload["transaction_channel"] == "ECOMMERCE"
     assert event_payload["merchant_country_code"] == "USA"
     assert event_payload["fraud_features"]["recent_auth_count_10m"] == 1
+    assert "mcc_risk_score" in event_payload["fraud_features"]
+    assert "merchant_intelligence_matched" in event_payload["fraud_features"]
 
 
 def test_process_settlement_allows_flagged_authorization_hold(db_session):

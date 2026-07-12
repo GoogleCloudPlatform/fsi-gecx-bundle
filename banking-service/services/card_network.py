@@ -89,6 +89,7 @@ def _build_authorization_context(db: Session, payload: Dict[str, Any], merchant_
         "shipping_country_code": payload.get("shipping_country_code"),
         "is_digital_goods": bool(payload.get("is_digital_goods", False)),
         "merchant_high_risk_flags": payload.get("merchant_high_risk_flags") or [],
+        "merchant_intelligence": payload.get("merchant_intelligence"),
         "synthetic_fraud_label": payload.get("synthetic_fraud_label"),
         "fraud_pattern_label": payload.get("fraud_pattern_label"),
         "fraud_pattern_sequence": payload.get("fraud_pattern_sequence"),
@@ -110,6 +111,7 @@ def _build_authorization_context(db: Session, payload: Dict[str, Any], merchant_
                     "merchant_longitude": context["merchant_longitude"] or enriched.get("longitude"),
                     "is_digital_goods": context["is_digital_goods"] or ("DIGITAL_GOODS" in enriched.get("high_risk_flags", [])),
                     "merchant_high_risk_flags": context["merchant_high_risk_flags"] or enriched.get("high_risk_flags", []),
+                    "merchant_intelligence": context["merchant_intelligence"] or enriched.get("merchant_intelligence"),
                 }
             )
         except Exception as exc:
