@@ -16,6 +16,7 @@ import {
   Search,
   SlidersHorizontal,
   Lock as LockIcon,
+  Loader2,
 } from 'lucide-react';
 import { 
   getAccountsSummary, 
@@ -26,7 +27,7 @@ import {
 import BillPayModal from './BillPayModal.jsx';
 import SpendAnalyzerModal from './SpendAnalyzerModal.jsx';
 
-function AccountsView({ fbUser, customerProfile }) {
+function AccountsView({ fbUser, customerProfile, isReady }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -380,6 +381,14 @@ function AccountsView({ fbUser, customerProfile }) {
   const handleBackToMaster = () => {
     setSearchParams({});
   };
+
+  if (!isReady) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
+      </div>
+    );
+  }
 
   if (!fbUser) {
     return (

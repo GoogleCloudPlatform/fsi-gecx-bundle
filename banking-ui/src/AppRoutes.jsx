@@ -83,7 +83,7 @@ export default function AppRoutes({
         <CheckingAccountsView activeBot={activeBot} setActiveBot={setActiveBot} />
       } />
       <Route path="/accounts" element={
-        <AccountsView fbUser={fbUser} customerProfile={customerProfile} />
+        <AccountsView fbUser={fbUser} customerProfile={customerProfile} isReady={isReady} />
       } />
       <Route path="/savings-accounts" element={
         <SavingsAccountsView />
