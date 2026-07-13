@@ -2398,6 +2398,10 @@ function AppContent() {
                 <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.BANKING_API_URL || 'unknown'}</span>
               </div>
               <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Data Generator API URL</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.DATA_GENERATOR_API_URL || import.meta.env.VITE_DATA_GENERATOR_API_URL || 'unknown'}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
                 <span className="font-semibold text-slate-500 dark:text-slate-400">CCAI Platform Enabled</span>
                 <span className="font-mono text-slate-800 dark:text-slate-200">{enableCcai() ? 'Yes' : 'No'}</span>
               </div>
