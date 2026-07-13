@@ -37,6 +37,7 @@ active_customer_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("ac
 session_event_callback_var: contextvars.ContextVar = contextvars.ContextVar("session_event_callback", default=None)
 session_should_end_var: contextvars.ContextVar[bool] = contextvars.ContextVar("session_should_end", default=False)
 is_processing_tool_var: contextvars.ContextVar[bool] = contextvars.ContextVar("is_processing_tool", default=False)
+wallet_consent_var: contextvars.ContextVar = contextvars.ContextVar("wallet_consent", default=None)
 
 
 def get_banking_service_mcp_url() -> str:
@@ -89,6 +90,7 @@ def bind_session_context(customer_id: str, callback):
         "callback": session_event_callback_var.set(callback),
         "should_end": session_should_end_var.set(False),
         "is_processing": is_processing_tool_var.set(False),
+        "wallet_consent": wallet_consent_var.set({"offered": False, "confirmed": False}),
     }
 
 
@@ -97,6 +99,7 @@ def reset_session_context(tokens: dict) -> None:
     if not tokens:
         return
     is_processing_tool_var.reset(tokens["is_processing"])
+    wallet_consent_var.reset(tokens["wallet_consent"])
     session_should_end_var.reset(tokens["should_end"])
     session_event_callback_var.reset(tokens["callback"])
     active_customer_id_var.reset(tokens["customer"])
@@ -120,6 +123,30 @@ def is_tool_processing() -> bool:
 
 def set_tool_processing(is_processing: bool) -> None:
     is_processing_tool_var.set(is_processing)
+
+
+def record_wallet_offer(offered: bool) -> None:
+    """Record a completed Wallet offer in shared per-session live state."""
+    consent = wallet_consent_var.get()
+    if consent is not None and offered:
+        consent["offered"] = True
+        consent["confirmed"] = False
+
+
+def record_wallet_customer_response(confirmed: bool) -> None:
+    """Resolve a pending Wallet offer from the next completed customer turn."""
+    consent = wallet_consent_var.get()
+    if consent is not None and consent.get("offered"):
+        consent["confirmed"] = confirmed
+        consent["offered"] = False
+
+
+def clear_wallet_consent() -> None:
+    """Invalidate consent when another action breaks the offer/approval sequence."""
+    consent = wallet_consent_var.get()
+    if consent is not None:
+        consent["offered"] = False
+        consent["confirmed"] = False
 
 def notify_event(event_dict):
     cb = session_event_callback_var.get()
@@ -204,6 +231,13 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
     logger = logging.getLogger("voice_agent")
     fraud_context = tool_context.state.get("fraud_context", {}) if hasattr(tool_context, "state") else {}
     fraud_playbook = tool_context.state.get("fraud_playbook", {}) if hasattr(tool_context, "state") else {}
+    wallet_consent = wallet_consent_var.get() or {}
+    if wallet_consent.get("confirmed"):
+        fraud_playbook["wallet_customer_confirmed"] = True
+        tool_context.state["fraud_playbook"] = fraud_playbook
+    if tool_name != "push_card_to_google_wallet":
+        clear_wallet_consent()
+        fraud_playbook["wallet_customer_confirmed"] = False
     logger.info(
         "[CALLBACK] before_tool_callback triggered %s args=%s",
         format_log_context(
@@ -226,12 +260,6 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
     }
     sequencing_error = validate_fraud_tool_sequence(fraud_playbook, tool_name, args)
     if sequencing_error:
-        if (
-            tool_name == "push_card_to_google_wallet"
-            and sequencing_error == "Ask the customer to explicitly confirm Google Wallet provisioning before queueing it."
-        ):
-            fraud_playbook["wallet_push_confirmation_requested"] = True
-            tool_context.state["fraud_playbook"] = fraud_playbook
         logger.warning(
             "[CALLBACK] fraud playbook drift %s",
             format_log_context(

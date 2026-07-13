@@ -1,8 +1,10 @@
 from pathlib import Path
 
 from agent.fraud_voice import (
+    agent_offered_google_wallet,
     build_fraud_playbook,
     build_initial_greeting,
+    customer_confirmed_google_wallet,
     mark_fraud_tool_completed,
     validate_fraud_tool_sequence,
 )
@@ -115,11 +117,25 @@ def test_validate_fraud_tool_sequence_allows_wallet_push_after_confirmation() ->
     playbook["open_alert_inspected"] = True
     playbook["triage_submitted"] = True
     playbook["replacement_issued"] = True
-    playbook["wallet_push_confirmation_requested"] = True
+    playbook["wallet_customer_confirmed"] = True
 
     error = validate_fraud_tool_sequence(playbook, "push_card_to_google_wallet", {})
 
     assert error is None
+
+
+def test_wallet_offer_requires_google_wallet_in_completed_agent_turn() -> None:
+    assert agent_offered_google_wallet("Would you like me to add it to Google Wallet?") is True
+    assert agent_offered_google_wallet("Your virtual card is ready.") is False
+    assert agent_offered_google_wallet("Google Wallet provisioning is already queued.") is False
+
+
+def test_wallet_confirmation_accepts_only_unambiguous_affirmatives() -> None:
+    assert customer_confirmed_google_wallet("Yes, please do") is True
+    assert customer_confirmed_google_wallet("That works") is True
+    assert customer_confirmed_google_wallet("No, I don't use Google Wallet") is False
+    assert customer_confirmed_google_wallet("What does that do?") is False
+    assert customer_confirmed_google_wallet("Yes, but don't add it") is False
 
 
 def test_validate_fraud_tool_sequence_requires_replacement_before_wallet_push() -> None:
@@ -134,6 +150,22 @@ def test_validate_fraud_tool_sequence_requires_replacement_before_wallet_push() 
     error = validate_fraud_tool_sequence(playbook, "push_card_to_google_wallet", {})
 
     assert error == "Complete fraud triage and replacement before queueing Google Wallet provisioning."
+
+
+def test_validate_fraud_tool_sequence_blocks_duplicate_wallet_push() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    playbook["replacement_issued"] = True
+    playbook["wallet_customer_confirmed"] = True
+    playbook["wallet_push_queued"] = True
+
+    error = validate_fraud_tool_sequence(playbook, "push_card_to_google_wallet", {})
+
+    assert error == "Google Wallet provisioning has already been queued. Do not submit it again."
 
 
 def test_validate_fraud_tool_sequence_rejects_wrong_triage_alert_id() -> None:

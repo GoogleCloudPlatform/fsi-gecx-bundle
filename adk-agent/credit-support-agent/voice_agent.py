@@ -20,9 +20,16 @@ from agent.agent import (
     create_voice_agent,
     is_session_end_requested,
     is_tool_processing,
+    record_wallet_customer_response,
+    record_wallet_offer,
     reset_session_context,
 )
-from agent.fraud_voice import build_fraud_playbook, build_initial_greeting
+from agent.fraud_voice import (
+    agent_offered_google_wallet,
+    build_fraud_playbook,
+    build_initial_greeting,
+    customer_confirmed_google_wallet,
+)
 from agent.instructions import compose_session_instruction
 from agent.version import BUILD_VERSION, BUILD_COMMIT_ID
 from agent.events import DataChannelEvent
@@ -747,12 +754,18 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                             
                 # Broadcast transcriptions over data channel for UI display when complete
                 if event.input_transcription and event.input_transcription.finished:
+                    record_wallet_customer_response(
+                        customer_confirmed_google_wallet(event.input_transcription.text)
+                    )
                     on_agent_event({
                         "type": "TRANSCRIPT",
                         "author": "user",
                         "text": event.input_transcription.text
                     })
                 if event.output_transcription and event.output_transcription.finished:
+                    record_wallet_offer(
+                        agent_offered_google_wallet(event.output_transcription.text)
+                    )
                     on_agent_event({
                         "type": "TRANSCRIPT",
                         "author": "agent",
@@ -981,7 +994,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         
         async def wait_for_disconnect():
             await disconnect_event.wait()
-            raise Exception("LiveKit room disconnected")
+            logger.info(
+                "LiveKit room disconnected; ending voice session %s",
+                session_log_context(room_name, customer_id, session_id, mode),
+            )
         disconnect_task = asyncio.create_task(wait_for_disconnect())
 
         async def wait_for_handoff():
