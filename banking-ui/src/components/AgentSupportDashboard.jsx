@@ -423,7 +423,7 @@ export default function AgentSupportDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch flex-grow mb-8">
         
         {/* Left Panel: Pending Escalations Queue */}
-        <div className="bg-white dark:bg-slate-900/50 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col justify-between min-h-[500px] shadow-sm">
+        <div className="bg-white dark:bg-slate-900/50 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col justify-between min-h-[500px] shadow-sm" id="inbound-request-queue">
           <div>
             <h2 className="text-md font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-4 border-b border-slate-200 dark:border-slate-805 pb-2">
               Inbound Request Queue ({escalations.length})
@@ -470,7 +470,7 @@ export default function AgentSupportDashboard() {
             <div className="flex flex-col justify-between h-full gap-6">
               
               {/* Top metadata info */}
-              <div className="flex justify-between items-start border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div className="flex justify-between items-start border-b border-slate-200 dark:border-slate-800 pb-4" id="takeover-session-header">
                 <div>
                   <h3 className="text-lg font-bold text-slate-900 dark:text-slate-200">Session Context: {selectedEscalation.customer_id}</h3>
                   <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5 font-semibold">Escalation Reason: {selectedEscalation.reason}</p>
@@ -500,7 +500,7 @@ export default function AgentSupportDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-grow items-stretch max-h-[350px] overflow-hidden">
                 
                 {/* Transcript feed */}
-                <div className="flex flex-col border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 bg-slate-50/50 dark:bg-slate-950/20 overflow-y-auto max-h-[330px] scrollbar-thin">
+                <div className="flex flex-col border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 bg-slate-50/50 dark:bg-slate-950/20 overflow-y-auto max-h-[330px] scrollbar-thin" id="live-chat-history">
                   <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 block">Conversation History</span>
                   <div className="space-y-3">
                     {!selectedEscalation.transcript || selectedEscalation.transcript.length === 0 ? (
@@ -528,7 +528,7 @@ export default function AgentSupportDashboard() {
                 </div>
 
                 {/* Ledger Interactive Co-browsing */}
-                <div className="flex flex-col border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 bg-slate-50/50 dark:bg-slate-950/20 max-h-[330px]">
+                <div className="flex flex-col border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 bg-slate-50/50 dark:bg-slate-950/20 max-h-[330px]" id="cobrowse-control-panel">
                   <div className="flex items-center gap-1.5 mb-3">
                     <Sparkles size={13} className="text-yellow-500 dark:text-yellow-400 animate-pulse" />
                     <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Co-Browsing Control Panel</span>
@@ -587,7 +587,7 @@ export default function AgentSupportDashboard() {
               </div>
 
               {/* Quick Actions Panel */}
-              <div className="border-t border-slate-205 dark:border-slate-800 pt-4 mt-2">
+              <div className="border-t border-slate-205 dark:border-slate-800 pt-4 mt-2" id="supervisor-quick-actions">
                 <span className="text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider mb-3 block">Supervisor Quick Actions</span>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   
@@ -692,6 +692,34 @@ export default function AgentSupportDashboard() {
           </div>
         </div>
       </GcpInfoModal>
+
+      {/* Joyride Onboarding Tour */}
+      {tourRun && domReady && steps.length > 0 && (
+        <Joyride
+          key={tourKey}
+          run={tourRun}
+          options={{
+            scrollOffset: 120
+          }}
+          steps={steps}
+          continuous={true}
+          showSkipButton={true}
+          showCloseButton={true}
+          onEvent={(data) => {
+            const { status, type, action } = data;
+            if (
+              [STATUS.FINISHED, STATUS.SKIPPED].includes(status) ||
+              type === EVENTS.TOUR_END ||
+              action === ACTIONS.CLOSE ||
+              action === ACTIONS.SKIP
+            ) {
+              setTourRun(false);
+              localStorage.setItem('supervisor-tour-completed', 'true');
+            }
+          }}
+          styles={getJoyrideStyles(resolvedTheme, brandColorFrom)}
+        />
+      )}
 
     </div>
   );
