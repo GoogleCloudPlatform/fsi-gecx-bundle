@@ -16,7 +16,8 @@ import {
   ShieldCheck,
   Video,
   VideoOff,
-  ExternalLink
+  ExternalLink,
+  RefreshCw
 } from 'lucide-react';
 import { 
   getCreditCardAccount, 
@@ -30,6 +31,24 @@ import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
+
+const AUDIO_INPUT_STORAGE_KEY = 'voice-support-audio-input';
+
+function microphoneConstraints(deviceId) {
+  return {
+    audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+  };
+}
+
+function microphoneErrorMessage(error) {
+  if (error?.name === 'NotAllowedError') {
+    return 'Microphone permission denied. Enable microphone access in browser settings.';
+  }
+  if (error?.name === 'NotFoundError' || error?.name === 'OverconstrainedError') {
+    return 'The selected microphone is no longer available. Choose another audio input and try again.';
+  }
+  return 'Failed to access the selected microphone or establish the call connection.';
+}
 
 function FraudStep({ label, complete, isLast = false }) {
   return (
@@ -167,6 +186,11 @@ export default function VoiceSupportView() {
   const [engine, setEngine] = useState('livekit'); // 'livekit' | 'gecx'
   const [volume, setVolume] = useState(0.8);
   const [latency, setLatency] = useState(0);
+  const [audioInputs, setAudioInputs] = useState([]);
+  const [selectedAudioInputId, setSelectedAudioInputId] = useState(
+    () => localStorage.getItem(AUDIO_INPUT_STORAGE_KEY) || ''
+  );
+  const [isRefreshingAudioInputs, setIsRefreshingAudioInputs] = useState(false);
 
   const affectedCardId = normalizeCardId(fraudContext?.fraud_alert?.card_id);
   const cards = account?.cards || [];
@@ -269,6 +293,46 @@ export default function VoiceSupportView() {
   const volumeRef = useRef(0.8);
   const micEnabledRef = useRef(true);
   const pingIntervalRef = useRef(null);
+
+  const refreshAudioInputs = useCallback(async (requestPermissions = false) => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      setErrorMessage('Audio input selection is not supported by this browser.');
+      return;
+    }
+
+    setIsRefreshingAudioInputs(true);
+    try {
+      const devices = await Room.getLocalDevices('audioinput', requestPermissions);
+      setAudioInputs(devices);
+      setSelectedAudioInputId((currentDeviceId) => {
+        if (currentDeviceId && devices.some((device) => device.deviceId === currentDeviceId)) {
+          return currentDeviceId;
+        }
+        // Browsers can hide every device until permission is granted. Preserve
+        // a saved choice during that anonymous pre-permission enumeration.
+        if (currentDeviceId && devices.length === 0 && !requestPermissions) {
+          return currentDeviceId;
+        }
+        localStorage.removeItem(AUDIO_INPUT_STORAGE_KEY);
+        return '';
+      });
+    } catch (error) {
+      console.error('Failed to enumerate microphones:', error);
+      setErrorMessage(microphoneErrorMessage(error));
+    } finally {
+      setIsRefreshingAudioInputs(false);
+    }
+  }, []);
+
+  const selectAudioInput = (deviceId) => {
+    setSelectedAudioInputId(deviceId);
+    if (deviceId) {
+      localStorage.setItem(AUDIO_INPUT_STORAGE_KEY, deviceId);
+    } else {
+      localStorage.removeItem(AUDIO_INPUT_STORAGE_KEY);
+    }
+    setErrorMessage('');
+  };
 
   const stopPlayoutQueue = useCallback(() => {
     activeSourcesRef.current.forEach(source => {
@@ -386,6 +450,13 @@ export default function VoiceSupportView() {
   useEffect(() => {
     micEnabledRef.current = micEnabled;
   }, [micEnabled]);
+
+  useEffect(() => {
+    refreshAudioInputs(false);
+    const handleDeviceChange = () => refreshAudioInputs(false);
+    navigator.mediaDevices?.addEventListener?.('devicechange', handleDeviceChange);
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', handleDeviceChange);
+  }, [refreshAudioInputs]);
 
   // Force voice/audio mode when using GECX engine (video avatars not supported)
   useEffect(() => {
@@ -573,7 +644,9 @@ export default function VoiceSupportView() {
     setTranscripts([{ author: 'system', text: 'Connecting to GECX voice stream...' }]);
 
     try {
-      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const micStream = await navigator.mediaDevices.getUserMedia(
+        microphoneConstraints(selectedAudioInputId)
+      );
       micStreamRef.current = micStream;
 
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
@@ -696,11 +769,7 @@ export default function VoiceSupportView() {
       setTranscripts([]);
     } catch (err) {
       console.error("Failed to initialize GECX call:", err);
-      setErrorMessage(
-        err.name === 'NotAllowedError' 
-          ? 'Microphone permission denied. Enable microphone access in browser settings.' 
-          : 'Failed to access microphone or establish call connection.'
-      );
+      setErrorMessage(microphoneErrorMessage(err));
       cleanupGecxSession();
     } finally {
       setIsConnecting(false);
@@ -719,11 +788,13 @@ export default function VoiceSupportView() {
     try {
       // Verify microphone access before establishing network connection
       try {
-        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const micStream = await navigator.mediaDevices.getUserMedia(
+          microphoneConstraints(selectedAudioInputId)
+        );
         micStream.getTracks().forEach(track => track.stop());
       } catch (micErr) {
         console.error("Microphone check failed:", micErr);
-        setErrorMessage('Microphone permission denied. Enable microphone access in browser settings.');
+        setErrorMessage(microphoneErrorMessage(micErr));
         setIsConnecting(false);
         return;
       }
@@ -944,7 +1015,10 @@ export default function VoiceSupportView() {
       console.log('Connected to LiveKit Room');
 
       // 5. Publish microphone track
-      await room.localParticipant.setMicrophoneEnabled(true);
+      await room.localParticipant.setMicrophoneEnabled(
+        true,
+        selectedAudioInputId ? { deviceId: { exact: selectedAudioInputId } } : undefined
+      );
       
       setIsConnected(true);
       setTranscripts([]);
@@ -1403,18 +1477,57 @@ export default function VoiceSupportView() {
         )}
 
         {/* Buttons */}
-        <div className="flex items-center gap-4">
+        <div className="flex w-full flex-wrap items-end justify-center gap-4">
           {!isConnected ? (
-            <button
-              onClick={startConsultation}
-              disabled={isConnecting}
-              className={`flex items-center gap-2 px-8 py-3 rounded-full font-bold shadow-lg shadow-blue-500/20 text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all transform active:scale-95 ${
-                isConnecting ? 'opacity-70 cursor-not-allowed' : ''
-              }`}
-            >
-              <Phone size={18} />
-              {isConnecting ? 'Connecting...' : 'Start Voice Consultation'}
-            </button>
+            <>
+              <div className="flex min-w-0 w-full max-w-sm flex-col gap-1.5 text-left sm:w-auto sm:min-w-72">
+                <label htmlFor="voice-audio-input" className="pl-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Audio input
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <Mic className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                    <select
+                      id="voice-audio-input"
+                      value={selectedAudioInputId}
+                      onChange={(event) => selectAudioInput(event.target.value)}
+                      disabled={isConnecting}
+                      className="h-11 w-full truncate rounded-xl border border-slate-300 bg-white pl-9 pr-8 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                    >
+                      <option value="">System default microphone</option>
+                      {selectedAudioInputId && !audioInputs.some((device) => device.deviceId === selectedAudioInputId) && (
+                        <option value={selectedAudioInputId}>Saved microphone (refresh to identify)</option>
+                      )}
+                      {audioInputs.map((device, index) => (
+                        <option key={device.deviceId} value={device.deviceId}>
+                          {device.label || `Microphone ${index + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => refreshAudioInputs(true)}
+                    disabled={isConnecting || isRefreshingAudioInputs}
+                    aria-label="Refresh microphones"
+                    title="Allow access and refresh microphones"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 transition hover:border-blue-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-400 dark:hover:border-blue-500 dark:hover:text-blue-400"
+                  >
+                    <RefreshCw size={16} className={isRefreshingAudioInputs ? 'animate-spin' : ''} />
+                  </button>
+                </div>
+              </div>
+              <button
+                onClick={startConsultation}
+                disabled={isConnecting}
+                className={`flex h-12 items-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-8 font-bold text-white shadow-lg shadow-blue-500/20 transition-all transform hover:from-blue-500 hover:to-indigo-500 active:scale-95 ${
+                  isConnecting ? 'opacity-70 cursor-not-allowed' : ''
+                }`}
+              >
+                <Phone size={18} />
+                {isConnecting ? 'Connecting...' : 'Start Voice Consultation'}
+              </button>
+            </>
           ) : (
             <>
               <button

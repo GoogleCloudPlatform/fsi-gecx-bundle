@@ -986,6 +986,11 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
           name  = "REQUIRE_CDC_BOOTSTRAP"
           value = "true"
         }
+
+        env {
+          name  = "CDC_REPLICATION_USER"
+          value = google_sql_user.banking_bq_connector.name
+        }
       }
 
       vpc_access {
@@ -1008,7 +1013,8 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
 
   depends_on = [
     google_project_service.run_googleapis_com,
-    google_secret_manager_secret_iam_member.banking_db_migration_postgres_root_password_accessor
+    google_secret_manager_secret_iam_member.banking_db_migration_postgres_root_password_accessor,
+    google_sql_user.banking_bq_connector
   ]
 }
 
