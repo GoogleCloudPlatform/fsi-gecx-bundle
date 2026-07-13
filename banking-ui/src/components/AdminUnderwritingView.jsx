@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   FileText, ShieldAlert, CheckCircle2, 
   XCircle, RefreshCw, User, AlertCircle, Clipboard, 
@@ -10,6 +10,9 @@ import { useSettings } from '../context/SettingsContext.jsx';
 import api from '../utils/api.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
+import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
+import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
+import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 
 const CONFIDENCE_THRESHOLDS = {
   ssn: 0.95,
@@ -37,7 +40,8 @@ const CANONICAL_SCHEMAS = {
 
 function AdminUnderwritingView({ fbUser }) {
   const navigate = useNavigate();
-  const { brandColorFrom, brandColorTo } = useSettings();
+  const location = useLocation();
+  const { brandColorFrom, brandColorTo, resolvedTheme } = useSettings();
   const projectId = window.firebaseConfig?.projectId;
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
@@ -67,6 +71,96 @@ function AdminUnderwritingView({ fbUser }) {
   
   // Optimistic Lock modal state
   const [showConflictModal, setShowConflictModal] = useState(false);
+
+  // Joyride Tour States
+  const [tourRun, setTourRun] = useState(false);
+  const [tourKey, setTourKey] = useState(0);
+  const [domReady, setDomReady] = useState(false);
+
+  useEffect(() => {
+    const isCompleted = localStorage.getItem('underwriting-tour-completed') === 'true';
+    const params = new URLSearchParams(location.search);
+    const forceTour = params.get('tour') === 'true';
+
+    if (forceTour || !isCompleted) {
+      setTourRun(true);
+    } else {
+      setTourRun(false);
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    const checkElement = setInterval(() => {
+      if (document.querySelector('#underwriting-tour-btn')) {
+        setDomReady(true);
+        clearInterval(checkElement);
+      }
+    }, 50);
+    return () => clearInterval(checkElement);
+  }, []);
+
+  // Auto-select first exception if tour runs and none selected
+  useEffect(() => {
+    if (tourRun && !selectedArtifact && exceptions.length > 0) {
+      const targetTier = activeTab === 'tier1' ? 'TIER_1_MANUAL_REVIEW' : 'TIER_2_SPOT_CHECK';
+      const match = exceptions.find(exc => exc.verification_tier === targetTier);
+      if (match) {
+        setSelectedArtifact(match);
+        setSelectedArtifactId(match.artifact_id);
+      }
+    }
+  }, [tourRun, selectedArtifact, exceptions, activeTab]);
+
+  const steps = useMemo(() => {
+    const baseSteps = [
+      {
+        target: '#underwriting-tour-btn',
+        content: "Welcome to the Underwriting Portal! This playground allows credit analysts to manually audit document OCR mismatches, review paystub parameters, and authorize mortgage approvals.",
+        placement: 'bottom-end',
+        skipBeacon: true
+      },
+      {
+        target: '#exceptions-ingestion-queue',
+        content: "Ingestion Exception Queue: Browse manual review documents (Tier 1) and spot-checks (Tier 2). Click an item in this list to inspect its contents.",
+        placement: 'right',
+        skipBeacon: true
+      },
+      {
+        target: '#exceptions-queue-refresh',
+        content: "Queue Controls: Refresh the exception list directly from the database to load concurrent ingestion updates.",
+        placement: 'bottom-end',
+        skipBeacon: true
+      }
+    ];
+
+    if (selectedArtifact) {
+      return [
+        ...baseSteps,
+        {
+          target: '#underwriting-pdf-viewer',
+          content: "Document Preview: Review the uploaded tax statement or W-2 PDF file directly inside the browser.",
+          placement: 'right',
+          skipBeacon: true
+        },
+        {
+          target: '#override_form',
+          content: "Override Form: Inspect parsed OCR fields. Confidences are highlighted to identify discrepancies. Override values to match the PDF, add compliance notes, and submit.",
+          placement: 'left',
+          skipBeacon: true
+        }
+      ];
+    } else {
+      return [
+        ...baseSteps,
+        {
+          target: '#underwriting-review-pane-fallback',
+          content: "Review Workspace: Once an artifact is selected, this pane displays the side-by-side PDF preview and OCR correction tables.",
+          placement: 'left',
+          skipBeacon: true
+        }
+      ];
+    }
+  }, [selectedArtifact]);
 
   // Fetch Exceptions on mount
   const fetchExceptions = async (silent = false) => {
@@ -354,7 +448,20 @@ function AdminUnderwritingView({ fbUser }) {
               <div className="text-xs font-bold text-slate-700 dark:text-slate-300">Awaiting Manual Audit</div>
             </div>
           </div>
+          <button
+            id="underwriting-tour-btn"
+            onClick={() => {
+              localStorage.removeItem('underwriting-tour-completed');
+              setTourKey(prev => prev + 1);
+              setTourRun(true);
+            }}
+            className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all flex items-center justify-center active:scale-95 cursor-pointer"
+            title="Take Underwriting Portal Tour"
+          >
+            <GoogleCompassIcon className="w-4 h-4 text-emerald-500" />
+          </button>
           <button 
+            id="exceptions-queue-refresh"
             onClick={() => fetchExceptions()}
             className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all flex items-center justify-center hover:rotate-180"
           >
@@ -388,7 +495,7 @@ function AdminUnderwritingView({ fbUser }) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 flex-1">
         
         {/* Sidebar Queue Panel */}
-        <div className="lg:col-span-3 bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/50 rounded-3xl p-4 h-[calc(100vh-300px)] overflow-y-auto flex flex-col space-y-3">
+        <div className="lg:col-span-3 bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/50 rounded-3xl p-4 h-[calc(100vh-300px)] overflow-y-auto flex flex-col space-y-3" id="exceptions-ingestion-queue">
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-2">Ingestion Exception Queue</span>
           
           <div className="flex border-b border-slate-200 dark:border-slate-800/80 my-2 shrink-0">
@@ -433,9 +540,9 @@ function AdminUnderwritingView({ fbUser }) {
         </div>
 
         {/* Review Workspace split-pane */}
-        <div className="lg:col-span-9 flex flex-col h-[calc(100vh-300px)]">
+        <div className="lg:col-span-9 flex flex-col h-[calc(100vh-300px)]" id="document-split-pane">
           {!selectedArtifact ? (
-            <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 rounded-3xl flex flex-col items-center justify-center text-center p-12">
+            <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 rounded-3xl flex flex-col items-center justify-center text-center p-12" id="underwriting-review-pane-fallback">
               <Clipboard className="w-16 h-16 text-slate-300 dark:text-slate-700 mb-4" />
               <h3 className="text-lg font-bold text-slate-800 dark:text-white">Select an Artifact to Review</h3>
               <p className="text-xs text-slate-500 max-w-sm mt-1 leading-relaxed">
@@ -446,7 +553,7 @@ function AdminUnderwritingView({ fbUser }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 h-full">
               
               {/* Left Pane - PDF Render Canvas */}
-              <div className="bg-slate-950 rounded-3xl border border-slate-800 relative overflow-hidden h-full flex flex-col">
+              <div className="bg-slate-950 rounded-3xl border border-slate-800 relative overflow-hidden h-full flex flex-col" id="underwriting-pdf-viewer">
                 <div className="p-3.5 bg-slate-900 border-b border-slate-800 text-xs font-semibold text-slate-400 flex items-center justify-between">
                   <span>Source PDF Document</span>
                   <span className="text-[10px] uppercase text-emerald-500 font-bold">Temporary Signed Session</span>
@@ -815,6 +922,33 @@ function AdminUnderwritingView({ fbUser }) {
         </div>
       </GcpInfoModal>
 
+      {/* Joyride Onboarding Tour */}
+      {tourRun && domReady && steps.length > 0 && (
+        <Joyride
+          key={tourKey}
+          run={tourRun}
+          options={{
+            scrollOffset: 120
+          }}
+          steps={steps}
+          continuous={true}
+          showSkipButton={true}
+          showCloseButton={true}
+          onEvent={(data) => {
+            const { status, type, action } = data;
+            if (
+              [STATUS.FINISHED, STATUS.SKIPPED].includes(status) ||
+              type === EVENTS.TOUR_END ||
+              action === ACTIONS.CLOSE ||
+              action === ACTIONS.SKIP
+            ) {
+              setTourRun(false);
+              localStorage.setItem('underwriting-tour-completed', 'true');
+            }
+          }}
+          styles={getJoyrideStyles(resolvedTheme, brandColorFrom)}
+        />
+      )}
     </section>
   );
 }

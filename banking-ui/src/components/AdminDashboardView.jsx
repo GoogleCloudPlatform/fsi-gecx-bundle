@@ -12,16 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings, Bell, ExternalLink, Sparkles, Activity } from 'lucide-react';
 import { resetDatabase, getResetDatabaseAccess, getSystemSettings, updateSystemSettings, provisionMyDemo, resetMyDemo, getCreditCardAccount } from '../utils/api.js';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
+import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { showInfoModals } from '../utils/constants.js';
+import { useSettings } from '../context/SettingsContext.jsx';
+import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
+import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 
 function AdminDashboardView() {
+  const { resolvedTheme, brandColorFrom } = useSettings();
   const navigate = useNavigate();
+  const location = useLocation();
   const [isResetting, setIsResetting] = useState(false);
   const [purgeAuditLogs, setPurgeAuditLogs] = useState(false);
   const [purgeDataLake, setPurgeDataLake] = useState(false);
@@ -31,7 +37,72 @@ function AdminDashboardView() {
   const [hasSeededProfile, setHasSeededProfile] = useState(false);
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [isResettingDemo, setIsResettingDemo] = useState(false);
-  
+
+  // Joyride Tour States
+  const [tourRun, setTourRun] = useState(false);
+  const [tourKey, setTourKey] = useState(0);
+  const [domReady, setDomReady] = useState(false);
+
+  useEffect(() => {
+    const isCompleted = localStorage.getItem('admin-tour-completed') === 'true';
+    const params = new URLSearchParams(location.search);
+    const forceTour = params.get('tour') === 'true';
+
+    if (forceTour || !isCompleted) {
+      setTourRun(true);
+    } else {
+      setTourRun(false);
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    const checkElement = setInterval(() => {
+      if (document.querySelector('#admin-tour-btn')) {
+        setDomReady(true);
+        clearInterval(checkElement);
+      }
+    }, 50);
+    return () => clearInterval(checkElement);
+  }, []);
+
+  const steps = useMemo(() => {
+    const s = [
+      {
+        target: '#admin-tour-btn',
+        content: "Welcome to the Admin Portal! Let's take a quick walk through of the tools available here.",
+        placement: 'bottom-end',
+        skipBeacon: true
+      },
+      {
+        target: '#admin-modules-grid',
+        content: "Admin Portals: Launch specialized operational consoles like the Underwriting checklist, Supervisor WebRTC voice session takeover, FCM notification debugger, or simulation triggers.",
+        placement: 'top',
+        skipBeacon: true
+      },
+      {
+        target: '#demo-suite-management',
+        content: "Demo Profile: Seed checking/savings accounts and credit cards with fake data or reset your presenter swipe history to restore the initial demo state.",
+        placement: 'top',
+        skipBeacon: true
+      },
+      {
+        target: '#presentation-settings',
+        content: "Voice & Presentation Options: Override avatar faces, watchdog timeouts, and toggle developer architecture tooltips on or off.",
+        placement: 'top',
+        skipBeacon: true
+      }
+    ];
+    if (fullResetAccess.allowed) {
+      s.push({
+        target: '#system-debug-tools',
+        content: "System Recovery: Presenters can perform a full transactional database wipe or purge BigQuery analytics compliance audit logs.",
+        placement: 'top',
+        skipBeacon: true
+      });
+    }
+    return s;
+  }, [fullResetAccess.allowed]);
+
   // Settings States
   const [hardTimeoutEnabled, setHardTimeoutEnabled] = useState(false);
   const [maxDuration, setMaxDuration] = useState(300);
@@ -245,19 +316,33 @@ function AdminDashboardView() {
             </p>
           </div>
         </div>
-        {showInfoModals() && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsInfoModalOpen(true)}
-            className="p-2.5 rounded-2xl hover:bg-slate-805/80 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
-            title="GCP Admin Integration Info"
+            id="admin-tour-btn"
+            onClick={() => {
+              localStorage.removeItem('admin-tour-completed');
+              setTourKey(prev => prev + 1);
+              setTourRun(true);
+            }}
+            className="p-2.5 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+            title="Take Admin Dashboard Tour"
           >
-            <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
+            <GoogleCompassIcon className="w-5 h-5 text-emerald-500" />
           </button>
-        )}
+          {showInfoModals() && (
+            <button
+              onClick={() => setIsInfoModalOpen(true)}
+              className="p-2.5 rounded-2xl hover:bg-slate-805/80 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+              title="GCP Admin Integration Info"
+            >
+              <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Module Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8" id="admin-modules-grid">
         {adminModules.map((mod) => {
           const IconComponent = mod.icon;
           return (
@@ -296,7 +381,7 @@ function AdminDashboardView() {
         })}
       </div>
 
-      <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+      <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5" id="demo-suite-management">
         <div>
           <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">Personal Demo Suite Management</h4>
           <p className="text-xs text-slate-500 mt-0.5 max-w-3xl">
@@ -335,7 +420,7 @@ function AdminDashboardView() {
       </div>
 
       {/* Settings Form */}
-      <form onSubmit={handleSaveSettings} className="mt-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 space-y-6">
+      <form onSubmit={handleSaveSettings} className="mt-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 space-y-6" id="presentation-settings">
         {/* Section 1: Demo & Website Settings */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800/80">
@@ -454,7 +539,7 @@ function AdminDashboardView() {
       </form>
 
       {fullResetAccess.allowed && (
-        <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4" id="system-debug-tools">
           <div>
             <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">System Debug Tools</h4>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -556,6 +641,34 @@ function AdminDashboardView() {
           </div>
         </div>
       </GcpInfoModal>
+
+      {/* Joyride Onboarding Tour */}
+      {tourRun && domReady && steps.length > 0 && (
+        <Joyride
+          key={tourKey}
+          run={tourRun}
+          options={{
+            scrollOffset: 120
+          }}
+          steps={steps}
+          continuous={true}
+          showSkipButton={true}
+          showCloseButton={true}
+          onEvent={(data) => {
+            const { status, type, action } = data;
+            if (
+              [STATUS.FINISHED, STATUS.SKIPPED].includes(status) ||
+              type === EVENTS.TOUR_END ||
+              action === ACTIONS.CLOSE ||
+              action === ACTIONS.SKIP
+            ) {
+              setTourRun(false);
+              localStorage.setItem('admin-tour-completed', 'true');
+            }
+          }}
+          styles={getJoyrideStyles(resolvedTheme, brandColorFrom)}
+        />
+      )}
 
     </section>
   );

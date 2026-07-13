@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Room, RoomEvent } from 'livekit-client';
 import { 
   Phone, 
@@ -15,8 +15,12 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
+import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { showInfoModals } from '../utils/constants.js';
+import { useSettings } from '../context/SettingsContext.jsx';
+import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
+import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 import { 
   getPendingEscalations, 
   getAgentVoiceToken,
@@ -30,7 +34,14 @@ import {
 import { DataChannelEvent } from '../utils/constants.js';
 
 export default function AgentSupportDashboard() {
+  const { brandColorFrom, resolvedTheme } = useSettings();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Joyride Tour States
+  const [tourRun, setTourRun] = useState(false);
+  const [tourKey, setTourKey] = useState(0);
+  const [domReady, setDomReady] = useState(false);
   const [escalations, setEscalations] = useState([]);
   const [selectedEscalation, setSelectedEscalation] = useState(null);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
@@ -48,6 +59,92 @@ export default function AgentSupportDashboard() {
   const [highlightedTxId, setHighlightedTxId] = useState(null);
   
   const roomRef = useRef(null);
+
+  useEffect(() => {
+    const isCompleted = localStorage.getItem('supervisor-tour-completed') === 'true';
+    const params = new URLSearchParams(location.search);
+    const forceTour = params.get('tour') === 'true';
+
+    if (forceTour || !isCompleted) {
+      setTourRun(true);
+    } else {
+      setTourRun(false);
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    const checkElement = setInterval(() => {
+      if (document.querySelector('#supervisor-tour-btn')) {
+        setDomReady(true);
+        clearInterval(checkElement);
+      }
+    }, 50);
+    return () => clearInterval(checkElement);
+  }, []);
+
+  // Auto-select first escalation if tour runs and none selected
+  useEffect(() => {
+    if (tourRun && !selectedEscalation && escalations.length > 0) {
+      setSelectedEscalation(escalations[0]);
+    }
+  }, [tourRun, selectedEscalation, escalations]);
+
+  const steps = useMemo(() => {
+    const baseSteps = [
+      {
+        target: '#supervisor-tour-btn',
+        content: "Welcome to the Supervisor Takeover Console! Here, you can monitor ongoing customer-to-AI support sessions and step in via WebRTC voice handoffs.",
+        placement: 'bottom-end',
+        skipBeacon: true
+      },
+      {
+        target: '#inbound-request-queue',
+        content: "Inbound Request Queue: Real-time list of customers requesting escalation. Click on a customer card to inspect their context.",
+        placement: 'right',
+        skipBeacon: true
+      }
+    ];
+
+    if (selectedEscalation) {
+      return [
+        ...baseSteps,
+        {
+          target: '#takeover-session-header',
+          content: "Takeover Controller: Connect live voice rooms by clicking 'Accept Takeover' once a customer thread is selected.",
+          placement: 'bottom',
+          skipBeacon: true
+        },
+        {
+          target: '#live-chat-history',
+          content: "Live Chat Transcript: Review all messages exchanged between the customer and the Gemini AI agent before escalation.",
+          placement: 'top',
+          skipBeacon: true
+        },
+        {
+          target: '#cobrowse-control-panel',
+          content: "Co-Browsing Panel: Highlight transactions or reverse fees to guide the customer. Changes sync instantly on their viewport.",
+          placement: 'top',
+          skipBeacon: true
+        },
+        {
+          target: '#supervisor-quick-actions',
+          content: "Supervisor Quick Actions: Direct admin commands to freeze cards or adjust credit limits immediately.",
+          placement: 'top',
+          skipBeacon: true
+        }
+      ];
+    } else {
+      return [
+        ...baseSteps,
+        {
+          target: '#takeover-session-panel-fallback',
+          content: "Takeover Console: When an escalation is active, this center pane displays the live voice controls, chat transcript, co-browsing control panel, and supervisor quick actions.",
+          placement: 'left',
+          skipBeacon: true
+        }
+      ];
+    }
+  }, [selectedEscalation]);
 
   // Poll for pending escalations every 3 seconds
   useEffect(() => {
@@ -301,6 +398,18 @@ export default function AgentSupportDashboard() {
         </div>
         
         <div className="flex items-center gap-3">
+          <button
+            id="supervisor-tour-btn"
+            onClick={() => {
+              localStorage.removeItem('supervisor-tour-completed');
+              setTourKey(prev => prev + 1);
+              setTourRun(true);
+            }}
+            className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+            title="Take Supervisor Console Tour"
+          >
+            <GoogleCompassIcon className="w-4 h-4 text-emerald-500" />
+          </button>
           {isConnected && (
             <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/50 rounded-full px-4 py-1.5 text-xs text-emerald-600 dark:text-emerald-300 font-bold flex items-center gap-2 animate-pulse">
               <Volume2 size={14} className="text-emerald-505 dark:text-emerald-400" />
@@ -337,7 +446,7 @@ export default function AgentSupportDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch flex-grow mb-8">
         
         {/* Left Panel: Pending Escalations Queue */}
-        <div className="bg-white dark:bg-slate-900/50 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col justify-between min-h-[500px] shadow-sm">
+        <div className="bg-white dark:bg-slate-900/50 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col justify-between min-h-[500px] shadow-sm" id="inbound-request-queue">
           <div>
             <h2 className="text-md font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-4 border-b border-slate-200 dark:border-slate-805 pb-2">
               Inbound Request Queue ({escalations.length})
@@ -384,7 +493,7 @@ export default function AgentSupportDashboard() {
             <div className="flex flex-col justify-between h-full gap-6">
               
               {/* Top metadata info */}
-              <div className="flex justify-between items-start border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div className="flex justify-between items-start border-b border-slate-200 dark:border-slate-800 pb-4" id="takeover-session-header">
                 <div>
                   <h3 className="text-lg font-bold text-slate-900 dark:text-slate-200">Session Context: {selectedEscalation.customer_id}</h3>
                   <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5 font-semibold">Escalation Reason: {selectedEscalation.reason}</p>
@@ -414,7 +523,7 @@ export default function AgentSupportDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-grow items-stretch max-h-[350px] overflow-hidden">
                 
                 {/* Transcript feed */}
-                <div className="flex flex-col border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 bg-slate-50/50 dark:bg-slate-950/20 overflow-y-auto max-h-[330px] scrollbar-thin">
+                <div className="flex flex-col border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 bg-slate-50/50 dark:bg-slate-950/20 overflow-y-auto max-h-[330px] scrollbar-thin" id="live-chat-history">
                   <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 block">Conversation History</span>
                   <div className="space-y-3">
                     {!selectedEscalation.transcript || selectedEscalation.transcript.length === 0 ? (
@@ -442,7 +551,7 @@ export default function AgentSupportDashboard() {
                 </div>
 
                 {/* Ledger Interactive Co-browsing */}
-                <div className="flex flex-col border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 bg-slate-50/50 dark:bg-slate-950/20 max-h-[330px]">
+                <div className="flex flex-col border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 bg-slate-50/50 dark:bg-slate-950/20 max-h-[330px]" id="cobrowse-control-panel">
                   <div className="flex items-center gap-1.5 mb-3">
                     <Sparkles size={13} className="text-yellow-500 dark:text-yellow-400 animate-pulse" />
                     <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Co-Browsing Control Panel</span>
@@ -501,7 +610,7 @@ export default function AgentSupportDashboard() {
               </div>
 
               {/* Quick Actions Panel */}
-              <div className="border-t border-slate-205 dark:border-slate-800 pt-4 mt-2">
+              <div className="border-t border-slate-205 dark:border-slate-800 pt-4 mt-2" id="supervisor-quick-actions">
                 <span className="text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider mb-3 block">Supervisor Quick Actions</span>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   
@@ -563,7 +672,7 @@ export default function AgentSupportDashboard() {
 
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 italic">
+            <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 italic" id="takeover-session-panel-fallback">
               <ArrowRight size={48} className="text-slate-300 dark:text-slate-600 mb-3 animate-pulse" />
               Select an active customer escalation from the queue to view context.
             </div>
@@ -606,6 +715,34 @@ export default function AgentSupportDashboard() {
           </div>
         </div>
       </GcpInfoModal>
+
+      {/* Joyride Onboarding Tour */}
+      {tourRun && domReady && steps.length > 0 && (
+        <Joyride
+          key={tourKey}
+          run={tourRun}
+          options={{
+            scrollOffset: 120
+          }}
+          steps={steps}
+          continuous={true}
+          showSkipButton={true}
+          showCloseButton={true}
+          onEvent={(data) => {
+            const { status, type, action } = data;
+            if (
+              [STATUS.FINISHED, STATUS.SKIPPED].includes(status) ||
+              type === EVENTS.TOUR_END ||
+              action === ACTIONS.CLOSE ||
+              action === ACTIONS.SKIP
+            ) {
+              setTourRun(false);
+              localStorage.setItem('supervisor-tour-completed', 'true');
+            }
+          }}
+          styles={getJoyrideStyles(resolvedTheme, brandColorFrom)}
+        />
+      )}
 
     </div>
   );
