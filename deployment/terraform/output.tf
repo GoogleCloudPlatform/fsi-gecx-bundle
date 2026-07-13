@@ -56,3 +56,8 @@ output "banking_service_uri" {
 output "banking_ui_uri" {
   value = var.deploy_cloud_run_services == true ? google_cloud_run_v2_service.banking_ui[0].urls[0] : null
 }
+
+output "real_time_analytics_agent_name" {
+  description = "Stable Gemini Data Analytics agent resource name deployed by the manual Cloud Build trigger."
+  value       = "projects/${var.project_id}/locations/us/dataAgents/real-time-analytics"
+}

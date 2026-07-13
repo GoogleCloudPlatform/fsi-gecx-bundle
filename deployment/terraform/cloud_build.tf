@@ -340,3 +340,32 @@ resource "google_cloudbuild_trigger" "terraform_plan_trigger" {
     _REGION = var.region
   }
 }
+
+resource "google_cloudbuild_trigger" "real_time_analytics_agent_deploy_trigger" {
+  count    = var.deploy_cloud_build_triggers ? 1 : 0
+  name     = "real-time-analytics-agent-deploy"
+  location = var.region
+  tags     = ["data-agent", "analytics", "manual"]
+
+  repository_event_config {
+    repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
+  }
+
+  service_account    = google_service_account.cloudbuild_service_account.id
+  filename           = "deployment/cloud_build/cloudbuild-data-agent-deploy.yaml"
+  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
+
+  substitutions = {
+    _REGION = var.region
+  }
+
+  depends_on = [
+    google_project_service.cloudaicompanion_googleapis_com,
+    google_project_service.geminidataanalytics_googleapis_com,
+    google_project_iam_member.cloudbuild_sa_data_agent_creator,
+    google_project_iam_member.cloudbuild_sa_data_agent_editor,
+    google_bigquery_dataset_iam_member.cloudbuild_sa_agent_analytics_metadata_viewer,
+    google_bigquery_dataset_iam_member.cloudbuild_sa_agent_compliance_metadata_viewer,
+    google_bigquery_dataset_iam_member.cloudbuild_sa_agent_cdc_metadata_viewer,
+  ]
+}
