@@ -26,7 +26,7 @@ from main import app
 from utils.database import Base, get_db
 from utils.auth import get_current_user
 from models.authentication import ValidatedToken
-from models.fraud import FraudAlert, FraudCaseAction
+from models.fraud import FraudAlert, FraudCaseAction, FraudModelDecision
 from models.audit import AuditOutbox
 from models.identity import User, UserSecureMessage
 from models.origination import Account
@@ -568,6 +568,31 @@ async def test_inject_anomaly_success(mock_get_tokens, mock_send_multicast, mock
         TransactionAuthorization.id.in_(fraud_alert.suspicious_authorization_ids)
     ).all()
     assert all(auth.fraud_risk_score and auth.fraud_risk_score > 0 for auth in suspicious_auths)
+    fraud_decisions = db_session.query(FraudModelDecision).filter(
+        FraudModelDecision.authorization_id.in_(fraud_alert.suspicious_authorization_ids)
+    ).all()
+    assert len(fraud_decisions) == 5
+    assert sum(decision.score >= 70 for decision in fraud_decisions) == 4
+    assert all(decision.reason_codes == ["SIMULATED_FRAUD_ANOMALY"] for decision in fraud_decisions)
+    assert all(decision.model_version == "targeted-fraud-simulation-v1" for decision in fraud_decisions)
+    with patch(
+        "services.cdc_monitoring.CdcMonitoringService.get_cached_datastream_metrics",
+        return_value={"status": "SUCCESS"},
+    ), patch(
+        "services.cdc_monitoring.CdcMonitoringService.get_cached_cdc_status",
+        return_value={"status": "SUCCESS"},
+    ), patch(
+        "services.cdc_monitoring.CdcMonitoringService.get_operational_stream_metrics",
+        return_value={},
+    ):
+        monitor_response = await async_client.get(
+            "/api/v1/simulation/operations-summary?window_minutes=15"
+        )
+    assert monitor_response.status_code == status.HTTP_200_OK
+    monitor_impact = monitor_response.json()["impact"]
+    assert monitor_impact["high_risk_transactions"] == 4
+    assert monitor_impact["peak_risk_score"] == 91
+    assert monitor_impact["rules_triggered"] == 1
     account_after_injection = db_session.query(CreditAccount).filter(CreditAccount.id == fraud_alert.credit_account_id).first()
     pending_sum = sum(auth.transaction_amount_cents for auth in db_session.query(TransactionAuthorization).filter(
         TransactionAuthorization.account_id == fraud_alert.credit_account_id,
