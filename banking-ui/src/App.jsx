@@ -1368,16 +1368,18 @@ function AppContent() {
                         <div className="text-sm font-bold text-slate-900 dark:text-white truncate">
                           {customerProfile.first_name || customerProfile.last_name ? `${customerProfile.first_name || ''} ${customerProfile.last_name || ''}`.trim() : 'Customer'}
                         </div>
-                        <div className="text-xs text-slate-400 flex items-center gap-1 min-w-0">
-                          <span className="font-mono text-[10px] select-all">ID: {customerProfile.user_id}</span>
-                          <button 
-                            onClick={() => handleCopy(customerProfile.user_id, 'id')}
-                            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-0.5 cursor-pointer"
-                            title="Copy Customer ID"
-                          >
-                            {copiedField === 'id' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                          </button>
-                        </div>
+                        {isAltPressed && (
+                          <div className="text-xs text-slate-400 flex items-center gap-1 min-w-0">
+                            <span className="font-mono text-[10px] select-all">ID: {customerProfile.user_id}</span>
+                            <button 
+                              onClick={() => handleCopy(customerProfile.user_id, 'id')}
+                              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-0.5 cursor-pointer"
+                              title="Copy Customer ID"
+                            >
+                              {copiedField === 'id' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
 

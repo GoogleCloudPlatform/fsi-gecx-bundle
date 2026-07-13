@@ -233,7 +233,7 @@ function HomeView({
                 </h1>
                 
                 <p className="text-lg text-slate-600 dark:text-slate-400 max-w-xl leading-relaxed">
-                  Take control of your financial future. Manage daily accounts, build long-term deposits, and explore premium credit offers designed just for you.
+                  Take control of your financial future. Manage daily accounts, build long-term wealth, and explore premium credit offers designed just for you.
                 </p>
 
                 <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs font-semibold text-slate-500 dark:text-slate-400 py-2">
@@ -247,7 +247,7 @@ function HomeView({
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                    <span>256-Bit Security</span>
+                    <span>Agentic Banking</span>
                   </div>
                 </div>
 
