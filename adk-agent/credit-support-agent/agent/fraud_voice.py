@@ -3,7 +3,8 @@ import re
 
 _WALLET_OFFER_PATTERN = re.compile(
     r"(?:\b(?:would you like|shall i|can i|want me to|i can)\b.{0,120}\bgoogle\s+wallet\b"
-    r"|\bgoogle\s+wallet\b.{0,120}\b(?:would you like|shall i|can i|want me to)\b)",
+    r"|\b(?:do you (?:want|need|would like)|please confirm)\b.{0,140}\bgoogle\s+wallet\b"
+    r"|\bgoogle\s+wallet\b.{0,140}\b(?:would you like|shall i|can i|want me to|do you (?:want|need|would like)|please confirm)\b)",
     re.IGNORECASE,
 )
 _WALLET_AFFIRMATIVE_PATTERN = re.compile(
@@ -14,6 +15,15 @@ _WALLET_AFFIRMATIVE_PATTERN = re.compile(
 )
 _WALLET_DECLINE_PATTERN = re.compile(
     r"\b(?:no|nope|don't|do not|not now|never|skip it|decline|rather not|stop)\b",
+    re.IGNORECASE,
+)
+_WALLET_RETRY_PATTERN = re.compile(
+    r"\b(?:(?:can|could|would)\s+you\s+(?:please\s+)?try(?:\s+it)?\s+(?:again|one\s+more\s+time)"
+    r"|try(?:\s+it)?\s+again|one\s+more\s+time)\b",
+    re.IGNORECASE,
+)
+_WALLET_RETRY_NEGATION_PATTERN = re.compile(
+    r"\b(?:don't|do not|stop|never)\b.{0,40}\b(?:try|retry)\b",
     re.IGNORECASE,
 )
 
@@ -32,6 +42,8 @@ def customer_confirmed_google_wallet(transcript: str | None) -> bool:
 def classify_google_wallet_response(transcript: str | None) -> str:
     """Classify the customer turn associated with a pending Wallet offer."""
     text = transcript or ""
+    if _WALLET_RETRY_PATTERN.search(text) and not _WALLET_RETRY_NEGATION_PATTERN.search(text):
+        return "CONFIRMED"
     if _WALLET_DECLINE_PATTERN.search(text):
         return "DECLINED"
     if customer_confirmed_google_wallet(text):
@@ -125,6 +137,17 @@ def build_triage_model_result(tool_response: dict | None) -> dict:
     }
 
 
+def prepare_wallet_tool_args(fraud_playbook: dict | None, args: dict | None) -> dict:
+    """Bind Wallet provisioning to trusted replacement-card state."""
+    prepared = dict(args or {})
+    prepared.pop("account_id", None)
+    replacement_card_token = (fraud_playbook or {}).get("replacement_card_token")
+    if replacement_card_token:
+        prepared["card_token"] = replacement_card_token
+    prepared["wallet_provider"] = "GOOGLE_WALLET"
+    return prepared
+
+
 def build_fraud_playbook(voice_context: dict | None) -> dict:
     """Derive a compact fraud-session playbook from trusted voice context."""
     fraud_alert = (voice_context or {}).get("fraud_alert") or {}
@@ -143,6 +166,7 @@ def build_fraud_playbook(voice_context: dict | None) -> dict:
             "confirmed_fraud": False,
             "card_blocked": False,
             "replacement_issued": False,
+            "replacement_card_token": None,
             "wallet_push_offered": False,
             "wallet_customer_confirmed": False,
             "wallet_response_status": "NONE",
@@ -170,6 +194,7 @@ def build_fraud_playbook(voice_context: dict | None) -> dict:
         "confirmed_fraud": False,
         "card_blocked": False,
         "replacement_issued": False,
+        "replacement_card_token": None,
         "wallet_push_offered": False,
         "wallet_customer_confirmed": False,
         "wallet_response_status": "NONE",
@@ -279,15 +304,17 @@ def mark_fraud_tool_completed(
 
     if tool_name == "triage_fraud_case":
         outcome = str((tool_response or {}).get("outcome") or "").strip().upper()
+        replacement_card = (tool_response or {}).get("replacement_card") or {}
         playbook["triage_submitted"] = True
         playbook["resolution_completed"] = True
         if outcome == "CUSTOMER_RECOGNIZED":
             playbook["recognized_activity_confirmed"] = True
         else:
             playbook["confirmed_fraud"] = True
-            if (tool_response or {}).get("replacement_card"):
+            if replacement_card:
                 playbook["card_blocked"] = True
                 playbook["replacement_issued"] = True
+                playbook["replacement_card_token"] = replacement_card.get("new_card_token")
         return playbook
 
     if tool_name == "resolve_fraud_alert":

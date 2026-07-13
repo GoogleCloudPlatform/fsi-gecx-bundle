@@ -10,6 +10,7 @@ from agent.fraud_voice import (
     customer_confirmed_google_wallet,
     invalidate_wallet_authorization,
     mark_fraud_tool_completed,
+    prepare_wallet_tool_args,
     validate_fraud_tool_sequence,
 )
 from agent.instructions import compose_session_instruction
@@ -130,6 +131,8 @@ def test_validate_fraud_tool_sequence_allows_wallet_push_after_confirmation() ->
 
 def test_wallet_offer_requires_google_wallet_in_completed_agent_turn() -> None:
     assert agent_offered_google_wallet("Would you like me to add it to Google Wallet?") is True
+    assert agent_offered_google_wallet("Do you need help adding it to your Google Wallet?") is True
+    assert agent_offered_google_wallet("Please confirm you'd like to add your virtual card to Google Wallet.") is True
     assert agent_offered_google_wallet("Your virtual card is ready.") is False
     assert agent_offered_google_wallet("Google Wallet provisioning is already queued.") is False
 
@@ -148,6 +151,8 @@ def test_wallet_response_classification_distinguishes_decline_and_unclear() -> N
     assert classify_google_wallet_response("No, not now") == "DECLINED"
     assert classify_google_wallet_response("Could you please, that would be great") == "CONFIRMED"
     assert classify_google_wallet_response("How does Google Wallet work?") == "UNCLEAR"
+    assert classify_google_wallet_response("No, that's okay. Can you try one more time?") == "CONFIRMED"
+    assert classify_google_wallet_response("No, don't try again.") == "DECLINED"
 
 
 def test_wallet_transcript_events_persist_offer_and_later_confirmation() -> None:
@@ -434,7 +439,10 @@ def test_mark_fraud_tool_completed_tracks_single_triage_workflow() -> None:
         "triage_fraud_case",
         {
             "outcome": "PENDING_SPECIALIST_REVIEW",
-            "replacement_card": {"new_card_id": "card-456"},
+            "replacement_card": {
+                "new_card_id": "card-456",
+                "new_card_token": "trusted-card-token",
+            },
         },
     )
 
@@ -444,6 +452,24 @@ def test_mark_fraud_tool_completed_tracks_single_triage_workflow() -> None:
     assert playbook["replacement_issued"] is True
     assert playbook["resolution_completed"] is True
     assert playbook["confirmed_fraud"] is True
+    assert playbook["replacement_card_token"] == "trusted-card-token"
+
+
+def test_wallet_args_use_trusted_replacement_token_not_model_account_id() -> None:
+    playbook = {"replacement_card_token": "trusted-card-token"}
+
+    prepared = prepare_wallet_tool_args(
+        playbook,
+        {
+            "account_id": "0131",
+            "card_token": "invented-card-token",
+            "wallet_provider": "OTHER_WALLET",
+        },
+    )
+
+    assert "account_id" not in prepared
+    assert prepared["card_token"] == "trusted-card-token"
+    assert prepared["wallet_provider"] == "GOOGLE_WALLET"
 
 
 def test_mark_fraud_tool_completed_tracks_recognized_triage() -> None:

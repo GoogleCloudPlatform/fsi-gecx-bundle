@@ -118,3 +118,12 @@ def test_configure_live_tool_defers_response_until_model_is_idle() -> None:
     tool = configure_live_tool(StubTool())
 
     assert tool.response_scheduling is types.FunctionResponseScheduling.WHEN_IDLE
+
+
+def test_configure_live_tool_can_interrupt_preview_avatar_with_result() -> None:
+    tool = configure_live_tool(
+        StubTool(),
+        response_scheduling=types.FunctionResponseScheduling.INTERRUPT,
+    )
+
+    assert tool.response_scheduling is types.FunctionResponseScheduling.INTERRUPT

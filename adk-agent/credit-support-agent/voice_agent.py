@@ -558,7 +558,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 resampled_frames = resampler.push(frame)
                 for res_frame in resampled_frames:
                     # Check if the agent is currently processing a tool call or shutting down to drop user mic buffers
-                    if is_tool_processing() or is_session_end_requested():
+                    if is_tool_processing() or is_session_end_requested() or session_end_disconnect_task:
                         logger.debug("Muting microphone audio: tool execution or session shutdown in progress.")
                         continue
 

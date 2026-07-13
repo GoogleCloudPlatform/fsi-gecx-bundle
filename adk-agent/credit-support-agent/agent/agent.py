@@ -26,6 +26,7 @@ from agent.fraud_voice import (
     build_triage_model_result,
     invalidate_wallet_authorization,
     mark_fraud_tool_completed,
+    prepare_wallet_tool_args,
     validate_fraud_tool_sequence,
 )
 from agent.instructions import INSTRUCTION_TEXT
@@ -211,6 +212,10 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
     logger = logging.getLogger("voice_agent")
     fraud_context = tool_context.state.get("fraud_context", {}) if hasattr(tool_context, "state") else {}
     fraud_playbook = tool_context.state.get("fraud_playbook", {}) if hasattr(tool_context, "state") else {}
+    if tool_name == "push_card_to_google_wallet":
+        prepared_args = prepare_wallet_tool_args(fraud_playbook, args)
+        args.clear()
+        args.update(prepared_args)
     if (
         tool_name != "push_card_to_google_wallet"
         and fraud_playbook.get("wallet_response_status") in {"PENDING", "CONFIRMED", "UNCLEAR"}
