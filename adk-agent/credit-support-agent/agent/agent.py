@@ -22,7 +22,11 @@ from google.genai.types import ThinkingConfig
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams, create_mcp_http_client
 
 from agent.events import DataChannelEvent
-from agent.fraud_voice import mark_fraud_tool_completed, validate_fraud_tool_sequence
+from agent.fraud_voice import (
+    invalidate_wallet_authorization,
+    mark_fraud_tool_completed,
+    validate_fraud_tool_sequence,
+)
 from agent.instructions import INSTRUCTION_TEXT
 from agent.tooling import LiveMcpToolset
 
@@ -69,6 +73,7 @@ def build_log_context(state: dict | None = None, **extra) -> dict:
             "fraud_entry_mode": fraud_playbook.get("entry_mode"),
             "fraud_alert_inspected": fraud_playbook.get("open_alert_inspected"),
             "fraud_resolution_completed": fraud_playbook.get("resolution_completed"),
+            "wallet_authorization_status": fraud_playbook.get("wallet_response_status"),
         })
     context.update({key: value for key, value in extra.items() if value is not None})
     return context
@@ -209,10 +214,10 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
         tool_name != "push_card_to_google_wallet"
         and fraud_playbook.get("wallet_response_status") in {"PENDING", "CONFIRMED", "UNCLEAR"}
     ):
-        fraud_playbook = dict(fraud_playbook)
-        fraud_playbook["wallet_push_offered"] = False
-        fraud_playbook["wallet_customer_confirmed"] = False
-        fraud_playbook["wallet_response_status"] = "INVALIDATED"
+        fraud_playbook = invalidate_wallet_authorization(
+            fraud_playbook,
+            reason=f"INTERVENING_TOOL:{tool_name}",
+        )
         tool_context.state["fraud_playbook"] = fraud_playbook
     logger.info(
         "[CALLBACK] before_tool_callback triggered %s args=%s",
@@ -246,9 +251,12 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
         )
         return {
             "success": False,
-            "message": sequencing_error,
+            "isError": True,
+            "error": "ACTION_NOT_COMPLETED",
+            "message": f"Action not completed. {sequencing_error}",
             "sequence_blocked": True,
             "required_action": sequencing_error,
+            "model_instruction": "Do not tell the customer this action succeeded. Follow required_action before retrying.",
         }
     if (
         fraud_playbook.get("must_inspect_open_alert_first")

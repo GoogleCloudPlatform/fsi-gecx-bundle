@@ -55,3 +55,31 @@ async def test_plugin_writes_wallet_transitions_to_adk_state_delta() -> None:
     assert offered["wallet_response_status"] == "PENDING"
     assert confirmed["wallet_response_status"] == "CONFIRMED"
     assert confirmed["wallet_customer_confirmed"] is True
+
+
+@pytest.mark.asyncio
+async def test_plugin_invalidates_wallet_authorization_on_interruption() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    playbook["wallet_push_offered"] = True
+    playbook["wallet_customer_confirmed"] = True
+    playbook["wallet_response_status"] = "CONFIRMED"
+    session = SimpleNamespace(state={"fraud_playbook": playbook})
+    context = SimpleNamespace(session=session)
+    plugin = FraudWorkflowStatePlugin()
+    event = Event(
+        id="interruption-event",
+        author="agent",
+        actions={},
+        interrupted=True,
+    )
+
+    await plugin.on_event_callback(invocation_context=context, event=event)
+
+    invalidated = event.actions.state_delta["fraud_playbook"]
+    assert invalidated["wallet_response_status"] == "INVALIDATED"
+    assert invalidated["wallet_invalidation_reason"] == "MODEL_RESPONSE_INTERRUPTED"

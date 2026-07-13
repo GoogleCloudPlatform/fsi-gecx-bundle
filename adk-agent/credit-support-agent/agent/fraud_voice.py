@@ -52,6 +52,11 @@ def apply_wallet_transcript_event(
         return playbook
 
     if author == "agent" and agent_offered_google_wallet(transcript):
+        # A preview model may repeat or elaborate on the offer before it emits
+        # the delayed function call. Do not erase authorization that the
+        # customer has already granted for this same action.
+        if playbook.get("wallet_response_status") == "CONFIRMED":
+            return playbook
         playbook["wallet_push_offered"] = True
         playbook["wallet_customer_confirmed"] = False
         playbook["wallet_response_status"] = "PENDING"
@@ -61,6 +66,12 @@ def apply_wallet_transcript_event(
 
     if author == "user" and playbook.get("wallet_push_offered"):
         status = classify_google_wallet_response(transcript)
+        if status == "UNCLEAR" and playbook.get("wallet_response_status") == "CONFIRMED":
+            # Follow-ups such as "Are you doing it?" are not a revocation.
+            # Preserve the originating confirmation until the action is
+            # consumed or explicitly invalidated.
+            playbook["wallet_followup_event_id"] = event_id
+            return playbook
         playbook["wallet_response_status"] = status
         playbook["wallet_customer_confirmed"] = status == "CONFIRMED"
         playbook["wallet_response_event_id"] = event_id
@@ -68,6 +79,24 @@ def apply_wallet_transcript_event(
             playbook["wallet_push_offered"] = False
         return playbook
 
+    return playbook
+
+
+def invalidate_wallet_authorization(
+    fraud_playbook: dict | None,
+    *,
+    reason: str,
+    event_id: str | None = None,
+) -> dict:
+    """Invalidate an outstanding Wallet authorization with an audit reason."""
+    playbook = dict(fraud_playbook or {})
+    if playbook.get("wallet_response_status") not in {"PENDING", "CONFIRMED", "UNCLEAR"}:
+        return playbook
+    playbook["wallet_push_offered"] = False
+    playbook["wallet_customer_confirmed"] = False
+    playbook["wallet_response_status"] = "INVALIDATED"
+    playbook["wallet_invalidation_reason"] = reason
+    playbook["wallet_invalidation_event_id"] = event_id
     return playbook
 
 
@@ -94,6 +123,9 @@ def build_fraud_playbook(voice_context: dict | None) -> dict:
             "wallet_response_status": "NONE",
             "wallet_offer_event_id": None,
             "wallet_response_event_id": None,
+            "wallet_followup_event_id": None,
+            "wallet_invalidation_reason": None,
+            "wallet_invalidation_event_id": None,
             "wallet_push_queued": False,
             "triage_submitted": False,
             "required_sequence": [],
@@ -118,6 +150,9 @@ def build_fraud_playbook(voice_context: dict | None) -> dict:
         "wallet_response_status": "NONE",
         "wallet_offer_event_id": None,
         "wallet_response_event_id": None,
+        "wallet_followup_event_id": None,
+        "wallet_invalidation_reason": None,
+        "wallet_invalidation_event_id": None,
         "wallet_push_queued": False,
         "triage_submitted": False,
         "required_sequence": [

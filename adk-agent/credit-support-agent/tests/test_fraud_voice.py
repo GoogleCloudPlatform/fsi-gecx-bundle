@@ -7,6 +7,7 @@ from agent.fraud_voice import (
     build_initial_greeting,
     classify_google_wallet_response,
     customer_confirmed_google_wallet,
+    invalidate_wallet_authorization,
     mark_fraud_tool_completed,
     validate_fraud_tool_sequence,
 )
@@ -205,6 +206,87 @@ def test_wallet_transcript_decline_does_not_authorize_tool() -> None:
     assert validate_fraud_tool_sequence(declined, "push_card_to_google_wallet", {}) == (
         "Ask the customer to explicitly confirm Google Wallet provisioning before queueing it."
     )
+
+
+def test_avatar_delayed_tool_call_preserves_confirmed_wallet_authorization() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    playbook["replacement_issued"] = True
+    offered = apply_wallet_transcript_event(
+        playbook,
+        author="agent",
+        transcript="I can queue it for Google Wallet. Would you like me to queue that now?",
+        event_id="avatar-agent-offer",
+    )
+    confirmed = apply_wallet_transcript_event(
+        offered,
+        author="user",
+        transcript="Yeah, that would be great, thank you so much.",
+        event_id="avatar-user-confirmation",
+    )
+    nudged = apply_wallet_transcript_event(
+        confirmed,
+        author="user",
+        transcript="Are you doing it?",
+        event_id="avatar-user-followup",
+    )
+
+    assert nudged["wallet_response_status"] == "CONFIRMED"
+    assert nudged["wallet_customer_confirmed"] is True
+    assert nudged["wallet_response_event_id"] == "avatar-user-confirmation"
+    assert nudged["wallet_followup_event_id"] == "avatar-user-followup"
+    assert validate_fraud_tool_sequence(nudged, "push_card_to_google_wallet", {}) is None
+
+
+def test_explicit_decline_revokes_prior_wallet_confirmation() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    playbook["replacement_issued"] = True
+    playbook["wallet_push_offered"] = True
+    playbook["wallet_customer_confirmed"] = True
+    playbook["wallet_response_status"] = "CONFIRMED"
+
+    declined = apply_wallet_transcript_event(
+        playbook,
+        author="user",
+        transcript="Actually no, don't add it.",
+        event_id="customer-revocation",
+    )
+
+    assert declined["wallet_response_status"] == "DECLINED"
+    assert declined["wallet_customer_confirmed"] is False
+    assert declined["wallet_push_offered"] is False
+
+
+def test_wallet_authorization_invalidation_records_reason() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    playbook["wallet_push_offered"] = True
+    playbook["wallet_customer_confirmed"] = True
+    playbook["wallet_response_status"] = "CONFIRMED"
+
+    invalidated = invalidate_wallet_authorization(
+        playbook,
+        reason="MODEL_RESPONSE_INTERRUPTED",
+        event_id="interrupt-1",
+    )
+
+    assert invalidated["wallet_response_status"] == "INVALIDATED"
+    assert invalidated["wallet_customer_confirmed"] is False
+    assert invalidated["wallet_invalidation_reason"] == "MODEL_RESPONSE_INTERRUPTED"
+    assert invalidated["wallet_invalidation_event_id"] == "interrupt-1"
 
 
 def test_validate_fraud_tool_sequence_requires_replacement_before_wallet_push() -> None:
