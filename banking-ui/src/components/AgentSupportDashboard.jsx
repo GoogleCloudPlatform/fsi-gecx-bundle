@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Room, RoomEvent } from 'livekit-client';
 import { 
   Phone, 
@@ -15,8 +15,12 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
+import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { showInfoModals } from '../utils/constants.js';
+import { useSettings } from '../context/SettingsContext.jsx';
+import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
+import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 import { 
   getPendingEscalations, 
   getAgentVoiceToken,
@@ -30,7 +34,77 @@ import {
 import { DataChannelEvent } from '../utils/constants.js';
 
 export default function AgentSupportDashboard() {
+  const { brandColorFrom, resolvedTheme } = useSettings();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Joyride Tour States
+  const [tourRun, setTourRun] = useState(false);
+  const [tourKey, setTourKey] = useState(0);
+  const [domReady, setDomReady] = useState(false);
+
+  useEffect(() => {
+    const isCompleted = localStorage.getItem('supervisor-tour-completed') === 'true';
+    const params = new URLSearchParams(location.search);
+    const forceTour = params.get('tour') === 'true';
+
+    if (forceTour || !isCompleted) {
+      setTourRun(true);
+    } else {
+      setTourRun(false);
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    const checkElement = setInterval(() => {
+      if (document.querySelector('#supervisor-tour-btn')) {
+        setDomReady(true);
+        clearInterval(checkElement);
+      }
+    }, 50);
+    return () => clearInterval(checkElement);
+  }, []);
+
+  const steps = useMemo(() => {
+    return [
+      {
+        target: '#supervisor-tour-btn',
+        content: "Welcome to the Supervisor Takeover Console! Here, you can monitor ongoing customer-to-AI support sessions and step in via WebRTC voice handoffs.",
+        placement: 'bottom-end',
+        skipBeacon: true
+      },
+      {
+        target: '#inbound-request-queue',
+        content: "Inbound Request Queue: Real-time list of customers requesting escalation. Click on a customer card to inspect their context.",
+        placement: 'right',
+        skipBeacon: true
+      },
+      {
+        target: '#takeover-session-header',
+        content: "Takeover Controller: Connect live voice rooms by clicking 'Accept Takeover' once a customer thread is selected.",
+        placement: 'bottom',
+        skipBeacon: true
+      },
+      {
+        target: '#live-chat-history',
+        content: "Live Chat Transcript: Review all messages exchanged between the customer and the Gemini AI agent before escalation.",
+        placement: 'top',
+        skipBeacon: true
+      },
+      {
+        target: '#cobrowse-control-panel',
+        content: "Co-Browsing Panel: Highlight transactions or reverse fees to guide the customer. Changes sync instantly on their viewport.",
+        placement: 'top',
+        skipBeacon: true
+      },
+      {
+        target: '#supervisor-quick-actions',
+        content: "Supervisor Quick Actions: Direct admin commands to freeze cards or adjust credit limits immediately.",
+        placement: 'top',
+        skipBeacon: true
+      }
+    ];
+  }, []);
   const [escalations, setEscalations] = useState([]);
   const [selectedEscalation, setSelectedEscalation] = useState(null);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
@@ -301,6 +375,18 @@ export default function AgentSupportDashboard() {
         </div>
         
         <div className="flex items-center gap-3">
+          <button
+            id="supervisor-tour-btn"
+            onClick={() => {
+              localStorage.removeItem('supervisor-tour-completed');
+              setTourKey(prev => prev + 1);
+              setTourRun(true);
+            }}
+            className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+            title="Take Supervisor Console Tour"
+          >
+            <GoogleCompassIcon className="w-4 h-4 text-emerald-500" />
+          </button>
           {isConnected && (
             <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/50 rounded-full px-4 py-1.5 text-xs text-emerald-600 dark:text-emerald-300 font-bold flex items-center gap-2 animate-pulse">
               <Volume2 size={14} className="text-emerald-505 dark:text-emerald-400" />

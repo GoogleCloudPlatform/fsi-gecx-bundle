@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Sparkles, Activity, ShieldAlert, Zap, Database, RefreshCw, 
   ArrowLeft, CheckCircle2, AlertTriangle, TrendingUp, Clock,
@@ -36,8 +36,12 @@ import {
   getBackendAuthHeaders,
 } from '../utils/api.js';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
+import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { showInfoModals } from '../utils/constants.js';
+import { useSettings } from '../context/SettingsContext.jsx';
+import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
+import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 
 const MIN_RISK_CONDITION_SCORED_EVENTS = 5;
 const ELEVATED_AVERAGE_RISK_SCORE = 25;
@@ -471,9 +475,118 @@ function parseFraudRiskScore(item) {
 }
 
 function AdminSimulationView({ mode = 'studio' }) {
+  const { resolvedTheme, brandColorFrom } = useSettings();
   const navigate = useNavigate();
+  const location = useLocation();
   const projectId = window.firebaseConfig?.projectId;
   const isMonitoring = mode === 'monitoring';
+
+  // Joyride Tour States
+  const [tourRun, setTourRun] = useState(false);
+  const [tourKey, setTourKey] = useState(0);
+  const [domReady, setDomReady] = useState(false);
+
+  useEffect(() => {
+    const isCompleted = isMonitoring
+      ? localStorage.getItem('operations-tour-completed') === 'true'
+      : localStorage.getItem('studio-tour-completed') === 'true';
+    const params = new URLSearchParams(location.search);
+    const forceTour = params.get('tour') === 'true';
+
+    if (forceTour || !isCompleted) {
+      setTourRun(true);
+    } else {
+      setTourRun(false);
+    }
+  }, [isMonitoring, location.search]);
+
+  useEffect(() => {
+    const targetSelector = isMonitoring ? '#operations-tour-btn' : '#studio-tour-btn';
+    const checkElement = setInterval(() => {
+      if (document.querySelector(targetSelector)) {
+        setDomReady(true);
+        clearInterval(checkElement);
+      }
+    }, 50);
+    return () => clearInterval(checkElement);
+  }, [isMonitoring]);
+
+  const steps = useMemo(() => {
+    if (isMonitoring) {
+      return [
+        {
+          target: '#operations-tour-btn',
+          content: "Welcome to the Operations Monitor! Let's take a quick walk through of this dashboard.",
+          placement: 'bottom-end',
+          skipBeacon: true
+        },
+        {
+          target: '#monitor-window-select',
+          content: "Reporting Window: Filter aggregated metrics and charts using this selector. The live stream below will continue updating in real-time.",
+          placement: 'bottom-end',
+          skipBeacon: true
+        },
+        {
+          target: '#replication-engine-health',
+          content: "Replication Engine Health: Monitor active WAL sync replication states, system latency, and analytical database sync pipelines.",
+          placement: 'top',
+          skipBeacon: true
+        },
+        {
+          target: '#risk-alerts-overview',
+          content: "Risk & Alerts Overview: Displays overall operational threat postures, active alerts, and flagged transactions.",
+          placement: 'top',
+          skipBeacon: true
+        },
+        {
+          target: '#live-activity-chart',
+          content: "Live Event Throughput: Visualize event volume and event types processed through the core event bus.",
+          placement: 'top',
+          skipBeacon: true
+        },
+        {
+          target: '#live-transaction-stream',
+          content: "Live Transaction Stream: Audit incoming card authorizations (AUTH) and settlements (SETTLE) as they occur in real-time.",
+          placement: 'top',
+          skipBeacon: true
+        }
+      ];
+    } else {
+      return [
+        {
+          target: '#studio-tour-btn',
+          content: "Welcome to the Simulation Studio! Let's take a quick walk through of the tools available here.",
+          placement: 'bottom-end',
+          skipBeacon: true
+        },
+        {
+          target: '#active-dispatch-feedback',
+          content: "Simulation Dispatch Feed: View real-time feedback and results from your most recently run or scheduled simulations.",
+          placement: 'top',
+          skipBeacon: true
+        },
+        {
+          target: '#immediate-actions',
+          content: "Immediate Scenarios: Inject quick domestic spend surges, targeted customer fraud alerts, or credit card late fees instantly.",
+          placement: 'top',
+          skipBeacon: true
+        },
+        {
+          target: '#scenario-composer',
+          content: "Scenario Composer: Select template types, seed values, event counts, and customize operating start/end windows.",
+          placement: 'top',
+          skipBeacon: true
+        },
+        {
+          target: '#scenario-composer-actions',
+          content: "Execution Triggers: Click Dry Run to validate the plan, Launch Now to execute immediately, or Schedule Run to queue background dispatch over time.",
+          placement: 'top',
+          skipBeacon: true
+        }
+      ];
+    }
+  }, [isMonitoring]);
+
   const PageIcon = isMonitoring ? Activity : Sparkles;
   const pageIconGradient = isMonitoring ? 'from-emerald-500 to-cyan-600' : 'from-cyan-500 to-blue-600';
   const pageTitle = isMonitoring ? 'Operations Monitor' : 'Simulation Studio';
@@ -1239,7 +1352,20 @@ function AdminSimulationView({ mode = 'studio' }) {
         </div>
         {isMonitoring && (
           <div className="flex items-center gap-2 self-start md:self-end">
+            <button
+              id="operations-tour-btn"
+              onClick={() => {
+                localStorage.removeItem('operations-tour-completed');
+                setTourKey(prev => prev + 1);
+                setTourRun(true);
+              }}
+              className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+              title="Take Operations Monitor Tour"
+            >
+              <GoogleCompassIcon className="w-4 h-4 text-emerald-500" />
+            </button>
             <select
+              id="monitor-window-select"
               value={monitorWindowMinutes}
               onChange={(event) => setMonitorWindowMinutes(Number(event.target.value))}
               className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
@@ -1258,11 +1384,27 @@ function AdminSimulationView({ mode = 'studio' }) {
             </button>
           </div>
         )}
+        {!isMonitoring && (
+          <div className="flex items-center gap-2 self-start md:self-end">
+            <button
+              id="studio-tour-btn"
+              onClick={() => {
+                localStorage.removeItem('studio-tour-completed');
+                setTourKey(prev => prev + 1);
+                setTourRun(true);
+              }}
+              className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+              title="Take Simulation Studio Tour"
+            >
+              <GoogleCompassIcon className="w-4 h-4 text-emerald-500" />
+            </button>
+          </div>
+        )}
       </div>
 
       {isMonitoring && (
         <>
-          <div className="mb-6 p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5">
+          <div className="mb-6 p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5" id="replication-engine-health">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <div className="text-[11px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">Replication Engine Health</div>
@@ -1318,7 +1460,7 @@ function AdminSimulationView({ mode = 'studio' }) {
           </div>
 
           <div className="mb-6 grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-5">
-            <div className="p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5">
+            <div className="p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5" id="risk-alerts-overview">
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <div className="text-[11px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">Risk & Alerts Overview</div>
@@ -1405,7 +1547,7 @@ function AdminSimulationView({ mode = 'studio' }) {
           </div>
 
           <div className="mb-10 grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-5">
-            <div className="p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5">
+            <div className="p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5" id="live-activity-chart">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[11px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">Live Activity</div>
@@ -1448,7 +1590,7 @@ function AdminSimulationView({ mode = 'studio' }) {
         <>
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-5 items-start">
       <div className="min-w-0">
-      <div className="mb-10 p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5">
+      <div className="mb-10 p-5 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5" id="active-dispatch-feedback">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">Active Dispatch & Feedback</h2>
@@ -1528,7 +1670,7 @@ function AdminSimulationView({ mode = 'studio' }) {
         )}
       </div>
 
-      <div className="mb-10">
+      <div className="mb-10" id="immediate-actions">
         <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           <Zap className="w-4 h-4 text-amber-500" />
           Immediate Actions
@@ -1602,7 +1744,7 @@ function AdminSimulationView({ mode = 'studio' }) {
         </div>
       </div>
 
-      <div className="mb-10 p-6 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5">
+      <div className="mb-10 p-6 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl shadow-slate-950/5" id="scenario-composer">
         <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
           <div className="min-w-0">
             <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -1824,7 +1966,7 @@ function AdminSimulationView({ mode = 'studio' }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2" id="scenario-composer-actions">
               <button
                 onClick={handleScenarioDryRun}
                 disabled={isScenarioLoading}
@@ -2120,7 +2262,7 @@ function AdminSimulationView({ mode = 'studio' }) {
       {isMonitoring && (
         <>
           <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-5">
-            <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-2xl shadow-slate-950/5 min-w-0">
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-2xl shadow-slate-950/5 min-w-0" id="live-transaction-stream">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
                 <div>
                   <h4 className="text-slate-900 dark:text-white font-extrabold text-lg flex items-center gap-2 flex-wrap">
@@ -2482,6 +2624,34 @@ function AdminSimulationView({ mode = 'studio' }) {
           </div>
         </div>
       </GcpInfoModal>
+
+      {/* Joyride Onboarding Tour */}
+      {tourRun && domReady && steps.length > 0 && (
+        <Joyride
+          key={tourKey}
+          run={tourRun}
+          options={{
+            scrollOffset: 120
+          }}
+          steps={steps}
+          continuous={true}
+          showSkipButton={true}
+          showCloseButton={true}
+          onEvent={(data) => {
+            const { status, type, action } = data;
+            if (
+              [STATUS.FINISHED, STATUS.SKIPPED].includes(status) ||
+              type === EVENTS.TOUR_END ||
+              action === ACTIONS.CLOSE ||
+              action === ACTIONS.SKIP
+            ) {
+              setTourRun(false);
+              localStorage.setItem('operations-tour-completed', 'true');
+            }
+          }}
+          styles={getJoyrideStyles(resolvedTheme, brandColorFrom)}
+        />
+      )}
 
     </section>
   );

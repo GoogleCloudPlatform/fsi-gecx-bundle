@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Send, Trash2, Plus, MessageSquare, Shield, 
@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
+import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { 
   getMessages, 
@@ -33,12 +34,71 @@ import {
 
 
 
+import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
+import { getJoyrideStyles } from '../utils/joyrideStyles.js';
+
 const CATEGORIES = ['General', 'Billing', 'Loans', 'Security'];
 
 function SecureMessagingView({ fbUser, customerProfile }) {
-  const { brandColorFrom, brandColorTo } = useSettings();
+  const { brandColorFrom, brandColorTo, resolvedTheme } = useSettings();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Joyride Tour States
+  const [tourRun, setTourRun] = useState(false);
+  const [tourKey, setTourKey] = useState(0);
+  const [domReady, setDomReady] = useState(false);
+
+  useEffect(() => {
+    const isCompleted = localStorage.getItem('secure-messaging-tour-completed') === 'true';
+    const params = new URLSearchParams(location.search);
+    const forceTour = params.get('tour') === 'true';
+
+    if (forceTour || !isCompleted) {
+      setTourRun(true);
+    } else {
+      setTourRun(false);
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    const checkElement = setInterval(() => {
+      if (document.querySelector('#secure-messaging-tour-btn')) {
+        setDomReady(true);
+        clearInterval(checkElement);
+      }
+    }, 50);
+    return () => clearInterval(checkElement);
+  }, []);
+
+  const steps = useMemo(() => {
+    return [
+      {
+        target: '#secure-messaging-tour-btn',
+        content: "Welcome to your Secure Messages portal! Here you can communicate directly and securely with bank representatives.",
+        placement: 'bottom-end',
+        skipBeacon: true
+      },
+      {
+        target: '#compose-message-btn',
+        content: "Click New Thread to start a new secure conversation. Select categories like Loans, Security, or Billing to reach the appropriate support team.",
+        placement: 'bottom',
+        skipBeacon: true
+      },
+      {
+        target: '#threads-list-container',
+        content: "Conversations List: View your active and past conversations. Unread messages from support will be highlighted.",
+        placement: 'right',
+        skipBeacon: true
+      },
+      {
+        target: '#chat-history-pane',
+        content: "Message Viewer: View the full history of the active thread, reply to support, and directly resolve alert issues.",
+        placement: 'left',
+        skipBeacon: true
+      }
+    ];
+  }, []);
 
   const [messages, setMessages] = useState([]);
   const [threads, setThreads] = useState({});
@@ -442,7 +502,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
       <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] rounded-full bg-cyan-500/5 dark:bg-cyan-500/5 blur-[120px] pointer-events-none -z-10" />
 
       {/* Header Info */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 relative pr-16">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 relative pr-28">
         <div>
           <h1 className="text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
             Secure Messages
@@ -468,23 +528,38 @@ function SecureMessagingView({ fbUser, customerProfile }) {
           )}
         </div>
 
-        <button
-          onClick={() => setIsInfoModalOpen(true)}
-          className="absolute right-0 top-1/2 -translate-y-1/2 p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm"
-          title="GCP & Firebase Integration Info"
-        >
-          <GoogleCloudIcon className="w-5 h-5" />
-        </button>
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
+          <button
+            id="secure-messaging-tour-btn"
+            onClick={() => {
+              localStorage.removeItem('secure-messaging-tour-completed');
+              setTourKey(prev => prev + 1);
+              setTourRun(true);
+            }}
+            className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:hover:text-white"
+            title="Take Secure Messaging Tour"
+          >
+            <GoogleCompassIcon className="w-5 h-5 text-emerald-500" />
+          </button>
+          <button
+            onClick={() => setIsInfoModalOpen(true)}
+            className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm"
+            title="GCP & Firebase Integration Info"
+          >
+            <GoogleCloudIcon className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {/* Primary Workspace Panel */}
       <div className="flex-grow grid grid-cols-1 md:grid-cols-12 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 rounded-3xl overflow-hidden shadow-2xl min-h-[600px]">
         
         {/* Left Side Pane: Threads List */}
-        <div className="md:col-span-4 border-r border-slate-200 dark:border-slate-800/80 flex flex-col h-full bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="md:col-span-4 border-r border-slate-200 dark:border-slate-800/80 flex flex-col h-full bg-slate-50/50 dark:bg-slate-900/50" id="threads-list-container">
           <div className="p-4 border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between gap-3 bg-white dark:bg-slate-900">
             <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">Conversations</span>
             <button
+              id="compose-message-btn"
               onClick={() => {
                 setIsComposing(true);
                 setActiveThreadId(null);
@@ -572,7 +647,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
         </div>
 
         {/* Right Side Pane: Chat View / Compose Form */}
-        <div className="md:col-span-8 flex flex-col h-full bg-white dark:bg-slate-900 relative">
+        <div className="md:col-span-8 flex flex-col h-full bg-white dark:bg-slate-900 relative" id="chat-history-pane">
           
           {/* Form State: Compose New Thread */}
           {isComposing && (
@@ -1070,6 +1145,34 @@ function SecureMessagingView({ fbUser, customerProfile }) {
           </div>
         </div>
       </GcpInfoModal>
+
+      {/* Joyride Onboarding Tour */}
+      {tourRun && domReady && steps.length > 0 && (
+        <Joyride
+          key={tourKey}
+          run={tourRun}
+          options={{
+            scrollOffset: 120
+          }}
+          steps={steps}
+          continuous={true}
+          showSkipButton={true}
+          showCloseButton={true}
+          onEvent={(data) => {
+            const { status, type, action } = data;
+            if (
+              [STATUS.FINISHED, STATUS.SKIPPED].includes(status) ||
+              type === EVENTS.TOUR_END ||
+              action === ACTIONS.CLOSE ||
+              action === ACTIONS.SKIP
+            ) {
+              setTourRun(false);
+              localStorage.setItem('secure-messaging-tour-completed', 'true');
+            }
+          }}
+          styles={getJoyrideStyles(resolvedTheme, brandColorFrom)}
+        />
+      )}
     </section>
   );
 }
