@@ -342,3 +342,17 @@ def test_composed_fraud_instruction_prefers_single_triage_workflow() -> None:
     ) in instruction
     assert "offer to queue Google Wallet provisioning and wait for an explicit" in instruction
     assert "Do not call the tool in the same response where you first offer Wallet provisioning" in instruction
+    assert "Any tool response with `success=false`, `sequence_blocked=true`, or an `error` is a failed action" in instruction
+    assert "Never describe it as completed or queued" in instruction
+
+
+def test_composed_instruction_preserves_catalog_guidance_as_non_operational_context() -> None:
+    instruction = compose_session_instruction(
+        avatar_name="Nova",
+        active_flows=["fraud_alert"],
+        guidance_summary="Source topics: fraud_golden_path, wallet_provisioning.",
+    )
+
+    assert "Approved support guidance:" in instruction
+    assert "fraud_golden_path, wallet_provisioning" in instruction
+    assert "use live tools and session context for operational truth" in instruction

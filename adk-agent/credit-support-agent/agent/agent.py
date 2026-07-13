@@ -19,12 +19,12 @@ import httpx
 from google.adk.agents import Agent
 from google.adk.planners import BuiltInPlanner
 from google.genai.types import ThinkingConfig
-from google.adk.tools.mcp_tool import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams, create_mcp_http_client
 
 from agent.events import DataChannelEvent
 from agent.fraud_voice import mark_fraud_tool_completed, validate_fraud_tool_sequence
 from agent.instructions import INSTRUCTION_TEXT
+from agent.tooling import LiveMcpToolset
 
 LOCATION = os.getenv("LOCATION", "us-central1")
 credentials, project_id = google.auth.default()
@@ -180,8 +180,8 @@ def custom_client_factory(headers=None, timeout=None, auth=None):
     dynamic_auth = DynamicGoogleAuth()
     return create_mcp_http_client(headers=headers, timeout=timeout, auth=dynamic_auth)
 
-def create_mcp_toolset() -> McpToolset:
-    return McpToolset(
+def create_mcp_toolset() -> LiveMcpToolset:
+    return LiveMcpToolset(
         connection_params=StreamableHTTPConnectionParams(
             url=get_banking_service_mcp_url(),
             httpx_client_factory=custom_client_factory,

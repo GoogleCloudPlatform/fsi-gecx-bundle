@@ -11,6 +11,7 @@ agent_tmp**
 
 # UV lock files
 uv.lock
+!credit-support-agent/uv.lock
 
 # Virtual Environments
 .venv
