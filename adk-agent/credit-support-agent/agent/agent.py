@@ -226,6 +226,12 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
     }
     sequencing_error = validate_fraud_tool_sequence(fraud_playbook, tool_name, args)
     if sequencing_error:
+        if (
+            tool_name == "push_card_to_google_wallet"
+            and sequencing_error == "Ask the customer to explicitly confirm Google Wallet provisioning before queueing it."
+        ):
+            fraud_playbook["wallet_push_confirmation_requested"] = True
+            tool_context.state["fraud_playbook"] = fraud_playbook
         logger.warning(
             "[CALLBACK] fraud playbook drift %s",
             format_log_context(

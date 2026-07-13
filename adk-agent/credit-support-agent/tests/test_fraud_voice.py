@@ -89,7 +89,7 @@ def test_validate_fraud_tool_sequence_blocks_low_level_fraud_tools_for_active_al
     assert error == "Use triage_fraud_case for active fraud alert mitigation instead of sequencing low-level fraud tools."
 
 
-def test_validate_fraud_tool_sequence_allows_wallet_push_after_triage_replacement() -> None:
+def test_validate_fraud_tool_sequence_blocks_wallet_push_until_confirmation() -> None:
     playbook = build_fraud_playbook(
         {
             "has_active_fraud_alert": True,
@@ -99,6 +99,23 @@ def test_validate_fraud_tool_sequence_allows_wallet_push_after_triage_replacemen
     playbook["open_alert_inspected"] = True
     playbook["triage_submitted"] = True
     playbook["replacement_issued"] = True
+
+    error = validate_fraud_tool_sequence(playbook, "push_card_to_google_wallet", {})
+
+    assert error == "Ask the customer to explicitly confirm Google Wallet provisioning before queueing it."
+
+
+def test_validate_fraud_tool_sequence_allows_wallet_push_after_confirmation() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    playbook["open_alert_inspected"] = True
+    playbook["triage_submitted"] = True
+    playbook["replacement_issued"] = True
+    playbook["wallet_push_confirmation_requested"] = True
 
     error = validate_fraud_tool_sequence(playbook, "push_card_to_google_wallet", {})
 
@@ -291,4 +308,5 @@ def test_composed_fraud_instruction_prefers_single_triage_workflow() -> None:
         "Do not call `report_lost_stolen_card`, `issue_replacement_card_tool`, "
         "`push_card_to_google_wallet`, or `resolve_fraud_alert` as separate steps"
     ) in instruction
-    assert "you may offer to queue Google Wallet provisioning" in instruction
+    assert "offer to queue Google Wallet provisioning and wait for an explicit" in instruction
+    assert "Do not call the tool in the same response where you first offer Wallet provisioning" in instruction

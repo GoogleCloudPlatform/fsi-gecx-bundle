@@ -16,6 +16,7 @@ def build_fraud_playbook(voice_context: dict | None) -> dict:
             "confirmed_fraud": False,
             "card_blocked": False,
             "replacement_issued": False,
+            "wallet_push_confirmation_requested": False,
             "wallet_push_queued": False,
             "triage_submitted": False,
             "required_sequence": [],
@@ -35,6 +36,7 @@ def build_fraud_playbook(voice_context: dict | None) -> dict:
         "confirmed_fraud": False,
         "card_blocked": False,
         "replacement_issued": False,
+        "wallet_push_confirmation_requested": False,
         "wallet_push_queued": False,
         "triage_submitted": False,
         "required_sequence": [
@@ -80,6 +82,12 @@ def validate_fraud_tool_sequence(fraud_playbook: dict | None, tool_name: str, ar
 
     if tool_name == "push_card_to_google_wallet" and not playbook.get("replacement_issued"):
         return "Complete fraud triage and replacement before queueing Google Wallet provisioning."
+    if (
+        tool_name == "push_card_to_google_wallet"
+        and playbook.get("replacement_issued")
+        and not playbook.get("wallet_push_confirmation_requested")
+    ):
+        return "Ask the customer to explicitly confirm Google Wallet provisioning before queueing it."
 
     if tool_name == "triage_fraud_case" and not playbook.get("open_alert_inspected"):
         return "Inspect the open fraud alert before taking mitigation actions."
@@ -120,6 +128,7 @@ def mark_fraud_tool_completed(
         return playbook
 
     if tool_name == "push_card_to_google_wallet":
+        playbook["wallet_push_confirmation_requested"] = True
         playbook["wallet_push_queued"] = True
         return playbook
 
