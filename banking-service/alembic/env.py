@@ -317,6 +317,67 @@ def run_migrations_online() -> None:
                             connection.execute(sa.text(f'GRANT USAGE ON SCHEMA {s} TO "{cdc_replication_user}";'))
                             connection.execute(sa.text(f'GRANT SELECT ON ALL TABLES IN SCHEMA {s} TO "{cdc_replication_user}";'))
                             connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT ON TABLES TO "{cdc_replication_user}";'))
+
+                    # Do not report a successful migration when Datastream still
+                    # cannot read the source. This catches missing grants before
+                    # the deployment pipeline starts (or resumes) the stream.
+                    cdc_role_ready = connection.execute(
+                        sa.text(
+                            "SELECT rolreplication "
+                            "FROM pg_roles WHERE rolname = :username"
+                        ),
+                        {"username": cdc_replication_user},
+                    ).scalar()
+                    cdc_can_connect = connection.execute(
+                        sa.text(
+                            "SELECT has_database_privilege(:username, current_database(), 'CONNECT')"
+                        ),
+                        {"username": cdc_replication_user},
+                    ).scalar()
+                    inaccessible_schemas = connection.execute(
+                        sa.text(
+                            "SELECT nspname FROM pg_namespace "
+                            "WHERE nspname = ANY(:schemas) "
+                            "AND NOT has_schema_privilege(:username, oid, 'USAGE')"
+                        ),
+                        {"username": cdc_replication_user, "schemas": cdc_schemas},
+                    ).scalars().all()
+                    unreadable_tables = connection.execute(
+                        sa.text(
+                            "SELECT format('%I.%I', n.nspname, c.relname) "
+                            "FROM pg_class c "
+                            "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                            "WHERE n.nspname = ANY(:schemas) "
+                            "AND c.relkind IN ('r', 'p') "
+                            "AND NOT has_table_privilege(:username, c.oid, 'SELECT') "
+                            "ORDER BY 1"
+                        ),
+                        {"username": cdc_replication_user, "schemas": cdc_schemas},
+                    ).scalars().all()
+
+                    cdc_permission_errors = []
+                    if not cdc_role_ready:
+                        cdc_permission_errors.append("role is missing REPLICATION")
+                    if not cdc_can_connect:
+                        cdc_permission_errors.append("role cannot CONNECT to the database")
+                    if inaccessible_schemas:
+                        cdc_permission_errors.append(
+                            f"role lacks schema USAGE on {', '.join(inaccessible_schemas)}"
+                        )
+                    if unreadable_tables:
+                        cdc_permission_errors.append(
+                            f"role lacks table SELECT on {', '.join(unreadable_tables)}"
+                        )
+                    if cdc_permission_errors:
+                        raise RuntimeError(
+                            f"CDC source permission verification failed for '{cdc_replication_user}': "
+                            + "; ".join(cdc_permission_errors)
+                        )
+                    logger.info(
+                        "Verified CDC source permissions for %s across %d schemas.",
+                        cdc_replication_user,
+                        len(cdc_schemas),
+                    )
                 except Exception as cdc_grant_err:
                     if require_cdc_bootstrap:
                         raise
