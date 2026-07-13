@@ -12,7 +12,8 @@ import {
   User,
   Calendar,
   AlertCircle,
-  CheckCircle2,
+  Check,
+  ShieldCheck,
   Video,
   VideoOff,
   ExternalLink
@@ -30,11 +31,27 @@ import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 
-function FraudStep({ label, complete }) {
+function FraudStep({ label, complete, isLast = false }) {
   return (
-    <div className="flex items-center gap-2">
-      <div className={`h-2.5 w-2.5 rounded-full ${complete ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'}`} />
-      <span className={`text-[11px] font-medium ${complete ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-400'}`}>
+    <div className="relative flex min-w-0 flex-1 flex-col items-center text-center">
+      {!isLast && (
+        <div
+          aria-hidden="true"
+          className={`absolute left-[calc(50%+1rem)] right-[calc(-50%+1rem)] top-3 h-px ${
+            complete ? 'bg-violet-300 dark:bg-violet-700' : 'bg-slate-200 dark:bg-slate-700'
+          }`}
+        />
+      )}
+      <div className={`relative z-10 flex h-6 w-6 items-center justify-center rounded-full border ${
+        complete
+          ? 'border-violet-600 bg-violet-600 text-white shadow-sm shadow-violet-500/30'
+          : 'border-slate-300 bg-white text-transparent dark:border-slate-600 dark:bg-slate-900'
+      }`}>
+        {complete && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+      </div>
+      <span className={`mt-2 text-[10px] font-medium leading-tight sm:text-[11px] ${
+        complete ? 'text-slate-800 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400'
+      }`}>
         {label}
       </span>
     </div>
@@ -43,10 +60,6 @@ function FraudStep({ label, complete }) {
 
 function normalizeCardId(cardId) {
   return cardId == null ? null : String(cardId);
-}
-
-function formatCents(amountCents) {
-  return `$${Math.abs((amountCents || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function applyReplacementCardEvent(cards, replacement) {
@@ -164,13 +177,15 @@ export default function VoiceSupportView() {
 
   const fraudProgress = {
     inspected: Boolean(fraudContext?.fraud_alert?.inspected),
-    blocked: compromisedCard?.status === 'BLOCKED' || cardStatus === 'BLOCKED',
     triaged: Boolean(fraudTriage.outcome),
     replaced: Boolean(fraudTriage.replacement_card || replacementCard),
-    walletQueued: Boolean(fraudTriage.walletQueued) || transcripts.some(t => t.author === 'system' && t.text.includes('Virtual card provisioning')),
-    specialistReview: Boolean(fraudTriage.outcome && fraudTriage.outcome !== 'CUSTOMER_RECOGNIZED'),
+    virtualCardActive: Boolean(
+      replacementCard?.is_virtual && replacementCard?.status === 'ACTIVE'
+      || fraudTriage.replacement_card?.is_virtual && (fraudTriage.replacement_card?.status || 'ACTIVE') === 'ACTIVE'
+    ),
   };
-  const showFraudRemediationProgress = fraudProgress.triaged || fraudProgress.blocked || fraudProgress.replaced || fraudProgress.walletQueued;
+  const customerConfirmedFraud = Boolean(fraudTriage.outcome && fraudTriage.outcome !== 'CUSTOMER_RECOGNIZED');
+  const suspiciousChargeCount = fraudContext?.fraud_alert?.suspicious_transactions?.length || 0;
 
   // Joyride Tour States
   const [tourRun, setTourRun] = useState(false);
@@ -957,7 +972,7 @@ export default function VoiceSupportView() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 pt-28 pb-12 text-slate-100 min-h-[80vh] flex flex-col justify-between">
+    <div className="mx-auto flex min-h-[calc(100dvh-2rem)] max-w-6xl min-w-0 flex-col gap-8 px-4 pb-[calc(3rem+env(safe-area-inset-bottom))] pt-28 text-slate-100">
       
       {/* Header section */}
       <div className="text-center mb-6 flex flex-col items-center relative w-full">
@@ -1044,70 +1059,41 @@ export default function VoiceSupportView() {
       )}
 
       {/* Main Content Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch flex-grow mb-8">
+      <div className="grid min-w-0 flex-1 grid-cols-1 items-start gap-8 md:grid-cols-2">
         
         {/* Left Side: Credit Card Mockup & Account details */}
-        <div className="flex flex-col gap-6 bg-white dark:bg-slate-900/50 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-3xl p-8 justify-between shadow-sm dark:shadow-none">
+        <div className="flex min-w-0 flex-col gap-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm backdrop-blur sm:p-8 dark:border-slate-800 dark:bg-slate-900/50 dark:shadow-none">
           {fraudContext?.fraud_alert && (fraudContext.has_active_fraud_alert || fraudTriage.outcome) && (
-            <div className="rounded-2xl border border-amber-300/70 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 p-4">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="mt-0.5 h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Active fraud case</p>
-                  <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
-                    {fraudContext.fraud_alert.summary}
-                  </p>
-                  {showFraudRemediationProgress ? (
-                    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
-                      <FraudStep label="Case triaged" complete={fraudProgress.triaged} />
-                      <FraudStep label="Card blocked" complete={fraudProgress.blocked} />
-                      <FraudStep label="Replacement issued" complete={fraudProgress.replaced} />
-                      <FraudStep label="Wallet queued" complete={fraudProgress.walletQueued} />
-                      <FraudStep label="Specialist review" complete={fraudProgress.specialistReview} />
-                    </div>
-                  ) : (
-                    <div className="mt-3 rounded-xl border border-amber-200 dark:border-amber-800/70 bg-white/80 dark:bg-slate-950/30 p-3">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-                          {fraudProgress.inspected ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">
-                            {fraudProgress.inspected ? 'Ready for confirmation' : 'Alert review'}
-                          </p>
-                          <p className="text-xs text-amber-800 dark:text-amber-300">
-                            {fraudProgress.inspected
-                              ? 'Suspicious transactions have been reviewed with the customer.'
-                              : 'Suspicious activity is being reviewed before account action.'}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {fraudTriage.outcome && (
-                    <div className="mt-3 rounded-xl border border-amber-200 dark:border-amber-800/70 bg-white/70 dark:bg-slate-950/30 p-3 text-xs text-amber-900 dark:text-amber-200">
-                      <p className="font-bold uppercase tracking-wide">Fraud triage summary</p>
-                      <div className="mt-2 grid gap-1.5">
-                        <p>Outcome: <span className="font-semibold">{fraudTriage.outcome.replaceAll('_', ' ')}</span></p>
-                        <p>Pending holds released: <span className="font-semibold">{fraudTriage.voided_authorizations.length}</span></p>
-                        <p>Provisional credits: <span className="font-semibold">{fraudTriage.provisional_credits.length}</span></p>
-                        {fraudTriage.provisional_credits.length > 0 && (
-                          <p>
-                            Credit total:{' '}
-                            <span className="font-semibold">
-                              {formatCents(fraudTriage.provisional_credits.reduce((total, item) => total + (item.credited_amount_cents || 0), 0))}
-                            </span>
-                          </p>
-                        )}
-                        {fraudTriage.replacement_card && (
-                          <p>Replacement virtual card: <span className="font-semibold">ending in {fraudTriage.replacement_card.new_last_four}</span></p>
-                        )}
-                      </div>
-                    </div>
-                  )}
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 dark:border-slate-700 dark:bg-slate-900/80" aria-labelledby="active-fraud-review-title">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-violet-200 bg-violet-50 text-violet-600 shadow-sm dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Active fraud review</p>
+                    <h2 id="active-fraud-review-title" className="mt-1 text-base font-bold text-slate-900 dark:text-white">
+                      Suspicious card activity
+                    </h2>
+                    <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+                      {suspiciousChargeCount} suspicious {suspiciousChargeCount === 1 ? 'charge' : 'charges'} under review
+                    </p>
+                  </div>
                 </div>
+                <span className="shrink-0 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[11px] font-bold text-violet-700 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300">
+                  {fraudTriage.outcome === 'CUSTOMER_RECOGNIZED' ? 'Reviewed' : 'In review'}
+                </span>
               </div>
-            </div>
+
+              {customerConfirmedFraud && (
+                <div className="mt-5 flex px-1" aria-label="Fraud review progress">
+                  <FraudStep label="Customer verified" complete />
+                  <FraudStep label="Charges reviewed" complete={fraudProgress.inspected || fraudProgress.triaged} />
+                  <FraudStep label="Card reissued" complete={fraudProgress.replaced} />
+                  <FraudStep label="Virtual card active" complete={fraudProgress.virtualCardActive} isLast />
+                </div>
+              )}
+            </section>
           )}
           
           {/* Card Mockup */}
@@ -1148,7 +1134,7 @@ export default function VoiceSupportView() {
             </div>
 
             {/* Card Status Locked Overlay */}
-            {displayCard?.status === 'BLOCKED' && (
+            {(displayCard?.status === 'BLOCKED' || cardStatus === 'BLOCKED') && (
               <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2">
                 <div className="p-3 bg-red-500/20 rounded-full border border-red-500/30 text-red-400">
                   <Lock size={32} className="animate-pulse" />
@@ -1255,7 +1241,7 @@ export default function VoiceSupportView() {
         </div>
 
         {/* Right Side: Conversation Transcripts & Video Player Panel */}
-        <div id="voice-transcript-panel" className="flex flex-col bg-white dark:bg-slate-900/50 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-3xl p-6 min-h-[400px] shadow-sm dark:shadow-none">
+        <div id="voice-transcript-panel" className="flex min-h-[400px] min-w-0 flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/50 dark:shadow-none">
           
           {/* Avatar Video Frame container if video mode is active */}
           {mode === 'video' && isConnected && (
@@ -1294,7 +1280,7 @@ export default function VoiceSupportView() {
           
           <div 
             ref={chatContainerRef} 
-            className="flex-grow overflow-y-auto space-y-4 pr-2 scrollbar-thin"
+            className="min-h-[220px] flex-grow overflow-y-auto space-y-4 pr-2 scrollbar-thin"
             style={{ maxHeight: mode === 'video' && isConnected ? '200px' : '350px' }}
           >
             {transcripts.map((t, idx) => {
@@ -1332,7 +1318,7 @@ export default function VoiceSupportView() {
       </div>
 
       {/* Footer / Control Section */}
-      <div id="voice-call-controls" className="flex flex-col items-center gap-4 bg-white dark:bg-slate-900/50 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm dark:shadow-none">
+      <div id="voice-call-controls" className="flex w-full shrink-0 flex-col items-center gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/50 dark:shadow-none">
         
         {/* Connection status notification */}
         {isHumanAgentActive && (

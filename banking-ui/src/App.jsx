@@ -127,6 +127,7 @@ function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
   const isSearchPage = location.pathname === '/search';
+  const isVoiceSupportPage = location.pathname === '/support/voice';
   const { 
     theme, setTheme,
     isCxAgentEnabled,
@@ -1527,7 +1528,7 @@ function AppContent() {
         />
       </main>
 
-          {isReady && fbUser && !isChatOpen && isCxAgentEnabled && !isSearchPage && isChatSdkReady && (
+          {isReady && fbUser && !isChatOpen && isCxAgentEnabled && !isSearchPage && !isVoiceSupportPage && isChatSdkReady && (
             <div
               onClick={() => setIsChatOpen(true)}
               className="fixed bottom-6 right-6 z-[100] w-14 h-14 rounded-full flex items-center justify-center cursor-pointer shadow-2xl hover:scale-110 transition-all duration-300 animate-fade-in"
@@ -1538,7 +1539,7 @@ function AppContent() {
           )}
 
           {/* Fixed Bottom Left Chat Messenger */}
-          {isReady && fbUser && isChatOpen && isCxAgentEnabled && !isSearchPage && isChatSdkReady && (
+          {isReady && fbUser && isChatOpen && isCxAgentEnabled && !isSearchPage && !isVoiceSupportPage && isChatSdkReady && (
             <div id="chat-messenger-wrapper" key="stable-chat-wrapper" className="fixed bottom-6 right-6 z-[100] w-[720px] h-[680px] rounded-3xl shadow-2xl overflow-hidden animate-fade-in">
               <chat-messenger
                 ref={messengerRefCallback}
