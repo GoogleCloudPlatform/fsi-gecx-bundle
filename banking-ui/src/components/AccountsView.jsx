@@ -15,6 +15,7 @@ import {
   FileText,
   Search,
   SlidersHorizontal,
+  Lock as LockIcon,
 } from 'lucide-react';
 import { 
   getAccountsSummary, 
@@ -384,7 +385,7 @@ function AccountsView({ fbUser, customerProfile }) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-6 text-center text-slate-900 dark:text-white">
         <div className="max-w-md space-y-6">
-          <Lock className="w-16 h-16 text-rose-550 dark:text-rose-500 mx-auto animate-pulse" />
+          <LockIcon className="w-16 h-16 text-rose-550 dark:text-rose-500 mx-auto animate-pulse" />
           <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white">Access Denied</h2>
           <p className="text-slate-600 dark:text-slate-400">Please sign in via your identity provider to access secure bank accounts.</p>
           <button 
