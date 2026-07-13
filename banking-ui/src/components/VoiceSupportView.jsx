@@ -176,21 +176,30 @@ function MicTester({ deviceId, onError }) {
         source.connect(analyser);
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        let smoothedVolume = 0;
         
         function updateVolume() {
           if (!active) return;
-          analyser.getByteFrequencyData(dataArray);
+          analyser.getByteTimeDomainData(dataArray);
           
-          let sum = 0;
+          let sumSquares = 0;
           for (let i = 0; i < dataArray.length; i++) {
-            sum += dataArray[i];
+            const normalized = (dataArray[i] - 128) / 128;
+            sumSquares += normalized * normalized;
           }
-          const average = sum / dataArray.length;
+          const rms = Math.sqrt(sumSquares / dataArray.length);
           
-          // Map average (0-255) to volume scale (0-100%)
-          // average of 0 is silence. We use a higher denominator (128) so it doesn't peg at 100% as easily.
-          const newVol = Math.min(100, (average / 128) * 100);
-          setVolumeLevel(newVol);
+          // Map RMS acoustic power to volume scale (0-100%)
+          const targetVol = Math.min(100, Math.sqrt(rms) * 400);
+          
+          // Envelope follower: instant attack, smooth decay
+          if (targetVol > smoothedVolume) {
+            smoothedVolume = targetVol;
+          } else {
+            smoothedVolume = smoothedVolume * 0.85 + targetVol * 0.15;
+          }
+          
+          setVolumeLevel(smoothedVolume);
 
           animationRef.current = requestAnimationFrame(updateVolume);
         }
