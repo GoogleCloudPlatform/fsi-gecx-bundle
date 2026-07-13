@@ -1477,10 +1477,13 @@ export default function VoiceSupportView() {
         )}
 
         {/* Buttons */}
-        <div className="flex w-full flex-wrap items-end justify-center gap-4">
+        <div className={isConnected
+          ? 'flex w-full flex-wrap items-end justify-center gap-4'
+          : 'grid w-full grid-cols-1 items-end justify-items-center gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)_minmax(0,1fr)]'
+        }>
           {!isConnected ? (
             <>
-              <div className="flex min-w-0 w-full max-w-sm flex-col gap-1.5 text-left sm:w-auto sm:min-w-72">
+              <div className="flex min-w-0 w-full max-w-sm flex-col gap-1.5 text-left sm:col-start-2 sm:max-w-none">
                 <label htmlFor="voice-audio-input" className="pl-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Audio input
                 </label>
@@ -1520,7 +1523,7 @@ export default function VoiceSupportView() {
               <button
                 onClick={startConsultation}
                 disabled={isConnecting}
-                className={`flex h-12 items-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-8 font-bold text-white shadow-lg shadow-blue-500/20 transition-all transform hover:from-blue-500 hover:to-indigo-500 active:scale-95 ${
+                className={`flex h-12 items-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-8 font-bold text-white shadow-lg shadow-blue-500/20 transition-all transform hover:from-blue-500 hover:to-indigo-500 active:scale-95 sm:col-start-3 sm:justify-self-start ${
                   isConnecting ? 'opacity-70 cursor-not-allowed' : ''
                 }`}
               >
