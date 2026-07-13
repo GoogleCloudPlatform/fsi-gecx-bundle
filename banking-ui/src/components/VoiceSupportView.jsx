@@ -408,61 +408,38 @@ export default function VoiceSupportView() {
       const outDevices = await Room.getLocalDevices('audiooutput', requestPermissions);
       setAudioOutputs(outDevices);
 
-      const defaultMicDevice = inDevices.find(d => d.deviceId === 'default');
-      const newDefaultMicLabel = defaultMicDevice?.label || '';
-      const defaultMicChanged = lastDefaultMicLabelRef.current && lastDefaultMicLabelRef.current !== newDefaultMicLabel;
-      lastDefaultMicLabelRef.current = newDefaultMicLabel;
+      const processDeviceList = (devices, lastDefaultLabelRef, storageKey, logLabel) => {
+        const defaultDevice = devices.find(d => d.deviceId === 'default');
+        const newDefaultLabel = defaultDevice?.label || '';
+        const defaultChanged = lastDefaultLabelRef.current && lastDefaultLabelRef.current !== newDefaultLabel;
+        lastDefaultLabelRef.current = newDefaultLabel;
 
-      const trueMicLabel = newDefaultMicLabel.replace(/^Default - /, '');
-      const trueMicDevice = inDevices.find(d => d.deviceId !== 'default' && d.label === trueMicLabel);
+        const trueLabel = newDefaultLabel.replace(/^Default - /, '');
+        const trueDevice = devices.find(d => d.deviceId !== 'default' && d.label === trueLabel);
 
-      setSelectedAudioInputId((currentDeviceId) => {
-        if (defaultMicChanged && trueMicDevice) {
-          console.log(`[Microphone] Browser site default microphone changed to: ${trueMicLabel} (${trueMicDevice.deviceId})`);
-          localStorage.setItem(AUDIO_INPUT_STORAGE_KEY, trueMicDevice.deviceId);
-          return trueMicDevice.deviceId;
-        }
-        if (currentDeviceId && inDevices.some((device) => device.deviceId === currentDeviceId)) {
-          return currentDeviceId;
-        }
-        if (currentDeviceId && inDevices.length === 0 && !requestPermissions) {
-          return currentDeviceId;
-        }
-        if (trueMicDevice) {
-          localStorage.setItem(AUDIO_INPUT_STORAGE_KEY, trueMicDevice.deviceId);
-          return trueMicDevice.deviceId;
-        }
-        localStorage.removeItem(AUDIO_INPUT_STORAGE_KEY);
-        return '';
-      });
+        return (currentDeviceId) => {
+          if (defaultChanged && trueDevice) {
+            console.log(`[${logLabel}] Browser site default ${logLabel.toLowerCase()} changed to: ${trueLabel} (${trueDevice.deviceId})`);
+            localStorage.setItem(storageKey, trueDevice.deviceId);
+            return trueDevice.deviceId;
+          }
+          if (currentDeviceId && devices.some((device) => device.deviceId === currentDeviceId)) {
+            return currentDeviceId;
+          }
+          if (currentDeviceId && devices.length === 0 && !requestPermissions) {
+            return currentDeviceId;
+          }
+          if (trueDevice) {
+            localStorage.setItem(storageKey, trueDevice.deviceId);
+            return trueDevice.deviceId;
+          }
+          localStorage.removeItem(storageKey);
+          return '';
+        };
+      };
 
-      const defaultSpeakerDevice = outDevices.find(d => d.deviceId === 'default');
-      const newDefaultSpeakerLabel = defaultSpeakerDevice?.label || '';
-      const defaultSpeakerChanged = lastDefaultSpeakerLabelRef.current && lastDefaultSpeakerLabelRef.current !== newDefaultSpeakerLabel;
-      lastDefaultSpeakerLabelRef.current = newDefaultSpeakerLabel;
-
-      const trueSpeakerLabel = newDefaultSpeakerLabel.replace(/^Default - /, '');
-      const trueSpeakerDevice = outDevices.find(d => d.deviceId !== 'default' && d.label === trueSpeakerLabel);
-
-      setSelectedAudioOutputId((currentDeviceId) => {
-        if (defaultSpeakerChanged && trueSpeakerDevice) {
-          console.log(`[Speaker] Browser site default speaker changed to: ${trueSpeakerLabel} (${trueSpeakerDevice.deviceId})`);
-          localStorage.setItem(AUDIO_OUTPUT_STORAGE_KEY, trueSpeakerDevice.deviceId);
-          return trueSpeakerDevice.deviceId;
-        }
-        if (currentDeviceId && outDevices.some((device) => device.deviceId === currentDeviceId)) {
-          return currentDeviceId;
-        }
-        if (currentDeviceId && outDevices.length === 0 && !requestPermissions) {
-          return currentDeviceId;
-        }
-        if (trueSpeakerDevice) {
-          localStorage.setItem(AUDIO_OUTPUT_STORAGE_KEY, trueSpeakerDevice.deviceId);
-          return trueSpeakerDevice.deviceId;
-        }
-        localStorage.removeItem(AUDIO_OUTPUT_STORAGE_KEY);
-        return '';
-      });
+      setSelectedAudioInputId(processDeviceList(inDevices, lastDefaultMicLabelRef, AUDIO_INPUT_STORAGE_KEY, 'Microphone'));
+      setSelectedAudioOutputId(processDeviceList(outDevices, lastDefaultSpeakerLabelRef, AUDIO_OUTPUT_STORAGE_KEY, 'Speaker'));
     } catch (error) {
       console.error('Failed to enumerate microphones:', error);
       setErrorMessage(microphoneErrorMessage(error));
@@ -482,31 +459,21 @@ export default function VoiceSupportView() {
     }
   }, [refreshAudioDevices]);
 
-  const selectAudioInput = (deviceId) => {
-    const device = audioInputs.find(d => d.deviceId === deviceId);
+  const handleDeviceSelection = (deviceId, devices, storageKey, setDeviceId, logLabel) => {
+    const device = devices.find(d => d.deviceId === deviceId);
     const deviceName = device?.label || 'System default';
-    console.log(`[Microphone] Microphone manually changed to: ${deviceName} (${deviceId})`);
-    setSelectedAudioInputId(deviceId);
+    console.log(`[${logLabel}] ${logLabel} manually changed to: ${deviceName} (${deviceId})`);
+    setDeviceId(deviceId);
     if (deviceId) {
-      localStorage.setItem(AUDIO_INPUT_STORAGE_KEY, deviceId);
+      localStorage.setItem(storageKey, deviceId);
     } else {
-      localStorage.removeItem(AUDIO_INPUT_STORAGE_KEY);
+      localStorage.removeItem(storageKey);
     }
     setErrorMessage('');
   };
 
-  const selectAudioOutput = (deviceId) => {
-    const device = audioOutputs.find(d => d.deviceId === deviceId);
-    const deviceName = device?.label || 'System default';
-    console.log(`[Speaker] Speaker manually changed to: ${deviceName} (${deviceId})`);
-    setSelectedAudioOutputId(deviceId);
-    if (deviceId) {
-      localStorage.setItem(AUDIO_OUTPUT_STORAGE_KEY, deviceId);
-    } else {
-      localStorage.removeItem(AUDIO_OUTPUT_STORAGE_KEY);
-    }
-    setErrorMessage('');
-  };
+  const selectAudioInput = (deviceId) => handleDeviceSelection(deviceId, audioInputs, AUDIO_INPUT_STORAGE_KEY, setSelectedAudioInputId, 'Microphone');
+  const selectAudioOutput = (deviceId) => handleDeviceSelection(deviceId, audioOutputs, AUDIO_OUTPUT_STORAGE_KEY, setSelectedAudioOutputId, 'Speaker');
 
   const stopPlayoutQueue = useCallback(() => {
     activeSourcesRef.current.forEach(source => {
