@@ -59,7 +59,7 @@ shadow-db-down: ## Stop the local-only PostgreSQL shadow DB
 livekit-up: ## Start the local LiveKit server container
 	@echo "Starting LiveKit server..."
 	@$(CONTAINER_RUNTIME) rm -f livekit-server-dev 2>/dev/null || true
-	$(CONTAINER_RUNTIME) run -d --name livekit-server-dev -p 7880:7880 -p 7881:7881 -p 7882:7882/udp livekit/livekit-server:v1.5.0 --dev --keys "devkey: secret" --node-ip 127.0.0.1 --rtc.enable_loopback_candidate
+	$(CONTAINER_RUNTIME) run -d --name livekit-server-dev -p 7880:7880 -p 7881:7881 -p 7882:7882/udp livekit/livekit-server:latest --dev --keys "devkey: secret" --node-ip 127.0.0.1 --rtc.enable_loopback_candidate
 
 .PHONY: livekit-down
 livekit-down: ## Stop the local LiveKit server container
