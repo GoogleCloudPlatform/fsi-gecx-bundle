@@ -42,6 +42,23 @@ export default function AgentSupportDashboard() {
   const [tourRun, setTourRun] = useState(false);
   const [tourKey, setTourKey] = useState(0);
   const [domReady, setDomReady] = useState(false);
+  const [escalations, setEscalations] = useState([]);
+  const [selectedEscalation, setSelectedEscalation] = useState(null);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  
+  const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [activeRoomName, setActiveRoomName] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [limitInput, setLimitInput] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [customerAccount, setCustomerAccount] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [highlightedTxId, setHighlightedTxId] = useState(null);
+  
+  const roomRef = useRef(null);
 
   useEffect(() => {
     const isCompleted = localStorage.getItem('supervisor-tour-completed') === 'true';
@@ -65,8 +82,15 @@ export default function AgentSupportDashboard() {
     return () => clearInterval(checkElement);
   }, []);
 
+  // Auto-select first escalation if tour runs and none selected
+  useEffect(() => {
+    if (tourRun && !selectedEscalation && escalations.length > 0) {
+      setSelectedEscalation(escalations[0]);
+    }
+  }, [tourRun, selectedEscalation, escalations]);
+
   const steps = useMemo(() => {
-    return [
+    const baseSteps = [
       {
         target: '#supervisor-tour-btn',
         content: "Welcome to the Supervisor Takeover Console! Here, you can monitor ongoing customer-to-AI support sessions and step in via WebRTC voice handoffs.",
@@ -78,50 +102,49 @@ export default function AgentSupportDashboard() {
         content: "Inbound Request Queue: Real-time list of customers requesting escalation. Click on a customer card to inspect their context.",
         placement: 'right',
         skipBeacon: true
-      },
-      {
-        target: '#takeover-session-header',
-        content: "Takeover Controller: Connect live voice rooms by clicking 'Accept Takeover' once a customer thread is selected.",
-        placement: 'bottom',
-        skipBeacon: true
-      },
-      {
-        target: '#live-chat-history',
-        content: "Live Chat Transcript: Review all messages exchanged between the customer and the Gemini AI agent before escalation.",
-        placement: 'top',
-        skipBeacon: true
-      },
-      {
-        target: '#cobrowse-control-panel',
-        content: "Co-Browsing Panel: Highlight transactions or reverse fees to guide the customer. Changes sync instantly on their viewport.",
-        placement: 'top',
-        skipBeacon: true
-      },
-      {
-        target: '#supervisor-quick-actions',
-        content: "Supervisor Quick Actions: Direct admin commands to freeze cards or adjust credit limits immediately.",
-        placement: 'top',
-        skipBeacon: true
       }
     ];
-  }, []);
-  const [escalations, setEscalations] = useState([]);
-  const [selectedEscalation, setSelectedEscalation] = useState(null);
-  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
-  
-  const [isConnected, setIsConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [activeRoomName, setActiveRoomName] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
-  
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [limitInput, setLimitInput] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-  const [customerAccount, setCustomerAccount] = useState(null);
-  const [transactions, setTransactions] = useState([]);
-  const [highlightedTxId, setHighlightedTxId] = useState(null);
-  
-  const roomRef = useRef(null);
+
+    if (selectedEscalation) {
+      return [
+        ...baseSteps,
+        {
+          target: '#takeover-session-header',
+          content: "Takeover Controller: Connect live voice rooms by clicking 'Accept Takeover' once a customer thread is selected.",
+          placement: 'bottom',
+          skipBeacon: true
+        },
+        {
+          target: '#live-chat-history',
+          content: "Live Chat Transcript: Review all messages exchanged between the customer and the Gemini AI agent before escalation.",
+          placement: 'top',
+          skipBeacon: true
+        },
+        {
+          target: '#cobrowse-control-panel',
+          content: "Co-Browsing Panel: Highlight transactions or reverse fees to guide the customer. Changes sync instantly on their viewport.",
+          placement: 'top',
+          skipBeacon: true
+        },
+        {
+          target: '#supervisor-quick-actions',
+          content: "Supervisor Quick Actions: Direct admin commands to freeze cards or adjust credit limits immediately.",
+          placement: 'top',
+          skipBeacon: true
+        }
+      ];
+    } else {
+      return [
+        ...baseSteps,
+        {
+          target: '#takeover-session-panel-fallback',
+          content: "Takeover Console: When an escalation is active, this center pane displays the live voice controls, chat transcript, co-browsing control panel, and supervisor quick actions.",
+          placement: 'left',
+          skipBeacon: true
+        }
+      ];
+    }
+  }, [selectedEscalation]);
 
   // Poll for pending escalations every 3 seconds
   useEffect(() => {
@@ -649,7 +672,7 @@ export default function AgentSupportDashboard() {
 
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 italic">
+            <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 italic" id="takeover-session-panel-fallback">
               <ArrowRight size={48} className="text-slate-300 dark:text-slate-600 mb-3 animate-pulse" />
               Select an active customer escalation from the queue to view context.
             </div>

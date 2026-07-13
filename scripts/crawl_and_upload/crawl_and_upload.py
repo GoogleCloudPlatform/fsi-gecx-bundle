@@ -164,7 +164,7 @@ def crawl_and_upload():
                     parsed_path = url.replace("https://", "").replace("http://", "")
                     if parsed_path.endswith("/"):
                         html_blob_name = parsed_path + "index.html"
-                    elif not "." in parsed_path.split("/")[-1]:
+                    elif "." not in parsed_path.split("/")[-1]:
                         html_blob_name = parsed_path + ".html"
                     else:
                         html_blob_name = parsed_path
