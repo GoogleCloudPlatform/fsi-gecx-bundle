@@ -440,9 +440,6 @@ export default function VoiceSupportView() {
     if (navigator.permissions && navigator.permissions.query) {
       navigator.permissions.query({ name: 'microphone' }).then(status => {
         setMicPermissionState(status.state);
-        if (status.state === 'granted') {
-          refreshAudioInputs(true);
-        }
         status.onchange = () => {
           setMicPermissionState(status.state);
         };
