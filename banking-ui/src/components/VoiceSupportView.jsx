@@ -1731,27 +1731,38 @@ export default function VoiceSupportView() {
             )}
           </div>
 
-          <div className="flex min-w-0 w-full flex-col gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
-            <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800/80">
-              <Settings className="w-5 h-5 text-emerald-500" />
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Options</h3>
+          <div className="flex min-w-0 w-max mx-auto flex-col gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80 gap-8">
+              <div className="flex items-center gap-2">
+                <Settings className="w-5 h-5 text-emerald-500" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Options</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => refreshAudioDevices(true)}
+                disabled={isConnecting || isRefreshingAudioDevices}
+                className="flex items-center gap-2 rounded-lg px-3 py-1.5 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-xs font-bold text-slate-600 transition hover:border-blue-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-blue-400"
+              >
+                <RefreshCw size={14} className={isRefreshingAudioDevices ? 'animate-spin' : ''} />
+                Refresh Audio Devices
+              </button>
             </div>
             
-            <div className="flex flex-col sm:flex-row gap-6 w-full">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-max">
               {/* Left Column: Input */}
-              <div className="flex-1 flex flex-col space-y-2 text-left">
+              <div className="flex flex-col space-y-2 text-left">
                 <label htmlFor="voice-audio-input" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Audio input
                 </label>
                 <div className="flex items-center gap-2">
-                  <div className="relative min-w-0 flex-1">
+                  <div className="relative w-full">
                     <Mic className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
                     <select
                       id="voice-audio-input"
                       value={selectedAudioInputId}
                       onChange={(event) => selectAudioInput(event.target.value)}
                       disabled={isConnecting || micPermissionState === 'denied'}
-                      className="h-11 w-full truncate rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-8 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
+                      className="h-11 w-full rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-8 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
                     >
                       {micPermissionState === 'denied' ? (
                         <option value="">Microphone permission denied</option>
@@ -1800,18 +1811,18 @@ export default function VoiceSupportView() {
               </div>
 
               {/* Right Column: Output */}
-              <div className="flex-1 flex flex-col space-y-2 text-left">
+              <div className="flex flex-col space-y-2 text-left">
                 <label htmlFor="voice-audio-output" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Audio output
                 </label>
                 <div className="flex items-center gap-2">
-                  <div className="relative min-w-0 flex-1">
+                  <div className="relative w-full">
                     <Volume2 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
                     <select
                       id="voice-audio-output"
                       value={selectedAudioOutputId}
                       onChange={(event) => selectAudioOutput(event.target.value)}
-                      className="h-11 w-full truncate rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-8 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
+                      className="h-11 w-full rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-8 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
                     >
                       {selectedAudioOutputId && !audioOutputs.some((device) => device.deviceId === selectedAudioOutputId) && (
                         <option value={selectedAudioOutputId}>Saved speaker (refresh to identify)</option>
@@ -1833,18 +1844,6 @@ export default function VoiceSupportView() {
                       })()}
                     </select>
                   </div>
-                </div>
-
-                <div className="pt-3">
-                  <button
-                    type="button"
-                    onClick={() => refreshAudioDevices(true)}
-                    disabled={isConnecting || isRefreshingAudioDevices}
-                    className="flex w-full h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 text-sm font-bold text-slate-600 transition hover:border-blue-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-blue-400"
-                  >
-                    <RefreshCw size={16} className={isRefreshingAudioDevices ? 'animate-spin' : ''} />
-                    Refresh Audio Devices
-                  </button>
                 </div>
               </div>
             </div>
