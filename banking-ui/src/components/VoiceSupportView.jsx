@@ -141,7 +141,7 @@ function applyWalletProvisioningEvent(cards, event) {
   });
 }
 
-function MicTester({ deviceId }) {
+function MicTester({ deviceId, onError }) {
   const [volumeLevel, setVolumeLevel] = useState(0);
   const streamRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -194,8 +194,11 @@ function MicTester({ deviceId }) {
         }
 
         updateVolume();
-      } catch (err) {
-        if (active) setError('Could not start test.');
+    } catch (err) {
+        if (active) {
+          setError('Could not start test.');
+          if (onError) onError(err instanceof Error ? err.message : String(err));
+        }
       }
     }
 
@@ -1741,7 +1744,7 @@ export default function VoiceSupportView() {
                     </button>
                   </div>
                   
-                  {isTestingMic && <MicTester deviceId={selectedAudioInputId} />}
+                  {isTestingMic && <MicTester deviceId={selectedAudioInputId} onError={setErrorMessage} />}
 
                 </div>
               </div>
