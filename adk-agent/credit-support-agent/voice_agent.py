@@ -20,22 +20,20 @@ from agent.agent import (
     create_voice_agent,
     is_session_end_requested,
     is_tool_processing,
-    record_wallet_customer_response,
-    record_wallet_offer,
     reset_session_context,
 )
 from agent.fraud_voice import (
-    agent_offered_google_wallet,
     build_fraud_playbook,
     build_initial_greeting,
-    customer_confirmed_google_wallet,
 )
 from agent.instructions import compose_session_instruction
+from agent.live_runtime import build_live_run_config, normalize_live_event
+from agent.workflow_plugin import FraudWorkflowStatePlugin
 from agent.version import BUILD_VERSION, BUILD_COMMIT_ID
 from agent.events import DataChannelEvent
+from google.adk.apps import App
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.agents.live_request_queue import LiveRequestQueue
 from google.genai import types
 
@@ -366,7 +364,14 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         logger.info("Setting agent model to Publishers Gemini Live audio wrapper %s model_name=%s", session_log_context(room_name, customer_id, session_id, mode), model_name)
         session_agent.model = Gemini(model=model_name)
         
-    runner = Runner(app_name="credit-support-agent", agent=session_agent, session_service=session_service)
+    runner = Runner(
+        app=App(
+            name="credit-support-agent",
+            root_agent=session_agent,
+            plugins=[FraudWorkflowStatePlugin()],
+        ),
+        session_service=session_service,
+    )
     loop = asyncio.get_running_loop()
     live_queue = LiveRequestQueue()
 
@@ -441,11 +446,6 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     user_stt_task = None
     agent_stt_task = None
 
-    # Configure ADK streaming for native audio
-    # Configure ADK streaming modalities dynamically
-    modalities = ["VIDEO"] if mode == "video" else ["AUDIO"]
-    avatar_config = types.AvatarConfig(avatar_name=avatar_name) if mode == "video" else None
-    
     # User-defined mapping for avatar -> voice name & language code
     AVATAR_METADATA = {
         "ingrid": {"voice": "Despina", "lang": "en-GB"},
@@ -470,20 +470,11 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             else:
                 voice_name = 'Aoede'
 
-    speech_config = types.SpeechConfig(
+    run_config = build_live_run_config(
+        mode=mode,
+        avatar_name=avatar_name,
+        voice_name=voice_name,
         language_code=lang_code,
-        voice_config=types.VoiceConfig(
-            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_name)
-        )
-    )
-
-    run_config = RunConfig(
-        streaming_mode=StreamingMode.BIDI,
-        response_modalities=modalities,
-        avatar_config=avatar_config,
-        speech_config=speech_config,
-        input_audio_transcription=types.AudioTranscriptionConfig(),
-        output_audio_transcription=types.AudioTranscriptionConfig()
     )
 
     # Initialize LiveKit Room and Audio Source
@@ -733,6 +724,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 live_request_queue=live_queue,
                 run_config=run_config
             ):
+                live_event = normalize_live_event(event)
                 if event.content and event.content.parts:
                     for part in event.content.parts:
                         # Extract audio output from the model
@@ -753,23 +745,17 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                                     logger.warning("ffmpeg_proc or ffmpeg_proc.stdin is not available!")
                             
                 # Broadcast transcriptions over data channel for UI display when complete
-                if event.input_transcription and event.input_transcription.finished:
-                    record_wallet_customer_response(
-                        customer_confirmed_google_wallet(event.input_transcription.text)
-                    )
+                if live_event.input_transcript is not None:
                     on_agent_event({
                         "type": "TRANSCRIPT",
                         "author": "user",
-                        "text": event.input_transcription.text
+                        "text": live_event.input_transcript
                     })
-                if event.output_transcription and event.output_transcription.finished:
-                    record_wallet_offer(
-                        agent_offered_google_wallet(event.output_transcription.text)
-                    )
+                if live_event.output_transcript is not None:
                     on_agent_event({
                         "type": "TRANSCRIPT",
                         "author": "agent",
-                        "text": event.output_transcription.text
+                        "text": live_event.output_transcript
                     })
                     if is_session_end_requested():
                         logger.info("Session end requested via end_consultation tool %s", session_log_context(room_name, customer_id, session_id, mode))
@@ -777,7 +763,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         schedule_session_end_disconnect("final_output_transcript")
 
                 # Log any final responses or tool call events for tracking
-                if event.is_final_response():
+                if live_event.final_response:
                     logger.debug("Agent turn complete. Finished generation.")
                     if is_session_end_requested():
                         logger.info("Session end requested without final output transcript %s", session_log_context(room_name, customer_id, session_id, mode))
@@ -785,9 +771,15 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         schedule_session_end_disconnect("final_response")
 
                 # Trigger clean shutdown when the model completes the session
-                if event.actions and event.actions.end_of_agent:
+                if live_event.end_of_agent:
                     logger.info("Model requested end of session conversation %s", session_log_context(room_name, customer_id, session_id, mode))
                     schedule_session_end_disconnect("end_of_agent")
+
+                if live_event.interrupted:
+                    logger.info("ADK Live response interrupted %s", session_log_context(room_name, customer_id, session_id, mode))
+
+                if live_event.session_resumption_handle:
+                    logger.debug("ADK Live session resumption handle updated %s", session_log_context(room_name, customer_id, session_id, mode))
 
                 if is_session_end_requested() and not session_end_disconnect_task:
                     logger.info("Session end requested; using graceful fallback disconnect %s", session_log_context(room_name, customer_id, session_id, mode))

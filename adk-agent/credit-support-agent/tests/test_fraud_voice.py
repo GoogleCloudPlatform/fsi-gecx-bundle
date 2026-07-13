@@ -2,8 +2,10 @@ from pathlib import Path
 
 from agent.fraud_voice import (
     agent_offered_google_wallet,
+    apply_wallet_transcript_event,
     build_fraud_playbook,
     build_initial_greeting,
+    classify_google_wallet_response,
     customer_confirmed_google_wallet,
     mark_fraud_tool_completed,
     validate_fraud_tool_sequence,
@@ -136,6 +138,73 @@ def test_wallet_confirmation_accepts_only_unambiguous_affirmatives() -> None:
     assert customer_confirmed_google_wallet("No, I don't use Google Wallet") is False
     assert customer_confirmed_google_wallet("What does that do?") is False
     assert customer_confirmed_google_wallet("Yes, but don't add it") is False
+    assert customer_confirmed_google_wallet("Could you please, that would be great.") is True
+    assert customer_confirmed_google_wallet("Sure, go ahead.") is True
+
+
+def test_wallet_response_classification_distinguishes_decline_and_unclear() -> None:
+    assert classify_google_wallet_response("No, not now") == "DECLINED"
+    assert classify_google_wallet_response("Could you please, that would be great") == "CONFIRMED"
+    assert classify_google_wallet_response("How does Google Wallet work?") == "UNCLEAR"
+
+
+def test_wallet_transcript_events_persist_offer_and_later_confirmation() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    playbook["replacement_issued"] = True
+
+    offered = apply_wallet_transcript_event(
+        playbook,
+        author="agent",
+        transcript="I can push the new virtual card to Google Wallet. Should I do that?",
+        event_id="agent-turn-1",
+    )
+    confirmed = apply_wallet_transcript_event(
+        offered,
+        author="user",
+        transcript="Could you please, that would be great.",
+        event_id="user-turn-2",
+    )
+
+    assert offered["wallet_response_status"] == "PENDING"
+    assert offered["wallet_offer_event_id"] == "agent-turn-1"
+    assert confirmed["wallet_customer_confirmed"] is True
+    assert confirmed["wallet_response_status"] == "CONFIRMED"
+    assert confirmed["wallet_response_event_id"] == "user-turn-2"
+    assert validate_fraud_tool_sequence(confirmed, "push_card_to_google_wallet", {}) is None
+
+
+def test_wallet_transcript_decline_does_not_authorize_tool() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    playbook["replacement_issued"] = True
+    playbook = apply_wallet_transcript_event(
+        playbook,
+        author="agent",
+        transcript="Would you like me to add it to Google Wallet?",
+        event_id="agent-turn-1",
+    )
+    declined = apply_wallet_transcript_event(
+        playbook,
+        author="user",
+        transcript="No, please don't do that.",
+        event_id="user-turn-2",
+    )
+
+    assert declined["wallet_customer_confirmed"] is False
+    assert declined["wallet_response_status"] == "DECLINED"
+    assert declined["wallet_push_offered"] is False
+    assert validate_fraud_tool_sequence(declined, "push_card_to_google_wallet", {}) == (
+        "Ask the customer to explicitly confirm Google Wallet provisioning before queueing it."
+    )
 
 
 def test_validate_fraud_tool_sequence_requires_replacement_before_wallet_push() -> None:
@@ -342,3 +411,18 @@ def test_composed_fraud_instruction_prefers_single_triage_workflow() -> None:
     ) in instruction
     assert "offer to queue Google Wallet provisioning and wait for an explicit" in instruction
     assert "Do not call the tool in the same response where you first offer Wallet provisioning" in instruction
+    assert "Any tool response with `success=false`, `sequence_blocked=true`, or an `error` is a failed action" in instruction
+    assert "Never describe it as completed or queued" in instruction
+    assert "Wait for the `triage_fraud_case` result before asking whether the customer needs anything else" in instruction
+
+
+def test_composed_instruction_preserves_catalog_guidance_as_non_operational_context() -> None:
+    instruction = compose_session_instruction(
+        avatar_name="Nova",
+        active_flows=["fraud_alert"],
+        guidance_summary="Source topics: fraud_golden_path, wallet_provisioning.",
+    )
+
+    assert "Approved support guidance:" in instruction
+    assert "fraud_golden_path, wallet_provisioning" in instruction
+    assert "use live tools and session context for operational truth" in instruction

@@ -7,8 +7,13 @@ _WALLET_OFFER_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _WALLET_AFFIRMATIVE_PATTERN = re.compile(
-    r"^\s*(?:yes|yeah|yep|sure|absolutely|please do|do it|go ahead|that works|sounds good|okay|ok)"
-    r"(?:\s*,?\s*(?:please|please do|thanks|thank you))?[.!]?\s*$",
+    r"(?:^\s*(?:yes|yeah|yep|sure|absolutely|please do|do it|go ahead|that works|sounds good|okay|ok)\b"
+    r"|\b(?:could|can|would)\s+you\s+(?:please\s+)?(?:do that|push|add|go ahead)\b"
+    r"|\bthat would be great\b|\bi(?:'d| would) like that\b|\bi want that\b)",
+    re.IGNORECASE,
+)
+_WALLET_DECLINE_PATTERN = re.compile(
+    r"\b(?:no|nope|don't|do not|not now|never|skip it|decline|rather not|stop)\b",
     re.IGNORECASE,
 )
 
@@ -19,8 +24,51 @@ def agent_offered_google_wallet(transcript: str | None) -> bool:
 
 
 def customer_confirmed_google_wallet(transcript: str | None) -> bool:
-    """Accept only a narrow, unambiguous affirmative customer response."""
-    return bool(_WALLET_AFFIRMATIVE_PATTERN.fullmatch(transcript or ""))
+    """Recognize an affirmative request while rejecting contradictory language."""
+    text = transcript or ""
+    return not _WALLET_DECLINE_PATTERN.search(text) and bool(_WALLET_AFFIRMATIVE_PATTERN.search(text))
+
+
+def classify_google_wallet_response(transcript: str | None) -> str:
+    """Classify the customer turn associated with a pending Wallet offer."""
+    text = transcript or ""
+    if _WALLET_DECLINE_PATTERN.search(text):
+        return "DECLINED"
+    if customer_confirmed_google_wallet(text):
+        return "CONFIRMED"
+    return "UNCLEAR"
+
+
+def apply_wallet_transcript_event(
+    fraud_playbook: dict | None,
+    *,
+    author: str,
+    transcript: str | None,
+    event_id: str | None,
+) -> dict:
+    """Return the ADK session playbook transition for a completed transcript."""
+    playbook = dict(fraud_playbook or {})
+    if playbook.get("entry_mode") != "FRAUD_ALERT":
+        return playbook
+
+    if author == "agent" and agent_offered_google_wallet(transcript):
+        playbook["wallet_push_offered"] = True
+        playbook["wallet_customer_confirmed"] = False
+        playbook["wallet_response_status"] = "PENDING"
+        playbook["wallet_offer_event_id"] = event_id
+        playbook["wallet_response_event_id"] = None
+        return playbook
+
+    if author == "user" and playbook.get("wallet_push_offered"):
+        status = classify_google_wallet_response(transcript)
+        playbook["wallet_response_status"] = status
+        playbook["wallet_customer_confirmed"] = status == "CONFIRMED"
+        playbook["wallet_response_event_id"] = event_id
+        if status == "DECLINED":
+            playbook["wallet_push_offered"] = False
+        return playbook
+
+    return playbook
 
 
 def build_fraud_playbook(voice_context: dict | None) -> dict:
@@ -43,6 +91,9 @@ def build_fraud_playbook(voice_context: dict | None) -> dict:
             "replacement_issued": False,
             "wallet_push_offered": False,
             "wallet_customer_confirmed": False,
+            "wallet_response_status": "NONE",
+            "wallet_offer_event_id": None,
+            "wallet_response_event_id": None,
             "wallet_push_queued": False,
             "triage_submitted": False,
             "required_sequence": [],
@@ -64,6 +115,9 @@ def build_fraud_playbook(voice_context: dict | None) -> dict:
         "replacement_issued": False,
         "wallet_push_offered": False,
         "wallet_customer_confirmed": False,
+        "wallet_response_status": "NONE",
+        "wallet_offer_event_id": None,
+        "wallet_response_event_id": None,
         "wallet_push_queued": False,
         "triage_submitted": False,
         "required_sequence": [
@@ -157,6 +211,9 @@ def mark_fraud_tool_completed(
         return playbook
 
     if tool_name == "push_card_to_google_wallet":
+        playbook["wallet_push_offered"] = False
+        playbook["wallet_customer_confirmed"] = False
+        playbook["wallet_response_status"] = "COMPLETED"
         playbook["wallet_push_queued"] = True
         return playbook
 
