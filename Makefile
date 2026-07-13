@@ -5,7 +5,7 @@ PROJECT_ID ?= $(shell gcloud config get-value project 2>/dev/null || echo "YOUR_
 PROJECT_NUMBER ?= $(shell gcloud projects describe $(PROJECT_ID) --format="value(projectNumber)" 2>/dev/null || echo "YOUR_PROJECT_NUMBER")
 REGION ?= us-central1
 DOCKER ?= podman
-CONTAINER_RUNTIME ?=
+CONTAINER_RUNTIME ?= $(shell bash scripts/dev/container-runtime.sh 2>/dev/null || echo "docker")
 TF_VARS ?= ./environment/$(PROJECT_ID)/terraform.tfvars
 TF_BACKEND ?= ./environment/$(PROJECT_ID)/gcs.tfbackend
 CUSTOM_DOMAIN ?= $(shell grep -E '^[[:space:]]*custom_domain[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]' || echo "banking.erikvoit.demo.altostrat.com")
@@ -55,6 +55,17 @@ shadow-db-up: ## Start the local-only PostgreSQL shadow DB for Alembic work
 shadow-db-down: ## Stop the local-only PostgreSQL shadow DB
 	@CONTAINER_RUNTIME="$(CONTAINER_RUNTIME)" bash scripts/dev/alembic-shadow.sh down
 
+.PHONY: livekit-up
+livekit-up: ## Start the local LiveKit server container
+	@echo "Starting LiveKit server..."
+	@$(CONTAINER_RUNTIME) rm -f livekit-server-dev 2>/dev/null || true
+	$(CONTAINER_RUNTIME) run -d --name livekit-server-dev -p 7880:7880 -p 7881:7881 -p 7882:7882/udp livekit/livekit-server:v1.5.0 --dev --keys "devkey: secret" --node-ip 127.0.0.1 --rtc.enable_loopback_candidate
+
+.PHONY: livekit-down
+livekit-down: ## Stop the local LiveKit server container
+	@echo "Stopping LiveKit server..."
+	$(CONTAINER_RUNTIME) rm -f livekit-server-dev
+
 .PHONY: shadow-db-logs
 shadow-db-logs: ## Tail logs for the local-only PostgreSQL shadow DB
 	@CONTAINER_RUNTIME="$(CONTAINER_RUNTIME)" bash scripts/dev/alembic-shadow.sh logs
@@ -90,12 +101,12 @@ db-init-local: ## Initialize and seed the local SQLite database
 .PHONY: run-backend-local
 run-backend-local: ## Run the FastAPI banking service locally
 	@echo "Starting banking-service..."
-	cd banking-service && FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
+	cd banking-service && VOICE_AGENT_SERVICE_URL=http://localhost:8088 FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
 
 .PHONY: run-backend-iam
 run-backend-iam: ## Run the FastAPI banking service locally
 	@echo "Starting banking-service..."
-	cd banking-service && FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) DB_IAM_AUTH=true DATABASE_URL="postgresql+psycopg2://$(GCP_ACCOUNT_ENCODED)@localhost:5432/banking?sslmode=disable" uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
+	cd banking-service && VOICE_AGENT_SERVICE_URL=http://localhost:8088 FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) DB_IAM_AUTH=true DATABASE_URL="postgresql+psycopg2://$(GCP_ACCOUNT_ENCODED)@localhost:5432/banking?sslmode=disable" uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
 
 .PHONY: run-frontend
 run-frontend: ## Run the React/Vite frontend dev server locally
@@ -106,6 +117,11 @@ run-frontend: ## Run the React/Vite frontend dev server locally
 run-data-generator: ## Run the FastAPI synthetic data generator locally
 	@echo "Starting data-generator..."
 	cd data-generator && PROJECT_ID=$(PROJECT_ID) ./run.sh
+
+.PHONY: run-voice-agent
+run-voice-agent: ## Run the credit card support voice agent locally
+	@echo "Starting credit-support-agent..."
+	cd adk-agent/credit-support-agent && PORT=8088 BANKING_SERVICE_URL=http://localhost:8080 VOICE_AGENT_AUDIO_MODEL="publishers/google/models/gemini-live-2.5-flash-native-audio" VOICE_AGENT_VIDEO_MODEL="publishers/google/models/gemini-live-2.5-flash-native-audio" ../../banking-service/.venv/bin/python voice_agent.py
 
 .PHONY: run
 run: ## Concurrently run both backend and frontend servers locally
