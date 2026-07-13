@@ -20,20 +20,18 @@ from agent.agent import (
     create_voice_agent,
     is_session_end_requested,
     is_tool_processing,
-    record_wallet_customer_response,
-    record_wallet_offer,
     reset_session_context,
 )
 from agent.fraud_voice import (
-    agent_offered_google_wallet,
     build_fraud_playbook,
     build_initial_greeting,
-    customer_confirmed_google_wallet,
 )
 from agent.instructions import compose_session_instruction
 from agent.live_runtime import build_live_run_config, normalize_live_event
+from agent.workflow_plugin import FraudWorkflowStatePlugin
 from agent.version import BUILD_VERSION, BUILD_COMMIT_ID
 from agent.events import DataChannelEvent
+from google.adk.apps import App
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.agents.live_request_queue import LiveRequestQueue
@@ -366,7 +364,14 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         logger.info("Setting agent model to Publishers Gemini Live audio wrapper %s model_name=%s", session_log_context(room_name, customer_id, session_id, mode), model_name)
         session_agent.model = Gemini(model=model_name)
         
-    runner = Runner(app_name="credit-support-agent", agent=session_agent, session_service=session_service)
+    runner = Runner(
+        app=App(
+            name="credit-support-agent",
+            root_agent=session_agent,
+            plugins=[FraudWorkflowStatePlugin()],
+        ),
+        session_service=session_service,
+    )
     loop = asyncio.get_running_loop()
     live_queue = LiveRequestQueue()
 
@@ -741,18 +746,12 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                             
                 # Broadcast transcriptions over data channel for UI display when complete
                 if live_event.input_transcript is not None:
-                    record_wallet_customer_response(
-                        customer_confirmed_google_wallet(live_event.input_transcript)
-                    )
                     on_agent_event({
                         "type": "TRANSCRIPT",
                         "author": "user",
                         "text": live_event.input_transcript
                     })
                 if live_event.output_transcript is not None:
-                    record_wallet_offer(
-                        agent_offered_google_wallet(live_event.output_transcript)
-                    )
                     on_agent_event({
                         "type": "TRANSCRIPT",
                         "author": "agent",
