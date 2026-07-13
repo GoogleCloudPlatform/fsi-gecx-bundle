@@ -15,6 +15,7 @@ import {
   FileText,
   Search,
   SlidersHorizontal,
+  Lock,
 } from 'lucide-react';
 import { 
   getAccountsSummary, 
