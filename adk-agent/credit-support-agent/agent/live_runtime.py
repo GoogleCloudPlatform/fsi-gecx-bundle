@@ -23,6 +23,7 @@ def build_live_run_config(
     voice_name: str,
     language_code: str,
     enable_session_resumption: bool | None = None,
+    manual_activity_detection: bool = False,
 ) -> RunConfig:
     """Build the single supported ADK 2.4 configuration for a voice session."""
     video_mode = mode == "video"
@@ -50,6 +51,15 @@ def build_live_run_config(
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),
         output_audio_transcription=types.AudioTranscriptionConfig(),
+        realtime_input_config=(
+            types.RealtimeInputConfig(
+                automatic_activity_detection=types.AutomaticActivityDetection(
+                    disabled=True
+                )
+            )
+            if manual_activity_detection
+            else None
+        ),
         session_resumption=(
             types.SessionResumptionConfig(transparent=True)
             if enable_session_resumption
@@ -100,4 +110,3 @@ def normalize_live_event(event) -> LiveEventView:
             resumption_update.new_handle if resumption_update else None
         ),
     )
-

@@ -23,6 +23,7 @@ from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnecti
 
 from agent.events import DataChannelEvent
 from agent.fraud_voice import (
+    build_triage_model_result,
     invalidate_wallet_authorization,
     mark_fraud_tool_completed,
     validate_fraud_tool_sequence,
@@ -376,7 +377,7 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
                 "secure_message": structured.get("secure_message"),
                 "escalated": structured.get("escalated", False),
             })
-            return None
+            return build_triage_model_result(structured)
 
         account_data = await fetch_updated_account_details()
         logger.info(

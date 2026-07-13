@@ -27,7 +27,7 @@ from agent.fraud_voice import (
     build_initial_greeting,
 )
 from agent.instructions import compose_session_instruction
-from agent.live_runtime import build_live_run_config, normalize_live_event
+from agent.live_runtime import build_live_run_config, env_flag, normalize_live_event
 from agent.workflow_plugin import FraudWorkflowStatePlugin
 from agent.version import BUILD_VERSION, BUILD_COMMIT_ID, BUILD_TIME
 from agent.events import DataChannelEvent
@@ -475,6 +475,16 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         avatar_name=avatar_name,
         voice_name=voice_name,
         language_code=lang_code,
+        manual_activity_detection=(
+            mode == "video"
+            and env_flag("VOICE_AGENT_VIDEO_MANUAL_ACTIVITY_ENABLED", default=True)
+        ),
+    )
+    video_manual_activity_enabled = bool(run_config.realtime_input_config)
+    logger.info(
+        "Configured Live input activity detection %s manual_activity=%s",
+        session_log_context(room_name, customer_id, session_id, mode),
+        video_manual_activity_enabled,
     )
 
     # Initialize LiveKit Room and Audio Source
@@ -566,6 +576,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         await user_stt_queue.put(pcm_bytes)
 
                     if speech_started:
+                        if video_manual_activity_enabled:
+                            live_queue.send_activity_start()
                         # Clear agent's playout queue to immediately interrupt speaking
                         logger.info("User speaking, interrupting agent voice output...")
                         while not playout_queue.empty():
@@ -576,6 +588,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 
                     # Always send the audio blob to the model to allow server-side silence detection
                     live_queue.send_realtime(audio_blob)
+                    if speech_ended and video_manual_activity_enabled:
+                        live_queue.send_activity_end()
         except Exception as err:
             logger.error(f"Error handling incoming audio: {err}", exc_info=True)
         finally:

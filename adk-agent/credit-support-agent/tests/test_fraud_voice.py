@@ -5,6 +5,7 @@ from agent.fraud_voice import (
     apply_wallet_transcript_event,
     build_fraud_playbook,
     build_initial_greeting,
+    build_triage_model_result,
     classify_google_wallet_response,
     customer_confirmed_google_wallet,
     invalidate_wallet_authorization,
@@ -287,6 +288,32 @@ def test_wallet_authorization_invalidation_records_reason() -> None:
     assert invalidated["wallet_customer_confirmed"] is False
     assert invalidated["wallet_invalidation_reason"] == "MODEL_RESPONSE_INTERRUPTED"
     assert invalidated["wallet_invalidation_event_id"] == "interrupt-1"
+
+
+def test_triage_model_result_exposes_only_confirmed_outcomes() -> None:
+    result = build_triage_model_result(
+        {
+            "message": "Fraud case triaged and pending specialist review.",
+            "outcome": "PENDING_SPECIALIST_REVIEW",
+            "voided_authorizations": [{"authorization_id": "auth-1"}],
+            "provisional_credits": [],
+            "replacement_card": {
+                "is_virtual": True,
+                "status": "ACTIVE",
+                "new_last_four": "4447",
+            },
+            "secure_message": {"message_id": "message-1"},
+            "escalated": False,
+        }
+    )
+
+    assert result["pending_holds_released"] == 1
+    assert result["provisional_credits_applied"] == 0
+    assert result["replacement_card_issued"] is True
+    assert result["replacement_card_type"] == "VIRTUAL"
+    assert result["secure_message_sent"] is True
+    assert result["escalated"] is False
+    assert "Do not say a physical card was mailed" in result["model_instruction"]
 
 
 def test_validate_fraud_tool_sequence_requires_replacement_before_wallet_push() -> None:

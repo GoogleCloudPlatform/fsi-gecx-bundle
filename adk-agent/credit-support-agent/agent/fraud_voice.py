@@ -100,6 +100,31 @@ def invalidate_wallet_authorization(
     return playbook
 
 
+def build_triage_model_result(tool_response: dict | None) -> dict:
+    """Return a compact, factual triage result for the model to summarize."""
+    response = tool_response or {}
+    replacement = response.get("replacement_card") or {}
+    return {
+        "success": True,
+        "message": response.get("message") or "Fraud case triage completed.",
+        "outcome": response.get("outcome"),
+        "pending_holds_released": len(response.get("voided_authorizations") or []),
+        "provisional_credits_applied": len(response.get("provisional_credits") or []),
+        "replacement_card_issued": bool(replacement),
+        "replacement_card_type": (
+            "VIRTUAL" if replacement.get("is_virtual") else "PHYSICAL"
+        ) if replacement else None,
+        "replacement_card_status": replacement.get("status"),
+        "replacement_card_last_four": replacement.get("new_last_four"),
+        "secure_message_sent": bool(response.get("secure_message")),
+        "escalated": bool(response.get("escalated")),
+        "model_instruction": (
+            "Summarize only these confirmed fields. Do not say a physical card was mailed, "
+            "a provisional credit was applied, or a Wallet action completed unless the corresponding field confirms it."
+        ),
+    }
+
+
 def build_fraud_playbook(voice_context: dict | None) -> dict:
     """Derive a compact fraud-session playbook from trusted voice context."""
     fraud_alert = (voice_context or {}).get("fraud_alert") or {}
