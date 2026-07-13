@@ -1059,7 +1059,7 @@ export default function VoiceSupportView() {
       )}
 
       {/* Main Content Layout */}
-      <div className="grid min-w-0 flex-1 grid-cols-1 items-start gap-8 md:grid-cols-2">
+      <div className="grid min-w-0 flex-1 grid-cols-1 items-stretch gap-8 md:grid-cols-2">
         
         {/* Left Side: Credit Card Mockup & Account details */}
         <div className="flex min-w-0 flex-col gap-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm backdrop-blur sm:p-8 dark:border-slate-800 dark:bg-slate-900/50 dark:shadow-none">
@@ -1241,7 +1241,7 @@ export default function VoiceSupportView() {
         </div>
 
         {/* Right Side: Conversation Transcripts & Video Player Panel */}
-        <div id="voice-transcript-panel" className="flex min-h-[400px] min-w-0 flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/50 dark:shadow-none">
+        <div id="voice-transcript-panel" className="flex h-full min-h-[400px] min-w-0 flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/50 dark:shadow-none">
           
           {/* Avatar Video Frame container if video mode is active */}
           {mode === 'video' && isConnected && (
@@ -1280,8 +1280,8 @@ export default function VoiceSupportView() {
           
           <div 
             ref={chatContainerRef} 
-            className="min-h-[220px] flex-grow overflow-y-auto space-y-4 pr-2 scrollbar-thin"
-            style={{ maxHeight: mode === 'video' && isConnected ? '200px' : '350px' }}
+            className="min-h-[220px] flex-1 overflow-y-auto space-y-4 pr-2 scrollbar-thin"
+            style={mode === 'video' && isConnected ? { maxHeight: '220px' } : undefined}
           >
             {transcripts.map((t, idx) => {
               if (t.author === 'system') {
