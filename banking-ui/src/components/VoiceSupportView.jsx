@@ -1646,12 +1646,12 @@ export default function VoiceSupportView() {
         )}
 
         {/* Buttons */}
-        <div className={isConnected
-          ? 'flex w-full flex-wrap items-end justify-center gap-4'
-          : 'flex w-full flex-col items-center gap-4'
-        }>
-          {!isConnected ? (
-            <>
+        <div className="flex w-full flex-col items-center gap-8">
+          <div className={isConnected
+            ? 'flex w-full flex-wrap items-end justify-center gap-4'
+            : 'flex w-full flex-col items-center gap-4'
+          }>
+            {!isConnected ? (
               <button
                 onClick={startConsultation}
                 disabled={isConnecting}
@@ -1662,115 +1662,115 @@ export default function VoiceSupportView() {
                 <Phone size={18} />
                 {isConnecting ? 'Connecting...' : 'Start Voice Consultation'}
               </button>
-
-              <div className="flex min-w-0 w-full max-w-md flex-col gap-4 mt-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
-                <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800/80">
-                  <Settings className="w-5 h-5 text-emerald-500" />
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Options</h3>
-                </div>
+            ) : (
+              <>
+                <button
+                  onClick={toggleMute}
+                  className={`p-4 rounded-full border transition-all ${
+                    micEnabled 
+                      ? 'border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-700' 
+                      : 'border-red-500/50 bg-red-950/50 text-red-400 hover:bg-red-900/30'
+                  }`}
+                >
+                  {micEnabled ? <Mic size={20} /> : <MicOff size={20} />}
+                </button>
                 
-                <div className="space-y-2 text-left">
-                  <label htmlFor="voice-audio-input" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                    Audio input
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <div className="relative min-w-0 flex-1">
-                      <Mic className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
-                      <select
-                        id="voice-audio-input"
-                        value={selectedAudioInputId}
-                        onChange={(event) => selectAudioInput(event.target.value)}
-                        disabled={isConnecting || micPermissionState === 'denied'}
-                        className="h-11 w-full truncate rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-8 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
-                      >
-                        {micPermissionState === 'denied' ? (
-                          <option value="">Microphone permission denied</option>
-                        ) : (
-                          <>
-                            {selectedAudioInputId && !audioInputs.some((device) => device.deviceId === selectedAudioInputId) && (
-                              <option value={selectedAudioInputId}>Saved microphone (refresh to identify)</option>
-                            )}
-                            {(() => {
-                              const defaultDevice = audioInputs.find(d => d.deviceId === 'default');
-                              const trueDefaultLabel = defaultDevice ? defaultDevice.label.replace(/^Default - /, '') : '';
-                              return audioInputs
-                                .filter((device) => device.deviceId !== 'default')
-                                .map((device, index) => {
-                                  const isDefault = device.label === trueDefaultLabel && trueDefaultLabel !== '';
-                                  const displayName = device.label || `Microphone ${index + 1}`;
-                                  return (
-                                    <option key={device.deviceId} value={device.deviceId}>
-                                      {isDefault ? `${displayName} (System default)` : displayName}
-                                    </option>
-                                  );
-                                });
-                            })()}
-                          </>
-                        )}
-                      </select>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => refreshAudioInputs(true)}
-                      disabled={isConnecting || isRefreshingAudioInputs}
-                      aria-label="Refresh microphones"
-                      title="Allow access and refresh microphones"
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 text-slate-500 transition hover:border-blue-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-400 dark:hover:border-blue-500 dark:hover:text-blue-400"
-                    >
-                      <RefreshCw size={16} className={isRefreshingAudioInputs ? 'animate-spin' : ''} />
-                    </button>
-                  </div>
-                  
-                  {/* Test Microphone Toggle */}
-                  <div className="flex items-center justify-between pt-3">
-                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => !isConnecting && micPermissionState !== 'denied' && setIsTestingMic(!isTestingMic)}>
-                      Test Microphone
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setIsTestingMic(!isTestingMic)}
-                      disabled={isConnecting || micPermissionState === 'denied'}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900 ${
-                        isTestingMic ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
-                      } ${isConnecting || micPermissionState === 'denied' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      <span className="sr-only">Test Microphone</span>
-                      <span
-                        aria-hidden="true"
-                        className={`pointer-events-none absolute left-0 inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          isTestingMic ? 'translate-x-4' : 'translate-x-0.5'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                  
-                  {isTestingMic && <MicTester deviceId={selectedAudioInputId} onError={setErrorMessage} />}
+                <button
+                  onClick={endConsultation}
+                  className="flex items-center gap-2 px-8 py-3 rounded-full font-bold shadow-lg shadow-red-500/20 text-white bg-red-600 hover:bg-red-500 transition-all transform active:scale-95"
+                >
+                  <PhoneOff size={18} />
+                  End Consultation
+                </button>
+              </>
+            )}
+          </div>
 
+          <div className="flex min-w-0 w-full max-w-md flex-col gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
+            <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800/80">
+              <Settings className="w-5 h-5 text-emerald-500" />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Options</h3>
+            </div>
+            
+            <div className="space-y-2 text-left">
+              <label htmlFor="voice-audio-input" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                Audio input
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <Mic className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                  <select
+                    id="voice-audio-input"
+                    value={selectedAudioInputId}
+                    onChange={(event) => selectAudioInput(event.target.value)}
+                    disabled={isConnecting || micPermissionState === 'denied'}
+                    className="h-11 w-full truncate rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-8 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
+                  >
+                    {micPermissionState === 'denied' ? (
+                      <option value="">Microphone permission denied</option>
+                    ) : (
+                      <>
+                        {selectedAudioInputId && !audioInputs.some((device) => device.deviceId === selectedAudioInputId) && (
+                          <option value={selectedAudioInputId}>Saved microphone (refresh to identify)</option>
+                        )}
+                        {(() => {
+                          const defaultDevice = audioInputs.find(d => d.deviceId === 'default');
+                          const trueDefaultLabel = defaultDevice ? defaultDevice.label.replace(/^Default - /, '') : '';
+                          return audioInputs
+                            .filter((device) => device.deviceId !== 'default')
+                            .map((device, index) => {
+                              const isDefault = device.label === trueDefaultLabel && trueDefaultLabel !== '';
+                              const displayName = device.label || `Microphone ${index + 1}`;
+                              return (
+                                <option key={device.deviceId} value={device.deviceId}>
+                                  {isDefault ? `${displayName} (System default)` : displayName}
+                                </option>
+                              );
+                            });
+                        })()}
+                      </>
+                    )}
+                  </select>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => refreshAudioInputs(true)}
+                  disabled={isConnecting || isRefreshingAudioInputs}
+                  aria-label="Refresh microphones"
+                  title="Allow access and refresh microphones"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 text-slate-500 transition hover:border-blue-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-400 dark:hover:border-blue-500 dark:hover:text-blue-400"
+                >
+                  <RefreshCw size={16} className={isRefreshingAudioInputs ? 'animate-spin' : ''} />
+                </button>
               </div>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={toggleMute}
-                className={`p-4 rounded-full border transition-all ${
-                  micEnabled 
-                    ? 'border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-700' 
-                    : 'border-red-500/50 bg-red-950/50 text-red-400 hover:bg-red-900/30'
-                }`}
-              >
-                {micEnabled ? <Mic size={20} /> : <MicOff size={20} />}
-              </button>
               
-              <button
-                onClick={endConsultation}
-                className="flex items-center gap-2 px-8 py-3 rounded-full font-bold shadow-lg shadow-red-500/20 text-white bg-red-600 hover:bg-red-500 transition-all transform active:scale-95"
-              >
-                <PhoneOff size={18} />
-                End Consultation
-              </button>
-            </>
-          )}
+              {/* Test Microphone Toggle */}
+              <div className="flex items-center justify-between pt-3">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => !isConnecting && micPermissionState !== 'denied' && setIsTestingMic(!isTestingMic)}>
+                  Test Microphone
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsTestingMic(!isTestingMic)}
+                  disabled={isConnecting || micPermissionState === 'denied'}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900 ${
+                    isTestingMic ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+                  } ${isConnecting || micPermissionState === 'denied' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <span className="sr-only">Test Microphone</span>
+                  <span
+                    aria-hidden="true"
+                    className={`pointer-events-none absolute left-0 inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      isTestingMic ? 'translate-x-4' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
+              
+              {isTestingMic && <MicTester deviceId={selectedAudioInputId} onError={setErrorMessage} />}
+
+            </div>
+          </div>
         </div>
       </div>
 
