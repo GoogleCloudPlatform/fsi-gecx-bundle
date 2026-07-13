@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Room, RoomEvent } from 'livekit-client';
+import { useLocation } from 'react-router-dom';
 import { 
   Phone, 
   PhoneOff, 
@@ -24,6 +25,10 @@ import {
 import { DataChannelEvent } from '../utils/constants.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
+import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
+import { useSettings } from '../context/SettingsContext.jsx';
+import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
+import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 
 function FraudStep({ label, complete }) {
   return (
@@ -103,6 +108,8 @@ function applyWalletProvisioningEvent(cards, event) {
 }
 
 export default function VoiceSupportView() {
+  const { brandColorFrom, resolvedTheme } = useSettings();
+  const location = useLocation();
   const projectId = window.firebaseConfig?.projectId;
   const voiceParts = (window.env?.CX_AGENT_STUDIO_VOICE_AGENT_DEPLOYMENT_NAME || '').split('/');
   const cxProjectId = voiceParts.includes('projects') ? voiceParts[voiceParts.indexOf('projects') + 1] : '';
@@ -164,6 +171,74 @@ export default function VoiceSupportView() {
     specialistReview: Boolean(fraudTriage.outcome && fraudTriage.outcome !== 'CUSTOMER_RECOGNIZED'),
   };
   const showFraudRemediationProgress = fraudProgress.triaged || fraudProgress.blocked || fraudProgress.replaced || fraudProgress.walletQueued;
+
+  // Joyride Tour States
+  const [tourRun, setTourRun] = useState(false);
+  const [tourKey, setTourKey] = useState(0);
+  const [domReady, setDomReady] = useState(false);
+
+  useEffect(() => {
+    const isCompleted = localStorage.getItem('voice-tour-completed') === 'true';
+    const params = new URLSearchParams(location.search);
+    const forceTour = params.get('tour') === 'true';
+
+    if (forceTour || !isCompleted) {
+      setTourRun(true);
+    } else {
+      setTourRun(false);
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    const checkElement = setInterval(() => {
+      if (document.querySelector('#voice-tour-btn')) {
+        setDomReady(true);
+        clearInterval(checkElement);
+      }
+    }, 50);
+    return () => clearInterval(checkElement);
+  }, []);
+
+  const steps = useMemo(() => {
+    return [
+      {
+        target: '#voice-tour-btn',
+        content: "Welcome to Credit Card Voice Support! Here you can speak directly with our AI voice assistant to activate cards, check credit balances, and resolve fraud blocks in real-time.",
+        placement: 'bottom-end',
+        skipBeacon: true
+      },
+      {
+        target: '#voice-engine-select',
+        content: "Engine Selector: Choose between LiveKit WebRTC (runs Opus audio with video support) or GECX Direct WS (uses raw low-latency PCM socket streaming). Both interface directly with Gemini.",
+        placement: 'bottom',
+        skipBeacon: true
+      },
+      {
+        target: '#voice-cc-mockup',
+        content: "Secure Card Instruments: View card details, status indicators (e.g. Card Frozen when compromised), and wallet provisioning states.",
+        placement: 'right',
+        skipBeacon: true
+      },
+      {
+        target: '#voice-balances-ledger',
+        content: "Ledgers and Balances: Monitor your credit limits, available credits, and current statement items updating dynamically from the database.",
+        placement: 'top',
+        skipBeacon: true
+      },
+      {
+        target: '#voice-transcript-panel',
+        content: "Live Consultation Transcript: Read transcription outputs of all spoken audio exchanges between you, the AI agent, or a takeover supervisor.",
+        placement: 'top',
+        skipBeacon: true
+      },
+      {
+        target: '#voice-call-controls',
+        content: "Call Actions: Pick between Voice-only or interactive Live Video Avatars, and click 'Join Voice channel' to launch the real-time audio session.",
+        placement: 'top',
+        skipBeacon: true
+      }
+    ];
+  }, []);
 
   const roomRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -892,17 +967,31 @@ export default function VoiceSupportView() {
         <p className="text-slate-400 mt-2 text-lg">
           Talk to our real-time AI assistant for instant credit card operations.
         </p>
-        <button
-          onClick={() => setIsInfoModalOpen(true)}
-          className="absolute right-0 top-1/2 -translate-y-1/2 p-2.5 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-800 shadow-sm text-slate-500 hover:text-slate-750 dark:text-slate-400 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
-          title="GCP App Integration Info"
-        >
-          <GoogleCloudIcon className="w-5 h-5" />
-        </button>
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-3">
+          <button
+            id="voice-tour-btn"
+            onClick={() => {
+              localStorage.removeItem('voice-tour-completed');
+              setTourKey(prev => prev + 1);
+              setTourRun(true);
+            }}
+            className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-800 shadow-sm text-slate-500 hover:text-slate-750 dark:text-slate-400 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+            title="Take Voice Support Tour"
+          >
+            <GoogleCompassIcon className="w-5 h-5 text-indigo-500" />
+          </button>
+          <button
+            onClick={() => setIsInfoModalOpen(true)}
+            className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-800 shadow-sm text-slate-500 hover:text-slate-750 dark:text-slate-400 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+            title="GCP App Integration Info"
+          >
+            <GoogleCloudIcon className="w-5 h-5" />
+          </button>
+        </div>
 
         {/* Engine Selection Toggle */}
         {!isConnected && !isConnecting && (
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-950/60 rounded-full border border-slate-200 dark:border-slate-800/80 mt-4">
+          <div id="voice-engine-select" className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-950/60 rounded-full border border-slate-200 dark:border-slate-800/80 mt-4">
             <button
               onClick={() => setEngine('livekit')}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
@@ -1022,7 +1111,7 @@ export default function VoiceSupportView() {
           )}
           
           {/* Card Mockup */}
-          <div className="relative aspect-[1.586/1] w-full rounded-2xl overflow-hidden bg-gradient-to-tr from-slate-900 via-indigo-950 to-indigo-900 p-6 shadow-2xl flex flex-col justify-between border border-slate-700/50">
+          <div id="voice-cc-mockup" className="relative aspect-[1.586/1] w-full rounded-2xl overflow-hidden bg-gradient-to-tr from-slate-900 via-indigo-950 to-indigo-900 p-6 shadow-2xl flex flex-col justify-between border border-slate-700/50">
             <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
             
             <div className="flex justify-between items-start">
@@ -1114,7 +1203,7 @@ export default function VoiceSupportView() {
           )}
 
           {/* Account Balances Grid */}
-          <div className="grid grid-cols-3 gap-4">
+          <div id="voice-balances-ledger" className="grid grid-cols-3 gap-4">
             <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Available Credit</span>
               <p className="text-xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">${availableCredit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
@@ -1166,7 +1255,7 @@ export default function VoiceSupportView() {
         </div>
 
         {/* Right Side: Conversation Transcripts & Video Player Panel */}
-        <div className="flex flex-col bg-white dark:bg-slate-900/50 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-3xl p-6 min-h-[400px] shadow-sm dark:shadow-none">
+        <div id="voice-transcript-panel" className="flex flex-col bg-white dark:bg-slate-900/50 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-3xl p-6 min-h-[400px] shadow-sm dark:shadow-none">
           
           {/* Avatar Video Frame container if video mode is active */}
           {mode === 'video' && isConnected && (
@@ -1243,7 +1332,7 @@ export default function VoiceSupportView() {
       </div>
 
       {/* Footer / Control Section */}
-      <div className="flex flex-col items-center gap-4 bg-white dark:bg-slate-900/50 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm dark:shadow-none">
+      <div id="voice-call-controls" className="flex flex-col items-center gap-4 bg-white dark:bg-slate-900/50 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm dark:shadow-none">
         
         {/* Connection status notification */}
         {isHumanAgentActive && (
@@ -1472,6 +1561,33 @@ export default function VoiceSupportView() {
         </div>
       </GcpInfoModal>
 
+      {/* Joyride Onboarding Tour */}
+      {tourRun && domReady && steps.length > 0 && (
+        <Joyride
+          key={tourKey}
+          run={tourRun}
+          options={{
+            scrollOffset: 120
+          }}
+          steps={steps}
+          continuous={true}
+          showSkipButton={true}
+          showCloseButton={true}
+          onEvent={(data) => {
+            const { status, type, action } = data;
+            if (
+              [STATUS.FINISHED, STATUS.SKIPPED].includes(status) ||
+              type === EVENTS.TOUR_END ||
+              action === ACTIONS.CLOSE ||
+              action === ACTIONS.SKIP
+            ) {
+              setTourRun(false);
+              localStorage.setItem('voice-tour-completed', 'true');
+            }
+          }}
+          styles={getJoyrideStyles(resolvedTheme, brandColorFrom)}
+        />
+      )}
     </div>
   );
 }
