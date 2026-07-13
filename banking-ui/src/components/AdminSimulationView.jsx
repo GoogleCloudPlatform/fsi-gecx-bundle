@@ -1136,6 +1136,7 @@ function AdminSimulationView({ mode = 'studio' }) {
         flaggedEventsPerMinute: Math.max(prev.flaggedEventsPerMinute, 1),
       }));
       fetchGlobalStream();
+      refreshOperationsSummary(monitorWindowMinutes);
     } catch (err) {
       setFeedback({
         type: 'error',
@@ -2561,24 +2562,40 @@ function AdminSimulationView({ mode = 'studio' }) {
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            The <strong>Credit Risk Metrics</strong> tile tracks open fraud cases, recent model scores, risk condition, and unsettled exposure separately from replication transport health. A non-zero alert count means the demo has suspicious card activity available for secure-message review and the voice agent flow.
+            <strong>Credit Risk Metrics</strong> summarizes operational fraud activity separately from replication transport health. Except for the current open-alert total, the metrics use the monitoring window selected at the top of the console.
           </p>
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 font-sans text-xs">
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">Open Fraud Alerts</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Open alerts represent operational fraud cases that have been enriched, messaged to the customer, and made available to support workflows.</p>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">All operational fraud alerts currently awaiting review, including cases available to customer messaging and support workflows.</p>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-amber-500 dark:text-amber-400 font-mono font-bold">Risk Condition</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Normal means the visible stream has low model scores and no active alert pressure. Elevated means the stream has flagged activity, open alerts, or an average model score above the operating threshold. Surging is reserved for multiple flagged authorizations per minute or a sustained high average model score.</p>
+              <div className="text-rose-500 dark:text-rose-400 font-mono font-bold">High Risk Transactions</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Unique authorizations with a recorded fraud model decision score of 70 or higher.</p>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-amber-500 dark:text-amber-400 font-mono font-bold">Peak Model Score</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">The score comes directly from authorization fraud decision payloads, making the tile reflect the current model rather than a separate hard-coded anomaly counter.</p>
+              <div className="text-cyan-500 dark:text-cyan-400 font-mono font-bold">Accounts Impacted</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Unique account IDs represented by authorization or settlement activity in the selected window.</p>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-blue-500 dark:text-blue-400 font-mono font-bold">Exposure + Event Mix</div>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Flagged exposure sums suspicious authorizations in the visible stream, while the event mix compares authorization, posting, and flagged activity per minute.</p>
+              <div className="text-amber-500 dark:text-amber-400 font-mono font-bold">Pending Exposure</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">The total value of pending or flagged authorization holds created in the selected window.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-slate-700 dark:text-slate-300 font-mono font-bold">Active Scenarios</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Distinct synthetic scenario IDs with recorded outcomes in the selected window.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-slate-700 dark:text-slate-300 font-mono font-bold">Peak Risk Score</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">The highest recorded fraud model decision score in the selected window.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-slate-700 dark:text-slate-300 font-mono font-bold">Rules Triggered</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Distinct non-baseline fraud reason codes recorded by model decisions in the selected window.</p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="text-slate-700 dark:text-slate-300 font-mono font-bold">Alerts Generated</div>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">Fraud alerts created during the selected window, regardless of their current status.</p>
             </div>
           </div>
         </div>

@@ -18,6 +18,7 @@ from models.credit_card import TransactionAuthorization
 from models.fraud import FraudAlert
 from repositories.accounts import AccountsRepository
 from repositories.credit_card import CreditCardRepository
+from repositories.fraud import FraudDecisionRepository
 from services.accounts import AccountsService
 from services.cdc_monitoring import CdcMonitoringService
 from services.seeding_service import (
@@ -26,6 +27,7 @@ from services.seeding_service import (
     reset_user_suite,
 )
 from services.fraud_alerts import FraudAlertService
+from services.fraud_scoring import DEFAULT_FRAUD_FLAG_THRESHOLD
 from utils.audit import record_audit_event
 from utils.database import SessionLocal, enable_session_rbac_override
 from utils.internal_auth import get_internal_switch_token
@@ -345,6 +347,7 @@ class SimulationService:
 
         injected_auths = []
         flagged_stream_events = 0
+        fraud_decision_repo = FraudDecisionRepository(self.db)
         for idx, (desc, amt, mcc, country, risk) in enumerate(swipes):
             auth = TransactionAuthorization(
                 id=uuid.uuid4(),
@@ -363,6 +366,45 @@ class SimulationService:
                 expires_at=now + datetime.timedelta(days=7),
             )
             self.db.add(auth)
+            self.db.flush()
+            decision_record = fraud_decision_repo.record_model_decision(
+                authorization_id=auth.id,
+                customer_id=user.id,
+                credit_account_id=cred_acc.id,
+                card_id=card.id,
+                score=risk,
+                threshold=DEFAULT_FRAUD_FLAG_THRESHOLD,
+                decision=(
+                    "FLAGGED"
+                    if risk > DEFAULT_FRAUD_FLAG_THRESHOLD
+                    else "APPROVED"
+                ),
+                reason_codes=["SIMULATED_FRAUD_ANOMALY"],
+                feature_snapshot={
+                    "merchant_name": desc,
+                    "merchant_category_code": mcc,
+                    "merchant_country_code": country,
+                    "transaction_channel": "ECOMMERCE",
+                    "is_fraud_simulation": True,
+                },
+                model_version="targeted-fraud-simulation-v1",
+            )
+            record_audit_event(
+                self.db,
+                "FRAUD_MODEL_DECISION_RECORDED",
+                {
+                    "decision_id": str(decision_record.id),
+                    "authorization_id": str(auth.id),
+                    "customer_id": str(user.id),
+                    "credit_account_id": str(cred_acc.id),
+                    "card_id": str(card.id),
+                    "score": risk,
+                    "threshold": DEFAULT_FRAUD_FLAG_THRESHOLD,
+                    "decision": decision_record.decision,
+                    "reason_codes": list(decision_record.reason_codes or []),
+                    "model_version": decision_record.model_version,
+                },
+            )
             injected_auths.append(auth)
             if risk > 0:
                 try:
