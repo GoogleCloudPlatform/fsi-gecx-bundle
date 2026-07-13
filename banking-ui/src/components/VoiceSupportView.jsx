@@ -19,7 +19,8 @@ import {
   ExternalLink,
   RefreshCw,
   Settings,
-  Activity
+  Activity,
+  Volume2
 } from 'lucide-react';
 import { 
   getCreditCardAccount, 
@@ -35,6 +36,7 @@ import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 
 const AUDIO_INPUT_STORAGE_KEY = 'voice-support-audio-input';
+const AUDIO_OUTPUT_STORAGE_KEY = 'voice-support-audio-output';
 
 function microphoneConstraints(deviceId) {
   return {
@@ -276,10 +278,14 @@ export default function VoiceSupportView() {
   const [volume, setVolume] = useState(0.8);
   const [latency, setLatency] = useState(0);
   const [audioInputs, setAudioInputs] = useState([]);
+  const [audioOutputs, setAudioOutputs] = useState([]);
   const [selectedAudioInputId, setSelectedAudioInputId] = useState(
     () => localStorage.getItem(AUDIO_INPUT_STORAGE_KEY) || ''
   );
-  const [isRefreshingAudioInputs, setIsRefreshingAudioInputs] = useState(false);
+  const [selectedAudioOutputId, setSelectedAudioOutputId] = useState(
+    () => localStorage.getItem(AUDIO_OUTPUT_STORAGE_KEY) || ''
+  );
+  const [isRefreshingAudioDevices, setIsRefreshingAudioInputs] = useState(false);
   const [micPermissionState, setMicPermissionState] = useState('prompt');
   const [isTestingMic, setIsTestingMic] = useState(false);
 
@@ -386,8 +392,9 @@ export default function VoiceSupportView() {
   const micEnabledRef = useRef(true);
   const pingIntervalRef = useRef(null);
   const lastDefaultMicLabelRef = useRef('');
+  const lastDefaultSpeakerLabelRef = useRef('');
 
-  const refreshAudioInputs = useCallback(async (requestPermissions = false) => {
+  const refreshAudioDevices = useCallback(async (requestPermissions = false) => {
     console.log(`[Microphone] Refreshing audio inputs... (Request permissions: ${requestPermissions})`);
     if (!navigator.mediaDevices?.enumerateDevices) {
       setErrorMessage('Audio input selection is not supported by this browser.');
@@ -396,36 +403,64 @@ export default function VoiceSupportView() {
 
     setIsRefreshingAudioInputs(true);
     try {
-      const devices = await Room.getLocalDevices('audioinput', requestPermissions);
-      setAudioInputs(devices);
+      const inDevices = await Room.getLocalDevices('audioinput', requestPermissions);
+      setAudioInputs(inDevices);
+      const outDevices = await Room.getLocalDevices('audiooutput', requestPermissions);
+      setAudioOutputs(outDevices);
 
-      const defaultDevice = devices.find(d => d.deviceId === 'default');
-      const newDefaultLabel = defaultDevice?.label || '';
-      const defaultChanged = lastDefaultMicLabelRef.current && lastDefaultMicLabelRef.current !== newDefaultLabel;
-      lastDefaultMicLabelRef.current = newDefaultLabel;
+      const defaultMicDevice = inDevices.find(d => d.deviceId === 'default');
+      const newDefaultMicLabel = defaultMicDevice?.label || '';
+      const defaultMicChanged = lastDefaultMicLabelRef.current && lastDefaultMicLabelRef.current !== newDefaultMicLabel;
+      lastDefaultMicLabelRef.current = newDefaultMicLabel;
 
-      const trueHardwareLabel = newDefaultLabel.replace(/^Default - /, '');
-      const trueHardwareDevice = devices.find(d => d.deviceId !== 'default' && d.label === trueHardwareLabel);
+      const trueMicLabel = newDefaultMicLabel.replace(/^Default - /, '');
+      const trueMicDevice = inDevices.find(d => d.deviceId !== 'default' && d.label === trueMicLabel);
 
       setSelectedAudioInputId((currentDeviceId) => {
-        if (defaultChanged && trueHardwareDevice) {
-          console.log(`[Microphone] Browser site default microphone changed to: ${trueHardwareLabel} (${trueHardwareDevice.deviceId})`);
-          localStorage.setItem(AUDIO_INPUT_STORAGE_KEY, trueHardwareDevice.deviceId);
-          return trueHardwareDevice.deviceId;
+        if (defaultMicChanged && trueMicDevice) {
+          console.log(`[Microphone] Browser site default microphone changed to: ${trueMicLabel} (${trueMicDevice.deviceId})`);
+          localStorage.setItem(AUDIO_INPUT_STORAGE_KEY, trueMicDevice.deviceId);
+          return trueMicDevice.deviceId;
         }
-        if (currentDeviceId && devices.some((device) => device.deviceId === currentDeviceId)) {
+        if (currentDeviceId && inDevices.some((device) => device.deviceId === currentDeviceId)) {
           return currentDeviceId;
         }
-        // Browsers can hide every device until permission is granted. Preserve
-        // a saved choice during that anonymous pre-permission enumeration.
-        if (currentDeviceId && devices.length === 0 && !requestPermissions) {
+        if (currentDeviceId && inDevices.length === 0 && !requestPermissions) {
           return currentDeviceId;
         }
-        if (trueHardwareDevice) {
-          localStorage.setItem(AUDIO_INPUT_STORAGE_KEY, trueHardwareDevice.deviceId);
-          return trueHardwareDevice.deviceId;
+        if (trueMicDevice) {
+          localStorage.setItem(AUDIO_INPUT_STORAGE_KEY, trueMicDevice.deviceId);
+          return trueMicDevice.deviceId;
         }
         localStorage.removeItem(AUDIO_INPUT_STORAGE_KEY);
+        return '';
+      });
+
+      const defaultSpeakerDevice = outDevices.find(d => d.deviceId === 'default');
+      const newDefaultSpeakerLabel = defaultSpeakerDevice?.label || '';
+      const defaultSpeakerChanged = lastDefaultSpeakerLabelRef.current && lastDefaultSpeakerLabelRef.current !== newDefaultSpeakerLabel;
+      lastDefaultSpeakerLabelRef.current = newDefaultSpeakerLabel;
+
+      const trueSpeakerLabel = newDefaultSpeakerLabel.replace(/^Default - /, '');
+      const trueSpeakerDevice = outDevices.find(d => d.deviceId !== 'default' && d.label === trueSpeakerLabel);
+
+      setSelectedAudioOutputId((currentDeviceId) => {
+        if (defaultSpeakerChanged && trueSpeakerDevice) {
+          console.log(`[Speaker] Browser site default speaker changed to: ${trueSpeakerLabel} (${trueSpeakerDevice.deviceId})`);
+          localStorage.setItem(AUDIO_OUTPUT_STORAGE_KEY, trueSpeakerDevice.deviceId);
+          return trueSpeakerDevice.deviceId;
+        }
+        if (currentDeviceId && outDevices.some((device) => device.deviceId === currentDeviceId)) {
+          return currentDeviceId;
+        }
+        if (currentDeviceId && outDevices.length === 0 && !requestPermissions) {
+          return currentDeviceId;
+        }
+        if (trueSpeakerDevice) {
+          localStorage.setItem(AUDIO_OUTPUT_STORAGE_KEY, trueSpeakerDevice.deviceId);
+          return trueSpeakerDevice.deviceId;
+        }
+        localStorage.removeItem(AUDIO_OUTPUT_STORAGE_KEY);
         return '';
       });
     } catch (error) {
@@ -445,7 +480,7 @@ export default function VoiceSupportView() {
         };
       }).catch(() => {});
     }
-  }, [refreshAudioInputs]);
+  }, [refreshAudioDevices]);
 
   const selectAudioInput = (deviceId) => {
     const device = audioInputs.find(d => d.deviceId === deviceId);
@@ -456,6 +491,19 @@ export default function VoiceSupportView() {
       localStorage.setItem(AUDIO_INPUT_STORAGE_KEY, deviceId);
     } else {
       localStorage.removeItem(AUDIO_INPUT_STORAGE_KEY);
+    }
+    setErrorMessage('');
+  };
+
+  const selectAudioOutput = (deviceId) => {
+    const device = audioOutputs.find(d => d.deviceId === deviceId);
+    const deviceName = device?.label || 'System default';
+    console.log(`[Speaker] Speaker manually changed to: ${deviceName} (${deviceId})`);
+    setSelectedAudioOutputId(deviceId);
+    if (deviceId) {
+      localStorage.setItem(AUDIO_OUTPUT_STORAGE_KEY, deviceId);
+    } else {
+      localStorage.removeItem(AUDIO_OUTPUT_STORAGE_KEY);
     }
     setErrorMessage('');
   };
@@ -579,11 +627,11 @@ export default function VoiceSupportView() {
 
   useEffect(() => {
     const isGranted = micPermissionState === 'granted';
-    refreshAudioInputs(isGranted);
-    const handleDeviceChange = () => refreshAudioInputs(isGranted);
+    refreshAudioDevices(isGranted);
+    const handleDeviceChange = () => refreshAudioDevices(isGranted);
     navigator.mediaDevices?.addEventListener?.('devicechange', handleDeviceChange);
     return () => navigator.mediaDevices?.removeEventListener?.('devicechange', handleDeviceChange);
-  }, [refreshAudioInputs, micPermissionState]);
+  }, [refreshAudioDevices, micPermissionState]);
 
   // Force voice/audio mode when using GECX engine (video avatars not supported)
   useEffect(() => {
@@ -641,6 +689,31 @@ export default function VoiceSupportView() {
 
     swapMicrophone();
   }, [selectedAudioInputId, engine, isConnected]);
+
+  // Mid-session speaker hot-swapping
+  useEffect(() => {
+    if (!isConnected) return;
+
+    async function swapSpeaker() {
+      try {
+        if (engine === 'livekit' && roomRef.current) {
+          await roomRef.current.switchActiveDevice('audiooutput', selectedAudioOutputId);
+          console.log(`[Hot-Swap] LiveKit active speaker switched to: ${selectedAudioOutputId || 'default'}`);
+        } else if (engine === 'gecx' && audioContextRef.current) {
+          if (typeof audioContextRef.current.setSinkId === 'function') {
+            await audioContextRef.current.setSinkId(selectedAudioOutputId);
+            console.log(`[Hot-Swap] GECX active speaker switched to: ${selectedAudioOutputId || 'default'}`);
+          } else {
+            console.warn('[Hot-Swap] setSinkId is not supported in this browser for GECX output routing.');
+          }
+        }
+      } catch (err) {
+        console.error('[Hot-Swap] Speaker switch failed:', err);
+      }
+    }
+
+    swapSpeaker();
+  }, [selectedAudioOutputId, isConnected, engine]);
 
   // Auto scroll transcript panel inside container
   useEffect(() => {
@@ -819,6 +892,14 @@ export default function VoiceSupportView() {
 
       if (audioCtx.state === 'suspended') {
         await audioCtx.resume();
+      }
+
+      if (typeof audioCtx.setSinkId === 'function' && selectedAudioOutputId) {
+        try {
+          await audioCtx.setSinkId(selectedAudioOutputId);
+        } catch (e) {
+          console.warn('[GECX] Failed to set initial sink ID:', e);
+        }
       }
 
       let fbToken = "";
@@ -1683,93 +1764,132 @@ export default function VoiceSupportView() {
             )}
           </div>
 
-          <div className="flex min-w-0 w-full max-w-md flex-col gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
+          <div className="flex min-w-0 w-full flex-col gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
             <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800/80">
               <Settings className="w-5 h-5 text-emerald-500" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">Options</h3>
             </div>
             
-            <div className="space-y-2 text-left">
-              <label htmlFor="voice-audio-input" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                Audio input
-              </label>
-              <div className="flex items-center gap-2">
-                <div className="relative min-w-0 flex-1">
-                  <Mic className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
-                  <select
-                    id="voice-audio-input"
-                    value={selectedAudioInputId}
-                    onChange={(event) => selectAudioInput(event.target.value)}
-                    disabled={isConnecting || micPermissionState === 'denied'}
-                    className="h-11 w-full truncate rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-8 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
-                  >
-                    {micPermissionState === 'denied' ? (
-                      <option value="">Microphone permission denied</option>
-                    ) : (
-                      <>
-                        {selectedAudioInputId && !audioInputs.some((device) => device.deviceId === selectedAudioInputId) && (
-                          <option value={selectedAudioInputId}>Saved microphone (refresh to identify)</option>
-                        )}
-                        {(() => {
-                          const defaultDevice = audioInputs.find(d => d.deviceId === 'default');
-                          const trueDefaultLabel = defaultDevice ? defaultDevice.label.replace(/^Default - /, '') : '';
-                          return audioInputs
-                            .filter((device) => device.deviceId !== 'default')
-                            .map((device, index) => {
-                              const isDefault = device.label === trueDefaultLabel && trueDefaultLabel !== '';
-                              const displayName = device.label || `Microphone ${index + 1}`;
-                              return (
-                                <option key={device.deviceId} value={device.deviceId}>
-                                  {isDefault ? `${displayName} (System default)` : displayName}
-                                </option>
-                              );
-                            });
-                        })()}
-                      </>
-                    )}
-                  </select>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => refreshAudioInputs(true)}
-                  disabled={isConnecting || isRefreshingAudioInputs}
-                  aria-label="Refresh microphones"
-                  title="Allow access and refresh microphones"
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 text-slate-500 transition hover:border-blue-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-400 dark:hover:border-blue-500 dark:hover:text-blue-400"
-                >
-                  <RefreshCw size={16} className={isRefreshingAudioInputs ? 'animate-spin' : ''} />
-                </button>
-              </div>
-              
-              {/* Test Microphone Toggle */}
-              <div className="flex items-center justify-between pt-3">
-                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => !isConnecting && !isConnected && micPermissionState !== 'denied' && setIsTestingMic(!isTestingMic)}>
-                  Test Microphone
+            <div className="flex flex-col sm:flex-row gap-6 w-full">
+              {/* Left Column: Input */}
+              <div className="flex-1 flex flex-col space-y-2 text-left">
+                <label htmlFor="voice-audio-input" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                  Audio input
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setIsTestingMic(!isTestingMic)}
-                  disabled={isConnecting || isConnected || micPermissionState === 'denied'}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900 ${
-                    isTestingMic ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
-                  } ${isConnecting || isConnected || micPermissionState === 'denied' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  <span className="sr-only">Test Microphone</span>
-                  <span
-                    aria-hidden="true"
-                    className={`pointer-events-none absolute left-0 inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      isTestingMic ? 'translate-x-4' : 'translate-x-0.5'
+                <div className="flex items-center gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <Mic className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                    <select
+                      id="voice-audio-input"
+                      value={selectedAudioInputId}
+                      onChange={(event) => selectAudioInput(event.target.value)}
+                      disabled={isConnecting || micPermissionState === 'denied'}
+                      className="h-11 w-full truncate rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-8 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
+                    >
+                      {micPermissionState === 'denied' ? (
+                        <option value="">Microphone permission denied</option>
+                      ) : (
+                        <>
+                          {selectedAudioInputId && !audioInputs.some((device) => device.deviceId === selectedAudioInputId) && (
+                            <option value={selectedAudioInputId}>Saved microphone (refresh to identify)</option>
+                          )}
+                          {(() => {
+                            const defaultDevice = audioInputs.find(d => d.deviceId === 'default');
+                            const trueDefaultLabel = defaultDevice ? defaultDevice.label.replace(/^Default - /, '') : '';
+                            return audioInputs
+                              .filter((device) => device.deviceId !== 'default')
+                              .map((device, index) => {
+                                const isDefault = device.label === trueDefaultLabel && trueDefaultLabel !== '';
+                                const displayName = device.label || `Microphone ${index + 1}`;
+                                return (
+                                  <option key={device.deviceId} value={device.deviceId}>
+                                    {isDefault ? `${displayName} (System default)` : displayName}
+                                  </option>
+                                );
+                              });
+                          })()}
+                        </>
+                      )}
+                    </select>
+                  </div>
+                </div>
+                
+                {/* Test Microphone Button */}
+                <div className="pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsTestingMic(!isTestingMic)}
+                    disabled={isConnecting || isConnected || micPermissionState === 'denied'}
+                    className={`flex w-full h-11 items-center justify-center gap-2 rounded-xl border text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                      isTestingMic 
+                        ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:border-emerald-800 dark:text-emerald-400'
+                        : 'border-slate-300 bg-slate-50 dark:bg-slate-950/20 text-slate-600 hover:border-blue-400 hover:text-blue-600 dark:border-slate-800 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-blue-400'
                     }`}
-                  />
-                </button>
+                  >
+                    <Mic size={16} className={isTestingMic ? "animate-pulse" : ""} />
+                    {isTestingMic ? 'Stop Testing' : 'Test Microphone'}
+                  </button>
+                </div>
               </div>
-              
-              {isTestingMic && <MicTester deviceId={selectedAudioInputId} onError={setErrorMessage} />}
 
+              {/* Right Column: Output */}
+              <div className="flex-1 flex flex-col space-y-2 text-left">
+                <label htmlFor="voice-audio-output" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                  Audio output
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <Volume2 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                    <select
+                      id="voice-audio-output"
+                      value={selectedAudioOutputId}
+                      onChange={(event) => selectAudioOutput(event.target.value)}
+                      className="h-11 w-full truncate rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-8 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
+                    >
+                      {selectedAudioOutputId && !audioOutputs.some((device) => device.deviceId === selectedAudioOutputId) && (
+                        <option value={selectedAudioOutputId}>Saved speaker (refresh to identify)</option>
+                      )}
+                      {(() => {
+                        const defaultDevice = audioOutputs.find(d => d.deviceId === 'default');
+                        const trueDefaultLabel = defaultDevice ? defaultDevice.label.replace(/^Default - /, '') : '';
+                        return audioOutputs
+                          .filter((device) => device.deviceId !== 'default')
+                          .map((device, index) => {
+                            const isDefault = device.label === trueDefaultLabel && trueDefaultLabel !== '';
+                            const displayName = device.label || `Speaker ${index + 1}`;
+                            return (
+                              <option key={device.deviceId} value={device.deviceId}>
+                                {isDefault ? `${displayName} (System default)` : displayName}
+                              </option>
+                            );
+                          });
+                      })()}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="pt-3">
+                  <button
+                    type="button"
+                    onClick={() => refreshAudioDevices(true)}
+                    disabled={isConnecting || isRefreshingAudioDevices}
+                    className="flex w-full h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 text-sm font-bold text-slate-600 transition hover:border-blue-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-blue-400"
+                  >
+                    <RefreshCw size={16} className={isRefreshingAudioDevices ? 'animate-spin' : ''} />
+                    Refresh Audio Devices
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            {isTestingMic && (
+              <div className="flex w-full justify-center pt-2">
+                <MicTester deviceId={selectedAudioInputId} onError={setErrorMessage} />
+              </div>
+            )}
             </div>
           </div>
         </div>
-      </div>
 
       <GcpInfoModal
         isOpen={isInfoModalOpen}
