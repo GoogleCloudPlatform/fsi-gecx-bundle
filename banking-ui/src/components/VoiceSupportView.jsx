@@ -1746,16 +1746,16 @@ export default function VoiceSupportView() {
               
               {/* Test Microphone Toggle */}
               <div className="flex items-center justify-between pt-3">
-                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => !isConnecting && micPermissionState !== 'denied' && setIsTestingMic(!isTestingMic)}>
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => !isConnecting && !isConnected && micPermissionState !== 'denied' && setIsTestingMic(!isTestingMic)}>
                   Test Microphone
                 </label>
                 <button
                   type="button"
                   onClick={() => setIsTestingMic(!isTestingMic)}
-                  disabled={isConnecting || micPermissionState === 'denied'}
+                  disabled={isConnecting || isConnected || micPermissionState === 'denied'}
                   className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900 ${
                     isTestingMic ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
-                  } ${isConnecting || micPermissionState === 'denied' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  } ${isConnecting || isConnected || micPermissionState === 'denied' ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <span className="sr-only">Test Microphone</span>
                   <span
