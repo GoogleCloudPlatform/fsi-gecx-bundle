@@ -7,6 +7,7 @@ REGION ?= us-central1
 DOCKER ?= podman
 CONTAINER_RUNTIME ?= $(shell bash scripts/dev/container-runtime.sh 2>/dev/null || echo "docker")
 LIVEKIT_SERVER_VERSION ?= v1.13.1
+FRONTEND_PORT ?= 5173
 TF_VARS ?= ./environment/$(PROJECT_ID)/terraform.tfvars
 TF_BACKEND ?= ./environment/$(PROJECT_ID)/gcs.tfbackend
 CUSTOM_DOMAIN ?= $(shell grep -E '^[[:space:]]*custom_domain[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]' || echo "banking.erikvoit.demo.altostrat.com")
@@ -114,7 +115,11 @@ run-backend-iam: ## Run the FastAPI banking service locally
 .PHONY: run-frontend
 run-frontend: ## Run the React/Vite frontend dev server locally
 	@echo "Starting banking-ui dev server..."
-	cd banking-ui && PROJECT_ID=$(PROJECT_ID) npm run dev
+	@if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:$(FRONTEND_PORT) -sTCP:LISTEN >/dev/null 2>&1; then \
+		echo "Error: frontend port $(FRONTEND_PORT) is already in use. Stop the other process or run with FRONTEND_PORT=<port>."; \
+		exit 1; \
+	fi
+	cd banking-ui && PROJECT_ID=$(PROJECT_ID) npm run dev -- --host localhost --port $(FRONTEND_PORT) --strictPort
 
 .PHONY: run-data-generator
 run-data-generator: ## Run the FastAPI synthetic data generator locally
