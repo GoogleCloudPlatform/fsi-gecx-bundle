@@ -36,7 +36,7 @@ voice_agent_video_model                         = "publishers/google/models/gemi
 voice_agent_audio_model                         = "publishers/google/models/gemini-live-2.5-flash-native-audio"
 cx_agent_studio_voice_agent_deployment_name     = "projects/fsi-demo-1841/locations/us/apps/94eea51e-bbb8-4df0-8a8d-7d17b954a00c/deployments/28ad2991-1c10-4247-8070-4ba1b9edd479"
 stable_env_url                                  = "https://agentic-finance.gcp-solutions.com/"
-feedback_url                                    = "https://b.corp.google.com/issues/new?component=1466478&template=1902036&title=Demo%20Feedback%3A%20Personalized%20Financial%20Services%20with%20GECX%20%26%20Virtual%20Agents&assignee=mservidio%40google.com&collaborators=mservidio%40google.com%2Cerikvoit%40google.com%2Cjamestsai%40google.com&customFields=1232889%3A1841&customFields=951269%3ANA&parentIssueId=519210046"
+feedback_url                                    = "https://b.corp.google.com/issues/new?component=1466478&template=1902036&title=Demo%20Feedback%3A%20Banking%20%26%20Financial%20Services%20Agentic%20AI%3A%20Grounded%20Enterprise%20Knowledge%20at%20the%20Moment%20of%20Intent%20-%20FSI%20Bank%20Demo&assignee=mservidio%40google.com&collaborators=mservidio%40google.com%2Cerikvoit%40google.com%2Cjamestsai%40google.com&customFields=1232889%3A1841&customFields=951269%3ANA&parentIssueId=519210046"
 data_generator_max_instance_request_concurrency = 8
 data_generator_request_timeout                  = "120s"
 data_generator_swipe_workflow_concurrency       = 1
