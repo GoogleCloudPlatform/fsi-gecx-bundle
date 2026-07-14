@@ -5,13 +5,26 @@ PROJECT_ID ?= $(shell gcloud config get-value project 2>/dev/null || echo "YOUR_
 PROJECT_NUMBER ?= $(shell gcloud projects describe $(PROJECT_ID) --format="value(projectNumber)" 2>/dev/null || echo "YOUR_PROJECT_NUMBER")
 REGION ?= us-central1
 DOCKER ?= podman
-CONTAINER_RUNTIME ?=
+CONTAINER_RUNTIME ?= $(shell bash scripts/dev/container-runtime.sh 2>/dev/null || echo "docker")
+LIVEKIT_SERVER_VERSION ?= v1.13.1
+LIVEKIT_NODE_IP ?= $(shell \
+	if command -v ipconfig >/dev/null 2>&1; then \
+		interface=$$(route -n get default 2>/dev/null | awk '/interface:/{print $$2}'); \
+		ipconfig getifaddr "$$interface" 2>/dev/null; \
+	elif command -v ip >/dev/null 2>&1; then \
+		ip route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($$i == "src") {print $$(i+1); exit}}'; \
+	fi)
+FRONTEND_PORT ?= 5173
 TF_VARS ?= ./environment/$(PROJECT_ID)/terraform.tfvars
 TF_BACKEND ?= ./environment/$(PROJECT_ID)/gcs.tfbackend
 CUSTOM_DOMAIN ?= $(shell grep -E '^[[:space:]]*custom_domain[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]' || echo "banking.erikvoit.demo.altostrat.com")
 DATA_STORE_ID ?= $(shell grep -E '^[[:space:]]*data_store_id[[:space:]]*=[[:space:]]*' deployment/terraform/discovery_engine.tf 2>/dev/null | cut -d'"' -f2 || echo "banking-site_1778875783412")
 GCP_ACCOUNT ?= $(shell ACCOUNT=$$(gcloud config get-value account 2>/dev/null); echo "$${ACCOUNT%.gserviceaccount.com}")
 GCP_ACCOUNT_ENCODED = $(subst @,%40,$(GCP_ACCOUNT))
+GECX_APP_ID ?= $(shell grep -E '^[[:space:]]*cx_agent_studio_voice_agent_deployment_name[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]' || echo "")
+GECX_LOCATION ?= $(shell gecx_loc=$$(grep -E '^[[:space:]]*gecx_location[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]'); echo $${gecx_loc:-us})
+VOICE_AGENT_AUDIO_MODEL ?= publishers/google/models/gemini-live-2.5-flash-native-audio
+VOICE_AGENT_VIDEO_MODEL ?= publishers/google/models/gemini-3.1-flash-live-preview-04-2026
 
 
 .PHONY: help
@@ -23,9 +36,11 @@ help: ## Display available commands and their descriptions
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: install
-install: ## Bootstrap dependencies for backend and frontend
+install: ## Bootstrap dependencies for the backend, voice agent, and frontend
 	@echo "Installing banking-service dependencies..."
-	cd banking-service && uv sync
+	cd banking-service && uv sync --frozen
+	@echo "Installing credit-support-agent dependencies..."
+	cd adk-agent/credit-support-agent && uv sync --frozen
 	@echo "Installing banking-ui dependencies..."
 	cd banking-ui && npm install
 
@@ -54,6 +69,22 @@ shadow-db-up: ## Start the local-only PostgreSQL shadow DB for Alembic work
 .PHONY: shadow-db-down
 shadow-db-down: ## Stop the local-only PostgreSQL shadow DB
 	@CONTAINER_RUNTIME="$(CONTAINER_RUNTIME)" bash scripts/dev/alembic-shadow.sh down
+
+.PHONY: livekit-up
+livekit-up: ## Start the local LiveKit server container
+	@echo "Starting LiveKit server..."
+	@if [ -z "$(LIVEKIT_NODE_IP)" ]; then \
+		echo "Error: could not detect the host IP for LiveKit ICE. Set LIVEKIT_NODE_IP=<host-ip>."; \
+		exit 1; \
+	fi
+	@echo "Advertising LiveKit RTC on host IP $(LIVEKIT_NODE_IP)..."
+	@$(CONTAINER_RUNTIME) rm -f livekit-server-dev 2>/dev/null || true
+	$(CONTAINER_RUNTIME) run -d --name livekit-server-dev -p 7880:7880 -p 7881:7881 -p 7882:7882/udp livekit/livekit-server:$(LIVEKIT_SERVER_VERSION) --dev --keys "devkey: secret" --node-ip "$(LIVEKIT_NODE_IP)"
+
+.PHONY: livekit-down
+livekit-down: ## Stop the local LiveKit server container
+	@echo "Stopping LiveKit server..."
+	$(CONTAINER_RUNTIME) rm -f livekit-server-dev
 
 .PHONY: shadow-db-logs
 shadow-db-logs: ## Tail logs for the local-only PostgreSQL shadow DB
@@ -90,22 +121,36 @@ db-init-local: ## Initialize and seed the local SQLite database
 .PHONY: run-backend-local
 run-backend-local: ## Run the FastAPI banking service locally
 	@echo "Starting banking-service..."
-	cd banking-service && FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
+	cd banking-service && GECX_APP_ID="$(GECX_APP_ID)" GECX_LOCATION="$(GECX_LOCATION)" VOICE_AGENT_SERVICE_URL=http://localhost:8088 FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
 
 .PHONY: run-backend-iam
 run-backend-iam: ## Run the FastAPI banking service locally
 	@echo "Starting banking-service..."
-	cd banking-service && FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) DB_IAM_AUTH=true DATABASE_URL="postgresql+psycopg2://$(GCP_ACCOUNT_ENCODED)@localhost:5432/banking?sslmode=disable" uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
+	cd banking-service && GECX_APP_ID="$(GECX_APP_ID)" GECX_LOCATION="$(GECX_LOCATION)" VOICE_AGENT_SERVICE_URL=http://localhost:8088 FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) DB_IAM_AUTH=true DATABASE_URL="postgresql+psycopg2://$(GCP_ACCOUNT_ENCODED)@localhost:5432/banking?sslmode=disable" uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
 
 .PHONY: run-frontend
 run-frontend: ## Run the React/Vite frontend dev server locally
 	@echo "Starting banking-ui dev server..."
-	cd banking-ui && PROJECT_ID=$(PROJECT_ID) npm run dev
+	@if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:$(FRONTEND_PORT) -sTCP:LISTEN >/dev/null 2>&1; then \
+		echo "Error: frontend port $(FRONTEND_PORT) is already in use. Stop the other process or run with FRONTEND_PORT=<port>."; \
+		exit 1; \
+	fi
+	cd banking-ui && PROJECT_ID=$(PROJECT_ID) npm run dev -- --host localhost --port $(FRONTEND_PORT) --strictPort
 
 .PHONY: run-data-generator
 run-data-generator: ## Run the FastAPI synthetic data generator locally
 	@echo "Starting data-generator..."
 	cd data-generator && PROJECT_ID=$(PROJECT_ID) ./run.sh
+
+.PHONY: run-voice-agent
+run-voice-agent: ## Run the credit card support voice agent locally
+	@echo "Starting credit-support-agent..."
+	cd adk-agent/credit-support-agent && PORT=8088 BANKING_SERVICE_URL=http://localhost:8080 VOICE_AGENT_AUDIO_MODEL="$(VOICE_AGENT_AUDIO_MODEL)" VOICE_AGENT_VIDEO_MODEL="$(VOICE_AGENT_VIDEO_MODEL)" uv run --frozen python voice_agent.py
+
+.PHONY: run-local
+run-local: livekit-up ## Start LiveKit, the local backend, frontend, and voice agent
+	@echo "Starting local backend, frontend, and voice agent concurrently... Press Ctrl+C to stop."
+	@$(MAKE) -j3 run-backend-local run-frontend run-voice-agent
 
 .PHONY: run
 run: ## Concurrently run both backend and frontend servers locally
@@ -204,10 +249,13 @@ create-gecx: upload-mortgage-agent upload-credit-agent ## Automate full CES agen
 .PHONY: update-gecx
 update-gecx: ## Execute the overwrite CES agent script to package and overwrite an existing agent in Customer Experience Studio (CES)
 ifndef APP_ID
-	$(error APP_ID is not defined. Run as: make update-gecx APP_ID=<your-app-id>)
+	$(error APP_ID is not defined. Run as: make update-gecx APP_ID=<your-app-id> AGENT_FOLDER=<agent-folder-name>)
 endif
-	@echo "Executing overwrite CES agent script for project $(PROJECT_ID) and App ID $(APP_ID)..."
-	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) APP_ID=$(APP_ID) bash overwrite_cxas_agent.sh
+ifndef AGENT_FOLDER
+	$(error AGENT_FOLDER is not defined. Run as: make update-gecx APP_ID=<your-app-id> AGENT_FOLDER=<agent-folder-name>)
+endif
+	@echo "Executing overwrite CES agent script for project $(PROJECT_ID), App ID $(APP_ID) and Agent Folder $(AGENT_FOLDER)..."
+	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) APP_ID=$(APP_ID) AGENT_FOLDER=$(AGENT_FOLDER) bash overwrite_cxas_agent.sh
 
 .PHONY: patch-convo-profile
 patch-convo-profile: ## Patch Dialogflow conversational profile to point to a new agent deployment (usage: make patch-convo-profile CONVERSATIONAL_PROFILE_ID=<profile-id> DEPLOYMENT_ID=<deployment-id>)
@@ -398,3 +446,19 @@ docker-run-iap-login-ui: ## Run the iap-login-ui container locally
 	-e BASE_PATH="/" \
 	-p 8080:8080 \
 	iap-login-ui-test
+
+.PHONY: docker-run-credit-support-agent
+docker-run-credit-support-agent: ## Run the credit-support-agent container locally
+	@echo "Running credit-support-agent container locally..."
+	$(DOCKER) build -f adk-agent/credit-support-agent/Dockerfile -t credit-support-agent-test .
+	$(DOCKER) run --user root -ti \
+	-v "$(HOME)/.config/gcloud/application_default_credentials.json":/gcp/creds.json \
+	-e GOOGLE_APPLICATION_CREDENTIALS=/gcp/creds.json \
+	-e GOOGLE_CLOUD_PROJECT=$(PROJECT_ID) \
+	-e PORT=8088 \
+	-e BANKING_SERVICE_URL="http://host.docker.internal:8080" \
+	-e LIVEKIT_URL="ws://host.docker.internal:7880" \
+	-e VOICE_AGENT_AUDIO_MODEL="publishers/google/models/gemini-live-2.5-flash-native-audio" \
+	-e VOICE_AGENT_VIDEO_MODEL="publishers/google/models/gemini-live-2.5-flash-native-audio" \
+	-p 8088:8088 \
+	credit-support-agent-test
