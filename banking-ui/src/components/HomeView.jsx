@@ -954,6 +954,7 @@ function HomeView({
           }}
           steps={steps}
           continuous={true}
+          locale={{ last: 'Done' }}
           showSkipButton={true}
           showCloseButton={true}
           onEvent={(data) => {
