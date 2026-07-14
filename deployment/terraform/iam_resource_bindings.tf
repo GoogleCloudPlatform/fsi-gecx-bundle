@@ -366,6 +366,48 @@ resource "google_bigquery_dataset_iam_member" "cloudbuild_sa_ci_bq_data_editor" 
   member     = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
 
+resource "google_bigquery_dataset_iam_member" "cloudbuild_sa_agent_analytics_metadata_viewer" {
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.analytics_curated.dataset_id
+  role       = "roles/bigquery.metadataViewer"
+  member     = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+}
+
+resource "google_bigquery_dataset_iam_member" "cloudbuild_sa_agent_compliance_metadata_viewer" {
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.compliance_audit.dataset_id
+  role       = "roles/bigquery.metadataViewer"
+  member     = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+}
+
+resource "google_bigquery_dataset_iam_member" "cloudbuild_sa_agent_cdc_metadata_viewer" {
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.iceberg_catalog.dataset_id
+  role       = "roles/bigquery.metadataViewer"
+  member     = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+}
+
+resource "google_bigquery_dataset_iam_member" "cloudbuild_sa_agent_analytics_data_viewer" {
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.analytics_curated.dataset_id
+  role       = "roles/bigquery.dataViewer"
+  member     = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+}
+
+resource "google_bigquery_dataset_iam_member" "cloudbuild_sa_agent_compliance_data_viewer" {
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.compliance_audit.dataset_id
+  role       = "roles/bigquery.dataViewer"
+  member     = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+}
+
+resource "google_bigquery_dataset_iam_member" "cloudbuild_sa_agent_cdc_data_viewer" {
+  project    = data.google_project.project.project_id
+  dataset_id = google_bigquery_dataset.iceberg_catalog.dataset_id
+  role       = "roles/bigquery.dataViewer"
+  member     = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+}
+
 resource "google_bigquery_dataset_iam_member" "database_viewer_compliance_audit_data_viewer" {
   for_each   = toset(local.iam_console_viewers)
   project    = data.google_project.project.project_id

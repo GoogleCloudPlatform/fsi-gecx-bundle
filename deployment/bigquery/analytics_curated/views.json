@@ -6,7 +6,8 @@
       "sources": [
         "iceberg_catalog.cards_posted_transactions",
         "iceberg_catalog.cards_transaction_authorization",
-        "iceberg_catalog.cards_issued_card"
+        "iceberg_catalog.cards_issued_card",
+        "iceberg_catalog.cards_credit_accounts"
       ]
     },
     {
@@ -49,6 +50,16 @@
         "iceberg_catalog.cards_credit_accounts",
         "iceberg_catalog.identity_users",
         "iceberg_catalog.identity_user_addresses"
+      ]
+    },
+    {
+      "name": "customer_analytics_profiles",
+      "sql": "customer_analytics_profiles.sql",
+      "sources": [
+        "iceberg_catalog.cards_credit_accounts",
+        "iceberg_catalog.identity_users",
+        "iceberg_catalog.identity_user_addresses",
+        "iceberg_catalog.kyc_user_credit_profiles"
       ]
     }
   ]

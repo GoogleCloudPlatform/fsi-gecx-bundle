@@ -33,6 +33,11 @@ roles:
   # Roles to view Data Catalog
   - roles/datacatalog.viewer
 
+  # BigQuery DataAgent discovery and chat
+  - roles/geminidataanalytics.dataAgentViewer
+  - roles/geminidataanalytics.dataAgentUser
+  - roles/cloudaicompanion.user
+
   # Roles to view Cloud Build
   - roles/cloudbuild.viewer
 

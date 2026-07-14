@@ -327,6 +327,28 @@ resource "google_project_iam_member" "cloudbuild_sa_bq_job_user" {
   member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
 
+resource "google_project_iam_member" "cloudbuild_sa_data_agent_creator" {
+  project = data.google_project.project.project_id
+  role    = "roles/geminidataanalytics.dataAgentCreator"
+  member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+
+  depends_on = [google_project_service.geminidataanalytics_googleapis_com]
+}
+
+resource "google_project_iam_member" "cloudbuild_sa_data_agent_editor" {
+  project = data.google_project.project.project_id
+  role    = "roles/geminidataanalytics.dataAgentEditor"
+  member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+
+  depends_on = [google_project_service.geminidataanalytics_googleapis_com]
+}
+
+resource "google_project_iam_member" "cloudbuild_sa_data_catalog_viewer" {
+  project = data.google_project.project.project_id
+  role    = "roles/datacatalog.viewer"
+  member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+}
+
 resource "google_project_iam_member" "lakehouse_reconcile_sa_bq_job_user" {
   project = data.google_project.project.project_id
   role    = "roles/bigquery.jobUser"
