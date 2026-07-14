@@ -14,3 +14,4 @@
 
 BUILD_VERSION = "local-dev"
 BUILD_COMMIT_ID = "ABCDEFG"
+BUILD_TIME = "0"

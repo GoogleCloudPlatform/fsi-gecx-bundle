@@ -64,13 +64,15 @@ steps:
         if [ -z "$$COMMIT_SHA" ]; then
           COMMIT_SHA="local"
         fi
+        BUILD_TIME_MS=$$(date +%s000)
         echo "Updating pyproject.toml version to: $$VERSION"
         sed -i 's/^version = "[^"]*"/version = "'"$${VERSION}"'"/g' banking-service/pyproject.toml
         cat banking-service/pyproject.toml | grep "^version ="
 
-        echo "Updating utils/version.py version: $$VERSION and commit: $$COMMIT_SHA"
+        echo "Updating utils/version.py version: $$VERSION and commit: $$COMMIT_SHA and time: $$BUILD_TIME_MS"
         sed -i 's/BUILD_VERSION = "[^"]*"/BUILD_VERSION = "'"$${VERSION}"'"/g' banking-service/utils/version.py
         sed -i 's/BUILD_COMMIT_ID = "[^"]*"/BUILD_COMMIT_ID = "'"$${COMMIT_SHA}"'"/g' banking-service/utils/version.py
+        sed -i 's/BUILD_TIME = "[^"]*"/BUILD_TIME = "'"$${BUILD_TIME_MS}"'"/g' banking-service/utils/version.py
         cat banking-service/utils/version.py | grep "BUILD_VERSION =\|BUILD_COMMIT_ID ="
 
   - name: "gcr.io/cloud-builders/docker"
