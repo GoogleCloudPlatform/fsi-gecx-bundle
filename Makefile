@@ -6,6 +6,7 @@ PROJECT_NUMBER ?= $(shell gcloud projects describe $(PROJECT_ID) --format="value
 REGION ?= us-central1
 DOCKER ?= podman
 CONTAINER_RUNTIME ?= $(shell bash scripts/dev/container-runtime.sh 2>/dev/null || echo "docker")
+LIVEKIT_SERVER_VERSION ?= v1.13.1
 TF_VARS ?= ./environment/$(PROJECT_ID)/terraform.tfvars
 TF_BACKEND ?= ./environment/$(PROJECT_ID)/gcs.tfbackend
 CUSTOM_DOMAIN ?= $(shell grep -E '^[[:space:]]*custom_domain[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]' || echo "banking.erikvoit.demo.altostrat.com")
@@ -23,9 +24,11 @@ help: ## Display available commands and their descriptions
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: install
-install: ## Bootstrap dependencies for backend and frontend
+install: ## Bootstrap dependencies for the backend, voice agent, and frontend
 	@echo "Installing banking-service dependencies..."
-	cd banking-service && uv sync
+	cd banking-service && uv sync --frozen
+	@echo "Installing credit-support-agent dependencies..."
+	cd adk-agent/credit-support-agent && uv sync --frozen
 	@echo "Installing banking-ui dependencies..."
 	cd banking-ui && npm install
 
@@ -59,7 +62,7 @@ shadow-db-down: ## Stop the local-only PostgreSQL shadow DB
 livekit-up: ## Start the local LiveKit server container
 	@echo "Starting LiveKit server..."
 	@$(CONTAINER_RUNTIME) rm -f livekit-server-dev 2>/dev/null || true
-	$(CONTAINER_RUNTIME) run -d --name livekit-server-dev -p 7880:7880 -p 7881:7881 -p 7882:7882/udp livekit/livekit-server:latest --dev --keys "devkey: secret" --node-ip 127.0.0.1 --rtc.enable_loopback_candidate
+	$(CONTAINER_RUNTIME) run -d --name livekit-server-dev -p 7880:7880 -p 7881:7881 -p 7882:7882/udp livekit/livekit-server:$(LIVEKIT_SERVER_VERSION) --dev --keys "devkey: secret" --node-ip 127.0.0.1 --rtc.enable_loopback_candidate
 
 .PHONY: livekit-down
 livekit-down: ## Stop the local LiveKit server container
@@ -121,7 +124,12 @@ run-data-generator: ## Run the FastAPI synthetic data generator locally
 .PHONY: run-voice-agent
 run-voice-agent: ## Run the credit card support voice agent locally
 	@echo "Starting credit-support-agent..."
-	cd adk-agent/credit-support-agent && PORT=8088 BANKING_SERVICE_URL=http://localhost:8080 VOICE_AGENT_AUDIO_MODEL="publishers/google/models/gemini-live-2.5-flash-native-audio" VOICE_AGENT_VIDEO_MODEL="publishers/google/models/gemini-live-2.5-flash-native-audio" ../../banking-service/.venv/bin/python voice_agent.py
+	cd adk-agent/credit-support-agent && PORT=8088 BANKING_SERVICE_URL=http://localhost:8080 VOICE_AGENT_AUDIO_MODEL="publishers/google/models/gemini-live-2.5-flash-native-audio" VOICE_AGENT_VIDEO_MODEL="publishers/google/models/gemini-live-2.5-flash-native-audio" uv run --frozen python voice_agent.py
+
+.PHONY: run-local
+run-local: livekit-up ## Start LiveKit, the local backend, frontend, and voice agent
+	@echo "Starting local backend, frontend, and voice agent concurrently... Press Ctrl+C to stop."
+	@$(MAKE) -j3 run-backend-local run-frontend run-voice-agent
 
 .PHONY: run
 run: ## Concurrently run both backend and frontend servers locally
