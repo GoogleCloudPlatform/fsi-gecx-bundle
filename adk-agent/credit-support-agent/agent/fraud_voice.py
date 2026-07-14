@@ -176,6 +176,10 @@ def build_fraud_playbook(voice_context: dict | None) -> dict:
             "wallet_invalidation_reason": None,
             "wallet_invalidation_event_id": None,
             "wallet_push_queued": False,
+            "workflow_authorization": None,
+            "escalation_status": "NONE",
+            "escalation_reason": None,
+            "completion_status": "ACTIVE",
             "triage_submitted": False,
             "required_sequence": [],
         }
@@ -204,6 +208,10 @@ def build_fraud_playbook(voice_context: dict | None) -> dict:
         "wallet_invalidation_reason": None,
         "wallet_invalidation_event_id": None,
         "wallet_push_queued": False,
+        "workflow_authorization": None,
+        "escalation_status": "NONE",
+        "escalation_reason": None,
+        "completion_status": "ACTIVE",
         "triage_submitted": False,
         "required_sequence": [
             "get_open_fraud_alert",

@@ -31,7 +31,11 @@ from models.audit import AuditOutbox
 from models.identity import User, UserSecureMessage
 from models.origination import Account
 from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, TransactionAuthorization
-from services.seeding_service import clean_database, provision_user_suite
+from services.seeding_service import (
+    _demo_account_baseline_cents,
+    clean_database,
+    provision_user_suite,
+)
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
 test_engine = create_engine(
@@ -218,11 +222,12 @@ async def test_reset_my_demo_success(async_client, db_session):
     accounts = db_session.query(Account).filter(Account.user_id == user_id, Account.status == "ACTIVE").all()
     assert len([acc for acc in accounts if acc.account_type == "CHECKING"]) == 1
     assert len([acc for acc in accounts if acc.account_type == "SAVINGS"]) == 1
+    expected_baseline = _demo_account_baseline_cents(mock_claims["email"])
     for acc in accounts:
         if acc.account_type == "CHECKING":
-            assert acc.cleared_balance_cents == 1000000
+            assert acc.cleared_balance_cents == expected_baseline["checking"]
         elif acc.account_type == "SAVINGS":
-            assert acc.cleared_balance_cents == 2000000
+            assert acc.cleared_balance_cents == expected_baseline["savings"]
     assert db_session.query(Account).filter(Account.user_id == user_id, Account.status == "CLOSED").count() == 2
 
 

@@ -5,7 +5,8 @@ def test_alembic_env_revokes_immutable_ledger_permissions_for_all_roles() -> Non
     env_text = Path(__file__).parents[1].joinpath("alembic", "env.py").read_text()
 
     assert "immutable_ledger_roles = set(roles + viewer_roles)" in env_text
-    assert 'reset_schemas = [s for s in schemas if s != "admin"]' in env_text
+    assert 'reset_schemas = [s for s in schemas if s not in {"admin", "voice_support_sessions"}]' in env_text
+    assert 'allowed_schemas = ["voice_support_sessions"]' in env_text
     assert 'reset_sa_names = ["banking-db-reset-sa"]' in env_text
     assert "bootstrap_roles = [" in env_text
     assert 'if "@" not in role' in env_text

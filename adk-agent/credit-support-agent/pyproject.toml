@@ -8,7 +8,7 @@ readme = "README.md"
 requires-python = ">=3.12,<3.14"
 
 dependencies = [
-    "google-adk==2.4.0",
+    "google-adk[db]==2.4.0",
     "google-cloud-logging>=3.14.0,<4.0.0",
     "protobuf>=6.33.6,<7.0.0",
     "livekit==0.19.1",
@@ -20,6 +20,8 @@ dependencies = [
     "google-cloud-speech>=2.30.0",
     "httpx>=0.28.0",
     "mcp",
+    "asyncpg>=0.30.0,<1.0.0",
+    "greenlet>=3.1.0,<4.0.0",
 ]
 
 [tool.poetry]

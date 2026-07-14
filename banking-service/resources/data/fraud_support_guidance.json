@@ -1,4 +1,8 @@
 {
+  "schema_version": 1,
+  "bundle_version": "2.0",
+  "published_at": "2026-07-09T00:00:00Z",
+  "max_age_days": 90,
   "topics": [
     {
       "topic_id": "fraud_golden_path",

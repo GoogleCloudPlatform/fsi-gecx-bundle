@@ -5,8 +5,6 @@ import sys
 import asyncio
 import logging
 import numpy as np
-import torch
-from silero_vad import load_silero_vad
 from livekit import rtc
 from fastapi import FastAPI, HTTPException, Request
 import uvicorn
@@ -22,18 +20,23 @@ from agent.agent import (
     is_tool_processing,
     reset_session_context,
 )
-from agent.fraud_voice import (
-    build_fraud_playbook,
-    build_initial_greeting,
-)
 from agent.instructions import compose_session_instruction
 from agent.live_runtime import build_live_run_config, env_flag, normalize_live_event
+from agent.guidance_snapshot import guidance_observability_payload
+from agent.media_bridge import BufferedAudioPlayout, SileroVADTracker
+from agent.session_coordinator import default_session_bootstrap, load_session_bootstrap
+from agent.runtime_config import load_runtime_config, validate_session_request
+from agent.terminal_outcome import TerminalOutcome
+from agent.session_store import (
+    cleanup_expired_sessions,
+    get_session_service,
+    open_or_resume_session,
+)
 from agent.workflow_plugin import FraudWorkflowStatePlugin
 from agent.version import BUILD_VERSION, BUILD_COMMIT_ID, BUILD_TIME
 from agent.events import DataChannelEvent
 from google.adk.apps import App
 from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
 from google.adk.agents.live_request_queue import LiveRequestQueue
 from google.genai import types
 
@@ -62,7 +65,8 @@ def session_log_context(room_name: str, customer_id: str, session_id: str, mode:
     context.update({key: value for key, value in extra.items() if value is not None})
     return " ".join(f"{key}={value}" for key, value in context.items())
 
-LIVEKIT_URL = os.getenv("LIVEKIT_URL", "ws://localhost:7880")
+runtime_config = load_runtime_config()
+LIVEKIT_URL = runtime_config.livekit_url
 def get_livekit_token(room_name: str) -> str:
     token_from_env = os.getenv("LIVEKIT_TOKEN")
     if token_from_env:
@@ -88,192 +92,54 @@ def get_livekit_token(room_name: str) -> str:
         logger.error(f"Failed to generate LiveKit token dynamically: {e}")
         raise e
 
-# Initialize Silero VAD
-logger.info("Loading Silero VAD model...")
-vad_model = load_silero_vad()
-
-class SileroVADTracker:
-    def __init__(self, threshold=0.5, silence_seconds=0.4, sample_rate=16000):
-        self.threshold = threshold
-        self.silence_samples_limit = int(silence_seconds * sample_rate)
-        self.sample_rate = sample_rate
-        self.speech_active = False
-        self.silent_samples = 0
-        self.buffer = []
-
-    def process_chunk(self, float32_samples: np.ndarray) -> tuple[bool, bool]:
-        """
-        Processes audio samples.
-        Returns (speech_started_detected, speech_ended_detected)
-        """
-        self.buffer.extend(float32_samples)
-        speech_started = False
-        speech_ended = False
-
-        # Silero VAD works on chunks of 512 samples at 16kHz
-        chunk_size = 512
-        while len(self.buffer) >= chunk_size:
-            chunk = np.array(self.buffer[:chunk_size], dtype=np.float32)
-            self.buffer = self.buffer[chunk_size:]
-
-            tensor_chunk = torch.from_numpy(chunk)
-            prob = vad_model(tensor_chunk, self.sample_rate).item()
-
-            if prob > self.threshold:
-                self.silent_samples = 0
-                if not self.speech_active:
-                    self.speech_active = True
-                    speech_started = True
-                    logger.info("Speech start detected by VAD")
-            else:
-                self.silent_samples += chunk_size
-                if self.speech_active and self.silent_samples >= self.silence_samples_limit:
-                    self.speech_active = False
-                    speech_ended = True
-                    logger.info("Speech end detected by VAD")
-
-        return speech_started, speech_ended
-
-
-async def run_stt_worker(client, audio_queue: asyncio.Queue, sample_rate: int, author: str, on_agent_event_fn):
-    logger.info(f"Starting async Speech-to-Text worker for {author} (sample_rate={sample_rate}Hz)...")
-    try:
-        from google.cloud import speech
-        
-        # Configure the streaming request config
-        config = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=sample_rate,
-            language_code="en-US",
-        )
-        streaming_config = speech.StreamingRecognitionConfig(
-            config=config,
-            interim_results=False
-        )
-        
-        def create_request_generator():
-            async def generator():
-                yield speech.StreamingRecognizeRequest(streaming_config=streaming_config)
-                while True:
-                    try:
-                        chunk = await audio_queue.get()
-                        if chunk is None:
-                            logger.info(f"STT worker for {author} received poison pill. Exiting generator.")
-                            audio_queue.task_done()
-                            break
-                        yield speech.StreamingRecognizeRequest(audio_content=chunk)
-                        audio_queue.task_done()
-                    except asyncio.CancelledError:
-                        break
-                    except Exception as e:
-                        logger.error(f"Error in STT generator for {author}: {e}")
-                        break
-            return generator()
-
-        # Reconnect loop to handle gRPC / Audio timeouts on silence
-        while True:
-            try:
-                logger.info(f"Connecting to Google Cloud Speech-to-Text for {author}...")
-                generator = create_request_generator()
-                responses = await client.streaming_recognize(requests=generator)
-                async for response in responses:
-                    for result in response.results:
-                        if result.is_final:
-                            transcript = result.alternatives[0].transcript.strip()
-                            if transcript:
-                                logger.info(f"[{author.upper()} TRANSCRIPT] {transcript}")
-                                # Broadcast the transcript to the client room
-                                on_agent_event_fn({
-                                    "type": "TRANSCRIPT",
-                                    "author": author,
-                                    "text": transcript
-                                })
-            except asyncio.CancelledError:
-                logger.info(f"STT worker for {author} was cancelled.")
-                break
-            except Exception as ex:
-                # Catch timeout or other gRPC connection closures and attempt recovery
-                logger.warning(f"Speech-to-Text stream for {author} closed: {ex}. Reconnecting...")
-                await asyncio.sleep(0.5)
-    except asyncio.CancelledError:
-        logger.info(f"STT worker for {author} was cancelled.")
-    except Exception as e:
-        logger.error(f"Fatal exception in STT worker loop for {author}: {e}", exc_info=True)
-    finally:
-        logger.info(f"Finished STT worker for {author}.")
-
 async def run_voice_agent_session(room_name: str, customer_id: str, session_id: str, mode: str = "audio"):
     logger.info("Initializing voice agent session %s", session_log_context(room_name, customer_id, session_id, mode))
     import agent.agent as agent_module
     session_context_tokens = bind_session_context(customer_id, None)
+    terminal_outcome = TerminalOutcome.NORMAL_DISCONNECT
 
-    # Load active configurations from banking-service
-    mock_avatar_enabled = False
-    avatar_name = "Ben" # default fallback
-    max_duration = 300
-    warning_duration = 240
-    hard_timeout_enabled = False
-    voice_context = {"has_active_fraud_alert": False, "fraud_alert": None}
+    # Load typed runtime settings and customer workflow context.
+    bootstrap = default_session_bootstrap()
+    settings = bootstrap.settings
+    voice_context = bootstrap.voice_context
     fraud_alert_state = {}
-    fraud_playbook = build_fraud_playbook(voice_context)
-    support_guidance = {"source": "none", "topic_ids": [], "topics": [], "agent_guidance_summary": ""}
-    initial_greeting_prompt = build_initial_greeting(fraud_playbook)
+    fraud_playbook = bootstrap.fraud_playbook
+    support_guidance = bootstrap.support_guidance
+    initial_greeting_prompt = bootstrap.initial_greeting_prompt
 
     try:
-        import httpx
         headers = agent_module.get_auth_headers()
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            settings_url = f"{agent_module.BANKING_SERVICE_URL}/api/settings"
-            resp = await client.get(settings_url, headers=headers)
-            if resp.status_code == 200:
-                settings = resp.json()
-                mock_avatar_enabled = settings.get("voice_agent_mock_avatar_enabled") == "true"
-                max_duration = int(settings.get("voice_agent_max_duration", 300))
-                warning_duration = int(settings.get("voice_agent_warning_duration", 240))
-                hard_timeout_enabled = settings.get("voice_agent_hard_timeout_enabled") == "true"
-                
-                avatar_mode = settings.get("voice_agent_avatar_selection", "random")
-                if avatar_mode == "random":
-                    import random
-                    avatar_name = random.choice(["Ingrid", "Paul", "Sam"])
-                else:
-                    avatar_name = avatar_mode
-                logger.info(
-                    "Loaded voice agent settings via API %s mock_avatar=%s avatar_name=%s max_duration=%s warning_duration=%s hard_timeout_enabled=%s",
-                    session_log_context(room_name, customer_id, session_id, mode),
-                    mock_avatar_enabled,
-                    avatar_name,
-                    max_duration,
-                    warning_duration,
-                    hard_timeout_enabled,
-                )
-            else:
-                logger.error("Failed to fetch system settings from API %s status=%s body=%s", session_log_context(room_name, customer_id, session_id, mode), resp.status_code, resp.text)
-
-            context_url = f"{agent_module.BANKING_SERVICE_URL}/credit-card/voice/context"
-            context_resp = await client.get(context_url, headers=headers)
-            if context_resp.status_code == 200:
-                voice_context = context_resp.json()
-                fraud_playbook = build_fraud_playbook(voice_context)
-                support_guidance = voice_context.get("support_guidance") or support_guidance
-                initial_greeting_prompt = build_initial_greeting(fraud_playbook)
-                logger.info(
-                    "Loaded customer voice context %s active_fraud=%s fraud_alert_id=%s guidance_source=%s",
-                    session_log_context(room_name, customer_id, session_id, mode, fraud_alert_id=fraud_playbook.get("fraud_alert_id")),
-                    voice_context.get("has_active_fraud_alert"),
-                    fraud_playbook.get("fraud_alert_id"),
-                    support_guidance.get("source"),
-                )
-            else:
-                logger.error("Failed to fetch voice-session context from API %s status=%s body=%s", session_log_context(room_name, customer_id, session_id, mode), context_resp.status_code, context_resp.text)
+        bootstrap = await load_session_bootstrap(
+            banking_service_url=agent_module.BANKING_SERVICE_URL,
+            headers=headers,
+        )
+        settings = bootstrap.settings
+        voice_context = bootstrap.voice_context
+        fraud_playbook = bootstrap.fraud_playbook
+        support_guidance = bootstrap.support_guidance
+        initial_greeting_prompt = bootstrap.initial_greeting_prompt
+        logger.info(
+            "Loaded voice bootstrap %s avatar=%s max_duration=%s active_fraud=%s guidance_snapshot=%s",
+            session_log_context(room_name, customer_id, session_id, mode),
+            settings.avatar_name,
+            settings.max_duration,
+            voice_context.get("has_active_fraud_alert"),
+            guidance_observability_payload(support_guidance),
+        )
     except Exception as e:
         logger.error("Failed to query system settings from API %s error=%s", session_log_context(room_name, customer_id, session_id, mode), e, exc_info=True)
+
+    mock_avatar_enabled = settings.mock_avatar_enabled
+    avatar_name = settings.avatar_name
+    max_duration = settings.max_duration
+    warning_duration = settings.warning_duration
+    hard_timeout_enabled = settings.hard_timeout_enabled
 
     active_escalation_id = None
     audio_server = None
     audio_port = None
 
-    session_service = InMemorySessionService()
+    session_service = await get_session_service()
     if voice_context.get("has_active_fraud_alert") and voice_context.get("fraud_alert"):
         fraud_alert_state = dict(voice_context["fraud_alert"])
     session_state = {
@@ -289,16 +155,23 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         "guidance_source": support_guidance.get("source"),
         "initial_greeting_prompt": initial_greeting_prompt,
     }
+    reset_generation = voice_context.get("reset_generation") or {
+        "global_epoch": 0,
+        "customer_epoch": 0,
+        "token": "0:0",
+    }
+    session_state["reset_generation"] = reset_generation
     # Create the session dynamically using the passed IDs
     user_id = f"user-{customer_id}"
-    await session_service.create_session(
-        app_name="credit-support-agent",
+    _, resumed, resume_reason = await open_or_resume_session(
+        session_service,
         user_id=user_id,
         session_id=session_id,
         state=session_state,
+        reset_generation_token=str(reset_generation.get("token") or ""),
     )
     logger.info(
-        "Created ADK session state %s",
+        "Opened ADK session state %s resumed=%s reason=%s reset_generation=%s",
         session_log_context(
             room_name,
             customer_id,
@@ -307,7 +180,17 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             fraud_alert_id=fraud_playbook.get("fraud_alert_id"),
             entry_mode=fraud_playbook.get("entry_mode"),
         ),
+        resumed,
+        resume_reason,
+        reset_generation.get("token"),
     )
+    if not resumed:
+        try:
+            deleted_sessions = await cleanup_expired_sessions(session_service)
+            if deleted_sessions:
+                logger.info("Cleaned up %s expired voice sessions", deleted_sessions)
+        except Exception as cleanup_error:
+            logger.warning("Voice session cleanup failed: %s", cleanup_error)
     logger.debug(
         "ADK session state payload %s state_keys=%s",
         session_log_context(room_name, customer_id, session_id, mode),
@@ -332,9 +215,9 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             "- Start the conversation by asking whether the customer recognizes the flagged transactions; do not assume fraud has occurred.\n"
             "- Name each flagged merchant and amount when summarizing what looked suspicious:\n"
             f"{suspicious_lines or '- No suspicious transaction details were provided.'}\n"
-            "- Before opening a fraud case, briefly restate the exact transactions the customer says they do not recognize and ask them to confirm that selection.\n"
-            "- Stop after asking for confirmation. Do not call triage_fraud_case in the same response where you ask whether the selection sounds right or is correct.\n"
-            "- After the customer explicitly confirms their selection in a later response, call triage_fraud_case once using authorization_id values for disputed pending authorizations and transaction_id values for disputed posted transactions when those IDs are present.\n"
+            "- Once the disputed selection is clear, call prepare_fraud_triage_confirmation with the exact alert id, disputed authorization ids, disputed transaction ids, and replacement choice. It does not mutate banking state.\n"
+            "- Restate the exact prepared selection and ask the customer to confirm it. Stop after asking; do not call triage_fraud_case in the same response.\n"
+            "- After the customer explicitly confirms in a later response, call triage_fraud_case once with exactly the prepared payload. Any changed selection requires a new preparation and confirmation.\n"
             "- If the customer recognizes every flagged transaction, call triage_fraud_case with empty disputed id arrays and issue_replacement=false.\n"
             "- If the customer disputes any flagged transaction, tell them any credits are provisional pending the full fraud investigation.\n"
             "- If triage_fraud_case returns a clearly transient technical failure, retry it once with the same arguments before offering human escalation.\n"
@@ -609,6 +492,16 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         event_payload = json.dumps({"type": "agent_mode", "mode": mode})
         logger.info("Broadcasting agent mode %s payload=%s", session_log_context(room_name, customer_id, session_id, mode), event_payload)
         await room.local_participant.publish_data(event_payload)
+        guidance_payload = {
+            "type": DataChannelEvent.GUIDANCE_SNAPSHOT.value,
+            **guidance_observability_payload(support_guidance),
+        }
+        logger.info(
+            "Publishing safe guidance snapshot %s guidance_snapshot=%s",
+            session_log_context(room_name, customer_id, session_id, mode),
+            guidance_payload,
+        )
+        await room.local_participant.publish_data(json.dumps(guidance_payload))
 
         # Publish our microphone/audio source track
         local_track = rtc.LocalAudioTrack.create_audio_track("agent-audio", audio_source)
@@ -649,66 +542,18 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         
         pass
 
+    playout_bridge = BufferedAudioPlayout(
+        audio_source=audio_source, queue=playout_queue
+    )
+
     async def playout_loop():
-        # Continuously reads frames from playout_queue and captures them into the AudioSource
-        # AudioSource expects Int16 PCM audio at 24000Hz (sample_rate=24000, 1 channel)
-        # Each capture frame should contain sample data
-        accumulator = b""
-        chunk_size = 480
-        start_time = None
-        frame_count = 0
-        is_buffering = True
-        
-        while True:
-            try:
-                pcm_bytes = await playout_queue.get()
-                accumulator += pcm_bytes
-                
-                # Pre-buffer 150ms of audio (7200 bytes) at the start of a turn to absorb network jitter
-                if is_buffering:
-                    if len(accumulator) < 7200:
-                        playout_queue.task_done()
-                        continue
-                    else:
-                        is_buffering = False
-                        start_time = asyncio.get_event_loop().time()
-                        frame_count = 0
-                
-                # Extract and play out all complete 10ms (480-byte) audio frames
-                while len(accumulator) >= chunk_size:
-                    chunk = accumulator[:chunk_size]
-                    accumulator = accumulator[chunk_size:]
-                    
-                    frame = rtc.AudioFrame(
-                        data=chunk,
-                        sample_rate=24000,
-                        num_channels=1,
-                        samples_per_channel=240
-                    )
-                    await audio_source.capture_frame(frame)
-                    frame_count += 1
-                    
-                    # Calculate target playout time for drift-corrected pacing (10ms per frame)
-                    target_time = start_time + (frame_count * 0.010)
-                    delay = target_time - asyncio.get_event_loop().time()
-                    if delay > 0:
-                        await asyncio.sleep(delay)
-                
-                # Reset buffering for the next response if the buffer has been fully cleared
-                if len(accumulator) == 0:
-                    is_buffering = True
-                    
-                playout_queue.task_done()
-            except Exception as e:
-                logger.error(f"Playout capture error: {e}")
+        await playout_bridge.run()
 
     session_end_disconnect_task = None
     session_end_event_published = False
 
     async def wait_for_playout_drain(reason: str) -> None:
-        try:
-            await asyncio.wait_for(playout_queue.join(), timeout=8.0)
-        except asyncio.TimeoutError:
+        if not await playout_bridge.wait_for_drain(timeout=8.0):
             logger.warning("Timed out waiting for final agent audio playout %s reason=%s", session_log_context(room_name, customer_id, session_id, mode), reason)
         await asyncio.sleep(1.0)
 
@@ -801,6 +646,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                     schedule_session_end_disconnect("session_end_fallback")
         except Exception as e:
             logger.error("Error in Gemini run_live loop %s error=%s", session_log_context(room_name, customer_id, session_id, mode), e, exc_info=True)
+            raise
         finally:
             if session_end_disconnect_task and not disconnect_event.is_set():
                 try:
@@ -868,6 +714,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         
         # Start the warning & timeout watchdog task
         async def watchdog_task_loop():
+            nonlocal terminal_outcome
             elapsed = 0
             warning_sent = False
             while True:
@@ -881,6 +728,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         "time_remaining_seconds": max(0, max_duration - elapsed)
                     })
                 if hard_timeout_enabled and elapsed >= max_duration:
+                    terminal_outcome = TerminalOutcome.HARD_TIMEOUT
                     logger.error("Watchdog hard timeout reached %s elapsed_seconds=%s", session_log_context(room_name, customer_id, session_id, mode), elapsed)
                     disconnect_event.set()
                     break
@@ -920,18 +768,37 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             except Exception as e:
                 logger.error("Failed to start local TCP audio server %s error=%s", session_log_context(room_name, customer_id, session_id, mode), e)
 
-            ffmpeg_proc = await asyncio.create_subprocess_exec(
-                'ffmpeg',
-                '-threads', '1',        # restrict to single thread for resource-constrained containers
-                '-f', 'mp4',
-                '-i', 'pipe:0',
-                '-vf', 'scale=352:640',
-                '-map', '0:v', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-',
-                '-map', '0:a', '-f', 's16le', '-ar', '24000', '-ac', '1', f'tcp://127.0.0.1:{audio_port}',
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
+            if audio_port:
+                try:
+                    ffmpeg_proc = await asyncio.create_subprocess_exec(
+                        'ffmpeg',
+                        '-threads', '1',
+                        '-f', 'mp4',
+                        '-i', 'pipe:0',
+                        '-vf', 'scale=352:640',
+                        '-map', '0:v', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-',
+                        '-map', '0:a', '-f', 's16le', '-ar', '24000', '-ac', '1', f'tcp://127.0.0.1:{audio_port}',
+                        stdin=asyncio.subprocess.PIPE,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                except Exception as avatar_error:
+                    logger.error("Live Avatar decoder failed; degrading to audio %s error=%s", session_log_context(room_name, customer_id, session_id, mode), avatar_error)
+
+            if ffmpeg_proc is None:
+                audio_model = os.getenv("VOICE_AGENT_AUDIO_MODEL")
+                if not audio_model:
+                    terminal_outcome = TerminalOutcome.MEDIA_FAILURE
+                    raise RuntimeError("Live Avatar decoder failed and no audio fallback model is configured")
+                mode = "audio"
+                session_agent.model = Gemini(model=audio_model)
+                run_config = build_live_run_config(
+                    mode="audio",
+                    avatar_name=None,
+                    voice_name=voice_name,
+                    language_code=lang_code,
+                )
+                on_agent_event({"type": "AVATAR_FALLBACK", "mode": "audio"})
             
             async def log_ffmpeg_stderr():
                 try:
@@ -943,7 +810,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 except Exception as ex:
                     logger.error(f"Error reading FFmpeg stderr: {ex}")
             
-            asyncio.create_task(log_ffmpeg_stderr())
+            if ffmpeg_proc:
+                asyncio.create_task(log_ffmpeg_stderr())
             
             async def read_ffmpeg_frames_loop():
                 vw, vh = 352, 640
@@ -993,7 +861,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         except Exception as ex:
                             logger.error(f"Error terminating FFmpeg reader process: {ex}")
             
-            ffmpeg_task = asyncio.create_task(read_ffmpeg_frames_loop())
+            if ffmpeg_proc:
+                ffmpeg_task = asyncio.create_task(read_ffmpeg_frames_loop())
             
         playout_task = asyncio.create_task(playout_loop())
         gemini_task = asyncio.create_task(run_gemini_loop())
@@ -1015,8 +884,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         tasks = [playout_task, gemini_task, disconnect_task, handoff_task, watchdog_task]
         if mock_video_task:
             tasks.append(mock_video_task)
-        if ffmpeg_task:
-            tasks.append(ffmpeg_task)
+        # Avatar decoding is optional media. Its termination must not end the
+        # ADK workflow or customer audio session.
             
         done, pending = await asyncio.wait(
             tasks,
@@ -1026,8 +895,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         for task in done:
             task.result()
     except KeyboardInterrupt:
+        terminal_outcome = TerminalOutcome.CANCELLED
         logger.info("Shutting down voice agent %s", session_log_context(room_name, customer_id, session_id, mode))
     except HandoffException as he:
+        terminal_outcome = TerminalOutcome.HANDOFF
         logger.info("Handoff completed successfully %s reason=%s", session_log_context(room_name, customer_id, session_id, mode), he)
         for task in [playout_task, gemini_task, disconnect_task, handoff_task, watchdog_task, mock_video_task, ffmpeg_task, user_stt_task, agent_stt_task]:
             if task and not task.done():
@@ -1052,9 +923,14 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             pass
         logger.info("Voice agent entered handoff standby and completed the session %s", session_log_context(room_name, customer_id, session_id, mode))
     except Exception as e:
+        if terminal_outcome not in {
+            TerminalOutcome.HARD_TIMEOUT,
+            TerminalOutcome.MEDIA_FAILURE,
+        }:
+            terminal_outcome = TerminalOutcome.MODEL_FAILURE
         logger.error("Encountered error in voice agent session %s error=%s", session_log_context(room_name, customer_id, session_id, mode), e, exc_info=True)
     finally:
-        logger.info("Cleaning up connections and tasks %s", session_log_context(room_name, customer_id, session_id, mode, active_escalation_id=active_escalation_id))
+        logger.info("Cleaning up connections and tasks %s", session_log_context(room_name, customer_id, session_id, mode, active_escalation_id=active_escalation_id, terminal_outcome=terminal_outcome.value))
         # Cancel any pending tasks
         for task in [playout_task, gemini_task, disconnect_task, handoff_task, watchdog_task, mock_video_task, ffmpeg_task, user_stt_task, agent_stt_task]:
             if task and not task.done():
@@ -1114,7 +990,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 app_version = f"{BUILD_VERSION} ({BUILD_COMMIT_ID})"
 app = FastAPI(title="Credit Support Voice Agent API", version=app_version)
 active_sessions = {}
-MAX_CONCURRENT_SESSIONS = 10
+MAX_CONCURRENT_SESSIONS = runtime_config.max_concurrent_sessions
 
 @app.get("/healthz")
 @app.get("/")
@@ -1129,6 +1005,10 @@ def health_check():
 
 @app.post("/internal/comms/voice/start")
 async def start_session(room_name: str, customer_id: str, session_id: str, request: Request, mode: str = "audio"):
+    try:
+        mode = validate_session_request(runtime_config, mode=mode)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     logger.info("Request to start voice agent session %s", session_log_context(room_name, customer_id, session_id, mode))
     
     # Dynamically resolve BANKING_SERVICE_URL from request URL if not explicitly set in env

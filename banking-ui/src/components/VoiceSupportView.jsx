@@ -288,6 +288,7 @@ export default function VoiceSupportView() {
 
   const [mode, setMode] = useState('audio');
   const [warningMessage, setWarningMessage] = useState('');
+  const [guidanceSnapshot, setGuidanceSnapshot] = useState(null);
 
   const [agentVideoTrack, setAgentVideoTrack] = useState(null);
   const [videoLoaded, setVideoLoaded] = useState(false);
@@ -588,6 +589,7 @@ export default function VoiceSupportView() {
     setAgentVideoTrack(null);
     setVideoLoaded(false);
     setAgentMode(null);
+    setGuidanceSnapshot(null);
   }, [engine, cleanupGecxSession]);
 
   const startDisconnectCountdown = useCallback(() => {
@@ -914,6 +916,7 @@ export default function VoiceSupportView() {
     if (isConnecting || isConnected) return;
     setIsConnecting(true);
     setErrorMessage('');
+    setGuidanceSnapshot(null);
     setTranscripts([{ author: 'system', text: 'Connecting to GECX voice stream...' }]);
 
     try {
@@ -1139,6 +1142,8 @@ export default function VoiceSupportView() {
           if (event.type === 'agent_mode') {
             console.log('Voice agent reported mode:', event.mode);
             setAgentMode(event.mode);
+          } else if (event.type === DataChannelEvent.GUIDANCE_SNAPSHOT) {
+            setGuidanceSnapshot(event);
           } else if (event.type === DataChannelEvent.FRAUD_ALERT_INSPECTED) {
             setFraudContext(prev => prev ? {
               ...prev,
@@ -1289,6 +1294,7 @@ export default function VoiceSupportView() {
         setAgentVideoTrack(null);
         setVideoLoaded(false);
         setAgentMode(null);
+        setGuidanceSnapshot(null);
         setTranscripts(prev => [...prev, { author: 'system', text: 'Disconnected from voice room.' }]);
       });
 
@@ -1710,6 +1716,12 @@ export default function VoiceSupportView() {
                 <>
                   <div>RTT Latency: <span className="text-yellow-650 dark:text-yellow-400">{latency} ms</span></div>
                   <div>Transport: <span className="text-slate-500 dark:text-slate-400">Stateless Proxy</span></div>
+                </>
+              )}
+              {guidanceSnapshot && (
+                <>
+                  <div>Guidance: <span className="font-bold text-violet-600 dark:text-violet-400">{guidanceSnapshot.source === 'knowledge_catalog' ? 'Knowledge Catalog' : 'Fallback'}</span></div>
+                  <div>Policy: <span className={guidanceSnapshot.freshness_status === 'STALE' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}>v{guidanceSnapshot.content_version || 'unknown'} · {guidanceSnapshot.freshness_status || 'UNKNOWN'}</span></div>
                 </>
               )}
             </div>

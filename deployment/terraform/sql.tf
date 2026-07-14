@@ -140,6 +140,12 @@ resource "google_sql_user" "banking_service_sa_iam_user" {
   type     = "CLOUD_IAM_SERVICE_ACCOUNT"
 }
 
+resource "google_sql_user" "voice_agent_sa_iam_user" {
+  name     = replace(google_service_account.voice_agent_sa.email, ".gserviceaccount.com", "")
+  instance = google_sql_database_instance.banking_data.name
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
+}
+
 resource "google_sql_user" "data_generator_iam_user" {
   name     = replace(google_service_account.data_generator_service_account.email, ".gserviceaccount.com", "")
   instance = google_sql_database_instance.banking_data.name

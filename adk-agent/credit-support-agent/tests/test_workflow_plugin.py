@@ -6,6 +6,7 @@ from google.genai import types
 
 from agent.fraud_voice import build_fraud_playbook
 from agent.workflow_plugin import FraudWorkflowStatePlugin
+from agent.workflow_authorization import TRIAGE_FRAUD_CASE, create_workflow_authorization
 
 
 def transcript_event(*, author: str, text: str, input_event: bool) -> Event:
@@ -83,3 +84,48 @@ async def test_plugin_invalidates_wallet_authorization_on_interruption() -> None
     invalidated = event.actions.state_delta["fraud_playbook"]
     assert invalidated["wallet_response_status"] == "INVALIDATED"
     assert invalidated["wallet_invalidation_reason"] == "MODEL_RESPONSE_INTERRUPTED"
+
+
+@pytest.mark.asyncio
+async def test_plugin_confirms_prepared_triage_only_after_separate_turns() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    playbook["workflow_authorization"] = create_workflow_authorization(
+        action=TRIAGE_FRAUD_CASE,
+        payload={
+            "fraud_alert_id": "fraud-123",
+            "disputed_authorization_ids": ["auth-1"],
+            "disputed_transaction_ids": [],
+            "issue_replacement": True,
+        },
+        session_id="session-1",
+    )
+    session = SimpleNamespace(state={"session_id": "session-1", "fraud_playbook": playbook})
+    context = SimpleNamespace(session=session)
+    plugin = FraudWorkflowStatePlugin()
+
+    prompt_event = transcript_event(
+        author="agent",
+        text="To confirm, you are disputing the charge linked to auth-1. Is that correct?",
+        input_event=False,
+    )
+    await plugin.on_event_callback(invocation_context=context, event=prompt_event)
+    prompted = prompt_event.actions.state_delta["fraud_playbook"]
+    session.state["fraud_playbook"] = prompted
+
+    customer_event = transcript_event(
+        author="user",
+        text="Yes, that's right.",
+        input_event=True,
+    )
+    await plugin.on_event_callback(invocation_context=context, event=customer_event)
+    confirmed = customer_event.actions.state_delta["fraud_playbook"]
+
+    assert prompted["workflow_authorization"]["status"] == "PENDING"
+    assert prompted["workflow_authorization"]["assistant_event_id"] == "agent-event"
+    assert confirmed["workflow_authorization"]["status"] == "CONFIRMED"
+    assert confirmed["workflow_authorization"]["customer_event_id"] == "user-event"

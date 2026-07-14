@@ -214,6 +214,11 @@ class FraudAlertService:
         customer_id=None,
         auth_provider_uid: str | None = None,
     ) -> dict:
+        from services.voice_session_epochs import get_reset_generation
+
+        reset_generation = get_reset_generation(
+            self.db, str(auth_provider_uid or customer_id or "")
+        )
         alert = self.repo.get_latest_open_alert_for_customer(
             customer_id=customer_id,
             auth_provider_uid=auth_provider_uid,
@@ -223,6 +228,7 @@ class FraudAlertService:
                 "entry_reason": "general_support",
                 "has_active_fraud_alert": False,
                 "fraud_alert": None,
+                "reset_generation": reset_generation,
                 "support_guidance": {
                     "source": "not_applicable",
                     "topic_ids": [],
@@ -236,6 +242,7 @@ class FraudAlertService:
         return {
             "entry_reason": "fraud_alert",
             "has_active_fraud_alert": True,
+            "reset_generation": reset_generation,
             "fraud_alert": {
                 "fraud_alert_id": str(alert.id),
                 "status": alert.status,

@@ -92,6 +92,11 @@ def include_object(obj, name, type_, reflected, compare_to):
     if IS_SQLITE_URL and _object_schema(obj, compare_to) in SQLITE_AUTOGEN_IGNORED_SCHEMAS:
         return False
 
+    # ADK owns its session tables and schema evolution. The reset epoch table
+    # in the same isolated schema is maintained by an explicit migration.
+    if _object_schema(obj, compare_to) == "voice_support_sessions":
+        return False
+
     return True
 
 
@@ -166,6 +171,7 @@ def run_migrations_offline() -> None:
             context.execute("CREATE SCHEMA IF NOT EXISTS catalog;")
             context.execute("CREATE SCHEMA IF NOT EXISTS ref_data;")
             context.execute("CREATE SCHEMA IF NOT EXISTS merchants;")
+            context.execute("CREATE SCHEMA IF NOT EXISTS voice_support_sessions;")
         context.run_migrations()
 
 
@@ -196,6 +202,7 @@ def run_migrations_online() -> None:
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS catalog;"))
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS ref_data;"))
             connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS merchants;"))
+            connection.execute(sa.text("CREATE SCHEMA IF NOT EXISTS voice_support_sessions;"))
             connection.execute(sa.text("ALTER TABLE IF EXISTS public.alembic_version SET SCHEMA admin;"))
             connection.commit()
 
@@ -225,9 +232,9 @@ def run_migrations_online() -> None:
                 except Exception:
                     project_id = os.getenv("PROJECT_ID")
 
-                schemas = ["identity", "kyc", "ledger", "cards", "operations", "origination", "audit", "admin", "catalog", "ref_data", "merchants"]
-                reset_schemas = [s for s in schemas if s != "admin"]
-                sa_names = ["banking-service-sa", "kyc-service-sa", "ledger-service-sa"]
+                schemas = ["identity", "kyc", "ledger", "cards", "operations", "origination", "audit", "admin", "catalog", "ref_data", "merchants", "voice_support_sessions"]
+                reset_schemas = [s for s in schemas if s not in {"admin", "voice_support_sessions"}]
+                sa_names = ["banking-service-sa", "kyc-service-sa", "ledger-service-sa", "voice-agent-sa"]
                 roles = [f"{sa}@{project_id}.iam" if project_id and str(project_id) != "None" else sa for sa in sa_names]
                 reset_sa_names = ["banking-db-reset-sa"]
                 reset_roles = [f"{sa}@{project_id}.iam" if project_id and str(project_id) != "None" else sa for sa in reset_sa_names]
@@ -271,7 +278,10 @@ def run_migrations_online() -> None:
                             "catalog",
                             "ref_data",
                             "merchants",
+                            "voice_support_sessions",
                         ]
+                    elif role.startswith("voice-agent-sa"):
+                        allowed_schemas = ["voice_support_sessions"]
                     else:
                         allowed_schemas = schemas
 
@@ -281,6 +291,8 @@ def run_migrations_online() -> None:
                                 connection.execute(sa.text(f'GRANT USAGE ON SCHEMA {s} TO "{role}";'))
                                 connection.execute(sa.text(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {s} TO "{role}";'))
                                 connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{role}";'))
+                                if role.startswith("voice-agent-sa"):
+                                    connection.execute(sa.text(f'GRANT CREATE ON SCHEMA {s} TO "{role}";'))
                         except Exception as grant_err:
                             logger.debug(f"Notice: Could not grant permissions on {s} to {role}: {grant_err}")
 

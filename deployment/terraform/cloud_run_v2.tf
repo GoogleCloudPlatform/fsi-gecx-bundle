@@ -651,7 +651,7 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
 
       env {
         name  = "DATABASE_URL"
-        value = "postgresql+psycopg2://${google_sql_user.banking_service_sa_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+        value = "postgresql+asyncpg://${google_sql_user.voice_agent_sa_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
       }
 
       env {
@@ -717,7 +717,10 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
   depends_on = [
     google_project_service.run_googleapis_com,
     google_secret_manager_secret_iam_member.voice_agent_key_accessor,
-    google_secret_manager_secret_iam_member.voice_agent_secret_accessor
+    google_secret_manager_secret_iam_member.voice_agent_secret_accessor,
+    google_sql_user.voice_agent_sa_iam_user,
+    google_project_iam_member.voice_agent_sa_cloudsql_client,
+    google_project_iam_member.voice_agent_sa_cloudsql_instance_user
   ]
 }
 

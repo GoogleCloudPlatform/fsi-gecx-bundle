@@ -106,6 +106,9 @@ class SimulationService:
         try:
             user = self._resolve_demo_user(token)
             reset_user_suite(self.db, user.id)
+            from services.voice_session_epochs import bump_customer_reset_generation
+
+            bump_customer_reset_generation(self.db, token.user_id)
             return {"status": "SUCCESS", "message": "Demo profile reset successfully."}
         except HTTPException as exc:
             if exc.status_code == status.HTTP_404_NOT_FOUND and exc.detail == "Demo profile not found.":
