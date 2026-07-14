@@ -87,16 +87,24 @@ async def build_readiness_report(
         try:
             probe = await customer_probe()
             guidance = probe.support_guidance or {}
+            active_fraud = bool(
+                probe.voice_context.get("has_active_fraud_alert")
+            )
+            reset_generation_present = bool(
+                (probe.voice_context.get("reset_generation") or {}).get("token")
+            )
+            guidance_available = bool(
+                guidance.get("source") and guidance.get("topic_ids")
+            )
             checks["customer_context"] = {
-                "ok": bool(guidance.get("source") and guidance.get("topic_ids")),
-                "active_fraud": bool(probe.voice_context.get("has_active_fraud_alert")),
+                "ok": reset_generation_present
+                and (guidance_available if active_fraud else True),
+                "active_fraud": active_fraud,
                 "guidance_source": guidance.get("source"),
                 "guidance_topics": guidance.get("topic_ids", []),
                 "guidance_version": guidance.get("content_version"),
                 "freshness": (guidance.get("freshness") or {}).get("status"),
-                "reset_generation_present": bool(
-                    (probe.voice_context.get("reset_generation") or {}).get("token")
-                ),
+                "reset_generation_present": reset_generation_present,
             }
         except Exception as error:
             checks["customer_context"] = {

@@ -76,3 +76,54 @@ async def test_readiness_fails_closed_without_audio_model(monkeypatch) -> None:
 
     assert report["status"] == "not_ready"
     assert report["checks"]["configuration"]["ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_readiness_accepts_customer_reported_fraud_intake_without_alert(
+    monkeypatch,
+) -> None:
+    async def session_store():
+        return {"ok": True, "backend": "DatabaseSessionService", "durable": True}
+
+    async def http_probe(**kwargs):
+        return {"ok": True, "status": 406}
+
+    async def customer_probe():
+        return SimpleNamespace(
+            voice_context={
+                "has_active_fraud_alert": False,
+                "reset_generation": {"token": "1:2"},
+            },
+            support_guidance={
+                "source": "not_applicable",
+                "topic_ids": [],
+                "content_version": None,
+                "freshness": None,
+            },
+        )
+
+    monkeypatch.setattr(readiness, "_probe_session_store", session_store)
+    monkeypatch.setattr(readiness, "_probe_http", http_probe)
+    report = await readiness.build_readiness_report(
+        runtime_config=SimpleNamespace(
+            audio_model="audio-model",
+            video_model="video-model",
+            livekit_url="ws://livekit",
+            max_concurrent_sessions=2,
+        ),
+        banking_service_url="https://banking",
+        banking_service_mcp_url="https://banking/api/mcp/",
+        authorization_header="Bearer token",
+        customer_probe=customer_probe,
+    )
+
+    assert report["status"] == "ready"
+    assert report["checks"]["customer_context"] == {
+        "ok": True,
+        "active_fraud": False,
+        "guidance_source": "not_applicable",
+        "guidance_topics": [],
+        "guidance_version": None,
+        "freshness": None,
+        "reset_generation_present": True,
+    }
