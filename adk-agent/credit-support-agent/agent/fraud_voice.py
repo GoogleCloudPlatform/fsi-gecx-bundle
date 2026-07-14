@@ -60,7 +60,7 @@ def apply_wallet_transcript_event(
 ) -> dict:
     """Return the ADK session playbook transition for a completed transcript."""
     playbook = dict(fraud_playbook or {})
-    if playbook.get("entry_mode") != "FRAUD_ALERT":
+    if playbook.get("entry_mode") not in {"FRAUD_ALERT", "CUSTOMER_REPORTED_FRAUD"}:
         return playbook
 
     if author == "agent" and agent_offered_google_wallet(transcript):
@@ -239,7 +239,12 @@ def build_initial_greeting(fraud_playbook: dict | None) -> str:
 def validate_fraud_tool_sequence(fraud_playbook: dict | None, tool_name: str, args: dict | None = None) -> str | None:
     """Return an operator-safe sequencing error when a fraud mitigation tool is called out of order."""
     playbook = fraud_playbook or {}
-    if playbook.get("entry_mode") != "FRAUD_ALERT":
+    if playbook.get("entry_mode") not in {"FRAUD_ALERT", "CUSTOMER_REPORTED_FRAUD"}:
+        if tool_name == "triage_customer_reported_fraud":
+            return (
+                "Use customer-reported triage only after confirming no active alert, "
+                "reviewing recent transactions, and preparing the exact selection."
+            )
         return None
 
     args = args or {}
@@ -267,8 +272,17 @@ def validate_fraud_tool_sequence(fraud_playbook: dict | None, tool_name: str, ar
 
     if tool_name == "triage_fraud_case" and not playbook.get("open_alert_inspected"):
         return "Inspect the open fraud alert before taking mitigation actions."
+    if tool_name == "triage_customer_reported_fraud" and (
+        playbook.get("entry_mode") != "CUSTOMER_REPORTED_FRAUD"
+        or not playbook.get("open_alert_inspected")
+        or playbook.get("fraud_alert_id")
+    ):
+        return (
+            "Use customer-reported triage only after confirming no active alert, "
+            "reviewing recent transactions, and preparing the exact selection."
+        )
 
-    if tool_name == "triage_fraud_case":
+    if tool_name in {"triage_fraud_case", "triage_customer_reported_fraud"}:
         fraud_alert_id = str((args or {}).get("fraud_alert_id") or "").strip()
         expected_alert_id = str(playbook.get("fraud_alert_id") or "").strip()
         if expected_alert_id and not fraud_alert_id:
@@ -310,7 +324,7 @@ def mark_fraud_tool_completed(
         playbook["wallet_push_queued"] = True
         return playbook
 
-    if tool_name == "triage_fraud_case":
+    if tool_name in {"triage_fraud_case", "triage_customer_reported_fraud"}:
         outcome = str((tool_response or {}).get("outcome") or "").strip().upper()
         replacement_card = (tool_response or {}).get("replacement_card") or {}
         playbook["triage_submitted"] = True

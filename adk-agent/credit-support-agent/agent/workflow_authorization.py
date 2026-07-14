@@ -10,6 +10,7 @@ from typing import Any
 
 
 TRIAGE_FRAUD_CASE = "TRIAGE_FRAUD_CASE"
+TRIAGE_CUSTOMER_REPORTED_FRAUD = "TRIAGE_CUSTOMER_REPORTED_FRAUD"
 PUSH_CARD_TO_GOOGLE_WALLET = "PUSH_CARD_TO_GOOGLE_WALLET"
 DEFAULT_AUTHORIZATION_TTL_SECONDS = 180
 
@@ -41,9 +42,8 @@ def _string_list(value: Any) -> list[str]:
 def canonical_action_payload(action: str, payload: dict | None) -> dict:
     """Return only trusted, action-relevant fields in a deterministic shape."""
     payload = payload or {}
-    if action == TRIAGE_FRAUD_CASE:
-        return {
-            "fraud_alert_id": str(payload.get("fraud_alert_id") or "").strip(),
+    if action in {TRIAGE_FRAUD_CASE, TRIAGE_CUSTOMER_REPORTED_FRAUD}:
+        canonical = {
             "disputed_authorization_ids": _string_list(
                 payload.get("disputed_authorization_ids")
             ),
@@ -51,7 +51,13 @@ def canonical_action_payload(action: str, payload: dict | None) -> dict:
                 payload.get("disputed_transaction_ids")
             ),
             "issue_replacement": bool(payload.get("issue_replacement", True)),
+            "escalate": bool(payload.get("escalate", False)),
         }
+        if action == TRIAGE_FRAUD_CASE:
+            canonical["fraud_alert_id"] = str(
+                payload.get("fraud_alert_id") or ""
+            ).strip()
+        return canonical
     if action == PUSH_CARD_TO_GOOGLE_WALLET:
         return {
             "card_token": str(payload.get("card_token") or "").strip(),

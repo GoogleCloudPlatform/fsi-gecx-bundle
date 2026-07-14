@@ -425,6 +425,30 @@ def test_validate_fraud_tool_sequence_blocks_duplicate_triage() -> None:
     assert error == "The fraud case has already been triaged. Do not submit the fraud workflow again."
 
 
+def test_customer_reported_triage_requires_prepared_no_alert_mode() -> None:
+    general = build_fraud_playbook(
+        {"has_active_fraud_alert": False, "fraud_alert": None}
+    )
+    general["open_alert_inspected"] = True
+
+    error = validate_fraud_tool_sequence(
+        general,
+        "triage_customer_reported_fraud",
+        {"disputed_transaction_ids": ["txn-1"]},
+    )
+    general["entry_mode"] = "CUSTOMER_REPORTED_FRAUD"
+
+    assert "preparing the exact selection" in error
+    assert (
+        validate_fraud_tool_sequence(
+            general,
+            "triage_customer_reported_fraud",
+            {"disputed_transaction_ids": ["txn-1"]},
+        )
+        is None
+    )
+
+
 def test_mark_fraud_tool_completed_tracks_single_triage_workflow() -> None:
     playbook = build_fraud_playbook(
         {
@@ -499,7 +523,7 @@ def test_base_instruction_excludes_active_fraud_flow() -> None:
     assert "When a trusted active fraud alert exists" not in instruction
     assert "call `triage_fraud_case` exactly once" not in instruction
     assert "fraud investigation team" not in instruction
-    assert "provisional credits" not in instruction
+    assert "five suspicious charges" not in instruction
 
 
 def test_base_instruction_includes_grounding_and_disclosure_guardrails() -> None:
@@ -510,6 +534,9 @@ def test_base_instruction_includes_grounding_and_disclosure_guardrails() -> None
     assert "Do not claim an action succeeded until the relevant tool result confirms success" in instruction
     assert "Before taking a consequential account action" in instruction
     assert "Do not provide financial, legal, tax, or investment advice" in instruction
+    assert "If `get_open_fraud_alert` confirms there is no active alert" in instruction
+    assert "Call `prepare_customer_reported_fraud_confirmation` with only those exact IDs" in instruction
+    assert "call `triage_customer_reported_fraud` exactly once" in instruction
 
 
 def test_voice_session_uses_fresh_agent_factory() -> None:

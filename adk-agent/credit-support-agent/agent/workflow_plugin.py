@@ -11,6 +11,7 @@ from agent.fraud_voice import (
 )
 from agent.workflow_authorization import (
     PUSH_CARD_TO_GOOGLE_WALLET,
+    TRIAGE_CUSTOMER_REPORTED_FRAUD,
     TRIAGE_FRAUD_CASE,
     apply_customer_authorization_response,
     assistant_requested_confirmation,
@@ -100,7 +101,8 @@ class FraudWorkflowStatePlugin(BasePlugin):
                     event_id=event_id,
                 )
             elif (
-                authorization.get("action") == TRIAGE_FRAUD_CASE
+                authorization.get("action")
+                in {TRIAGE_FRAUD_CASE, TRIAGE_CUSTOMER_REPORTED_FRAUD}
                 and authorization.get("status") == "PREPARED"
                 and assistant_requested_confirmation(transcript)
             ):

@@ -5,6 +5,8 @@ from typing import Iterable
 
 from models.authentication import ValidatedToken
 from models.credit_card import CreditAccount, IssuedCard, TransactionAuthorization
+from models.identity import User
+from repositories.credit_card import CreditCardRepository
 from models.secure_messaging import SecureMessageCreateRequest, SENDER_TYPE_BANK
 from repositories.fraud import FraudAlertRepository, ScenarioOutcomeRepository
 from services.knowledge_catalog import KnowledgeCatalogService
@@ -275,12 +277,255 @@ class FraudAlertService:
                 "success": False,
                 "message": "No open fraud alert found for the customer.",
                 "fraud_alert": None,
+                # The caller only invokes this operation after a fraud inquiry. Give
+                # the live agent the same governed guidance used by alert-led entry.
+                "support_guidance": KnowledgeCatalogService().get_guidance_bundle_for_voice_customer_reported_fraud(),
             }
         return {
             "success": True,
             "message": "Open fraud alert retrieved successfully.",
             "fraud_alert": context["fraud_alert"],
+            "support_guidance": context.get("support_guidance"),
         }
+
+    def triage_customer_reported_fraud(
+        self,
+        *,
+        auth_provider_uid: str,
+        disputed_authorization_ids: list[str] | None = None,
+        disputed_transaction_ids: list[str] | None = None,
+        issue_replacement: bool = True,
+        escalate: bool = False,
+        idempotency_key: str | None = None,
+    ) -> dict:
+        """Create a customer-reported alert and execute the existing triage workflow.
+
+        The exact selection is ownership- and eligibility-checked before an alert is
+        created. Alert creation and remediation are exposed as one workflow so a
+        customer needs to confirm the selection only once.
+        """
+        authorization_ids = sorted(
+            {str(value).strip() for value in (disputed_authorization_ids or []) if str(value).strip()}
+        )
+        transaction_ids = sorted(
+            {str(value).strip() for value in (disputed_transaction_ids or []) if str(value).strip()}
+        )
+        if not authorization_ids and not transaction_ids:
+            raise ValueError("Select at least one pending authorization or posted transaction to dispute.")
+
+        card_repo = CreditCardRepository(self.db)
+        account = card_repo.get_account_by_customer(auth_provider_uid)
+        if not account:
+            return {
+                "success": False,
+                "message": "No credit card account found for the customer.",
+                "fraud_alert": None,
+            }
+        account = card_repo.get_account_by_id(str(account.id), lock=True)
+        customer = self.db.query(User).filter(User.id == account.customer_id).first()
+        if not customer:
+            return {
+                "success": False,
+                "message": "Customer identity record was not found.",
+                "fraud_alert": None,
+            }
+
+        existing_open = self.repo.get_open_alert_for_account(
+            credit_account_id=account.id
+        )
+        if existing_open and existing_open.source != "CUSTOMER_REPORTED":
+            return {
+                "success": False,
+                "message": "A fraud alert is already active for this account. Inspect that alert before proceeding.",
+                "fraud_alert": self._alert_result(existing_open),
+                "conflict": "ACTIVE_FRAUD_ALERT",
+            }
+
+        selection = (authorization_ids, transaction_ids)
+        existing_customer_alert = self.repo.get_latest_customer_reported_alert_for_account(
+            credit_account_id=account.id
+        )
+        if existing_customer_alert:
+            existing_selection = (
+                sorted(existing_customer_alert.suspicious_authorization_ids or []),
+                sorted(
+                    str(item.get("transaction_id"))
+                    for item in (existing_customer_alert.suspicious_transactions or [])
+                    if item.get("transaction_id")
+                ),
+            )
+            if existing_selection != selection:
+                return {
+                    "success": False,
+                    "message": "A different customer-reported fraud case is already active for this account.",
+                    "fraud_alert": self._alert_result(existing_customer_alert),
+                    "conflict": "ACTIVE_CUSTOMER_REPORTED_ALERT",
+                }
+            triage_actions = [
+                action
+                for action in self.repo.list_case_actions(
+                    fraud_alert_id=existing_customer_alert.id
+                )
+                if action.action_type == "FRAUD_CASE_TRIAGED"
+            ]
+            if triage_actions:
+                request = triage_actions[-1].request_payload or {}
+                requested_options = (
+                    bool(request.get("issue_replacement", True)),
+                    bool(request.get("escalate", False)),
+                )
+                if requested_options != (bool(issue_replacement), bool(escalate)):
+                    return {
+                        "success": False,
+                        "message": "This customer-reported case was already submitted with different remediation options.",
+                        "fraud_alert": self._alert_result(existing_customer_alert),
+                        "conflict": "CUSTOMER_REPORTED_OPTIONS_CHANGED",
+                    }
+            if existing_customer_alert.status == "TRIAGED_PENDING_REVIEW":
+                completed_action = self.repo.get_latest_successful_case_action(
+                    fraud_alert_id=existing_customer_alert.id,
+                    action_type="FRAUD_CASE_TRIAGED",
+                )
+                if not completed_action:
+                    raise ValueError(
+                        "The existing customer-reported case has no completed triage result."
+                    )
+                replay = dict(completed_action.result_payload or {})
+                replay["idempotent_replay"] = True
+                replay["intake_source"] = "CUSTOMER_REPORTED"
+                return replay
+
+        card_ids: set[str] = set()
+        suspicious_transactions: list[dict] = []
+        for authorization_id in authorization_ids:
+            authorization = card_repo.get_authorization_by_id_for_account(
+                authorization_id, account.id
+            )
+            if not authorization or authorization.status != "PENDING":
+                raise ValueError(
+                    f"Pending authorization '{authorization_id}' is not eligible for this account."
+                )
+            card_ids.add(str(authorization.card_id))
+            suspicious_transactions.append(
+                {
+                    "authorization_id": str(authorization.id),
+                    "transaction_id": None,
+                    "merchant_name": authorization.merchant_name or authorization.auth_code,
+                    "amount_cents": int(
+                        authorization.billing_amount_cents
+                        or authorization.transaction_amount_cents
+                        or 0
+                    ),
+                    "merchant_category_code": authorization.merchant_category_code,
+                    "card_network": authorization.card_network,
+                    "created_at": authorization.created_at.isoformat()
+                    if authorization.created_at
+                    else None,
+                    "pending": True,
+                    "source": "CUSTOMER_REPORTED",
+                }
+            )
+
+        for transaction_id in transaction_ids:
+            transaction = card_repo.get_ledger_entry_by_id_for_account(
+                transaction_id, account.id
+            )
+            if not transaction or int(transaction.amount_cents) >= 0:
+                raise ValueError(
+                    f"Posted transaction '{transaction_id}' is not an eligible debit for this account."
+                )
+            authorization = transaction.authorization
+            if authorization:
+                card_ids.add(str(authorization.card_id))
+            suspicious_transactions.append(
+                {
+                    "authorization_id": str(transaction.authorization_id)
+                    if transaction.authorization_id
+                    else None,
+                    "transaction_id": str(transaction.id),
+                    "merchant_name": transaction.description,
+                    "amount_cents": abs(int(transaction.amount_cents)),
+                    "merchant_category_code": authorization.merchant_category_code
+                    if authorization
+                    else None,
+                    "card_network": authorization.card_network if authorization else None,
+                    "created_at": transaction.posted_at.isoformat()
+                    if transaction.posted_at
+                    else None,
+                    "pending": False,
+                    "source": "CUSTOMER_REPORTED",
+                }
+            )
+
+        if len(card_ids) > 1:
+            raise ValueError("Selected transactions span multiple cards; open a separate case for each card.")
+        if card_ids:
+            card = card_repo.get_card_by_id_for_account(next(iter(card_ids)), account.id)
+        else:
+            active_cards = card_repo.list_active_cards_by_account(account.id)
+            card = active_cards[0] if active_cards else None
+        if not card:
+            raise ValueError("No card instrument could be resolved for the selected transactions.")
+
+        if existing_customer_alert:
+            alert = existing_customer_alert
+        else:
+            existing_open = self.repo.get_open_alert_for_account(
+                credit_account_id=account.id
+            )
+            if existing_open:
+                return {
+                    "success": False,
+                    "message": "A fraud alert became active while the customer report was being prepared. Inspect that alert before proceeding.",
+                    "fraud_alert": self._alert_result(existing_open),
+                    "conflict": "ACTIVE_FRAUD_ALERT",
+                }
+            alert = self.repo.create_alert(
+                customer_id=customer.id,
+                auth_provider_uid=customer.auth_provider_uid or auth_provider_uid,
+                credit_account_id=account.id,
+                card_id=card.id,
+                card_last_four=card.last_four,
+                message_thread_id=str(uuid.uuid4()),
+                suspicious_authorization_ids=authorization_ids,
+                suspicious_transactions=suspicious_transactions,
+                source="CUSTOMER_REPORTED",
+            )
+            record_audit_event(
+                self.db,
+                "FRAUD_ALERT_CREATED",
+                {
+                    "fraud_alert_id": str(alert.id),
+                    "correlation_id": str(alert.id),
+                    "customer_id": str(customer.id),
+                    "credit_account_id": str(account.id),
+                    "card_last_four": card.last_four,
+                    "authorization_ids": authorization_ids,
+                    "transaction_ids": transaction_ids,
+                    "source": "CUSTOMER_REPORTED",
+                },
+            )
+            self.db.commit()
+
+        # Business idempotency is semantic rather than session-bound so a lost
+        # response can be retried safely from a new voice connection.
+        workflow_key = self._build_triage_idempotency_key(
+            disputed_authorization_ids=authorization_ids,
+            disputed_transaction_ids=transaction_ids,
+            issue_replacement=issue_replacement,
+            escalate=escalate,
+        )
+        result = self.triage_fraud_case(
+            auth_provider_uid=auth_provider_uid,
+            fraud_alert_id=str(alert.id),
+            disputed_authorization_ids=authorization_ids,
+            disputed_transaction_ids=transaction_ids,
+            issue_replacement=issue_replacement,
+            escalate=escalate,
+            idempotency_key=workflow_key,
+        )
+        result["intake_source"] = "CUSTOMER_REPORTED"
+        return result
 
     def get_open_alert_for_account(self, *, credit_account_id) -> dict | None:
         alert = self.repo.get_open_alert_for_account(
@@ -414,6 +659,20 @@ class FraudAlertService:
                 raise ValueError(
                     f"Authorization ids are not part of this fraud alert: {', '.join(unexpected)}"
                 )
+
+        allowed_transaction_ids = {
+            str(item.get("transaction_id"))
+            for item in (alert.suspicious_transactions or [])
+            if item.get("transaction_id")
+        }
+        unexpected_transactions = sorted(
+            set(disputed_transaction_ids) - allowed_transaction_ids
+        )
+        if unexpected_transactions:
+            raise ValueError(
+                "Transaction ids are not part of this fraud alert: "
+                + ", ".join(unexpected_transactions)
+            )
 
         has_disputes = bool(disputed_authorization_ids or disputed_transaction_ids)
         if not has_disputes:
@@ -853,6 +1112,7 @@ class FraudAlertService:
         return {
             "fraud_alert_id": str(alert.id),
             "status": alert.status,
+            "source": alert.source,
             "remediation_status": alert.remediation_status,
             "card_id": str(alert.card_id),
             "card_last_four": alert.card_last_four,

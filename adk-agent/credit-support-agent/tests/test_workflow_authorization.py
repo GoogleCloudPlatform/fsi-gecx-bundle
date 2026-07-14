@@ -1,4 +1,5 @@
 from agent.workflow_authorization import (
+    TRIAGE_CUSTOMER_REPORTED_FRAUD,
     TRIAGE_FRAUD_CASE,
     action_payload_fingerprint,
     apply_customer_authorization_response,
@@ -47,6 +48,47 @@ def test_payload_fingerprint_is_stable_for_reordered_selection() -> None:
 
     assert action_payload_fingerprint(TRIAGE_FRAUD_CASE, first) == action_payload_fingerprint(
         TRIAGE_FRAUD_CASE, second
+    )
+
+
+def test_customer_reported_authorization_is_exact_selection_bound() -> None:
+    payload = {
+        "disputed_authorization_ids": ["auth-2", "auth-1"],
+        "disputed_transaction_ids": ["txn-1"],
+        "issue_replacement": True,
+        "escalate": False,
+    }
+    authorization = create_workflow_authorization(
+        action=TRIAGE_CUSTOMER_REPORTED_FRAUD,
+        payload=payload,
+        session_id="session-1",
+        now_epoch_s=1000.0,
+    )
+    authorization = mark_authorization_prompted(
+        authorization,
+        assistant_event_id="assistant-1",
+        now_epoch_s=1001.0,
+    )
+    authorization = apply_customer_authorization_response(
+        authorization,
+        transcript="Yes, those are the charges.",
+        customer_event_id="customer-1",
+        now_epoch_s=1002.0,
+    )
+
+    assert validate_workflow_authorization(
+        authorization,
+        action=TRIAGE_CUSTOMER_REPORTED_FRAUD,
+        payload={**payload, "disputed_authorization_ids": ["auth-1", "auth-2"]},
+        session_id="session-1",
+        now_epoch_s=1003.0,
+    ) is None
+    assert "differs from the exact payload" in validate_workflow_authorization(
+        authorization,
+        action=TRIAGE_CUSTOMER_REPORTED_FRAUD,
+        payload={**payload, "disputed_transaction_ids": ["txn-2"]},
+        session_id="session-1",
+        now_epoch_s=1003.0,
     )
 
 

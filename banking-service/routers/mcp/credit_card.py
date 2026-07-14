@@ -28,6 +28,7 @@ from services.credit_card import (
     issue_replacement_card,
     queue_wallet_provisioning,
     reverse_posted_fee,
+    get_transaction_history_dto,
 )
 from services.fraud_alerts import FraudAlertService
 from services.voice_bidi import send_session_event
@@ -482,6 +483,60 @@ async def triage_fraud_case(
 
 @mcp.tool()
 @requires_user_assertion
+async def triage_customer_reported_fraud(
+    disputed_authorization_ids: list[str] = None,
+    disputed_transaction_ids: list[str] = None,
+    issue_replacement: bool = True,
+    escalate: bool = False,
+    idempotency_key: str = None,
+    ctx: Context = None,
+) -> dict:
+    """Create and triage a customer-reported fraud case after exact confirmation.
+
+    Use this only when no active alert exists and the customer has selected exact
+    entries returned by get_transaction_history.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    db = SessionLocal()
+    try:
+        result = FraudAlertService(db).triage_customer_reported_fraud(
+            auth_provider_uid=verified_customer_id,
+            disputed_authorization_ids=disputed_authorization_ids or [],
+            disputed_transaction_ids=disputed_transaction_ids or [],
+            issue_replacement=issue_replacement,
+            escalate=escalate,
+            idempotency_key=idempotency_key,
+        )
+        if result.get("success"):
+            fraud_alert = result.get("fraud_alert") or {}
+            await send_session_event(
+                f"session-{verified_customer_id}",
+                {
+                    "type": "FRAUD_CASE_TRIAGED",
+                    "fraud_alert_id": fraud_alert.get("fraud_alert_id"),
+                    "outcome": result.get("outcome"),
+                    "fraud_alert": fraud_alert,
+                    "voided_authorizations": result.get("voided_authorizations", []),
+                    "provisional_credits": result.get("provisional_credits", []),
+                    "replacement_card": result.get("replacement_card"),
+                    "secure_message": result.get("secure_message"),
+                    "escalated": result.get("escalated", False),
+                    "intake_source": "CUSTOMER_REPORTED",
+                },
+            )
+        return result
+    except ValueError as exc:
+        logger.warning("Customer-reported fraud validation failed: %s", exc)
+        return {"success": False, "message": str(exc), "fraud_alert": None}
+    except Exception as exc:
+        logger.exception("Customer-reported fraud intake failed")
+        return {"success": False, "message": f"Internal error: {exc}", "fraud_alert": None}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
 async def reverse_overdraft_fee(
     account_id: str = None,
     fee_date: str = None,
@@ -695,15 +750,29 @@ async def get_transaction_history(
         if not account:
             return {"success": False, "message": "No credit card account found for the user."}
             
-        ledger = repo.list_ledger_entries(account.id)
-        data = [{
-            "transaction_id": entry.id,
-            "amount_cents": entry.amount_cents,
-            "description": entry.description,
-            "timestamp": entry.posted_at.isoformat() if entry.posted_at else None
-        } for entry in ledger]
+        transactions = get_transaction_history_dto(repo, verified_customer_id) or []
+        transactions = sorted(
+            transactions,
+            key=lambda item: item.get("posted_at") or "",
+            reverse=True,
+        )
+        visible_transactions = transactions[:50]
+        data = [
+            {
+                **item,
+                "transaction_id": item["id"] if not item.get("pending") else None,
+                "authorization_id": item["id"] if item.get("pending") else None,
+                "timestamp": item.get("posted_at"),
+            }
+            for item in visible_transactions
+        ]
         
-        return {"success": True, "data": data}
+        return {
+            "success": True,
+            "data": data,
+            "total_available": len(transactions),
+            "truncated": len(transactions) > len(visible_transactions),
+        }
     except Exception as e:
         logger.error(f"Error in FastMCP get_transaction_history: {e}")
         return {"success": False, "message": f"Internal error: {str(e)}"}

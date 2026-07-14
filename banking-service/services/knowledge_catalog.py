@@ -17,6 +17,13 @@ DEFAULT_TOPIC_IDS = [
     "wallet_provisioning",
     "human_escalation",
 ]
+CUSTOMER_REPORTED_TOPIC_IDS = [
+    "customer_reported_fraud",
+    "replacement_card",
+    "wallet_provisioning",
+    "human_escalation",
+]
+SYNC_TOPIC_IDS = list(dict.fromkeys(DEFAULT_TOPIC_IDS + CUSTOMER_REPORTED_TOPIC_IDS))
 
 RESOURCES_DIR = Path(__file__).resolve().parent.parent / "resources" / "data"
 LOCAL_GUIDANCE_FILE = RESOURCES_DIR / "fraud_support_guidance.json"
@@ -53,6 +60,13 @@ class KnowledgeCatalogService:
 
     def get_guidance_bundle_for_voice_fraud(self) -> dict[str, Any]:
         return self.get_guidance_bundle(DEFAULT_TOPIC_IDS, audience="CREDIT_SUPPORT_AGENT", channel="VOICE")
+
+    def get_guidance_bundle_for_voice_customer_reported_fraud(self) -> dict[str, Any]:
+        return self.get_guidance_bundle(
+            CUSTOMER_REPORTED_TOPIC_IDS,
+            audience="CREDIT_SUPPORT_AGENT",
+            channel="VOICE",
+        )
 
     def get_guidance_bundle(
         self,
@@ -108,7 +122,7 @@ class KnowledgeCatalogService:
 
     def sync_topics_to_catalog(self, topic_ids: list[str] | None = None) -> list[str]:
         self.validate_local_guidance(strict_freshness=True)
-        topic_ids = topic_ids or DEFAULT_TOPIC_IDS
+        topic_ids = topic_ids or SYNC_TOPIC_IDS
         topics = [topic for topic in self._get_local_topics(topic_ids).values()]
         if not self.enabled:
             raise RuntimeError("Knowledge Catalog sync requires KNOWLEDGE_CATALOG_ENABLED=true.")

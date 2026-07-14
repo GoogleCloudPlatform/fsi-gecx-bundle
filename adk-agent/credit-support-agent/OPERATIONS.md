@@ -33,6 +33,12 @@ and migrations, build the banking UI, and inspect `terraform plan` for:
 Deploy the database migration and banking service before the agent revision so
 the reset epoch table and voice-context field exist first.
 
+When the fraud guidance bundle changes, run the banking-service Knowledge
+Catalog sync after deployment. Version 2.1 adds the
+`customer_reported_fraud` topic; a missing remote topic is safe because the
+runtime merges the local fallback, but the catalog should be synchronized
+before promotion.
+
 ## Evo rehearsal
 
 Run each audio path once, then run the all-disputed fraud path three consecutive
@@ -46,6 +52,8 @@ times before a demo:
 6. transient tool failure (bounded retry or safe escalation)
 7. presenter reset during a pending confirmation (old session must be rejected)
 8. remote Knowledge Catalog and forced local fallback
+9. no active alert: identify one pending and one posted debit from recent
+   history, confirm the exact selection, and complete customer-reported triage
 
 For each run, confirm one mutation call, no spoken success before its structured
 result, the expected UI event, terminal outcome, guidance source/topics/version,
