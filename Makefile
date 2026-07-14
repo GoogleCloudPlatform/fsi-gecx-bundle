@@ -21,6 +21,8 @@ CUSTOM_DOMAIN ?= $(shell grep -E '^[[:space:]]*custom_domain[[:space:]]*=[[:spac
 DATA_STORE_ID ?= $(shell grep -E '^[[:space:]]*data_store_id[[:space:]]*=[[:space:]]*' deployment/terraform/discovery_engine.tf 2>/dev/null | cut -d'"' -f2 || echo "banking-site_1778875783412")
 GCP_ACCOUNT ?= $(shell ACCOUNT=$$(gcloud config get-value account 2>/dev/null); echo "$${ACCOUNT%.gserviceaccount.com}")
 GCP_ACCOUNT_ENCODED = $(subst @,%40,$(GCP_ACCOUNT))
+GECX_APP_ID ?= $(shell grep -E '^[[:space:]]*cx_agent_studio_voice_agent_deployment_name[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]' || echo "")
+GECX_LOCATION ?= $(shell gecx_loc=$$(grep -E '^[[:space:]]*gecx_location[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]'); echo $${gecx_loc:-us})
 
 
 .PHONY: help
@@ -117,12 +119,12 @@ db-init-local: ## Initialize and seed the local SQLite database
 .PHONY: run-backend-local
 run-backend-local: ## Run the FastAPI banking service locally
 	@echo "Starting banking-service..."
-	cd banking-service && VOICE_AGENT_SERVICE_URL=http://localhost:8088 FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
+	cd banking-service && GECX_APP_ID="$(GECX_APP_ID)" GECX_LOCATION="$(GECX_LOCATION)" VOICE_AGENT_SERVICE_URL=http://localhost:8088 FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
 
 .PHONY: run-backend-iam
 run-backend-iam: ## Run the FastAPI banking service locally
 	@echo "Starting banking-service..."
-	cd banking-service && VOICE_AGENT_SERVICE_URL=http://localhost:8088 FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) DB_IAM_AUTH=true DATABASE_URL="postgresql+psycopg2://$(GCP_ACCOUNT_ENCODED)@localhost:5432/banking?sslmode=disable" uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
+	cd banking-service && GECX_APP_ID="$(GECX_APP_ID)" GECX_LOCATION="$(GECX_LOCATION)" VOICE_AGENT_SERVICE_URL=http://localhost:8088 FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) DB_IAM_AUTH=true DATABASE_URL="postgresql+psycopg2://$(GCP_ACCOUNT_ENCODED)@localhost:5432/banking?sslmode=disable" uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
 
 .PHONY: run-frontend
 run-frontend: ## Run the React/Vite frontend dev server locally
