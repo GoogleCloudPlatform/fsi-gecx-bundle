@@ -57,3 +57,4 @@ seed_mock_user_count                             = 2000
 full_reset_enabled                               = true
 stable_env_url                                   = "https://agentic-finance.gcp-solutions.com/"
 additional_cors_allowed_origins                  = []
+enable_avatar_modality                           = true

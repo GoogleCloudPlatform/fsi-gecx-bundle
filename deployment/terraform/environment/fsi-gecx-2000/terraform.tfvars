@@ -48,3 +48,4 @@ data_generator_fraud_pattern_max_per_pulse      = 1
 data_generator_fraud_pattern_target_mode        = "eligible"
 seed_mock_user_count                            = 2000
 full_reset_enabled                              = true
+enable_avatar_modality                          = true

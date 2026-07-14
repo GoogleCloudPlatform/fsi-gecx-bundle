@@ -401,3 +401,9 @@ variable "feedback_url" {
   description = "URL for the buganizer feedback link to show on the stable environment banner (leave empty to disable)"
   default     = null
 }
+
+variable "enable_avatar_modality" {
+  type        = bool
+  description = "Whether to enable the avatar modality in the banking UI"
+  default     = false
+}
