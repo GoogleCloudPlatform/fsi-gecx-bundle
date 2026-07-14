@@ -13,6 +13,10 @@ DATA_STORE_ID ?= $(shell grep -E '^[[:space:]]*data_store_id[[:space:]]*=[[:spac
 GCP_ACCOUNT ?= $(shell ACCOUNT=$$(gcloud config get-value account 2>/dev/null); echo "$${ACCOUNT%.gserviceaccount.com}")
 GCP_ACCOUNT_ENCODED = $(subst @,%40,$(GCP_ACCOUNT))
 
+LOCAL_DB_PORT ?= 5432
+LOCAL_DB_NAME ?= banking
+LOCAL_DB_USER ?= banking
+LOCAL_DB_PASSWORD ?= banking
 
 .PHONY: help
 help: ## Display available commands and their descriptions
@@ -82,6 +86,49 @@ test-integration: ## Execute live GCP sandbox Document AI integration tests (man
 	@echo "Executing live cloud sandbox integration test suite..."
 	cd banking-service && RUN_INTEGRATION_TESTS=true .venv/bin/pytest tests/test_integration_docai.py -v -s
 
+.PHONY: local-db-up
+local-db-up: ## Start a persistent local PostgreSQL container
+	@echo "Starting local PostgreSQL database container..."
+	@$(DOCKER) volume create fsi-gecx-local-db-data >/dev/null 2>&1 || true
+	@$(DOCKER) rm -f fsi-gecx-local-db 2>/dev/null || true
+	$(DOCKER) run -d \
+		--name fsi-gecx-local-db \
+		-p $(LOCAL_DB_PORT):5432 \
+		-e POSTGRES_DB=$(LOCAL_DB_NAME) \
+		-e POSTGRES_USER=$(LOCAL_DB_USER) \
+		-e POSTGRES_PASSWORD=$(LOCAL_DB_PASSWORD) \
+		-v fsi-gecx-local-db-data:/var/lib/postgresql/data \
+		mirror.gcr.io/library/postgres:18-alpine
+	@echo "Waiting for database to accept connections..."
+	@attempts=10; \
+	while [ $$attempts -gt 0 ]; do \
+		if $(DOCKER) exec fsi-gecx-local-db pg_isready -U $(LOCAL_DB_USER) -d $(LOCAL_DB_NAME) >/dev/null 2>&1; then \
+			echo "Database is ready!"; \
+			exit 0; \
+		fi; \
+		echo "Waiting... ($$attempts attempts left)"; \
+		sleep 2; \
+		attempts=$$((attempts - 1)); \
+	done; \
+	echo "Database failed to start in time." >&2; \
+	exit 1
+
+.PHONY: local-db-down
+local-db-down: ## Stop the persistent local PostgreSQL container
+	@echo "Stopping local PostgreSQL database container..."
+	$(DOCKER) stop fsi-gecx-local-db >/dev/null 2>&1 || true
+	$(DOCKER) rm fsi-gecx-local-db >/dev/null 2>&1 || true
+
+.PHONY: local-db-upgrade
+local-db-upgrade: local-db-up ## Run database migrations against the local PostgreSQL DB
+	@echo "Running Alembic migrations against local PostgreSQL database..."
+	cd banking-service && DATABASE_URL="postgresql+psycopg2://$(LOCAL_DB_USER):$(LOCAL_DB_PASSWORD)@localhost:$(LOCAL_DB_PORT)/$(LOCAL_DB_NAME)" uv run alembic upgrade head
+
+.PHONY: local-db-seed
+local-db-seed: local-db-upgrade ## Run migrations and seed the local PostgreSQL database
+	@echo "Seeding local PostgreSQL database..."
+	cd banking-service && DATABASE_URL="postgresql+psycopg2://$(LOCAL_DB_USER):$(LOCAL_DB_PASSWORD)@localhost:$(LOCAL_DB_PORT)/$(LOCAL_DB_NAME)" uv run python -m services.seeding_service
+
 .PHONY: db-init-local
 db-init-local: ## Initialize and seed the local SQLite database
 	@echo "Initializing and seeding local SQLite database..."
@@ -91,6 +138,11 @@ db-init-local: ## Initialize and seed the local SQLite database
 run-backend-local: ## Run the FastAPI banking service locally
 	@echo "Starting banking-service..."
 	cd banking-service && FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
+
+.PHONY: run-backend-pg
+run-backend-pg: local-db-seed ## Run the FastAPI banking service locally using the persistent local PostgreSQL DB
+	@echo "Starting banking-service with local PostgreSQL..."
+	cd banking-service && FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) DATABASE_URL="postgresql+psycopg2://$(LOCAL_DB_USER):$(LOCAL_DB_PASSWORD)@localhost:$(LOCAL_DB_PORT)/$(LOCAL_DB_NAME)" uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
 
 .PHONY: run-backend-iam
 run-backend-iam: ## Run the FastAPI banking service locally
