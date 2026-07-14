@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Room, RoomEvent } from 'livekit-client';
 import { useLocation } from 'react-router-dom';
-import { 
-  Phone, 
-  PhoneOff, 
-  Mic, 
-  MicOff, 
-  Lock, 
-  Unlock, 
+import {
+  Phone,
+  PhoneOff,
+  Mic,
+  MicOff,
+  Lock,
+  Unlock,
   CreditCard,
   User,
   Calendar,
@@ -22,10 +22,10 @@ import {
   Activity,
   Volume2
 } from 'lucide-react';
-import { 
-  getCreditCardAccount, 
-  getCreditCardVoiceToken, 
-  getCreditCardTransactions 
+import {
+  getCreditCardAccount,
+  getCreditCardVoiceToken,
+  getCreditCardTransactions
 } from '../utils/api.js';
 import { DataChannelEvent } from '../utils/constants.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
@@ -37,6 +37,14 @@ import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 
 const AUDIO_INPUT_STORAGE_KEY = 'voice-support-audio-input';
 const AUDIO_OUTPUT_STORAGE_KEY = 'voice-support-audio-output';
+
+function persistAudioDeviceSelection(storageKey, deviceId) {
+  if (deviceId) {
+    localStorage.setItem(storageKey, deviceId);
+  } else {
+    localStorage.removeItem(storageKey);
+  }
+}
 
 function microphoneConstraints(deviceId) {
   return {
@@ -168,6 +176,10 @@ function MicTester({ deviceId, onError }) {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         audioContextRef.current = audioContext;
 
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume();
+        }
+
         const analyser = audioContext.createAnalyser();
         analyser.fftSize = 256;
         analyserRef.current = analyser;
@@ -177,28 +189,28 @@ function MicTester({ deviceId, onError }) {
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
         let smoothedVolume = 0;
-        
+
         function updateVolume() {
           if (!active) return;
           analyser.getByteTimeDomainData(dataArray);
-          
+
           let sumSquares = 0;
           for (let i = 0; i < dataArray.length; i++) {
             const normalized = (dataArray[i] - 128) / 128;
             sumSquares += normalized * normalized;
           }
           const rms = Math.sqrt(sumSquares / dataArray.length);
-          
+
           // Map RMS acoustic power to volume scale (0-100%)
           const targetVol = Math.min(100, Math.sqrt(rms) * 400);
-          
+
           // Envelope follower: instant attack, smooth decay
           if (targetVol > smoothedVolume) {
             smoothedVolume = targetVol;
           } else {
             smoothedVolume = smoothedVolume * 0.85 + targetVol * 0.15;
           }
-          
+
           setVolumeLevel(smoothedVolume);
 
           animationRef.current = requestAnimationFrame(updateVolume);
@@ -230,8 +242,8 @@ function MicTester({ deviceId, onError }) {
         {error && <span className="text-red-500 normal-case tracking-normal">{error}</span>}
       </div>
       <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden flex">
-        <div 
-          className="h-full bg-emerald-500 transition-[width] duration-75 ease-out rounded-full" 
+        <div
+          className="h-full bg-emerald-500 transition-[width] duration-75 ease-out rounded-full"
           style={{ width: `${volumeLevel}%` }}
         />
       </div>
@@ -264,16 +276,16 @@ export default function VoiceSupportView() {
     escalated: false,
     walletQueued: false,
   });
-  
+
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [micEnabled, setMicEnabled] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
-  
+
   const [isHumanAgentActive, setIsHumanAgentActive] = useState(false);
   const [humanAgentName, setHumanAgentName] = useState('');
   const [highlightedTxId, setHighlightedTxId] = useState(null);
-  
+
   const [mode, setMode] = useState('audio');
   const [warningMessage, setWarningMessage] = useState('');
 
@@ -388,7 +400,7 @@ export default function VoiceSupportView() {
   const roomRef = useRef(null);
   const chatContainerRef = useRef(null);
   const disconnectTimerRef = useRef(null);
-  
+
   // GECX connection hooks & streaming timing refs
   const wsRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -400,8 +412,8 @@ export default function VoiceSupportView() {
   const volumeRef = useRef(0.8);
   const micEnabledRef = useRef(true);
   const pingIntervalRef = useRef(null);
-  const lastDefaultMicLabelRef = useRef('');
-  const lastDefaultSpeakerLabelRef = useRef('');
+  const appliedAudioInputIdRef = useRef(selectedAudioInputId);
+  const appliedAudioOutputIdRef = useRef(selectedAudioOutputId);
 
   const refreshAudioDevices = useCallback(async (requestPermissions = false) => {
     console.log(`[Microphone] Refreshing audio inputs... (Request permissions: ${requestPermissions})`);
@@ -417,20 +429,13 @@ export default function VoiceSupportView() {
       const outDevices = await Room.getLocalDevices('audiooutput', requestPermissions);
       setAudioOutputs(outDevices);
 
-      const processDeviceList = (devices, lastDefaultLabelRef, storageKey, logLabel) => {
-        const defaultDevice = devices.find(d => d.deviceId === 'default');
-        const newDefaultLabel = defaultDevice?.label || '';
-        const defaultChanged = lastDefaultLabelRef.current && lastDefaultLabelRef.current !== newDefaultLabel;
-        lastDefaultLabelRef.current = newDefaultLabel;
-
-        const trueLabel = newDefaultLabel.replace(/^Default - /, '');
-        const trueDevice = devices.find(d => d.deviceId !== 'default' && d.label === trueLabel);
-
+      const reconcileDeviceSelection = (devices, storageKey) => {
         return (currentDeviceId) => {
-          if (defaultChanged && trueDevice) {
-            console.log(`[${logLabel}] Browser site default ${logLabel.toLowerCase()} changed to: ${trueLabel} (${trueDevice.deviceId})`);
-            localStorage.setItem(storageKey, trueDevice.deviceId);
-            return trueDevice.deviceId;
+          // An empty ID intentionally follows the browser/OS default. Do not
+          // replace it with a physical device ID, or a later default-device
+          // change can override a user's explicit selection.
+          if (!currentDeviceId) {
+            return '';
           }
           if (currentDeviceId && devices.some((device) => device.deviceId === currentDeviceId)) {
             return currentDeviceId;
@@ -438,17 +443,13 @@ export default function VoiceSupportView() {
           if (currentDeviceId && devices.length === 0 && !requestPermissions) {
             return currentDeviceId;
           }
-          if (trueDevice) {
-            localStorage.setItem(storageKey, trueDevice.deviceId);
-            return trueDevice.deviceId;
-          }
-          localStorage.removeItem(storageKey);
+          persistAudioDeviceSelection(storageKey, '');
           return '';
         };
       };
 
-      setSelectedAudioInputId(processDeviceList(inDevices, lastDefaultMicLabelRef, AUDIO_INPUT_STORAGE_KEY, 'Microphone'));
-      setSelectedAudioOutputId(processDeviceList(outDevices, lastDefaultSpeakerLabelRef, AUDIO_OUTPUT_STORAGE_KEY, 'Speaker'));
+      setSelectedAudioInputId(reconcileDeviceSelection(inDevices, AUDIO_INPUT_STORAGE_KEY));
+      setSelectedAudioOutputId(reconcileDeviceSelection(outDevices, AUDIO_OUTPUT_STORAGE_KEY));
     } catch (error) {
       console.error('Failed to enumerate microphones:', error);
       setErrorMessage(microphoneErrorMessage(error));
@@ -458,14 +459,27 @@ export default function VoiceSupportView() {
   }, []);
 
   useEffect(() => {
+    let permissionStatus;
+    let active = true;
+    const handlePermissionChange = () => {
+      if (active && permissionStatus) {
+        setMicPermissionState(permissionStatus.state);
+      }
+    };
+
     if (navigator.permissions && navigator.permissions.query) {
       navigator.permissions.query({ name: 'microphone' }).then(status => {
+        if (!active) return;
+        permissionStatus = status;
         setMicPermissionState(status.state);
-        status.onchange = () => {
-          setMicPermissionState(status.state);
-        };
+        status.addEventListener?.('change', handlePermissionChange);
       }).catch(() => {});
     }
+
+    return () => {
+      active = false;
+      permissionStatus?.removeEventListener?.('change', handlePermissionChange);
+    };
   }, [refreshAudioDevices]);
 
   const handleDeviceSelection = (deviceId, devices, storageKey, setDeviceId, logLabel) => {
@@ -473,11 +487,7 @@ export default function VoiceSupportView() {
     const deviceName = device?.label || 'System default';
     console.log(`[${logLabel}] ${logLabel} manually changed to: ${deviceName} (${deviceId})`);
     setDeviceId(deviceId);
-    if (deviceId) {
-      localStorage.setItem(storageKey, deviceId);
-    } else {
-      localStorage.removeItem(storageKey);
-    }
+    persistAudioDeviceSelection(storageKey, deviceId);
     setErrorMessage('');
   };
 
@@ -493,7 +503,7 @@ export default function VoiceSupportView() {
       }
     });
     activeSourcesRef.current = [];
-    
+
     const audioCtx = audioContextRef.current;
     if (audioCtx) {
       nextPlayoutTimeRef.current = audioCtx.currentTime + 0.05;
@@ -521,6 +531,14 @@ export default function VoiceSupportView() {
         // Ignore error
       }
       workletNodeRef.current = null;
+    }
+    if (sourceNodeRef.current) {
+      try {
+        sourceNodeRef.current.disconnect();
+      } catch {
+        // Ignore error
+      }
+      sourceNodeRef.current = null;
     }
     if (micStreamRef.current) {
       try {
@@ -631,64 +649,104 @@ export default function VoiceSupportView() {
 
   // Mid-session microphone hot-swapping
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isConnected) {
+      appliedAudioInputIdRef.current = selectedAudioInputId;
+      return undefined;
+    }
+
+    const previousDeviceId = appliedAudioInputIdRef.current;
+    if (previousDeviceId === selectedAudioInputId) return undefined;
+    let cancelled = false;
 
     async function swapMicrophone() {
+      let newStream = null;
+      let newSourceNode = null;
       try {
         if (engine === 'livekit' && roomRef.current) {
           await roomRef.current.switchActiveDevice('audioinput', selectedAudioInputId);
+          if (cancelled) return;
+          appliedAudioInputIdRef.current = selectedAudioInputId;
           console.log(`[Hot-Swap] LiveKit active device switched to: ${selectedAudioInputId || 'default'}`);
         } else if (engine === 'gecx' && audioContextRef.current && workletNodeRef.current) {
-          // Stop old tracks
-          if (micStreamRef.current) {
-            micStreamRef.current.getTracks().forEach(track => track.stop());
-          }
-          // Disconnect old source node
-          if (sourceNodeRef.current) {
-            sourceNodeRef.current.disconnect();
-          }
-          // Get new stream
-          const newStream = await navigator.mediaDevices.getUserMedia(
+          // Acquire and connect the replacement before disturbing the working
+          // stream. A rejected device request must not silence the session.
+          newStream = await navigator.mediaDevices.getUserMedia(
             microphoneConstraints(selectedAudioInputId)
           );
-          micStreamRef.current = newStream;
-          // Connect new source to existing worklet node
-          const newSourceNode = audioContextRef.current.createMediaStreamSource(newStream);
-          sourceNodeRef.current = newSourceNode;
+          if (cancelled) {
+            newStream.getTracks().forEach(track => track.stop());
+            return;
+          }
+          newSourceNode = audioContextRef.current.createMediaStreamSource(newStream);
           newSourceNode.connect(workletNodeRef.current);
+
+          const oldStream = micStreamRef.current;
+          const oldSourceNode = sourceNodeRef.current;
+          micStreamRef.current = newStream;
+          sourceNodeRef.current = newSourceNode;
+          appliedAudioInputIdRef.current = selectedAudioInputId;
+          oldSourceNode?.disconnect();
+          oldStream?.getTracks().forEach(track => track.stop());
           console.log(`[Hot-Swap] GECX stream successfully swapped to new device`);
         }
       } catch (err) {
+        newSourceNode?.disconnect();
+        newStream?.getTracks().forEach(track => track.stop());
+        if (cancelled) return;
         console.error('[Hot-Swap] Failed to swap microphone mid-session:', err);
+        setErrorMessage('Could not switch microphones. The previous microphone remains active.');
+        persistAudioDeviceSelection(AUDIO_INPUT_STORAGE_KEY, previousDeviceId);
+        setSelectedAudioInputId(previousDeviceId);
       }
     }
 
     swapMicrophone();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedAudioInputId, engine, isConnected]);
 
   // Mid-session speaker hot-swapping
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isConnected) {
+      appliedAudioOutputIdRef.current = selectedAudioOutputId;
+      return undefined;
+    }
+
+    const previousDeviceId = appliedAudioOutputIdRef.current;
+    if (previousDeviceId === selectedAudioOutputId) return undefined;
+    let cancelled = false;
 
     async function swapSpeaker() {
       try {
         if (engine === 'livekit' && roomRef.current) {
           await roomRef.current.switchActiveDevice('audiooutput', selectedAudioOutputId);
+          if (cancelled) return;
+          appliedAudioOutputIdRef.current = selectedAudioOutputId;
           console.log(`[Hot-Swap] LiveKit active speaker switched to: ${selectedAudioOutputId || 'default'}`);
         } else if (engine === 'gecx' && audioContextRef.current) {
           if (typeof audioContextRef.current.setSinkId === 'function') {
             await audioContextRef.current.setSinkId(selectedAudioOutputId);
+            if (cancelled) return;
+            appliedAudioOutputIdRef.current = selectedAudioOutputId;
             console.log(`[Hot-Swap] GECX active speaker switched to: ${selectedAudioOutputId || 'default'}`);
           } else {
-            console.warn('[Hot-Swap] setSinkId is not supported in this browser for GECX output routing.');
+            throw new Error('Audio output switching is not supported in this browser.');
           }
         }
       } catch (err) {
+        if (cancelled) return;
         console.error('[Hot-Swap] Speaker switch failed:', err);
+        setErrorMessage('Could not switch speakers. The previous audio output remains active.');
+        persistAudioDeviceSelection(AUDIO_OUTPUT_STORAGE_KEY, previousDeviceId);
+        setSelectedAudioOutputId(previousDeviceId);
       }
     }
 
     swapSpeaker();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedAudioOutputId, isConnected, engine]);
 
   // Auto scroll transcript panel inside container
@@ -711,7 +769,7 @@ export default function VoiceSupportView() {
   // Handle dynamically attaching/detaching the subscribed video track when the DOM element is mounted
   useEffect(() => {
     let attachedElement = null;
-    
+
     // Exact crop alignments defined by user preference
     const AVATAR_POSITIONS = {
       'ingrid': 'center',
@@ -732,7 +790,7 @@ export default function VoiceSupportView() {
         attachedElement.style.objectPosition = AVATAR_POSITIONS[avatarName.toLowerCase()] || "center";
         attachedElement.style.opacity = "0";
         attachedElement.style.transition = "opacity 0.5s ease-in-out";
-        
+
         const checkFrames = (now, metadata) => {
           if (metadata.presentedFrames >= 45) {
             console.log('Stable WebRTC video stream reached (45 frames). Revealing avatar.');
@@ -754,7 +812,7 @@ export default function VoiceSupportView() {
             }, 1000);
           };
         }
-        
+
         container.appendChild(attachedElement);
       }
     }
@@ -898,7 +956,7 @@ export default function VoiceSupportView() {
           type: "AUTH",
           token: fbToken
         }));
-        
+
         // Start latency diagnostics ping loop
         pingIntervalRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
@@ -943,24 +1001,24 @@ export default function VoiceSupportView() {
           process(inputs, outputs, parameters) {
             const input = inputs[0];
             if (!input || !input[0]) return true;
-            
+
             const samples = input[0];
             const combined = new Float32Array(this.buffer.length + samples.length);
             combined.set(this.buffer);
             combined.set(samples, this.buffer.length);
             this.buffer = combined;
-            
+
             const sendChunkSize = 2048; // packet size of ~128ms
             while (this.buffer.length >= sendChunkSize) {
               const chunk = this.buffer.slice(0, sendChunkSize);
               this.buffer = this.buffer.slice(sendChunkSize);
-              
+
               const int16Buffer = new Int16Array(chunk.length);
               for (let i = 0; i < chunk.length; i++) {
                 const s = Math.max(-1, Math.min(1, chunk[i]));
                 int16Buffer[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
               }
-              
+
               this.port.postMessage(int16Buffer.buffer, [int16Buffer.buffer]);
             }
             return true;
@@ -968,7 +1026,7 @@ export default function VoiceSupportView() {
         }
         registerProcessor('pcm-processor', PCMProcessor);
       `;
-      
+
       const blob = new Blob([workletCode], { type: 'application/javascript' });
       const workletUrl = URL.createObjectURL(blob);
       await audioCtx.audioWorklet.addModule(workletUrl);
@@ -1184,7 +1242,7 @@ export default function VoiceSupportView() {
             setClearedBalance(event.cleared_balance_cents / 100);
             setAvailableCredit(event.available_credit_cents / 100);
             setTranscripts(prev => [...prev, { author: 'system', text: `LEDGER UPDATE: Late fee reversed. Available credit adjusted.` }]);
-            
+
             getCreditCardTransactions().then(setTransactions).catch(console.error);
           } else if (event.type === DataChannelEvent.HIGHLIGHT_TRANSACTION) {
             const txId = event.id;
@@ -1192,7 +1250,7 @@ export default function VoiceSupportView() {
               console.log('Highlighting transaction:', txId);
               setHighlightedTxId(txId);
               setTranscripts(prev => [...prev, { author: 'system', text: 'Representative highlighted a transaction.' }]);
-              
+
               setTimeout(() => {
                 setHighlightedTxId(null);
               }, 4000);
@@ -1242,7 +1300,7 @@ export default function VoiceSupportView() {
         true,
         selectedAudioInputId ? { deviceId: { exact: selectedAudioInputId } } : undefined
       );
-      
+
       setIsConnected(true);
       setTranscripts([]);
     } catch (err) {
@@ -1270,7 +1328,7 @@ export default function VoiceSupportView() {
 
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-2rem)] max-w-6xl min-w-0 flex-col gap-8 px-4 pb-[calc(3rem+env(safe-area-inset-bottom))] pt-28 text-slate-100">
-      
+
       {/* Header section */}
       <div className="text-center mb-6 flex flex-col items-center relative w-full">
         <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
@@ -1307,8 +1365,8 @@ export default function VoiceSupportView() {
             <button
               onClick={() => setEngine('livekit')}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-                engine === 'livekit' 
-                  ? 'bg-blue-600/20 border border-blue-500/30 text-blue-600 dark:text-blue-400' 
+                engine === 'livekit'
+                  ? 'bg-blue-600/20 border border-blue-500/30 text-blue-600 dark:text-blue-400'
                   : 'text-slate-500 dark:text-slate-450 hover:text-slate-750 dark:hover:text-slate-200'
               }`}
             >
@@ -1317,8 +1375,8 @@ export default function VoiceSupportView() {
             <button
               onClick={() => setEngine('gecx')}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-                engine === 'gecx' 
-                  ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-650 dark:text-indigo-400' 
+                engine === 'gecx'
+                  ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-650 dark:text-indigo-400'
                   : 'text-slate-500 dark:text-slate-450 hover:text-slate-750 dark:hover:text-slate-200'
               }`}
             >
@@ -1357,7 +1415,7 @@ export default function VoiceSupportView() {
 
       {/* Main Content Layout */}
       <div className="grid min-w-0 flex-1 grid-cols-1 items-stretch gap-8 md:grid-cols-2">
-        
+
         {/* Left Side: Credit Card Mockup & Account details */}
         <div className="flex min-w-0 flex-col gap-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm backdrop-blur sm:p-8 dark:border-slate-800 dark:bg-slate-900/50 dark:shadow-none">
           {fraudContext?.fraud_alert && (fraudContext.has_active_fraud_alert || fraudTriage.outcome) && (
@@ -1392,11 +1450,11 @@ export default function VoiceSupportView() {
               )}
             </section>
           )}
-          
+
           {/* Card Mockup */}
           <div id="voice-cc-mockup" className="relative aspect-[1.586/1] w-full rounded-2xl overflow-hidden bg-gradient-to-tr from-slate-900 via-indigo-950 to-indigo-900 p-6 shadow-2xl flex flex-col justify-between border border-slate-700/50">
             <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
-            
+
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-xs uppercase tracking-widest text-slate-400 font-semibold">Credit Card</p>
@@ -1513,11 +1571,11 @@ export default function VoiceSupportView() {
                 transactions.map((tx) => {
                   const isHighlighted = highlightedTxId === tx.id;
                   return (
-                    <div 
-                      key={tx.id} 
+                    <div
+                      key={tx.id}
                       className={`flex justify-between items-center p-2 rounded-lg border text-xs transition-all duration-500 ${
-                        isHighlighted 
-                          ? 'border-yellow-500 bg-yellow-500/10 scale-[1.02] shadow-lg shadow-yellow-500/10 text-slate-900 dark:text-white' 
+                        isHighlighted
+                          ? 'border-yellow-500 bg-yellow-500/10 scale-[1.02] shadow-lg shadow-yellow-500/10 text-slate-900 dark:text-white'
                           : 'border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/30 text-slate-700 dark:text-slate-300'
                       }`}
                     >
@@ -1539,7 +1597,7 @@ export default function VoiceSupportView() {
 
         {/* Right Side: Conversation Transcripts & Video Player Panel */}
         <div id="voice-transcript-panel" className="flex h-full min-h-[400px] min-w-0 flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/50 dark:shadow-none">
-          
+
           {/* Avatar Video Frame container if video mode is active */}
           {mode === 'video' && isConnected && (
             <div className="flex flex-col mb-4">
@@ -1547,8 +1605,8 @@ export default function VoiceSupportView() {
                 Live Avatar Stream
               </h2>
               <div className="aspect-square w-full max-w-[340px] mx-auto relative rounded-3xl overflow-hidden border-2 border-slate-200 dark:border-slate-800 shadow-inner bg-slate-950">
-                <div 
-                  id="avatar-video-container" 
+                <div
+                  id="avatar-video-container"
                   className="w-full h-full"
                 />
                 {!videoLoaded && (
@@ -1574,9 +1632,9 @@ export default function VoiceSupportView() {
           <h2 className="text-md font-bold uppercase tracking-wider text-slate-900 dark:text-white mb-4 border-b border-slate-200 dark:border-slate-800 pb-2">
             Live Consultation Transcript
           </h2>
-          
-          <div 
-            ref={chatContainerRef} 
+
+          <div
+            ref={chatContainerRef}
             className="min-h-[220px] flex-1 overflow-y-auto space-y-4 pr-2 scrollbar-thin"
             style={mode === 'video' && isConnected ? { maxHeight: '220px' } : undefined}
           >
@@ -1595,8 +1653,8 @@ export default function VoiceSupportView() {
               return (
                 <div key={idx} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 shadow-sm text-sm ${
-                    isUser 
-                      ? 'bg-blue-600 text-white rounded-br-none' 
+                    isUser
+                      ? 'bg-blue-600 text-white rounded-br-none'
                       : isHumanAgentActive && t.author === 'agent'
                         ? 'bg-indigo-600 text-white rounded-bl-none'
                         : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-bl-none border border-slate-200/50 dark:border-transparent'
@@ -1616,7 +1674,7 @@ export default function VoiceSupportView() {
 
       {/* Footer / Control Section */}
       <div id="voice-call-controls" className="flex w-full shrink-0 flex-col items-center gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/50 dark:shadow-none">
-        
+
         {/* Connection status notification */}
         {isHumanAgentActive && (
           <div className="bg-indigo-900/30 border border-indigo-500/50 rounded-xl px-4 py-2 text-xs text-indigo-300 font-bold flex items-center gap-2 animate-pulse">
@@ -1653,15 +1711,15 @@ export default function VoiceSupportView() {
                 </>
               )}
             </div>
-            
+
             {/* Volume Playout slider control */}
             {engine === 'gecx' && (
               <div className="flex items-center gap-3 border-t border-slate-200 dark:border-slate-800/80 pt-3 mt-1">
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Volume:</span>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="1.0" 
+                <input
+                  type="range"
+                  min="0"
+                  max="1.0"
                   step="0.05"
                   value={volume}
                   onChange={(e) => setVolume(parseFloat(e.target.value))}
@@ -1679,8 +1737,8 @@ export default function VoiceSupportView() {
             <button
               onClick={() => setMode('audio')}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-                mode === 'audio' 
-                  ? 'bg-blue-600/20 border border-blue-500/30 text-blue-600 dark:text-blue-400' 
+                mode === 'audio'
+                  ? 'bg-blue-600/20 border border-blue-500/30 text-blue-600 dark:text-blue-400'
                   : 'text-slate-500 dark:text-slate-450 hover:text-slate-700 dark:hover:text-slate-200'
               }`}
             >
@@ -1690,8 +1748,8 @@ export default function VoiceSupportView() {
             <button
               onClick={() => setMode('video')}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-                mode === 'video' 
-                  ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-650 dark:text-indigo-400' 
+                mode === 'video'
+                  ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-650 dark:text-indigo-400'
                   : 'text-slate-500 dark:text-slate-450 hover:text-slate-700 dark:hover:text-slate-200'
               }`}
             >
@@ -1723,14 +1781,14 @@ export default function VoiceSupportView() {
                 <button
                   onClick={toggleMute}
                   className={`p-4 rounded-full border transition-all ${
-                    micEnabled 
-                      ? 'border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-700' 
+                    micEnabled
+                      ? 'border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-700'
                       : 'border-red-500/50 bg-red-950/50 text-red-400 hover:bg-red-900/30'
                   }`}
                 >
                   {micEnabled ? <Mic size={20} /> : <MicOff size={20} />}
                 </button>
-                
+
                 <button
                   onClick={endConsultation}
                   className="flex items-center gap-2 px-8 py-3 rounded-full font-bold shadow-lg shadow-red-500/20 text-white bg-red-600 hover:bg-red-500 transition-all transform active:scale-95"
@@ -1742,8 +1800,8 @@ export default function VoiceSupportView() {
             )}
           </div>
 
-          <div className="flex min-w-0 w-max mx-auto flex-col gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80 gap-8">
+          <div className="mx-auto flex w-full max-w-2xl min-w-0 flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-slate-800/80">
               <div className="flex items-center gap-2">
                 <Settings className="w-5 h-5 text-emerald-500" />
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">Options</h3>
@@ -1758,10 +1816,10 @@ export default function VoiceSupportView() {
                 Refresh Audio Devices
               </button>
             </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-max">
+
+            <div className="grid w-full min-w-0 grid-cols-1 gap-6 sm:grid-cols-2">
               {/* Left Column: Input */}
-              <div className="flex flex-col space-y-2 text-left">
+              <div className="flex min-w-0 flex-col space-y-2 text-left">
                 <label htmlFor="voice-audio-input" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Audio input
                 </label>
@@ -1779,30 +1837,23 @@ export default function VoiceSupportView() {
                         <option value="">Microphone permission denied</option>
                       ) : (
                         <>
+                          <option value="">System default microphone</option>
                           {selectedAudioInputId && !audioInputs.some((device) => device.deviceId === selectedAudioInputId) && (
                             <option value={selectedAudioInputId}>Saved microphone (refresh to identify)</option>
                           )}
-                          {(() => {
-                            const defaultDevice = audioInputs.find(d => d.deviceId === 'default');
-                            const trueDefaultLabel = defaultDevice ? defaultDevice.label.replace(/^Default - /, '') : '';
-                            return audioInputs
-                              .filter((device) => device.deviceId !== 'default')
-                              .map((device, index) => {
-                                const isDefault = device.label === trueDefaultLabel && trueDefaultLabel !== '';
-                                const displayName = device.label || `Microphone ${index + 1}`;
-                                return (
-                                  <option key={device.deviceId} value={device.deviceId}>
-                                    {isDefault ? `${displayName} (System default)` : displayName}
-                                  </option>
-                                );
-                              });
-                          })()}
+                          {audioInputs
+                            .filter((device) => device.deviceId !== 'default')
+                            .map((device, index) => (
+                              <option key={device.deviceId} value={device.deviceId}>
+                                {device.label || `Microphone ${index + 1}`}
+                              </option>
+                            ))}
                         </>
                       )}
                     </select>
                   </div>
                 </div>
-                
+
                 {/* Test Microphone Button */}
                 <div className="pt-3">
                   <button
@@ -1810,19 +1861,19 @@ export default function VoiceSupportView() {
                     onClick={() => setIsTestingMic(!isTestingMic)}
                     disabled={isConnecting || isConnected || micPermissionState === 'denied'}
                     className={`flex w-full h-11 items-center justify-center gap-2 rounded-xl border text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                      isTestingMic 
+                      isTestingMic
                         ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:border-emerald-800 dark:text-emerald-400'
                         : 'border-slate-300 bg-slate-50 dark:bg-slate-950/20 text-slate-600 hover:border-blue-400 hover:text-blue-600 dark:border-slate-800 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-blue-400'
                     }`}
                   >
-                    <Mic size={16} className={isTestingMic ? "animate-pulse" : ""} />
+                    <Mic size={16} className={isTestingMic ? 'animate-pulse' : ''} />
                     {isTestingMic ? 'Stop Testing' : 'Test Microphone'}
                   </button>
                 </div>
               </div>
 
               {/* Right Column: Output */}
-              <div className="flex flex-col space-y-2 text-left">
+              <div className="flex min-w-0 flex-col space-y-2 text-left">
                 <label htmlFor="voice-audio-output" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Audio output
                 </label>
@@ -1833,40 +1884,34 @@ export default function VoiceSupportView() {
                       id="voice-audio-output"
                       value={selectedAudioOutputId}
                       onChange={(event) => selectAudioOutput(event.target.value)}
+                      disabled={isConnecting}
                       className="h-11 w-full rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-8 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
                     >
+                      <option value="">System default speaker</option>
                       {selectedAudioOutputId && !audioOutputs.some((device) => device.deviceId === selectedAudioOutputId) && (
                         <option value={selectedAudioOutputId}>Saved speaker (refresh to identify)</option>
                       )}
-                      {(() => {
-                        const defaultDevice = audioOutputs.find(d => d.deviceId === 'default');
-                        const trueDefaultLabel = defaultDevice ? defaultDevice.label.replace(/^Default - /, '') : '';
-                        return audioOutputs
-                          .filter((device) => device.deviceId !== 'default')
-                          .map((device, index) => {
-                            const isDefault = device.label === trueDefaultLabel && trueDefaultLabel !== '';
-                            const displayName = device.label || `Speaker ${index + 1}`;
-                            return (
-                              <option key={device.deviceId} value={device.deviceId}>
-                                {isDefault ? `${displayName} (System default)` : displayName}
-                              </option>
-                            );
-                          });
-                      })()}
+                      {audioOutputs
+                        .filter((device) => device.deviceId !== 'default')
+                        .map((device, index) => (
+                          <option key={device.deviceId} value={device.deviceId}>
+                            {device.label || `Speaker ${index + 1}`}
+                          </option>
+                        ))}
                     </select>
                   </div>
                 </div>
               </div>
             </div>
-            
+
             {isTestingMic && (
               <div className="flex w-full justify-center pt-2">
                 <MicTester deviceId={selectedAudioInputId} onError={setErrorMessage} />
               </div>
             )}
-            </div>
           </div>
         </div>
+      </div>
 
       <GcpInfoModal
         isOpen={isInfoModalOpen}

@@ -23,6 +23,8 @@ GCP_ACCOUNT ?= $(shell ACCOUNT=$$(gcloud config get-value account 2>/dev/null); 
 GCP_ACCOUNT_ENCODED = $(subst @,%40,$(GCP_ACCOUNT))
 GECX_APP_ID ?= $(shell grep -E '^[[:space:]]*cx_agent_studio_voice_agent_deployment_name[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]' || echo "")
 GECX_LOCATION ?= $(shell gecx_loc=$$(grep -E '^[[:space:]]*gecx_location[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]'); echo $${gecx_loc:-us})
+VOICE_AGENT_AUDIO_MODEL ?= publishers/google/models/gemini-live-2.5-flash-native-audio
+VOICE_AGENT_VIDEO_MODEL ?= publishers/google/models/gemini-3.1-flash-live-preview-04-2026
 
 
 .PHONY: help
@@ -143,7 +145,7 @@ run-data-generator: ## Run the FastAPI synthetic data generator locally
 .PHONY: run-voice-agent
 run-voice-agent: ## Run the credit card support voice agent locally
 	@echo "Starting credit-support-agent..."
-	cd adk-agent/credit-support-agent && PORT=8088 BANKING_SERVICE_URL=http://localhost:8080 VOICE_AGENT_AUDIO_MODEL="publishers/google/models/gemini-live-2.5-flash-native-audio" VOICE_AGENT_VIDEO_MODEL="publishers/google/models/gemini-live-2.5-flash-native-audio" uv run --frozen python voice_agent.py
+	cd adk-agent/credit-support-agent && PORT=8088 BANKING_SERVICE_URL=http://localhost:8080 VOICE_AGENT_AUDIO_MODEL="$(VOICE_AGENT_AUDIO_MODEL)" VOICE_AGENT_VIDEO_MODEL="$(VOICE_AGENT_VIDEO_MODEL)" uv run --frozen python voice_agent.py
 
 .PHONY: run-local
 run-local: livekit-up ## Start LiveKit, the local backend, frontend, and voice agent
