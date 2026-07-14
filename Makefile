@@ -7,6 +7,13 @@ REGION ?= us-central1
 DOCKER ?= podman
 CONTAINER_RUNTIME ?= $(shell bash scripts/dev/container-runtime.sh 2>/dev/null || echo "docker")
 LIVEKIT_SERVER_VERSION ?= v1.13.1
+LIVEKIT_NODE_IP ?= $(shell \
+	if command -v ipconfig >/dev/null 2>&1; then \
+		interface=$$(route -n get default 2>/dev/null | awk '/interface:/{print $$2}'); \
+		ipconfig getifaddr "$$interface" 2>/dev/null; \
+	elif command -v ip >/dev/null 2>&1; then \
+		ip route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($$i == "src") {print $$(i+1); exit}}'; \
+	fi)
 FRONTEND_PORT ?= 5173
 TF_VARS ?= ./environment/$(PROJECT_ID)/terraform.tfvars
 TF_BACKEND ?= ./environment/$(PROJECT_ID)/gcs.tfbackend
@@ -62,8 +69,13 @@ shadow-db-down: ## Stop the local-only PostgreSQL shadow DB
 .PHONY: livekit-up
 livekit-up: ## Start the local LiveKit server container
 	@echo "Starting LiveKit server..."
+	@if [ -z "$(LIVEKIT_NODE_IP)" ]; then \
+		echo "Error: could not detect the host IP for LiveKit ICE. Set LIVEKIT_NODE_IP=<host-ip>."; \
+		exit 1; \
+	fi
+	@echo "Advertising LiveKit RTC on host IP $(LIVEKIT_NODE_IP)..."
 	@$(CONTAINER_RUNTIME) rm -f livekit-server-dev 2>/dev/null || true
-	$(CONTAINER_RUNTIME) run -d --name livekit-server-dev -p 7880:7880 -p 7881:7881 -p 7882:7882/udp livekit/livekit-server:$(LIVEKIT_SERVER_VERSION) --dev --keys "devkey: secret" --node-ip 127.0.0.1 --rtc.enable_loopback_candidate
+	$(CONTAINER_RUNTIME) run -d --name livekit-server-dev -p 7880:7880 -p 7881:7881 -p 7882:7882/udp livekit/livekit-server:$(LIVEKIT_SERVER_VERSION) --dev --keys "devkey: secret" --node-ip "$(LIVEKIT_NODE_IP)"
 
 .PHONY: livekit-down
 livekit-down: ## Stop the local LiveKit server container
