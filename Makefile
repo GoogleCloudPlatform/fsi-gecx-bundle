@@ -427,3 +427,19 @@ docker-run-iap-login-ui: ## Run the iap-login-ui container locally
 	-e BASE_PATH="/" \
 	-p 8080:8080 \
 	iap-login-ui-test
+
+.PHONY: docker-run-credit-support-agent
+docker-run-credit-support-agent: ## Run the credit-support-agent container locally
+	@echo "Running credit-support-agent container locally..."
+	$(DOCKER) build -f adk-agent/credit-support-agent/Dockerfile -t credit-support-agent-test .
+	$(DOCKER) run --user root -ti \
+	-v "$(HOME)/.config/gcloud/application_default_credentials.json":/gcp/creds.json \
+	-e GOOGLE_APPLICATION_CREDENTIALS=/gcp/creds.json \
+	-e GOOGLE_CLOUD_PROJECT=$(PROJECT_ID) \
+	-e PORT=8088 \
+	-e BANKING_SERVICE_URL="http://host.docker.internal:8080" \
+	-e LIVEKIT_URL="ws://host.docker.internal:7880" \
+	-e VOICE_AGENT_AUDIO_MODEL="publishers/google/models/gemini-live-2.5-flash-native-audio" \
+	-e VOICE_AGENT_VIDEO_MODEL="publishers/google/models/gemini-live-2.5-flash-native-audio" \
+	-p 8088:8088 \
+	credit-support-agent-test
