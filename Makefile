@@ -17,6 +17,7 @@ LOCAL_DB_PORT ?= 5432
 LOCAL_DB_NAME ?= banking
 LOCAL_DB_USER ?= banking
 LOCAL_DB_PASSWORD ?= banking
+LOCAL_REDIS_PORT ?= 6379
 
 .PHONY: help
 help: ## Display available commands and their descriptions
@@ -97,7 +98,7 @@ local-db-up: ## Start a persistent local PostgreSQL container
 		-e POSTGRES_DB=$(LOCAL_DB_NAME) \
 		-e POSTGRES_USER=$(LOCAL_DB_USER) \
 		-e POSTGRES_PASSWORD=$(LOCAL_DB_PASSWORD) \
-		-v fsi-gecx-local-db-data:/var/lib/postgresql/data \
+		-v fsi-gecx-local-db-data:/var/lib/postgresql \
 		mirror.gcr.io/library/postgres:18-alpine
 	@echo "Waiting for database to accept connections..."
 	@attempts=10; \
@@ -118,6 +119,34 @@ local-db-down: ## Stop the persistent local PostgreSQL container
 	@echo "Stopping local PostgreSQL database container..."
 	$(DOCKER) stop fsi-gecx-local-db >/dev/null 2>&1 || true
 	$(DOCKER) rm fsi-gecx-local-db >/dev/null 2>&1 || true
+
+.PHONY: local-redis-up
+local-redis-up: ## Start a persistent local Redis container
+	@echo "Starting local Redis container..."
+	@$(DOCKER) rm -f fsi-gecx-local-redis >/dev/null 2>&1 || true
+	$(DOCKER) run -d \
+		--name fsi-gecx-local-redis \
+		-p $(LOCAL_REDIS_PORT):6379 \
+		mirror.gcr.io/library/redis:alpine
+	@echo "Waiting for Redis to accept connections..."
+	@attempts=10; \
+	while [ $$attempts -gt 0 ]; do \
+		if $(DOCKER) exec fsi-gecx-local-redis redis-cli ping >/dev/null 2>&1; then \
+			echo "Redis is ready!"; \
+			exit 0; \
+		fi; \
+		echo "Waiting... ($$attempts attempts left)"; \
+		sleep 1; \
+		attempts=$$((attempts - 1)); \
+	done; \
+	echo "Redis failed to start in time." >&2; \
+	exit 1
+
+.PHONY: local-redis-down
+local-redis-down: ## Stop the local Redis container
+	@echo "Stopping local Redis container..."
+	$(DOCKER) stop fsi-gecx-local-redis >/dev/null 2>&1 || true
+	$(DOCKER) rm fsi-gecx-local-redis >/dev/null 2>&1 || true
 
 .PHONY: local-db-upgrade
 local-db-upgrade: local-db-up ## Run database migrations against the local PostgreSQL DB
@@ -140,9 +169,9 @@ run-backend-local: ## Run the FastAPI banking service locally
 	cd banking-service && FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
 
 .PHONY: run-backend-pg
-run-backend-pg: local-db-seed ## Run the FastAPI banking service locally using the persistent local PostgreSQL DB
-	@echo "Starting banking-service with local PostgreSQL..."
-	cd banking-service && FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) DATABASE_URL="postgresql+psycopg2://$(LOCAL_DB_USER):$(LOCAL_DB_PASSWORD)@localhost:$(LOCAL_DB_PORT)/$(LOCAL_DB_NAME)" uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
+run-backend-pg: ## Run the FastAPI banking service locally using the persistent local PostgreSQL DB and local Redis
+	@echo "Starting banking-service with local PostgreSQL and Redis..."
+	cd banking-service && FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) DATABASE_URL="postgresql+psycopg2://$(LOCAL_DB_USER):$(LOCAL_DB_PASSWORD)@localhost:$(LOCAL_DB_PORT)/$(LOCAL_DB_NAME)" REDIS_HOST=localhost REDIS_PORT=$(LOCAL_REDIS_PORT) uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
 
 .PHONY: run-backend-iam
 run-backend-iam: ## Run the FastAPI banking service locally
