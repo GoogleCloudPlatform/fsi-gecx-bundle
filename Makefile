@@ -247,10 +247,13 @@ create-gecx: upload-mortgage-agent upload-credit-agent ## Automate full CES agen
 .PHONY: update-gecx
 update-gecx: ## Execute the overwrite CES agent script to package and overwrite an existing agent in Customer Experience Studio (CES)
 ifndef APP_ID
-	$(error APP_ID is not defined. Run as: make update-gecx APP_ID=<your-app-id>)
+	$(error APP_ID is not defined. Run as: make update-gecx APP_ID=<your-app-id> AGENT_FOLDER=<agent-folder-name>)
 endif
-	@echo "Executing overwrite CES agent script for project $(PROJECT_ID) and App ID $(APP_ID)..."
-	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) APP_ID=$(APP_ID) bash overwrite_cxas_agent.sh
+ifndef AGENT_FOLDER
+	$(error AGENT_FOLDER is not defined. Run as: make update-gecx APP_ID=<your-app-id> AGENT_FOLDER=<agent-folder-name>)
+endif
+	@echo "Executing overwrite CES agent script for project $(PROJECT_ID), App ID $(APP_ID) and Agent Folder $(AGENT_FOLDER)..."
+	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) APP_ID=$(APP_ID) AGENT_FOLDER=$(AGENT_FOLDER) bash overwrite_cxas_agent.sh
 
 .PHONY: patch-convo-profile
 patch-convo-profile: ## Patch Dialogflow conversational profile to point to a new agent deployment (usage: make patch-convo-profile CONVERSATIONAL_PROFILE_ID=<profile-id> DEPLOYMENT_ID=<deployment-id>)
