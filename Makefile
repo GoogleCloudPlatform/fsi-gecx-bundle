@@ -26,6 +26,11 @@ GECX_LOCATION ?= $(shell gecx_loc=$$(grep -E '^[[:space:]]*gecx_location[[:space
 VOICE_AGENT_AUDIO_MODEL ?= publishers/google/models/gemini-live-2.5-flash-native-audio
 VOICE_AGENT_VIDEO_MODEL ?= publishers/google/models/gemini-3.1-flash-live-preview-04-2026
 
+LOCAL_DB_PORT ?= 5432
+LOCAL_DB_NAME ?= banking
+LOCAL_DB_USER ?= banking
+LOCAL_DB_PASSWORD ?= banking
+LOCAL_REDIS_PORT ?= 6379
 
 .PHONY: help
 help: ## Display available commands and their descriptions
@@ -113,6 +118,77 @@ test-integration: ## Execute live GCP sandbox Document AI integration tests (man
 	@echo "Executing live cloud sandbox integration test suite..."
 	cd banking-service && RUN_INTEGRATION_TESTS=true .venv/bin/pytest tests/test_integration_docai.py -v -s
 
+.PHONY: local-db-up
+local-db-up: ## Start a persistent local PostgreSQL container
+	@echo "Starting local PostgreSQL database container..."
+	@$(DOCKER) volume create fsi-gecx-local-db-data >/dev/null 2>&1 || true
+	@$(DOCKER) rm -f fsi-gecx-local-db 2>/dev/null || true
+	$(DOCKER) run -d \
+		--name fsi-gecx-local-db \
+		-p $(LOCAL_DB_PORT):5432 \
+		-e POSTGRES_DB=$(LOCAL_DB_NAME) \
+		-e POSTGRES_USER=$(LOCAL_DB_USER) \
+		-e POSTGRES_PASSWORD=$(LOCAL_DB_PASSWORD) \
+		-v fsi-gecx-local-db-data:/var/lib/postgresql \
+		mirror.gcr.io/library/postgres:18-alpine
+	@echo "Waiting for database to accept connections..."
+	@attempts=10; \
+	while [ $$attempts -gt 0 ]; do \
+		if $(DOCKER) exec fsi-gecx-local-db pg_isready -U $(LOCAL_DB_USER) -d $(LOCAL_DB_NAME) >/dev/null 2>&1; then \
+			echo "Database is ready!"; \
+			exit 0; \
+		fi; \
+		echo "Waiting... ($$attempts attempts left)"; \
+		sleep 2; \
+		attempts=$$((attempts - 1)); \
+	done; \
+	echo "Database failed to start in time." >&2; \
+	exit 1
+
+.PHONY: local-db-down
+local-db-down: ## Stop the persistent local PostgreSQL container
+	@echo "Stopping local PostgreSQL database container..."
+	$(DOCKER) stop fsi-gecx-local-db >/dev/null 2>&1 || true
+	$(DOCKER) rm fsi-gecx-local-db >/dev/null 2>&1 || true
+
+.PHONY: local-redis-up
+local-redis-up: ## Start a persistent local Redis container
+	@echo "Starting local Redis container..."
+	@$(DOCKER) rm -f fsi-gecx-local-redis >/dev/null 2>&1 || true
+	$(DOCKER) run -d \
+		--name fsi-gecx-local-redis \
+		-p $(LOCAL_REDIS_PORT):6379 \
+		mirror.gcr.io/library/redis:alpine
+	@echo "Waiting for Redis to accept connections..."
+	@attempts=10; \
+	while [ $$attempts -gt 0 ]; do \
+		if $(DOCKER) exec fsi-gecx-local-redis redis-cli ping >/dev/null 2>&1; then \
+			echo "Redis is ready!"; \
+			exit 0; \
+		fi; \
+		echo "Waiting... ($$attempts attempts left)"; \
+		sleep 1; \
+		attempts=$$((attempts - 1)); \
+	done; \
+	echo "Redis failed to start in time." >&2; \
+	exit 1
+
+.PHONY: local-redis-down
+local-redis-down: ## Stop the local Redis container
+	@echo "Stopping local Redis container..."
+	$(DOCKER) stop fsi-gecx-local-redis >/dev/null 2>&1 || true
+	$(DOCKER) rm fsi-gecx-local-redis >/dev/null 2>&1 || true
+
+.PHONY: local-db-upgrade
+local-db-upgrade: local-db-up ## Run database migrations against the local PostgreSQL DB
+	@echo "Running Alembic migrations against local PostgreSQL database..."
+	cd banking-service && DATABASE_URL="postgresql+psycopg2://$(LOCAL_DB_USER):$(LOCAL_DB_PASSWORD)@localhost:$(LOCAL_DB_PORT)/$(LOCAL_DB_NAME)" uv run alembic upgrade head
+
+.PHONY: local-db-seed
+local-db-seed: local-db-upgrade ## Run migrations and seed the local PostgreSQL database
+	@echo "Seeding local PostgreSQL database..."
+	cd banking-service && DATABASE_URL="postgresql+psycopg2://$(LOCAL_DB_USER):$(LOCAL_DB_PASSWORD)@localhost:$(LOCAL_DB_PORT)/$(LOCAL_DB_NAME)" uv run python -m services.seeding_service
+
 .PHONY: db-init-local
 db-init-local: ## Initialize and seed the local SQLite database
 	@echo "Initializing and seeding local SQLite database..."
@@ -122,6 +198,11 @@ db-init-local: ## Initialize and seed the local SQLite database
 run-backend-local: ## Run the FastAPI banking service locally
 	@echo "Starting banking-service..."
 	cd banking-service && GECX_APP_ID="$(GECX_APP_ID)" GECX_LOCATION="$(GECX_LOCATION)" VOICE_AGENT_SERVICE_URL=http://localhost:8088 FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
+
+.PHONY: run-backend-pg
+run-backend-pg: ## Run the FastAPI banking service locally using the persistent local PostgreSQL DB and local Redis
+	@echo "Starting banking-service with local PostgreSQL and Redis..."
+	cd banking-service && FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) DATABASE_URL="postgresql+psycopg2://$(LOCAL_DB_USER):$(LOCAL_DB_PASSWORD)@localhost:$(LOCAL_DB_PORT)/$(LOCAL_DB_NAME)" REDIS_HOST=localhost REDIS_PORT=$(LOCAL_REDIS_PORT) uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
 
 .PHONY: run-backend-iam
 run-backend-iam: ## Run the FastAPI banking service locally

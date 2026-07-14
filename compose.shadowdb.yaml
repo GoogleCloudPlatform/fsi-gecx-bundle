@@ -2,7 +2,7 @@ name: fsi-gecx-shadowdb
 
 services:
   shadow-db:
-    image: mirror.gcr.io/library/postgres:16-alpine
+    image: mirror.gcr.io/library/postgres:18-alpine
     container_name: fsi-gecx-shadow-db
     environment:
       POSTGRES_DB: ${SHADOW_DB_NAME:-banking_shadow}
@@ -16,7 +16,7 @@ services:
       timeout: 5s
       retries: 12
     volumes:
-      - shadow-db-data:/var/lib/postgresql/data
+      - shadow-db-data:/var/lib/postgresql
 
 volumes:
   shadow-db-data:
