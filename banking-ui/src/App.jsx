@@ -2087,7 +2087,7 @@ function AppContent() {
                     <GoogleCloudIcon className="w-3 h-3" />
                   </button>
                 </div>
-                <div className="text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5 mt-0.5">
+                <div className="text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5 -mt-1">
                   <span>Build Time: {getFormattedBuildTime()}</span>
                 </div>
               </>
