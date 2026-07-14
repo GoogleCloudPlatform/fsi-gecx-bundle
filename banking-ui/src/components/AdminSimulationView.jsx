@@ -1680,8 +1680,8 @@ function AdminSimulationView({ mode = 'studio' }) {
           These controls fire direct simulation requests now. They are useful for quick demos, but they do not create durable scheduled records.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-950/10">
-            <div className="flex items-start gap-3">
+          <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-950/10 flex flex-col">
+            <div className="flex items-start gap-3 flex-grow">
               <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-600 dark:text-cyan-400 shrink-0">
                 <TrendingUp className="w-5 h-5" />
               </div>
@@ -1701,8 +1701,8 @@ function AdminSimulationView({ mode = 'studio' }) {
             </button>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-950/10">
-            <div className="flex items-start gap-3">
+          <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-950/10 flex flex-col">
+            <div className="flex items-start gap-3 flex-grow">
               <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0">
                 <ShieldAlert className="w-5 h-5" />
               </div>
@@ -1722,8 +1722,8 @@ function AdminSimulationView({ mode = 'studio' }) {
             </button>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-950/10">
-            <div className="flex items-start gap-3">
+          <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-950/10 flex flex-col">
+            <div className="flex items-start gap-3 flex-grow">
               <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
                 <Zap className="w-5 h-5" />
               </div>
