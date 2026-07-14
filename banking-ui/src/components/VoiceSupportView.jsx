@@ -221,7 +221,7 @@ function MicTester({ deviceId, onError }) {
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
       if (audioContextRef.current) audioContextRef.current.close().catch(() => {});
     };
-  }, [deviceId]);
+  }, [deviceId, onError]);
 
   return (
     <div className="flex flex-col gap-1 w-full mt-3 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-800/80">
@@ -1655,19 +1655,21 @@ export default function VoiceSupportView() {
             </div>
             
             {/* Volume Playout slider control */}
-            <div className="flex items-center gap-3 border-t border-slate-200 dark:border-slate-800/80 pt-3 mt-1">
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Volume:</span>
-              <input 
-                type="range" 
-                min="0" 
-                max="1.0" 
-                step="0.05"
-                value={volume}
-                onChange={(e) => setVolume(parseFloat(e.target.value))}
-                className="flex-grow h-1 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
-              />
-              <span className="text-[10px] text-slate-700 dark:text-slate-300 font-mono w-8 text-right">{Math.round(volume * 100)}%</span>
-            </div>
+            {engine === 'gecx' && (
+              <div className="flex items-center gap-3 border-t border-slate-200 dark:border-slate-800/80 pt-3 mt-1">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Volume:</span>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="1.0" 
+                  step="0.05"
+                  value={volume}
+                  onChange={(e) => setVolume(parseFloat(e.target.value))}
+                  className="flex-grow h-1 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                />
+                <span className="text-[10px] text-slate-700 dark:text-slate-300 font-mono w-8 text-right">{Math.round(volume * 100)}%</span>
+              </div>
+            )}
           </div>
         )}
 
