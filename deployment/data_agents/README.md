@@ -38,8 +38,10 @@ BigQuery DataAgents require explicit table references. Dataset-level IAM can gra
 access, but it does not make a whole dataset an agent knowledge source. Keep the source allowlist
 intentional: large source lists reduce accuracy and consume model context.
 
-The agent queries BigQuery with the signed-in user's credentials. Users therefore need both the
-DataAgent/Cloud AI Companion roles and access to the underlying datasets.
+The DataAgent API validates knowledge sources with the deploying principal's credentials, so the
+Cloud Build service account needs metadata and data-viewer access to all three source datasets.
+The agent later queries BigQuery with the signed-in user's credentials. Users therefore also need
+both the DataAgent/Cloud AI Companion roles and access to the underlying datasets.
 
 ## Demo questions
 

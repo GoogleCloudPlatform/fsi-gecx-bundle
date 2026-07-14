@@ -367,5 +367,8 @@ resource "google_cloudbuild_trigger" "real_time_analytics_agent_deploy_trigger" 
     google_bigquery_dataset_iam_member.cloudbuild_sa_agent_analytics_metadata_viewer,
     google_bigquery_dataset_iam_member.cloudbuild_sa_agent_compliance_metadata_viewer,
     google_bigquery_dataset_iam_member.cloudbuild_sa_agent_cdc_metadata_viewer,
+    google_bigquery_dataset_iam_member.cloudbuild_sa_agent_analytics_data_viewer,
+    google_bigquery_dataset_iam_member.cloudbuild_sa_agent_compliance_data_viewer,
+    google_bigquery_dataset_iam_member.cloudbuild_sa_agent_cdc_data_viewer,
   ]
 }
