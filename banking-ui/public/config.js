@@ -31,5 +31,6 @@ window.env = {
   BUILD_BUILD_ID: "local-build",
   BUILD_LOCATION: "local-location",
   STABLE_ENV_URL: "https://agentic-finance.gcp-solutions.com/",
-  FEEDBACK_URL: "https://b.corp.google.com/issues/new?component=1466478&template=1902036&title=Demo%20Feedback%3A%20Personalized%20Financial%20Services%20with%20GECX%20%26%20Virtual%20Agents&assignee=mservidio%40google.com&collaborators=mservidio%40google.com%2Cerikvoit%40google.com%2Cjamestsai%40google.com&customFields=1232889%3A1841&customFields=951269%3ANA&parentIssueId=519210046"
+  FEEDBACK_URL: "https://b.corp.google.com/issues/new?component=1466478&template=1902036&title=Demo%20Feedback%3A%20Personalized%20Financial%20Services%20with%20GECX%20%26%20Virtual%20Agents&assignee=mservidio%40google.com&collaborators=mservidio%40google.com%2Cerikvoit%40google.com%2Cjamestsai%40google.com&customFields=1232889%3A1841&customFields=951269%3ANA&parentIssueId=519210046",
+  ENABLE_AVATAR_MODALITY: true
 };

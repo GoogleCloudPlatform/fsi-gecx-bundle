@@ -486,6 +486,10 @@ resource "google_cloud_run_v2_service" "banking_ui" {
           value = var.cx_agent_studio_get_user_location_tool_name
         }
       }
+      env {
+        name  = "VITE_ENABLE_AVATAR_MODALITY"
+        value = tostring(var.enable_avatar_modality)
+      }
     }
   }
 

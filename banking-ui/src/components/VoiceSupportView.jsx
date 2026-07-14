@@ -294,8 +294,10 @@ export default function VoiceSupportView() {
   const [avatarName, setAvatarName] = useState('Sam');
   const [agentMode, setAgentMode] = useState(null);
 
+  const enableAvatarModality = window.env?.ENABLE_AVATAR_MODALITY === true || window.env?.ENABLE_AVATAR_MODALITY === 'true' || import.meta.env.VITE_ENABLE_AVATAR_MODALITY === 'true';
+
   // New engine-specific configuration states
-  const [engine, setEngine] = useState('livekit'); // 'livekit' | 'gecx'
+  const [engine, setEngine] = useState(enableAvatarModality ? 'livekit' : 'gecx'); // 'livekit' | 'gecx'
   const [volume, setVolume] = useState(0.8);
   const [latency, setLatency] = useState(0);
   const [audioInputs, setAudioInputs] = useState([]);
@@ -1360,7 +1362,7 @@ export default function VoiceSupportView() {
         </div>
 
         {/* Engine Selection Toggle */}
-        {!isConnected && !isConnecting && (
+        {enableAvatarModality && !isConnected && !isConnecting && (
           <div id="voice-engine-select" className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-950/60 rounded-full border border-slate-200 dark:border-slate-800/80 mt-4">
             <button
               onClick={() => setEngine('livekit')}
