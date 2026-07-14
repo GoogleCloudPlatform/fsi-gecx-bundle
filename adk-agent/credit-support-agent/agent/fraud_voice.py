@@ -139,13 +139,14 @@ def build_triage_model_result(tool_response: dict | None) -> dict:
 
 def prepare_wallet_tool_args(fraud_playbook: dict | None, args: dict | None) -> dict:
     """Bind Wallet provisioning to trusted replacement-card state."""
-    prepared = dict(args or {})
-    prepared.pop("account_id", None)
     replacement_card_token = (fraud_playbook or {}).get("replacement_card_token")
-    if replacement_card_token:
-        prepared["card_token"] = replacement_card_token
-    prepared["wallet_provider"] = "GOOGLE_WALLET"
-    return prepared
+    # Reconstruct the request instead of filtering the model's request in place.
+    # This prevents invented identifiers (for example a support-message thread or
+    # the blocked physical card) from crossing the MCP tool boundary.
+    return {
+        "card_token": replacement_card_token,
+        "wallet_provider": "GOOGLE_WALLET",
+    }
 
 
 def build_fraud_playbook(voice_context: dict | None) -> dict:
@@ -269,6 +270,8 @@ def validate_fraud_tool_sequence(fraud_playbook: dict | None, tool_name: str, ar
         and not playbook.get("wallet_customer_confirmed")
     ):
         return "Ask the customer to explicitly confirm Google Wallet provisioning before queueing it."
+    if tool_name == "push_card_to_google_wallet" and not playbook.get("replacement_card_token"):
+        return "The trusted replacement virtual-card token is unavailable. Do not provision another card."
 
     if tool_name == "triage_fraud_case" and not playbook.get("open_alert_inspected"):
         return "Inspect the open fraud alert before taking mitigation actions."
@@ -315,6 +318,7 @@ def mark_fraud_tool_completed(
 
     if tool_name == "issue_replacement_card_tool":
         playbook["replacement_issued"] = True
+        playbook["replacement_card_token"] = (tool_response or {}).get("new_card_token")
         return playbook
 
     if tool_name == "push_card_to_google_wallet":
@@ -337,6 +341,10 @@ def mark_fraud_tool_completed(
                 playbook["card_blocked"] = True
                 playbook["replacement_issued"] = True
                 playbook["replacement_card_token"] = replacement_card.get("new_card_token")
+                playbook["replacement_card_id"] = replacement_card.get("new_card_id")
+                playbook["replacement_card_is_virtual"] = bool(
+                    replacement_card.get("is_virtual")
+                )
         return playbook
 
     if tool_name == "resolve_fraud_alert":

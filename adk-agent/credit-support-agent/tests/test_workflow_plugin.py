@@ -6,7 +6,12 @@ from google.genai import types
 
 from agent.fraud_voice import build_fraud_playbook
 from agent.workflow_plugin import FraudWorkflowStatePlugin
-from agent.workflow_authorization import TRIAGE_FRAUD_CASE, create_workflow_authorization
+from agent.workflow_authorization import (
+    PUSH_CARD_TO_GOOGLE_WALLET,
+    TRIAGE_FRAUD_CASE,
+    create_workflow_authorization,
+    invalidate_workflow_authorization,
+)
 
 
 def transcript_event(*, author: str, text: str, input_event: bool) -> Event:
@@ -84,6 +89,69 @@ async def test_plugin_invalidates_wallet_authorization_on_interruption() -> None
     invalidated = event.actions.state_delta["fraud_playbook"]
     assert invalidated["wallet_response_status"] == "INVALIDATED"
     assert invalidated["wallet_invalidation_reason"] == "MODEL_RESPONSE_INTERRUPTED"
+
+
+@pytest.mark.asyncio
+async def test_plugin_creates_fresh_wallet_authorization_after_failed_attempt() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    playbook.update(
+        {
+            "replacement_issued": True,
+            "replacement_card_token": "trusted-replacement-token",
+            "wallet_push_offered": True,
+            "wallet_customer_confirmed": True,
+            "wallet_response_status": "CONFIRMED",
+        }
+    )
+    failed_authorization = create_workflow_authorization(
+        action=PUSH_CARD_TO_GOOGLE_WALLET,
+        payload={
+            "card_token": "trusted-replacement-token",
+            "wallet_provider": "GOOGLE_WALLET",
+        },
+        session_id="session-1",
+    )
+    failed_authorization["status"] = "EXECUTING"
+    playbook["workflow_authorization"] = invalidate_workflow_authorization(
+        failed_authorization,
+        reason="TOOL_RESULT_NOT_SUCCESSFUL:push_card_to_google_wallet",
+    )
+    session = SimpleNamespace(
+        state={"session_id": "session-1", "fraud_playbook": playbook}
+    )
+    context = SimpleNamespace(session=session)
+    plugin = FraudWorkflowStatePlugin()
+
+    retry_offer = transcript_event(
+        author="agent",
+        text="I couldn't queue it. Would you like me to try Google Wallet again?",
+        input_event=False,
+    )
+    await plugin.on_event_callback(invocation_context=context, event=retry_offer)
+    prompted = retry_offer.actions.state_delta["fraud_playbook"]
+    session.state["fraud_playbook"] = prompted
+
+    retry_confirmation = transcript_event(
+        author="user",
+        text="Yes, please try again.",
+        input_event=True,
+    )
+    await plugin.on_event_callback(
+        invocation_context=context,
+        event=retry_confirmation,
+    )
+    confirmed = retry_confirmation.actions.state_delta["fraud_playbook"]
+
+    assert prompted["workflow_authorization"]["status"] == "PENDING"
+    assert prompted["workflow_authorization"]["payload"]["card_token"] == (
+        "trusted-replacement-token"
+    )
+    assert confirmed["workflow_authorization"]["status"] == "CONFIRMED"
 
 
 @pytest.mark.asyncio

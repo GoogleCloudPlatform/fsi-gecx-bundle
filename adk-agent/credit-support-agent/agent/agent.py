@@ -833,7 +833,7 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
                     "card_token": structured.get("card_token"),
                     "fraud_alert_id": structured.get("fraud_alert_id"),
                 })
-    elif isinstance(structured, dict):
+    else:
         playbook = dict(tool_context.state.get("fraud_playbook") or {})
         authorization = playbook.get("workflow_authorization") or {}
         if authorization.get("status") == "EXECUTING":

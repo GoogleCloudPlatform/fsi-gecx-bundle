@@ -123,6 +123,7 @@ def test_validate_fraud_tool_sequence_allows_wallet_push_after_confirmation() ->
     playbook["triage_submitted"] = True
     playbook["replacement_issued"] = True
     playbook["wallet_customer_confirmed"] = True
+    playbook["replacement_card_token"] = "trusted-card-token"
 
     error = validate_fraud_tool_sequence(playbook, "push_card_to_google_wallet", {})
 
@@ -163,6 +164,7 @@ def test_wallet_transcript_events_persist_offer_and_later_confirmation() -> None
         }
     )
     playbook["replacement_issued"] = True
+    playbook["replacement_card_token"] = "trusted-card-token"
 
     offered = apply_wallet_transcript_event(
         playbook,
@@ -193,6 +195,7 @@ def test_wallet_transcript_decline_does_not_authorize_tool() -> None:
         }
     )
     playbook["replacement_issued"] = True
+    playbook["replacement_card_token"] = "trusted-card-token"
     playbook = apply_wallet_transcript_event(
         playbook,
         author="agent",
@@ -222,6 +225,7 @@ def test_avatar_delayed_tool_call_preserves_confirmed_wallet_authorization() -> 
         }
     )
     playbook["replacement_issued"] = True
+    playbook["replacement_card_token"] = "trusted-card-token"
     offered = apply_wallet_transcript_event(
         playbook,
         author="agent",
@@ -488,12 +492,30 @@ def test_wallet_args_use_trusted_replacement_token_not_model_account_id() -> Non
             "account_id": "0131",
             "card_token": "invented-card-token",
             "wallet_provider": "OTHER_WALLET",
+            "session_id": "secure-message-thread-id",
         },
     )
 
-    assert "account_id" not in prepared
-    assert prepared["card_token"] == "trusted-card-token"
-    assert prepared["wallet_provider"] == "GOOGLE_WALLET"
+    assert prepared == {
+        "card_token": "trusted-card-token",
+        "wallet_provider": "GOOGLE_WALLET",
+    }
+
+
+def test_wallet_requires_trusted_replacement_token() -> None:
+    playbook = {
+        "entry_mode": "FRAUD_ALERT",
+        "replacement_issued": True,
+        "replacement_card_token": None,
+        "wallet_customer_confirmed": True,
+    }
+
+    assert validate_fraud_tool_sequence(
+        playbook, "push_card_to_google_wallet", {}
+    ) == (
+        "The trusted replacement virtual-card token is unavailable. "
+        "Do not provision another card."
+    )
 
 
 def test_mark_fraud_tool_completed_tracks_recognized_triage() -> None:
