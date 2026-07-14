@@ -12,12 +12,18 @@ class VoiceRuntimeConfig:
     video_model: str | None
     livekit_url: str
     max_concurrent_sessions: int
+    audio_session_capacity_units: int = 1
+    video_session_capacity_units: int = 4
 
 
 def load_runtime_config() -> VoiceRuntimeConfig:
     max_sessions = int(os.getenv("VOICE_AGENT_MAX_CONCURRENT_SESSIONS", "10"))
     if max_sessions < 1:
         raise ValueError("VOICE_AGENT_MAX_CONCURRENT_SESSIONS must be positive")
+    audio_units = int(os.getenv("VOICE_AGENT_AUDIO_SESSION_CAPACITY_UNITS", "1"))
+    video_units = int(os.getenv("VOICE_AGENT_VIDEO_SESSION_CAPACITY_UNITS", "4"))
+    if min(audio_units, video_units) < 1:
+        raise ValueError("Voice session capacity units must be positive")
     livekit_url = os.getenv("LIVEKIT_URL", "ws://localhost:7880")
     if not livekit_url.startswith(("ws://", "wss://")):
         raise ValueError("LIVEKIT_URL must use ws:// or wss://")
@@ -26,6 +32,8 @@ def load_runtime_config() -> VoiceRuntimeConfig:
         video_model=os.getenv("VOICE_AGENT_VIDEO_MODEL"),
         livekit_url=livekit_url,
         max_concurrent_sessions=max_sessions,
+        audio_session_capacity_units=audio_units,
+        video_session_capacity_units=video_units,
     )
 
 

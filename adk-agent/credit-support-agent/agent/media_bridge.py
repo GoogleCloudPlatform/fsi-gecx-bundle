@@ -13,6 +13,20 @@ logger = logging.getLogger("voice_agent")
 _vad_model = None
 
 
+def discard_audio_queue(queue: asyncio.Queue) -> int:
+    """Discard queued playout while preserving Queue.join accounting."""
+    discarded = 0
+    while not queue.empty():
+        try:
+            queue.get_nowait()
+        except asyncio.QueueEmpty:
+            break
+        else:
+            queue.task_done()
+            discarded += 1
+    return discarded
+
+
 def _get_vad_model():
     global _vad_model
     if _vad_model is None:

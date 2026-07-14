@@ -20,7 +20,8 @@ import {
   RefreshCw,
   Settings,
   Activity,
-  Volume2
+  Volume2,
+  Send
 } from 'lucide-react';
 import {
   getCreditCardAccount,
@@ -28,6 +29,7 @@ import {
   getCreditCardTransactions
 } from '../utils/api.js';
 import { DataChannelEvent } from '../utils/constants.js';
+import { encodeTypedCustomerTurn, resolveTypedDelivery } from '../utils/voiceTypedInput.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
@@ -312,6 +314,9 @@ export default function VoiceSupportView() {
   const [isRefreshingAudioDevices, setIsRefreshingAudioInputs] = useState(false);
   const [micPermissionState, setMicPermissionState] = useState('prompt');
   const [isTestingMic, setIsTestingMic] = useState(false);
+  const [typedDraft, setTypedDraft] = useState('');
+  const [pendingTypedMessageId, setPendingTypedMessageId] = useState(null);
+  const [typedInputError, setTypedInputError] = useState('');
 
   const affectedCardId = normalizeCardId(fraudContext?.fraud_alert?.card_id);
   const cards = account?.cards || [];
@@ -403,6 +408,9 @@ export default function VoiceSupportView() {
   const roomRef = useRef(null);
   const chatContainerRef = useRef(null);
   const disconnectTimerRef = useRef(null);
+  const typedAckTimerRef = useRef(null);
+  const pendingTypedMessageIdRef = useRef(null);
+  const retryTypedMessageIdRef = useRef(null);
 
   // GECX connection hooks & streaming timing refs
   const wsRef = useRef(null);
@@ -590,6 +598,14 @@ export default function VoiceSupportView() {
     setVideoLoaded(false);
     setAgentMode(null);
     setGuidanceSnapshot(null);
+    if (typedAckTimerRef.current) {
+      clearTimeout(typedAckTimerRef.current);
+      typedAckTimerRef.current = null;
+    }
+    pendingTypedMessageIdRef.current = null;
+    retryTypedMessageIdRef.current = null;
+    setPendingTypedMessageId(null);
+    setTypedInputError('');
   }, [engine, cleanupGecxSession]);
 
   const startDisconnectCountdown = useCallback(() => {
@@ -1139,9 +1155,45 @@ export default function VoiceSupportView() {
           const event = JSON.parse(decoder.decode(payload));
           console.log('Received data channel event:', event);
 
-          if (event.type === 'agent_mode') {
+          const typedDelivery = resolveTypedDelivery(
+            event,
+            pendingTypedMessageIdRef.current,
+          );
+
+          if (typedDelivery.matched && typedDelivery.accepted) {
+              if (typedAckTimerRef.current) {
+                clearTimeout(typedAckTimerRef.current);
+                typedAckTimerRef.current = null;
+              }
+              pendingTypedMessageIdRef.current = null;
+              retryTypedMessageIdRef.current = null;
+              setPendingTypedMessageId(null);
+              setTypedDraft('');
+              setTypedInputError('');
+          } else if (typedDelivery.matched && !typedDelivery.accepted) {
+              if (typedAckTimerRef.current) {
+                clearTimeout(typedAckTimerRef.current);
+                typedAckTimerRef.current = null;
+              }
+              pendingTypedMessageIdRef.current = null;
+              retryTypedMessageIdRef.current = typedDelivery.retryMessageId;
+              setPendingTypedMessageId(null);
+              setTypedInputError(typedDelivery.error);
+          } else if (event.type === 'agent_mode') {
             console.log('Voice agent reported mode:', event.mode);
             setAgentMode(event.mode);
+          } else if (event.type === DataChannelEvent.AVATAR_FALLBACK) {
+            console.warn('Avatar stream unavailable; continuing in audio mode.');
+            setAgentMode('audio');
+            setAgentVideoTrack(null);
+            setVideoLoaded(false);
+            setTranscripts(prev => [
+              ...prev,
+              {
+                author: 'system',
+                text: 'Avatar video became unavailable. Continuing in voice mode.',
+              },
+            ]);
           } else if (event.type === DataChannelEvent.GUIDANCE_SNAPSHOT) {
             setGuidanceSnapshot(event);
           } else if (event.type === DataChannelEvent.FRAUD_ALERT_INSPECTED) {
@@ -1295,6 +1347,14 @@ export default function VoiceSupportView() {
         setVideoLoaded(false);
         setAgentMode(null);
         setGuidanceSnapshot(null);
+        if (typedAckTimerRef.current) {
+          clearTimeout(typedAckTimerRef.current);
+          typedAckTimerRef.current = null;
+        }
+        pendingTypedMessageIdRef.current = null;
+        retryTypedMessageIdRef.current = null;
+        setPendingTypedMessageId(null);
+        setTypedInputError('');
         setTranscripts(prev => [...prev, { author: 'system', text: 'Disconnected from voice room.' }]);
       });
 
@@ -1320,7 +1380,49 @@ export default function VoiceSupportView() {
     }
   };
 
-
+  const sendTypedMessage = async (event) => {
+    event?.preventDefault?.();
+    const text = typedDraft.trim();
+    if (!text || pendingTypedMessageId || !isConnected || engine !== 'livekit') return;
+    if (isHumanAgentActive) {
+      setTypedInputError('Typed AI messages are unavailable during a representative handoff.');
+      return;
+    }
+    if (text.length > 1000) {
+      setTypedInputError('Typed messages are limited to 1,000 characters.');
+      return;
+    }
+    const room = roomRef.current;
+    if (!room) {
+      setTypedInputError('The voice room is no longer connected.');
+      return;
+    }
+    const messageId = retryTypedMessageIdRef.current || crypto.randomUUID();
+    try {
+      setTypedInputError('');
+      pendingTypedMessageIdRef.current = messageId;
+      setPendingTypedMessageId(messageId);
+      const payload = encodeTypedCustomerTurn({ messageId, text });
+      await room.localParticipant.publishData(payload, {
+        reliable: true,
+        topic: 'voice-support',
+      });
+      typedAckTimerRef.current = setTimeout(() => {
+        if (pendingTypedMessageIdRef.current === messageId) {
+          pendingTypedMessageIdRef.current = null;
+          retryTypedMessageIdRef.current = messageId;
+          setPendingTypedMessageId(null);
+          setTypedInputError('The message was not acknowledged. Please try again.');
+        }
+      }, 8000);
+    } catch (error) {
+      console.error('Failed to publish typed customer turn:', error);
+      pendingTypedMessageIdRef.current = null;
+      retryTypedMessageIdRef.current = messageId;
+      setPendingTypedMessageId(null);
+      setTypedInputError('Unable to send the typed message. Please try again.');
+    }
+  };
 
   const toggleMute = async () => {
     const enabled = !micEnabled;
@@ -1333,6 +1435,8 @@ export default function VoiceSupportView() {
       setMicEnabled(enabled);
     }
   };
+
+  const showAvatarPanel = mode === 'video' && isConnected && agentMode !== 'audio';
 
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-2rem)] max-w-6xl min-w-0 flex-col gap-8 px-4 pb-[calc(3rem+env(safe-area-inset-bottom))] pt-28 text-slate-100">
@@ -1607,7 +1711,7 @@ export default function VoiceSupportView() {
         <div id="voice-transcript-panel" className="flex h-full min-h-[400px] min-w-0 flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/50 dark:shadow-none">
 
           {/* Avatar Video Frame container if video mode is active */}
-          {mode === 'video' && isConnected && (
+          {showAvatarPanel && (
             <div className="flex flex-col mb-4">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
                 Live Avatar Stream
@@ -1644,7 +1748,7 @@ export default function VoiceSupportView() {
           <div
             ref={chatContainerRef}
             className="min-h-[220px] flex-1 overflow-y-auto space-y-4 pr-2 scrollbar-thin"
-            style={mode === 'video' && isConnected ? { maxHeight: '220px' } : undefined}
+            style={showAvatarPanel ? { maxHeight: '220px' } : undefined}
           >
             {transcripts.map((t, idx) => {
               if (t.author === 'system') {
@@ -1676,6 +1780,50 @@ export default function VoiceSupportView() {
               );
             })}
           </div>
+
+          {isConnected && engine === 'livekit' && (
+            <form
+              onSubmit={sendTypedMessage}
+              className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800"
+            >
+              <div className="flex items-end gap-2">
+                <label htmlFor="voice-typed-message" className="sr-only">Type a message</label>
+                <textarea
+                  id="voice-typed-message"
+                  value={typedDraft}
+                  onChange={(event) => {
+                    setTypedDraft(event.target.value);
+                    if (typedInputError) setTypedInputError('');
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      sendTypedMessage(event);
+                    }
+                  }}
+                  rows={1}
+                  maxLength={1000}
+                  disabled={Boolean(pendingTypedMessageId) || isHumanAgentActive}
+                  placeholder={isHumanAgentActive ? 'Typing is unavailable during handoff' : 'Type a message to the same support agent'}
+                  className="max-h-28 min-h-11 flex-1 resize-y rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
+                />
+                <button
+                  type="submit"
+                  disabled={!typedDraft.trim() || Boolean(pendingTypedMessageId) || isHumanAgentActive}
+                  aria-label="Send typed message"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Send size={17} className={pendingTypedMessageId ? 'animate-pulse' : ''} />
+                </button>
+              </div>
+              <div className="mt-1.5 flex min-h-4 items-center justify-between gap-3 px-1 text-[10px]">
+                <span className={typedInputError ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}>
+                  {typedInputError || (pendingTypedMessageId ? 'Sending securely…' : 'Enter to send · Shift+Enter for a new line')}
+                </span>
+                <span className="shrink-0 text-slate-400 dark:text-slate-500">{typedDraft.length}/1000</span>
+              </div>
+            </form>
+          )}
         </div>
 
       </div>

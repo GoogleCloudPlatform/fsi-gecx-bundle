@@ -4,9 +4,11 @@ os.environ["TORCH_CPP_LOG_LEVEL"] = "ERROR"
 import sys
 import asyncio
 import logging
+import time
 import numpy as np
 from livekit import rtc
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 import uvicorn
 
 # Prepend the directory to sys.path
@@ -20,13 +22,21 @@ from agent.agent import (
     is_tool_processing,
     reset_session_context,
 )
+from agent.avatar_runtime import run_with_avatar_fallback
 from agent.instructions import compose_session_instruction
 from agent.live_runtime import build_live_run_config, env_flag, normalize_live_event
 from agent.guidance_snapshot import guidance_observability_payload
-from agent.media_bridge import BufferedAudioPlayout, SileroVADTracker
-from agent.session_coordinator import default_session_bootstrap, load_session_bootstrap
+from agent.media_bridge import BufferedAudioPlayout, SileroVADTracker, discard_audio_queue
+from agent.log_safety import stable_log_reference
+from agent.session_coordinator import (
+    default_session_bootstrap,
+    load_session_bootstrap,
+    should_abandon_escalation,
+)
 from agent.runtime_config import load_runtime_config, validate_session_request
-from agent.terminal_outcome import TerminalOutcome
+from agent.session_capacity import SessionCapacity
+from agent.readiness import build_readiness_report
+from agent.terminal_outcome import TerminalOutcome, ToolFailureTracker
 from agent.session_store import (
     cleanup_expired_sessions,
     get_session_service,
@@ -34,7 +44,20 @@ from agent.session_store import (
 )
 from agent.workflow_plugin import FraudWorkflowStatePlugin
 from agent.version import BUILD_VERSION, BUILD_COMMIT_ID, BUILD_TIME
-from agent.events import DataChannelEvent
+from agent.events import DataChannelEvent, INTERNAL_TOOL_RUNTIME_STATUS
+from agent.typed_input import (
+    TypedInputError,
+    parse_customer_text_packet,
+    typed_input_ack,
+    validate_typed_turn_availability,
+)
+from agent.telemetry import (
+    record_avatar_fallback,
+    record_interruption,
+    record_session_completed,
+    record_session_started,
+    record_typed_turn,
+)
 from google.adk.apps import App
 from google.adk.runners import Runner
 from google.adk.agents.live_request_queue import LiveRequestQueue
@@ -57,11 +80,18 @@ else:
 
 def session_log_context(room_name: str, customer_id: str, session_id: str, mode: str, **extra) -> str:
     context = {
-        "room_name": room_name,
-        "customer_id": customer_id,
-        "session_id": session_id,
+        "room_ref": stable_log_reference(room_name, prefix="room"),
+        "customer_ref": stable_log_reference(customer_id, prefix="customer"),
+        "session_ref": stable_log_reference(session_id, prefix="session"),
         "mode": mode,
     }
+    for identifier in ("fraud_alert_id", "active_escalation_id"):
+        if identifier in extra:
+            value = extra.pop(identifier)
+            extra[identifier.removesuffix("_id") + "_ref"] = stable_log_reference(
+                value,
+                prefix=identifier.removesuffix("_id"),
+            )
     context.update({key: value for key, value in extra.items() if value is not None})
     return " ".join(f"{key}={value}" for key, value in context.items())
 
@@ -74,7 +104,10 @@ def get_livekit_token(room_name: str) -> str:
 
     api_key = os.getenv("LIVEKIT_API_KEY", "devkey")
     api_secret = os.getenv("LIVEKIT_API_SECRET", "secret")
-    logger.info(f"Generating fresh LiveKit token for room: {room_name}")
+    logger.info(
+        "Generating fresh LiveKit token room_ref=%s",
+        stable_log_reference(room_name, prefix="room"),
+    )
     try:
         from livekit import api as lk_api
         token = lk_api.AccessToken(api_key, api_secret)
@@ -93,6 +126,9 @@ def get_livekit_token(room_name: str) -> str:
         raise e
 
 async def run_voice_agent_session(room_name: str, customer_id: str, session_id: str, mode: str = "audio"):
+    requested_mode = mode
+    session_started_at = time.monotonic()
+    record_session_started(mode)
     logger.info("Initializing voice agent session %s", session_log_context(room_name, customer_id, session_id, mode))
     import agent.agent as agent_module
     session_context_tokens = bind_session_context(customer_id, None)
@@ -259,9 +295,16 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     live_queue = LiveRequestQueue()
 
     conversation_transcript = []
+    tool_failure_tracker = ToolFailureTracker()
 
     # Define tool event callback to broadcast over LiveKit data channel
     def on_agent_event(event_dict):
+        if event_dict.get("type") == INTERNAL_TOOL_RUNTIME_STATUS:
+            tool_failure_tracker.record(
+                str(event_dict.get("tool") or ""),
+                str(event_dict.get("outcome") or ""),
+            )
+            return
         if room and room.local_participant:
             import json
             payload = json.dumps(event_dict)
@@ -310,12 +353,17 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                             res_data = resp.json()
                             active_escalation_id = res_data.get("escalation_id")
                             logger.info(
-                                "Successfully synced support escalation via API %s escalation_id=%s",
-                                session_log_context(room_name, customer_id, session_id, mode),
-                                active_escalation_id,
+                                "Successfully synced support escalation via API %s",
+                                session_log_context(
+                                    room_name,
+                                    customer_id,
+                                    session_id,
+                                    mode,
+                                    active_escalation_id=active_escalation_id,
+                                ),
                             )
                         else:
-                            logger.error("Failed to sync support escalation via API %s status=%s body=%s", session_log_context(room_name, customer_id, session_id, mode), resp.status_code, resp.text)
+                            logger.error("Failed to sync support escalation via API %s status=%s", session_log_context(room_name, customer_id, session_id, mode), resp.status_code)
                 except Exception as ex:
                     logger.error("Failed to call support escalation API %s error=%s", session_log_context(room_name, customer_id, session_id, mode), ex, exc_info=True)
 
@@ -376,6 +424,16 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     
     # We maintain an output queue for playout frames to handle interruptions
     playout_queue = asyncio.Queue()
+    typed_turn_lock = asyncio.Lock()
+    typed_turn_active = asyncio.Event()
+    runtime_transition_active = asyncio.Event()
+    voice_input_active = asyncio.Event()
+    seen_typed_message_ids: set[str] = set()
+    typed_message_order: list[str] = []
+    pending_typed_transcripts: list[str] = []
+    typed_turn_watchdog_task = None
+    greeting_task = None
+    greeting_sent = False
 
     room = rtc.Room()
 
@@ -385,13 +443,20 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             if not participant.identity.startswith("agent-human"):
                 asyncio.create_task(handle_incoming_audio(track))
             else:
-                logger.info(f"Ignoring audio track subscription from human supervisor: {participant.identity}")
+                logger.info(
+                    "Ignoring audio track subscription from human supervisor %s "
+                    "participant_ref=%s",
+                    session_log_context(room_name, customer_id, session_id, mode),
+                    stable_log_reference(participant.identity, prefix="participant"),
+                )
 
     disconnect_event = asyncio.Event()
 
     @room.on("disconnected")
     def on_disconnected(reason: rtc.DisconnectReason):
-        logger.warning("Disconnected from LiveKit room %s reason=%s", session_log_context(room_name, customer_id, session_id, mode), reason)
+        # The customer ending a call and our graceful terminal path both land
+        # here. Actual media/model failures are logged at their failure site.
+        logger.info("Disconnected from LiveKit room %s reason=%s", session_log_context(room_name, customer_id, session_id, mode), reason)
         disconnect_event.set()
 
     handoff_event = asyncio.Event()
@@ -399,17 +464,213 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     @room.on("participant_connected")
     def on_participant_connected(participant: rtc.RemoteParticipant):
         if participant.identity.startswith("agent-human"):
-            logger.info("Human agent connected %s participant=%s", session_log_context(room_name, customer_id, session_id, mode), participant.identity)
+            logger.info(
+                "Human agent connected %s participant_ref=%s",
+                session_log_context(room_name, customer_id, session_id, mode),
+                stable_log_reference(participant.identity, prefix="participant"),
+            )
             handoff_event.set()
 
     @room.on("participant_disconnected")
     def on_participant_disconnected(participant: rtc.RemoteParticipant):
-        logger.info("Participant disconnected %s participant=%s", session_log_context(room_name, customer_id, session_id, mode), participant.identity)
+        logger.info(
+            "Participant disconnected %s participant_ref=%s",
+            session_log_context(room_name, customer_id, session_id, mode),
+            stable_log_reference(participant.identity, prefix="participant"),
+        )
         if not participant.identity.startswith("agent-human"):
             logger.info("Customer disconnected; initiating voice agent session shutdown %s", session_log_context(room_name, customer_id, session_id, mode))
             disconnect_event.set()
 
+    async def publish_typed_ack(
+        participant_identity: str | None,
+        *,
+        message_id: str | None,
+        accepted: bool,
+        code: str | None = None,
+        message: str | None = None,
+        retryable: bool = False,
+    ) -> None:
+        if not participant_identity:
+            return
+        await room.local_participant.publish_data(
+            typed_input_ack(
+                message_id=message_id,
+                accepted=accepted,
+                code=code,
+                message=message,
+                retryable=retryable,
+            ),
+            reliable=True,
+            destination_identities=[participant_identity],
+            topic="voice-support",
+        )
+
+    async def handle_typed_input(packet: rtc.DataPacket) -> None:
+        nonlocal typed_turn_watchdog_task
+        participant_identity = (
+            packet.participant.identity if packet.participant is not None else None
+        )
+        message_id = None
+        delivered_to_adk = False
+        try:
+            import json
+
+            raw_payload = json.loads(packet.data.decode("utf-8"))
+            message_id = str(raw_payload.get("message_id") or "") or None
+        except Exception:
+            pass
+        try:
+            message = parse_customer_text_packet(
+                packet.data,
+                participant_identity=participant_identity,
+                expected_identity=f"user-{customer_id}",
+                seen_message_ids=seen_typed_message_ids,
+            )
+            if message is None:
+                return
+            validate_typed_turn_availability(
+                tool_processing=is_tool_processing(),
+                voice_input_active=voice_input_active.is_set(),
+                typed_turn_active=typed_turn_active.is_set(),
+                runtime_transition_active=runtime_transition_active.is_set(),
+                session_ending=(
+                    is_session_end_requested() or disconnect_event.is_set()
+                ),
+                human_handoff_active=handoff_event.is_set(),
+            )
+            async with typed_turn_lock:
+                validate_typed_turn_availability(
+                    tool_processing=is_tool_processing(),
+                    voice_input_active=voice_input_active.is_set(),
+                    typed_turn_active=typed_turn_active.is_set(),
+                    runtime_transition_active=runtime_transition_active.is_set(),
+                    session_ending=(
+                        is_session_end_requested() or disconnect_event.is_set()
+                    ),
+                    human_handoff_active=handoff_event.is_set(),
+                )
+                discard_audio_queue(playout_queue)
+                seen_typed_message_ids.add(message.message_id)
+                typed_message_order.append(message.message_id)
+                if len(typed_message_order) > 200:
+                    seen_typed_message_ids.discard(typed_message_order.pop(0))
+                pending_typed_transcripts.append(message.text)
+                typed_turn_active.set()
+
+                async def release_stalled_typed_turn() -> None:
+                    await asyncio.sleep(30.0)
+                    if typed_turn_active.is_set():
+                        typed_turn_active.clear()
+                        if message.text in pending_typed_transcripts:
+                            pending_typed_transcripts.remove(message.text)
+                        logger.warning(
+                            "Released stalled typed-turn microphone gate %s "
+                            "message_ref=%s",
+                            session_log_context(room_name, customer_id, session_id, mode),
+                            stable_log_reference(
+                                message.message_id, prefix="typed_message"
+                            ),
+                        )
+
+                if typed_turn_watchdog_task and not typed_turn_watchdog_task.done():
+                    typed_turn_watchdog_task.cancel()
+                typed_turn_watchdog_task = asyncio.create_task(
+                    release_stalled_typed_turn()
+                )
+                live_queue.send_content(
+                    types.Content(
+                        role="user",
+                        parts=[types.Part(text=message.text)],
+                    )
+                )
+                delivered_to_adk = True
+                on_agent_event(
+                    {
+                        "type": DataChannelEvent.TRANSCRIPT.value,
+                        "author": "user",
+                        "text": message.text,
+                    }
+                )
+                await publish_typed_ack(
+                    participant_identity,
+                    message_id=message.message_id,
+                    accepted=True,
+                )
+                logger.info(
+                    "Accepted typed customer turn %s message_ref=%s "
+                    "character_count=%s",
+                    session_log_context(room_name, customer_id, session_id, mode),
+                    stable_log_reference(message.message_id, prefix="typed_message"),
+                    len(message.text),
+                )
+                record_typed_turn(mode, "accepted")
+        except TypedInputError as error:
+            if error.code == "DUPLICATE_MESSAGE":
+                await publish_typed_ack(
+                    participant_identity,
+                    message_id=message_id,
+                    accepted=True,
+                )
+                record_typed_turn(mode, "duplicate")
+                return
+            await publish_typed_ack(
+                participant_identity,
+                message_id=message_id,
+                accepted=False,
+                code=error.code,
+                message=str(error),
+                retryable=error.retryable,
+            )
+            logger.warning(
+                "Rejected typed customer turn %s code=%s retryable=%s",
+                session_log_context(room_name, customer_id, session_id, mode),
+                error.code,
+                error.retryable,
+            )
+            record_typed_turn(mode, "rejected")
+        except Exception as error:
+            # If ADK did not accept the turn, roll back deduplication so a
+            # client retry can safely deliver it. If only the acknowledgement
+            # failed, retain the id: the client's same-id retry will receive a
+            # duplicate acceptance without creating a second model turn.
+            if not delivered_to_adk and message_id:
+                seen_typed_message_ids.discard(message_id)
+                if message_id in typed_message_order:
+                    typed_message_order.remove(message_id)
+                if "message" in locals() and message.text in pending_typed_transcripts:
+                    pending_typed_transcripts.remove(message.text)
+                typed_turn_active.clear()
+                if typed_turn_watchdog_task and not typed_turn_watchdog_task.done():
+                    typed_turn_watchdog_task.cancel()
+                try:
+                    await publish_typed_ack(
+                        participant_identity,
+                        message_id=message_id,
+                        accepted=False,
+                        code="DELIVERY_FAILED",
+                        message="The message could not be delivered. Please try again.",
+                        retryable=True,
+                    )
+                except Exception:
+                    pass
+            logger.warning(
+                "Typed customer turn delivery failed %s delivered_to_adk=%s error_type=%s",
+                session_log_context(room_name, customer_id, session_id, mode),
+                delivered_to_adk,
+                type(error).__name__,
+            )
+            record_typed_turn(
+                mode,
+                "ack_failed" if delivered_to_adk else "delivery_failed",
+            )
+
+    @room.on("data_received")
+    def on_data_received(packet: rtc.DataPacket):
+        asyncio.create_task(handle_typed_input(packet))
+
     async def handle_incoming_audio(track: rtc.Track):
+        nonlocal terminal_outcome, greeting_task, greeting_sent
         # Read frames from LiveKit incoming track
         audio_stream = rtc.AudioStream(track)
         # Resampler will be initialized dynamically on the first frame to match incoming sample rate
@@ -424,6 +685,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                     # Media path is active. Send initial greeting prompt after a 500ms delay to let the WebRTC connection stabilize.
                     async def send_delayed_greeting():
                         await asyncio.sleep(0.5)
+                        if disconnect_event.is_set():
+                            return
                         logger.info("Media path is active. Triggering assistant greeting...")
                         greeting_text = initial_greeting_prompt
                         live_queue.send_content(
@@ -431,7 +694,9 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                                 parts=[types.Part(text=greeting_text)]
                             )
                         )
-                    asyncio.create_task(send_delayed_greeting())
+                    if not greeting_sent:
+                        greeting_sent = True
+                        greeting_task = asyncio.create_task(send_delayed_greeting())
                     resampler = rtc.AudioResampler(
                         input_rate=frame.sample_rate,
                         output_rate=16000,
@@ -441,7 +706,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 resampled_frames = resampler.push(frame)
                 for res_frame in resampled_frames:
                     # Check if the agent is currently processing a tool call or shutting down to drop user mic buffers
-                    if is_tool_processing() or is_session_end_requested() or session_end_disconnect_task:
+                    if is_tool_processing() or typed_turn_active.is_set() or is_session_end_requested() or session_end_disconnect_task:
                         logger.debug("Muting microphone audio: tool execution or session shutdown in progress.")
                         continue
 
@@ -459,23 +724,30 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                         await user_stt_queue.put(pcm_bytes)
 
                     if speech_started:
+                        voice_input_active.set()
                         if video_manual_activity_enabled:
                             live_queue.send_activity_start()
                         # Clear agent's playout queue to immediately interrupt speaking
                         logger.info("User speaking, interrupting agent voice output...")
-                        while not playout_queue.empty():
-                            try:
-                                playout_queue.get_nowait()
-                            except asyncio.QueueEmpty:
-                                break
+                        discard_audio_queue(playout_queue)
 
                     # Always send the audio blob to the model to allow server-side silence detection
                     live_queue.send_realtime(audio_blob)
                     if speech_ended and video_manual_activity_enabled:
                         live_queue.send_activity_end()
+                    if speech_ended:
+                        voice_input_active.clear()
         except Exception as err:
-            logger.error(f"Error handling incoming audio: {err}", exc_info=True)
+            terminal_outcome = TerminalOutcome.MEDIA_FAILURE
+            logger.error(
+                "Incoming audio path failed %s error_type=%s",
+                session_log_context(room_name, customer_id, session_id, mode),
+                type(err).__name__,
+                exc_info=True,
+            )
+            disconnect_event.set()
         finally:
+            voice_input_active.clear()
             await audio_stream.aclose()
 
     video_source = None
@@ -605,11 +877,14 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                             
                 # Broadcast transcriptions over data channel for UI display when complete
                 if live_event.input_transcript is not None:
-                    on_agent_event({
-                        "type": "TRANSCRIPT",
-                        "author": "user",
-                        "text": live_event.input_transcript
-                    })
+                    if live_event.input_transcript in pending_typed_transcripts:
+                        pending_typed_transcripts.remove(live_event.input_transcript)
+                    else:
+                        on_agent_event({
+                            "type": "TRANSCRIPT",
+                            "author": "user",
+                            "text": live_event.input_transcript
+                        })
                 if live_event.output_transcript is not None:
                     on_agent_event({
                         "type": "TRANSCRIPT",
@@ -623,6 +898,9 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 
                 # Log any final responses or tool call events for tracking
                 if live_event.final_response:
+                    typed_turn_active.clear()
+                    if typed_turn_watchdog_task and not typed_turn_watchdog_task.done():
+                        typed_turn_watchdog_task.cancel()
                     logger.debug("Agent turn complete. Finished generation.")
                     if is_session_end_requested():
                         logger.info("Session end requested without final output transcript %s", session_log_context(room_name, customer_id, session_id, mode))
@@ -635,6 +913,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                     schedule_session_end_disconnect("end_of_agent")
 
                 if live_event.interrupted:
+                    record_interruption(mode)
                     logger.info("ADK Live response interrupted %s", session_log_context(room_name, customer_id, session_id, mode))
 
                 if live_event.session_resumption_handle:
@@ -654,8 +933,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 except asyncio.TimeoutError:
                     logger.warning("Timed out waiting for graceful session end %s", session_log_context(room_name, customer_id, session_id, mode))
             logger.info("Gemini stream loop finished; closing connections %s", session_log_context(room_name, customer_id, session_id, mode))
-            live_queue.close()
-            await room.disconnect()
+            # Session-level cleanup owns the shared queue and LiveKit room so
+            # an avatar decoder failure can restart only the model stream.
 
     async def mock_video_loop():
         logger.info("Starting mock video loop task...")
@@ -798,7 +1077,14 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                     voice_name=voice_name,
                     language_code=lang_code,
                 )
-                on_agent_event({"type": "AVATAR_FALLBACK", "mode": "audio"})
+                video_manual_activity_enabled = False
+                record_avatar_fallback("decoder_start_failed")
+                on_agent_event(
+                    {
+                        "type": DataChannelEvent.AVATAR_FALLBACK.value,
+                        "mode": "audio",
+                    }
+                )
             
             async def log_ffmpeg_stderr():
                 try:
@@ -864,8 +1150,65 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             if ffmpeg_proc:
                 ffmpeg_task = asyncio.create_task(read_ffmpeg_frames_loop())
             
+        async def prepare_audio_fallback() -> None:
+            runtime_transition_active.set()
+            deadline = asyncio.get_running_loop().time() + 30.0
+            while (
+                typed_turn_active.is_set()
+                and not disconnect_event.is_set()
+                and not handoff_event.is_set()
+                and asyncio.get_running_loop().time() < deadline
+            ):
+                await asyncio.sleep(0.05)
+
+        async def activate_audio_fallback() -> None:
+            nonlocal live_queue, mode, run_config, video_manual_activity_enabled
+            nonlocal terminal_outcome
+            audio_model = os.getenv("VOICE_AGENT_AUDIO_MODEL")
+            if not audio_model:
+                terminal_outcome = TerminalOutcome.MEDIA_FAILURE
+                raise RuntimeError(
+                    "Avatar decoder stopped and no audio fallback model is configured"
+                )
+            live_queue.close()
+            live_queue = LiveRequestQueue()
+            mode = "audio"
+            session_agent.model = Gemini(model=audio_model)
+            run_config = build_live_run_config(
+                mode="audio",
+                avatar_name=None,
+                voice_name=voice_name,
+                language_code=lang_code,
+            )
+            video_manual_activity_enabled = False
+            runtime_transition_active.clear()
+            record_avatar_fallback("decoder_stopped")
+            logger.warning(
+                "Live Avatar decoder stopped; continuing with audio %s",
+                session_log_context(room_name, customer_id, session_id, mode),
+            )
+            on_agent_event(
+                {
+                    "type": DataChannelEvent.AVATAR_FALLBACK.value,
+                    "mode": "audio",
+                }
+            )
+
         playout_task = asyncio.create_task(playout_loop())
-        gemini_task = asyncio.create_task(run_gemini_loop())
+        gemini_task = asyncio.create_task(
+            run_with_avatar_fallback(
+                primary_factory=run_gemini_loop,
+                decoder_task=ffmpeg_task,
+                fallback_factory=run_gemini_loop,
+                prepare_fallback=prepare_audio_fallback,
+                activate_fallback=activate_audio_fallback,
+                stop_requested=lambda: (
+                    disconnect_event.is_set()
+                    or handoff_event.is_set()
+                    or session_end_disconnect_task is not None
+                ),
+            )
+        )
         
         async def wait_for_disconnect():
             await disconnect_event.wait()
@@ -900,7 +1243,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     except HandoffException as he:
         terminal_outcome = TerminalOutcome.HANDOFF
         logger.info("Handoff completed successfully %s reason=%s", session_log_context(room_name, customer_id, session_id, mode), he)
-        for task in [playout_task, gemini_task, disconnect_task, handoff_task, watchdog_task, mock_video_task, ffmpeg_task, user_stt_task, agent_stt_task]:
+        for task in [playout_task, gemini_task, disconnect_task, handoff_task, watchdog_task, mock_video_task, ffmpeg_task, user_stt_task, agent_stt_task, typed_turn_watchdog_task, greeting_task]:
             if task and not task.done():
                 task.cancel()
                 try:
@@ -930,9 +1273,15 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             terminal_outcome = TerminalOutcome.MODEL_FAILURE
         logger.error("Encountered error in voice agent session %s error=%s", session_log_context(room_name, customer_id, session_id, mode), e, exc_info=True)
     finally:
+        terminal_outcome = tool_failure_tracker.terminal_outcome(terminal_outcome)
+        record_session_completed(
+            requested_mode,
+            terminal_outcome.value,
+            time.monotonic() - session_started_at,
+        )
         logger.info("Cleaning up connections and tasks %s", session_log_context(room_name, customer_id, session_id, mode, active_escalation_id=active_escalation_id, terminal_outcome=terminal_outcome.value))
         # Cancel any pending tasks
-        for task in [playout_task, gemini_task, disconnect_task, handoff_task, watchdog_task, mock_video_task, ffmpeg_task, user_stt_task, agent_stt_task]:
+        for task in [playout_task, gemini_task, disconnect_task, handoff_task, watchdog_task, mock_video_task, ffmpeg_task, user_stt_task, agent_stt_task, typed_turn_watchdog_task, greeting_task]:
             if task and not task.done():
                 task.cancel()
                 try:
@@ -950,8 +1299,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             except Exception as ex:
                 logger.error(f"Error terminating FFmpeg reader process: {ex}")
         # If the room disconnected before the supervisor took over, mark the escalation as ABANDONED
-        # If the room disconnected before the supervisor took over, mark the escalation as ABANDONED
-        if active_escalation_id is not None:
+        if should_abandon_escalation(active_escalation_id, terminal_outcome):
             try:
                 import httpx
                 headers = agent_module.get_auth_headers()
@@ -959,10 +1307,19 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                     abandon_url = f"{agent_module.BANKING_SERVICE_URL}/support/escalations/{active_escalation_id}/abandon"
                     resp = await client.post(abandon_url, headers=headers)
                     if resp.status_code == 200:
-                        logger.info("Active escalation marked as ABANDONED via API %s escalation_id=%s", session_log_context(room_name, customer_id, session_id, mode), active_escalation_id)
+                        logger.info(
+                            "Active escalation marked as ABANDONED via API %s",
+                            session_log_context(
+                                room_name,
+                                customer_id,
+                                session_id,
+                                mode,
+                                active_escalation_id=active_escalation_id,
+                            ),
+                        )
                         active_escalation_id = None
                     else:
-                        logger.error("Failed to mark escalation as ABANDONED via API %s status=%s body=%s", session_log_context(room_name, customer_id, session_id, mode, active_escalation_id=active_escalation_id), resp.status_code, resp.text)
+                        logger.error("Failed to mark escalation as ABANDONED via API %s status=%s", session_log_context(room_name, customer_id, session_id, mode, active_escalation_id=active_escalation_id), resp.status_code)
             except Exception as ex:
                 logger.error("Failed to call abandon escalation API %s error=%s", session_log_context(room_name, customer_id, session_id, mode, active_escalation_id=active_escalation_id), ex, exc_info=True)
 
@@ -990,18 +1347,68 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 app_version = f"{BUILD_VERSION} ({BUILD_COMMIT_ID})"
 app = FastAPI(title="Credit Support Voice Agent API", version=app_version)
 active_sessions = {}
-MAX_CONCURRENT_SESSIONS = runtime_config.max_concurrent_sessions
+session_capacity = SessionCapacity(
+    max_units=runtime_config.max_concurrent_sessions,
+    audio_units=runtime_config.audio_session_capacity_units,
+    video_units=runtime_config.video_session_capacity_units,
+)
+session_registry_lock = asyncio.Lock()
 
 @app.get("/healthz")
 @app.get("/")
 def health_check():
     return {
         "status": "healthy",
-        "active_sessions": len(active_sessions),
+        **session_capacity.snapshot(),
         "build_version": BUILD_VERSION,
         "build_commit_id": BUILD_COMMIT_ID,
-        "build_time": BUILD_TIME
+        "build_time": BUILD_TIME,
     }
+
+
+@app.get("/internal/readiness")
+async def readiness_check(customer_id: str | None = None):
+    """Verify runtime dependencies without performing a banking mutation."""
+    import agent.agent as agent_module
+
+    authorization = None
+    try:
+        token = agent_module.get_auth_token_for_audience(
+            agent_module.BANKING_SERVICE_URL
+        )
+        authorization = f"Bearer {token}"
+    except Exception:
+        logger.exception("Unable to create banking-service readiness credential")
+
+    customer_probe = None
+    if customer_id:
+        async def probe_customer_context():
+            return await load_session_bootstrap(
+                banking_service_url=agent_module.BANKING_SERVICE_URL,
+                headers={
+                    "Authorization": authorization or "",
+                    "x-target-customer-id": customer_id,
+                },
+            )
+
+        customer_probe = probe_customer_context
+
+    report = await build_readiness_report(
+        runtime_config=runtime_config,
+        banking_service_url=agent_module.BANKING_SERVICE_URL,
+        banking_service_mcp_url=agent_module.get_banking_service_mcp_url(),
+        authorization_header=authorization,
+        customer_probe=customer_probe,
+        deployment_metadata={
+            "version": BUILD_VERSION,
+            "commit": BUILD_COMMIT_ID,
+            "revision": os.getenv("K_REVISION"),
+        },
+    )
+    return JSONResponse(
+        status_code=200 if report["status"] == "ready" else 503,
+        content=report,
+    )
 
 @app.post("/internal/comms/voice/start")
 async def start_session(room_name: str, customer_id: str, session_id: str, request: Request, mode: str = "audio"):
@@ -1019,31 +1426,55 @@ async def start_session(room_name: str, customer_id: str, session_id: str, reque
             agent_module.BANKING_SERVICE_URL = own_url.replace("credit-support-agent", "banking-service")
             logger.info("Dynamically resolved BANKING_SERVICE_URL %s banking_service_url=%s", session_log_context(room_name, customer_id, session_id, mode), agent_module.BANKING_SERVICE_URL)
 
-    if len(active_sessions) >= MAX_CONCURRENT_SESSIONS:
-        logger.warning("Rejecting start request %s max_capacity=%s", session_log_context(room_name, customer_id, session_id, mode), MAX_CONCURRENT_SESSIONS)
-        raise HTTPException(status_code=429, detail="Container session capacity reached.")
+    async with session_registry_lock:
+        # Release a prior reservation before checking capacity so reconnecting a
+        # room cannot be rejected merely because its old task occupies the slot.
+        old_task = active_sessions.pop(room_name, None)
+        if old_task is not None:
+            session_capacity.release(room_name)
+            logger.info("Cancelling existing session to allow replacement %s", session_log_context(room_name, customer_id, session_id, mode))
+            old_task.cancel()
+            try:
+                await asyncio.wait_for(old_task, timeout=3.0)
+            except (asyncio.CancelledError, TimeoutError):
+                logger.info("Old task cleanup complete or timed out %s", session_log_context(room_name, customer_id, session_id, mode))
+            except Exception as error:
+                logger.warning(
+                    "Old task ended with an error during replacement %s error_type=%s",
+                    session_log_context(room_name, customer_id, session_id, mode),
+                    type(error).__name__,
+                )
 
-    # If a session is already active for this room, cancel it to allow the new one to take over
-    if room_name in active_sessions:
-        logger.info("Cancelling existing session to allow replacement %s", session_log_context(room_name, customer_id, session_id, mode))
-        old_task = active_sessions[room_name]
-        old_task.cancel()
         try:
-            await asyncio.wait_for(old_task, timeout=3.0)
-        except Exception as e:
-            logger.info("Old task cleanup complete or timed out %s error=%s", session_log_context(room_name, customer_id, session_id, mode), e)
-        active_sessions.pop(room_name, None)
+            reservation = session_capacity.reserve(room_name, mode)
+        except OverflowError as error:
+            logger.warning(
+                "Rejecting start request %s capacity=%s",
+                session_log_context(room_name, customer_id, session_id, mode),
+                session_capacity.snapshot(),
+            )
+            raise HTTPException(status_code=429, detail="Container session capacity reached.") from error
 
-    async def run_session_wrapper():
-        try:
-            await run_voice_agent_session(room_name, customer_id, session_id, mode)
-        finally:
-            active_sessions.pop(room_name, None)
-            logger.info("Cleaned up room registry %s", session_log_context(room_name, customer_id, session_id, mode))
+        task = None
 
-    # Create the task wrapper and store in active_sessions map
-    task = asyncio.create_task(run_session_wrapper())
-    active_sessions[room_name] = task
+        async def run_session_wrapper():
+            try:
+                await run_voice_agent_session(room_name, customer_id, session_id, mode)
+            finally:
+                # An older cancelled task must never delete a newer replacement.
+                if active_sessions.get(room_name) is task:
+                    active_sessions.pop(room_name, None)
+                    session_capacity.release(room_name)
+                    logger.info("Cleaned up room registry %s", session_log_context(room_name, customer_id, session_id, mode))
+
+        task = asyncio.create_task(run_session_wrapper())
+        active_sessions[room_name] = task
+        logger.info(
+            "Reserved voice capacity %s mode_units=%s capacity=%s",
+            session_log_context(room_name, customer_id, session_id, mode),
+            reservation.units,
+            session_capacity.snapshot(),
+        )
     
     return {"status": "LAUNCHED", "room_name": room_name}
 

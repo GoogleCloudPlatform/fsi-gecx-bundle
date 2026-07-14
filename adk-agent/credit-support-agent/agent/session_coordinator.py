@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from agent.fraud_voice import build_fraud_playbook, build_initial_greeting
+from agent.terminal_outcome import TerminalOutcome
 
 logger = logging.getLogger("voice_agent")
 
@@ -44,6 +45,15 @@ DEFAULT_GUIDANCE = {
     "topics": [],
     "agent_guidance_summary": "",
 }
+
+
+def should_abandon_escalation(
+    active_escalation_id: str | None, terminal_outcome: TerminalOutcome
+) -> bool:
+    """Return whether cleanup must abandon an escalation with no handoff."""
+    return bool(
+        active_escalation_id and terminal_outcome != TerminalOutcome.HANDOFF
+    )
 
 
 def default_session_bootstrap() -> VoiceSessionBootstrap:

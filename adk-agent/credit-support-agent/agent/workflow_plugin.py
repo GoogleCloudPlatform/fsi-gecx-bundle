@@ -47,12 +47,19 @@ class FraudWorkflowStatePlugin(BasePlugin):
                 )
 
         input_transcription = getattr(event, "input_transcription", None)
+        customer_text = None
         if input_transcription and input_transcription.finished:
+            customer_text = input_transcription.text
+        elif getattr(event, "author", None) == "user":
+            parts = getattr(getattr(event, "content", None), "parts", None) or []
+            text_parts = [part.text for part in parts if getattr(part, "text", None)]
+            customer_text = "\n".join(text_parts).strip() or None
+        if customer_text is not None:
             authorization = updated.get("workflow_authorization") or {}
             if authorization.get("status") in {"PENDING", "CONFIRMED", "UNCLEAR"}:
                 authorization = apply_customer_authorization_response(
                     authorization,
-                    transcript=input_transcription.text,
+                    transcript=customer_text,
                     customer_event_id=event_id,
                 )
                 updated["workflow_authorization"] = authorization
@@ -68,7 +75,7 @@ class FraudWorkflowStatePlugin(BasePlugin):
                 updated = apply_wallet_transcript_event(
                     updated,
                     author="user",
-                    transcript=input_transcription.text,
+                    transcript=customer_text,
                     event_id=event_id,
                 )
 

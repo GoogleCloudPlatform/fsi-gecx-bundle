@@ -220,8 +220,17 @@ resource "google_cloudbuild_trigger" "credit_support_agent_deploy_trigger" {
   include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
 
   substitutions = {
-    _REGION         = var.region
-    _TRIGGER_DEPLOY = "true"
+    _REGION                                       = var.region
+    _TRIGGER_DEPLOY                               = "true"
+    _VOICE_AGENT_CPU                              = tostring(var.voice_agent_cpu)
+    _VOICE_AGENT_MEMORY                           = var.voice_agent_memory
+    _VOICE_AGENT_REQUEST_TIMEOUT_SECONDS          = tostring(var.voice_agent_request_timeout_seconds)
+    _VOICE_AGENT_MIN_INSTANCES                    = tostring(var.voice_agent_min_instances)
+    _VOICE_AGENT_MAX_INSTANCES                    = tostring(var.voice_agent_max_instances)
+    _VOICE_AGENT_MAX_INSTANCE_REQUEST_CONCURRENCY = tostring(var.voice_agent_max_instance_request_concurrency)
+    _VOICE_AGENT_MAX_CONCURRENT_SESSIONS          = tostring(var.voice_agent_max_concurrent_sessions)
+    _VOICE_AGENT_AUDIO_SESSION_CAPACITY_UNITS     = tostring(var.voice_agent_audio_session_capacity_units)
+    _VOICE_AGENT_VIDEO_SESSION_CAPACITY_UNITS     = tostring(var.voice_agent_video_session_capacity_units)
   }
 }
 

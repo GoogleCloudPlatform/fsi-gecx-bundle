@@ -197,3 +197,47 @@ async def test_plugin_confirms_prepared_triage_only_after_separate_turns() -> No
     assert prompted["workflow_authorization"]["assistant_event_id"] == "agent-event"
     assert confirmed["workflow_authorization"]["status"] == "CONFIRMED"
     assert confirmed["workflow_authorization"]["customer_event_id"] == "user-event"
+
+
+@pytest.mark.asyncio
+async def test_plugin_accepts_typed_customer_confirmation() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    authorization = create_workflow_authorization(
+        action=TRIAGE_FRAUD_CASE,
+        payload={
+            "fraud_alert_id": "fraud-123",
+            "disputed_authorization_ids": ["auth-1"],
+            "disputed_transaction_ids": [],
+            "issue_replacement": True,
+        },
+        session_id="session-1",
+    )
+    authorization["status"] = "PENDING"
+    authorization["assistant_event_id"] = "agent-prompt"
+    playbook["workflow_authorization"] = authorization
+    session = SimpleNamespace(
+        state={"session_id": "session-1", "fraud_playbook": playbook}
+    )
+    context = SimpleNamespace(session=session)
+    plugin = FraudWorkflowStatePlugin()
+    event = Event(
+        id="typed-user-event",
+        author="user",
+        actions={},
+        content=types.Content(
+            role="user", parts=[types.Part(text="Yes, that is correct.")]
+        ),
+    )
+
+    await plugin.on_event_callback(invocation_context=context, event=event)
+
+    updated = event.actions.state_delta["fraud_playbook"]
+    assert updated["workflow_authorization"]["status"] == "CONFIRMED"
+    assert updated["workflow_authorization"]["customer_event_id"] == (
+        "typed-user-event"
+    )

@@ -14,6 +14,7 @@
 
 import os
 import contextvars
+import time
 import google
 import httpx
 from google.adk.agents import Agent
@@ -22,8 +23,15 @@ from google.genai.types import ThinkingConfig
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams, create_mcp_http_client
 from google.adk.tools import ToolContext
 
-from agent.events import DataChannelEvent
+from agent.events import DataChannelEvent, INTERNAL_TOOL_RUNTIME_STATUS
 from agent.guidance_snapshot import guidance_observability_payload
+from agent.log_safety import (
+    stable_log_reference,
+    tool_args_log_summary,
+    tool_response_succeeded,
+    tool_result_log_summary,
+)
+from agent.telemetry import record_tool_completed
 from agent.fraud_voice import (
     build_triage_model_result,
     invalidate_wallet_authorization,
@@ -74,18 +82,23 @@ def get_banking_service_mcp_url() -> str:
 
 def build_log_context(state: dict | None = None, **extra) -> dict:
     context = {
-        "customer_id": active_customer_id_var.get(),
+        "customer_ref": stable_log_reference(active_customer_id_var.get(), prefix="customer"),
     }
     if state:
         context.update({
-            "room_name": state.get("room_name"),
-            "session_id": state.get("session_id"),
+            "room_ref": stable_log_reference(state.get("room_name"), prefix="room"),
+            "session_ref": stable_log_reference(
+                state.get("session_id"), prefix="session"
+            ),
             "mode": state.get("mode"),
         })
         fraud_context = state.get("fraud_context") or {}
         fraud_playbook = state.get("fraud_playbook") or {}
         context.update({
-            "fraud_alert_id": fraud_context.get("fraud_alert_id") or fraud_playbook.get("fraud_alert_id"),
+            "fraud_alert_ref": stable_log_reference(
+                fraud_context.get("fraud_alert_id") or fraud_playbook.get("fraud_alert_id"),
+                prefix="alert",
+            ),
             "fraud_entry_mode": fraud_playbook.get("entry_mode"),
             "fraud_alert_inspected": fraud_playbook.get("open_alert_inspected"),
             "fraud_resolution_completed": fraud_playbook.get("resolution_completed"),
@@ -553,12 +566,12 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
             state=tool_context.state if hasattr(tool_context, "state") else None,
             tool_name=tool_name,
         ),
-        args,
+        tool_args_log_summary(tool_name, args),
     )
     logger.debug(
-        "[CALLBACK] fraud callback raw context fraud_alert_id=%s fraud_playbook=%s",
-        fraud_context.get("fraud_alert_id"),
-        fraud_playbook,
+        "[CALLBACK] fraud callback state fraud_alert_present=%s playbook_keys=%s",
+        bool(fraud_context.get("fraud_alert_id")),
+        sorted(fraud_playbook.keys()),
     )
     mitigation_tools = {
         "report_lost_stolen_card",
@@ -617,6 +630,9 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
         tool_context.state["fraud_playbook"] = fraud_playbook
     set_tool_processing(True)
     tool_context.state["is_processing_tool"] = True
+    tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
+    tool_started[tool_name] = time.monotonic()
+    tool_context.state["_voice_tool_started_at"] = tool_started
     return None
 
 async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> None:
@@ -629,11 +645,22 @@ async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> N
             state=tool_context.state if hasattr(tool_context, "state") else None,
             tool_name=tool_name,
         ),
-        error,
-        args,
+        type(error).__name__,
+        tool_args_log_summary(tool_name, args),
     )
     set_tool_processing(False)
     tool_context.state["is_processing_tool"] = False
+    tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
+    started_at = tool_started.pop(tool_name, time.monotonic())
+    tool_context.state["_voice_tool_started_at"] = tool_started
+    record_tool_completed(tool_name, "error", time.monotonic() - started_at)
+    notify_event(
+        {
+            "type": INTERNAL_TOOL_RUNTIME_STATUS,
+            "tool": tool_name,
+            "outcome": "error",
+        }
+    )
     playbook = dict(tool_context.state.get("fraud_playbook") or {})
     authorization = playbook.get("workflow_authorization") or {}
     if authorization.get("status") == "EXECUTING":
@@ -660,12 +687,21 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
             state=tool_context.state if hasattr(tool_context, "state") else None,
             tool_name=tool_name,
         ),
-        tool_response,
+        tool_result_log_summary(tool_response),
     )
     set_tool_processing(False)
     tool_context.state["is_processing_tool"] = False
     # Check if the tool succeeded
     structured = tool_response.get("structuredContent") if isinstance(tool_response, dict) else None
+    success = tool_response_succeeded(tool_name, tool_response)
+    tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
+    started_at = tool_started.pop(tool_name, time.monotonic())
+    tool_context.state["_voice_tool_started_at"] = tool_started
+    record_tool_completed(
+        tool_name,
+        "success" if success else "failure",
+        time.monotonic() - started_at,
+    )
     if isinstance(structured, dict):
         guidance = structured.get("support_guidance")
         if isinstance(guidance, dict) and guidance:
@@ -697,6 +733,13 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
                     "last_four": item.get("last_four"),
                 }
             tool_context.state["recent_transaction_index"] = recent_index
+    notify_event(
+        {
+            "type": INTERNAL_TOOL_RUNTIME_STATUS,
+            "tool": tool_name,
+            "outcome": "success" if success else "failure",
+        }
+    )
     if isinstance(tool_response, dict) and tool_response.get("status") == "SUCCESS":
         playbook = dict(tool_context.state.get("fraud_playbook") or {})
         if tool_name == "transfer_to_human":
