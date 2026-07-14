@@ -413,9 +413,7 @@ async def trigger_voice_agent_session_async(
         )
         return
 
-    logger.info(
-        f"Triggering voice agent dispatch: {voice_service_url} for room: {room_name}"
-    )
+    logger.info("Triggering voice agent dispatch.")
 
     headers = {}
     if voice_service_url.startswith("https"):
@@ -430,7 +428,7 @@ async def trigger_voice_agent_session_async(
         async with httpx.AsyncClient() as client:
             res = await client.post(
                 f"{voice_service_url}/internal/comms/voice/start",
-                params={
+                json={
                     "room_name": room_name,
                     "customer_id": customer_id,
                     "session_id": session_id,
@@ -440,9 +438,7 @@ async def trigger_voice_agent_session_async(
                 timeout=5.0,
             )
             if res.status_code == 200:
-                logger.info(
-                    f"Voice agent dispatch trigger successful: {res.status_code} - {res.json()}"
-                )
+                logger.info("Voice agent dispatch trigger successful: %s", res.status_code)
             else:
                 logger.error(
                     f"Voice agent dispatcher returned non-success status {res.status_code}: {res.text}"
@@ -464,7 +460,7 @@ def get_voice_room_token(
 
     Triggers the voice worker to dynamically join the room.
     """
-    logger.info(f"Generating LiveKit token for customer: {customer_id}")
+    logger.info("Generating LiveKit token for authenticated customer.")
     room_name = f"room-{customer_id}"
     import uuid
 

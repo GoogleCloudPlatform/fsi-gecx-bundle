@@ -9,6 +9,7 @@ import numpy as np
 from livekit import rtc
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 import uvicorn
 
 # Prepend the directory to sys.path
@@ -76,6 +77,7 @@ if os.getenv("VERBOSE_LOGGING") == "true":
 else:
     logging.getLogger("google_adk").setLevel(logging.ERROR)
     logging.getLogger("google_genai").setLevel(logging.ERROR)
+logging.getLogger("mcp.client.streamable_http").setLevel(logging.WARNING)
 
 
 def session_log_context(room_name: str, customer_id: str, session_id: str, mode: str, **extra) -> str:
@@ -1354,6 +1356,13 @@ session_capacity = SessionCapacity(
 )
 session_registry_lock = asyncio.Lock()
 
+
+class VoiceSessionStartRequest(BaseModel):
+    room_name: str
+    customer_id: str
+    session_id: str
+    mode: str = "audio"
+
 @app.get("/healthz")
 @app.get("/")
 def health_check():
@@ -1367,9 +1376,11 @@ def health_check():
 
 
 @app.get("/internal/readiness")
-async def readiness_check(customer_id: str | None = None):
+async def readiness_check(request: Request, customer_id: str | None = None):
     """Verify runtime dependencies without performing a banking mutation."""
     import agent.agent as agent_module
+
+    customer_id = request.headers.get("x-target-customer-id") or customer_id
 
     authorization = None
     try:
@@ -1411,7 +1422,21 @@ async def readiness_check(customer_id: str | None = None):
     )
 
 @app.post("/internal/comms/voice/start")
-async def start_session(room_name: str, customer_id: str, session_id: str, request: Request, mode: str = "audio"):
+async def start_session(
+    request: Request,
+    payload: VoiceSessionStartRequest | None = None,
+    room_name: str | None = None,
+    customer_id: str | None = None,
+    session_id: str | None = None,
+    mode: str = "audio",
+):
+    if payload is not None:
+        room_name = payload.room_name
+        customer_id = payload.customer_id
+        session_id = payload.session_id
+        mode = payload.mode
+    if not room_name or not customer_id or not session_id:
+        raise HTTPException(status_code=422, detail="Missing voice session dispatch fields.")
     try:
         mode = validate_session_request(runtime_config, mode=mode)
     except ValueError as error:
@@ -1481,4 +1506,4 @@ async def start_session(room_name: str, customer_id: str, session_id: str, reque
 if __name__ == "__main__":
     logger.info(f"Starting Credit Support Voice Agent version: {app_version}")
     port = int(os.getenv("PORT", "8080"))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port, access_log=False)

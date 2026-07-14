@@ -86,7 +86,7 @@ async def _open_probe_session(args, index: int) -> dict:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
                 args.agent_start_url,
-                params={
+                json={
                     "room_name": room_name,
                     "customer_id": customer_id,
                     "session_id": str(uuid.uuid4()),

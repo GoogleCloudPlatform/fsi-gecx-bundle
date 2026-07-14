@@ -203,11 +203,11 @@ def run_readiness_proxy(
     )
     try:
         url = f"http://127.0.0.1:{port}/internal/readiness"
-        params = {"customer_id": customer_id} if customer_id else None
+        headers = {"x-target-customer-id": customer_id} if customer_id else None
         last_error: Exception | None = None
         for _ in range(30):
             try:
-                response = httpx.get(url, params=params, timeout=10.0)
+                response = httpx.get(url, headers=headers, timeout=10.0)
                 return response.json()
             except Exception as error:
                 last_error = error

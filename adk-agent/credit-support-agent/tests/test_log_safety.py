@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from agent.agent import build_log_context
 from agent.log_safety import (
     stable_log_reference,
@@ -94,3 +96,18 @@ def test_failed_mutation_remains_a_tool_failure() -> None:
             }
         },
     )
+
+
+def test_voice_dispatch_identifiers_do_not_use_logged_query_strings() -> None:
+    root = Path(__file__).resolve().parents[3]
+    voice_runtime = (root / "adk-agent/credit-support-agent/voice_agent.py").read_text()
+    capacity_probe = (
+        root / "adk-agent/credit-support-agent/scripts/voice_capacity_probe.py"
+    ).read_text()
+    canary = (root / "adk-agent/credit-support-agent/scripts/voice_canary.py").read_text()
+    banking_router = (root / "banking-service/routers/credit_card.py").read_text()
+
+    assert "uvicorn.run(app, host=\"0.0.0.0\", port=port, access_log=False)" in voice_runtime
+    assert 'json={\n                    "room_name": room_name' in capacity_probe
+    assert 'json={\n                    "room_name": room_name' in banking_router
+    assert 'headers = {"x-target-customer-id": customer_id}' in canary
