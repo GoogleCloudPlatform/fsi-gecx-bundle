@@ -19,6 +19,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import BillPayModal from './BillPayModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
+import GcpInfoModal from './GcpInfoModal.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 
@@ -818,74 +819,49 @@ function HomeView({
             </div>
           )}
 
-          {isSchemaModalOpen && (
-            <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col animate-scale-up">
-                {/* Header bar */}
-                <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950/50 flex-shrink-0">
-                  <div className="flex items-center gap-2">
-                    <GoogleCloudIcon className="w-5 h-5 text-emerald-500" />
-                    <h3 className="font-bold text-slate-900 dark:text-white text-base">Enterprise Data Layer Architecture</h3>
-                  </div>
-                  <button 
-                    onClick={() => setIsSchemaModalOpen(false)}
-                    className="p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Content body */}
-                <div className="p-6 space-y-4 text-sm text-slate-600 dark:text-slate-300 leading-relaxed text-left font-normal">
-                  <p>
-                    Our cloud-native banking platform utilizes a multi-schema relational data architecture designed for real-time transaction processing, high-concurrency simulation, and regulatory compliance.
-                  </p>
-                  <div className="space-y-2.5 pt-1 text-xs">
-                    <div className="flex items-start gap-2.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0"></span>
-                      <div>
-                        <strong className="text-slate-900 dark:text-white font-bold">Transactional Ledgers:</strong> Event-driven outbox pattern recording append-only cryptographic audit logs and double-entry accounting for pending holds and posted transactions.
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2.5">
-                      <span className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0"></span>
-                      <div>
-                        <strong className="text-slate-900 dark:text-white font-bold">CDC Iceberg Pipeline:</strong> Real-time Write-Ahead Log (WAL) streaming via Google Cloud Datastream into Apache Iceberg tables and BigQuery Medallion Materialized Views for sub-second OLAP compliance analytics.
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2.5">
-                      <span className="w-2 h-2 rounded-full bg-purple-500 mt-1.5 shrink-0"></span>
-                      <div>
-                        <strong className="text-slate-900 dark:text-white font-bold">Sandbox Isolation:</strong> Automated persona provisioning with multi-layered KYC credit profile isolation and real-time surge data generators.
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center text-xs">
-                    <span className="text-slate-500 font-mono">Enterprise Data Platform</span>
-                    <a 
-                      href="https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/tree/main/docs/architecture/data-platform" 
-                      target="_blank" 
-                      rel="noreferrer" 
-                      className="text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 font-bold"
-                    >
-                      View Architecture Docs
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
+          <GcpInfoModal
+            isOpen={isSchemaModalOpen}
+            onClose={() => setIsSchemaModalOpen(false)}
+            title="Enterprise Data Layer Architecture"
+          >
+            <div className="space-y-4 text-sm text-slate-600 dark:text-slate-300 leading-relaxed text-left font-normal mt-2">
+              <p>
+                Our cloud-native banking platform utilizes a multi-schema relational data architecture designed for real-time transaction processing, high-concurrency simulation, and regulatory compliance.
+              </p>
+              <div className="space-y-2.5 pt-1 text-xs">
+                <div className="flex items-start gap-2.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0"></span>
+                  <div>
+                    <strong className="text-slate-900 dark:text-white font-bold">Transactional Ledgers:</strong> Event-driven outbox pattern recording append-only cryptographic audit logs and double-entry accounting for pending holds and posted transactions.
                   </div>
                 </div>
-
-                {/* Footer */}
-                <div className="p-4 bg-slate-50 dark:bg-slate-950/30 border-t border-slate-200 dark:border-slate-800 flex justify-end">
-                  <button 
-                    onClick={() => setIsSchemaModalOpen(false)}
-                    className="px-5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-white font-bold text-xs transition cursor-pointer"
-                  >
-                    Got it
-                  </button>
+                <div className="flex items-start gap-2.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0"></span>
+                  <div>
+                    <strong className="text-slate-900 dark:text-white font-bold">CDC Iceberg Pipeline:</strong> Real-time Write-Ahead Log (WAL) streaming via Google Cloud Datastream into Apache Iceberg tables and BigQuery Medallion Materialized Views for sub-second OLAP compliance analytics.
+                  </div>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <span className="w-2 h-2 rounded-full bg-purple-500 mt-1.5 shrink-0"></span>
+                  <div>
+                    <strong className="text-slate-900 dark:text-white font-bold">Sandbox Isolation:</strong> Automated persona provisioning with multi-layered KYC credit profile isolation and real-time surge data generators.
+                  </div>
                 </div>
               </div>
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center text-xs">
+                <span className="text-slate-500 font-mono">Enterprise Data Platform</span>
+                <a 
+                  href="https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/tree/main/docs/architecture/data-platform" 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 font-bold"
+                >
+                  View Architecture Docs
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
             </div>
-          )}
+          </GcpInfoModal>
 
           <BillPayModal
             isOpen={isBillPayOpen}
