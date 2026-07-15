@@ -475,7 +475,6 @@ docker-run-banking-ui: ## Run the banking-ui container locally
 	CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME=$$(grep CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME banking-ui/public/config.js 2>/dev/null | cut -d'"' -f2); \
 	CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME=$$(grep CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME banking-ui/public/config.js 2>/dev/null | cut -d'"' -f2); \
 	LIVEKIT_URL=$$(grep LIVEKIT_URL banking-ui/public/config.js 2>/dev/null | cut -d'"' -f2); \
-	SHOW_INFO_MODALS=$$(grep SHOW_INFO_MODALS banking-ui/public/config.js 2>/dev/null | cut -d'"' -f2); \
 	$(DOCKER) run -ti \
 	-e GOOGLE_CLOUD_PROJECT=$(PROJECT_ID) \
 	-e BASE_URL="http://localhost:5174" \
@@ -494,7 +493,6 @@ docker-run-banking-ui: ## Run the banking-ui container locally
 	-e VITE_CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME="$$CX_AGENT_STUDIO_POPULATE_FORM_CONTENT_TOOL_NAME" \
 	-e VITE_CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME="$$CX_AGENT_STUDIO_GET_USER_LOCATION_TOOL_NAME" \
 	-e VITE_LIVEKIT_URL="$$LIVEKIT_URL" \
-	-e VITE_SHOW_INFO_MODALS="$$SHOW_INFO_MODALS" \
 	-p 5174:8080 \
 	banking-ui-test
 
