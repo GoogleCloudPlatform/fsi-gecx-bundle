@@ -85,7 +85,6 @@ export default function AppRoutes({
 
       // https://firebase.google.com/docs/reference/js/analytics.md#logevent_0792e28
       window.firebaseLogEvent(window.firebaseAnalytics, 'page_view', payload);
-      console.log('ANALYTICS_PAGE_VIEW:', payload);
       prevLocationRef.current = location;
     }
   }, [location]);

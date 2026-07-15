@@ -424,6 +424,16 @@ function AppContent() {
   }, [fbUser, fcmToken]);
 
   useEffect(() => {
+    if (window.firebaseAnalytics && window.firebaseSetUserId) {
+      if (fbUser && fbUser.uid) {
+        window.firebaseSetUserId(window.firebaseAnalytics, fbUser.uid);
+      } else {
+        window.firebaseSetUserId(window.firebaseAnalytics, null);
+      }
+    }
+  }, [fbUser]);
+
+  useEffect(() => {
     if (!fbUser) return;
 
     if ('permissions' in navigator) {

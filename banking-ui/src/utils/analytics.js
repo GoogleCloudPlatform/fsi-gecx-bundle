@@ -55,6 +55,5 @@ export const logInteractionEvent = (category, trackingName, additionalProps = {}
 
     // https://firebase.google.com/docs/reference/js/analytics.md#logevent_1f89527
     window.firebaseLogEvent(window.firebaseAnalytics, 'select_content', payload);
-    console.log('ANALYTICS_EVENT:', payload);
   }
 };
