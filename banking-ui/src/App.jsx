@@ -124,21 +124,13 @@ const getGithubCommitUrl = () => {
 };
 
 const getFormattedBuildTime = () => {
+  if (window.env?.BUILD_VERSION === 'local-dev') {
+    window.env.BUILD_TIME = Date.now();
+  }
   if (!window.env?.BUILD_TIME || window.env.BUILD_TIME === '${BUILD_TIME}' || window.env.BUILD_TIME === '0') return 'unknown';
   const buildTimeMs = parseInt(window.env.BUILD_TIME, 10);
   if (isNaN(buildTimeMs)) return 'unknown';
-  const date = new Date(buildTimeMs);
-  const pad = (n) => n.toString().padStart(2, '0');
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1);
-  const day = pad(date.getDate());
-  let hours = date.getHours();
-  const ampm = hours >= 12 ? 'pm' : 'am';
-  hours = hours % 12;
-  hours = hours ? hours : 12; 
-  const min = pad(date.getMinutes());
-  const sec = pad(date.getSeconds());
-  return `${year}-${month}-${day} ${pad(hours)}:${min}:${sec} ${ampm}`;
+  return new Date(buildTimeMs).toLocaleString();
 };
 
 function AppContent() {
@@ -2087,7 +2079,7 @@ function AppContent() {
                     <GoogleCloudIcon className="w-3 h-3" />
                   </button>
                 </div>
-                <div className="text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5 -mt-1">
+                <div className="text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5 -mt-3">
                   <span>Build Time: {getFormattedBuildTime()}</span>
                 </div>
               </>
