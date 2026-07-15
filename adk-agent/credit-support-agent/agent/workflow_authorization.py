@@ -19,7 +19,8 @@ _AFFIRMATIVE_PATTERN = re.compile(
     r"sounds good|okay|ok|correct|exactly|affirmative|that(?:'|’)s right|that is right|"
     r"that(?:'|’)s correct|that is correct)\b|"
     r"\b(?:could|can|would)\s+you\s+(?:please\s+)?(?:do that|proceed|go ahead|push|add)\b|"
-    r"\bthat would be great\b|\bi(?:'d| would) like that\b|\bi want that\b)",
+    r"\bthat(?: would|'d|’d) be (?:great|perfect|helpful)\b|"
+    r"\bi(?:'d|’d| would) (?:like|appreciate) that\b|\bi want that\b|\blet(?:'|’)s do it\b)",
     re.IGNORECASE,
 )
 _DECLINE_PATTERN = re.compile(
