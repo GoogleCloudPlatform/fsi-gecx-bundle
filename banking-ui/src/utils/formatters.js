@@ -73,5 +73,3 @@ export const getPhonePlaceholder = (locale = navigator.language) => {
   if (locale.startsWith('it-IT')) return "Phone Number (e.g. 333 123 4567)";
   return "Phone Number";
 };
-
-
