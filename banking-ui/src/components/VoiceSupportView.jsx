@@ -301,7 +301,7 @@ export default function VoiceSupportView() {
   const enableAvatarModality = window.env?.ENABLE_AVATAR_MODALITY === true || window.env?.ENABLE_AVATAR_MODALITY === 'true' || import.meta.env.VITE_ENABLE_AVATAR_MODALITY === 'true';
 
   // New engine-specific configuration states
-  const [engine, setEngine] = useState(enableAvatarModality ? 'livekit' : 'gecx'); // 'livekit' | 'gecx'
+  const [engine, setEngine] = useState('livekit'); // 'livekit' | 'gecx'
   const [volume, setVolume] = useState(0.8);
   const [latency, setLatency] = useState(0);
   const [audioInputs, setAudioInputs] = useState([]);
@@ -1473,7 +1473,7 @@ export default function VoiceSupportView() {
         </div>
 
         {/* Engine Selection Toggle */}
-        {enableAvatarModality && !isConnected && !isConnecting && (
+        {!isConnected && !isConnecting && (
           <div id="voice-engine-select" className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-950/60 rounded-full border border-slate-200 dark:border-slate-800/80 mt-4">
             <button
               onClick={() => setEngine('livekit')}
@@ -1907,17 +1907,19 @@ export default function VoiceSupportView() {
               <Mic size={14} />
               Voice Call
             </button>
-            <button
-              onClick={() => setMode('video')}
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-                mode === 'video'
-                  ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-650 dark:text-indigo-400'
-                  : 'text-slate-500 dark:text-slate-450 hover:text-slate-700 dark:hover:text-slate-200'
-              }`}
-            >
-              <Video size={14} />
-              Live Avatar
-            </button>
+            {enableAvatarModality && (
+              <button
+                onClick={() => setMode('video')}
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                  mode === 'video'
+                    ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-650 dark:text-indigo-400'
+                    : 'text-slate-500 dark:text-slate-450 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}
+              >
+                <Video size={14} />
+                Live Avatar
+              </button>
+            )}
           </div>
         )}
 
