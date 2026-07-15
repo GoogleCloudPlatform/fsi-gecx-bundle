@@ -14,7 +14,7 @@
 
 from fastapi import APIRouter
 
-from utils.version import BUILD_VERSION, BUILD_COMMIT_ID
+from utils.version import BUILD_VERSION, BUILD_COMMIT_ID, BUILD_TIME
 
 router = APIRouter(tags=["system"])
 
@@ -23,6 +23,7 @@ router = APIRouter(tags=["system"])
 async def health_check():
     return {
         "status": "ok",
-        "version": BUILD_VERSION,
-        "commit": BUILD_COMMIT_ID
+        "build_version": BUILD_VERSION,
+        "build_commit_id": BUILD_COMMIT_ID,
+        "build_time": BUILD_TIME
     }

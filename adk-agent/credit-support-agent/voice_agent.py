@@ -29,7 +29,7 @@ from agent.fraud_voice import (
 from agent.instructions import compose_session_instruction
 from agent.live_runtime import build_live_run_config, normalize_live_event
 from agent.workflow_plugin import FraudWorkflowStatePlugin
-from agent.version import BUILD_VERSION, BUILD_COMMIT_ID
+from agent.version import BUILD_VERSION, BUILD_COMMIT_ID, BUILD_TIME
 from agent.events import DataChannelEvent
 from google.adk.apps import App
 from google.adk.runners import Runner
@@ -1108,8 +1108,9 @@ def health_check():
     return {
         "status": "healthy",
         "active_sessions": len(active_sessions),
-        "version": BUILD_VERSION,
-        "commit": BUILD_COMMIT_ID
+        "build_version": BUILD_VERSION,
+        "build_commit_id": BUILD_COMMIT_ID,
+        "build_time": BUILD_TIME
     }
 
 @app.post("/internal/comms/voice/start")

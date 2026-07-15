@@ -2004,13 +2004,14 @@ async def run_activity_surge_task(
 
 @app.get("/health")
 def health():
-    from utils.version import BUILD_VERSION, BUILD_COMMIT_ID
+    from utils.version import BUILD_VERSION, BUILD_COMMIT_ID, BUILD_TIME
 
     return {
         "status": "ok",
         "service": "data-generator",
-        "version": BUILD_VERSION,
-        "commit": BUILD_COMMIT_ID,
+        "build_version": BUILD_VERSION,
+        "build_commit_id": BUILD_COMMIT_ID,
+        "build_time": BUILD_TIME,
     }
 
 
