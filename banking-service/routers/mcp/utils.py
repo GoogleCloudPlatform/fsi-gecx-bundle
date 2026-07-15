@@ -24,6 +24,7 @@ from fastmcp import Context
 from utils.auth import validate_firebase_token
 from utils.env import is_running_locally
 from utils.database import SessionLocal
+from utils.log_safety import stable_log_reference
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,10 @@ def _extract_customer_identity(ctx: Context) -> str:
     if iap_header:
         # Normalize standard Argolis/GCP email identity claims
         email = iap_header.replace("accounts.google.com:", "").strip()
-        logger.info(f"Identity verified via IAP header context: {email}")
+        logger.info(
+            "Identity verified via IAP header context identity_ref=%s",
+            stable_log_reference(email, "identity"),
+        )
         return email
         
     # 2. Check custom development authorization context header (strictly gated to Local Development environment)
@@ -62,7 +66,10 @@ def _extract_customer_identity(ctx: Context) -> str:
         if dev_auth:
             # Development/Sandbox bypass parsing
             email = dev_auth.replace("Bearer ", "").strip()
-            logger.info(f"Identity verified via Forwarded Context: {email}")
+            logger.info(
+                "Identity verified via forwarded context identity_ref=%s",
+                stable_log_reference(email, "identity"),
+            )
             return email
         
     logger.error("Authentication context missing from ASGI request headers.")
@@ -116,26 +123,31 @@ def requires_user_assertion(func):
                     from utils.auth import validate_google_id_token, is_support_staff
                     caller_token = validate_google_id_token(token)
                     is_support = is_support_staff(caller_token)
-                except Exception as e:
-                    logger.error(f"GECX caller token verification failed: {e}")
-                    raise PermissionError("Access Denied: GECX caller token verification failed.")
+                except Exception as exc:
+                    logger.error(
+                        "GECX caller token verification failed error_type=%s",
+                        type(exc).__name__,
+                    )
+                    raise PermissionError(
+                        "Access Denied: GECX caller token verification failed."
+                    ) from exc
 
         # 2. Extract and validate Firebase ID Token Assertion or resolve target customer ID for support staff
-        logger.info(f"FastMCP call kwargs: {kwargs}")
-        logger.info(f"FastMCP call ctx: {ctx.__dict__ if ctx else None}")
-        
         headers = {}
         if ctx and ctx.request_context and ctx.request_context.request:
             headers = {k.lower().strip(): v.strip() for k, v in ctx.request_context.request.headers.items()}
         
-        logger.info(f"FastMCP call headers: {headers}")
-
         target_customer_id = headers.get("x-target-customer-id")
         effective_id = None
         assertion_token = None
         
         if is_support and target_customer_id:
-            logger.info(f"Support staff caller bypass: using targeted customer ID '{target_customer_id}' directly.")
+            logger.info(
+                "FastMCP invocation authorized tool=%s support_caller=true "
+                "target_customer_ref=%s assertion_present=false",
+                func.__name__,
+                stable_log_reference(target_customer_id, "customer"),
+            )
             effective_id = target_customer_id
         else:
             assertion_token = headers.get("x-forwarded-user-context") or kwargs.get("assertion_token")
@@ -149,9 +161,14 @@ def requires_user_assertion(func):
                 try:
                     validated = validate_firebase_token(assertion_token)
                     user_id = validated.claims.get("sub")
-                except Exception as e:
-                    logger.error(f"Firebase token validation failed in FastMCP: {e}")
-                    raise PermissionError(f"Access Denied: Invalid assertion token. Details: {e}")
+                except Exception as exc:
+                    logger.error(
+                        "Firebase token validation failed in FastMCP error_type=%s",
+                        type(exc).__name__,
+                    )
+                    raise PermissionError(
+                        "Access Denied: Invalid assertion token."
+                    ) from exc
 
             # 3. Resolve customer ID with Demo Fallback support
             db = SessionLocal()
@@ -166,13 +183,27 @@ def requires_user_assertion(func):
                         accounts = repo.get_all_accounts()
                         if accounts:
                             effective_id = str(accounts[0].customer_id)
-                            logger.warning(f"Customer profile '{user_id}' not seeded. Falling back to seeded profile '{effective_id}' for demo purposes.")
+                            logger.warning(
+                                "Customer profile not seeded; using demo fallback "
+                                "requested_customer_ref=%s effective_customer_ref=%s",
+                                stable_log_reference(user_id, "customer"),
+                                stable_log_reference(effective_id, "customer"),
+                            )
                         else:
                             raise ValueError(f"No financial account found for customer ID '{user_id}' and no seeded accounts exist.")
                     else:
                         raise ValueError(f"No financial account found for customer ID '{user_id}'.")
             finally:
                 db.close()
+
+            logger.info(
+                "FastMCP invocation authorized tool=%s support_caller=%s "
+                "target_customer_ref=%s assertion_present=%s",
+                func.__name__,
+                str(is_support).lower(),
+                stable_log_reference(effective_id, "customer"),
+                bool(assertion_token),
+            )
 
         # Set ContextVars for internal resolution
         t_cust = verified_customer_id_var.set(effective_id)

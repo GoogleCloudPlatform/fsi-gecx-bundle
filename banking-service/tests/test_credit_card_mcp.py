@@ -26,6 +26,8 @@ from routers.mcp.credit_card import (
     request_credit_limit_increase,
     reverse_overdraft_fee,
     triage_fraud_case,
+    triage_customer_reported_fraud,
+    get_transaction_history,
     unfreeze_card,
 )
 from models.credit_card import AccountLedger, Base, FinancialAccount, IssuedCard, TransactionAuthorization
@@ -524,6 +526,17 @@ async def test_triage_fraud_case_confirmed_fraud_success(mock_send_event, mock_v
     seeded_account.available_credit_cents -= 4200
     seeded_account.cleared_balance_cents += 3500
     db_session.add_all([pending_auth, posted_tx])
+    alert = FraudAlertService(db_session).repo.get_alert_by_id(
+        fraud_alert_id=alert_result["fraud_alert_id"]
+    )
+    alert.suspicious_transactions = list(alert.suspicious_transactions or []) + [
+        {
+            "transaction_id": posted_id,
+            "merchant_name": "FRAUD_POSTED_TEST",
+            "amount_cents": 3500,
+            "pending": False,
+        }
+    ]
     db_session.commit()
 
     result = await triage_fraud_case(
@@ -565,3 +578,67 @@ async def test_triage_fraud_case_rejects_invalid_alert_id(mock_validate_token, d
 
     assert result["success"] is False
     assert "Invalid fraud alert id" in result["message"]
+
+
+@pytest.mark.asyncio
+@patch("routers.mcp.utils.validate_firebase_token")
+async def test_get_transaction_history_returns_pending_and_posted_ids(
+    mock_validate_token, db_session
+):
+    mock_validate_token.return_value = MagicMock(
+        claims={"sub": "jane.doe@example.com", "email": "customer@example.com"}
+    )
+
+    result = await get_transaction_history(
+        assertion_token="valid-token", ctx=MagicMock()
+    )
+
+    assert result["success"] is True
+    assert any(item["pending"] and item["authorization_id"] for item in result["data"])
+    assert any(not item["pending"] and item["transaction_id"] for item in result["data"])
+
+
+@pytest.mark.asyncio
+@patch("routers.mcp.utils.validate_firebase_token")
+@patch("routers.mcp.credit_card.send_session_event")
+async def test_triage_customer_reported_fraud_success(
+    mock_send_event, mock_validate_token, db_session
+):
+    mock_validate_token.return_value = MagicMock(
+        claims={"sub": "jane.doe@example.com", "email": "customer@example.com"}
+    )
+    account = db_session.query(FinancialAccount).filter_by(
+        id="88888888-8888-4888-8888-999999999999"
+    ).first()
+    card = db_session.query(IssuedCard).filter_by(account_id=account.id).first()
+    pending = TransactionAuthorization(
+        id="abababab-abab-4bab-8bab-abababababab",
+        card_id=card.id,
+        account_id=account.id,
+        transaction_amount_cents=1700,
+        billing_amount_cents=1700,
+        status="PENDING",
+        auth_code="654321",
+        retrieval_reference_number="210987654321",
+        card_network="VISA",
+        merchant_category_code="5999",
+        merchant_name="UNKNOWN MERCHANT",
+        expires_at=datetime.datetime.now(datetime.timezone.utc)
+        + datetime.timedelta(days=7),
+    )
+    db_session.add(pending)
+    db_session.commit()
+
+    result = await triage_customer_reported_fraud(
+        disputed_authorization_ids=[str(pending.id)],
+        disputed_transaction_ids=[],
+        issue_replacement=True,
+        idempotency_key="mcp-customer-reported",
+        assertion_token="valid-token",
+        ctx=MagicMock(),
+    )
+
+    assert result["success"] is True
+    assert result["intake_source"] == "CUSTOMER_REPORTED"
+    assert result["fraud_alert"]["source"] == "CUSTOMER_REPORTED"
+    assert mock_send_event.call_args.args[1]["intake_source"] == "CUSTOMER_REPORTED"

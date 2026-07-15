@@ -75,6 +75,23 @@ class FraudAlertRepository:
             .first()
         )
 
+    def get_latest_customer_reported_alert_for_account(
+        self,
+        *,
+        credit_account_id,
+    ) -> FraudAlert | None:
+        """Return the latest reusable customer-reported intake for an account."""
+        return (
+            self.db.query(FraudAlert)
+            .filter(
+                FraudAlert.credit_account_id == credit_account_id,
+                FraudAlert.source == "CUSTOMER_REPORTED",
+                FraudAlert.status.in_(["OPEN", "TRIAGED_PENDING_REVIEW"]),
+            )
+            .order_by(FraudAlert.created_at.desc())
+            .first()
+        )
+
     def count_open_alerts(self) -> int:
         return self.db.query(FraudAlert).filter(FraudAlert.status == "OPEN").count()
 
@@ -251,6 +268,23 @@ class FraudAlertRepository:
         self.db.add(action)
         self.db.flush()
         return action
+
+    def get_latest_successful_case_action(
+        self,
+        *,
+        fraud_alert_id,
+        action_type: str,
+    ) -> FraudCaseAction | None:
+        return (
+            self.db.query(FraudCaseAction)
+            .filter(
+                FraudCaseAction.fraud_alert_id == fraud_alert_id,
+                FraudCaseAction.action_type == action_type,
+                FraudCaseAction.status == "SUCCEEDED",
+            )
+            .order_by(FraudCaseAction.completed_at.desc())
+            .first()
+        )
 
     def get_case_action_by_idempotency_key(
         self,

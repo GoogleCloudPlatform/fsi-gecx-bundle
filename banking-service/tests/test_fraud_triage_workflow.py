@@ -120,7 +120,13 @@ def fraud_alert(db_session):
                 "authorization_id": "02000000-0000-4000-8000-000000000002",
                 "merchant_name": "TEST FRAUD MERCHANT",
                 "amount_cents": 4200,
-            }
+            },
+            {
+                "transaction_id": "01000000-0000-4000-8000-000000000001",
+                "merchant_name": "FRAUD_POSTED_TEST",
+                "amount_cents": 3500,
+                "pending": False,
+            },
         ],
     )
 
@@ -513,6 +519,82 @@ def test_triage_fraud_case_rejects_authorization_outside_alert(db_session, fraud
             disputed_authorization_ids=["99999999-9999-4999-8999-999999999999"],
             idempotency_key="bad-auth-flow",
         )
+
+
+def test_triage_fraud_case_rejects_posted_transaction_outside_alert(
+    db_session, fraud_alert
+):
+    with pytest.raises(ValueError, match="Transaction ids are not part"):
+        FraudAlertService(db_session).triage_fraud_case(
+            auth_provider_uid="cust-test-xyz",
+            fraud_alert_id=str(fraud_alert.id),
+            disputed_transaction_ids=["99999999-9999-4999-8999-999999999999"],
+            idempotency_key="bad-posted-flow",
+        )
+
+
+def test_customer_reported_fraud_creates_alert_and_reuses_triage(db_session):
+    service = FraudAlertService(db_session)
+    result = service.triage_customer_reported_fraud(
+        auth_provider_uid="cust-test-xyz",
+        disputed_authorization_ids=["02000000-0000-4000-8000-000000000002"],
+        disputed_transaction_ids=["01000000-0000-4000-8000-000000000001"],
+        issue_replacement=True,
+        idempotency_key="different-voice-session-key",
+    )
+    replay = service.triage_customer_reported_fraud(
+        auth_provider_uid="cust-test-xyz",
+        disputed_authorization_ids=["02000000-0000-4000-8000-000000000002"],
+        disputed_transaction_ids=["01000000-0000-4000-8000-000000000001"],
+        issue_replacement=True,
+        idempotency_key="customer-report-flow",
+    )
+    changed_options = service.triage_customer_reported_fraud(
+        auth_provider_uid="cust-test-xyz",
+        disputed_authorization_ids=["02000000-0000-4000-8000-000000000002"],
+        disputed_transaction_ids=["01000000-0000-4000-8000-000000000001"],
+        issue_replacement=False,
+        idempotency_key="changed-options",
+    )
+
+    alert = FraudAlertRepository(db_session).get_alert_by_id(
+        fraud_alert_id=result["fraud_alert"]["fraud_alert_id"]
+    )
+    assert result["success"] is True
+    assert result["intake_source"] == "CUSTOMER_REPORTED"
+    assert replay["idempotent_replay"] is True
+    assert changed_options["conflict"] == "CUSTOMER_REPORTED_OPTIONS_CHANGED"
+    assert alert.source == "CUSTOMER_REPORTED"
+    assert alert.status == "TRIAGED_PENDING_REVIEW"
+    assert alert.selected_disputed_authorization_ids == [
+        "02000000-0000-4000-8000-000000000002"
+    ]
+    assert alert.selected_disputed_transaction_ids == [
+        "01000000-0000-4000-8000-000000000001"
+    ]
+
+
+def test_customer_reported_fraud_rejects_unowned_or_ineligible_selection(db_session):
+    with pytest.raises(ValueError, match="not an eligible debit for this account"):
+        FraudAlertService(db_session).triage_customer_reported_fraud(
+            auth_provider_uid="cust-test-xyz",
+            disputed_transaction_ids=["99999999-9999-4999-8999-999999999999"],
+            issue_replacement=False,
+        )
+
+
+def test_customer_reported_fraud_defers_to_existing_risk_alert(
+    db_session, fraud_alert
+):
+    result = FraudAlertService(db_session).triage_customer_reported_fraud(
+        auth_provider_uid="cust-test-xyz",
+        disputed_authorization_ids=["02000000-0000-4000-8000-000000000002"],
+        issue_replacement=True,
+    )
+
+    assert result["success"] is False
+    assert result["conflict"] == "ACTIVE_FRAUD_ALERT"
+    assert result["fraud_alert"]["fraud_alert_id"] == str(fraud_alert.id)
 
 
 def test_triage_fraud_case_rejects_wrong_customer(db_session, fraud_alert):

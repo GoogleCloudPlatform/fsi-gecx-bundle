@@ -1,4 +1,8 @@
 {
+  "schema_version": 1,
+  "bundle_version": "2.1",
+  "published_at": "2026-07-14T00:00:00Z",
+  "max_age_days": 90,
   "topics": [
     {
       "topic_id": "fraud_golden_path",
@@ -28,8 +32,35 @@
       ],
       "customer_safe_summary": "Review the suspicious charges with the customer first, ask whether they recognize them, confirm the selected disputed transactions, then raise the fraud case and explain provisional remediation pending investigation.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.0",
-      "last_reviewed": "2026-07-09"
+      "version": "2.1",
+      "last_reviewed": "2026-07-14"
+    },
+    {
+      "topic_id": "customer_reported_fraud",
+      "title": "Customer-Reported Fraud Intake",
+      "audience": "CREDIT_SUPPORT_AGENT",
+      "channel": "VOICE",
+      "applies_when": ["customer_reports_unrecognized_charges", "no_active_fraud_alert"],
+      "must_do": [
+        "Check for an open fraud alert before starting customer-reported intake.",
+        "When no alert exists, retrieve recent transaction history and let the customer identify exact pending authorizations and posted debit transactions they do not recognize.",
+        "Restate the exact selected merchants and amounts, disclose the pending-investigation actions, and obtain explicit confirmation in a separate customer turn.",
+        "After confirmation, call triage_customer_reported_fraud once with exactly the confirmed selection and wait for its result."
+      ],
+      "must_not_do": [
+        "Do not infer, expand, or substitute the customer's disputed transaction selection.",
+        "Do not create an alert, block a card, issue a replacement, or claim remediation before triage_customer_reported_fraud confirms success.",
+        "Do not use customer-reported intake when an active alert exists; inspect and use the active-alert triage flow instead."
+      ],
+      "tool_dependencies": [
+        "get_open_fraud_alert",
+        "get_transaction_history",
+        "triage_customer_reported_fraud"
+      ],
+      "customer_safe_summary": "If no alert exists, review recent transactions with the customer, confirm only the exact charges they identify, then open and triage a customer-reported fraud case through one controlled workflow.",
+      "source_policy_ref": "customer_reported_fraud_intake_v1",
+      "version": "2.1",
+      "last_reviewed": "2026-07-14"
     },
     {
       "topic_id": "recognized_activity",
@@ -50,8 +81,8 @@
       ],
       "customer_safe_summary": "If the charges are legitimate, close the alert through the fraud triage workflow and reassure the customer that no card action is required.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.0",
-      "last_reviewed": "2026-07-09"
+      "version": "2.1",
+      "last_reviewed": "2026-07-14"
     },
     {
       "topic_id": "replacement_card",
@@ -73,8 +104,8 @@
       ],
       "customer_safe_summary": "When fraud is confirmed, the fraud triage workflow blocks the compromised card and may issue a replacement card as part of the case remediation.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.0",
-      "last_reviewed": "2026-07-09"
+      "version": "2.1",
+      "last_reviewed": "2026-07-14"
     },
     {
       "topic_id": "wallet_provisioning",
@@ -97,8 +128,8 @@
       ],
       "customer_safe_summary": "After a replacement card is issued, offer to queue it for Google Wallet only if the customer wants immediate card access, and describe the queue as pending until the tool succeeds.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.0",
-      "last_reviewed": "2026-07-09"
+      "version": "2.1",
+      "last_reviewed": "2026-07-14"
     },
     {
       "topic_id": "human_escalation",
@@ -120,8 +151,8 @@
       ],
       "customer_safe_summary": "If the customer wants a human representative, transfer the conversation without losing the fraud case context.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.0",
-      "last_reviewed": "2026-07-09"
+      "version": "2.1",
+      "last_reviewed": "2026-07-14"
     }
   ]
 }

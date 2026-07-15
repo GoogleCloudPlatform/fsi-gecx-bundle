@@ -210,17 +210,24 @@ resource "google_project_iam_member" "datagen_sa_cloudsql_instance_user" {
 }
 
 resource "google_project_iam_member" "developer_cloudsql_client" {
-  count   = var.enable_current_user_grants ? 1 : 0
+  count   = local.primary_developer_iam_member == null ? 0 : 1
   project = data.google_project.project.project_id
   role    = "roles/cloudsql.client"
-  member  = local.current_principal_member
+  member  = local.primary_developer_iam_member
 }
 
 resource "google_project_iam_member" "developer_cloudsql_instance_user" {
-  count   = var.enable_current_user_grants ? 1 : 0
+  count   = local.primary_developer_iam_member == null ? 0 : 1
   project = data.google_project.project.project_id
   role    = "roles/cloudsql.instanceUser"
-  member  = local.current_principal_member
+  member  = local.primary_developer_iam_member
+}
+
+resource "google_project_iam_member" "additional_developer_cloudsql_client" {
+  for_each = local.additional_developer_iam_members
+  project  = data.google_project.project.project_id
+  role     = "roles/cloudsql.client"
+  member   = each.value
 }
 
 resource "google_project_iam_member" "banking_service_sa_cloudsql_client" {
@@ -233,6 +240,18 @@ resource "google_project_iam_member" "banking_service_sa_cloudsql_instance_user"
   project = data.google_project.project.project_id
   role    = "roles/cloudsql.instanceUser"
   member  = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
+resource "google_project_iam_member" "voice_agent_sa_cloudsql_client" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.voice_agent_sa.email}"
+}
+
+resource "google_project_iam_member" "voice_agent_sa_cloudsql_instance_user" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = "serviceAccount:${google_service_account.voice_agent_sa.email}"
 }
 
 resource "google_project_iam_member" "banking_service_sa_run_developer" {

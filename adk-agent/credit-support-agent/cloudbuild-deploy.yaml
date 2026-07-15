@@ -118,7 +118,13 @@ steps:
           gcloud run deploy credit-support-agent \
             --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:$${COMMIT_SHA:-local}" \
             --region "${_REGION}" \
-            --cpu 4 --memory 4Gi \
+            --cpu "${_VOICE_AGENT_CPU}" \
+            --memory "${_VOICE_AGENT_MEMORY}" \
+            --timeout "${_VOICE_AGENT_REQUEST_TIMEOUT_SECONDS}s" \
+            --min-instances "${_VOICE_AGENT_MIN_INSTANCES}" \
+            --max-instances "${_VOICE_AGENT_MAX_INSTANCES}" \
+            --concurrency "${_VOICE_AGENT_MAX_INSTANCE_REQUEST_CONCURRENCY}" \
+            --update-env-vars "VOICE_AGENT_MAX_CONCURRENT_SESSIONS=${_VOICE_AGENT_MAX_CONCURRENT_SESSIONS},VOICE_AGENT_AUDIO_SESSION_CAPACITY_UNITS=${_VOICE_AGENT_AUDIO_SESSION_CAPACITY_UNITS},VOICE_AGENT_VIDEO_SESSION_CAPACITY_UNITS=${_VOICE_AGENT_VIDEO_SESSION_CAPACITY_UNITS}" \
             --no-cpu-throttling
         else
           echo "Skipping deployment because _TRIGGER_DEPLOY is not true"
@@ -135,3 +141,12 @@ options:
 substitutions:
   _REGION: "us-central1"
   _TRIGGER_DEPLOY: "false"
+  _VOICE_AGENT_CPU: "4"
+  _VOICE_AGENT_MEMORY: "4Gi"
+  _VOICE_AGENT_REQUEST_TIMEOUT_SECONDS: "300"
+  _VOICE_AGENT_MIN_INSTANCES: "1"
+  _VOICE_AGENT_MAX_INSTANCES: "5"
+  _VOICE_AGENT_MAX_INSTANCE_REQUEST_CONCURRENCY: "8"
+  _VOICE_AGENT_MAX_CONCURRENT_SESSIONS: "4"
+  _VOICE_AGENT_AUDIO_SESSION_CAPACITY_UNITS: "1"
+  _VOICE_AGENT_VIDEO_SESSION_CAPACITY_UNITS: "4"

@@ -61,6 +61,35 @@ def test_build_video_run_config_can_disable_resumption() -> None:
     assert config.response_modalities == ["VIDEO"]
     assert config.avatar_config.avatar_name == "Sam"
     assert config.session_resumption is None
+    assert config.realtime_input_config is None
+
+
+def test_build_video_run_config_supports_manual_activity_detection() -> None:
+    config = build_live_run_config(
+        mode="video",
+        avatar_name="Ingrid",
+        voice_name="Despina",
+        language_code="en-GB",
+        enable_session_resumption=True,
+        manual_activity_detection=True,
+    )
+
+    assert config.response_modalities == ["VIDEO"]
+    assert config.realtime_input_config is not None
+    assert config.realtime_input_config.automatic_activity_detection.disabled is True
+
+
+def test_audio_run_config_keeps_server_activity_detection() -> None:
+    config = build_live_run_config(
+        mode="audio",
+        avatar_name=None,
+        voice_name="Aoede",
+        language_code="en-US",
+        enable_session_resumption=True,
+    )
+
+    assert config.response_modalities == ["AUDIO"]
+    assert config.realtime_input_config is None
 
 
 def test_normalize_live_event_keeps_only_completed_transcripts() -> None:
@@ -90,3 +119,11 @@ def test_configure_live_tool_defers_response_until_model_is_idle() -> None:
 
     assert tool.response_scheduling is types.FunctionResponseScheduling.WHEN_IDLE
 
+
+def test_configure_live_tool_can_interrupt_preview_avatar_with_result() -> None:
+    tool = configure_live_tool(
+        StubTool(),
+        response_scheduling=types.FunctionResponseScheduling.INTERRUPT,
+    )
+
+    assert tool.response_scheduling is types.FunctionResponseScheduling.INTERRUPT

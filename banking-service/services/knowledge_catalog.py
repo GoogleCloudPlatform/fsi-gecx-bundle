@@ -1,7 +1,9 @@
 import json
+import hashlib
 import logging
 import os
 from collections.abc import Mapping, Sequence
+from datetime import date, datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -15,16 +17,35 @@ DEFAULT_TOPIC_IDS = [
     "wallet_provisioning",
     "human_escalation",
 ]
+CUSTOMER_REPORTED_TOPIC_IDS = [
+    "customer_reported_fraud",
+    "replacement_card",
+    "wallet_provisioning",
+    "human_escalation",
+]
+SYNC_TOPIC_IDS = list(dict.fromkeys(DEFAULT_TOPIC_IDS + CUSTOMER_REPORTED_TOPIC_IDS))
 
 RESOURCES_DIR = Path(__file__).resolve().parent.parent / "resources" / "data"
 LOCAL_GUIDANCE_FILE = RESOURCES_DIR / "fraud_support_guidance.json"
+GUIDANCE_SNAPSHOT_SCHEMA_VERSION = 1
 
 
 @lru_cache(maxsize=1)
-def _load_local_guidance_topics() -> dict[str, dict[str, Any]]:
+def _load_local_guidance_document() -> dict[str, Any]:
     with LOCAL_GUIDANCE_FILE.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
-    return {topic["topic_id"]: topic for topic in payload.get("topics", [])}
+    if payload.get("schema_version") != GUIDANCE_SNAPSHOT_SCHEMA_VERSION:
+        raise ValueError("Unsupported fraud support guidance schema_version.")
+    if not payload.get("bundle_version"):
+        raise ValueError("Fraud support guidance requires bundle_version.")
+    if not isinstance(payload.get("topics"), list) or not payload["topics"]:
+        raise ValueError("Fraud support guidance requires at least one topic.")
+    return payload
+
+
+def _load_local_guidance_topics() -> dict[str, dict[str, Any]]:
+    payload = _load_local_guidance_document()
+    return {topic["topic_id"]: topic for topic in payload["topics"]}
 
 
 class KnowledgeCatalogService:
@@ -40,6 +61,13 @@ class KnowledgeCatalogService:
     def get_guidance_bundle_for_voice_fraud(self) -> dict[str, Any]:
         return self.get_guidance_bundle(DEFAULT_TOPIC_IDS, audience="CREDIT_SUPPORT_AGENT", channel="VOICE")
 
+    def get_guidance_bundle_for_voice_customer_reported_fraud(self) -> dict[str, Any]:
+        return self.get_guidance_bundle(
+            CUSTOMER_REPORTED_TOPIC_IDS,
+            audience="CREDIT_SUPPORT_AGENT",
+            channel="VOICE",
+        )
+
     def get_guidance_bundle(
         self,
         topic_ids: list[str],
@@ -47,15 +75,28 @@ class KnowledgeCatalogService:
         audience: str | None = None,
         channel: str | None = None,
     ) -> dict[str, Any]:
+        retrieved_at = datetime.now(timezone.utc)
         local_topics = self._get_local_topics(topic_ids, audience=audience, channel=channel)
         if not self.enabled:
-            return self._build_bundle(topic_ids, local_topics, source="local_file")
+            return self._build_bundle(
+                topic_ids,
+                local_topics,
+                source="local_file",
+                fallback_reason="KNOWLEDGE_CATALOG_DISABLED",
+                retrieved_at=retrieved_at,
+            )
 
         try:
             remote_topics = self._get_remote_topics(topic_ids, audience=audience, channel=channel)
         except Exception as exc:  # pragma: no cover - graceful runtime fallback
             logger.warning("Knowledge Catalog read failed; falling back to local guidance: %s", exc)
-            return self._build_bundle(topic_ids, local_topics, source="local_file_fallback")
+            return self._build_bundle(
+                topic_ids,
+                local_topics,
+                source="local_file_fallback",
+                fallback_reason="KNOWLEDGE_CATALOG_READ_FAILED",
+                retrieved_at=retrieved_at,
+            )
 
         merged_topics = []
         remote_by_id = {topic["topic_id"]: topic for topic in remote_topics}
@@ -63,11 +104,25 @@ class KnowledgeCatalogService:
             merged_topics.append(remote_by_id.get(topic_id) or local_topics.get(topic_id))
         merged_topics = [topic for topic in merged_topics if topic]
 
-        source = "knowledge_catalog" if len(remote_by_id) == len(merged_topics) else "knowledge_catalog_with_local_fallback"
-        return self._build_bundle(topic_ids, merged_topics, source=source)
+        missing_remote_topic_ids = [
+            topic_id for topic_id in topic_ids if topic_id not in remote_by_id
+        ]
+        source = "knowledge_catalog" if not missing_remote_topic_ids else "knowledge_catalog_with_local_fallback"
+        return self._build_bundle(
+            topic_ids,
+            merged_topics,
+            source=source,
+            fallback_reason=(
+                "MISSING_REMOTE_TOPICS:" + ",".join(missing_remote_topic_ids)
+                if missing_remote_topic_ids
+                else None
+            ),
+            retrieved_at=retrieved_at,
+        )
 
     def sync_topics_to_catalog(self, topic_ids: list[str] | None = None) -> list[str]:
-        topic_ids = topic_ids or DEFAULT_TOPIC_IDS
+        self.validate_local_guidance(strict_freshness=True)
+        topic_ids = topic_ids or SYNC_TOPIC_IDS
         topics = [topic for topic in self._get_local_topics(topic_ids).values()]
         if not self.enabled:
             raise RuntimeError("Knowledge Catalog sync requires KNOWLEDGE_CATALOG_ENABLED=true.")
@@ -172,17 +227,108 @@ class KnowledgeCatalogService:
             topic["customer_safe_summary"] = summary_data["customer_safe_summary"]
         return topic
 
-    def _build_bundle(self, topic_ids: list[str], topics: list[dict[str, Any]] | dict[str, dict[str, Any]], *, source: str) -> dict[str, Any]:
+    def _build_bundle(
+        self,
+        topic_ids: list[str],
+        topics: list[dict[str, Any]] | dict[str, dict[str, Any]],
+        *,
+        source: str,
+        fallback_reason: str | None,
+        retrieved_at: datetime,
+    ) -> dict[str, Any]:
         if isinstance(topics, dict):
             ordered_topics = [topics[topic_id] for topic_id in topic_ids if topic_id in topics]
         else:
             by_id = {topic["topic_id"]: topic for topic in topics}
             ordered_topics = [by_id[topic_id] for topic_id in topic_ids if topic_id in by_id]
-        return {
+        freshness = self._guidance_freshness(ordered_topics, retrieved_at.date())
+        versions = sorted({str(topic.get("version")) for topic in ordered_topics if topic.get("version")})
+        content_version = (
+            versions[0]
+            if len(versions) == 1
+            else "+".join(versions)
+            if versions
+            else str(_load_local_guidance_document()["bundle_version"])
+        )
+        snapshot_content = {
             "source": source,
             "topic_ids": [topic["topic_id"] for topic in ordered_topics],
+            "content_version": content_version,
+            "topics": ordered_topics,
+        }
+        snapshot_id = hashlib.sha256(
+            json.dumps(snapshot_content, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()[:24]
+        return {
+            "schema_version": GUIDANCE_SNAPSHOT_SCHEMA_VERSION,
+            "snapshot_id": snapshot_id,
+            "source": source,
+            "topic_ids": [topic["topic_id"] for topic in ordered_topics],
+            "content_version": content_version,
+            "retrieved_at": retrieved_at.isoformat().replace("+00:00", "Z"),
+            "fallback_reason": fallback_reason,
+            "freshness": freshness,
             "topics": ordered_topics,
             "agent_guidance_summary": self._build_agent_guidance_summary(ordered_topics),
+        }
+
+    def validate_local_guidance(self, *, strict_freshness: bool = False) -> dict[str, Any]:
+        document = _load_local_guidance_document()
+        topics = list(_load_local_guidance_topics().values())
+        required_topic_fields = {
+            "topic_id",
+            "title",
+            "audience",
+            "channel",
+            "version",
+            "last_reviewed",
+        }
+        errors: list[str] = []
+        for topic in topics:
+            missing = sorted(required_topic_fields - topic.keys())
+            if missing:
+                errors.append(f"{topic.get('topic_id', '<unknown>')}: missing {', '.join(missing)}")
+            try:
+                date.fromisoformat(str(topic.get("last_reviewed")))
+            except ValueError:
+                errors.append(f"{topic.get('topic_id', '<unknown>')}: invalid last_reviewed")
+        freshness = self._guidance_freshness(topics, datetime.now(timezone.utc).date())
+        if strict_freshness and freshness["status"] == "STALE":
+            errors.append(
+                f"guidance is stale; oldest review is {freshness['oldest_last_reviewed']}"
+            )
+        if errors:
+            raise ValueError("Invalid fraud support guidance: " + "; ".join(errors))
+        return {
+            "schema_version": document["schema_version"],
+            "bundle_version": document["bundle_version"],
+            "topic_count": len(topics),
+            "freshness": freshness,
+        }
+
+    @staticmethod
+    def _guidance_freshness(topics: list[dict[str, Any]], as_of: date) -> dict[str, Any]:
+        max_age_days = int(_load_local_guidance_document().get("max_age_days", 90))
+        reviewed_dates = []
+        for topic in topics:
+            try:
+                reviewed_dates.append(date.fromisoformat(str(topic.get("last_reviewed"))))
+            except ValueError:
+                continue
+        if not reviewed_dates:
+            return {
+                "status": "UNKNOWN",
+                "oldest_last_reviewed": None,
+                "age_days": None,
+                "max_age_days": max_age_days,
+            }
+        oldest = min(reviewed_dates)
+        age_days = (as_of - oldest).days
+        return {
+            "status": "FRESH" if age_days <= max_age_days else "STALE",
+            "oldest_last_reviewed": oldest.isoformat(),
+            "age_days": age_days,
+            "max_age_days": max_age_days,
         }
 
     @staticmethod

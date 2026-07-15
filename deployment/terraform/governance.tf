@@ -54,8 +54,15 @@ resource "google_data_catalog_policy_tag_iam_member" "banking_service_fine_grain
 
 # Grant Fine-Grained Reader to local developers to query policy-tagged BQ columns
 resource "google_data_catalog_policy_tag_iam_member" "local_developer_fine_grained_reader" {
-  count      = var.enable_current_user_grants ? 1 : 0
+  count      = local.primary_developer_iam_member == null ? 0 : 1
   policy_tag = google_data_catalog_policy_tag.sensitive_npi.id
   role       = "roles/datacatalog.categoryFineGrainedReader"
-  member     = local.current_principal_member
+  member     = local.primary_developer_iam_member
+}
+
+resource "google_data_catalog_policy_tag_iam_member" "additional_developer_fine_grained_reader" {
+  for_each   = local.additional_developer_iam_members
+  policy_tag = google_data_catalog_policy_tag.sensitive_npi.id
+  role       = "roles/datacatalog.categoryFineGrainedReader"
+  member     = each.value
 }

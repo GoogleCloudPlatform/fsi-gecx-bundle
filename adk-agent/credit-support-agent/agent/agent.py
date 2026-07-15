@@ -14,17 +14,46 @@
 
 import os
 import contextvars
+import time
 import google
 import httpx
 from google.adk.agents import Agent
 from google.adk.planners import BuiltInPlanner
 from google.genai.types import ThinkingConfig
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams, create_mcp_http_client
+from google.adk.tools import ToolContext
 
-from agent.events import DataChannelEvent
-from agent.fraud_voice import mark_fraud_tool_completed, validate_fraud_tool_sequence
+from agent.events import DataChannelEvent, INTERNAL_TOOL_RUNTIME_STATUS
+from agent.guidance_snapshot import guidance_observability_payload
+from agent.log_safety import (
+    stable_log_reference,
+    tool_args_log_summary,
+    tool_response_succeeded,
+    tool_result_log_summary,
+)
+from agent.telemetry import record_tool_completed
+from agent.fraud_voice import (
+    build_triage_model_result,
+    invalidate_wallet_authorization,
+    mark_fraud_tool_completed,
+    prepare_wallet_tool_args,
+    validate_fraud_tool_sequence,
+)
 from agent.instructions import INSTRUCTION_TEXT
+from agent.reset_guard import validate_reset_generation
 from agent.tooling import LiveMcpToolset
+from agent.workflow_authorization import (
+    PUSH_CARD_TO_GOOGLE_WALLET,
+    TRIAGE_CUSTOMER_REPORTED_FRAUD,
+    TRIAGE_FRAUD_CASE,
+    apply_customer_authorization_response,
+    action_payload_fingerprint,
+    create_workflow_authorization,
+    invalidate_workflow_authorization,
+    mark_authorization_completed,
+    mark_authorization_executing,
+    validate_workflow_authorization,
+)
 
 LOCATION = os.getenv("LOCATION", "us-central1")
 credentials, project_id = google.auth.default()
@@ -37,6 +66,9 @@ active_customer_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("ac
 session_event_callback_var: contextvars.ContextVar = contextvars.ContextVar("session_event_callback", default=None)
 session_should_end_var: contextvars.ContextVar[bool] = contextvars.ContextVar("session_should_end", default=False)
 is_processing_tool_var: contextvars.ContextVar[bool] = contextvars.ContextVar("is_processing_tool", default=False)
+latest_customer_turn_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "latest_customer_turn", default=None
+)
 
 
 def get_banking_service_mcp_url() -> str:
@@ -54,21 +86,35 @@ def get_banking_service_mcp_url() -> str:
 
 def build_log_context(state: dict | None = None, **extra) -> dict:
     context = {
-        "customer_id": active_customer_id_var.get(),
+        "customer_ref": stable_log_reference(active_customer_id_var.get(), prefix="customer"),
     }
     if state:
         context.update({
-            "room_name": state.get("room_name"),
-            "session_id": state.get("session_id"),
+            "room_ref": stable_log_reference(state.get("room_name"), prefix="room"),
+            "session_ref": stable_log_reference(
+                state.get("session_id"), prefix="session"
+            ),
             "mode": state.get("mode"),
         })
         fraud_context = state.get("fraud_context") or {}
         fraud_playbook = state.get("fraud_playbook") or {}
         context.update({
-            "fraud_alert_id": fraud_context.get("fraud_alert_id") or fraud_playbook.get("fraud_alert_id"),
+            "fraud_alert_ref": stable_log_reference(
+                fraud_context.get("fraud_alert_id") or fraud_playbook.get("fraud_alert_id"),
+                prefix="alert",
+            ),
             "fraud_entry_mode": fraud_playbook.get("entry_mode"),
             "fraud_alert_inspected": fraud_playbook.get("open_alert_inspected"),
             "fraud_resolution_completed": fraud_playbook.get("resolution_completed"),
+            "wallet_authorization_status": fraud_playbook.get("wallet_response_status"),
+            "workflow_authorization_action": (
+                fraud_playbook.get("workflow_authorization") or {}
+            ).get("action"),
+            "workflow_authorization_status": (
+                fraud_playbook.get("workflow_authorization") or {}
+            ).get("status"),
+            "escalation_status": fraud_playbook.get("escalation_status"),
+            "completion_status": fraud_playbook.get("completion_status"),
         })
     context.update({key: value for key, value in extra.items() if value is not None})
     return context
@@ -89,6 +135,10 @@ def bind_session_context(customer_id: str, callback):
         "callback": session_event_callback_var.set(callback),
         "should_end": session_should_end_var.set(False),
         "is_processing": is_processing_tool_var.set(False),
+        # Session tasks inherit ContextVar values, but assignments made inside
+        # child tasks do not flow back to their parent. Share a mutable holder
+        # so transcript listeners and tool callbacks observe the same turn.
+        "latest_customer_turn": latest_customer_turn_var.set({"latest": None}),
     }
 
 
@@ -97,6 +147,7 @@ def reset_session_context(tokens: dict) -> None:
     if not tokens:
         return
     is_processing_tool_var.reset(tokens["is_processing"])
+    latest_customer_turn_var.reset(tokens["latest_customer_turn"])
     session_should_end_var.reset(tokens["should_end"])
     session_event_callback_var.reset(tokens["callback"])
     active_customer_id_var.reset(tokens["customer"])
@@ -116,6 +167,67 @@ def clear_session_end_request() -> None:
 
 def is_tool_processing() -> bool:
     return is_processing_tool_var.get()
+
+
+def record_customer_turn(
+    transcript: str,
+    *,
+    event_id: str | None = None,
+    observed_at_epoch_s: float | None = None,
+) -> None:
+    """Record bounded confirmation evidence before a Live tool call is emitted."""
+    text = str(transcript or "").strip()
+    if not text:
+        return
+    observed_at = time.time() if observed_at_epoch_s is None else observed_at_epoch_s
+    turn = {
+        "transcript": text[:1000],
+        "event_id": event_id or f"customer-turn-{time.time_ns()}",
+        "observed_at_epoch_s": observed_at,
+    }
+    holder = latest_customer_turn_var.get()
+    if holder is None:
+        latest_customer_turn_var.set({"latest": turn})
+    else:
+        holder["latest"] = turn
+
+
+def apply_latest_customer_turn_to_authorization(
+    fraud_playbook: dict,
+) -> tuple[dict, bool]:
+    """Reconcile Live/typed input that ADK has not yet committed to session state."""
+    authorization = dict(fraud_playbook.get("workflow_authorization") or {})
+    holder = latest_customer_turn_var.get() or {}
+    turn = holder.get("latest") or {}
+    if authorization.get("status") not in {"PENDING", "UNCLEAR"}:
+        return fraud_playbook, False
+    if not authorization.get("assistant_event_id"):
+        return fraud_playbook, False
+    if float(turn.get("observed_at_epoch_s") or 0) <= float(
+        authorization.get("issued_at_epoch_s") or 0
+    ):
+        return fraud_playbook, False
+    if not turn.get("event_id") or turn.get("event_id") == authorization.get(
+        "customer_event_id"
+    ):
+        return fraud_playbook, False
+
+    updated_authorization = apply_customer_authorization_response(
+        authorization,
+        transcript=turn.get("transcript"),
+        customer_event_id=str(turn["event_id"]),
+        now_epoch_s=float(turn["observed_at_epoch_s"]),
+    )
+    if updated_authorization == authorization:
+        return fraud_playbook, False
+    updated_playbook = dict(fraud_playbook)
+    updated_playbook["workflow_authorization"] = updated_authorization
+    if updated_authorization.get("action") == PUSH_CARD_TO_GOOGLE_WALLET:
+        updated_playbook["wallet_response_status"] = updated_authorization.get("status")
+        updated_playbook["wallet_customer_confirmed"] = (
+            updated_authorization.get("status") == "CONFIRMED"
+        )
+    return updated_playbook, True
 
 
 def set_tool_processing(is_processing: bool) -> None:
@@ -177,6 +289,200 @@ def transfer_to_human(reason: str) -> dict:
     notify_event({"type": DataChannelEvent.HANDOFF_PENDING.value, "reason": reason})
     return {"status": "SUCCESS", "message": "Escalation sequence initiated."}
 
+
+def prepare_fraud_triage_confirmation(
+    fraud_alert_id: str,
+    disputed_authorization_ids: list[str],
+    disputed_transaction_ids: list[str],
+    issue_replacement: bool,
+    tool_context: ToolContext,
+) -> dict:
+    """Prepare the exact fraud-triage payload that the customer must confirm.
+
+    This tool performs no banking mutation. Call it after the customer identifies
+    the disputed transactions and before asking the customer to confirm that
+    selection. The resulting authorization is scoped to this ADK session.
+    """
+    state = tool_context.state
+    playbook = dict(state.get("fraud_playbook") or {})
+    fraud_context = state.get("fraud_context") or {}
+    expected_alert_id = str(playbook.get("fraud_alert_id") or "").strip()
+    requested_alert_id = str(fraud_alert_id or "").strip()
+    if not playbook.get("open_alert_inspected"):
+        return {
+            "success": False,
+            "error": "ALERT_NOT_INSPECTED",
+            "message": "Inspect the open fraud alert before preparing customer confirmation.",
+        }
+    if not expected_alert_id or requested_alert_id != expected_alert_id:
+        return {
+            "success": False,
+            "error": "ALERT_ID_MISMATCH",
+            "message": "Prepare confirmation only for the active inspected fraud alert.",
+        }
+
+    suspicious = fraud_context.get("suspicious_transactions") or []
+    allowed_authorization_ids = {
+        str(item.get("authorization_id"))
+        for item in suspicious
+        if item.get("authorization_id")
+    }
+    allowed_transaction_ids = {
+        str(item.get("transaction_id"))
+        for item in suspicious
+        if item.get("transaction_id")
+    }
+    requested_authorization_ids = {
+        str(item) for item in disputed_authorization_ids if str(item).strip()
+    }
+    requested_transaction_ids = {
+        str(item) for item in disputed_transaction_ids if str(item).strip()
+    }
+    if requested_authorization_ids - allowed_authorization_ids:
+        return {
+            "success": False,
+            "error": "INVALID_DISPUTED_AUTHORIZATION",
+            "message": "One or more pending authorizations are not part of the inspected alert.",
+        }
+    if requested_transaction_ids - allowed_transaction_ids:
+        return {
+            "success": False,
+            "error": "INVALID_DISPUTED_TRANSACTION",
+            "message": "One or more posted transactions are not part of the inspected alert.",
+        }
+
+    payload = {
+        "fraud_alert_id": requested_alert_id,
+        "disputed_authorization_ids": list(requested_authorization_ids),
+        "disputed_transaction_ids": list(requested_transaction_ids),
+        "issue_replacement": issue_replacement,
+    }
+    existing = playbook.get("workflow_authorization") or {}
+    if existing:
+        existing = invalidate_workflow_authorization(
+            existing,
+            reason="REPLACED_BY_NEW_TRIAGE_SELECTION",
+        )
+        playbook["last_workflow_authorization"] = existing
+    authorization = create_workflow_authorization(
+        action=TRIAGE_FRAUD_CASE,
+        payload=payload,
+        session_id=str(state.get("session_id") or ""),
+    )
+    playbook["workflow_authorization"] = authorization
+    state["fraud_playbook"] = playbook
+    return {
+        "success": True,
+        "confirmation_required": True,
+        "action": TRIAGE_FRAUD_CASE,
+        "payload": authorization["payload"],
+        "payload_fingerprint": authorization["payload_fingerprint"],
+        "model_instruction": (
+            "Restate this exact selection in customer-safe language and ask for explicit confirmation. "
+            "Do not call triage_fraud_case until a later customer turn confirms it."
+        ),
+    }
+
+
+def prepare_customer_reported_fraud_confirmation(
+    disputed_authorization_ids: list[str],
+    disputed_transaction_ids: list[str],
+    issue_replacement: bool,
+    tool_context: ToolContext,
+) -> dict:
+    """Prepare an exact customer-reported fraud selection without mutating banking state."""
+    state = tool_context.state
+    playbook = dict(state.get("fraud_playbook") or {})
+    if not playbook.get("open_alert_inspected") or playbook.get("fraud_alert_id"):
+        return {
+            "success": False,
+            "error": "ACTIVE_ALERT_CHECK_REQUIRED",
+            "message": "Confirm that no active fraud alert exists before preparing this report.",
+        }
+
+    recent_index = state.get("recent_transaction_index") or {}
+    requested_authorization_ids = {
+        str(value).strip()
+        for value in disputed_authorization_ids
+        if str(value).strip()
+    }
+    requested_transaction_ids = {
+        str(value).strip() for value in disputed_transaction_ids if str(value).strip()
+    }
+    if not requested_authorization_ids and not requested_transaction_ids:
+        return {
+            "success": False,
+            "error": "EMPTY_DISPUTE_SELECTION",
+            "message": "Select at least one recent transaction before preparing confirmation.",
+        }
+    allowed_authorization_ids = {
+        item_id
+        for item_id, item in recent_index.items()
+        if item.get("pending") is True
+    }
+    allowed_transaction_ids = {
+        item_id
+        for item_id, item in recent_index.items()
+        if item.get("pending") is False and int(item.get("amount_cents") or 0) < 0
+    }
+    if requested_authorization_ids - allowed_authorization_ids:
+        return {
+            "success": False,
+            "error": "INVALID_DISPUTED_AUTHORIZATION",
+            "message": "One or more selected pending authorizations are not in the trusted recent history.",
+        }
+    if requested_transaction_ids - allowed_transaction_ids:
+        return {
+            "success": False,
+            "error": "INVALID_DISPUTED_TRANSACTION",
+            "message": "One or more selected posted transactions are not eligible entries in the trusted recent history.",
+        }
+
+    payload = {
+        "disputed_authorization_ids": list(requested_authorization_ids),
+        "disputed_transaction_ids": list(requested_transaction_ids),
+        "issue_replacement": issue_replacement,
+        "escalate": False,
+    }
+    existing = playbook.get("workflow_authorization") or {}
+    if existing:
+        playbook["last_workflow_authorization"] = invalidate_workflow_authorization(
+            existing,
+            reason="REPLACED_BY_NEW_CUSTOMER_REPORTED_SELECTION",
+        )
+    authorization = create_workflow_authorization(
+        action=TRIAGE_CUSTOMER_REPORTED_FRAUD,
+        payload=payload,
+        session_id=str(state.get("session_id") or ""),
+    )
+    playbook.update(
+        {
+            "entry_mode": "CUSTOMER_REPORTED_FRAUD",
+            "resolution_path": "CUSTOMER_REPORTED_FRAUD",
+            "workflow_authorization": authorization,
+        }
+    )
+    state["fraud_playbook"] = playbook
+    return {
+        "success": True,
+        "confirmation_required": True,
+        "action": TRIAGE_CUSTOMER_REPORTED_FRAUD,
+        "payload": authorization["payload"],
+        "payload_fingerprint": authorization["payload_fingerprint"],
+        "selected_transactions": [
+            {
+                **recent_index[item_id],
+                "amount_cents": recent_index[item_id].get("display_amount_cents"),
+            }
+            for item_id in sorted(requested_authorization_ids | requested_transaction_ids)
+        ],
+        "model_instruction": (
+            "Restate the exact selected merchants and amounts, explain the pending-investigation actions, "
+            "and ask for explicit confirmation. Do not call triage_customer_reported_fraud until a later customer turn confirms it."
+        ),
+    }
+
+
 async def fetch_updated_account_details() -> dict:
     headers = {}
     token = get_auth_token_for_audience(BANKING_SERVICE_URL)
@@ -199,20 +505,146 @@ def get_auth_headers() -> dict:
         "x-target-customer-id": active_customer_id_var.get()
     }
 
-async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
+async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | None:
     tool_name = getattr(tool, "name", str(tool))
     import logging
     logger = logging.getLogger("voice_agent")
     fraud_context = tool_context.state.get("fraud_context", {}) if hasattr(tool_context, "state") else {}
     fraud_playbook = tool_context.state.get("fraud_playbook", {}) if hasattr(tool_context, "state") else {}
+    consequential_tools = {
+        "report_lost_stolen_card",
+        "unfreeze_card",
+        "reverse_overdraft_fee",
+        "request_credit_limit_increase",
+        "issue_replacement_card_tool",
+        "push_card_to_google_wallet",
+        "resolve_fraud_alert",
+        "triage_fraud_case",
+        "triage_customer_reported_fraud",
+    }
+    if tool_name in consequential_tools:
+        expected_generation = str(
+            tool_context.state.get("reset_generation_token")
+            or (tool_context.state.get("reset_generation") or {}).get("token")
+            or ""
+        )
+        try:
+            reset_headers = get_auth_headers()
+        except Exception:
+            reset_headers = {}
+        generation_valid, generation_reason = await validate_reset_generation(
+            banking_service_url=BANKING_SERVICE_URL,
+            headers=reset_headers,
+            expected_token=expected_generation,
+        )
+        if not generation_valid:
+            logger.warning(
+                "[CALLBACK] reset generation blocked consequential tool %s",
+                format_log_context(
+                    state=tool_context.state,
+                    tool_name=tool_name,
+                    drift=generation_reason,
+                ),
+            )
+            return {
+                "success": False,
+                "isError": True,
+                "error": "SESSION_INVALIDATED",
+                "message": "This consultation is no longer current because demo data changed. Start a new consultation before taking action.",
+                "required_action": generation_reason,
+                "model_instruction": "Do not claim success or retry this tool in the current session.",
+            }
+    if tool_name == "push_card_to_google_wallet":
+        prepared_args = prepare_wallet_tool_args(fraud_playbook, args)
+        args.clear()
+        args.update(prepared_args)
     if (
-        tool_name != "push_card_to_google_wallet"
+        tool_name not in {
+            "push_card_to_google_wallet",
+            "prepare_fraud_triage_confirmation",
+            "prepare_customer_reported_fraud_confirmation",
+        }
         and fraud_playbook.get("wallet_response_status") in {"PENDING", "CONFIRMED", "UNCLEAR"}
     ):
-        fraud_playbook = dict(fraud_playbook)
-        fraud_playbook["wallet_push_offered"] = False
-        fraud_playbook["wallet_customer_confirmed"] = False
-        fraud_playbook["wallet_response_status"] = "INVALIDATED"
+        fraud_playbook = invalidate_wallet_authorization(
+            fraud_playbook,
+            reason=f"INTERVENING_TOOL:{tool_name}",
+        )
+        tool_context.state["fraud_playbook"] = fraud_playbook
+
+    authorization_action = None
+    if tool_name == "triage_fraud_case":
+        authorization_action = TRIAGE_FRAUD_CASE
+    elif tool_name == "triage_customer_reported_fraud":
+        authorization_action = TRIAGE_CUSTOMER_REPORTED_FRAUD
+    elif tool_name == "push_card_to_google_wallet":
+        authorization_action = PUSH_CARD_TO_GOOGLE_WALLET
+    active_authorization = fraud_playbook.get("workflow_authorization") or {}
+    if (
+        active_authorization.get("status")
+        in {"PREPARED", "PENDING", "CONFIRMED", "UNCLEAR"}
+        and tool_name
+        not in {
+            "prepare_fraud_triage_confirmation",
+            "prepare_customer_reported_fraud_confirmation",
+        }
+        and active_authorization.get("action") != authorization_action
+    ):
+        fraud_playbook["workflow_authorization"] = invalidate_workflow_authorization(
+            active_authorization,
+            reason=f"INTERVENING_TOOL:{tool_name}",
+        )
+        tool_context.state["fraud_playbook"] = fraud_playbook
+    authorization_to_execute = None
+    if authorization_action:
+        fraud_playbook, authorization_reconciled = (
+            apply_latest_customer_turn_to_authorization(fraud_playbook)
+        )
+        if authorization_reconciled:
+            tool_context.state["fraud_playbook"] = fraud_playbook
+            logger.info(
+                "[CALLBACK] reconciled latest customer turn before tool validation %s",
+                format_log_context(
+                    state=tool_context.state,
+                    tool_name=tool_name,
+                ),
+            )
+        authorization = fraud_playbook.get("workflow_authorization")
+        authorization_error = validate_workflow_authorization(
+            authorization,
+            action=authorization_action,
+            payload=args,
+            session_id=str(tool_context.state.get("session_id") or ""),
+        )
+        if authorization_error:
+            logger.warning(
+                "[CALLBACK] workflow authorization blocked %s",
+                format_log_context(
+                    state=tool_context.state,
+                    tool_name=tool_name,
+                    drift=authorization_error,
+                ),
+            )
+            return {
+                "success": False,
+                "isError": False,
+                "status": "AUTHORIZATION_REQUIRED",
+                "message": "The action has not run because customer confirmation is still required.",
+                "authorization_blocked": True,
+                "required_action": authorization_error,
+                "model_instruction": (
+                    "This is an expected authorization checkpoint, not a technical failure. "
+                    "Do not apologize, claim an error, or escalate. If the exact selection is already prepared, "
+                    "restate it and ask the customer for explicit confirmation, then stop. Otherwise prepare it first."
+                ),
+            }
+        authorization_to_execute = authorization
+    if tool_name == "transfer_to_human":
+        fraud_playbook["escalation_status"] = "EXECUTING"
+        fraud_playbook["escalation_reason"] = str(args.get("reason") or "").strip()
+        tool_context.state["fraud_playbook"] = fraud_playbook
+    elif tool_name == "end_consultation":
+        fraud_playbook["completion_status"] = "ENDING"
         tool_context.state["fraud_playbook"] = fraud_playbook
     logger.info(
         "[CALLBACK] before_tool_callback triggered %s args=%s",
@@ -220,12 +652,12 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
             state=tool_context.state if hasattr(tool_context, "state") else None,
             tool_name=tool_name,
         ),
-        args,
+        tool_args_log_summary(tool_name, args),
     )
     logger.debug(
-        "[CALLBACK] fraud callback raw context fraud_alert_id=%s fraud_playbook=%s",
-        fraud_context.get("fraud_alert_id"),
-        fraud_playbook,
+        "[CALLBACK] fraud callback state fraud_alert_present=%s playbook_keys=%s",
+        bool(fraud_context.get("fraud_alert_id")),
+        sorted(fraud_playbook.keys()),
     )
     mitigation_tools = {
         "report_lost_stolen_card",
@@ -233,6 +665,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
         "push_card_to_google_wallet",
         "resolve_fraud_alert",
         "triage_fraud_case",
+        "triage_customer_reported_fraud",
     }
     sequencing_error = validate_fraud_tool_sequence(fraud_playbook, tool_name, args)
     if sequencing_error:
@@ -246,9 +679,12 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
         )
         return {
             "success": False,
-            "message": sequencing_error,
+            "isError": True,
+            "error": "ACTION_NOT_COMPLETED",
+            "message": f"Action not completed. {sequencing_error}",
             "sequence_blocked": True,
             "required_action": sequencing_error,
+            "model_instruction": "Do not tell the customer this action succeeded. Follow required_action before retrying.",
         }
     if (
         fraud_playbook.get("must_inspect_open_alert_first")
@@ -263,8 +699,26 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
                 drift="mitigation_tool_invoked_before_open_alert_inspection",
             ),
         )
+    if authorization_to_execute:
+        fraud_playbook["workflow_authorization"] = mark_authorization_executing(
+            authorization_to_execute
+        )
+        if tool_name in {"triage_fraud_case", "triage_customer_reported_fraud"}:
+            action = (
+                TRIAGE_FRAUD_CASE
+                if tool_name == "triage_fraud_case"
+                else TRIAGE_CUSTOMER_REPORTED_FRAUD
+            )
+            args["idempotency_key"] = (
+                f"voice:{tool_context.state.get('session_id')}:triage:"
+                f"{action_payload_fingerprint(action, args)[:24]}"
+            )
+        tool_context.state["fraud_playbook"] = fraud_playbook
     set_tool_processing(True)
     tool_context.state["is_processing_tool"] = True
+    tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
+    tool_started[tool_name] = time.monotonic()
+    tool_context.state["_voice_tool_started_at"] = tool_started
     return None
 
 async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> None:
@@ -277,11 +731,36 @@ async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> N
             state=tool_context.state if hasattr(tool_context, "state") else None,
             tool_name=tool_name,
         ),
-        error,
-        args,
+        type(error).__name__,
+        tool_args_log_summary(tool_name, args),
     )
     set_tool_processing(False)
     tool_context.state["is_processing_tool"] = False
+    tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
+    started_at = tool_started.pop(tool_name, time.monotonic())
+    tool_context.state["_voice_tool_started_at"] = tool_started
+    record_tool_completed(tool_name, "error", time.monotonic() - started_at)
+    notify_event(
+        {
+            "type": INTERNAL_TOOL_RUNTIME_STATUS,
+            "tool": tool_name,
+            "outcome": "error",
+        }
+    )
+    playbook = dict(tool_context.state.get("fraud_playbook") or {})
+    authorization = playbook.get("workflow_authorization") or {}
+    if authorization.get("status") == "EXECUTING":
+        playbook["workflow_authorization"] = invalidate_workflow_authorization(
+            authorization,
+            reason=f"TOOL_ERROR:{tool_name}",
+        )
+        tool_context.state["fraud_playbook"] = playbook
+    if tool_name == "transfer_to_human":
+        playbook["escalation_status"] = "FAILED"
+        tool_context.state["fraud_playbook"] = playbook
+    elif tool_name == "end_consultation":
+        playbook["completion_status"] = "END_FAILED"
+        tool_context.state["fraud_playbook"] = playbook
     return None
 
 async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs) -> dict | None:
@@ -294,13 +773,76 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
             state=tool_context.state if hasattr(tool_context, "state") else None,
             tool_name=tool_name,
         ),
-        tool_response,
+        tool_result_log_summary(tool_response),
     )
     set_tool_processing(False)
     tool_context.state["is_processing_tool"] = False
     # Check if the tool succeeded
     structured = tool_response.get("structuredContent") if isinstance(tool_response, dict) else None
+    success = tool_response_succeeded(tool_name, tool_response)
+    tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
+    started_at = tool_started.pop(tool_name, time.monotonic())
+    tool_context.state["_voice_tool_started_at"] = tool_started
+    record_tool_completed(
+        tool_name,
+        "success" if success else "failure",
+        time.monotonic() - started_at,
+    )
+    if isinstance(structured, dict):
+        guidance = structured.get("support_guidance")
+        if isinstance(guidance, dict) and guidance:
+            tool_context.state["support_guidance"] = guidance
+            notify_event(
+                {
+                    "type": DataChannelEvent.GUIDANCE_SNAPSHOT.value,
+                    **guidance_observability_payload(guidance),
+                }
+            )
+        if tool_name == "get_open_fraud_alert" and structured.get("fraud_alert") is None:
+            playbook = dict(tool_context.state.get("fraud_playbook") or {})
+            playbook["open_alert_inspected"] = True
+            playbook["fraud_alert_id"] = None
+            tool_context.state["fraud_playbook"] = playbook
+        if tool_name == "get_transaction_history" and structured.get("success") is True:
+            recent_index = {}
+            for item in (structured.get("data") or [])[:50]:
+                item_id = item.get("authorization_id") or item.get("transaction_id") or item.get("id")
+                if not item_id:
+                    continue
+                recent_index[str(item_id)] = {
+                    "id": str(item_id),
+                    "description": item.get("description"),
+                    "amount_cents": item.get("amount_cents"),
+                    "display_amount_cents": abs(int(item.get("amount_cents") or 0)),
+                    "pending": bool(item.get("pending")),
+                    "posted_at": item.get("posted_at") or item.get("timestamp"),
+                    "last_four": item.get("last_four"),
+                }
+            tool_context.state["recent_transaction_index"] = recent_index
+    notify_event(
+        {
+            "type": INTERNAL_TOOL_RUNTIME_STATUS,
+            "tool": tool_name,
+            "outcome": "success" if success else "failure",
+        }
+    )
+    if isinstance(tool_response, dict) and tool_response.get("status") == "SUCCESS":
+        playbook = dict(tool_context.state.get("fraud_playbook") or {})
+        if tool_name == "transfer_to_human":
+            playbook["escalation_status"] = "COMPLETED"
+        elif tool_name == "end_consultation":
+            playbook["completion_status"] = "COMPLETED"
+        tool_context.state["fraud_playbook"] = playbook
     if structured and isinstance(structured, dict) and structured.get("success") is True:
+        authorization = (
+            tool_context.state.get("fraud_playbook", {}).get("workflow_authorization")
+        )
+        if authorization and authorization.get("status") == "EXECUTING":
+            completed_playbook = dict(tool_context.state.get("fraud_playbook") or {})
+            completed_playbook["workflow_authorization"] = mark_authorization_completed(
+                authorization
+            )
+            tool_context.state["fraud_playbook"] = completed_playbook
         updated_playbook = mark_fraud_tool_completed(
             tool_context.state.get("fraud_playbook", {}),
             tool_name,
@@ -346,7 +888,7 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
             })
             return None
 
-        if tool_name == "triage_fraud_case":
+        if tool_name in {"triage_fraud_case", "triage_customer_reported_fraud"}:
             logger.info(
                 "[CALLBACK] FRAUD_CASE_TRIAGED event broadcasted %s",
                 format_log_context(
@@ -368,7 +910,7 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
                 "secure_message": structured.get("secure_message"),
                 "escalated": structured.get("escalated", False),
             })
-            return None
+            return build_triage_model_result(structured)
 
         account_data = await fetch_updated_account_details()
         logger.info(
@@ -420,6 +962,15 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
                     "card_token": structured.get("card_token"),
                     "fraud_alert_id": structured.get("fraud_alert_id"),
                 })
+    else:
+        playbook = dict(tool_context.state.get("fraud_playbook") or {})
+        authorization = playbook.get("workflow_authorization") or {}
+        if authorization.get("status") == "EXECUTING":
+            playbook["workflow_authorization"] = invalidate_workflow_authorization(
+                authorization,
+                reason=f"TOOL_RESULT_NOT_SUCCESSFUL:{tool_name}",
+            )
+            tool_context.state["fraud_playbook"] = playbook
     return None
 
 NAME = "credit_card_support_voice_assistant"
@@ -432,7 +983,13 @@ def create_voice_agent(*, model=None, instruction: str = INSTRUCTION_TEXT) -> Ag
         description=DESCRIPTION,
         model=model or os.getenv("VOICE_AGENT_AUDIO_MODEL"),
         instruction=instruction,
-        tools=[create_mcp_toolset(), end_consultation, transfer_to_human],
+        tools=[
+            create_mcp_toolset(),
+            prepare_fraud_triage_confirmation,
+            prepare_customer_reported_fraud_confirmation,
+            end_consultation,
+            transfer_to_human,
+        ],
         before_tool_callback=before_tool_callback,
         after_tool_callback=after_tool_callback,
         on_tool_error_callback=on_tool_error_callback,

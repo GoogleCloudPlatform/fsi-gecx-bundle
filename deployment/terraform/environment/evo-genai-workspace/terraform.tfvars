@@ -15,22 +15,25 @@
 # WARNING: Do NOT place any secrets (passwords, private keys, API keys, OAuth tokens)
 # in this file. Secrets should be stored in Secret Manager and accessed dynamically.
 
-project_id                                       = "evo-genai-workspace"
-deploy_cloud_build_triggers                      = true
-deploy_cloud_run_services                        = true
-set_cloud_run_audiences                          = true
-ccai_company_id                                  = "17762261086439462b8f0b64f6cd0d5e3"
-ccai_host                                        = "https://fsi-test-4000-jz3ioz1.uc1.ccaiplatform.com"
-custom_domain                                    = "banking.erikvoit.demo.altostrat.com"
-github_app_installation_id                       = "261964"
-github_oauth_token_secret_name                   = "GoogleCloudPlatform-github-oauthtoken-6a4506"
-manage_github_connection                         = false
-cx_agent_studio_deployment_name                  = "projects/evo-genai-workspace/locations/us/apps/a3e14f8f-8ac8-4020-94f9-dd7d53294566/deployments/b732b1ca-13be-47f0-8161-250e531c1aa6"
-cx_agent_studio_upload_tool_name                 = "projects/evo-genai-workspace/locations/us/apps/a3e14f8f-8ac8-4020-94f9-dd7d53294566/tools/7d1d2879-9909-42a5-a39b-4ac6370980d3"
-cx_agent_studio_populate_content_tool_name       = "projects/evo-genai-workspace/locations/us/apps/a3e14f8f-8ac8-4020-94f9-dd7d53294566/tools/8e42a29a-d20e-4aba-8ea9-beecb68c6a60"
-use_external_identities                          = true
-enable_blocking_functions                        = true
-enable_current_user_grants                       = true
+project_id                                 = "evo-genai-workspace"
+deploy_cloud_build_triggers                = true
+deploy_cloud_run_services                  = true
+set_cloud_run_audiences                    = true
+ccai_company_id                            = "17762261086439462b8f0b64f6cd0d5e3"
+ccai_host                                  = "https://fsi-test-4000-jz3ioz1.uc1.ccaiplatform.com"
+custom_domain                              = "banking.erikvoit.demo.altostrat.com"
+github_app_installation_id                 = "261964"
+github_oauth_token_secret_name             = "GoogleCloudPlatform-github-oauthtoken-6a4506"
+manage_github_connection                   = false
+cx_agent_studio_deployment_name            = "projects/evo-genai-workspace/locations/us/apps/a3e14f8f-8ac8-4020-94f9-dd7d53294566/deployments/b732b1ca-13be-47f0-8161-250e531c1aa6"
+cx_agent_studio_upload_tool_name           = "projects/evo-genai-workspace/locations/us/apps/a3e14f8f-8ac8-4020-94f9-dd7d53294566/tools/7d1d2879-9909-42a5-a39b-4ac6370980d3"
+cx_agent_studio_populate_content_tool_name = "projects/evo-genai-workspace/locations/us/apps/a3e14f8f-8ac8-4020-94f9-dd7d53294566/tools/8e42a29a-d20e-4aba-8ea9-beecb68c6a60"
+use_external_identities                    = true
+enable_blocking_functions                  = true
+developer_iam_members = [
+  "serviceAccount:cloudbuild-terraform-sa@evo-genai-workspace.iam.gserviceaccount.com",
+  "user:erikvoit@gcp.solutions",
+]
 repo_branch_expression                           = "^main$"
 cloud_build_trigger_event                        = "push_to_branch"
 github_repo_remote_uri                           = "https://github.com/GoogleCloudPlatform/fsi-gecx-bundle.git"

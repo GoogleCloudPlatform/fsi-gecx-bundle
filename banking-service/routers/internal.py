@@ -338,6 +338,11 @@ def reset_database(
     warnings: list[str] = []
     try:
         enable_session_rbac_override(db)
+        from services.voice_session_epochs import bump_global_reset_generation
+
+        # Persist invalidation outside the schemas rebuilt by the reset job.
+        # Any active voice workflow becomes stale before destructive work starts.
+        bump_global_reset_generation(db)
 
         if is_cloud_run() and os.getenv("FULL_RESET_JOB_NAME"):
             enable_maintenance_mode(

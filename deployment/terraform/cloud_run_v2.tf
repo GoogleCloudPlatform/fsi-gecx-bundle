@@ -609,12 +609,14 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
 
   # CPU/instance scaling configurations to avoid drops
   scaling {
-    min_instance_count = 1
-    max_instance_count = 5
+    min_instance_count = var.voice_agent_min_instances
+    max_instance_count = var.voice_agent_max_instances
   }
 
   template {
-    service_account = google_service_account.voice_agent_sa.email
+    service_account                  = google_service_account.voice_agent_sa.email
+    max_instance_request_concurrency = var.voice_agent_max_instance_request_concurrency
+    timeout                          = "${var.voice_agent_request_timeout_seconds}s"
 
     vpc_access {
       network_interfaces {
@@ -643,15 +645,15 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
         cpu_idle          = false
         startup_cpu_boost = true
         limits = {
-          cpu    = "4"
-          memory = "4Gi"
+          cpu    = tostring(var.voice_agent_cpu)
+          memory = var.voice_agent_memory
         }
       }
 
 
       env {
         name  = "DATABASE_URL"
-        value = "postgresql+psycopg2://${google_sql_user.banking_service_sa_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+        value = "postgresql+asyncpg://${google_sql_user.voice_agent_sa_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
       }
 
       env {
@@ -703,6 +705,21 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
         name  = "VOICE_AGENT_AUDIO_MODEL"
         value = var.voice_agent_audio_model
       }
+
+      env {
+        name  = "VOICE_AGENT_MAX_CONCURRENT_SESSIONS"
+        value = tostring(var.voice_agent_max_concurrent_sessions)
+      }
+
+      env {
+        name  = "VOICE_AGENT_AUDIO_SESSION_CAPACITY_UNITS"
+        value = tostring(var.voice_agent_audio_session_capacity_units)
+      }
+
+      env {
+        name  = "VOICE_AGENT_VIDEO_SESSION_CAPACITY_UNITS"
+        value = tostring(var.voice_agent_video_session_capacity_units)
+      }
     }
   }
 
@@ -717,7 +734,10 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
   depends_on = [
     google_project_service.run_googleapis_com,
     google_secret_manager_secret_iam_member.voice_agent_key_accessor,
-    google_secret_manager_secret_iam_member.voice_agent_secret_accessor
+    google_secret_manager_secret_iam_member.voice_agent_secret_accessor,
+    google_sql_user.voice_agent_sa_iam_user,
+    google_project_iam_member.voice_agent_sa_cloudsql_client,
+    google_project_iam_member.voice_agent_sa_cloudsql_instance_user
   ]
 }
 

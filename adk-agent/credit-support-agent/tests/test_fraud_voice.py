@@ -5,9 +5,12 @@ from agent.fraud_voice import (
     apply_wallet_transcript_event,
     build_fraud_playbook,
     build_initial_greeting,
+    build_triage_model_result,
     classify_google_wallet_response,
     customer_confirmed_google_wallet,
+    invalidate_wallet_authorization,
     mark_fraud_tool_completed,
+    prepare_wallet_tool_args,
     validate_fraud_tool_sequence,
 )
 from agent.instructions import compose_session_instruction
@@ -120,6 +123,7 @@ def test_validate_fraud_tool_sequence_allows_wallet_push_after_confirmation() ->
     playbook["triage_submitted"] = True
     playbook["replacement_issued"] = True
     playbook["wallet_customer_confirmed"] = True
+    playbook["replacement_card_token"] = "trusted-card-token"
 
     error = validate_fraud_tool_sequence(playbook, "push_card_to_google_wallet", {})
 
@@ -128,6 +132,8 @@ def test_validate_fraud_tool_sequence_allows_wallet_push_after_confirmation() ->
 
 def test_wallet_offer_requires_google_wallet_in_completed_agent_turn() -> None:
     assert agent_offered_google_wallet("Would you like me to add it to Google Wallet?") is True
+    assert agent_offered_google_wallet("Do you need help adding it to your Google Wallet?") is True
+    assert agent_offered_google_wallet("Please confirm you'd like to add your virtual card to Google Wallet.") is True
     assert agent_offered_google_wallet("Your virtual card is ready.") is False
     assert agent_offered_google_wallet("Google Wallet provisioning is already queued.") is False
 
@@ -146,6 +152,8 @@ def test_wallet_response_classification_distinguishes_decline_and_unclear() -> N
     assert classify_google_wallet_response("No, not now") == "DECLINED"
     assert classify_google_wallet_response("Could you please, that would be great") == "CONFIRMED"
     assert classify_google_wallet_response("How does Google Wallet work?") == "UNCLEAR"
+    assert classify_google_wallet_response("No, that's okay. Can you try one more time?") == "CONFIRMED"
+    assert classify_google_wallet_response("No, don't try again.") == "DECLINED"
 
 
 def test_wallet_transcript_events_persist_offer_and_later_confirmation() -> None:
@@ -156,6 +164,7 @@ def test_wallet_transcript_events_persist_offer_and_later_confirmation() -> None
         }
     )
     playbook["replacement_issued"] = True
+    playbook["replacement_card_token"] = "trusted-card-token"
 
     offered = apply_wallet_transcript_event(
         playbook,
@@ -186,6 +195,7 @@ def test_wallet_transcript_decline_does_not_authorize_tool() -> None:
         }
     )
     playbook["replacement_issued"] = True
+    playbook["replacement_card_token"] = "trusted-card-token"
     playbook = apply_wallet_transcript_event(
         playbook,
         author="agent",
@@ -205,6 +215,114 @@ def test_wallet_transcript_decline_does_not_authorize_tool() -> None:
     assert validate_fraud_tool_sequence(declined, "push_card_to_google_wallet", {}) == (
         "Ask the customer to explicitly confirm Google Wallet provisioning before queueing it."
     )
+
+
+def test_avatar_delayed_tool_call_preserves_confirmed_wallet_authorization() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    playbook["replacement_issued"] = True
+    playbook["replacement_card_token"] = "trusted-card-token"
+    offered = apply_wallet_transcript_event(
+        playbook,
+        author="agent",
+        transcript="I can queue it for Google Wallet. Would you like me to queue that now?",
+        event_id="avatar-agent-offer",
+    )
+    confirmed = apply_wallet_transcript_event(
+        offered,
+        author="user",
+        transcript="Yeah, that would be great, thank you so much.",
+        event_id="avatar-user-confirmation",
+    )
+    nudged = apply_wallet_transcript_event(
+        confirmed,
+        author="user",
+        transcript="Are you doing it?",
+        event_id="avatar-user-followup",
+    )
+
+    assert nudged["wallet_response_status"] == "CONFIRMED"
+    assert nudged["wallet_customer_confirmed"] is True
+    assert nudged["wallet_response_event_id"] == "avatar-user-confirmation"
+    assert nudged["wallet_followup_event_id"] == "avatar-user-followup"
+    assert validate_fraud_tool_sequence(nudged, "push_card_to_google_wallet", {}) is None
+
+
+def test_explicit_decline_revokes_prior_wallet_confirmation() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    playbook["replacement_issued"] = True
+    playbook["wallet_push_offered"] = True
+    playbook["wallet_customer_confirmed"] = True
+    playbook["wallet_response_status"] = "CONFIRMED"
+
+    declined = apply_wallet_transcript_event(
+        playbook,
+        author="user",
+        transcript="Actually no, don't add it.",
+        event_id="customer-revocation",
+    )
+
+    assert declined["wallet_response_status"] == "DECLINED"
+    assert declined["wallet_customer_confirmed"] is False
+    assert declined["wallet_push_offered"] is False
+
+
+def test_wallet_authorization_invalidation_records_reason() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    playbook["wallet_push_offered"] = True
+    playbook["wallet_customer_confirmed"] = True
+    playbook["wallet_response_status"] = "CONFIRMED"
+
+    invalidated = invalidate_wallet_authorization(
+        playbook,
+        reason="MODEL_RESPONSE_INTERRUPTED",
+        event_id="interrupt-1",
+    )
+
+    assert invalidated["wallet_response_status"] == "INVALIDATED"
+    assert invalidated["wallet_customer_confirmed"] is False
+    assert invalidated["wallet_invalidation_reason"] == "MODEL_RESPONSE_INTERRUPTED"
+    assert invalidated["wallet_invalidation_event_id"] == "interrupt-1"
+
+
+def test_triage_model_result_exposes_only_confirmed_outcomes() -> None:
+    result = build_triage_model_result(
+        {
+            "message": "Fraud case triaged and pending specialist review.",
+            "outcome": "PENDING_SPECIALIST_REVIEW",
+            "voided_authorizations": [{"authorization_id": "auth-1"}],
+            "provisional_credits": [],
+            "replacement_card": {
+                "is_virtual": True,
+                "status": "ACTIVE",
+                "new_last_four": "4447",
+            },
+            "secure_message": {"message_id": "message-1"},
+            "escalated": False,
+        }
+    )
+
+    assert result["pending_holds_released"] == 1
+    assert result["provisional_credits_applied"] == 0
+    assert result["replacement_card_issued"] is True
+    assert result["replacement_card_type"] == "VIRTUAL"
+    assert result["secure_message_sent"] is True
+    assert result["escalated"] is False
+    assert "Do not say a physical card was mailed" in result["model_instruction"]
 
 
 def test_validate_fraud_tool_sequence_requires_replacement_before_wallet_push() -> None:
@@ -311,6 +429,30 @@ def test_validate_fraud_tool_sequence_blocks_duplicate_triage() -> None:
     assert error == "The fraud case has already been triaged. Do not submit the fraud workflow again."
 
 
+def test_customer_reported_triage_requires_prepared_no_alert_mode() -> None:
+    general = build_fraud_playbook(
+        {"has_active_fraud_alert": False, "fraud_alert": None}
+    )
+    general["open_alert_inspected"] = True
+
+    error = validate_fraud_tool_sequence(
+        general,
+        "triage_customer_reported_fraud",
+        {"disputed_transaction_ids": ["txn-1"]},
+    )
+    general["entry_mode"] = "CUSTOMER_REPORTED_FRAUD"
+
+    assert "preparing the exact selection" in error
+    assert (
+        validate_fraud_tool_sequence(
+            general,
+            "triage_customer_reported_fraud",
+            {"disputed_transaction_ids": ["txn-1"]},
+        )
+        is None
+    )
+
+
 def test_mark_fraud_tool_completed_tracks_single_triage_workflow() -> None:
     playbook = build_fraud_playbook(
         {
@@ -325,7 +467,10 @@ def test_mark_fraud_tool_completed_tracks_single_triage_workflow() -> None:
         "triage_fraud_case",
         {
             "outcome": "PENDING_SPECIALIST_REVIEW",
-            "replacement_card": {"new_card_id": "card-456"},
+            "replacement_card": {
+                "new_card_id": "card-456",
+                "new_card_token": "trusted-card-token",
+            },
         },
     )
 
@@ -335,6 +480,42 @@ def test_mark_fraud_tool_completed_tracks_single_triage_workflow() -> None:
     assert playbook["replacement_issued"] is True
     assert playbook["resolution_completed"] is True
     assert playbook["confirmed_fraud"] is True
+    assert playbook["replacement_card_token"] == "trusted-card-token"
+
+
+def test_wallet_args_use_trusted_replacement_token_not_model_account_id() -> None:
+    playbook = {"replacement_card_token": "trusted-card-token"}
+
+    prepared = prepare_wallet_tool_args(
+        playbook,
+        {
+            "account_id": "0131",
+            "card_token": "invented-card-token",
+            "wallet_provider": "OTHER_WALLET",
+            "session_id": "secure-message-thread-id",
+        },
+    )
+
+    assert prepared == {
+        "card_token": "trusted-card-token",
+        "wallet_provider": "GOOGLE_WALLET",
+    }
+
+
+def test_wallet_requires_trusted_replacement_token() -> None:
+    playbook = {
+        "entry_mode": "FRAUD_ALERT",
+        "replacement_issued": True,
+        "replacement_card_token": None,
+        "wallet_customer_confirmed": True,
+    }
+
+    assert validate_fraud_tool_sequence(
+        playbook, "push_card_to_google_wallet", {}
+    ) == (
+        "The trusted replacement virtual-card token is unavailable. "
+        "Do not provision another card."
+    )
 
 
 def test_mark_fraud_tool_completed_tracks_recognized_triage() -> None:
@@ -364,7 +545,7 @@ def test_base_instruction_excludes_active_fraud_flow() -> None:
     assert "When a trusted active fraud alert exists" not in instruction
     assert "call `triage_fraud_case` exactly once" not in instruction
     assert "fraud investigation team" not in instruction
-    assert "provisional credits" not in instruction
+    assert "five suspicious charges" not in instruction
 
 
 def test_base_instruction_includes_grounding_and_disclosure_guardrails() -> None:
@@ -375,6 +556,9 @@ def test_base_instruction_includes_grounding_and_disclosure_guardrails() -> None
     assert "Do not claim an action succeeded until the relevant tool result confirms success" in instruction
     assert "Before taking a consequential account action" in instruction
     assert "Do not provide financial, legal, tax, or investment advice" in instruction
+    assert "If `get_open_fraud_alert` confirms there is no active alert" in instruction
+    assert "Call `prepare_customer_reported_fraud_confirmation` with only those exact IDs" in instruction
+    assert "call `triage_customer_reported_fraud` exactly once" in instruction
 
 
 def test_voice_session_uses_fresh_agent_factory() -> None:
@@ -394,14 +578,14 @@ def test_composed_fraud_instruction_prefers_single_triage_workflow() -> None:
         session_context="Session-specific customer context:\n- Fraud alert id for triage_fraud_case: fraud-123.",
     )
 
-    assert "Immediately call `triage_fraud_case` exactly once" in instruction
+    assert "call `prepare_fraud_triage_confirmation` with the exact" in instruction
     assert "Ask whether the customer recognizes these transactions" in instruction
-    assert "restate the specific transactions" in instruction
+    assert "restate the exact selection" in instruction
     assert "Stop after asking for confirmation" in instruction
-    assert "do not call any fraud workflow tool in the same response" in instruction
+    assert "do not call `triage_fraud_case` in the same response" in instruction
     assert "raising a case with the fraud investigation team" in instruction
     assert "This is not a second confirmation checkpoint" in instruction
-    assert "Immediately call `triage_fraud_case` exactly once after that disclosure" in instruction
+    assert "using exactly the payload that `prepare_fraud_triage_confirmation` returned" in instruction
     assert "summarize only confirmed tool results" in instruction
     assert "Do not push a virtual card to Google Wallet unless" in instruction
     assert "Do not burst-call multiple fraud tools in a row" in instruction

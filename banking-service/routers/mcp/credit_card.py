@@ -21,6 +21,7 @@ from fastmcp import Context
 from . import mcp  # Import shared FastMCP server instance
 from routers.mcp.utils import requires_user_assertion, verified_customer_id_var
 from utils.database import SessionLocal
+from utils.log_safety import stable_log_reference
 from repositories.credit_card import CreditCardRepository
 from services.credit_card import (
     apply_limit_increase,
@@ -28,6 +29,7 @@ from services.credit_card import (
     issue_replacement_card,
     queue_wallet_provisioning,
     reverse_posted_fee,
+    get_transaction_history_dto,
 )
 from services.fraud_alerts import FraudAlertService
 from services.voice_bidi import send_session_event
@@ -47,7 +49,11 @@ async def report_lost_stolen_card(
         account_id: Optional unique identifier for the credit card account.
     """
     verified_customer_id = verified_customer_id_var.get()
-    logger.info(f"FastMCP report_lost_stolen_card invoked for account: {account_id} (Customer: {verified_customer_id})")
+    logger.info(
+        "FastMCP report_lost_stolen_card invoked account_ref=%s customer_ref=%s",
+        stable_log_reference(account_id, "account"),
+        stable_log_reference(verified_customer_id, "customer"),
+    )
     
     db = SessionLocal()
     repo = CreditCardRepository(db)
@@ -64,7 +70,12 @@ async def report_lost_stolen_card(
         # Enforce BOLA/IDOR check: verify account belongs to verified_customer_id
         account = repo.get_account_by_customer(verified_customer_id)
         if not account or account.id != account_id:
-            logger.error(f"Security Alert: BOLA/IDOR attempt or account not found for {account_id} by {verified_customer_id}")
+            logger.error(
+                "Security Alert: BOLA/IDOR attempt or account not found "
+                "account_ref=%s customer_ref=%s",
+                stable_log_reference(account_id, "account"),
+                stable_log_reference(verified_customer_id, "customer"),
+            )
             return {"success": False, "message": "Account not found or unauthorized."}
 
         # Find the active card linked to this account
@@ -78,7 +89,10 @@ async def report_lost_stolen_card(
             return {"success": False, "message": "No active card found linked to this account."}
 
         # Anti-Fraud Check: billing address modification quarantine (Simulated)
-        logger.info(f"Anti-Fraud check: Address quarantine check passed for customer {verified_customer_id}")
+        logger.info(
+            "Anti-Fraud address quarantine check passed customer_ref=%s",
+            stable_log_reference(verified_customer_id, "customer"),
+        )
 
         # Execute freeze service
         freeze_card(db, card_token=card.card_token, reason="CUSTOMER_REPORTED_LOST_STOLEN")
@@ -97,9 +111,12 @@ async def report_lost_stolen_card(
             "message": "Card reported as lost. A new card will be issued.",
             "confirmation_number": confirmation_number
         }
-    except Exception as e:
-        logger.error(f"Error in FastMCP report_lost_stolen_card: {e}")
-        return {"success": False, "message": f"Internal error: {str(e)}"}
+    except Exception as exc:
+        logger.error(
+            "Error in FastMCP report_lost_stolen_card error_type=%s",
+            type(exc).__name__,
+        )
+        return {"success": False, "message": "Internal error updating card status."}
     finally:
         db.close()
 
@@ -117,7 +134,11 @@ async def unfreeze_card(
         account_id: Optional unique identifier for the credit card account.
     """
     verified_customer_id = verified_customer_id_var.get()
-    logger.info(f"FastMCP unfreeze_card invoked for account: {account_id} (Customer: {verified_customer_id})")
+    logger.info(
+        "FastMCP unfreeze_card invoked account_ref=%s customer_ref=%s",
+        stable_log_reference(account_id, "account"),
+        stable_log_reference(verified_customer_id, "customer"),
+    )
     
     db = SessionLocal()
     repo = CreditCardRepository(db)
@@ -134,7 +155,12 @@ async def unfreeze_card(
         # Enforce BOLA/IDOR check: verify account belongs to verified_customer_id
         account = repo.get_account_by_customer(verified_customer_id)
         if not account or account.id != account_id:
-            logger.error(f"Security Alert: BOLA/IDOR attempt or account not found for {account_id} by {verified_customer_id}")
+            logger.error(
+                "Security Alert: BOLA/IDOR attempt or account not found "
+                "account_ref=%s customer_ref=%s",
+                stable_log_reference(account_id, "account"),
+                stable_log_reference(verified_customer_id, "customer"),
+            )
             return {"success": False, "message": "Account not found or unauthorized."}
 
         # Find the blocked card linked to this account
@@ -163,9 +189,11 @@ async def unfreeze_card(
             "message": "Card successfully unblocked and reactivated.",
             "card_token": card.card_token
         }
-    except Exception as e:
-        logger.error(f"Error in FastMCP unfreeze_card: {e}")
-        return {"success": False, "message": f"Internal error: {str(e)}"}
+    except Exception as exc:
+        logger.error(
+            "Error in FastMCP unfreeze_card error_type=%s", type(exc).__name__
+        )
+        return {"success": False, "message": "Internal error updating card status."}
     finally:
         db.close()
 
@@ -186,9 +214,9 @@ async def issue_replacement_card_tool(
     """
     verified_customer_id = verified_customer_id_var.get()
     logger.info(
-        "FastMCP issue_replacement_card_tool invoked for account: %s (Customer: %s)",
-        account_id,
-        verified_customer_id,
+        "FastMCP issue_replacement_card_tool invoked account_ref=%s customer_ref=%s",
+        stable_log_reference(account_id, "account"),
+        stable_log_reference(verified_customer_id, "customer"),
     )
 
     db = SessionLocal()
@@ -207,8 +235,8 @@ async def issue_replacement_card_tool(
         if not account or str(account.id) != str(account_id):
             logger.error(
                 "Security Alert: BOLA/IDOR attempt or account not found for %s by %s",
-                account_id,
-                verified_customer_id,
+                stable_log_reference(account_id, "account"),
+                stable_log_reference(verified_customer_id, "customer"),
             )
             return {"success": False, "message": "Account not found or unauthorized."}
 
@@ -250,9 +278,12 @@ async def issue_replacement_card_tool(
             "fraud_alert_id": result.get("fraud_alert_id"),
             "compromised_card_id": result.get("compromised_card_id"),
         }
-    except Exception as e:
-        logger.error(f"Error in FastMCP issue_replacement_card_tool: {e}")
-        return {"success": False, "message": f"Internal error: {str(e)}"}
+    except Exception as exc:
+        logger.error(
+            "Error in FastMCP issue_replacement_card_tool error_type=%s",
+            type(exc).__name__,
+        )
+        return {"success": False, "message": "Internal error issuing replacement card."}
     finally:
         db.close()
 
@@ -275,9 +306,9 @@ async def push_card_to_google_wallet(
     """
     verified_customer_id = verified_customer_id_var.get()
     logger.info(
-        "FastMCP push_card_to_google_wallet invoked for account: %s (Customer: %s)",
-        account_id,
-        verified_customer_id,
+        "FastMCP push_card_to_google_wallet invoked account_ref=%s customer_ref=%s",
+        stable_log_reference(account_id, "account"),
+        stable_log_reference(verified_customer_id, "customer"),
     )
 
     db = SessionLocal()
@@ -296,8 +327,8 @@ async def push_card_to_google_wallet(
         if not account or str(account.id) != str(account_id):
             logger.error(
                 "Security Alert: BOLA/IDOR attempt or account not found for %s by %s",
-                account_id,
-                verified_customer_id,
+                stable_log_reference(account_id, "account"),
+                stable_log_reference(verified_customer_id, "customer"),
             )
             return {"success": False, "message": "Account not found or unauthorized."}
 
@@ -337,9 +368,12 @@ async def push_card_to_google_wallet(
             "wallet_provisioning_status": result["wallet_provisioning_status"],
             "fraud_alert_id": result.get("fraud_alert_id"),
         }
-    except Exception as e:
-        logger.error(f"Error in FastMCP push_card_to_google_wallet: {e}")
-        return {"success": False, "message": f"Internal error: {str(e)}"}
+    except Exception as exc:
+        logger.error(
+            "Error in FastMCP push_card_to_google_wallet error_type=%s",
+            type(exc).__name__,
+        )
+        return {"success": False, "message": "Internal error provisioning wallet."}
     finally:
         db.close()
 
@@ -353,15 +387,25 @@ async def get_open_fraud_alert(
     Retrieves the latest open fraud alert for the verified customer.
     """
     verified_customer_id = verified_customer_id_var.get()
-    logger.info("FastMCP get_open_fraud_alert invoked for customer: %s", verified_customer_id)
+    logger.info(
+        "FastMCP get_open_fraud_alert invoked customer_ref=%s",
+        stable_log_reference(verified_customer_id, "customer"),
+    )
 
     db = SessionLocal()
     try:
         service = FraudAlertService(db)
         return service.get_open_alert_details(auth_provider_uid=verified_customer_id)
-    except Exception as e:
-        logger.error(f"Error in FastMCP get_open_fraud_alert: {e}")
-        return {"success": False, "message": f"Internal error: {str(e)}", "fraud_alert": None}
+    except Exception as exc:
+        logger.error(
+            "Error in FastMCP get_open_fraud_alert error_type=%s",
+            type(exc).__name__,
+        )
+        return {
+            "success": False,
+            "message": "Internal error retrieving fraud alert.",
+            "fraud_alert": None,
+        }
     finally:
         db.close()
 
@@ -380,8 +424,8 @@ async def resolve_fraud_alert(
     """
     verified_customer_id = verified_customer_id_var.get()
     logger.info(
-        "FastMCP resolve_fraud_alert invoked for customer: %s with resolution=%s",
-        verified_customer_id,
+        "FastMCP resolve_fraud_alert invoked customer_ref=%s resolution=%s",
+        stable_log_reference(verified_customer_id, "customer"),
         resolution,
     )
 
@@ -401,9 +445,16 @@ async def resolve_fraud_alert(
             auth_provider_uid=verified_customer_id,
             resolution=normalized_resolution,
         )
-    except Exception as e:
-        logger.error(f"Error in FastMCP resolve_fraud_alert: {e}")
-        return {"success": False, "message": f"Internal error: {str(e)}", "fraud_alert": None}
+    except Exception as exc:
+        logger.error(
+            "Error in FastMCP resolve_fraud_alert error_type=%s",
+            type(exc).__name__,
+        )
+        return {
+            "success": False,
+            "message": "Internal error resolving fraud alert.",
+            "fraud_alert": None,
+        }
     finally:
         db.close()
 
@@ -432,9 +483,9 @@ async def triage_fraud_case(
     """
     verified_customer_id = verified_customer_id_var.get()
     logger.info(
-        "FastMCP triage_fraud_case invoked for customer=%s fraud_alert_id=%s",
-        verified_customer_id,
-        fraud_alert_id,
+        "FastMCP triage_fraud_case invoked customer_ref=%s fraud_alert_ref=%s",
+        stable_log_reference(verified_customer_id, "customer"),
+        stable_log_reference(fraud_alert_id, "fraud-alert"),
     )
 
     if not re.match(r"^[a-fA-F0-9-]{32,36}$", str(fraud_alert_id or "")):
@@ -470,12 +521,86 @@ async def triage_fraud_case(
                 },
             )
         return result
-    except ValueError as e:
-        logger.warning(f"Validation error in FastMCP triage_fraud_case: {e}")
-        return {"success": False, "message": str(e), "fraud_alert": None}
-    except Exception as e:
-        logger.error(f"Error in FastMCP triage_fraud_case: {e}")
-        return {"success": False, "message": f"Internal error: {str(e)}", "fraud_alert": None}
+    except ValueError as exc:
+        logger.warning(
+            "Validation error in FastMCP triage_fraud_case error_type=%s",
+            type(exc).__name__,
+        )
+        return {"success": False, "message": str(exc), "fraud_alert": None}
+    except Exception as exc:
+        logger.error(
+            "Error in FastMCP triage_fraud_case error_type=%s",
+            type(exc).__name__,
+        )
+        return {
+            "success": False,
+            "message": "Internal error triaging fraud case.",
+            "fraud_alert": None,
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def triage_customer_reported_fraud(
+    disputed_authorization_ids: list[str] = None,
+    disputed_transaction_ids: list[str] = None,
+    issue_replacement: bool = True,
+    escalate: bool = False,
+    idempotency_key: str = None,
+    ctx: Context = None,
+) -> dict:
+    """Create and triage a customer-reported fraud case after exact confirmation.
+
+    Use this only when no active alert exists and the customer has selected exact
+    entries returned by get_transaction_history.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    db = SessionLocal()
+    try:
+        result = FraudAlertService(db).triage_customer_reported_fraud(
+            auth_provider_uid=verified_customer_id,
+            disputed_authorization_ids=disputed_authorization_ids or [],
+            disputed_transaction_ids=disputed_transaction_ids or [],
+            issue_replacement=issue_replacement,
+            escalate=escalate,
+            idempotency_key=idempotency_key,
+        )
+        if result.get("success"):
+            fraud_alert = result.get("fraud_alert") or {}
+            await send_session_event(
+                f"session-{verified_customer_id}",
+                {
+                    "type": "FRAUD_CASE_TRIAGED",
+                    "fraud_alert_id": fraud_alert.get("fraud_alert_id"),
+                    "outcome": result.get("outcome"),
+                    "fraud_alert": fraud_alert,
+                    "voided_authorizations": result.get("voided_authorizations", []),
+                    "provisional_credits": result.get("provisional_credits", []),
+                    "replacement_card": result.get("replacement_card"),
+                    "secure_message": result.get("secure_message"),
+                    "escalated": result.get("escalated", False),
+                    "intake_source": "CUSTOMER_REPORTED",
+                },
+            )
+        return result
+    except ValueError as exc:
+        logger.warning(
+            "Customer-reported fraud validation failed error_type=%s",
+            type(exc).__name__,
+        )
+        return {"success": False, "message": str(exc), "fraud_alert": None}
+    except Exception as exc:
+        logger.error(
+            "Customer-reported fraud intake failed error_type=%s",
+            type(exc).__name__,
+        )
+        return {
+            "success": False,
+            "message": "Internal error triaging reported fraud.",
+            "fraud_alert": None,
+        }
     finally:
         db.close()
 
@@ -495,7 +620,11 @@ async def reverse_overdraft_fee(
         fee_date: Optional date of the fee to reverse.
     """
     verified_customer_id = verified_customer_id_var.get()
-    logger.info(f"FastMCP reverse_overdraft_fee invoked for account: {account_id} (Customer: {verified_customer_id})")
+    logger.info(
+        "FastMCP reverse_overdraft_fee invoked account_ref=%s customer_ref=%s",
+        stable_log_reference(account_id, "account"),
+        stable_log_reference(verified_customer_id, "customer"),
+    )
     
     db = SessionLocal()
     repo = CreditCardRepository(db)
@@ -512,7 +641,12 @@ async def reverse_overdraft_fee(
         # Enforce BOLA check
         account = repo.get_account_by_customer(verified_customer_id)
         if not account or account.id != account_id:
-            logger.error(f"Security Alert: BOLA/IDOR attempt or account not found for {account_id} by {verified_customer_id}")
+            logger.error(
+                "Security Alert: BOLA/IDOR attempt or account not found "
+                "account_ref=%s customer_ref=%s",
+                stable_log_reference(account_id, "account"),
+                stable_log_reference(verified_customer_id, "customer"),
+            )
             return {"success": False, "message": "Account not found or unauthorized."}
 
         # Concurrency Locking: lock account row for balance updates
@@ -592,9 +726,12 @@ async def reverse_overdraft_fee(
             "amount_reversed": abs(original_tx.amount_cents)/100,
             "reversals_remaining_this_year": 0
         }
-    except Exception as e:
-        logger.error(f"Error in FastMCP reverse_overdraft_fee: {e}")
-        return {"success": False, "message": f"Internal error: {str(e)}"}
+    except Exception as exc:
+        logger.error(
+            "Error in FastMCP reverse_overdraft_fee error_type=%s",
+            type(exc).__name__,
+        )
+        return {"success": False, "message": "Internal error reversing fee."}
     finally:
         db.close()
 
@@ -618,7 +755,11 @@ async def request_credit_limit_increase(
         amount: Desired new credit limit amount (alias in dollars).
     """
     verified_customer_id = verified_customer_id_var.get()
-    logger.info(f"FastMCP request_credit_limit_increase invoked for account: {account_id} (Customer: {verified_customer_id})")
+    logger.info(
+        "FastMCP request_credit_limit_increase invoked account_ref=%s customer_ref=%s",
+        stable_log_reference(account_id, "account"),
+        stable_log_reference(verified_customer_id, "customer"),
+    )
     
     db = SessionLocal()
     repo = CreditCardRepository(db)
@@ -635,7 +776,12 @@ async def request_credit_limit_increase(
         # Enforce BOLA check
         account = repo.get_account_by_customer(verified_customer_id)
         if not account or account.id != account_id:
-            logger.error(f"Security Alert: BOLA/IDOR attempt or account not found for {account_id} by {verified_customer_id}")
+            logger.error(
+                "Security Alert: BOLA/IDOR attempt or account not found "
+                "account_ref=%s customer_ref=%s",
+                stable_log_reference(account_id, "account"),
+                stable_log_reference(verified_customer_id, "customer"),
+            )
             return {"success": False, "message": "Account not found or unauthorized."}
 
         # Concurrency Locking
@@ -670,9 +816,12 @@ async def request_credit_limit_increase(
             "message": "Credit limit increase approved.",
             "new_limit": target_limit
         }
-    except Exception as e:
-        logger.error(f"Error in FastMCP request_credit_limit_increase: {e}")
-        return {"success": False, "message": f"Internal error: {str(e)}"}
+    except Exception as exc:
+        logger.error(
+            "Error in FastMCP request_credit_limit_increase error_type=%s",
+            type(exc).__name__,
+        )
+        return {"success": False, "message": "Internal error updating credit limit."}
     finally:
         db.close()
 
@@ -686,7 +835,10 @@ async def get_transaction_history(
     Retrieves the transaction ledger history for the verified user's credit card account.
     """
     verified_customer_id = verified_customer_id_var.get()
-    logger.info(f"FastMCP get_transaction_history invoked for Customer: {verified_customer_id}")
+    logger.info(
+        "FastMCP get_transaction_history invoked customer_ref=%s",
+        stable_log_reference(verified_customer_id, "customer"),
+    )
     
     db = SessionLocal()
     repo = CreditCardRepository(db)
@@ -695,17 +847,34 @@ async def get_transaction_history(
         if not account:
             return {"success": False, "message": "No credit card account found for the user."}
             
-        ledger = repo.list_ledger_entries(account.id)
-        data = [{
-            "transaction_id": entry.id,
-            "amount_cents": entry.amount_cents,
-            "description": entry.description,
-            "timestamp": entry.posted_at.isoformat() if entry.posted_at else None
-        } for entry in ledger]
+        transactions = get_transaction_history_dto(repo, verified_customer_id) or []
+        transactions = sorted(
+            transactions,
+            key=lambda item: item.get("posted_at") or "",
+            reverse=True,
+        )
+        visible_transactions = transactions[:50]
+        data = [
+            {
+                **item,
+                "transaction_id": item["id"] if not item.get("pending") else None,
+                "authorization_id": item["id"] if item.get("pending") else None,
+                "timestamp": item.get("posted_at"),
+            }
+            for item in visible_transactions
+        ]
         
-        return {"success": True, "data": data}
-    except Exception as e:
-        logger.error(f"Error in FastMCP get_transaction_history: {e}")
-        return {"success": False, "message": f"Internal error: {str(e)}"}
+        return {
+            "success": True,
+            "data": data,
+            "total_available": len(transactions),
+            "truncated": len(transactions) > len(visible_transactions),
+        }
+    except Exception as exc:
+        logger.error(
+            "Error in FastMCP get_transaction_history error_type=%s",
+            type(exc).__name__,
+        )
+        return {"success": False, "message": "Internal error retrieving transactions."}
     finally:
         db.close()

@@ -140,6 +140,12 @@ resource "google_sql_user" "banking_service_sa_iam_user" {
   type     = "CLOUD_IAM_SERVICE_ACCOUNT"
 }
 
+resource "google_sql_user" "voice_agent_sa_iam_user" {
+  name     = replace(google_service_account.voice_agent_sa.email, ".gserviceaccount.com", "")
+  instance = google_sql_database_instance.banking_data.name
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
+}
+
 resource "google_sql_user" "data_generator_iam_user" {
   name     = replace(google_service_account.data_generator_service_account.email, ".gserviceaccount.com", "")
   instance = google_sql_database_instance.banking_data.name
@@ -160,7 +166,7 @@ resource "google_sql_user" "kyc_service_iam_user" {
 
 locals {
   db_iam_support_members = {
-    for member in distinct(concat(local.database_iam_support_users, var.enable_current_user_grants ? [local.current_principal_member] : [])) :
+    for member in distinct(concat(local.database_iam_support_users, local.developer_iam_members)) :
     member => {
       name = split(":", member)[0] == "serviceAccount" ? replace(split(":", member)[1], ".gserviceaccount.com", "") : split(":", member)[1]
       type = split(":", member)[0] == "user" ? "CLOUD_IAM_USER" : (

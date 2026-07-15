@@ -252,6 +252,111 @@ variable "banking_service_max_instance_request_concurrency" {
   default     = 16
 }
 
+variable "voice_agent_max_instance_request_concurrency" {
+  type        = number
+  description = "Maximum simultaneous HTTP control requests per credit-support-agent instance."
+  default     = 8
+
+  validation {
+    condition     = var.voice_agent_max_instance_request_concurrency >= 1
+    error_message = "voice_agent_max_instance_request_concurrency must be at least 1."
+  }
+}
+
+variable "voice_agent_cpu" {
+  type        = number
+  description = "vCPU allocated to each credit-support-agent Cloud Run instance. Qualify changes with separate audio and avatar probes."
+  default     = 4
+
+  validation {
+    condition     = contains([1, 2, 4, 6, 8], var.voice_agent_cpu)
+    error_message = "voice_agent_cpu must be one of 1, 2, 4, 6, or 8."
+  }
+}
+
+variable "voice_agent_memory" {
+  type        = string
+  description = "Memory allocated to each credit-support-agent Cloud Run instance."
+  default     = "4Gi"
+
+  validation {
+    condition     = can(regex("^[1-9][0-9]*(Mi|Gi)$", var.voice_agent_memory))
+    error_message = "voice_agent_memory must be a positive Mi or Gi quantity, for example 4Gi."
+  }
+}
+
+variable "voice_agent_request_timeout_seconds" {
+  type        = number
+  description = "Cloud Run timeout for credit-support-agent control and readiness requests. Live sessions continue in the always-allocated background runtime."
+  default     = 300
+
+  validation {
+    condition     = var.voice_agent_request_timeout_seconds >= 15 && var.voice_agent_request_timeout_seconds <= 3600
+    error_message = "voice_agent_request_timeout_seconds must be between 15 and 3600."
+  }
+}
+
+variable "voice_agent_min_instances" {
+  type        = number
+  description = "Minimum warm credit-support-agent instances. Keep at least one because Live sessions outlive their start request."
+  default     = 1
+
+  validation {
+    condition     = var.voice_agent_min_instances >= 1
+    error_message = "voice_agent_min_instances must be at least 1."
+  }
+}
+
+variable "voice_agent_max_instances" {
+  type        = number
+  description = "Maximum credit-support-agent instances. Tune only with deployed capacity evidence."
+  default     = 5
+
+  validation {
+    condition     = var.voice_agent_max_instances >= var.voice_agent_min_instances
+    error_message = "voice_agent_max_instances must be at least voice_agent_min_instances."
+  }
+}
+
+variable "voice_agent_max_concurrent_sessions" {
+  type        = number
+  description = "Maximum weighted Live session capacity per credit-support-agent instance."
+  default     = 4
+
+  validation {
+    condition     = var.voice_agent_max_concurrent_sessions >= 1
+    error_message = "voice_agent_max_concurrent_sessions must be at least 1."
+  }
+}
+
+variable "voice_agent_audio_session_capacity_units" {
+  type        = number
+  description = "Capacity units consumed by one Gemini Live audio session."
+  default     = 1
+
+  validation {
+    condition = (
+      var.voice_agent_audio_session_capacity_units >= 1 &&
+      var.voice_agent_audio_session_capacity_units <= var.voice_agent_max_concurrent_sessions
+    )
+    error_message = "voice_agent_audio_session_capacity_units must be between 1 and the maximum weighted session capacity."
+  }
+}
+
+variable "voice_agent_video_session_capacity_units" {
+  type        = number
+  description = "Capacity units consumed by one Live Avatar video session."
+  default     = 4
+
+  validation {
+    condition = (
+      var.voice_agent_video_session_capacity_units >= 1 &&
+      var.voice_agent_video_session_capacity_units <= var.voice_agent_max_concurrent_sessions
+    )
+    error_message = "voice_agent_video_session_capacity_units must be between 1 and the maximum weighted session capacity."
+  }
+}
+
 variable "data_generator_max_instance_request_concurrency" {
   type        = number
   description = "Maximum concurrent requests per data-generator Cloud Run instance."
@@ -378,10 +483,21 @@ variable "additional_cors_allowed_origins" {
   default     = []
 }
 
-variable "enable_current_user_grants" {
-  type        = bool
-  description = "Set to true to grant the current openid user IAP backend accessor role."
-  default     = false
+variable "developer_iam_members" {
+  type        = list(string)
+  description = "Explicit IAM members that receive developer IAP, Cloud SQL, and governed-data access. Keep the primary member first to preserve legacy Terraform resource addresses."
+  default     = []
+
+  validation {
+    condition = (
+      length(var.developer_iam_members) == length(distinct(var.developer_iam_members)) &&
+      alltrue([
+        for member in var.developer_iam_members :
+        can(regex("^(user|group|serviceAccount):[^[:space:]]+$", member))
+      ])
+    )
+    error_message = "developer_iam_members must contain unique IAM members prefixed with user:, group:, or serviceAccount:."
+  }
 }
 
 variable "banking_service_timeout_seconds" {
