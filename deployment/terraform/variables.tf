@@ -483,10 +483,21 @@ variable "additional_cors_allowed_origins" {
   default     = []
 }
 
-variable "enable_current_user_grants" {
-  type        = bool
-  description = "Set to true to grant the current openid user IAP backend accessor role."
-  default     = false
+variable "developer_iam_members" {
+  type        = list(string)
+  description = "Explicit IAM members that receive developer IAP, Cloud SQL, and governed-data access. Keep the primary member first to preserve legacy Terraform resource addresses."
+  default     = []
+
+  validation {
+    condition = (
+      length(var.developer_iam_members) == length(distinct(var.developer_iam_members)) &&
+      alltrue([
+        for member in var.developer_iam_members :
+        can(regex("^(user|group|serviceAccount):[^[:space:]]+$", member))
+      ])
+    )
+    error_message = "developer_iam_members must contain unique IAM members prefixed with user:, group:, or serviceAccount:."
+  }
 }
 
 variable "banking_service_timeout_seconds" {

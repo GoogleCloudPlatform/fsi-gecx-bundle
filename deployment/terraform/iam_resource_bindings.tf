@@ -130,7 +130,7 @@ resource "google_cloud_run_service_iam_member" "iap_login_ui_public_invoker" {
 
 locals {
   cloud_run_iap_members = concat(
-    var.enable_current_user_grants ? [local.current_principal_member] : [],
+    local.developer_iam_members,
     local.additional_cloud_run_iap_members
   )
 }
