@@ -1894,7 +1894,7 @@ export default function VoiceSupportView() {
         )}
 
         {/* Mode Selection Toggle */}
-        {!isConnected && !isConnecting && engine === 'livekit' && (
+        {!isConnected && !isConnecting && engine === 'livekit' && enableAvatarModality && (
           <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-950/60 rounded-full border border-slate-200 dark:border-slate-800/80 mb-2">
             <button
               onClick={() => setMode('audio')}
@@ -1907,19 +1907,17 @@ export default function VoiceSupportView() {
               <Mic size={14} />
               Voice Call
             </button>
-            {enableAvatarModality && (
-              <button
-                onClick={() => setMode('video')}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-                  mode === 'video'
-                    ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-650 dark:text-indigo-400'
-                    : 'text-slate-500 dark:text-slate-450 hover:text-slate-700 dark:hover:text-slate-200'
-                }`}
-              >
-                <Video size={14} />
-                Live Avatar
-              </button>
-            )}
+            <button
+              onClick={() => setMode('video')}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                mode === 'video'
+                  ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-650 dark:text-indigo-400'
+                  : 'text-slate-500 dark:text-slate-450 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}
+            >
+              <Video size={14} />
+              Live Avatar
+            </button>
           </div>
         )}
 
