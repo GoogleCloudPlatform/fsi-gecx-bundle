@@ -83,13 +83,13 @@ steps:
         sed -i 's/BUILD_BUILD_ID: "[^"]*"/BUILD_BUILD_ID: "'"$BUILD_ID"'"/g' banking-ui/public/config.template.js
         sed -i 's/BUILD_LOCATION: "[^"]*"/BUILD_LOCATION: "'"$LOCATION"'"/g' banking-ui/public/config.template.js
         
-        # Write RELEASE_NOTES to a markdown file
-        echo "${_RELEASE_NOTES}" > banking-ui/public/release-notes.md
-        
-        # Determine boolean flag
+        # Determine boolean flag and write file conditionally
         HAS_NOTES="false"
         if [ -n "${_RELEASE_NOTES}" ]; then
           HAS_NOTES="true"
+          echo "${_RELEASE_NOTES}" > banking-ui/public/release-notes.md
+        else
+          rm -f banking-ui/public/release-notes.md
         fi
         
         # Inject HAS_RELEASE_NOTES boolean
