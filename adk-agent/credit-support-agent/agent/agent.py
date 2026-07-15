@@ -24,11 +24,12 @@ from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnecti
 from google.adk.tools import ToolContext
 
 from agent.events import DataChannelEvent, INTERNAL_TOOL_RUNTIME_STATUS
-from agent.closeout import closeout_block_reason
+from agent.closeout import closeout_block_reason, invalidate_closeout_checkpoint
 from agent.guidance_snapshot import guidance_observability_payload
 from agent.log_safety import (
     stable_log_reference,
     tool_args_log_summary,
+    tool_response_is_expected_checkpoint,
     tool_response_succeeded,
     tool_result_log_summary,
 )
@@ -530,9 +531,8 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
     fraud_context = tool_context.state.get("fraud_context", {}) if hasattr(tool_context, "state") else {}
     fraud_playbook = tool_context.state.get("fraud_playbook", {}) if hasattr(tool_context, "state") else {}
     if tool_name == "end_consultation":
-        latest_turn = (latest_customer_turn_var.get() or {}).get("latest") or {}
         block_reason = closeout_block_reason(
-            latest_customer_transcript=latest_turn.get("transcript"),
+            closeout_checkpoint=tool_context.state.get("closeout_checkpoint"),
             workflow_authorization=fraud_playbook.get("workflow_authorization"),
         )
         if block_reason:
@@ -562,6 +562,14 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
                     "Gratitude attached to an action confirmation is not closeout consent."
                 ),
             }
+    else:
+        checkpoint = tool_context.state.get("closeout_checkpoint")
+        invalidated_checkpoint = invalidate_closeout_checkpoint(
+            checkpoint,
+            reason=f"INTERVENING_TOOL:{tool_name}",
+        )
+        if invalidated_checkpoint != (checkpoint or {}):
+            tool_context.state["closeout_checkpoint"] = invalidated_checkpoint
     consequential_tools = {
         "report_lost_stolen_card",
         "unfreeze_card",
@@ -845,12 +853,16 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
     # Check if the tool succeeded
     structured = tool_response.get("structuredContent") if isinstance(tool_response, dict) else None
     success = tool_response_succeeded(tool_name, tool_response)
+    expected_checkpoint = tool_response_is_expected_checkpoint(tool_response)
+    outcome = "checkpoint" if expected_checkpoint else (
+        "success" if success else "failure"
+    )
     tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
     started_at = tool_started.pop(tool_name, time.monotonic())
     tool_context.state["_voice_tool_started_at"] = tool_started
     record_tool_completed(
         tool_name,
-        "success" if success else "failure",
+        outcome,
         time.monotonic() - started_at,
     )
     if isinstance(structured, dict):
@@ -888,7 +900,7 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
         {
             "type": INTERNAL_TOOL_RUNTIME_STATUS,
             "tool": tool_name,
-            "outcome": "success" if success else "failure",
+            "outcome": outcome,
         }
     )
     if isinstance(tool_response, dict) and tool_response.get("status") == "SUCCESS":

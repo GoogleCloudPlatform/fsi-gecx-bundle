@@ -64,6 +64,51 @@ async def test_plugin_writes_wallet_transitions_to_adk_state_delta() -> None:
 
 
 @pytest.mark.asyncio
+async def test_plugin_persists_ordered_closeout_checkpoint() -> None:
+    session = SimpleNamespace(state={"fraud_playbook": {}})
+    context = SimpleNamespace(session=session)
+    plugin = FraudWorkflowStatePlugin()
+
+    prompt_event = transcript_event(
+        author="agent",
+        text="Is there anything else I can help you with?",
+        input_event=False,
+    )
+    await plugin.on_event_callback(invocation_context=context, event=prompt_event)
+    checkpoint = prompt_event.actions.state_delta["closeout_checkpoint"]
+    session.state["closeout_checkpoint"] = checkpoint
+
+    customer_event = transcript_event(
+        author="user",
+        text="No, that's all.",
+        input_event=True,
+    )
+    await plugin.on_event_callback(invocation_context=context, event=customer_event)
+
+    assert customer_event.actions.state_delta["closeout_checkpoint"] == {
+        "status": "CONFIRMED",
+        "assistant_event_id": "agent-event",
+        "customer_event_id": "user-event",
+    }
+
+
+@pytest.mark.asyncio
+async def test_plugin_does_not_treat_fraud_answer_as_closeout() -> None:
+    session = SimpleNamespace(state={"fraud_playbook": {}})
+    context = SimpleNamespace(session=session)
+    plugin = FraudWorkflowStatePlugin()
+    customer_event = transcript_event(
+        author="user",
+        text="No, I don't recognize those charges.",
+        input_event=True,
+    )
+
+    await plugin.on_event_callback(invocation_context=context, event=customer_event)
+
+    assert "closeout_checkpoint" not in customer_event.actions.state_delta
+
+
+@pytest.mark.asyncio
 async def test_plugin_invalidates_wallet_authorization_on_interruption() -> None:
     playbook = build_fraud_playbook(
         {

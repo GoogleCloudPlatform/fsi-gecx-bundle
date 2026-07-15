@@ -4,6 +4,7 @@ from agent.agent import build_log_context
 from agent.log_safety import (
     stable_log_reference,
     tool_args_log_summary,
+    tool_response_is_expected_checkpoint,
     tool_response_succeeded,
     tool_result_log_summary,
 )
@@ -95,6 +96,23 @@ def test_failed_mutation_remains_a_tool_failure() -> None:
                 "error": "PROVISIONING_FAILED",
             }
         },
+    )
+
+
+def test_direct_local_tool_success_is_recognized() -> None:
+    assert tool_response_succeeded(
+        "prepare_fraud_triage_confirmation",
+        {"success": True, "confirmation_required": True},
+    )
+
+
+def test_control_checkpoint_is_not_a_tool_execution_failure() -> None:
+    assert tool_response_is_expected_checkpoint(
+        {
+            "success": False,
+            "isError": False,
+            "status": "SESSION_CLOSE_CONFIRMATION_REQUIRED",
+        }
     )
 
 

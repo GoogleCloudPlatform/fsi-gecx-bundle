@@ -6,6 +6,12 @@ import hashlib
 from typing import Any
 
 
+EXPECTED_TOOL_CHECKPOINT_STATUSES = {
+    "AUTHORIZATION_REQUIRED",
+    "SESSION_CLOSE_CONFIRMATION_REQUIRED",
+}
+
+
 def stable_log_reference(value: Any, *, prefix: str = "ref") -> str | None:
     """Return a stable, non-reversible reference suitable for correlation logs."""
     if value in (None, ""):
@@ -77,6 +83,8 @@ def tool_response_succeeded(tool_name: str, tool_response: Any) -> bool:
         return False
     if tool_response.get("status") == "SUCCESS":
         return True
+    if "success" in tool_response:
+        return tool_response.get("success") is True
     structured = tool_response.get("structuredContent")
     if not isinstance(structured, dict):
         return False
@@ -89,3 +97,12 @@ def tool_response_succeeded(tool_name: str, tool_response: Any) -> bool:
     if "success" in structured:
         return structured.get("success") is True
     return True
+
+
+def tool_response_is_expected_checkpoint(tool_response: Any) -> bool:
+    """Return whether a blocked local tool call is an expected control checkpoint."""
+    return bool(
+        isinstance(tool_response, dict)
+        and tool_response.get("status") in EXPECTED_TOOL_CHECKPOINT_STATUSES
+        and tool_response.get("isError") is not True
+    )
