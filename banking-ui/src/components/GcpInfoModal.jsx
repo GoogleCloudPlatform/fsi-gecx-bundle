@@ -16,7 +16,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 
-export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Integration", maxWidthClass = "max-w-lg", titleClassName = "mb-4", children }) {
+export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Integration", maxWidthClass = "max-w-lg", children }) {
   const contentRef = useRef(null);
   const [hasConsoleLink, setHasConsoleLink] = useState(false);
 
@@ -47,7 +47,7 @@ export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Inte
         >
           <X className="w-5 h-5" />
         </button>
-        <h2 className={`text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5 shrink-0 ${titleClassName}`}>
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2.5 shrink-0">
           <GoogleCloudIcon className="w-6 h-6" />
           <span>{title}</span>
         </h2>
