@@ -211,11 +211,6 @@ function HomeView({
       {/* Hero Section */}
       <section className="relative pt-32 pb-12 md:pt-36 md:pb-16 px-6">
         <div className="absolute inset-0 -z-10 overflow-hidden">
-          <img 
-            src="/hero_bg.png" 
-            alt="Abstract background" 
-            className="w-full h-full object-cover opacity-40 mix-blend-screen"
-          />
           <div className="absolute inset-0 bg-gradient-to-b from-slate-50/50 via-slate-50/80 to-slate-50 dark:from-slate-950/50 dark:via-slate-950/80 dark:to-slate-950"></div>
         </div>
 
