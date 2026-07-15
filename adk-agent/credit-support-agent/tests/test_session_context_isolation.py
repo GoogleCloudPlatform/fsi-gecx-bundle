@@ -1,5 +1,6 @@
 import asyncio
 import httpx
+import pytest
 
 from agent import agent
 
@@ -39,3 +40,24 @@ def test_parallel_session_context_and_mcp_auth_isolation(monkeypatch) -> None:
     assert first[1] is not second[1]
     assert first[2] == "customer-a"
     assert second[2] == "customer-b"
+
+
+@pytest.mark.asyncio
+async def test_child_tool_task_signals_are_visible_to_parent_voice_loop() -> None:
+    tokens = agent.bind_session_context("customer-a", lambda event: event)
+    try:
+        async def tool_callback_task() -> None:
+            agent.set_tool_processing(True)
+            agent.request_session_end()
+
+        await asyncio.create_task(tool_callback_task())
+
+        assert agent.is_tool_processing() is True
+        assert agent.is_session_end_requested() is True
+
+        agent.set_tool_processing(False)
+        agent.clear_session_end_request()
+        assert agent.is_tool_processing() is False
+        assert agent.is_session_end_requested() is False
+    finally:
+        agent.reset_session_context(tokens)
