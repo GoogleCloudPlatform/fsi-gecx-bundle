@@ -230,13 +230,6 @@ resource "google_project_iam_member" "additional_developer_cloudsql_client" {
   member   = each.value
 }
 
-resource "google_project_iam_member" "additional_developer_cloudsql_instance_user" {
-  for_each = local.additional_developer_iam_members
-  project  = data.google_project.project.project_id
-  role     = "roles/cloudsql.instanceUser"
-  member   = each.value
-}
-
 resource "google_project_iam_member" "banking_service_sa_cloudsql_client" {
   project = data.google_project.project.project_id
   role    = "roles/cloudsql.client"
