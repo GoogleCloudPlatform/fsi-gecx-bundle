@@ -73,3 +73,16 @@ export const getPhonePlaceholder = (locale = navigator.language) => {
   if (locale.startsWith('it-IT')) return "Phone Number (e.g. 333 123 4567)";
   return "Phone Number";
 };
+
+/**
+ * Format the build time from the environment variable
+ */
+export const getFormattedBuildTime = () => {
+  if (window.env?.BUILD_VERSION === 'local-dev') {
+    window.env.BUILD_TIME = Date.now();
+  }
+  if (!window.env?.BUILD_TIME || window.env.BUILD_TIME === '${BUILD_TIME}' || window.env.BUILD_TIME === '0') return 'unknown';
+  const buildTimeMs = parseInt(window.env.BUILD_TIME, 10);
+  if (isNaN(buildTimeMs)) return 'unknown';
+  return new Date(buildTimeMs).toLocaleString();
+};

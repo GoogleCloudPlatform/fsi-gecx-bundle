@@ -33,5 +33,20 @@ window.env = {
   STABLE_ENV_URL: "https://agentic-finance.gcp-solutions.com/",
   FEEDBACK_URL: "https://b.corp.google.com/issues/new?component=1466478&template=1902036&title=Demo%20Feedback%3A%20Personalized%20Financial%20Services%20with%20GECX%20%26%20Virtual%20Agents&assignee=mservidio%40google.com&collaborators=mservidio%40google.com%2Cerikvoit%40google.com%2Cjamestsai%40google.com&customFields=1232889%3A1841&customFields=951269%3ANA&parentIssueId=519210046",
   ENABLE_AVATAR_MODALITY: true,
-  CONSOLE_VIEWER_GROUP_JOIN_URL: "https://groups.google.com/a/google.com/g/fsi-nova-horizon-demo-console-viewer"
+  CONSOLE_VIEWER_GROUP_JOIN_URL: "https://groups.google.com/a/google.com/g/fsi-nova-horizon-demo-console-viewer",
+  RELEASE_NOTES: `
+Welcome to the latest version of the Nova Horizon Banking suite! Here is a summary of what's changed.
+
+## ✨ New Features
+* **Release Notes Viewer**: You can now view these release notes directly in the app.
+* **GCP Info Integration**: Added self-join group link to footer.
+
+## 🐛 Bug Fixes
+* Fixed an issue where the hero background image was not visible on the Home View.
+* Resolved styling inconsistencies in the Voice Support view.
+
+## 📝 Enhancements
+1. Added Google Analytics via Firebase for better tracking.
+2. Improved responsive design for mobile users.
+`
 };
