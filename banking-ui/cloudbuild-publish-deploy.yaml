@@ -84,7 +84,7 @@ steps:
         fi
         
         # Inject HAS_RELEASE_NOTES boolean
-        sed -i 's/HAS_RELEASE_NOTES: "[^"]*"/HAS_RELEASE_NOTES: '"$HAS_NOTES"'/g' banking-ui/public/config.template.js
+        sed -i 's/HAS_RELEASE_NOTES: "[^"]*"/HAS_RELEASE_NOTES: '"$$HAS_NOTES"'/g' banking-ui/public/config.template.js
 
         echo "--- Updated config.template.js ---"
         cat banking-ui/public/config.template.js
