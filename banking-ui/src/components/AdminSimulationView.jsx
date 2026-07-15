@@ -2468,7 +2468,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Track the banking-service SSE connections, the data-generator pulse worker, and the Redis event bus that powers the live monitor.</p>
               </div>
               <a
-                href="https://console.cloud.google.com/run"
+                href={`https://console.cloud.google.com/run/overview?project=${projectId}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
@@ -2542,7 +2542,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Track the banking-service stream endpoints, the data-generator worker, and the Redis event bus that feeds the monitor.</p>
               </div>
               <a
-                href="https://console.cloud.google.com/run"
+                href={`https://console.cloud.google.com/run/overview?project=${projectId}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
@@ -2630,7 +2630,7 @@ function AdminSimulationView({ mode = 'studio' }) {
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Inspect revisions for banking-service, data-generator, and banking-ui after a scenario-control deployment.</p>
             </div>
             <a
-              href="https://console.cloud.google.com/run"
+              href={`https://console.cloud.google.com/run/overview?project=${projectId}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
