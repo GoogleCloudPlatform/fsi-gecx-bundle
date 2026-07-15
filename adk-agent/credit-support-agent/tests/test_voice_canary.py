@@ -81,3 +81,19 @@ def test_extract_deployed_trajectory_hashes_explicit_session_id() -> None:
     )
 
     assert found_session == session_ref
+
+
+def test_deployed_log_fetch_keeps_the_newest_sessions(monkeypatch) -> None:
+    observed = {}
+
+    def check_output(command, text):
+        observed["command"] = command
+        observed["text"] = text
+        return "[]"
+
+    monkeypatch.setattr(voice_canary.subprocess, "check_output", check_output)
+
+    assert voice_canary.load_deployed_logs("demo-project", "us-central1", "15m") == []
+    assert "--order=desc" in observed["command"]
+    assert "--order=asc" not in observed["command"]
+    assert observed["text"] is True

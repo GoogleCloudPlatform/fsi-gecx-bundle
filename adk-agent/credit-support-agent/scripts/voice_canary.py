@@ -178,7 +178,7 @@ def load_deployed_logs(project: str, region: str, freshness: str) -> list[dict[s
         f"--project={project}",
         f"--freshness={freshness}",
         "--limit=2000",
-        "--order=asc",
+        "--order=desc",
         "--format=json",
     ]
     return json.loads(subprocess.check_output(command, text=True))
