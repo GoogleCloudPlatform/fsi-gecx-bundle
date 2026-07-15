@@ -425,6 +425,8 @@ export default function VoiceSupportView() {
   const volumeRef = useRef(0.8);
   const micEnabledRef = useRef(true);
   const pingIntervalRef = useRef(null);
+  const appliedAudioInputIdRef = useRef(selectedAudioInputId);
+  const appliedAudioOutputIdRef = useRef(selectedAudioOutputId);
 
   const refreshAudioDevices = useCallback(async (requestPermissions = false) => {
     console.log(`[Microphone] Refreshing audio inputs... (Request permissions: ${requestPermissions})`);
@@ -669,64 +671,104 @@ export default function VoiceSupportView() {
 
   // Mid-session microphone hot-swapping
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isConnected) {
+      appliedAudioInputIdRef.current = selectedAudioInputId;
+      return undefined;
+    }
+
+    const previousDeviceId = appliedAudioInputIdRef.current;
+    if (previousDeviceId === selectedAudioInputId) return undefined;
+    let cancelled = false;
 
     async function swapMicrophone() {
+      let newStream = null;
+      let newSourceNode = null;
       try {
         if (engine === 'livekit' && roomRef.current) {
           await roomRef.current.switchActiveDevice('audioinput', selectedAudioInputId);
+          if (cancelled) return;
+          appliedAudioInputIdRef.current = selectedAudioInputId;
           console.log(`[Hot-Swap] LiveKit active device switched to: ${selectedAudioInputId || 'default'}`);
         } else if (engine === 'gecx' && audioContextRef.current && workletNodeRef.current) {
-          // Stop old tracks
-          if (micStreamRef.current) {
-            micStreamRef.current.getTracks().forEach(track => track.stop());
-          }
-          if (sourceNodeRef.current) {
-            sourceNodeRef.current.disconnect();
-          }
-
-          // Request new device
-          const newStream = await navigator.mediaDevices.getUserMedia(
+          // Acquire and connect the replacement before disturbing the working
+          // stream. A rejected device request must not silence the session.
+          newStream = await navigator.mediaDevices.getUserMedia(
             microphoneConstraints(selectedAudioInputId)
           );
-          const newSourceNode = audioContextRef.current.createMediaStreamSource(newStream);
+          if (cancelled) {
+            newStream.getTracks().forEach(track => track.stop());
+            return;
+          }
+          newSourceNode = audioContextRef.current.createMediaStreamSource(newStream);
           newSourceNode.connect(workletNodeRef.current);
 
+          const oldStream = micStreamRef.current;
+          const oldSourceNode = sourceNodeRef.current;
           micStreamRef.current = newStream;
           sourceNodeRef.current = newSourceNode;
+          appliedAudioInputIdRef.current = selectedAudioInputId;
+          oldSourceNode?.disconnect();
+          oldStream?.getTracks().forEach(track => track.stop());
           console.log(`[Hot-Swap] GECX stream successfully swapped to new device`);
         }
       } catch (err) {
+        newSourceNode?.disconnect();
+        newStream?.getTracks().forEach(track => track.stop());
+        if (cancelled) return;
         console.error('[Hot-Swap] Failed to swap microphone mid-session:', err);
+        setErrorMessage('Could not switch microphones. The previous microphone remains active.');
+        persistAudioDeviceSelection(AUDIO_INPUT_STORAGE_KEY, previousDeviceId);
+        setSelectedAudioInputId(previousDeviceId);
       }
     }
 
     swapMicrophone();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedAudioInputId, engine, isConnected]);
 
   // Mid-session speaker hot-swapping
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isConnected) {
+      appliedAudioOutputIdRef.current = selectedAudioOutputId;
+      return undefined;
+    }
+
+    const previousDeviceId = appliedAudioOutputIdRef.current;
+    if (previousDeviceId === selectedAudioOutputId) return undefined;
+    let cancelled = false;
 
     async function swapSpeaker() {
       try {
         if (engine === 'livekit' && roomRef.current) {
           await roomRef.current.switchActiveDevice('audiooutput', selectedAudioOutputId);
+          if (cancelled) return;
+          appliedAudioOutputIdRef.current = selectedAudioOutputId;
           console.log(`[Hot-Swap] LiveKit active speaker switched to: ${selectedAudioOutputId || 'default'}`);
         } else if (engine === 'gecx' && audioContextRef.current) {
           if (typeof audioContextRef.current.setSinkId === 'function') {
             await audioContextRef.current.setSinkId(selectedAudioOutputId);
+            if (cancelled) return;
+            appliedAudioOutputIdRef.current = selectedAudioOutputId;
             console.log(`[Hot-Swap] GECX active speaker switched to: ${selectedAudioOutputId || 'default'}`);
           } else {
             throw new Error('Audio output switching is not supported in this browser.');
           }
         }
       } catch (err) {
+        if (cancelled) return;
         console.error('[Hot-Swap] Speaker switch failed:', err);
+        setErrorMessage('Could not switch speakers. The previous audio output remains active.');
+        persistAudioDeviceSelection(AUDIO_OUTPUT_STORAGE_KEY, previousDeviceId);
+        setSelectedAudioOutputId(previousDeviceId);
       }
     }
 
     swapSpeaker();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedAudioOutputId, isConnected, engine]);
 
   // Auto scroll transcript panel inside container
