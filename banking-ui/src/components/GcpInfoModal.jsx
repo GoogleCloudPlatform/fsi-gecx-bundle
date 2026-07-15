@@ -12,11 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 
 export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Integration", maxWidthClass = "max-w-lg", children }) {
+  const contentRef = useRef(null);
+  const [hasConsoleLink, setHasConsoleLink] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && contentRef.current) {
+      const html = contentRef.current.innerHTML;
+      setHasConsoleLink(
+        html.includes('console.cloud.google.com') || html.includes('ces.cloud.google.com')
+      );
+    }
+  }, [isOpen, children]);
+
+  const consoleViewerUrl = window.env?.CONSOLE_VIEWER_GROUP_JOIN_URL || import.meta.env.VITE_CONSOLE_VIEWER_GROUP_JOIN_URL;
+
   if (!isOpen) return null;
 
   return (
@@ -33,11 +47,18 @@ export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Inte
           <span>{title}</span>
         </h2>
         
-        <div className="flex-1 overflow-y-auto pr-1">
+        <div className="flex-1 overflow-y-auto pr-1" ref={contentRef}>
           {children}
         </div>
 
-        <div className="mt-6 flex justify-end shrink-0">
+        <div className="mt-6 flex justify-between items-center shrink-0">
+          <div>
+            {hasConsoleLink && consoleViewerUrl && (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                For GCP console viewer access to the demo project, <a href={consoleViewerUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 underline">join here</a>.
+              </p>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="px-5 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-sm transition-colors cursor-pointer"
