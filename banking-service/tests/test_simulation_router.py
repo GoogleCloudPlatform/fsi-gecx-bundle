@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import datetime
+import uuid
+
 import pytest
 import respx
 import httpx
@@ -859,6 +862,86 @@ async def test_get_active_cards_marks_demo_script_accounts_ineligible_for_genera
     regular_card = cards_by_name["Regular Customer"]
     assert regular_card["is_demo_script_account"] is False
     assert regular_card["generator_eligible"] is True
+
+
+@pytest.mark.asyncio
+async def test_ensure_vip_mexico_leaders_tops_configured_vips_idempotently(async_client, db_session):
+    global mock_claims
+    mock_claims = {"sub": "leaderboard-presenter", "email": "leaderboard.presenter@google.com"}
+
+    provision_user_suite(db_session, "larry.page@nova.horizon.test", "vip-larry")
+    provision_user_suite(db_session, "sergey.brin@nova.horizon.test", "vip-sergey")
+    provision_user_suite(db_session, "generic.customer@example.com", "generic-customer")
+
+    generic_user = db_session.query(User).filter_by(email="generic.customer@example.com").one()
+    generic_account = db_session.query(CreditAccount).filter_by(customer_id=generic_user.id, status="ACTIVE").one()
+    generic_card = db_session.query(IssuedCard).filter_by(account_id=generic_account.id, status="ACTIVE").one()
+    authorization_id = uuid.uuid4()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    db_session.add(
+        TransactionAuthorization(
+            id=authorization_id,
+            card_id=generic_card.id,
+            account_id=generic_account.id,
+            transaction_amount_cents=400_000,
+            billing_amount_cents=400_000,
+            status="SETTLED",
+            decline_reason="NONE",
+            auth_code="444444",
+            retrieval_reference_number="GENMEX000001",
+            card_network="VISA",
+            merchant_category_code="7011",
+            merchant_name="GENERIC MEXICO RESORT [MEX]",
+            transaction_channel="CARD_PRESENT",
+            entry_mode="CHIP",
+            merchant_country_code="MEX",
+            merchant_city="Cancun",
+            merchant_region="ROO",
+            fraud_risk_score=0,
+            created_at=now - datetime.timedelta(hours=1),
+            expires_at=now + datetime.timedelta(days=7),
+        )
+    )
+    db_session.add(
+        PostedTransaction(
+            id=uuid.uuid4(),
+            account_id=generic_account.id,
+            authorization_id=authorization_id,
+            auth_code="444444",
+            retrieval_reference_number="GENMEX000001",
+            amount_cents=-400_000,
+            description="GENERIC MEXICO RESORT [MEX]",
+            posted_at=now,
+        )
+    )
+    db_session.commit()
+
+    first_response = await async_client.post("/api/v1/simulation/ensure-vip-mexico-leaders")
+    assert first_response.status_code == status.HTTP_200_OK
+    first_result = first_response.json()
+    assert first_result["vip_customers_considered"] == 2
+    assert first_result["generic_ceiling_cents"] == 400_000
+    assert first_result["transactions_created"] == 2
+
+    for vip_email in ("larry.page@nova.horizon.test", "sergey.brin@nova.horizon.test"):
+        vip_user = db_session.query(User).filter_by(email=vip_email).one()
+        vip_spend = (
+            db_session.query(PostedTransaction)
+            .join(TransactionAuthorization, TransactionAuthorization.id == PostedTransaction.authorization_id)
+            .join(CreditAccount, CreditAccount.id == PostedTransaction.account_id)
+            .filter(
+                CreditAccount.customer_id == vip_user.id,
+                TransactionAuthorization.merchant_country_code == "MEX",
+                PostedTransaction.amount_cents < 0,
+                PostedTransaction.posted_at >= now - datetime.timedelta(days=14),
+            )
+            .all()
+        )
+        assert sum(-transaction.amount_cents for transaction in vip_spend) > 400_000
+
+    second_response = await async_client.post("/api/v1/simulation/ensure-vip-mexico-leaders")
+    assert second_response.status_code == status.HTTP_200_OK
+    assert second_response.json()["transactions_created"] == 0
 
 
 @pytest.mark.asyncio

@@ -11,11 +11,13 @@ from typing import Any
 
 import httpx
 from fastapi import HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models.authentication import ValidatedToken
-from models.credit_card import TransactionAuthorization
+from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, TransactionAuthorization
 from models.fraud import FraudAlert
+from models.identity import User, UserAddress
 from repositories.accounts import AccountsRepository
 from repositories.credit_card import CreditCardRepository
 from repositories.fraud import FraudDecisionRepository
@@ -24,6 +26,7 @@ from services.cdc_monitoring import CdcMonitoringService
 from services.seeding_service import (
     deprovision_user_suite,
     is_demo_script_user_email,
+    load_vip_googlers,
     provision_user_suite,
     reset_user_suite,
 )
@@ -40,6 +43,29 @@ logger = logging.getLogger(__name__)
 DATA_GENERATOR_URL = os.getenv("DATA_GENERATOR_URL", "http://localhost:8001")
 SURGE_DISPATCH_CONNECT_TIMEOUT_SECONDS = float(os.getenv("SURGE_DISPATCH_CONNECT_TIMEOUT_SECONDS", "5"))
 SURGE_DISPATCH_READ_TIMEOUT_SECONDS = float(os.getenv("SURGE_DISPATCH_READ_TIMEOUT_SECONDS", "8"))
+VIP_MEXICO_WINDOW_DAYS = 14
+VIP_MEXICO_MARGIN_CENTS = 50_000
+VIP_MEXICO_RANK_STEP_CENTS = 2_500
+NORTHERN_CALIFORNIA_CITIES = {
+    "SAN FRANCISCO",
+    "MOUNTAIN VIEW",
+    "PALO ALTO",
+    "LOS ALTOS",
+    "LOS ALTOS HILLS",
+    "MENLO PARK",
+    "WOODSIDE",
+    "ATHERTON",
+    "PORTOLA VALLEY",
+    "HILLSBOROUGH",
+    "SARATOGA",
+    "SAN JOSE",
+    "OAKLAND",
+    "BERKELEY",
+    "FREMONT",
+    "SANTA CLARA",
+    "SUNNYVALE",
+    "SACRAMENTO",
+}
 
 
 class SimulationService:
@@ -153,6 +179,191 @@ class SimulationService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to remove demo accounts.",
             ) from exc
+
+    def ensure_vip_mexico_spend_leaders(self) -> dict:
+        """Top up configured Northern California VIPs above non-VIP Mexico spend."""
+        self._enable_simulation_db_access()
+        now = datetime.datetime.now(datetime.timezone.utc)
+        cutoff = now - datetime.timedelta(days=VIP_MEXICO_WINDOW_DAYS)
+        vip_emails = {
+            str(vip.get("email") or "").strip().lower()
+            for vip in load_vip_googlers()
+            if vip.get("email")
+        }
+        if not vip_emails:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="No configured VIP customers are available for analytics preparation.",
+            )
+
+        spend_rows = (
+            self.db.query(
+                User.id,
+                User.email,
+                func.coalesce(func.sum(-PostedTransaction.amount_cents), 0).label("spend_cents"),
+            )
+            .join(CreditAccount, CreditAccount.customer_id == User.id)
+            .join(PostedTransaction, PostedTransaction.account_id == CreditAccount.id)
+            .join(TransactionAuthorization, TransactionAuthorization.id == PostedTransaction.authorization_id)
+            .join(
+                UserAddress,
+                (UserAddress.user_id == User.id) & (UserAddress.is_primary.is_(True)),
+            )
+            .filter(
+                func.upper(UserAddress.state) == "CA",
+                func.upper(UserAddress.city).in_(NORTHERN_CALIFORNIA_CITIES),
+                func.upper(TransactionAuthorization.merchant_country_code) == "MEX",
+                PostedTransaction.amount_cents < 0,
+                PostedTransaction.posted_at >= cutoff,
+            )
+            .group_by(User.id, User.email)
+            .all()
+        )
+        spend_by_user_id = {row.id: int(row.spend_cents or 0) for row in spend_rows}
+        generic_ceiling_cents = max(
+            (
+                int(row.spend_cents or 0)
+                for row in spend_rows
+                if (row.email or "").lower() not in vip_emails
+            ),
+            default=0,
+        )
+
+        vip_instruments = (
+            self.db.query(User, CreditAccount, IssuedCard)
+            .join(
+                UserAddress,
+                (UserAddress.user_id == User.id) & (UserAddress.is_primary.is_(True)),
+            )
+            .join(CreditAccount, CreditAccount.customer_id == User.id)
+            .join(IssuedCard, IssuedCard.account_id == CreditAccount.id)
+            .filter(
+                func.lower(User.email).in_(vip_emails),
+                func.upper(UserAddress.state) == "CA",
+                func.upper(UserAddress.city).in_(NORTHERN_CALIFORNIA_CITIES),
+                CreditAccount.status == "ACTIVE",
+                IssuedCard.status == "ACTIVE",
+                IssuedCard.is_active.is_(True),
+            )
+            .order_by(func.lower(User.email), IssuedCard.created_at.desc())
+            .with_for_update()
+            .all()
+        )
+
+        instruments_by_user_id: dict[Any, tuple[User, CreditAccount, IssuedCard]] = {}
+        for user, account, card in vip_instruments:
+            instruments_by_user_id.setdefault(user.id, (user, account, card))
+        instruments = list(instruments_by_user_id.values())
+        if not instruments:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="No active Northern California VIP cards are available. Run the full demo reset first.",
+            )
+
+        plans: list[tuple[User, CreditAccount, IssuedCard, int, int]] = []
+        for rank_index, (user, account, card) in enumerate(instruments):
+            target_cents = (
+                generic_ceiling_cents
+                + VIP_MEXICO_MARGIN_CENTS
+                + ((len(instruments) - rank_index) * VIP_MEXICO_RANK_STEP_CENTS)
+            )
+            current_spend_cents = spend_by_user_id.get(user.id, 0)
+            top_off_cents = max(0, target_cents - current_spend_cents)
+            if top_off_cents > int(account.available_credit_cents or 0):
+                self.db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "The current Mexico spend ceiling exceeds available VIP credit. "
+                        "Run the full demo reset before preparing the analytics leaderboard."
+                    ),
+                )
+            plans.append((user, account, card, target_cents, top_off_cents))
+
+        transactions_created = 0
+        total_added_cents = 0
+        for user, account, card, _target_cents, top_off_cents in plans:
+            if top_off_cents <= 0:
+                continue
+            authorization_id = uuid.uuid4()
+            rrn = f"VT{authorization_id.hex[:10]}"
+            auth_code = f"{authorization_id.int % 1_000_000:06d}"
+            created_at = now - datetime.timedelta(minutes=5)
+            authorization = TransactionAuthorization(
+                id=authorization_id,
+                card_id=card.id,
+                account_id=account.id,
+                transaction_amount_cents=top_off_cents,
+                billing_amount_cents=top_off_cents,
+                status="SETTLED",
+                decline_reason="NONE",
+                auth_code=auth_code,
+                retrieval_reference_number=rrn,
+                card_network="VISA",
+                merchant_category_code="7011",
+                merchant_name="MAYAKOBA EXECUTIVE RETREAT [MEX]",
+                transaction_channel="CARD_PRESENT",
+                entry_mode="CHIP",
+                merchant_country_code="MEX",
+                merchant_city="Playa del Carmen",
+                merchant_region="ROO",
+                merchant_postal_code="77710",
+                merchant_latitude=20.629559,
+                merchant_longitude=-87.073885,
+                fraud_risk_score=0,
+                created_at=created_at,
+                expires_at=created_at + datetime.timedelta(days=7),
+            )
+            self.db.add(authorization)
+            self.db.add(
+                PostedTransaction(
+                    id=uuid.uuid4(),
+                    account_id=account.id,
+                    authorization_id=authorization_id,
+                    auth_code=auth_code,
+                    retrieval_reference_number=rrn,
+                    amount_cents=-top_off_cents,
+                    description=authorization.merchant_name,
+                    posted_at=now,
+                )
+            )
+            account.cleared_balance_cents = int(account.cleared_balance_cents or 0) + top_off_cents
+            account.available_credit_cents = max(
+                0,
+                int(account.available_credit_cents or 0) - top_off_cents,
+            )
+            transactions_created += 1
+            total_added_cents += top_off_cents
+
+        record_audit_event(
+            self.db,
+            "VIP_MEXICO_SPEND_LEADERS_ENSURED",
+            {
+                "window_days": VIP_MEXICO_WINDOW_DAYS,
+                "vip_customers_considered": len(instruments),
+                "transactions_created": transactions_created,
+                "generic_ceiling_cents": generic_ceiling_cents,
+                "total_added_cents": total_added_cents,
+            },
+        )
+        self.db.commit()
+
+        minimum_target_cents = min(plan[3] for plan in plans)
+        return {
+            "status": "SUCCESS",
+            "message": (
+                "VIP Mexico spend leaderboard prepared successfully."
+                if transactions_created
+                else "VIP Mexico spend already leads the current non-VIP ceiling."
+            ),
+            "window_days": VIP_MEXICO_WINDOW_DAYS,
+            "vip_customers_considered": len(instruments),
+            "transactions_created": transactions_created,
+            "generic_ceiling_cents": generic_ceiling_cents,
+            "minimum_vip_target_cents": minimum_target_cents,
+            "margin_cents": VIP_MEXICO_MARGIN_CENTS,
+            "total_added_cents": total_added_cents,
+        }
 
     def list_active_cards_for_simulation(self) -> dict:
         self._enable_simulation_db_access()
