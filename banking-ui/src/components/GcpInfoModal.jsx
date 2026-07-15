@@ -34,6 +34,21 @@ export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Inte
     }
   }, [isOpen, children]);
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   const consoleViewerUrl = window.env?.CONSOLE_VIEWER_GROUP_JOIN_URL || import.meta.env.VITE_CONSOLE_VIEWER_GROUP_JOIN_URL;
 
   if (!isOpen) return null;

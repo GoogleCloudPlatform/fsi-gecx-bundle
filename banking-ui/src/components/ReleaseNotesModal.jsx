@@ -30,6 +30,21 @@ export function ReleaseNotesModal({ isOpen, onClose, onOpen }) {
     }
   }, [isOpen, releaseNotesText]);
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   const getProcessedReleaseNotes = () => {
     if (!releaseNotesText) return '';
     return releaseNotesText
