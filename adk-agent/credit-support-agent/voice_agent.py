@@ -21,6 +21,7 @@ from agent.agent import (
     create_voice_agent,
     is_session_end_requested,
     is_tool_processing,
+    record_customer_turn,
     reset_session_context,
 )
 from agent.avatar_runtime import run_with_avatar_fallback
@@ -256,6 +257,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             "- Once the disputed selection is clear, call prepare_fraud_triage_confirmation with the exact alert id, disputed authorization ids, disputed transaction ids, and replacement choice. It does not mutate banking state.\n"
             "- Restate the exact prepared selection and ask the customer to confirm it. Stop after asking; do not call triage_fraud_case in the same response.\n"
             "- After the customer explicitly confirms in a later response, call triage_fraud_case once with exactly the prepared payload. Any changed selection requires a new preparation and confirmation.\n"
+            "- An AUTHORIZATION_REQUIRED tool result is an expected checkpoint, not a technical failure. Never apologize or escalate for it; ask for the required explicit confirmation and wait.\n"
             "- If the customer recognizes every flagged transaction, call triage_fraud_case with empty disputed id arrays and issue_replacement=false.\n"
             "- If the customer disputes any flagged transaction, tell them any credits are provisional pending the full fraud investigation.\n"
             "- If triage_fraud_case returns a clearly transient technical failure, retry it once with the same arguments before offering human escalation.\n"
@@ -559,6 +561,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                     seen_typed_message_ids.discard(typed_message_order.pop(0))
                 pending_typed_transcripts.append(message.text)
                 typed_turn_active.set()
+                record_customer_turn(
+                    message.text,
+                    event_id=f"typed-{message.message_id}",
+                )
 
                 async def release_stalled_typed_turn() -> None:
                     await asyncio.sleep(30.0)
@@ -879,6 +885,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                             
                 # Broadcast transcriptions over data channel for UI display when complete
                 if live_event.input_transcript is not None:
+                    record_customer_turn(live_event.input_transcript)
                     if live_event.input_transcript in pending_typed_transcripts:
                         pending_typed_transcripts.remove(live_event.input_transcript)
                     else:

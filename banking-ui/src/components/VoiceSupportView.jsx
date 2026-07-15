@@ -30,6 +30,7 @@ import {
 } from '../utils/api.js';
 import { DataChannelEvent } from '../utils/constants.js';
 import { encodeTypedCustomerTurn, resolveTypedDelivery } from '../utils/voiceTypedInput.js';
+import { formatVoiceLedgerAmount } from '../utils/voiceLedger.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
@@ -1696,8 +1697,7 @@ export default function VoiceSupportView() {
                         <p className="text-[9px] text-slate-450 dark:text-slate-500">{new Date(tx.posted_at).toLocaleDateString()}</p>
                       </div>
                       <span className={`font-mono font-bold ${tx.amount_cents > 0 ? 'text-indigo-600 dark:text-indigo-300' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                        {tx.amount_cents > 0 ? '-' : '+'}
-                        ${Math.abs(tx.amount_cents / 100).toFixed(2)}
+                        {formatVoiceLedgerAmount(tx.amount_cents)}
                       </span>
                     </div>
                   );

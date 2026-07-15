@@ -3,12 +3,26 @@ from agent.workflow_authorization import (
     TRIAGE_FRAUD_CASE,
     action_payload_fingerprint,
     apply_customer_authorization_response,
+    classify_confirmation_response,
     create_workflow_authorization,
     mark_authorization_completed,
     mark_authorization_executing,
     mark_authorization_prompted,
     validate_workflow_authorization,
 )
+
+
+def test_common_explicit_confirmation_phrases_are_recognized() -> None:
+    for transcript in (
+        "Correct",
+        "That's correct.",
+        "That’s correct.",
+        "That is correct",
+        "Exactly",
+        "Affirmative",
+        "Yes, that's correct",
+    ):
+        assert classify_confirmation_response(transcript) == "CONFIRMED"
 
 
 def triage_payload(*, disputed_ids=None) -> dict:

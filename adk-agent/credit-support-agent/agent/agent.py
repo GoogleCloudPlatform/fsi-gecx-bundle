@@ -46,6 +46,7 @@ from agent.workflow_authorization import (
     PUSH_CARD_TO_GOOGLE_WALLET,
     TRIAGE_CUSTOMER_REPORTED_FRAUD,
     TRIAGE_FRAUD_CASE,
+    apply_customer_authorization_response,
     action_payload_fingerprint,
     create_workflow_authorization,
     invalidate_workflow_authorization,
@@ -65,6 +66,9 @@ active_customer_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("ac
 session_event_callback_var: contextvars.ContextVar = contextvars.ContextVar("session_event_callback", default=None)
 session_should_end_var: contextvars.ContextVar[bool] = contextvars.ContextVar("session_should_end", default=False)
 is_processing_tool_var: contextvars.ContextVar[bool] = contextvars.ContextVar("is_processing_tool", default=False)
+latest_customer_turn_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "latest_customer_turn", default=None
+)
 
 
 def get_banking_service_mcp_url() -> str:
@@ -131,6 +135,10 @@ def bind_session_context(customer_id: str, callback):
         "callback": session_event_callback_var.set(callback),
         "should_end": session_should_end_var.set(False),
         "is_processing": is_processing_tool_var.set(False),
+        # Session tasks inherit ContextVar values, but assignments made inside
+        # child tasks do not flow back to their parent. Share a mutable holder
+        # so transcript listeners and tool callbacks observe the same turn.
+        "latest_customer_turn": latest_customer_turn_var.set({"latest": None}),
     }
 
 
@@ -139,6 +147,7 @@ def reset_session_context(tokens: dict) -> None:
     if not tokens:
         return
     is_processing_tool_var.reset(tokens["is_processing"])
+    latest_customer_turn_var.reset(tokens["latest_customer_turn"])
     session_should_end_var.reset(tokens["should_end"])
     session_event_callback_var.reset(tokens["callback"])
     active_customer_id_var.reset(tokens["customer"])
@@ -158,6 +167,67 @@ def clear_session_end_request() -> None:
 
 def is_tool_processing() -> bool:
     return is_processing_tool_var.get()
+
+
+def record_customer_turn(
+    transcript: str,
+    *,
+    event_id: str | None = None,
+    observed_at_epoch_s: float | None = None,
+) -> None:
+    """Record bounded confirmation evidence before a Live tool call is emitted."""
+    text = str(transcript or "").strip()
+    if not text:
+        return
+    observed_at = time.time() if observed_at_epoch_s is None else observed_at_epoch_s
+    turn = {
+        "transcript": text[:1000],
+        "event_id": event_id or f"customer-turn-{time.time_ns()}",
+        "observed_at_epoch_s": observed_at,
+    }
+    holder = latest_customer_turn_var.get()
+    if holder is None:
+        latest_customer_turn_var.set({"latest": turn})
+    else:
+        holder["latest"] = turn
+
+
+def apply_latest_customer_turn_to_authorization(
+    fraud_playbook: dict,
+) -> tuple[dict, bool]:
+    """Reconcile Live/typed input that ADK has not yet committed to session state."""
+    authorization = dict(fraud_playbook.get("workflow_authorization") or {})
+    holder = latest_customer_turn_var.get() or {}
+    turn = holder.get("latest") or {}
+    if authorization.get("status") not in {"PENDING", "UNCLEAR"}:
+        return fraud_playbook, False
+    if not authorization.get("assistant_event_id"):
+        return fraud_playbook, False
+    if float(turn.get("observed_at_epoch_s") or 0) <= float(
+        authorization.get("issued_at_epoch_s") or 0
+    ):
+        return fraud_playbook, False
+    if not turn.get("event_id") or turn.get("event_id") == authorization.get(
+        "customer_event_id"
+    ):
+        return fraud_playbook, False
+
+    updated_authorization = apply_customer_authorization_response(
+        authorization,
+        transcript=turn.get("transcript"),
+        customer_event_id=str(turn["event_id"]),
+        now_epoch_s=float(turn["observed_at_epoch_s"]),
+    )
+    if updated_authorization == authorization:
+        return fraud_playbook, False
+    updated_playbook = dict(fraud_playbook)
+    updated_playbook["workflow_authorization"] = updated_authorization
+    if updated_authorization.get("action") == PUSH_CARD_TO_GOOGLE_WALLET:
+        updated_playbook["wallet_response_status"] = updated_authorization.get("status")
+        updated_playbook["wallet_customer_confirmed"] = (
+            updated_authorization.get("status") == "CONFIRMED"
+        )
+    return updated_playbook, True
 
 
 def set_tool_processing(is_processing: bool) -> None:
@@ -435,7 +505,7 @@ def get_auth_headers() -> dict:
         "x-target-customer-id": active_customer_id_var.get()
     }
 
-async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
+async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | None:
     tool_name = getattr(tool, "name", str(tool))
     import logging
     logger = logging.getLogger("voice_agent")
@@ -527,6 +597,18 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
         tool_context.state["fraud_playbook"] = fraud_playbook
     authorization_to_execute = None
     if authorization_action:
+        fraud_playbook, authorization_reconciled = (
+            apply_latest_customer_turn_to_authorization(fraud_playbook)
+        )
+        if authorization_reconciled:
+            tool_context.state["fraud_playbook"] = fraud_playbook
+            logger.info(
+                "[CALLBACK] reconciled latest customer turn before tool validation %s",
+                format_log_context(
+                    state=tool_context.state,
+                    tool_name=tool_name,
+                ),
+            )
         authorization = fraud_playbook.get("workflow_authorization")
         authorization_error = validate_workflow_authorization(
             authorization,
@@ -545,12 +627,16 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> None:
             )
             return {
                 "success": False,
-                "isError": True,
-                "error": "ACTION_NOT_AUTHORIZED",
-                "message": f"Action not completed. {authorization_error}",
+                "isError": False,
+                "status": "AUTHORIZATION_REQUIRED",
+                "message": "The action has not run because customer confirmation is still required.",
                 "authorization_blocked": True,
                 "required_action": authorization_error,
-                "model_instruction": "Do not claim success. Prepare and obtain fresh customer confirmation before retrying.",
+                "model_instruction": (
+                    "This is an expected authorization checkpoint, not a technical failure. "
+                    "Do not apologize, claim an error, or escalate. If the exact selection is already prepared, "
+                    "restate it and ask the customer for explicit confirmation, then stop. Otherwise prepare it first."
+                ),
             }
         authorization_to_execute = authorization
     if tool_name == "transfer_to_human":

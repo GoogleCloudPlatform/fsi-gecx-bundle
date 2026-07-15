@@ -16,7 +16,8 @@ DEFAULT_AUTHORIZATION_TTL_SECONDS = 180
 
 _AFFIRMATIVE_PATTERN = re.compile(
     r"(?:^\s*(?:yes|yeah|yep|sure|absolutely|please do|do it|go ahead|that works|"
-    r"sounds good|okay|ok|correct|that's right|that is right)\b|"
+    r"sounds good|okay|ok|correct|exactly|affirmative|that(?:'|’)s right|that is right|"
+    r"that(?:'|’)s correct|that is correct)\b|"
     r"\b(?:could|can|would)\s+you\s+(?:please\s+)?(?:do that|proceed|go ahead|push|add)\b|"
     r"\bthat would be great\b|\bi(?:'d| would) like that\b|\bi want that\b)",
     re.IGNORECASE,

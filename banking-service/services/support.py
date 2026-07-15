@@ -22,6 +22,7 @@ from livekit import api as lk_api
 from models.authentication import ValidatedToken
 from models.support import Escalation
 from repositories.support import SupportRepository
+from utils.log_safety import stable_log_reference
 
 logger = logging.getLogger(__name__)
 
@@ -62,11 +63,18 @@ class SupportService:
             logger.error("Security Alert: Unauthorized access attempt without valid email context.")
             raise HTTPException(status_code=401, detail="Unauthorized: Identity email context missing.")
 
-        logger.info(f"Generating LiveKit human token for agent {agent_email} on room {room_name}")
+        logger.info(
+            "Generating LiveKit human token agent_ref=%s room_ref=%s",
+            stable_log_reference(agent_email, "agent"),
+            stable_log_reference(room_name, "room"),
+        )
 
         escalation = self.repo.get_pending_by_room(room_name)
         if not escalation:
-            logger.warning(f"No pending escalation found for room {room_name}")
+            logger.warning(
+                "No pending escalation found room_ref=%s",
+                stable_log_reference(room_name, "room"),
+            )
             raise HTTPException(status_code=404, detail="No active or pending escalation found for this room.")
 
         try:
@@ -90,13 +98,19 @@ class SupportService:
                 "room_name": room_name,
                 "escalation_id": escalation.id
             }
-        except Exception as e:
-            logger.error(f"Failed to generate LiveKit token for agent: {e}")
+        except Exception as exc:
+            logger.error(
+                "Failed to generate LiveKit token for agent error_type=%s",
+                type(exc).__name__,
+            )
             self.db.rollback()
             raise HTTPException(status_code=500, detail="LiveKit token creation error.")
 
     def complete_escalation(self, escalation_id: str) -> Dict[str, Any]:
-        logger.info(f"Completing escalation session: {escalation_id}")
+        logger.info(
+            "Completing escalation session escalation_ref=%s",
+            stable_log_reference(escalation_id, "escalation"),
+        )
         escalation = self.repo.get_by_id(escalation_id)
         if not escalation:
             raise HTTPException(status_code=404, detail="Escalation not found.")
@@ -105,15 +119,30 @@ class SupportService:
             escalation.status = "COMPLETED"
             self.repo.save(escalation)
             self.db.commit()
-            logger.info(f"Escalation {escalation_id} successfully marked as COMPLETED.")
+            logger.info(
+                "Escalation marked as COMPLETED escalation_ref=%s",
+                stable_log_reference(escalation_id, "escalation"),
+            )
             return {"status": "SUCCESS", "escalation_id": escalation_id}
-        except Exception as e:
+        except Exception as exc:
             self.db.rollback()
-            logger.error(f"Failed to complete escalation: {e}")
+            logger.error(
+                "Failed to complete escalation error_type=%s", type(exc).__name__
+            )
             raise HTTPException(status_code=500, detail="Database write error.")
 
     def escalate_session(self, payload: Any) -> Dict[str, Any]:
-        logger.info(f"Escalation request: {payload}")
+        logger.info(
+            "Escalation request room_ref=%s customer_ref=%s escalation_ref=%s "
+            "transcript_entries=%s reason_present=%s",
+            stable_log_reference(getattr(payload, "room_name", None), "room"),
+            stable_log_reference(getattr(payload, "customer_id", None), "customer"),
+            stable_log_reference(
+                getattr(payload, "escalation_id", None), "escalation"
+            ),
+            len(getattr(payload, "transcript", None) or []),
+            bool(getattr(payload, "reason", None)),
+        )
         try:
             if payload.escalation_id is not None:
                 existing = self.repo.get_by_id(payload.escalation_id)
@@ -121,7 +150,10 @@ class SupportService:
                     existing.transcript = payload.transcript
                     self.repo.save(existing)
                     self.db.commit()
-                    logger.info(f"Updated transcript on existing escalation: {payload.escalation_id}")
+                    logger.info(
+                        "Updated transcript on existing escalation escalation_ref=%s",
+                        stable_log_reference(payload.escalation_id, "escalation"),
+                    )
                     return {"status": "SUCCESS", "escalation_id": existing.id}
                 else:
                     raise HTTPException(status_code=404, detail="Escalation ID not found to update.")
@@ -135,17 +167,26 @@ class SupportService:
                 )
                 self.repo.save(escalation)
                 self.db.commit()
-                logger.info(f"Created new support escalation: {escalation.id}")
+                logger.info(
+                    "Created new support escalation escalation_ref=%s",
+                    stable_log_reference(escalation.id, "escalation"),
+                )
                 return {"status": "SUCCESS", "escalation_id": escalation.id}
-        except Exception as e:
-            if isinstance(e, HTTPException):
-                raise e
+        except Exception as exc:
+            if isinstance(exc, HTTPException):
+                raise exc
             self.db.rollback()
-            logger.error(f"Failed to handle escalation request: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.error(
+                "Failed to handle escalation request error_type=%s",
+                type(exc).__name__,
+            )
+            raise HTTPException(status_code=500, detail="Escalation request failed.")
 
     def abandon_escalation(self, escalation_id: str) -> Dict[str, Any]:
-        logger.info(f"Abandoning escalation: {escalation_id}")
+        logger.info(
+            "Abandoning escalation escalation_ref=%s",
+            stable_log_reference(escalation_id, "escalation"),
+        )
         escalation = self.repo.get_by_id(escalation_id)
         if not escalation:
             raise HTTPException(status_code=404, detail="Escalation not found.")
@@ -154,9 +195,14 @@ class SupportService:
             escalation.status = "ABANDONED"
             self.repo.save(escalation)
             self.db.commit()
-            logger.info(f"Escalation {escalation_id} marked as ABANDONED.")
+            logger.info(
+                "Escalation marked as ABANDONED escalation_ref=%s",
+                stable_log_reference(escalation_id, "escalation"),
+            )
             return {"status": "SUCCESS", "escalation_id": escalation_id}
-        except Exception as e:
+        except Exception as exc:
             self.db.rollback()
-            logger.error(f"Failed to abandon escalation: {e}")
+            logger.error(
+                "Failed to abandon escalation error_type=%s", type(exc).__name__
+            )
             raise HTTPException(status_code=500, detail="Database write error.")
