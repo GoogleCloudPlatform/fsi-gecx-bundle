@@ -67,12 +67,14 @@ export default function AppRoutes({
   const location = useLocation();
 
   useEffect(() => {
+    // https://firebase.google.com/docs/reference/js/analytics.md#logevent_0792e28
     if (window.firebaseAnalytics && window.firebaseLogEvent) {
       window.firebaseLogEvent(window.firebaseAnalytics, 'page_view', {
+        page_title: PAGE_TITLES[location.pathname] || document.title,
+        page_location: window.location.href,
         page_path: location.pathname,
         page_search: location.search,
         page_hash: location.hash,
-        page_title: PAGE_TITLES[location.pathname] || document.title
       });
     }
   }, [location]);
