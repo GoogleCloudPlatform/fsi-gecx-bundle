@@ -64,11 +64,13 @@ steps:
         if [ -z "$$COMMIT_SHA" ]; then
           COMMIT_SHA="local"
         fi
-        echo "Updating config files with version: $$VERSION and commit: $$COMMIT_SHA"
+        BUILD_TIME_MS=$$(date +%s000)
+        echo "Updating config files with version: $$VERSION and commit: $$COMMIT_SHA and time: $$BUILD_TIME_MS"
         
         # Update config.js
         sed -i 's/BUILD_VERSION: "[^"]*"/BUILD_VERSION: "'"$${VERSION}"'"/g' banking-ui/public/config.js
         sed -i 's/BUILD_COMMIT_ID: "[^"]*"/BUILD_COMMIT_ID: "'"$${COMMIT_SHA}"'"/g' banking-ui/public/config.js
+        sed -i 's/BUILD_TIME: "[^"]*"/BUILD_TIME: "'"$${BUILD_TIME_MS}"'"/g' banking-ui/public/config.js
         sed -i 's/BUILD_PROJECT_ID: "[^"]*"/BUILD_PROJECT_ID: "'"$PROJECT_ID"'"/g' banking-ui/public/config.js
         sed -i 's/BUILD_BUILD_ID: "[^"]*"/BUILD_BUILD_ID: "'"$BUILD_ID"'"/g' banking-ui/public/config.js
         sed -i 's/BUILD_LOCATION: "[^"]*"/BUILD_LOCATION: "'"$LOCATION"'"/g' banking-ui/public/config.js
@@ -76,6 +78,7 @@ steps:
         # Update config.template.js
         sed -i 's/BUILD_VERSION: "[^"]*"/BUILD_VERSION: "'"$${VERSION}"'"/g' banking-ui/public/config.template.js
         sed -i 's/BUILD_COMMIT_ID: "[^"]*"/BUILD_COMMIT_ID: "'"$${COMMIT_SHA}"'"/g' banking-ui/public/config.template.js
+        sed -i 's/BUILD_TIME: "[^"]*"/BUILD_TIME: "'"$${BUILD_TIME_MS}"'"/g' banking-ui/public/config.template.js
         sed -i 's/BUILD_PROJECT_ID: "[^"]*"/BUILD_PROJECT_ID: "'"$PROJECT_ID"'"/g' banking-ui/public/config.template.js
         sed -i 's/BUILD_BUILD_ID: "[^"]*"/BUILD_BUILD_ID: "'"$BUILD_ID"'"/g' banking-ui/public/config.template.js
         sed -i 's/BUILD_LOCATION: "[^"]*"/BUILD_LOCATION: "'"$LOCATION"'"/g' banking-ui/public/config.template.js
