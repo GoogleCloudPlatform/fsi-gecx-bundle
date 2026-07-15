@@ -62,6 +62,12 @@ variable "enable_ccai" {
   default = false
 }
 
+variable "console_viewer_group_join_url" {
+  description = "The URL for joining the GCP Console Viewer group"
+  type        = string
+  default     = null
+}
+
 variable "ccai_company_id" {
   type    = string
   default = null
