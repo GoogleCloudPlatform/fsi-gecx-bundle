@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { getFormattedBuildTime } from '../utils/formatters.js';
@@ -7,9 +7,8 @@ export function ReleaseNotesModal({ isOpen, onClose, onOpen }) {
   useEffect(() => {
     const version = window.env?.BUILD_VERSION;
     const commitId = window.env?.BUILD_COMMIT_ID;
-    const releaseNotes = window.env?.RELEASE_NOTES;
 
-    if (version && commitId && releaseNotes) {
+    if (version && commitId) {
       const storageKey = 'last_seen_release_notes';
       const currentRelease = `${version} (${commitId})`;
 
@@ -20,9 +19,20 @@ export function ReleaseNotesModal({ isOpen, onClose, onOpen }) {
     }
   }, [onOpen]);
 
+  const [releaseNotesText, setReleaseNotesText] = useState('');
+
+  useEffect(() => {
+    if (isOpen && !releaseNotesText) {
+      fetch('/release-notes.md')
+        .then(res => res.text())
+        .then(text => setReleaseNotesText(text))
+        .catch(err => console.error("Failed to load release notes", err));
+    }
+  }, [isOpen, releaseNotesText]);
+
   const getProcessedReleaseNotes = () => {
-    if (!window.env?.RELEASE_NOTES) return '';
-    return window.env.RELEASE_NOTES
+    if (!releaseNotesText) return '';
+    return releaseNotesText
       .replace(/\$\{version\}/g, window.env?.BUILD_VERSION || 'unknown')
       .replace(/\$\{commit_id\}/g, window.env?.BUILD_COMMIT_ID || 'unknown')
       .replace(/\$\{build_time\}/g, getFormattedBuildTime());
@@ -40,7 +50,7 @@ export function ReleaseNotesModal({ isOpen, onClose, onOpen }) {
         <div className="text-[11px] text-slate-400 dark:text-slate-500 mb-4 flex items-center gap-1.5 border-b border-slate-100 dark:border-slate-800 pb-3">
           <span>Build Time: {getFormattedBuildTime()}</span>
         </div>
-        {window.env?.RELEASE_NOTES ? (
+        {releaseNotesText ? (
           /* eslint-disable no-unused-vars */
           <ReactMarkdown
             components={{
