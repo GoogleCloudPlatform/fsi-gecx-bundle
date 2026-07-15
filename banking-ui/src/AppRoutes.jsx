@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 import HomeView from './components/HomeView.jsx';
 import AccountsView from './components/AccountsView.jsx';
@@ -63,6 +63,19 @@ export default function AppRoutes({
   calculateMonthlyPayment,
   interestRate
 }) {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (window.firebaseAnalytics && window.firebaseLogEvent) {
+      window.firebaseLogEvent(window.firebaseAnalytics, 'page_view', {
+        page_path: location.pathname,
+        page_search: location.search,
+        page_hash: location.hash,
+        page_title: document.title
+      });
+    }
+  }, [location]);
+
   return (
     <Routes>
       <Route path="/" element={
