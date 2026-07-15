@@ -55,7 +55,7 @@ export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Inte
 
   return (
     <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className={`bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 ${maxWidthClass} w-full shadow-2xl animate-fade-in relative text-left flex flex-col max-h-[90vh]`}>
+      <div className={`bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 ${maxWidthClass} w-full shadow-2xl animate-fade-in relative text-left flex flex-col max-h-[90dvh]`}>
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
