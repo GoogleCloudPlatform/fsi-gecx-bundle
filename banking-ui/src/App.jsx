@@ -45,10 +45,11 @@ import {
   getAccountsSummary
 } from './utils/api.js';
 import { getFormattedBuildTime } from './utils/formatters.js';
+import { hasReleaseNotes } from './utils/releaseNotes.js';
 import GoogleCloudIcon from './components/icons/GoogleCloudIcon.jsx';
 import CloudBuildIcon from './components/icons/CloudBuildIcon.jsx';
 import GcpInfoModal from './components/GcpInfoModal.jsx';
-import { ReleaseNotesModal, hasReleaseNotes } from './components/ReleaseNotesModal.jsx';
+import ReleaseNotesModal from './components/ReleaseNotesModal.jsx';
 
 
 const IconMap = {

@@ -3,8 +3,6 @@ import ReactMarkdown from 'react-markdown';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { getFormattedBuildTime } from '../utils/formatters.js';
 
-export const hasReleaseNotes = () => !!window.env?.RELEASE_NOTES?.trim();
-
 export function ReleaseNotesModal({ isOpen, onClose, onOpen }) {
   useEffect(() => {
     const version = window.env?.BUILD_VERSION;
@@ -43,17 +41,18 @@ export function ReleaseNotesModal({ isOpen, onClose, onOpen }) {
           <span>Build Time: {getFormattedBuildTime()}</span>
         </div>
         {window.env?.RELEASE_NOTES ? (
+          /* eslint-disable no-unused-vars */
           <ReactMarkdown
             components={{
-              h1: ({ node, ...props }) => <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200 mt-6 mb-4" {...props} />,
-              h2: ({ node, ...props }) => <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200 mt-5 mb-3" {...props} />,
-              h3: ({ node, ...props }) => <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mt-4 mb-2" {...props} />,
-              p: ({ node, ...props }) => <p className="mb-4 text-slate-600 dark:text-slate-400 leading-relaxed" {...props} />,
-              ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-4 space-y-1" {...props} />,
-              ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-4 space-y-1" {...props} />,
-              li: ({ node, ...props }) => <li className="text-slate-600 dark:text-slate-400" {...props} />,
-              blockquote: ({ node, ...props }) => <blockquote className="border-l-4 border-emerald-500 pl-4 py-1 mb-4 italic text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded-r" {...props} />,
-              code: ({ node, inline, ...props }) =>
+              h1: ({ _node, ...props }) => <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200 mt-6 mb-4" {...props} />,
+              h2: ({ _node, ...props }) => <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200 mt-5 mb-3" {...props} />,
+              h3: ({ _node, ...props }) => <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mt-4 mb-2" {...props} />,
+              p: ({ _node, ...props }) => <p className="mb-4 text-slate-600 dark:text-slate-400 leading-relaxed" {...props} />,
+              ul: ({ _node, ...props }) => <ul className="list-disc pl-5 mb-4 space-y-1" {...props} />,
+              ol: ({ _node, ...props }) => <ol className="list-decimal pl-5 mb-4 space-y-1" {...props} />,
+              li: ({ _node, ...props }) => <li className="text-slate-600 dark:text-slate-400" {...props} />,
+              blockquote: ({ _node, ...props }) => <blockquote className="border-l-4 border-emerald-500 pl-4 py-1 mb-4 italic text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded-r" {...props} />,
+              code: ({ _node, inline, ...props }) =>
                 inline ? (
                   <code className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-emerald-600 dark:text-emerald-400 text-xs font-mono" {...props} />
                 ) : (
@@ -61,12 +60,13 @@ export function ReleaseNotesModal({ isOpen, onClose, onOpen }) {
                     <code {...props} />
                   </pre>
                 ),
-              strong: ({ node, ...props }) => <strong className="font-semibold text-slate-800 dark:text-slate-200" {...props} />,
-              a: ({ node, ...props }) => <a className="text-emerald-500 hover:text-emerald-600 hover:underline" {...props} />
+              strong: ({ _node, ...props }) => <strong className="font-semibold text-slate-800 dark:text-slate-200" {...props} />,
+              a: ({ _node, ...props }) => <a className="text-emerald-500 hover:text-emerald-600 hover:underline" {...props} />
             }}
           >
             {getProcessedReleaseNotes()}
           </ReactMarkdown>
+          /* eslint-enable no-unused-vars */
         ) : (
           <p>No release notes available for this build.</p>
         )}

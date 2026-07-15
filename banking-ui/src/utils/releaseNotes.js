@@ -12,8 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export function formatVoiceLedgerAmount(amountCents) {
-  const numericAmount = Number(amountCents);
-  const safeAmount = Number.isFinite(numericAmount) ? numericAmount : 0;
-  return `$${Math.abs(safeAmount / 100).toFixed(2)}`;
-}
+export const hasReleaseNotes = () => !!window.env?.RELEASE_NOTES?.trim();
