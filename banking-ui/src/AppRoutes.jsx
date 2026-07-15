@@ -65,17 +65,28 @@ export default function AppRoutes({
   interestRate
 }) {
   const location = useLocation();
+  const prevLocationRef = React.useRef(null);
 
   useEffect(() => {
-    // https://firebase.google.com/docs/reference/js/analytics.md#logevent_0792e28
     if (window.firebaseAnalytics && window.firebaseLogEvent) {
-      window.firebaseLogEvent(window.firebaseAnalytics, 'page_view', {
+      const payload = {
         page_title: PAGE_TITLES[location.pathname] || document.title,
         page_location: window.location.href,
         page_path: location.pathname,
         page_search: location.search,
         page_hash: location.hash,
-      });
+      };
+
+      if (prevLocationRef.current) {
+        payload.page_referrer = window.location.origin + prevLocationRef.current.pathname + prevLocationRef.current.search;
+      } else {
+        payload.page_referrer = document.referrer;
+      }
+
+      // https://firebase.google.com/docs/reference/js/analytics.md#logevent_0792e28
+      window.firebaseLogEvent(window.firebaseAnalytics, 'page_view', payload);
+      console.log('ANALYTICS_PAGE_VIEW:', payload);
+      prevLocationRef.current = location;
     }
   }, [location]);
 

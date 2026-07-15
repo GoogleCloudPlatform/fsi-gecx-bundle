@@ -44,14 +44,17 @@ export const deriveBreadcrumbFromUrl = (path) => {
 export const logInteractionEvent = (category, trackingName, additionalProps = {}) => {
   if (window.firebaseAnalytics && window.firebaseLogEvent) {
     const payload = {
-      event_category: category,
-      button_name: trackingName,
-      url: window.location.pathname,
+      content_type: category,
+      item_id: trackingName,
+      page_path: window.location.pathname,
+      page_location: window.location.href,
       view_name: PAGE_TITLES[window.location.pathname] || document.title,
       breadcrumb_path: deriveBreadcrumbFromUrl(window.location.pathname),
       ...additionalProps
     };
 
-    window.firebaseLogEvent(window.firebaseAnalytics, 'interaction_event', payload);
+    // https://firebase.google.com/docs/reference/js/analytics.md#logevent_1f89527
+    window.firebaseLogEvent(window.firebaseAnalytics, 'select_content', payload);
+    console.log('ANALYTICS_EVENT:', payload);
   }
 };
