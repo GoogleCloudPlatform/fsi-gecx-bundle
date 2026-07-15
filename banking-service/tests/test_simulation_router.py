@@ -232,6 +232,69 @@ async def test_reset_my_demo_success(async_client, db_session):
 
 
 @pytest.mark.asyncio
+async def test_deprovision_my_demo_returns_to_one_click_provisioning_state(
+    async_client, db_session
+):
+    global mock_claims
+    mock_claims = {
+        "sub": "deprovision-uid",
+        "email": "deprovision.presenter@google.com",
+    }
+
+    provision_response = await async_client.post("/api/v1/simulation/provision-my-demo")
+    assert provision_response.status_code == status.HTTP_201_CREATED
+    user_id = provision_response.json()["summary"]["user_id"]
+
+    deprovision_response = await async_client.post(
+        "/api/v1/simulation/deprovision-my-demo"
+    )
+
+    assert deprovision_response.status_code == status.HTTP_200_OK
+    assert deprovision_response.json()["summary"] == {
+        "deposit_accounts_closed": 2,
+        "credit_accounts_closed": 1,
+        "cards_deactivated": 1,
+    }
+    assert db_session.query(Account).filter(
+        Account.user_id == user_id,
+        Account.status == "ACTIVE",
+    ).count() == 0
+    assert db_session.query(CreditAccount).filter(
+        CreditAccount.customer_id == user_id,
+        CreditAccount.status == "ACTIVE",
+    ).count() == 0
+    assert db_session.query(IssuedCard).join(CreditAccount).filter(
+        CreditAccount.customer_id == user_id,
+        IssuedCard.is_active.is_(True),
+    ).count() == 0
+    assert db_session.query(AuditOutbox).filter(
+        AuditOutbox.event_type == "DEMO_SUITE_DEPROVISIONED"
+    ).count() == 1
+
+    account_response = await async_client.get("/api/v1/credit-card/account")
+    assert account_response.status_code == status.HTTP_404_NOT_FOUND
+
+    reprovision_response = await async_client.post(
+        "/api/v1/simulation/provision-my-demo"
+    )
+    assert reprovision_response.status_code == status.HTTP_201_CREATED
+    assert db_session.query(Account).filter(
+        Account.user_id == user_id,
+        Account.status == "ACTIVE",
+    ).count() == 2
+    assert db_session.query(CreditAccount).filter(
+        CreditAccount.customer_id == user_id,
+        CreditAccount.status == "ACTIVE",
+    ).count() == 1
+    assert db_session.query(IssuedCard).join(CreditAccount).filter(
+        CreditAccount.customer_id == user_id,
+        CreditAccount.status == "ACTIVE",
+        IssuedCard.status == "ACTIVE",
+        IssuedCard.is_active.is_(True),
+    ).count() == 1
+
+
+@pytest.mark.asyncio
 async def test_reset_my_demo_clears_fraud_state_and_restores_card_baseline(async_client, db_session):
     global mock_claims
     mock_claims = {"sub": "reset-fraud-uid", "email": "reset.fraud.presenter@google.com"}

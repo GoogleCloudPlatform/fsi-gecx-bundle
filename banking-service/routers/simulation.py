@@ -70,6 +70,17 @@ def reset_my_demo(
     """
     return SimulationService(db).reset_my_demo(token)
 
+
+@router.post("/deprovision-my-demo", status_code=status.HTTP_200_OK)
+@v1_router.post("/deprovision-my-demo", status_code=status.HTTP_200_OK)
+@alias_router.post("/deprovision-my-demo", status_code=status.HTTP_200_OK)
+def deprovision_my_demo(
+    token: ValidatedToken = Depends(verify_presenter_domain),
+    db: Session = Depends(get_db),
+):
+    """Closes the presenter's active demo accounts so provisioning can be demonstrated again."""
+    return SimulationService(db).deprovision_my_demo(token)
+
 @router.post("/surge", status_code=status.HTTP_200_OK)
 @v1_router.post("/surge", status_code=status.HTTP_200_OK)
 @alias_router.post("/surge", status_code=status.HTTP_200_OK)

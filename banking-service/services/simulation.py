@@ -22,6 +22,7 @@ from repositories.fraud import FraudDecisionRepository
 from services.accounts import AccountsService
 from services.cdc_monitoring import CdcMonitoringService
 from services.seeding_service import (
+    deprovision_user_suite,
     is_demo_script_user_email,
     provision_user_suite,
     reset_user_suite,
@@ -122,6 +123,35 @@ class SimulationService:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to reset demo profile.",
+            ) from exc
+
+    def deprovision_my_demo(self, token: ValidatedToken) -> dict:
+        if not token.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Authenticated user ID not found in token claims.",
+            )
+
+        user = self._resolve_demo_user(token)
+        try:
+            summary = deprovision_user_suite(self.db, user.id)
+            return {
+                "status": "SUCCESS",
+                "message": "Demo accounts removed. The presenter is ready for one-click provisioning.",
+                "summary": summary,
+            }
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
+        except Exception as exc:
+            logger.error(
+                "Failed to deprovision demo profile for user_id=%s: %s", user.id, exc
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to remove demo accounts.",
             ) from exc
 
     def list_active_cards_for_simulation(self) -> dict:

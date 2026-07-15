@@ -55,9 +55,12 @@ class CreditCardRepository:
         return query.first()
 
     def get_account_by_customer(self, customer_id: str) -> Optional[FinancialAccount]:
-        """Retrieves a Financial Account matching the specified customer ID."""
+        """Retrieves the active Financial Account matching the specified customer ID."""
         resolved_uid = self._resolve_user_id(customer_id)
-        return self.db.query(FinancialAccount).filter(FinancialAccount.customer_id == resolved_uid).first()
+        return self.db.query(FinancialAccount).filter(
+            FinancialAccount.customer_id == resolved_uid,
+            FinancialAccount.status == "ACTIVE",
+        ).first()
 
     def save_account(self, account: FinancialAccount) -> FinancialAccount:
         """Saves a Financial Account instance to the session."""

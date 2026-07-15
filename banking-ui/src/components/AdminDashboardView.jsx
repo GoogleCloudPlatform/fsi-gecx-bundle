@@ -15,7 +15,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings, Bell, ExternalLink, Sparkles, Activity } from 'lucide-react';
-import { resetDatabase, getResetDatabaseAccess, getSystemSettings, updateSystemSettings, provisionMyDemo, resetMyDemo, getCreditCardAccount } from '../utils/api.js';
+import { resetDatabase, getResetDatabaseAccess, getSystemSettings, updateSystemSettings, provisionMyDemo, resetMyDemo, deprovisionMyDemo, getCreditCardAccount } from '../utils/api.js';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
@@ -37,6 +37,7 @@ function AdminDashboardView() {
   const [hasSeededProfile, setHasSeededProfile] = useState(false);
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [isResettingDemo, setIsResettingDemo] = useState(false);
+  const [isRemovingDemo, setIsRemovingDemo] = useState(false);
 
   // Joyride Tour States
   const [tourRun, setTourRun] = useState(false);
@@ -250,6 +251,24 @@ function AdminDashboardView() {
     }
   };
 
+  const handleDeprovisionDemo = async () => {
+    if (!window.confirm("Remove your active demo accounts? Financial and audit history will be preserved, but your presenter profile will return to the one-click provisioning state.")) {
+      return;
+    }
+    setIsRemovingDemo(true);
+    setNotice({ type: '', text: '' });
+    try {
+      const res = await deprovisionMyDemo();
+      setHasSeededProfile(false);
+      setNotice({ type: 'success', text: res.message || 'Demo accounts removed successfully!' });
+      setTimeout(() => setNotice({ type: '', text: '' }), 5000);
+    } catch (err) {
+      setNotice({ type: 'error', text: err.response?.data?.detail || 'Failed to remove demo accounts.' });
+    } finally {
+      setIsRemovingDemo(false);
+    }
+  };
+
   const adminModules = [
     {
       title: "Underwriting Portal",
@@ -404,17 +423,30 @@ function AdminDashboardView() {
               {isProvisioning ? 'Provisioning...' : 'Provision My Demo Profile'}
             </button>
           ) : (
-            <button
-              onClick={handleResetDemo}
-              disabled={isResettingDemo}
-              className={`w-full px-5 py-3 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
-                isResettingDemo
-                  ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                  : 'border-blue-200 dark:border-blue-900/30 bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100/50 dark:hover:bg-blue-950/40'
-              }`}
-            >
-              {isResettingDemo ? 'Resetting Suite...' : 'Reset My Demo Suite'}
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={handleResetDemo}
+                disabled={isResettingDemo || isRemovingDemo}
+                className={`w-full px-5 py-3 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
+                  isResettingDemo || isRemovingDemo
+                    ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                    : 'border-blue-200 dark:border-blue-900/30 bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100/50 dark:hover:bg-blue-950/40'
+                }`}
+              >
+                {isResettingDemo ? 'Resetting Suite...' : 'Reset My Demo Suite'}
+              </button>
+              <button
+                onClick={handleDeprovisionDemo}
+                disabled={isResettingDemo || isRemovingDemo}
+                className={`w-full px-5 py-3 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
+                  isResettingDemo || isRemovingDemo
+                    ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                    : 'border-amber-200 dark:border-amber-900/30 bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 hover:bg-amber-100/50 dark:hover:bg-amber-950/40'
+                }`}
+              >
+                {isRemovingDemo ? 'Removing Accounts...' : 'Remove My Demo Accounts'}
+              </button>
+            </div>
           )}
         </div>
       </div>
