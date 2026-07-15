@@ -21,7 +21,8 @@ import {
   Settings,
   Activity,
   Volume2,
-  Send
+  Send,
+  ChevronDown
 } from 'lucide-react';
 import {
   getCreditCardAccount,
@@ -670,104 +671,64 @@ export default function VoiceSupportView() {
 
   // Mid-session microphone hot-swapping
   useEffect(() => {
-    if (!isConnected) {
-      appliedAudioInputIdRef.current = selectedAudioInputId;
-      return undefined;
-    }
-
-    const previousDeviceId = appliedAudioInputIdRef.current;
-    if (previousDeviceId === selectedAudioInputId) return undefined;
-    let cancelled = false;
+    if (!isConnected) return;
 
     async function swapMicrophone() {
-      let newStream = null;
-      let newSourceNode = null;
       try {
         if (engine === 'livekit' && roomRef.current) {
           await roomRef.current.switchActiveDevice('audioinput', selectedAudioInputId);
-          if (cancelled) return;
-          appliedAudioInputIdRef.current = selectedAudioInputId;
           console.log(`[Hot-Swap] LiveKit active device switched to: ${selectedAudioInputId || 'default'}`);
         } else if (engine === 'gecx' && audioContextRef.current && workletNodeRef.current) {
-          // Acquire and connect the replacement before disturbing the working
-          // stream. A rejected device request must not silence the session.
-          newStream = await navigator.mediaDevices.getUserMedia(
+          // Stop old tracks
+          if (micStreamRef.current) {
+            micStreamRef.current.getTracks().forEach(track => track.stop());
+          }
+          if (sourceNodeRef.current) {
+            sourceNodeRef.current.disconnect();
+          }
+
+          // Request new device
+          const newStream = await navigator.mediaDevices.getUserMedia(
             microphoneConstraints(selectedAudioInputId)
           );
-          if (cancelled) {
-            newStream.getTracks().forEach(track => track.stop());
-            return;
-          }
-          newSourceNode = audioContextRef.current.createMediaStreamSource(newStream);
+          const newSourceNode = audioContextRef.current.createMediaStreamSource(newStream);
           newSourceNode.connect(workletNodeRef.current);
 
-          const oldStream = micStreamRef.current;
-          const oldSourceNode = sourceNodeRef.current;
           micStreamRef.current = newStream;
           sourceNodeRef.current = newSourceNode;
-          appliedAudioInputIdRef.current = selectedAudioInputId;
-          oldSourceNode?.disconnect();
-          oldStream?.getTracks().forEach(track => track.stop());
           console.log(`[Hot-Swap] GECX stream successfully swapped to new device`);
         }
       } catch (err) {
-        newSourceNode?.disconnect();
-        newStream?.getTracks().forEach(track => track.stop());
-        if (cancelled) return;
         console.error('[Hot-Swap] Failed to swap microphone mid-session:', err);
-        setErrorMessage('Could not switch microphones. The previous microphone remains active.');
-        persistAudioDeviceSelection(AUDIO_INPUT_STORAGE_KEY, previousDeviceId);
-        setSelectedAudioInputId(previousDeviceId);
       }
     }
 
     swapMicrophone();
-    return () => {
-      cancelled = true;
-    };
   }, [selectedAudioInputId, engine, isConnected]);
 
   // Mid-session speaker hot-swapping
   useEffect(() => {
-    if (!isConnected) {
-      appliedAudioOutputIdRef.current = selectedAudioOutputId;
-      return undefined;
-    }
-
-    const previousDeviceId = appliedAudioOutputIdRef.current;
-    if (previousDeviceId === selectedAudioOutputId) return undefined;
-    let cancelled = false;
+    if (!isConnected) return;
 
     async function swapSpeaker() {
       try {
         if (engine === 'livekit' && roomRef.current) {
           await roomRef.current.switchActiveDevice('audiooutput', selectedAudioOutputId);
-          if (cancelled) return;
-          appliedAudioOutputIdRef.current = selectedAudioOutputId;
           console.log(`[Hot-Swap] LiveKit active speaker switched to: ${selectedAudioOutputId || 'default'}`);
         } else if (engine === 'gecx' && audioContextRef.current) {
           if (typeof audioContextRef.current.setSinkId === 'function') {
             await audioContextRef.current.setSinkId(selectedAudioOutputId);
-            if (cancelled) return;
-            appliedAudioOutputIdRef.current = selectedAudioOutputId;
             console.log(`[Hot-Swap] GECX active speaker switched to: ${selectedAudioOutputId || 'default'}`);
           } else {
             throw new Error('Audio output switching is not supported in this browser.');
           }
         }
       } catch (err) {
-        if (cancelled) return;
         console.error('[Hot-Swap] Speaker switch failed:', err);
-        setErrorMessage('Could not switch speakers. The previous audio output remains active.');
-        persistAudioDeviceSelection(AUDIO_OUTPUT_STORAGE_KEY, previousDeviceId);
-        setSelectedAudioOutputId(previousDeviceId);
       }
     }
 
     swapSpeaker();
-    return () => {
-      cancelled = true;
-    };
   }, [selectedAudioOutputId, isConnected, engine]);
 
   // Auto scroll transcript panel inside container
@@ -1962,7 +1923,7 @@ export default function VoiceSupportView() {
             )}
           </div>
 
-          <div className="mx-auto flex w-full max-w-2xl min-w-0 flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
+          <div className="mx-auto flex w-full max-w-4xl min-w-0 flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-slate-800/80">
               <div className="flex items-center gap-2">
                 <Settings className="w-5 h-5 text-emerald-500" />
@@ -1988,12 +1949,13 @@ export default function VoiceSupportView() {
                 <div className="flex items-center gap-2">
                   <div className="relative w-full">
                     <Mic className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
                     <select
                       id="voice-audio-input"
                       value={selectedAudioInputId}
                       onChange={(event) => selectAudioInput(event.target.value)}
                       disabled={isConnecting || micPermissionState === 'denied'}
-                      className="h-11 w-full rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-8 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
+                      className="appearance-none h-11 w-full rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-10 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
                     >
                       {micPermissionState === 'denied' ? (
                         <option value="">Microphone permission denied</option>
