@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { X } from 'lucide-react';
-import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
-import { getFormattedBuildTime } from '../utils/formatters.js';
+import { getFormattedBuildTime } from '../utils/releaseNotes.js';
 
 export function ReleaseNotesModal({ isOpen, onClose, onOpen }) {
   useEffect(() => {
@@ -51,8 +50,8 @@ export function ReleaseNotesModal({ isOpen, onClose, onOpen }) {
           <X className="w-5 h-5" />
         </button>
         <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5 shrink-0 mb-4">
-          <GoogleCloudIcon className="w-6 h-6" />
-          <span>Release Notes: {window.env?.BUILD_VERSION || 'unknown'} ({window.env?.BUILD_COMMIT_ID || 'unknown'})</span>
+          <img src="/favicon.svg" alt="Nova Horizon" className="w-6 h-6" />
+          <span>{window.env?.BUILD_VERSION || 'unknown'} ({window.env?.BUILD_COMMIT_ID || 'unknown'})</span>
         </h2>
 
         <div className="flex-1 overflow-y-auto pr-2 text-slate-600 dark:text-slate-400 text-sm leading-relaxed text-left">

@@ -74,16 +74,4 @@ export const getPhonePlaceholder = (locale = navigator.language) => {
   return "Phone Number";
 };
 
-/**
- * Format the build time from the environment variable
- */
-export const getFormattedBuildTime = () => {
-  if (window.env?.BUILD_VERSION === 'local-dev') {
-    window.env.BUILD_TIME = Date.now();
-  }
-  if (!window.env?.BUILD_TIME || window.env.BUILD_TIME === '${BUILD_TIME}' || window.env.BUILD_TIME === '0') return 'unknown';
-  const buildTimeMs = parseInt(window.env.BUILD_TIME, 10);
-  if (isNaN(buildTimeMs)) return 'unknown';
-  return new Date(buildTimeMs).toLocaleString();
-};
 

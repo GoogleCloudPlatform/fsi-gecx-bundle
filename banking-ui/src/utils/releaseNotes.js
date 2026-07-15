@@ -12,4 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export const hasReleaseNotes = () => window.env?.HAS_RELEASE_NOTES === true;
+export const hasReleaseNotes = () => 
+  window.env?.HAS_RELEASE_NOTES === true || window.env?.HAS_RELEASE_NOTES === 'true';
+
+/**
+ * Format the build time from the environment variable
+ */
+export const getFormattedBuildTime = () => {
+  if (window.env?.BUILD_VERSION === 'local-dev') {
+    window.env.BUILD_TIME = Date.now();
+  }
+  if (!window.env?.BUILD_TIME || window.env.BUILD_TIME === '${BUILD_TIME}' || window.env.BUILD_TIME === '0') return 'unknown';
+  const buildTimeMs = parseInt(window.env.BUILD_TIME, 10);
+  if (isNaN(buildTimeMs)) return 'unknown';
+  return new Date(buildTimeMs).toLocaleString();
+};
