@@ -23,7 +23,9 @@ export const HELP_CATEGORIES = [
 
 export const PAGE_TITLES = {
   '/': 'Home',
+  '/accounts': 'Account Ledger',
   '/checking-accounts': 'Checking Accounts',
+  '/commpare-products': 'Compare Products',
   '/savings-accounts': 'Savings Accounts',
   '/certificate-accounts': 'Certificate Accounts',
   '/credit-cards': 'Credit Cards',
