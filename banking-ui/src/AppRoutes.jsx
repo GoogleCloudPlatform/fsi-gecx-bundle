@@ -14,6 +14,7 @@
 
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { PAGE_TITLES } from './utils/constants.js';
 
 import HomeView from './components/HomeView.jsx';
 import AccountsView from './components/AccountsView.jsx';
@@ -71,7 +72,7 @@ export default function AppRoutes({
         page_path: location.pathname,
         page_search: location.search,
         page_hash: location.hash,
-        page_title: document.title
+        page_title: PAGE_TITLES[location.pathname] || document.title
       });
     }
   }, [location]);
