@@ -61,3 +61,4 @@ full_reset_enabled                               = true
 stable_env_url                                   = "https://agentic-finance.gcp-solutions.com/"
 additional_cors_allowed_origins                  = []
 enable_avatar_modality                           = true
+console_viewer_group_join_url                    = "https://groups.google.com/a/google.com/g/fsi-nova-horizon-demo-console-viewer"
