@@ -15,8 +15,8 @@
  */
 /* global importScripts, firebase */
 
-importScripts('https://www.gstatic.com/firebasejs/12.13.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/12.13.0/firebase-messaging-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/12.16.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/12.16.0/firebase-messaging-compat.js');
 importScripts('/fbConfig.js');
 
 // Initialize Firebase app in service worker

@@ -19,10 +19,10 @@
     <link rel="stylesheet" href="https://www.gstatic.com/chat-messenger/sdk/prod/v1.16/themes/chat-messenger-default.css">
     <link rel="stylesheet" href="https://www.gstatic.com/chat-messenger/sdk/prod/v1.16/themes/chat-messenger-layout.css">
     <script type="module">
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
-      import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-analytics.js";
-      import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
-      import { isSupported, getMessaging, onMessage, getToken } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-messaging.js";
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+      import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js";
+      import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+      import { isSupported, getMessaging, onMessage, getToken } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-messaging.js";
 
       // Detect if Firebase configuration is missing or contains placeholder templates
       const useMockAuth = !self.firebaseConfig || !self.firebaseConfig.apiKey || self.firebaseConfig.apiKey.startsWith("${");
@@ -73,6 +73,8 @@
           // Initialize Firebase using loaded configuration
           const app = initializeApp(self.firebaseConfig);
           const analytics = getAnalytics(app);
+          window.firebaseAnalytics = analytics;
+          window.firebaseLogEvent = logEvent;
 
           // Initialize Auth
           const auth = getAuth(app);
