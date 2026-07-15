@@ -153,6 +153,18 @@ function AppContent() {
   const [isAuthInfoModalOpen, setIsAuthInfoModalOpen] = useState(false);
   const [isGcpEnvModalOpen, setIsGcpEnvModalOpen] = useState(false);
   const [isReleaseNotesModalOpen, setIsReleaseNotesModalOpen] = useState(false);
+  
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('release_notes') === 'true') {
+      setIsReleaseNotesModalOpen(true);
+      searchParams.delete('release_notes');
+      const newSearch = searchParams.toString();
+      const newUrl = newSearch ? `${location.pathname}?${newSearch}` : location.pathname;
+      navigate(newUrl, { replace: true });
+    }
+  }, [location.search, location.pathname, navigate]);
+
   const [copiedField, setCopiedField] = useState(null);
   const projectId = window.firebaseConfig?.projectId;
   const cxParts = (window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME || '').split('/');
