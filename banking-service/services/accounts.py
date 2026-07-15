@@ -260,11 +260,29 @@ class AccountsService:
 
         # Fetch credit accounts
         from models.credit_card import CreditAccount
-        credit_accounts = self.db.query(CreditAccount).filter(CreditAccount.customer_id == user.id).all()
+        credit_accounts = self.db.query(CreditAccount).filter(
+            CreditAccount.customer_id == user.id,
+            CreditAccount.status == "ACTIVE",
+        ).all()
+
+        # Closed suites are intentionally retained for ledger/audit history. Their
+        # presence must suppress the local-development convenience auto-provisioner
+        # so a presenter can demonstrate the explicit one-click provisioning state.
+        has_archived_or_active_suite = bool(
+            self.db.query(Account).filter(Account.user_id == user.id).first()
+            or self.db.query(CreditAccount).filter(
+                CreditAccount.customer_id == user.id
+            ).first()
+        )
 
         # Auto-provision sandbox for mock user when running locally to speed up local dev onboarding!
         from utils.env import is_running_locally
-        if is_running_locally() and not deposit_accounts and not credit_accounts:
+        if (
+            is_running_locally()
+            and not deposit_accounts
+            and not credit_accounts
+            and not has_archived_or_active_suite
+        ):
             user_email = user.email
             user_uid = user.auth_provider_uid
             user_id = user.id
@@ -278,7 +296,10 @@ class AccountsService:
                     Account.user_id == user_id,
                     Account.status == "ACTIVE",
                 ).all()
-                credit_accounts = self.db.query(CreditAccount).filter(CreditAccount.customer_id == user_id).all()
+                credit_accounts = self.db.query(CreditAccount).filter(
+                    CreditAccount.customer_id == user_id,
+                    CreditAccount.status == "ACTIVE",
+                ).all()
             except Exception as e:
                 logger.error(f"Failed to auto-provision local sandbox for user: {user_email}. Error: {e}")
                 self.db.rollback()
@@ -369,7 +390,11 @@ class AccountsService:
             raise HTTPException(status_code=404, detail="User profile not found.")
             
         # Ensure account belongs to user
-        account = self.db.query(Account).filter(Account.id == account_id, Account.user_id == user.id).first()
+        account = self.db.query(Account).filter(
+            Account.id == account_id,
+            Account.user_id == user.id,
+            Account.status == "ACTIVE",
+        ).first()
         if not account:
             raise HTTPException(status_code=404, detail="Account not found.")
             

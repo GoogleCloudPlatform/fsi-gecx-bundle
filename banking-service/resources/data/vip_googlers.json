@@ -194,5 +194,89 @@
     },
     "credit_tier": "PRIME_EXCELLENT",
     "fico_score": 840
+  },
+  {
+    "name": "Frances Arnold",
+    "email": "frances.arnold@nova.horizon.test",
+    "role": "Google VIP",
+    "home_metro": "LOS ANGELES CA",
+    "residential_address": {
+      "street": "125 Innovation Way",
+      "city": "Pasadena",
+      "state": "CA",
+      "postal_code": "91001"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 845
+  },
+  {
+    "name": "John Hennessy",
+    "email": "john.hennessy@nova.horizon.test",
+    "role": "Google VIP",
+    "home_metro": "MOUNTAIN VIEW CA",
+    "residential_address": {
+      "street": "450 Research Loop",
+      "city": "Palo Alto",
+      "state": "CA",
+      "postal_code": "94305"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 850
+  },
+  {
+    "name": "Marty Chávez",
+    "email": "marty.chavez@nova.horizon.test",
+    "role": "Google VIP",
+    "home_metro": "MOUNTAIN VIEW CA",
+    "residential_address": {
+      "street": "800 Data Drive",
+      "city": "Mountain View",
+      "state": "CA",
+      "postal_code": "94039"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 835
+  },
+  {
+    "name": "John Doerr",
+    "email": "john.doerr@nova.horizon.test",
+    "role": "Google VIP",
+    "home_metro": "MOUNTAIN VIEW CA",
+    "residential_address": {
+      "street": "275 Redwood Terrace",
+      "city": "Woodside",
+      "state": "CA",
+      "postal_code": "94061"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 840
+  },
+  {
+    "name": "Ram Shriram",
+    "email": "ram.shriram@nova.horizon.test",
+    "role": "Google VIP",
+    "home_metro": "MOUNTAIN VIEW CA",
+    "residential_address": {
+      "street": "650 Venture Lane",
+      "city": "Menlo Park",
+      "state": "CA",
+      "postal_code": "94025"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 845
+  },
+  {
+    "name": "Robin Washington",
+    "email": "robin.washington@nova.horizon.test",
+    "role": "Google VIP",
+    "home_metro": "SAN FRANCISCO CA",
+    "residential_address": {
+      "street": "300 Bayfront Plaza",
+      "city": "San Francisco",
+      "state": "CA",
+      "postal_code": "94105"
+    },
+    "credit_tier": "PRIME_EXCELLENT",
+    "fico_score": 830
   }
 ]

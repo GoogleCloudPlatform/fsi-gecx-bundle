@@ -1110,8 +1110,14 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
         # 1. Check if user already exists
         existing_user = db.query(User).filter((User.email == email) | (User.auth_provider_uid == firebase_uid)).first()
         if existing_user:
-            has_dep = db.query(Account).filter(Account.user_id == existing_user.id).first()
-            has_cc = db.query(CreditAccount).filter(CreditAccount.customer_id == existing_user.id).first()
+            has_dep = db.query(Account).filter(
+                Account.user_id == existing_user.id,
+                Account.status == "ACTIVE",
+            ).first()
+            has_cc = db.query(CreditAccount).filter(
+                CreditAccount.customer_id == existing_user.id,
+                CreditAccount.status != "CLOSED",
+            ).first()
             if has_dep or has_cc:
                 raise ValueError("Profile already provisioned with active accounts.")
             user_uuid = existing_user.id
@@ -1424,7 +1430,10 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
     ).delete(synchronize_session=False)
 
     # 3. Fetch credit accounts belonging to user
-    credit_accounts = db.query(CreditAccount).filter(CreditAccount.customer_id == user_id).all()
+    credit_accounts = db.query(CreditAccount).filter(
+        CreditAccount.customer_id == user_id,
+        CreditAccount.status == "ACTIVE",
+    ).all()
     cred_acc = credit_accounts[0] if credit_accounts else None
     card = None
     if cred_acc:
@@ -1480,6 +1489,80 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
         
     db.commit()
     logger.info(f"Successfully reset personal demo suite accounts for user_id={user_id}.")
+
+
+def deprovision_user_suite(db: Session, user_id: uuid.UUID) -> dict[str, int]:
+    """Close a presenter's active suite while preserving append-only financial history."""
+    enable_session_rbac_override(db)
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise ValueError(f"User {user_id} was not found.")
+
+    deposit_accounts = db.query(Account).filter(
+        Account.user_id == user_id,
+        Account.status == "ACTIVE",
+    ).all()
+    credit_accounts = db.query(CreditAccount).filter(
+        CreditAccount.customer_id == user_id,
+        CreditAccount.status != "CLOSED",
+    ).all()
+    if not deposit_accounts and not credit_accounts:
+        raise ValueError("No active demo accounts were found for this presenter.")
+
+    for account in deposit_accounts:
+        account.status = "CLOSED"
+
+    credit_account_ids = [account.id for account in credit_accounts]
+    cards = []
+    if credit_account_ids:
+        cards = db.query(IssuedCard).filter(
+            IssuedCard.account_id.in_(credit_account_ids)
+        ).all()
+        for card in cards:
+            card.status = "CLOSED"
+            card.is_active = False
+        for account in credit_accounts:
+            account.status = "CLOSED"
+
+    fraud_alerts = db.query(FraudAlert).filter(FraudAlert.customer_id == user_id).all()
+    fraud_alert_ids = [alert.id for alert in fraud_alerts]
+    fraud_thread_ids = {
+        thread_id
+        for alert in fraud_alerts
+        for thread_id in (alert.message_thread_id, alert.triage_message_thread_id)
+        if thread_id
+    }
+    if fraud_alert_ids:
+        db.query(FraudCaseAction).filter(
+            FraudCaseAction.fraud_alert_id.in_(fraud_alert_ids)
+        ).delete(synchronize_session=False)
+        db.query(FraudAlert).filter(FraudAlert.id.in_(fraud_alert_ids)).delete(
+            synchronize_session=False
+        )
+    if fraud_thread_ids:
+        db.query(UserSecureMessage).filter(
+            UserSecureMessage.user_id == user_id,
+            UserSecureMessage.thread_id.in_(fraud_thread_ids),
+        ).delete(synchronize_session=False)
+
+    summary = {
+        "deposit_accounts_closed": len(deposit_accounts),
+        "credit_accounts_closed": len(credit_accounts),
+        "cards_deactivated": len(cards),
+    }
+    record_audit_event(
+        db,
+        "DEMO_SUITE_DEPROVISIONED",
+        {"user_id": str(user_id), **summary},
+    )
+    db.commit()
+    logger.info(
+        "Deprovisioned personal demo suite for user_id=%s summary=%s.",
+        user_id,
+        summary,
+    )
+    return summary
 
 
 def run_algorithmic_seeding_job() -> Dict[str, Any]:

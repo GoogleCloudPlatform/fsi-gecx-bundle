@@ -11,18 +11,22 @@ from typing import Any
 
 import httpx
 from fastapi import HTTPException, status
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from models.authentication import ValidatedToken
-from models.credit_card import TransactionAuthorization
+from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, TransactionAuthorization
 from models.fraud import FraudAlert
+from models.identity import User, UserAddress
 from repositories.accounts import AccountsRepository
 from repositories.credit_card import CreditCardRepository
 from repositories.fraud import FraudDecisionRepository
 from services.accounts import AccountsService
 from services.cdc_monitoring import CdcMonitoringService
 from services.seeding_service import (
+    deprovision_user_suite,
     is_demo_script_user_email,
+    load_vip_googlers,
     provision_user_suite,
     reset_user_suite,
 )
@@ -39,6 +43,30 @@ logger = logging.getLogger(__name__)
 DATA_GENERATOR_URL = os.getenv("DATA_GENERATOR_URL", "http://localhost:8001")
 SURGE_DISPATCH_CONNECT_TIMEOUT_SECONDS = float(os.getenv("SURGE_DISPATCH_CONNECT_TIMEOUT_SECONDS", "5"))
 SURGE_DISPATCH_READ_TIMEOUT_SECONDS = float(os.getenv("SURGE_DISPATCH_READ_TIMEOUT_SECONDS", "8"))
+VIP_MEXICO_WINDOW_DAYS = 14
+VIP_MEXICO_GUARANTEE_WINDOW_DAYS = 7
+VIP_MEXICO_MARGIN_CENTS = 50_000
+VIP_MEXICO_RANK_STEP_CENTS = 2_500
+NORTHERN_CALIFORNIA_CITIES = {
+    "SAN FRANCISCO",
+    "MOUNTAIN VIEW",
+    "PALO ALTO",
+    "LOS ALTOS",
+    "LOS ALTOS HILLS",
+    "MENLO PARK",
+    "WOODSIDE",
+    "ATHERTON",
+    "PORTOLA VALLEY",
+    "HILLSBOROUGH",
+    "SARATOGA",
+    "SAN JOSE",
+    "OAKLAND",
+    "BERKELEY",
+    "FREMONT",
+    "SANTA CLARA",
+    "SUNNYVALE",
+    "SACRAMENTO",
+}
 
 
 class SimulationService:
@@ -123,6 +151,235 @@ class SimulationService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to reset demo profile.",
             ) from exc
+
+    def deprovision_my_demo(self, token: ValidatedToken) -> dict:
+        if not token.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Authenticated user ID not found in token claims.",
+            )
+
+        user = self._resolve_demo_user(token)
+        try:
+            summary = deprovision_user_suite(self.db, user.id)
+            return {
+                "status": "SUCCESS",
+                "message": "Demo accounts removed. The presenter is ready for one-click provisioning.",
+                "summary": summary,
+            }
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
+        except Exception as exc:
+            logger.error(
+                "Failed to deprovision demo profile for user_id=%s: %s", user.id, exc
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to remove demo accounts.",
+            ) from exc
+
+    async def ensure_vip_mexico_spend_leaders(self) -> dict:
+        """Ask the data generator to top up NorCal VIPs above non-VIP Mexico spend."""
+        self._enable_simulation_db_access()
+        now = datetime.datetime.now(datetime.timezone.utc)
+        cutoff = now - datetime.timedelta(days=VIP_MEXICO_WINDOW_DAYS)
+        guarantee_cutoff = now - datetime.timedelta(days=VIP_MEXICO_GUARANTEE_WINDOW_DAYS)
+        vip_emails = {
+            str(vip.get("email") or "").strip().lower()
+            for vip in load_vip_googlers()
+            if vip.get("email")
+        }
+        if not vip_emails:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="No configured VIP customers are available for analytics preparation.",
+            )
+
+        latest_primary_addresses = (
+            self.db.query(
+                UserAddress.user_id.label("user_id"),
+                UserAddress.city.label("city"),
+                UserAddress.state.label("state"),
+                func.row_number()
+                .over(
+                    partition_by=UserAddress.user_id,
+                    order_by=(UserAddress.created_at.desc(), UserAddress.id.desc()),
+                )
+                .label("address_rank"),
+            )
+            .filter(UserAddress.is_primary.is_(True))
+            .subquery()
+        )
+
+        spend_rows = (
+            self.db.query(
+                User.id,
+                User.email,
+                func.coalesce(func.sum(-PostedTransaction.amount_cents), 0).label("spend_cents"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (PostedTransaction.posted_at >= guarantee_cutoff, -PostedTransaction.amount_cents),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("guarantee_spend_cents"),
+            )
+            .join(CreditAccount, CreditAccount.customer_id == User.id)
+            .join(PostedTransaction, PostedTransaction.account_id == CreditAccount.id)
+            .join(TransactionAuthorization, TransactionAuthorization.id == PostedTransaction.authorization_id)
+            .join(
+                latest_primary_addresses,
+                (latest_primary_addresses.c.user_id == User.id)
+                & (latest_primary_addresses.c.address_rank == 1),
+            )
+            .filter(
+                func.upper(latest_primary_addresses.c.state) == "CA",
+                func.upper(latest_primary_addresses.c.city).in_(NORTHERN_CALIFORNIA_CITIES),
+                func.upper(
+                    func.coalesce(
+                        TransactionAuthorization.merchant_country_code,
+                        TransactionAuthorization.shipping_country_code,
+                    )
+                )
+                == "MEX",
+                PostedTransaction.amount_cents < 0,
+                PostedTransaction.posted_at >= cutoff,
+            )
+            .group_by(User.id, User.email)
+            .all()
+        )
+        guarantee_spend_by_user_id = {
+            row.id: int(row.guarantee_spend_cents or 0) for row in spend_rows
+        }
+        generic_ceiling_cents = max(
+            (
+                int(row.spend_cents or 0)
+                for row in spend_rows
+                if (row.email or "").lower() not in vip_emails
+            ),
+            default=0,
+        )
+
+        vip_instruments = (
+            self.db.query(User, CreditAccount, IssuedCard)
+            .join(
+                latest_primary_addresses,
+                (latest_primary_addresses.c.user_id == User.id)
+                & (latest_primary_addresses.c.address_rank == 1),
+            )
+            .join(CreditAccount, CreditAccount.customer_id == User.id)
+            .join(IssuedCard, IssuedCard.account_id == CreditAccount.id)
+            .filter(
+                func.lower(User.email).in_(vip_emails),
+                func.upper(latest_primary_addresses.c.state) == "CA",
+                func.upper(latest_primary_addresses.c.city).in_(NORTHERN_CALIFORNIA_CITIES),
+                CreditAccount.status == "ACTIVE",
+                IssuedCard.status == "ACTIVE",
+                IssuedCard.is_active.is_(True),
+            )
+            .order_by(func.lower(User.email), IssuedCard.created_at.desc())
+            .all()
+        )
+
+        instruments_by_user_id: dict[Any, tuple[User, CreditAccount, IssuedCard]] = {}
+        for user, account, card in vip_instruments:
+            instruments_by_user_id.setdefault(user.id, (user, account, card))
+        instruments = list(instruments_by_user_id.values())
+        if not instruments:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="No active Northern California VIP cards are available. Run the full demo reset first.",
+            )
+
+        plans: list[dict[str, Any]] = []
+        for rank_index, (user, account, card) in enumerate(instruments):
+            target_cents = (
+                generic_ceiling_cents
+                + VIP_MEXICO_MARGIN_CENTS
+                + ((len(instruments) - rank_index) * VIP_MEXICO_RANK_STEP_CENTS)
+            )
+            # All generated transactions land inside seven days. Comparing that
+            # subtotal with the 14-day generic ceiling guarantees either window.
+            current_spend_cents = guarantee_spend_by_user_id.get(user.id, 0)
+            top_off_cents = max(0, target_cents - current_spend_cents)
+            if top_off_cents > int(account.available_credit_cents or 0):
+                self.db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "The current Mexico spend ceiling exceeds available VIP credit. "
+                        "Run the full demo reset before preparing the analytics leaderboard."
+                    ),
+                )
+            plans.append(
+                {
+                    "customer_id": str(user.id),
+                    "customer_name": " ".join(part for part in (user.first_name, user.last_name) if part),
+                    "card_token": card.card_token,
+                    "target_cents": target_cents,
+                    "top_off_cents": top_off_cents,
+                }
+            )
+
+        targets = [plan for plan in plans if plan["top_off_cents"] > 0]
+        generation_result = {
+            "status": "NOOP",
+            "transactions_created": 0,
+            "customers_topped_off": 0,
+            "total_added_cents": 0,
+        }
+        if targets:
+            generation_result = await self._dispatch_generation_scenario_request(
+                "/ensure-vip-mexico-leaders",
+                {
+                    "seed": random.randint(1, 999_999_999),
+                    "targets": targets,
+                },
+                action_name="VIP Mexico leaderboard preparation",
+                read_timeout_seconds=120.0,
+            )
+
+        transactions_created = int(generation_result.get("transactions_created") or 0)
+        customers_topped_off = int(generation_result.get("customers_topped_off") or 0)
+        total_added_cents = int(generation_result.get("total_added_cents") or 0)
+
+        record_audit_event(
+            self.db,
+            "VIP_MEXICO_SPEND_LEADERS_ENSURED",
+            {
+                "window_days": VIP_MEXICO_WINDOW_DAYS,
+                "vip_customers_considered": len(instruments),
+                "vip_customers_topped_off": customers_topped_off,
+                "transactions_created": transactions_created,
+                "generic_ceiling_cents": generic_ceiling_cents,
+                "total_added_cents": total_added_cents,
+            },
+        )
+        self.db.commit()
+
+        minimum_target_cents = min(plan["target_cents"] for plan in plans)
+        return {
+            "status": "SUCCESS",
+            "message": (
+                "VIP Mexico spend leaderboard prepared successfully."
+                if transactions_created
+                else "VIP Mexico spend already leads the current non-VIP ceiling."
+            ),
+            "window_days": VIP_MEXICO_WINDOW_DAYS,
+            "guarantee_window_days": VIP_MEXICO_GUARANTEE_WINDOW_DAYS,
+            "vip_customers_considered": len(instruments),
+            "vip_customers_topped_off": customers_topped_off,
+            "transactions_created": transactions_created,
+            "generic_ceiling_cents": generic_ceiling_cents,
+            "minimum_vip_target_cents": minimum_target_cents,
+            "margin_cents": VIP_MEXICO_MARGIN_CENTS,
+            "total_added_cents": total_added_cents,
+        }
 
     def list_active_cards_for_simulation(self) -> dict:
         self._enable_simulation_db_access()

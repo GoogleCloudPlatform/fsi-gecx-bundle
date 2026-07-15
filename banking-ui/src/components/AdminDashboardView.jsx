@@ -15,7 +15,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings, Bell, ExternalLink, Sparkles, Activity } from 'lucide-react';
-import { resetDatabase, getResetDatabaseAccess, getSystemSettings, updateSystemSettings, provisionMyDemo, resetMyDemo, getCreditCardAccount } from '../utils/api.js';
+import { resetDatabase, getResetDatabaseAccess, getSystemSettings, updateSystemSettings, provisionMyDemo, resetMyDemo, deprovisionMyDemo, ensureVipMexicoLeaders, getCreditCardAccount } from '../utils/api.js';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
@@ -37,6 +37,8 @@ function AdminDashboardView() {
   const [hasSeededProfile, setHasSeededProfile] = useState(false);
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [isResettingDemo, setIsResettingDemo] = useState(false);
+  const [isRemovingDemo, setIsRemovingDemo] = useState(false);
+  const [isPreparingVipSpend, setIsPreparingVipSpend] = useState(false);
 
   // Joyride Tour States
   const [tourRun, setTourRun] = useState(false);
@@ -210,7 +212,7 @@ function AdminDashboardView() {
         type: res.status === 'PARTIAL_SUCCESS' ? 'warning' : 'success',
         text: `${res.message || 'Database successfully reset and re-seeded!'}${warningText}`,
       });
-      setTimeout(() => setNotice({ type: '', text: '' }), 5000);
+      setTimeout(() => setNotice({ type: '', text: '' }), res.status === 'PARTIAL_SUCCESS' ? 12000 : 5000);
     } catch (err) {
       setNotice({ type: 'error', text: err.response?.data?.detail || 'Failed to reset database.' });
     } finally {
@@ -247,6 +249,43 @@ function AdminDashboardView() {
       setNotice({ type: 'error', text: err.response?.data?.detail || 'Failed to reset demo profile.' });
     } finally {
       setIsResettingDemo(false);
+    }
+  };
+
+  const handleDeprovisionDemo = async () => {
+    if (!window.confirm("Remove your active demo accounts? Financial and audit history will be preserved, but your presenter profile will return to the one-click provisioning state.")) {
+      return;
+    }
+    setIsRemovingDemo(true);
+    setNotice({ type: '', text: '' });
+    try {
+      const res = await deprovisionMyDemo();
+      setHasSeededProfile(false);
+      setNotice({ type: 'success', text: res.message || 'Demo accounts removed successfully!' });
+      setTimeout(() => setNotice({ type: '', text: '' }), 5000);
+    } catch (err) {
+      setNotice({ type: 'error', text: err.response?.data?.detail || 'Failed to remove demo accounts.' });
+    } finally {
+      setIsRemovingDemo(false);
+    }
+  };
+
+  const handlePrepareVipSpend = async () => {
+    setIsPreparingVipSpend(true);
+    setNotice({ type: '', text: '' });
+    try {
+      const res = await ensureVipMexicoLeaders();
+      const created = Number(res.transactions_created || 0);
+      const considered = Number(res.vip_customers_considered || 0);
+      setNotice({
+        type: 'success',
+        text: `${res.message || 'VIP Mexico spend leaderboard prepared.'} ${created} top-off transaction${created === 1 ? '' : 's'} added across ${considered} eligible VIP customers.`,
+      });
+      setTimeout(() => setNotice({ type: '', text: '' }), 7000);
+    } catch (err) {
+      setNotice({ type: 'error', text: err.response?.data?.detail || 'Failed to prepare the VIP Mexico spend leaderboard.' });
+    } finally {
+      setIsPreparingVipSpend(false);
     }
   };
 
@@ -381,8 +420,8 @@ function AdminDashboardView() {
         })}
       </div>
 
-      <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5" id="demo-suite-management">
-        <div>
+      <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col xl:flex-row xl:items-center justify-between gap-5" id="demo-suite-management">
+        <div className="min-w-0">
           <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">Personal Demo Suite Management</h4>
           <p className="text-xs text-slate-500 mt-0.5 max-w-3xl">
             {hasSeededProfile
@@ -390,7 +429,7 @@ function AdminDashboardView() {
               : "You do not have a seeded personal demo profile. Provision a complete account suite with checking, savings, credit cards, credit scoring profiles, and realistic transaction history."}
           </p>
         </div>
-        <div className="w-full lg:w-auto lg:min-w-[280px]">
+        <div className="w-full xl:w-[440px] xl:shrink-0">
           {!hasSeededProfile ? (
             <button
               onClick={handleProvisionDemo}
@@ -404,19 +443,53 @@ function AdminDashboardView() {
               {isProvisioning ? 'Provisioning...' : 'Provision My Demo Profile'}
             </button>
           ) : (
-            <button
-              onClick={handleResetDemo}
-              disabled={isResettingDemo}
-              className={`w-full px-5 py-3 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
-                isResettingDemo
-                  ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                  : 'border-blue-200 dark:border-blue-900/30 bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100/50 dark:hover:bg-blue-950/40'
-              }`}
-            >
-              {isResettingDemo ? 'Resetting Suite...' : 'Reset My Demo Suite'}
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={handleResetDemo}
+                disabled={isResettingDemo || isRemovingDemo}
+                className={`w-full px-5 py-3 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
+                  isResettingDemo || isRemovingDemo
+                    ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                    : 'border-blue-200 dark:border-blue-900/30 bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100/50 dark:hover:bg-blue-950/40'
+                }`}
+              >
+                {isResettingDemo ? 'Resetting Suite...' : 'Reset My Demo Suite'}
+              </button>
+              <button
+                onClick={handleDeprovisionDemo}
+                disabled={isResettingDemo || isRemovingDemo}
+                className={`w-full px-5 py-3 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
+                  isResettingDemo || isRemovingDemo
+                    ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                    : 'border-amber-200 dark:border-amber-900/30 bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 hover:bg-amber-100/50 dark:hover:bg-amber-950/40'
+                }`}
+              >
+                {isRemovingDemo ? 'Removing Accounts...' : 'Remove My Demo Accounts'}
+              </button>
+            </div>
           )}
         </div>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-5 rounded-3xl border border-violet-200 bg-violet-50/60 p-6 dark:border-violet-900/40 dark:bg-violet-950/20 xl:flex-row xl:items-center xl:justify-between" id="vip-analytics-preparation">
+        <div className="min-w-0">
+          <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">VIP Mexico Analytics Preparation</h4>
+          <p className="mt-0.5 max-w-3xl text-xs text-slate-500 dark:text-slate-400">
+            Ensure configured Northern California VIP customers lead all non-VIP posted Mexico spend over the last 14 days. Re-running is safe and adds transactions only when the generic spend ceiling has increased.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handlePrepareVipSpend}
+          disabled={isPreparingVipSpend}
+          className={`w-full shrink-0 whitespace-nowrap rounded-xl border px-5 py-3 text-xs font-bold shadow-sm transition-all active:scale-95 xl:w-auto ${
+            isPreparingVipSpend
+              ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-slate-800 dark:bg-slate-800'
+              : 'border-violet-200 bg-white text-violet-700 hover:bg-violet-100/70 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300 dark:hover:bg-violet-900/40'
+          }`}
+        >
+          {isPreparingVipSpend ? 'Preparing Leaderboard...' : 'Ensure VIP Mexico Leaders'}
+        </button>
       </div>
 
       {/* Settings Form */}

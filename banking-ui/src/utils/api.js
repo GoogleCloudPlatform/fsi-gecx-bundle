@@ -383,6 +383,16 @@ export async function resetMyDemo() {
   return res.data;
 }
 
+export async function deprovisionMyDemo() {
+  const res = await api.post('v1/simulation/deprovision-my-demo');
+  return res.data;
+}
+
+export async function ensureVipMexicoLeaders() {
+  const res = await api.post('v1/simulation/ensure-vip-mexico-leaders');
+  return res.data;
+}
+
 export async function triggerSpendSurge() {
   const res = await api.post('v1/simulation/surge');
   return res.data;

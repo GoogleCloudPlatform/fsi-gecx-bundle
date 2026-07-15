@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import datetime
+import json
+import uuid
+
 import pytest
 import respx
 import httpx
@@ -28,7 +32,7 @@ from utils.auth import get_current_user
 from models.authentication import ValidatedToken
 from models.fraud import FraudAlert, FraudCaseAction, FraudModelDecision
 from models.audit import AuditOutbox
-from models.identity import User, UserSecureMessage
+from models.identity import User, UserAddress, UserSecureMessage
 from models.origination import Account
 from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, TransactionAuthorization
 from services.seeding_service import (
@@ -229,6 +233,122 @@ async def test_reset_my_demo_success(async_client, db_session):
         elif acc.account_type == "SAVINGS":
             assert acc.cleared_balance_cents == expected_baseline["savings"]
     assert db_session.query(Account).filter(Account.user_id == user_id, Account.status == "CLOSED").count() == 2
+
+
+@pytest.mark.asyncio
+async def test_deprovision_my_demo_returns_to_one_click_provisioning_state(
+    async_client, db_session
+):
+    global mock_claims
+    mock_claims = {
+        "sub": "deprovision-uid",
+        "email": "deprovision.presenter@google.com",
+    }
+
+    provision_response = await async_client.post("/api/v1/simulation/provision-my-demo")
+    assert provision_response.status_code == status.HTTP_201_CREATED
+    user_id = provision_response.json()["summary"]["user_id"]
+    original_deposit_account_ids = {
+        str(account.id)
+        for account in db_session.query(Account).filter(
+            Account.user_id == user_id,
+            Account.status == "ACTIVE",
+        )
+    }
+
+    deprovision_response = await async_client.post(
+        "/api/v1/simulation/deprovision-my-demo"
+    )
+
+    assert deprovision_response.status_code == status.HTTP_200_OK
+    assert deprovision_response.json()["summary"] == {
+        "deposit_accounts_closed": 2,
+        "credit_accounts_closed": 1,
+        "cards_deactivated": 1,
+    }
+    assert db_session.query(Account).filter(
+        Account.user_id == user_id,
+        Account.status == "ACTIVE",
+    ).count() == 0
+    assert db_session.query(CreditAccount).filter(
+        CreditAccount.customer_id == user_id,
+        CreditAccount.status == "ACTIVE",
+    ).count() == 0
+    assert db_session.query(IssuedCard).join(CreditAccount).filter(
+        CreditAccount.customer_id == user_id,
+        IssuedCard.is_active.is_(True),
+    ).count() == 0
+    assert db_session.query(AuditOutbox).filter(
+        AuditOutbox.event_type == "DEMO_SUITE_DEPROVISIONED"
+    ).count() == 1
+
+    account_response = await async_client.get("/api/v1/credit-card/account")
+    assert account_response.status_code == status.HTTP_404_NOT_FOUND
+    summary_response = await async_client.get("/api/v1/accounts/summary")
+    assert summary_response.status_code == status.HTTP_200_OK
+    assert summary_response.json() == {
+        "deposit_accounts": [],
+        "credit_accounts": [],
+    }
+    for account_id in original_deposit_account_ids:
+        transactions_response = await async_client.get(
+            f"/api/v1/accounts/{account_id}/transactions"
+        )
+        assert transactions_response.status_code == status.HTTP_404_NOT_FOUND
+
+    reprovision_response = await async_client.post(
+        "/api/v1/simulation/provision-my-demo"
+    )
+    assert reprovision_response.status_code == status.HTTP_201_CREATED
+    assert db_session.query(Account).filter(
+        Account.user_id == user_id,
+        Account.status == "ACTIVE",
+    ).count() == 2
+    assert db_session.query(CreditAccount).filter(
+        CreditAccount.customer_id == user_id,
+        CreditAccount.status == "ACTIVE",
+    ).count() == 1
+    assert db_session.query(IssuedCard).join(CreditAccount).filter(
+        CreditAccount.customer_id == user_id,
+        CreditAccount.status == "ACTIVE",
+        IssuedCard.status == "ACTIVE",
+        IssuedCard.is_active.is_(True),
+    ).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_accounts_summary_keeps_blocked_card_visible_on_active_account(
+    async_client, db_session
+):
+    global mock_claims
+    mock_claims = {
+        "sub": "blocked-card-uid",
+        "email": "blocked.card.presenter@google.com",
+    }
+
+    provision_response = await async_client.post("/api/v1/simulation/provision-my-demo")
+    assert provision_response.status_code == status.HTTP_201_CREATED
+    user_id = provision_response.json()["summary"]["user_id"]
+    credit_account = db_session.query(CreditAccount).filter(
+        CreditAccount.customer_id == user_id,
+        CreditAccount.status == "ACTIVE",
+    ).one()
+    card = db_session.query(IssuedCard).filter(
+        IssuedCard.account_id == credit_account.id
+    ).one()
+    card.status = "BLOCKED"
+    card.is_active = False
+    db_session.commit()
+
+    summary_response = await async_client.get("/api/v1/accounts/summary")
+
+    assert summary_response.status_code == status.HTTP_200_OK
+    credit_accounts = summary_response.json()["credit_accounts"]
+    assert len(credit_accounts) == 1
+    assert credit_accounts[0]["status"] == "ACTIVE"
+    assert len(credit_accounts[0]["cards"]) == 1
+    assert credit_accounts[0]["cards"][0]["status"] == "BLOCKED"
+    assert credit_accounts[0]["cards"][0]["is_active"] is False
 
 
 @pytest.mark.asyncio
@@ -743,6 +863,173 @@ async def test_get_active_cards_marks_demo_script_accounts_ineligible_for_genera
     regular_card = cards_by_name["Regular Customer"]
     assert regular_card["is_demo_script_account"] is False
     assert regular_card["generator_eligible"] is True
+
+
+@pytest.mark.asyncio
+async def test_ensure_vip_mexico_leaders_tops_configured_vips_idempotently(async_client, db_session, respx_mock):
+    global mock_claims
+    mock_claims = {"sub": "leaderboard-presenter", "email": "leaderboard.presenter@google.com"}
+
+    provision_user_suite(db_session, "larry.page@nova.horizon.test", "vip-larry")
+    provision_user_suite(db_session, "sergey.brin@nova.horizon.test", "vip-sergey")
+    provision_user_suite(db_session, "generic.customer@example.com", "generic-customer")
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    generic_user = db_session.query(User).filter_by(email="generic.customer@example.com").one()
+    latest_address = (
+        db_session.query(UserAddress)
+        .filter_by(user_id=generic_user.id, is_primary=True)
+        .order_by(UserAddress.created_at.desc(), UserAddress.id.desc())
+        .first()
+    )
+    for index in range(2):
+        db_session.add(
+            UserAddress(
+                id=uuid.uuid4(),
+                user_id=generic_user.id,
+                address_type="PREVIOUS",
+                is_primary=True,
+                street_line_1=f"{index + 1}00 Previous Street",
+                city=latest_address.city,
+                state=latest_address.state,
+                postal_code=latest_address.postal_code,
+                country_code=latest_address.country_code,
+                created_at=now - datetime.timedelta(days=index + 2),
+            )
+        )
+    generic_account = db_session.query(CreditAccount).filter_by(customer_id=generic_user.id, status="ACTIVE").one()
+    generic_card = db_session.query(IssuedCard).filter_by(account_id=generic_account.id, status="ACTIVE").one()
+    authorization_id = uuid.uuid4()
+    db_session.add(
+        TransactionAuthorization(
+            id=authorization_id,
+            card_id=generic_card.id,
+            account_id=generic_account.id,
+            transaction_amount_cents=400_000,
+            billing_amount_cents=400_000,
+            status="SETTLED",
+            decline_reason="NONE",
+            auth_code="444444",
+            retrieval_reference_number="GENMEX000001",
+            card_network="VISA",
+            merchant_category_code="7011",
+            merchant_name="GENERIC MEXICO RESORT [MEX]",
+            transaction_channel="CARD_PRESENT",
+            entry_mode="CHIP",
+            merchant_country_code="MEX",
+            merchant_city="Cancun",
+            merchant_region="ROO",
+            fraud_risk_score=0,
+            created_at=now - datetime.timedelta(hours=1),
+            expires_at=now + datetime.timedelta(days=7),
+        )
+    )
+    db_session.add(
+        PostedTransaction(
+            id=uuid.uuid4(),
+            account_id=generic_account.id,
+            authorization_id=authorization_id,
+            auth_code="444444",
+            retrieval_reference_number="GENMEX000001",
+            amount_cents=-400_000,
+            description="GENERIC MEXICO RESORT [MEX]",
+            posted_at=now,
+        )
+    )
+    db_session.commit()
+
+    captured_targets = []
+
+    def generate_top_offs(request):
+        payload = json.loads(request.content)
+        captured_targets.extend(payload["targets"])
+        total_added_cents = 0
+        for index, target in enumerate(payload["targets"]):
+            card = db_session.query(IssuedCard).filter_by(card_token=target["card_token"]).one()
+            account = db_session.query(CreditAccount).filter_by(id=card.account_id).one()
+            amount_cents = target["top_off_cents"]
+            authorization_id = uuid.uuid4()
+            rrn = f"VIPT{index:08d}"
+            db_session.add(
+                TransactionAuthorization(
+                    id=authorization_id,
+                    card_id=card.id,
+                    account_id=account.id,
+                    transaction_amount_cents=amount_cents,
+                    billing_amount_cents=amount_cents,
+                    status="SETTLED",
+                    decline_reason="NONE",
+                    auth_code=f"{index:06d}",
+                    retrieval_reference_number=rrn,
+                    card_network="VISA",
+                    merchant_category_code="7011",
+                    merchant_name="GENERATOR MEXICO TOP OFF [MEX]",
+                    transaction_channel="CARD_PRESENT",
+                    entry_mode="CHIP",
+                    merchant_country_code="MEX",
+                    merchant_city="Cancun",
+                    merchant_region="ROO",
+                    fraud_risk_score=0,
+                    created_at=now,
+                    expires_at=now + datetime.timedelta(days=7),
+                )
+            )
+            db_session.add(
+                PostedTransaction(
+                    id=uuid.uuid4(),
+                    account_id=account.id,
+                    authorization_id=authorization_id,
+                    auth_code=f"{index:06d}",
+                    retrieval_reference_number=rrn,
+                    amount_cents=-amount_cents,
+                    description="GENERATOR MEXICO TOP OFF [MEX]",
+                    posted_at=now,
+                )
+            )
+            account.available_credit_cents -= amount_cents
+            account.cleared_balance_cents += amount_cents
+            total_added_cents += amount_cents
+        db_session.commit()
+        return httpx.Response(
+            status.HTTP_200_OK,
+            json={
+                "status": "SUCCESS",
+                "customers_topped_off": len(payload["targets"]),
+                "transactions_created": len(payload["targets"]),
+                "total_added_cents": total_added_cents,
+            },
+        )
+
+    respx_mock.post("http://localhost:8001/ensure-vip-mexico-leaders").mock(side_effect=generate_top_offs)
+
+    first_response = await async_client.post("/api/v1/simulation/ensure-vip-mexico-leaders")
+    assert first_response.status_code == status.HTTP_200_OK
+    first_result = first_response.json()
+    assert first_result["vip_customers_considered"] == 2
+    assert first_result["vip_customers_topped_off"] == 2
+    assert first_result["generic_ceiling_cents"] == 400_000
+    assert first_result["transactions_created"] == 2
+    assert len(captured_targets) == 2
+
+    for vip_email in ("larry.page@nova.horizon.test", "sergey.brin@nova.horizon.test"):
+        vip_user = db_session.query(User).filter_by(email=vip_email).one()
+        vip_spend = (
+            db_session.query(PostedTransaction)
+            .join(TransactionAuthorization, TransactionAuthorization.id == PostedTransaction.authorization_id)
+            .join(CreditAccount, CreditAccount.id == PostedTransaction.account_id)
+            .filter(
+                CreditAccount.customer_id == vip_user.id,
+                TransactionAuthorization.merchant_country_code == "MEX",
+                PostedTransaction.amount_cents < 0,
+                PostedTransaction.posted_at >= now - datetime.timedelta(days=14),
+            )
+            .all()
+        )
+        assert sum(-transaction.amount_cents for transaction in vip_spend) > 400_000
+
+    second_response = await async_client.post("/api/v1/simulation/ensure-vip-mexico-leaders")
+    assert second_response.status_code == status.HTTP_200_OK
+    assert second_response.json()["transactions_created"] == 0
 
 
 @pytest.mark.asyncio

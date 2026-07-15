@@ -520,6 +520,54 @@ async def test_simulate_pulse_declined():
 
 
 @respx.mock
+def test_vip_mexico_top_off_generates_varied_settled_basket():
+    auth_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "action_code": "00",
+                "authorization_id": "8e7cf8ba-a9fc-44b3-80b3-f24d86bf4f98",
+                "auth_code": "123456",
+                "retrieval_reference_number": "VIPTOP000001",
+                "status": "PENDING",
+            },
+        )
+    )
+    settle_route = respx.post(
+        f"{BANKING_SERVICE_URL}/api/v1/card-network/settle"
+    ).mock(return_value=httpx.Response(200, json={"success": True, "status": "SETTLED"}))
+
+    response = client.post(
+        "/ensure-vip-mexico-leaders",
+        json={
+            "seed": 1841,
+            "targets": [
+                {
+                    "customer_id": "vip-1",
+                    "customer_name": "VIP Customer",
+                    "card_token": "tok_vip_1",
+                    "target_cents": 900000,
+                    "top_off_cents": 250000,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["customers_topped_off"] == 1
+    assert response.json()["transactions_created"] == 4
+    assert response.json()["total_added_cents"] == 250000
+    assert auth_route.call_count == 4
+    assert settle_route.call_count == 4
+    payloads = [json.loads(call.request.content.decode()) for call in auth_route.calls]
+    assert sum(payload["amount_cents"] for payload in payloads) == 250000
+    assert {payload["merchant_country_code"] for payload in payloads} == {"MEX"}
+    assert len({payload["merchant_name"] for payload in payloads}) == 4
+
+
+@respx.mock
 def test_simulate_surge_success():
     auth_route = respx.post(
         f"{BANKING_SERVICE_URL}/api/v1/card-network/authorize"

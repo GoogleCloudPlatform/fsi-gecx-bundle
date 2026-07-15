@@ -29,6 +29,7 @@ credit_account_summary AS (
     SUM(cleared_balance_cents) AS total_cleared_balance_cents,
     SUM(available_credit_cents) AS total_available_credit_cents
   FROM `__PROJECT_ID__.iceberg_catalog.cards_credit_accounts`
+  WHERE UPPER(status) = 'ACTIVE'
   GROUP BY customer_id
 )
 SELECT
