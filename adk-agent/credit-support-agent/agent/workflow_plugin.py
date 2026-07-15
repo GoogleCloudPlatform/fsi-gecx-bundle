@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from google.adk.plugins import BasePlugin
 
+from agent.closeout import apply_closeout_transcript_event
 from agent.fraud_voice import (
     agent_offered_google_wallet,
     apply_wallet_transcript_event,
@@ -55,6 +56,15 @@ class FraudWorkflowStatePlugin(BasePlugin):
             text_parts = [part.text for part in parts if getattr(part, "text", None)]
             customer_text = "\n".join(text_parts).strip() or None
         if customer_text is not None:
+            checkpoint = invocation_context.session.state.get("closeout_checkpoint")
+            updated_checkpoint = apply_closeout_transcript_event(
+                checkpoint,
+                author="user",
+                transcript=customer_text,
+                event_id=event_id,
+            )
+            if updated_checkpoint != (checkpoint or {}):
+                event.actions.state_delta["closeout_checkpoint"] = updated_checkpoint
             authorization = updated.get("workflow_authorization") or {}
             if authorization.get("status") in {"PENDING", "CONFIRMED", "UNCLEAR"}:
                 authorization = apply_customer_authorization_response(
@@ -82,6 +92,15 @@ class FraudWorkflowStatePlugin(BasePlugin):
         output_transcription = getattr(event, "output_transcription", None)
         if output_transcription and output_transcription.finished:
             transcript = output_transcription.text
+            checkpoint = invocation_context.session.state.get("closeout_checkpoint")
+            updated_checkpoint = apply_closeout_transcript_event(
+                checkpoint,
+                author="agent",
+                transcript=transcript,
+                event_id=event_id,
+            )
+            if updated_checkpoint != (checkpoint or {}):
+                event.actions.state_delta["closeout_checkpoint"] = updated_checkpoint
             authorization = updated.get("workflow_authorization") or {}
             if agent_offered_google_wallet(transcript):
                 if updated.get("replacement_card_token") and not (
