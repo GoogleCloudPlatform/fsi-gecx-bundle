@@ -38,7 +38,7 @@ import {
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
-import { showInfoModals } from '../utils/constants.js';
+
 import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
@@ -1413,7 +1413,6 @@ function AdminSimulationView({ mode = 'studio' }) {
               </div>
               <div className="flex items-center gap-2">
                 <span className={`px-3 py-1 rounded-full border text-[10px] font-black ${walStatus.className}`}>{walStatus.label}</span>
-                {showInfoModals() && (
                   <button
                     onClick={() => setInfoModal('wal')}
                     className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
@@ -1421,7 +1420,6 @@ function AdminSimulationView({ mode = 'studio' }) {
                   >
                     <GoogleCloudIcon className="w-4 h-4 text-indigo-400" />
                   </button>
-                )}
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -1467,7 +1465,6 @@ function AdminSimulationView({ mode = 'studio' }) {
                   <div className="text-[11px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">Risk & Alerts Overview</div>
                   <p className="text-xs text-slate-500 mt-1">{formatWindowLabel(monitorWindowMinutes)} operational risk posture.</p>
                 </div>
-                {showInfoModals() && (
                   <button
                     onClick={() => setInfoModal('credit-risk')}
                     className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
@@ -1475,7 +1472,6 @@ function AdminSimulationView({ mode = 'studio' }) {
                   >
                     <GoogleCloudIcon className="w-4 h-4 text-indigo-400" />
                   </button>
-                )}
               </div>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 {riskOverviewCards.map((card) => (
@@ -1754,7 +1750,6 @@ function AdminSimulationView({ mode = 'studio' }) {
             </div>
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">Scenario Composer</h2>
-              {showInfoModals() && (
                 <button
                   onClick={() => setInfoModal('scenario-studio')}
                   className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
@@ -1762,7 +1757,6 @@ function AdminSimulationView({ mode = 'studio' }) {
                 >
                   <GoogleCloudIcon className="w-4 h-4 text-indigo-400" />
                 </button>
-              )}
             </div>
             <p className="text-xs text-slate-500 mt-1 max-w-2xl">
               Dry-run a scenario plan, launch it now, or schedule the run into a start/end operating window.

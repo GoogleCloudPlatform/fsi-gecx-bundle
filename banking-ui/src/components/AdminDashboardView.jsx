@@ -19,7 +19,7 @@ import { resetDatabase, getResetDatabaseAccess, getSystemSettings, updateSystemS
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
-import { showInfoModals } from '../utils/constants.js';
+
 import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
@@ -112,7 +112,7 @@ function AdminDashboardView() {
   const [warningDuration, setWarningDuration] = useState(240);
   const [avatarSelection, setAvatarSelection] = useState('random');
   const [mockAvatarEnabled, setMockAvatarEnabled] = useState(false);
-  const [showInfoModalsState, setShowInfoModalsState] = useState(true);
+
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   // Load Settings on Mount
@@ -126,10 +126,6 @@ function AdminDashboardView() {
           setWarningDuration(parseInt(settings.voice_agent_warning_duration) || 240);
           setAvatarSelection(settings.voice_agent_avatar_selection || 'random');
           setMockAvatarEnabled(settings.voice_agent_mock_avatar_enabled === 'true');
-          
-          const showInfo = settings.show_info_modals !== undefined ? settings.show_info_modals : String(import.meta.env.VITE_SHOW_INFO_MODALS !== 'false');
-          setShowInfoModalsState(showInfo === 'true');
-          localStorage.setItem('show_info_modals', showInfo);
         }
       } catch (err) {
         console.error("Failed to load voice agent settings:", err);
@@ -173,10 +169,8 @@ function AdminDashboardView() {
         voice_agent_max_duration: String(maxDuration),
         voice_agent_warning_duration: String(warningDuration),
         voice_agent_avatar_selection: avatarSelection,
-        voice_agent_mock_avatar_enabled: String(mockAvatarEnabled),
-        show_info_modals: String(showInfoModalsState)
+        voice_agent_mock_avatar_enabled: String(mockAvatarEnabled)
       });
-      localStorage.setItem('show_info_modals', String(showInfoModalsState));
       setNotice({ type: 'success', text: 'Voice agent settings updated successfully!' });
       setTimeout(() => setNotice({ type: '', text: '' }), 4000);
     } catch (err) {
@@ -369,15 +363,13 @@ function AdminDashboardView() {
           >
             <GoogleCompassIcon className="w-5 h-5 text-emerald-500" />
           </button>
-          {showInfoModals() && (
             <button
               onClick={() => setIsInfoModalOpen(true)}
               className="p-2.5 rounded-2xl hover:bg-slate-805/80 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
               title="GCP Admin Integration Info"
             >
               <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
-            </button>
-          )}
+          </button>
         </div>
       </div>
 
@@ -502,18 +494,7 @@ function AdminDashboardView() {
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">Demo & Presentation Settings</h3>
           </div>
           
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Enable Developer Architecture Tooltips</span>
-              <p className="text-[10px] text-slate-400 mt-0.5">Displays blue Google Cloud architecture shortcuts and visual flow diagrams across page views to help walkthroughs.</p>
-            </div>
-            <input
-              type="checkbox"
-              checked={showInfoModalsState}
-              onChange={(e) => setShowInfoModalsState(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
-            />
-          </div>
+
         </div>
 
         {/* Section 2: Voice & Live Avatar Settings */}
