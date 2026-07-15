@@ -320,9 +320,9 @@ resource "google_bigquery_dataset_iam_member" "reporting_iceberg_data_editor" {
   member     = "serviceAccount:${google_service_account.reporting_service_account.email}"
 }
 
-resource "google_bigquery_dataset_iam_member" "banking_service_iceberg_data_viewer" {
+resource "google_bigquery_dataset_iam_member" "banking_service_iceberg_data_editor" {
   dataset_id = google_bigquery_dataset.iceberg_catalog.dataset_id
-  role       = "roles/bigquery.dataViewer"
+  role       = "roles/bigquery.dataEditor"
   member     = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 

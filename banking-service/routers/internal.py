@@ -373,8 +373,12 @@ def reset_database(
             if purge_audit_logs:
                 warnings.append("Audit purge is skipped for asynchronous Cloud Run reset jobs.")
             return {
-                "status": "SUCCESS",
-                "message": "Database reset job started. Demo data will be rebuilt shortly.",
+                "status": "PARTIAL_SUCCESS" if warnings else "SUCCESS",
+                "message": (
+                    "Database reset job started, but one or more requested purge steps were skipped."
+                    if warnings
+                    else "Database reset job started. Demo data will be rebuilt shortly."
+                ),
                 "operation": reset_job_operation.get("name"),
                 "warnings": warnings,
             }

@@ -212,7 +212,7 @@ function AdminDashboardView() {
         type: res.status === 'PARTIAL_SUCCESS' ? 'warning' : 'success',
         text: `${res.message || 'Database successfully reset and re-seeded!'}${warningText}`,
       });
-      setTimeout(() => setNotice({ type: '', text: '' }), 5000);
+      setTimeout(() => setNotice({ type: '', text: '' }), res.status === 'PARTIAL_SUCCESS' ? 12000 : 5000);
     } catch (err) {
       setNotice({ type: 'error', text: err.response?.data?.detail || 'Failed to reset database.' });
     } finally {
