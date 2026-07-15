@@ -490,6 +490,13 @@ resource "google_cloud_run_v2_service" "banking_ui" {
         name  = "VITE_ENABLE_AVATAR_MODALITY"
         value = tostring(var.enable_avatar_modality)
       }
+      dynamic "env" {
+        for_each = var.console_viewer_group_join_url != null ? [1] : []
+        content {
+          name  = "VITE_CONSOLE_VIEWER_GROUP_JOIN_URL"
+          value = var.console_viewer_group_join_url
+        }
+      }
     }
   }
 
