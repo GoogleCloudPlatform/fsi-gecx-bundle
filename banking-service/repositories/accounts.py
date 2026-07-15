@@ -26,7 +26,11 @@ class AccountsRepository:
     def get_deposit_account_for_user(self, user_id: str | uuid.UUID, account_id: str | uuid.UUID) -> Account | None:
         user_uuid = uuid.UUID(str(user_id)) if not isinstance(user_id, uuid.UUID) else user_id
         account_uuid = uuid.UUID(str(account_id)) if not isinstance(account_id, uuid.UUID) else account_id
-        return self.db.query(Account).filter(Account.id == account_uuid, Account.user_id == user_uuid).first()
+        return self.db.query(Account).filter(
+            Account.id == account_uuid,
+            Account.user_id == user_uuid,
+            Account.status == "ACTIVE",
+        ).first()
 
     def list_funding_accounts_for_user(self, user_id: str | uuid.UUID) -> list[Account]:
         user_uuid = uuid.UUID(str(user_id)) if not isinstance(user_id, uuid.UUID) else user_id
@@ -47,7 +51,11 @@ class AccountsRepository:
     ) -> CreditAccount | None:
         user_uuid = uuid.UUID(str(user_id)) if not isinstance(user_id, uuid.UUID) else user_id
         account_uuid = uuid.UUID(str(credit_account_id)) if not isinstance(credit_account_id, uuid.UUID) else credit_account_id
-        return self.db.query(CreditAccount).filter(CreditAccount.id == account_uuid, CreditAccount.customer_id == user_uuid).first()
+        return self.db.query(CreditAccount).filter(
+            CreditAccount.id == account_uuid,
+            CreditAccount.customer_id == user_uuid,
+            CreditAccount.status == "ACTIVE",
+        ).first()
 
     def add_transaction(self, transaction: Transaction) -> Transaction:
         self.db.add(transaction)

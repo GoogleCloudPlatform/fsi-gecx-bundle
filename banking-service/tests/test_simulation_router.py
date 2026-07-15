@@ -244,6 +244,13 @@ async def test_deprovision_my_demo_returns_to_one_click_provisioning_state(
     provision_response = await async_client.post("/api/v1/simulation/provision-my-demo")
     assert provision_response.status_code == status.HTTP_201_CREATED
     user_id = provision_response.json()["summary"]["user_id"]
+    original_deposit_account_ids = {
+        str(account.id)
+        for account in db_session.query(Account).filter(
+            Account.user_id == user_id,
+            Account.status == "ACTIVE",
+        )
+    }
 
     deprovision_response = await async_client.post(
         "/api/v1/simulation/deprovision-my-demo"
@@ -273,6 +280,17 @@ async def test_deprovision_my_demo_returns_to_one_click_provisioning_state(
 
     account_response = await async_client.get("/api/v1/credit-card/account")
     assert account_response.status_code == status.HTTP_404_NOT_FOUND
+    summary_response = await async_client.get("/api/v1/accounts/summary")
+    assert summary_response.status_code == status.HTTP_200_OK
+    assert summary_response.json() == {
+        "deposit_accounts": [],
+        "credit_accounts": [],
+    }
+    for account_id in original_deposit_account_ids:
+        transactions_response = await async_client.get(
+            f"/api/v1/accounts/{account_id}/transactions"
+        )
+        assert transactions_response.status_code == status.HTTP_404_NOT_FOUND
 
     reprovision_response = await async_client.post(
         "/api/v1/simulation/provision-my-demo"
@@ -292,6 +310,41 @@ async def test_deprovision_my_demo_returns_to_one_click_provisioning_state(
         IssuedCard.status == "ACTIVE",
         IssuedCard.is_active.is_(True),
     ).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_accounts_summary_keeps_blocked_card_visible_on_active_account(
+    async_client, db_session
+):
+    global mock_claims
+    mock_claims = {
+        "sub": "blocked-card-uid",
+        "email": "blocked.card.presenter@google.com",
+    }
+
+    provision_response = await async_client.post("/api/v1/simulation/provision-my-demo")
+    assert provision_response.status_code == status.HTTP_201_CREATED
+    user_id = provision_response.json()["summary"]["user_id"]
+    credit_account = db_session.query(CreditAccount).filter(
+        CreditAccount.customer_id == user_id,
+        CreditAccount.status == "ACTIVE",
+    ).one()
+    card = db_session.query(IssuedCard).filter(
+        IssuedCard.account_id == credit_account.id
+    ).one()
+    card.status = "BLOCKED"
+    card.is_active = False
+    db_session.commit()
+
+    summary_response = await async_client.get("/api/v1/accounts/summary")
+
+    assert summary_response.status_code == status.HTTP_200_OK
+    credit_accounts = summary_response.json()["credit_accounts"]
+    assert len(credit_accounts) == 1
+    assert credit_accounts[0]["status"] == "ACTIVE"
+    assert len(credit_accounts[0]["cards"]) == 1
+    assert credit_accounts[0]["cards"][0]["status"] == "BLOCKED"
+    assert credit_accounts[0]["cards"][0]["is_active"] is False
 
 
 @pytest.mark.asyncio

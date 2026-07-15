@@ -276,7 +276,11 @@ class CreditCardRepository:
             self.db.query(IssuedCard, FinancialAccount, User)
             .join(FinancialAccount, IssuedCard.account_id == FinancialAccount.id)
             .outerjoin(User, FinancialAccount.customer_id == User.id)
-            .filter(IssuedCard.status == "ACTIVE", IssuedCard.is_active)
+            .filter(
+                FinancialAccount.status == "ACTIVE",
+                IssuedCard.status == "ACTIVE",
+                IssuedCard.is_active,
+            )
             .all()
         )
 
@@ -288,6 +292,7 @@ class CreditCardRepository:
             .join(FinancialAccount, IssuedCard.account_id == FinancialAccount.id)
             .filter(
                 FinancialAccount.customer_id == resolved_uid,
+                FinancialAccount.status == "ACTIVE",
                 IssuedCard.status == "ACTIVE",
                 IssuedCard.is_active,
             )
