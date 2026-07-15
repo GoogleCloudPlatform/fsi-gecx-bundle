@@ -72,14 +72,6 @@ steps:
         sed -i 's/BUILD_COMMIT_ID: "[^"]*"/BUILD_COMMIT_ID: "'"$${COMMIT_SHA}"'"/g' banking-ui/public/config.template.js
         sed -i 's/BUILD_TIME: "[^"]*"/BUILD_TIME: "'"$${BUILD_TIME_MS}"'"/g' banking-ui/public/config.template.js
         sed -i 's/BUILD_PROJECT_ID: "[^"]*"/BUILD_PROJECT_ID: "'"$PROJECT_ID"'"/g' banking-ui/public/config.template.js
-        sed -i 's/BUILD_BUILD_ID: "[^"]*"/BUILD_BUILD_ID: "'"$BUILD_ID"'"/g' banking-ui/public/config.template.js
-        sed -i 's/BUILD_LOCATION: "[^"]*"/BUILD_LOCATION: "'"$LOCATION"'"/g' banking-ui/public/config.template.js
-        
-        # Override with substitution variable if provided
-        if [ -n "${_RELEASE_NOTES}" ]; then
-          echo "${_RELEASE_NOTES}" > banking-ui/public/release-notes.md
-        fi
-        
         # Determine boolean flag by checking if file exists and is not empty (-s)
         HAS_NOTES="false"
         if [ -s "banking-ui/public/release-notes.md" ]; then
@@ -156,4 +148,3 @@ options:
 substitutions:
   _REGION: "us-central1"
   _TRIGGER_DEPLOY: "false"
-  _RELEASE_NOTES: ""
