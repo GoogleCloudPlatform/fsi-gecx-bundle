@@ -400,8 +400,8 @@ function AdminDashboardView() {
         })}
       </div>
 
-      <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5" id="demo-suite-management">
-        <div>
+      <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col xl:flex-row xl:items-center justify-between gap-5" id="demo-suite-management">
+        <div className="min-w-0">
           <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">Personal Demo Suite Management</h4>
           <p className="text-xs text-slate-500 mt-0.5 max-w-3xl">
             {hasSeededProfile
@@ -409,7 +409,7 @@ function AdminDashboardView() {
               : "You do not have a seeded personal demo profile. Provision a complete account suite with checking, savings, credit cards, credit scoring profiles, and realistic transaction history."}
           </p>
         </div>
-        <div className="w-full lg:w-auto lg:min-w-[280px]">
+        <div className="w-full xl:w-[440px] xl:shrink-0">
           {!hasSeededProfile ? (
             <button
               onClick={handleProvisionDemo}
