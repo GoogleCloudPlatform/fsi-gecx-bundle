@@ -66,7 +66,7 @@ export function ReleaseNotesModal({ isOpen, onClose, onOpen }) {
         </button>
         <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5 shrink-0 mb-4">
           <img src="/favicon.svg" alt="Nova Horizon" className="w-6 h-6" />
-          <span>{window.env?.BUILD_VERSION || 'unknown'} ({window.env?.BUILD_COMMIT_ID || 'unknown'})</span>
+          <span>Release Notes: {window.env?.BUILD_VERSION || 'unknown'} ({window.env?.BUILD_COMMIT_ID || 'unknown'})</span>
         </h2>
 
         <div className="flex-1 overflow-y-auto pr-2 text-slate-600 dark:text-slate-400 text-sm leading-relaxed text-left">
