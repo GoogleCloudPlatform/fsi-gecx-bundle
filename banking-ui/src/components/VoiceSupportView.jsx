@@ -2004,12 +2004,13 @@ export default function VoiceSupportView() {
                 <div className="flex items-center gap-2">
                   <div className="relative w-full">
                     <Volume2 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
                     <select
                       id="voice-audio-output"
                       value={selectedAudioOutputId}
                       onChange={(event) => selectAudioOutput(event.target.value)}
                       disabled={isConnecting}
-                      className="h-11 w-full rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-8 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
+                      className="appearance-none h-11 w-full rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-10 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
                     >
                       <option value="">System default speaker</option>
                       {selectedAudioOutputId && !audioOutputs.some((device) => device.deviceId === selectedAudioOutputId) && (
