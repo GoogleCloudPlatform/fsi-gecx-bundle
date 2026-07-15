@@ -425,8 +425,6 @@ export default function VoiceSupportView() {
   const volumeRef = useRef(0.8);
   const micEnabledRef = useRef(true);
   const pingIntervalRef = useRef(null);
-  const appliedAudioInputIdRef = useRef(selectedAudioInputId);
-  const appliedAudioOutputIdRef = useRef(selectedAudioOutputId);
 
   const refreshAudioDevices = useCallback(async (requestPermissions = false) => {
     console.log(`[Microphone] Refreshing audio inputs... (Request permissions: ${requestPermissions})`);
