@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { PAGE_TITLES } from './constants.js';
+
 /**
  * Derives a breadcrumb string from a given URL path.
  * e.g. "/admin/underwriting" -> "Admin > Underwriting"
@@ -45,7 +47,7 @@ export const logInteractionEvent = (category, trackingName, additionalProps = {}
       event_category: category,
       button_name: trackingName,
       url: window.location.pathname,
-      view_name: document.title,
+      view_name: PAGE_TITLES[window.location.pathname] || document.title,
       breadcrumb_path: deriveBreadcrumbFromUrl(window.location.pathname),
       ...additionalProps
     };

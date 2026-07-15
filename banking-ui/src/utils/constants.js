@@ -21,6 +21,25 @@ export const HELP_CATEGORIES = [
   'Wealth & Budgeting'
 ];
 
+export const PAGE_TITLES = {
+  '/': 'Home',
+  '/checking-accounts': 'Checking Accounts',
+  '/savings-accounts': 'Savings Accounts',
+  '/certificate-accounts': 'Certificate Accounts',
+  '/credit-cards': 'Credit Cards',
+  '/mortgages': 'Mortgages & Home Loans',
+  '/mortgage-rates': 'Mortgage Rates',
+  '/help-center': 'Help & Learning Center',
+  '/fee-schedule': 'Fee Schedule',
+  '/disclosures': 'Account Disclosures',
+  '/settings': 'Settings',
+  '/edit-profile': 'Edit Profile',
+  '/apply/credit-card': 'Apply for Credit Card',
+  '/search': 'Search Site',
+  '/support/voice': 'Voice Support Consultation',
+  '/locator': 'Find Branch/ATM',
+};
+
 /**
  * Shared constants for LiveKit Data Channel event communication
  */

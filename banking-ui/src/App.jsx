@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 
-import { HELP_CATEGORIES, enableCcai } from './utils/constants.js';
+import { HELP_CATEGORIES, enableCcai, PAGE_TITLES } from './utils/constants.js';
 import AppRoutes from './AppRoutes.jsx';
 import { SettingsProvider, useSettings } from './context/SettingsContext.jsx';
 import {
@@ -285,26 +285,14 @@ function AppContent() {
     setIsProfileOpen(false);
 
     // Update page title dynamically
-    const pageTitles = {
-      '/': siteTitle,
-      '/checking-accounts': `Checking Accounts | ${bankName}`,
-      '/savings-accounts': `Savings Accounts | ${bankName}`,
-      '/certificate-accounts': `Certificate Accounts | ${bankName}`,
-      '/credit-cards': `Credit Cards | ${bankName}`,
-      '/mortgages': `Mortgages & Home Loans | ${bankName}`,
-      '/mortgage-rates': `Mortgage Rates | ${bankName}`,
-      '/help-center': `Help & Learning Center | ${bankName}`,
-      '/fee-schedule': `Fee Schedule | ${bankName}`,
-      '/disclosures': `Account Disclosures | ${bankName}`,
-      '/settings': `Settings | ${bankName}`,
-      '/edit-profile': `Edit Profile | ${bankName}`,
-      '/apply/credit-card': `Apply for Credit Card | ${bankName}`,
-      '/search': `Search Site | ${bankName}`,
-      '/support/voice': `Voice Support Consultation | ${bankName}`,
-      '/locator': `Find Branch/ATM | ${bankName}`,
-    };
+    let title = PAGE_TITLES[location.pathname] || 'Premium Digital Banking';
 
-    const title = pageTitles[location.pathname] || `${bankName} | Premium Digital Banking`;
+    if (location.pathname === '/') {
+      title = siteTitle;
+    } else if (location.pathname !== '/') {
+      title = `${title} | ${bankName}`;
+    }
+
     document.title = title;
   }, [location.pathname, bankName, siteTitle]);
 
