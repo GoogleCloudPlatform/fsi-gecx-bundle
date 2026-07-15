@@ -22,10 +22,15 @@ export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Inte
 
   useEffect(() => {
     if (isOpen && contentRef.current) {
-      const html = contentRef.current.innerHTML;
-      setHasConsoleLink(
-        html.includes('console.cloud.google.com') || html.includes('ces.cloud.google.com')
-      );
+      const links = contentRef.current.querySelectorAll('a');
+      let found = false;
+      for (const link of Array.from(links)) {
+        if (link.hostname === 'console.cloud.google.com' || link.hostname === 'ces.cloud.google.com') {
+          found = true;
+          break;
+        }
+      }
+      setHasConsoleLink(found);
     }
   }, [isOpen, children]);
 
@@ -51,17 +56,17 @@ export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Inte
           {children}
         </div>
 
-        <div className="mt-6 flex justify-between items-center shrink-0">
+        <div className="mt-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
           <div>
             {hasConsoleLink && consoleViewerUrl && (
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                For GCP console viewer access to the demo project, <a href={consoleViewerUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 underline">join here</a>.
+                GCP console access viewer <a href={consoleViewerUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 underline">self join</a>
               </p>
             )}
           </div>
           <button
             onClick={onClose}
-            className="px-5 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-sm transition-colors cursor-pointer"
+            className="w-full sm:w-auto whitespace-nowrap px-5 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-sm transition-colors cursor-pointer"
           >
             Got it
           </button>
