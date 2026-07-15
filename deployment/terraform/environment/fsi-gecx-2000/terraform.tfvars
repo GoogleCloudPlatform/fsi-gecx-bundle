@@ -49,3 +49,4 @@ data_generator_fraud_pattern_target_mode        = "eligible"
 seed_mock_user_count                            = 2000
 full_reset_enabled                              = true
 enable_avatar_modality                          = true
+console_viewer_group_join_url                   = "https://groups.google.com/a/google.com/g/fsi-nova-horizon-demo-console-viewer"
