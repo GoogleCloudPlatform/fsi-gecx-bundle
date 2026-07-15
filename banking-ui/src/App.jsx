@@ -50,6 +50,7 @@ import GoogleCloudIcon from './components/icons/GoogleCloudIcon.jsx';
 import CloudBuildIcon from './components/icons/CloudBuildIcon.jsx';
 import GcpInfoModal from './components/GcpInfoModal.jsx';
 import ReleaseNotesModal from './components/ReleaseNotesModal.jsx';
+import AnalyticsButton from './components/AnalyticsButton.jsx';
 
 
 const IconMap = {
@@ -2096,13 +2097,14 @@ function AppContent() {
                     )}
                     )
                   </span>
-                  <button
+                  <AnalyticsButton
                     onClick={() => setIsGcpEnvModalOpen(true)}
                     className="p-0.5 rounded hover:bg-slate-105 dark:hover:bg-slate-800/80 transition-colors cursor-pointer text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 flex items-center justify-center"
                     title="View GCP Environment Configuration"
+                    trackingName="open_gcp_env_config_modal"
                   >
                     <GoogleCloudIcon className="w-3 h-3" />
-                  </button>
+                  </AnalyticsButton>
                 </div>
                 <div className="text-[11px] text-slate-400 dark:text-slate-500 flex flex-col gap-1.5 -mt-3">
                   <span>Build Time: {getFormattedBuildTime()}</span>
