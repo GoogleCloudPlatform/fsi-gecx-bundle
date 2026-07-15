@@ -56,6 +56,8 @@ steps:
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     id: "update-configs"
     entrypoint: "bash"
+    env:
+      - 'RELEASE_NOTES=${_RELEASE_NOTES}'
     args:
       - "-c"
       - |
@@ -82,6 +84,38 @@ steps:
         sed -i 's/BUILD_PROJECT_ID: "[^"]*"/BUILD_PROJECT_ID: "'"$PROJECT_ID"'"/g' banking-ui/public/config.template.js
         sed -i 's/BUILD_BUILD_ID: "[^"]*"/BUILD_BUILD_ID: "'"$BUILD_ID"'"/g' banking-ui/public/config.template.js
         sed -i 's/BUILD_LOCATION: "[^"]*"/BUILD_LOCATION: "'"$LOCATION"'"/g' banking-ui/public/config.template.js
+        
+        # Write RELEASE_NOTES to a markdown file and inject HAS_RELEASE_NOTES boolean
+        python3 -c "
+import os, re
+notes = os.environ.get('RELEASE_NOTES', '')
+has_notes = 'true' if notes.strip() else 'false'
+
+# Write to release-notes.md
+with open('banking-ui/public/release-notes.md', 'w') as f:
+    f.write(notes)
+
+# Update configs
+for f in ['banking-ui/public/config.js', 'banking-ui/public/config.template.js']:
+    try:
+        with open(f, 'r') as file:
+            content = file.read()
+        
+        replacement = '  HAS_RELEASE_NOTES: {}'.format(has_notes)
+        
+        if 'HAS_RELEASE_NOTES:' in content:
+            content = re.sub(r'  HAS_RELEASE_NOTES:\s*(true|false)', replacement, content)
+        else:
+            content = content.replace('};', replacement + '\n};')
+            
+        # Also strip out any legacy RELEASE_NOTES blocks just in case
+        content = re.sub(r'\s*RELEASE_NOTES:\s*\`.*?\`,', '', content, flags=re.DOTALL)
+            
+        with open(f, 'w') as file:
+            file.write(content)
+    except FileNotFoundError:
+        pass
+"
         
         echo "--- Updated config.js ---"
         cat banking-ui/public/config.js
@@ -151,3 +185,4 @@ options:
 substitutions:
   _REGION: "us-central1"
   _TRIGGER_DEPLOY: "false"
+  _RELEASE_NOTES: ""
