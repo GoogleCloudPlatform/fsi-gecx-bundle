@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import datetime
+import json
 import uuid
 
 import pytest
@@ -31,7 +32,7 @@ from utils.auth import get_current_user
 from models.authentication import ValidatedToken
 from models.fraud import FraudAlert, FraudCaseAction, FraudModelDecision
 from models.audit import AuditOutbox
-from models.identity import User, UserSecureMessage
+from models.identity import User, UserAddress, UserSecureMessage
 from models.origination import Account
 from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, TransactionAuthorization
 from services.seeding_service import (
@@ -865,7 +866,7 @@ async def test_get_active_cards_marks_demo_script_accounts_ineligible_for_genera
 
 
 @pytest.mark.asyncio
-async def test_ensure_vip_mexico_leaders_tops_configured_vips_idempotently(async_client, db_session):
+async def test_ensure_vip_mexico_leaders_tops_configured_vips_idempotently(async_client, db_session, respx_mock):
     global mock_claims
     mock_claims = {"sub": "leaderboard-presenter", "email": "leaderboard.presenter@google.com"}
 
@@ -873,11 +874,32 @@ async def test_ensure_vip_mexico_leaders_tops_configured_vips_idempotently(async
     provision_user_suite(db_session, "sergey.brin@nova.horizon.test", "vip-sergey")
     provision_user_suite(db_session, "generic.customer@example.com", "generic-customer")
 
+    now = datetime.datetime.now(datetime.timezone.utc)
     generic_user = db_session.query(User).filter_by(email="generic.customer@example.com").one()
+    latest_address = (
+        db_session.query(UserAddress)
+        .filter_by(user_id=generic_user.id, is_primary=True)
+        .order_by(UserAddress.created_at.desc(), UserAddress.id.desc())
+        .first()
+    )
+    for index in range(2):
+        db_session.add(
+            UserAddress(
+                id=uuid.uuid4(),
+                user_id=generic_user.id,
+                address_type="PREVIOUS",
+                is_primary=True,
+                street_line_1=f"{index + 1}00 Previous Street",
+                city=latest_address.city,
+                state=latest_address.state,
+                postal_code=latest_address.postal_code,
+                country_code=latest_address.country_code,
+                created_at=now - datetime.timedelta(days=index + 2),
+            )
+        )
     generic_account = db_session.query(CreditAccount).filter_by(customer_id=generic_user.id, status="ACTIVE").one()
     generic_card = db_session.query(IssuedCard).filter_by(account_id=generic_account.id, status="ACTIVE").one()
     authorization_id = uuid.uuid4()
-    now = datetime.datetime.now(datetime.timezone.utc)
     db_session.add(
         TransactionAuthorization(
             id=authorization_id,
@@ -916,12 +938,78 @@ async def test_ensure_vip_mexico_leaders_tops_configured_vips_idempotently(async
     )
     db_session.commit()
 
+    captured_targets = []
+
+    def generate_top_offs(request):
+        payload = json.loads(request.content)
+        captured_targets.extend(payload["targets"])
+        total_added_cents = 0
+        for index, target in enumerate(payload["targets"]):
+            card = db_session.query(IssuedCard).filter_by(card_token=target["card_token"]).one()
+            account = db_session.query(CreditAccount).filter_by(id=card.account_id).one()
+            amount_cents = target["top_off_cents"]
+            authorization_id = uuid.uuid4()
+            rrn = f"VIPT{index:08d}"
+            db_session.add(
+                TransactionAuthorization(
+                    id=authorization_id,
+                    card_id=card.id,
+                    account_id=account.id,
+                    transaction_amount_cents=amount_cents,
+                    billing_amount_cents=amount_cents,
+                    status="SETTLED",
+                    decline_reason="NONE",
+                    auth_code=f"{index:06d}",
+                    retrieval_reference_number=rrn,
+                    card_network="VISA",
+                    merchant_category_code="7011",
+                    merchant_name="GENERATOR MEXICO TOP OFF [MEX]",
+                    transaction_channel="CARD_PRESENT",
+                    entry_mode="CHIP",
+                    merchant_country_code="MEX",
+                    merchant_city="Cancun",
+                    merchant_region="ROO",
+                    fraud_risk_score=0,
+                    created_at=now,
+                    expires_at=now + datetime.timedelta(days=7),
+                )
+            )
+            db_session.add(
+                PostedTransaction(
+                    id=uuid.uuid4(),
+                    account_id=account.id,
+                    authorization_id=authorization_id,
+                    auth_code=f"{index:06d}",
+                    retrieval_reference_number=rrn,
+                    amount_cents=-amount_cents,
+                    description="GENERATOR MEXICO TOP OFF [MEX]",
+                    posted_at=now,
+                )
+            )
+            account.available_credit_cents -= amount_cents
+            account.cleared_balance_cents += amount_cents
+            total_added_cents += amount_cents
+        db_session.commit()
+        return httpx.Response(
+            status.HTTP_200_OK,
+            json={
+                "status": "SUCCESS",
+                "customers_topped_off": len(payload["targets"]),
+                "transactions_created": len(payload["targets"]),
+                "total_added_cents": total_added_cents,
+            },
+        )
+
+    respx_mock.post("http://localhost:8001/ensure-vip-mexico-leaders").mock(side_effect=generate_top_offs)
+
     first_response = await async_client.post("/api/v1/simulation/ensure-vip-mexico-leaders")
     assert first_response.status_code == status.HTTP_200_OK
     first_result = first_response.json()
     assert first_result["vip_customers_considered"] == 2
+    assert first_result["vip_customers_topped_off"] == 2
     assert first_result["generic_ceiling_cents"] == 400_000
     assert first_result["transactions_created"] == 2
+    assert len(captured_targets) == 2
 
     for vip_email in ("larry.page@nova.horizon.test", "sergey.brin@nova.horizon.test"):
         vip_user = db_session.query(User).filter_by(email=vip_email).one()

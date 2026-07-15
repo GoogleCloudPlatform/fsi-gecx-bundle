@@ -35,7 +35,7 @@ from scenarios import (
     plan_scenario,
 )
 from scenarios.executor import _auth_payload, _execution_id, _resolution_for_event
-from scenarios.schemas import BehaviorPolicy, PersonaProfile, ScenarioMode, ScenarioPlan, ScenarioType
+from scenarios.schemas import BehaviorPolicy, MerchantContext, PersonaProfile, ScenarioMode, ScenarioPlan, ScenarioType
 from scheduler import (
     EnqueueScenarioRequest,
     ScheduledEventDispatchResult,
@@ -60,6 +60,19 @@ class CardPayload(BaseModel):
 
 class SurgeRequest(BaseModel):
     active_cards: Optional[List[CardPayload]] = None
+
+
+class VipMexicoTopOffTarget(BaseModel):
+    customer_id: str
+    customer_name: str
+    card_token: str = Field(..., min_length=1)
+    target_cents: int = Field(..., ge=1)
+    top_off_cents: int = Field(..., ge=1)
+
+
+class VipMexicoTopOffRequest(BaseModel):
+    targets: List[VipMexicoTopOffTarget] = Field(..., min_length=1, max_length=50)
+    seed: int = Field(..., ge=0)
 
 
 class AnomalyRequest(BaseModel):
@@ -113,6 +126,20 @@ PULSE_MAX_EVENTS = int(os.getenv("PULSE_MAX_EVENTS", "12"))
 SWIPE_WORKFLOW_CONCURRENCY = int(os.getenv("SWIPE_WORKFLOW_CONCURRENCY", "4"))
 SURGE_TOTAL_EVENTS = int(os.getenv("SURGE_TOTAL_EVENTS", "50"))
 SURGE_STAGGER_SECONDS = float(os.getenv("SURGE_STAGGER_SECONDS", "0.2"))
+VIP_MEXICO_MERCHANTS = (
+    ("AEROMEXICO TICKET CDMX", "Airline", "4511", "Mexico City", "CDMX"),
+    ("VOLARIS AIR GUADALAJARA", "Airline", "4511", "Guadalajara", "JAL"),
+    ("GRAND VELAS RIVIERA MAYA", "Hotel", "7011", "Playa del Carmen", "QR"),
+    ("CABO AZUL RESORT", "Hotel", "7011", "San Jose del Cabo", "BCS"),
+    ("CONTRAMAR ROMA NORTE", "Dining", "5812", "Mexico City", "CDMX"),
+    ("PUJOL POLANCO", "Dining", "5812", "Mexico City", "CDMX"),
+    ("TULUM WELLNESS SPA", "Wellness", "7298", "Tulum", "QR"),
+    ("XCARET MEXICO PARK", "Attraction", "7991", "Playa del Carmen", "QR"),
+    ("UBER TRIP CANCUN", "Transportation", "4121", "Cancun", "QR"),
+    ("LA EUROPEA POLANCO", "Retail", "5921", "Mexico City", "CDMX"),
+    ("HACIENDA TEQUILA TOUR", "Attraction", "7991", "Tequila", "JAL"),
+    ("ROSETTA COLONIA ROMA", "Dining", "5812", "Mexico City", "CDMX"),
+)
 ACTIVE_CARD_FETCH_TIMEOUT_SECONDS = float(
     os.getenv("ACTIVE_CARD_FETCH_TIMEOUT_SECONDS", "10")
 )
@@ -2426,6 +2453,129 @@ async def execute_simulation_pulse(event_id: str | None = None) -> Dict[str, Any
         **summary,
         "active_cards_count": len(cards),
         "event_id": event_id,
+    }
+
+
+@app.post(
+    "/ensure-vip-mexico-leaders",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_switch_or_presenter_token)],
+)
+async def ensure_vip_mexico_leaders(payload: VipMexicoTopOffRequest):
+    """Generate varied, settled Mexico travel baskets for explicitly targeted VIP cards."""
+    rng = random.Random(payload.seed)
+    transactions_created = 0
+    customers_topped_off = 0
+    total_added_cents = 0
+    executions = []
+
+    for target_index, target in enumerate(payload.targets):
+        event_count = min(4, target.top_off_cents)
+        weights = [rng.randint(50, 150) for _ in range(event_count)]
+        distributable_cents = target.top_off_cents - event_count
+        amounts = [
+            1 + (distributable_cents * weight // sum(weights))
+            for weight in weights
+        ]
+        amounts[-1] += target.top_off_cents - sum(amounts)
+
+        plan = plan_scenario(
+            ScenarioRequest(
+                goal=f"Prepare varied Mexico travel spend for {target.customer_name}.",
+                scenario_type=ScenarioType.PREMIUM_TRAVEL_OFFER_FUEL,
+                mode=ScenarioMode.EXECUTE,
+                seed=rng.randint(1, 999_999_999),
+                target_cohort_size=1,
+                max_events=4,
+                allow_vip_targets=True,
+            )
+        )
+        merchant_events = list(plan.timeline)
+        selected_merchants = rng.sample(VIP_MEXICO_MERCHANTS, event_count)
+        timeline = [
+            merchant_events[index].model_copy(
+                update={
+                    "event_id": f"vip-topoff-{target_index:02d}-{index:02d}-{uuid.uuid4().hex[:8]}",
+                    "amount_cents": amount_cents,
+                    "offset_minutes": rng.randint(0, 3 * 24 * 60),
+                    "merchant_context": MerchantContext(
+                        category=selected_merchants[index][1],
+                        mcc=selected_merchants[index][2],
+                        merchant_name_hint=f"{selected_merchants[index][0]} [MEX]",
+                        country_code="MEX",
+                        city=selected_merchants[index][3],
+                        region=selected_merchants[index][4],
+                    ),
+                }
+            )
+            for index, amount_cents in enumerate(amounts)
+        ]
+        settlement_policies = [
+            policy.model_copy(
+                update={
+                    "settlement_probability": 1.0,
+                    "reversal_probability": 0.0,
+                    "pending_probability": 0.0,
+                }
+            )
+            for policy in plan.behavior_policies
+        ]
+        plan = plan.model_copy(
+            update={
+                "scenario_id": f"vip_mexico_topoff-{payload.seed}-{target_index}-{uuid.uuid4().hex[:10]}",
+                "timeline": timeline,
+                "behavior_policies": settlement_policies,
+                "labels": {
+                    **plan.labels,
+                    "workflow": "vip_mexico_leader_topoff",
+                    "customer_id": target.customer_id,
+                },
+            }
+        )
+        execution = await execute_scenario(
+            ScenarioExecutionRequest(
+                plan=plan,
+                mode=ScenarioMode.EXECUTE,
+                idempotency_key=f"vip-topoff:{payload.seed}:{target_index}:{uuid.uuid4().hex}",
+                default_card_token=target.card_token,
+            ),
+            banking_service_url=BANKING_SERVICE_URL,
+            headers=get_service_headers(),
+            timeout_seconds=SWIPE_REQUEST_TIMEOUT_SECONDS,
+        )
+        settled_event_ids = {
+            step.event_id for step in execution.steps if step.resolution == "settled"
+        }
+        added_cents = sum(
+            event.amount_cents or 0 for event in timeline if event.event_id in settled_event_ids
+        )
+        if added_cents != target.top_off_cents:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=(
+                    f"Mexico top-off was incomplete for {target.customer_name}: "
+                    f"settled {added_cents} of {target.top_off_cents} cents."
+                ),
+            )
+        transactions_created += len(settled_event_ids)
+        customers_topped_off += 1
+        total_added_cents += added_cents
+        executions.append(
+            {
+                "customer_id": target.customer_id,
+                "scenario_id": execution.scenario_id,
+                "transactions_created": len(settled_event_ids),
+                "added_cents": added_cents,
+            }
+        )
+
+    return {
+        "status": "SUCCESS",
+        "message": "Varied Mexico spend baskets generated successfully.",
+        "customers_topped_off": customers_topped_off,
+        "transactions_created": transactions_created,
+        "total_added_cents": total_added_cents,
+        "executions": executions,
     }
 
 
