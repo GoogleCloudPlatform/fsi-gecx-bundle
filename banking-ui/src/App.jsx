@@ -45,6 +45,7 @@ import {
   getAccountsSummary
 } from './utils/api.js';
 import { getFormattedBuildTime, hasReleaseNotes } from './utils/releaseNotes.js';
+import { logInteractionEvent } from './utils/analytics.js';
 import GoogleCloudIcon from './components/icons/GoogleCloudIcon.jsx';
 import CloudBuildIcon from './components/icons/CloudBuildIcon.jsx';
 import GcpInfoModal from './components/GcpInfoModal.jsx';
@@ -164,6 +165,30 @@ function AppContent() {
       navigate(newUrl, { replace: true });
     }
   }, [location.search, location.pathname, navigate]);
+
+  useEffect(() => {
+    const handleGlobalClick = (e) => {
+      const target = e.target.closest('button, a');
+      if (!target) return;
+
+      // Skip if explicitly handled by AnalyticsButton or AnalyticsLink
+      if (target.dataset.analyticsHandled === 'true') return;
+
+      const isLink = target.tagName.toLowerCase() === 'a';
+      const category = isLink ? 'link_click' : 'button_click';
+      
+      let nameToLog = target.dataset.analyticsName || target.getAttribute('aria-label') || target.innerText;
+      if (!nameToLog || typeof nameToLog !== 'string') {
+        nameToLog = isLink ? 'unknown_link' : 'unknown_button';
+      }
+      nameToLog = nameToLog.trim().substring(0, 50); // limit length
+
+      logInteractionEvent(category, nameToLog);
+    };
+
+    document.addEventListener('click', handleGlobalClick);
+    return () => document.removeEventListener('click', handleGlobalClick);
+  }, []);
 
   const [copiedField, setCopiedField] = useState(null);
   const projectId = window.firebaseConfig?.projectId;
