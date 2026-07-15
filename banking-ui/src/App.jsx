@@ -2357,10 +2357,6 @@ function AppContent() {
                 <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.BUILD_VERSION || 'unknown'}</span>
               </div>
               <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
-                <span className="font-semibold text-slate-500 dark:text-slate-400">Build Time</span>
-                <span className="font-mono text-slate-800 dark:text-slate-200">{getFormattedBuildTime()}</span>
-              </div>
-              <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
                 <span className="font-semibold text-slate-500 dark:text-slate-400">Build Commit ID</span>
                 {getGithubCommitUrl() ? (
                   <a
@@ -2375,6 +2371,10 @@ function AppContent() {
                 ) : (
                   <span className="font-mono text-slate-800 dark:text-slate-200">{window.env?.BUILD_COMMIT_ID || 'unknown'}</span>
                 )}
+              </div>
+              <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Build Time</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200">{getFormattedBuildTime()}</span>
               </div>
               {window.env?.BUILD_VERSION !== 'local-dev' && (
                 <>
