@@ -34,6 +34,21 @@ export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Inte
     }
   }, [isOpen, children]);
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   const consoleViewerUrl = window.env?.CONSOLE_VIEWER_GROUP_JOIN_URL || import.meta.env.VITE_CONSOLE_VIEWER_GROUP_JOIN_URL;
 
   if (!isOpen) return null;
@@ -60,7 +75,7 @@ export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Inte
           <div>
             {hasConsoleLink && consoleViewerUrl && (
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                GCP console access viewer <a href={consoleViewerUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 underline">self join</a>
+                GCP console access viewer <a href={consoleViewerUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 underline">self join</a>.
               </p>
             )}
           </div>

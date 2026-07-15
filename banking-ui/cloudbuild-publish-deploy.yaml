@@ -66,15 +66,7 @@ steps:
         fi
         BUILD_TIME_MS=$$(date +%s000)
         echo "Updating config files with version: $$VERSION and commit: $$COMMIT_SHA and time: $$BUILD_TIME_MS"
-        
-        # Update config.js
-        sed -i 's/BUILD_VERSION: "[^"]*"/BUILD_VERSION: "'"$${VERSION}"'"/g' banking-ui/public/config.js
-        sed -i 's/BUILD_COMMIT_ID: "[^"]*"/BUILD_COMMIT_ID: "'"$${COMMIT_SHA}"'"/g' banking-ui/public/config.js
-        sed -i 's/BUILD_TIME: "[^"]*"/BUILD_TIME: "'"$${BUILD_TIME_MS}"'"/g' banking-ui/public/config.js
-        sed -i 's/BUILD_PROJECT_ID: "[^"]*"/BUILD_PROJECT_ID: "'"$PROJECT_ID"'"/g' banking-ui/public/config.js
-        sed -i 's/BUILD_BUILD_ID: "[^"]*"/BUILD_BUILD_ID: "'"$BUILD_ID"'"/g' banking-ui/public/config.js
-        sed -i 's/BUILD_LOCATION: "[^"]*"/BUILD_LOCATION: "'"$LOCATION"'"/g' banking-ui/public/config.js
-        
+
         # Update config.template.js
         sed -i 's/BUILD_VERSION: "[^"]*"/BUILD_VERSION: "'"$${VERSION}"'"/g' banking-ui/public/config.template.js
         sed -i 's/BUILD_COMMIT_ID: "[^"]*"/BUILD_COMMIT_ID: "'"$${COMMIT_SHA}"'"/g' banking-ui/public/config.template.js
@@ -82,10 +74,18 @@ steps:
         sed -i 's/BUILD_PROJECT_ID: "[^"]*"/BUILD_PROJECT_ID: "'"$PROJECT_ID"'"/g' banking-ui/public/config.template.js
         sed -i 's/BUILD_BUILD_ID: "[^"]*"/BUILD_BUILD_ID: "'"$BUILD_ID"'"/g' banking-ui/public/config.template.js
         sed -i 's/BUILD_LOCATION: "[^"]*"/BUILD_LOCATION: "'"$LOCATION"'"/g' banking-ui/public/config.template.js
+
+        # Determine boolean flag by checking if file exists and is not empty (-s)
+        HAS_NOTES="false"
+        if [ -s "banking-ui/public/release-notes.md" ]; then
+          HAS_NOTES="true"
+        else
+          rm -f banking-ui/public/release-notes.md
+        fi
         
-        echo "--- Updated config.js ---"
-        cat banking-ui/public/config.js
-        echo "-------------------------"
+        # Inject HAS_RELEASE_NOTES boolean
+        sed -i 's/HAS_RELEASE_NOTES: "[^"]*"/HAS_RELEASE_NOTES: '"$$HAS_NOTES"'/g' banking-ui/public/config.template.js
+
         echo "--- Updated config.template.js ---"
         cat banking-ui/public/config.template.js
         echo "----------------------------------"

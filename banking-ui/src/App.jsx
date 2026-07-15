@@ -28,8 +28,6 @@ import {
   LogIn,
   AlertCircle
 } from 'lucide-react';
-
-
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 
 import { HELP_CATEGORIES, enableCcai } from './utils/constants.js';
@@ -46,10 +44,11 @@ import {
   getCcaiAuthToken,
   getAccountsSummary
 } from './utils/api.js';
+import { getFormattedBuildTime, hasReleaseNotes } from './utils/releaseNotes.js';
 import GoogleCloudIcon from './components/icons/GoogleCloudIcon.jsx';
 import CloudBuildIcon from './components/icons/CloudBuildIcon.jsx';
 import GcpInfoModal from './components/GcpInfoModal.jsx';
-
+import ReleaseNotesModal from './components/ReleaseNotesModal.jsx';
 
 
 const IconMap = {
@@ -123,16 +122,6 @@ const getGithubCommitUrl = () => {
   return `https://github.com/GoogleCloudPlatform/fsi-gecx-bundle/commit/${commitId}`;
 };
 
-const getFormattedBuildTime = () => {
-  if (window.env?.BUILD_VERSION === 'local-dev') {
-    window.env.BUILD_TIME = Date.now();
-  }
-  if (!window.env?.BUILD_TIME || window.env.BUILD_TIME === '${BUILD_TIME}' || window.env.BUILD_TIME === '0') return 'unknown';
-  const buildTimeMs = parseInt(window.env.BUILD_TIME, 10);
-  if (isNaN(buildTimeMs)) return 'unknown';
-  return new Date(buildTimeMs).toLocaleString();
-};
-
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -163,6 +152,7 @@ function AppContent() {
   const [isGcpInfoModalOpen, setIsGcpInfoModalOpen] = useState(false);
   const [isAuthInfoModalOpen, setIsAuthInfoModalOpen] = useState(false);
   const [isGcpEnvModalOpen, setIsGcpEnvModalOpen] = useState(false);
+  const [isReleaseNotesModalOpen, setIsReleaseNotesModalOpen] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
   const projectId = window.firebaseConfig?.projectId;
   const cxParts = (window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME || '').split('/');
@@ -2079,8 +2069,17 @@ function AppContent() {
                     <GoogleCloudIcon className="w-3 h-3" />
                   </button>
                 </div>
-                <div className="text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5 -mt-3">
+                <div className="text-[11px] text-slate-400 dark:text-slate-500 flex flex-col gap-1.5 -mt-3">
                   <span>Build Time: {getFormattedBuildTime()}</span>
+                  {hasReleaseNotes() && (
+                    <button
+                      onClick={() => setIsReleaseNotesModalOpen(true)}
+                      className="text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-1 w-fit transition-colors"
+                    >
+                      <span>Release Notes</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -2368,6 +2367,21 @@ function AppContent() {
                 <span className="font-semibold text-slate-500 dark:text-slate-400">Build Time</span>
                 <span className="font-mono text-slate-800 dark:text-slate-200">{getFormattedBuildTime()}</span>
               </div>
+              {hasReleaseNotes() && (
+                <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Release Notes</span>
+                  <button
+                    onClick={() => {
+                      setIsGcpEnvModalOpen(false);
+                      setIsReleaseNotesModalOpen(true);
+                    }}
+                    className="font-mono text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-0.5"
+                  >
+                    <span>View Notes</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
               {window.env?.BUILD_VERSION !== 'local-dev' && (
                 <>
                   {window.env?.BUILD_PROJECT_ID && (
@@ -2564,6 +2578,14 @@ function AppContent() {
           </div>
         </div>
       </GcpInfoModal>
+
+      {hasReleaseNotes() && (
+        <ReleaseNotesModal
+          isOpen={isReleaseNotesModalOpen}
+          onClose={() => setIsReleaseNotesModalOpen(false)}
+          onOpen={() => setIsReleaseNotesModalOpen(true)}
+        />
+      )}
 
         {/* Push Notification Toast/Dialog on Bottom Left */}
         {activeNotification && (
