@@ -21,7 +21,8 @@ import {
   Settings,
   Activity,
   Volume2,
-  Send
+  Send,
+  ChevronDown
 } from 'lucide-react';
 import {
   getCreditCardAccount,
@@ -1962,7 +1963,7 @@ export default function VoiceSupportView() {
             )}
           </div>
 
-          <div className="mx-auto flex w-full max-w-2xl min-w-0 flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
+          <div className="mx-auto flex w-full max-w-4xl min-w-0 flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-slate-800/80">
               <div className="flex items-center gap-2">
                 <Settings className="w-5 h-5 text-emerald-500" />
@@ -1988,12 +1989,13 @@ export default function VoiceSupportView() {
                 <div className="flex items-center gap-2">
                   <div className="relative w-full">
                     <Mic className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
                     <select
                       id="voice-audio-input"
                       value={selectedAudioInputId}
                       onChange={(event) => selectAudioInput(event.target.value)}
                       disabled={isConnecting || micPermissionState === 'denied'}
-                      className="h-11 w-full rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-8 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
+                      className="appearance-none h-11 w-full rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-10 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
                     >
                       {micPermissionState === 'denied' ? (
                         <option value="">Microphone permission denied</option>
@@ -2042,12 +2044,13 @@ export default function VoiceSupportView() {
                 <div className="flex items-center gap-2">
                   <div className="relative w-full">
                     <Volume2 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
                     <select
                       id="voice-audio-output"
                       value={selectedAudioOutputId}
                       onChange={(event) => selectAudioOutput(event.target.value)}
                       disabled={isConnecting}
-                      className="h-11 w-full rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-8 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
+                      className="appearance-none h-11 w-full rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-10 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200"
                     >
                       <option value="">System default speaker</option>
                       {selectedAudioOutputId && !audioOutputs.some((device) => device.deviceId === selectedAudioOutputId) && (
