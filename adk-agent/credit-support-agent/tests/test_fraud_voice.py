@@ -146,6 +146,9 @@ def test_wallet_confirmation_accepts_only_unambiguous_affirmatives() -> None:
     assert customer_confirmed_google_wallet("Yes, but don't add it") is False
     assert customer_confirmed_google_wallet("Could you please, that would be great.") is True
     assert customer_confirmed_google_wallet("Sure, go ahead.") is True
+    assert customer_confirmed_google_wallet("Yeah, that'd be great, thanks.") is True
+    assert customer_confirmed_google_wallet("That’d be perfect.") is True
+    assert customer_confirmed_google_wallet("I'd appreciate that.") is True
 
 
 def test_wallet_response_classification_distinguishes_decline_and_unclear() -> None:
@@ -598,6 +601,8 @@ def test_composed_fraud_instruction_prefers_single_triage_workflow() -> None:
     assert "Any tool response with `success=false`, `sequence_blocked=true`, or an `error` is a failed action" in instruction
     assert "Never describe it as completed or queued" in instruction
     assert "Wait for the `triage_fraud_case` result before asking whether the customer needs anything else" in instruction
+    assert "After a successful Wallet tool result reports `wallet_provisioning_status=QUEUED`" in instruction
+    assert "Do not end the consultation until the customer explicitly says no" in instruction
 
 
 def test_composed_instruction_preserves_catalog_guidance_as_non_operational_context() -> None:

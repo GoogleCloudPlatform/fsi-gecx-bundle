@@ -21,6 +21,10 @@ def test_common_explicit_confirmation_phrases_are_recognized() -> None:
         "Exactly",
         "Affirmative",
         "Yes, that's correct",
+        "Yeah, that'd be great, thanks",
+        "That’d be perfect.",
+        "I'd appreciate that.",
+        "Let's do it.",
     ):
         assert classify_confirmation_response(transcript) == "CONFIRMED"
 

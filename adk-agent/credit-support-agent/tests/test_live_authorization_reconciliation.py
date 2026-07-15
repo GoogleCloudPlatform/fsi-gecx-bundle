@@ -5,6 +5,7 @@ import pytest
 
 from agent import agent
 from agent.workflow_authorization import (
+    PUSH_CARD_TO_GOOGLE_WALLET,
     TRIAGE_FRAUD_CASE,
     create_workflow_authorization,
     mark_authorization_prompted,
@@ -125,3 +126,43 @@ async def test_early_tool_attempt_returns_recoverable_authorization_checkpoint(
     assert result["isError"] is False
     assert result["authorization_blocked"] is True
     assert "not a technical failure" in result["model_instruction"]
+
+
+@pytest.mark.asyncio
+async def test_blocked_wallet_call_reports_not_queued_and_forbids_false_success(
+    monkeypatch,
+) -> None:
+    async def generation_is_valid(**kwargs):
+        return True, None
+
+    monkeypatch.setattr(agent, "validate_reset_generation", generation_is_valid)
+    monkeypatch.setattr(agent, "get_auth_headers", lambda: {})
+    authorization = create_workflow_authorization(
+        action=PUSH_CARD_TO_GOOGLE_WALLET,
+        payload={"card_token": "replacement-token"},
+        session_id="session-1",
+        now_epoch_s=1000.0,
+    )
+    context = SimpleNamespace(
+        state={
+            "session_id": "session-1",
+            "reset_generation_token": "0:1",
+            "fraud_playbook": {
+                "replacement_card_token": "replacement-token",
+                "workflow_authorization": authorization,
+            },
+            "fraud_context": {},
+        }
+    )
+
+    result = await agent.before_tool_callback(
+        SimpleNamespace(name="push_card_to_google_wallet"),
+        {"card_token": "invented-token"},
+        context,
+    )
+
+    assert result["status"] == "AUTHORIZATION_REQUIRED"
+    assert result["action_completed"] is False
+    assert result["wallet_provisioning_status"] == "NOT_QUEUED"
+    assert "DID NOT RUN" in result["model_instruction"]
+    assert "not queued" in result["customer_response"]

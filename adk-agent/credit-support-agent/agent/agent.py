@@ -24,6 +24,7 @@ from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnecti
 from google.adk.tools import ToolContext
 
 from agent.events import DataChannelEvent, INTERNAL_TOOL_RUNTIME_STATUS
+from agent.closeout import closeout_block_reason
 from agent.guidance_snapshot import guidance_observability_payload
 from agent.log_safety import (
     stable_log_reference,
@@ -64,8 +65,12 @@ os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")
 BANKING_SERVICE_URL = os.getenv("BANKING_SERVICE_URL", "http://localhost:8080").rstrip("/")
 active_customer_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("active_customer_id", default="jane.doe@example.com")
 session_event_callback_var: contextvars.ContextVar = contextvars.ContextVar("session_event_callback", default=None)
-session_should_end_var: contextvars.ContextVar[bool] = contextvars.ContextVar("session_should_end", default=False)
-is_processing_tool_var: contextvars.ContextVar[bool] = contextvars.ContextVar("is_processing_tool", default=False)
+session_should_end_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "session_should_end", default=None
+)
+is_processing_tool_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "is_processing_tool", default=None
+)
 latest_customer_turn_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
     "latest_customer_turn", default=None
 )
@@ -133,11 +138,12 @@ def bind_session_context(customer_id: str, callback):
     return {
         "customer": active_customer_id_var.set(customer_id),
         "callback": session_event_callback_var.set(callback),
-        "should_end": session_should_end_var.set(False),
-        "is_processing": is_processing_tool_var.set(False),
         # Session tasks inherit ContextVar values, but assignments made inside
-        # child tasks do not flow back to their parent. Share a mutable holder
-        # so transcript listeners and tool callbacks observe the same turn.
+        # child tasks do not flow back to their parent. Share mutable holders
+        # so the voice loop, transcript listeners, and tool callbacks observe
+        # the same session signals.
+        "should_end": session_should_end_var.set({"requested": False}),
+        "is_processing": is_processing_tool_var.set({"active": False}),
         "latest_customer_turn": latest_customer_turn_var.set({"latest": None}),
     }
 
@@ -154,19 +160,27 @@ def reset_session_context(tokens: dict) -> None:
 
 
 def is_session_end_requested() -> bool:
-    return session_should_end_var.get()
+    return bool((session_should_end_var.get() or {}).get("requested"))
 
 
 def request_session_end() -> None:
-    session_should_end_var.set(True)
+    holder = session_should_end_var.get()
+    if holder is None:
+        session_should_end_var.set({"requested": True})
+    else:
+        holder["requested"] = True
 
 
 def clear_session_end_request() -> None:
-    session_should_end_var.set(False)
+    holder = session_should_end_var.get()
+    if holder is None:
+        session_should_end_var.set({"requested": False})
+    else:
+        holder["requested"] = False
 
 
 def is_tool_processing() -> bool:
-    return is_processing_tool_var.get()
+    return bool((is_processing_tool_var.get() or {}).get("active"))
 
 
 def record_customer_turn(
@@ -231,7 +245,11 @@ def apply_latest_customer_turn_to_authorization(
 
 
 def set_tool_processing(is_processing: bool) -> None:
-    is_processing_tool_var.set(is_processing)
+    holder = is_processing_tool_var.get()
+    if holder is None:
+        is_processing_tool_var.set({"active": is_processing})
+    else:
+        holder["active"] = is_processing
 
 
 def notify_event(event_dict):
@@ -511,6 +529,39 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
     logger = logging.getLogger("voice_agent")
     fraud_context = tool_context.state.get("fraud_context", {}) if hasattr(tool_context, "state") else {}
     fraud_playbook = tool_context.state.get("fraud_playbook", {}) if hasattr(tool_context, "state") else {}
+    if tool_name == "end_consultation":
+        latest_turn = (latest_customer_turn_var.get() or {}).get("latest") or {}
+        block_reason = closeout_block_reason(
+            latest_customer_transcript=latest_turn.get("transcript"),
+            workflow_authorization=fraud_playbook.get("workflow_authorization"),
+        )
+        if block_reason:
+            fraud_playbook["completion_status"] = "ACTIVE"
+            tool_context.state["fraud_playbook"] = fraud_playbook
+            logger.info(
+                "[CALLBACK] premature consultation close blocked %s",
+                format_log_context(
+                    state=tool_context.state,
+                    tool_name=tool_name,
+                    drift=block_reason,
+                ),
+            )
+            return {
+                "success": False,
+                "isError": False,
+                "status": "SESSION_CLOSE_CONFIRMATION_REQUIRED",
+                "session_ended": False,
+                "closeout_blocked": True,
+                "required_action": block_reason,
+                "message": "The voice support session is still active.",
+                "customer_response": "Is there anything else I can help you with?",
+                "model_instruction": (
+                    "Do not say goodbye or claim the session ended. Ask exactly, "
+                    "'Is there anything else I can help you with?' Then stop and wait "
+                    "for the customer to explicitly say no, that is all, or goodbye. "
+                    "Gratitude attached to an action confirmation is not closeout consent."
+                ),
+            }
     consequential_tools = {
         "report_lost_stolen_card",
         "unfreeze_card",
@@ -625,19 +676,33 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
                     drift=authorization_error,
                 ),
             )
-            return {
+            blocked_result = {
                 "success": False,
                 "isError": False,
                 "status": "AUTHORIZATION_REQUIRED",
+                "action_completed": False,
                 "message": "The action has not run because customer confirmation is still required.",
                 "authorization_blocked": True,
                 "required_action": authorization_error,
                 "model_instruction": (
                     "This is an expected authorization checkpoint, not a technical failure. "
-                    "Do not apologize, claim an error, or escalate. If the exact selection is already prepared, "
-                    "restate it and ask the customer for explicit confirmation, then stop. Otherwise prepare it first."
+                    "The action DID NOT RUN. Do not say it completed, was added, or was queued, "
+                    "and do not end the consultation. If the exact selection is already prepared, "
+                    "restate it and ask the customer for explicit confirmation, then stop and wait. "
+                    "Otherwise prepare it first."
                 ),
             }
+            if tool_name == "push_card_to_google_wallet":
+                blocked_result.update(
+                    {
+                        "wallet_provisioning_status": "NOT_QUEUED",
+                        "customer_response": (
+                            "I have not queued the card yet. Please say yes if you want "
+                            "me to queue it for Google Wallet."
+                        ),
+                    }
+                )
+            return blocked_result
         authorization_to_execute = authorization
     if tool_name == "transfer_to_human":
         fraud_playbook["escalation_status"] = "EXECUTING"
