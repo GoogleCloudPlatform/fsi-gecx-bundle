@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
@@ -381,13 +382,14 @@ export default function AgentSupportDashboard() {
       {/* Header section */}
       <div className="mb-6 flex justify-between items-center border-b border-slate-200 dark:border-slate-805 pb-4 w-full">
         <div>
-          <button 
+          <AnalyticsButton
+            analyticsId="agent_support_dashboard_back_to_admin_portal" 
             onClick={() => navigate('/admin')}
             className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors mb-3 group"
           >
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
             Back to Admin Portal
-          </button>
+          </AnalyticsButton>
           <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 via-slate-705 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
             Supervisor Takeover Dashboard
           </h1>
@@ -397,7 +399,8 @@ export default function AgentSupportDashboard() {
         </div>
         
         <div className="flex items-center gap-3">
-          <button
+          <AnalyticsButton
+            analyticsId="agent_support_dashboard_take_supervisor_console_tour"
             id="supervisor-tour-btn"
             onClick={() => {
               localStorage.removeItem('supervisor-tour-completed');
@@ -408,20 +411,21 @@ export default function AgentSupportDashboard() {
             title="Take Supervisor Console Tour"
           >
             <GoogleCompassIcon className="w-4 h-4 text-emerald-500" />
-          </button>
+          </AnalyticsButton>
           {isConnected && (
             <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/50 rounded-full px-4 py-1.5 text-xs text-emerald-600 dark:text-emerald-300 font-bold flex items-center gap-2 animate-pulse">
               <Volume2 size={14} className="text-emerald-505 dark:text-emerald-400" />
               Live Voice Room: {activeRoomName}
             </div>
           )}
-            <button
+            <AnalyticsButton
+              analyticsId="agent_support_dashboard_gcp_co_browse_integration_info_modal"
               onClick={() => setIsInfoModalOpen(true)}
               className="p-2.5 rounded-2xl hover:bg-slate-800/80 border border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
               title="GCP Co-Browse Integration Info"
             >
               <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
-          </button>
+          </AnalyticsButton>
         </div>
       </div>
 
@@ -497,22 +501,24 @@ export default function AgentSupportDashboard() {
                 </div>
                 
                 {!isConnected ? (
-                  <button
+                  <AnalyticsButton
+                    analyticsId="agent_support_dashboard_04"
                     onClick={() => acceptCall(selectedEscalation)}
                     disabled={isConnecting}
                     className="flex items-center gap-2 px-6 py-2.5 rounded-full font-bold shadow-lg shadow-indigo-500/20 text-white bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 transition-all transform active:scale-95 text-sm"
                   >
                     <Phone size={15} />
                     {isConnecting ? 'Connecting Representative...' : 'Accept Takeover'}
-                  </button>
+                  </AnalyticsButton>
                 ) : (
-                  <button
+                  <AnalyticsButton
+                    analyticsId="agent_support_dashboard_disconnect_session"
                     onClick={endCall}
                     className="flex items-center gap-2 px-6 py-2.5 rounded-full font-bold shadow-lg shadow-red-500/20 text-white bg-red-600 hover:bg-red-500 transition-all transform active:scale-95 text-sm"
                   >
                     <PhoneOff size={15} />
                     Disconnect Session
-                  </button>
+                  </AnalyticsButton>
                 )}
               </div>
 
@@ -579,22 +585,24 @@ export default function AgentSupportDashboard() {
                             </div>
                             
                             <div className="flex gap-1.5">
-                              <button
+                              <AnalyticsButton
+                                analyticsId="agent_support_dashboard_highlight"
                                 onClick={() => highlightTransaction(tx.id)}
                                 className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-90 transition-all flex items-center gap-1 text-[10px] font-bold shadow-sm"
                               >
                                 <MousePointerClick size={12} className="text-yellow-505 dark:text-yellow-400" />
                                 Highlight
-                              </button>
+                              </AnalyticsButton>
                               
                               {tx.amount_cents < 0 && (
-                                <button
+                                <AnalyticsButton
+                                  analyticsId="agent_support_dashboard_reverse_charge"
                                   onClick={() => handleReverseFee(tx.id)}
                                   disabled={isProcessing}
                                   className="p-1.5 rounded-lg border border-emerald-250 dark:border-emerald-800/80 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 disabled:opacity-50 disabled:cursor-not-allowed active:scale-90 transition-all text-[10px] font-bold shadow-sm"
                                 >
                                   Reverse Charge
-                                </button>
+                                </AnalyticsButton>
                               )}
                             </div>
                           </div>
@@ -621,13 +629,14 @@ export default function AgentSupportDashboard() {
                         </span>
                       </p>
                     </div>
-                    <button
+                    <AnalyticsButton
+                      analyticsId="agent_support_dashboard_freeze_credit_card"
                       onClick={handleFreezeCard}
                       disabled={isProcessing || customerAccount?.cards?.[0]?.status !== 'ACTIVE'}
                       className="px-4 py-2 rounded-xl text-xs font-bold border border-red-500/20 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95 shadow-sm"
                     >
                       Freeze Credit Card
-                    </button>
+                    </AnalyticsButton>
                   </div>
 
                   {/* Limit Controls */}
@@ -653,13 +662,14 @@ export default function AgentSupportDashboard() {
                           className="w-24 pl-5 pr-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs font-mono focus:outline-none focus:border-slate-400 dark:focus:border-slate-700"
                         />
                       </div>
-                      <button
+                      <AnalyticsButton
+                        analyticsId="agent_support_dashboard_update"
                         onClick={handleUpdateLimit}
                         disabled={isProcessing || !limitInput}
                         className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-indigo-650 hover:bg-indigo-500 disabled:bg-indigo-950/50 disabled:text-indigo-600 disabled:cursor-not-allowed transition-all active:scale-95 shadow-md"
                       >
                         Update
-                      </button>
+                      </AnalyticsButton>
                     </div>
 
                   </div>

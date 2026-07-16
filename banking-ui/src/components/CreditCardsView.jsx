@@ -21,6 +21,8 @@ import {
 import { useSettings } from '../context/SettingsContext.jsx';
 import { creditCards as cards } from '../utils/productData.js';
 import CreditCardMatrix from './CreditCardMatrix.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
+
 
 function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
   const navigate = useNavigate();
@@ -79,7 +81,8 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
             {cards.map((card, idx) => {
               const isSelected = idx === selectedCardIndex;
               return (
-                <button
+                <AnalyticsButton
+                  analyticsId="credit_cards_view_01"
                   key={idx}
                   onClick={() => setSelectedCardIndex(idx)}
                   className={`px-5 py-3 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center space-x-2 border ${
@@ -91,7 +94,7 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
                   <CreditCard className={`w-4 h-4 ${isSelected ? 'text-emerald-400 dark:text-emerald-600' : ''}`} />
                   <span>{card.name.split(' ')[0]}</span>
                   <span className="text-xs opacity-70 hidden sm:inline">({card.tag.split(' ')[0]})</span>
-                </button>
+                </AnalyticsButton>
               );
             })}
           </div>
@@ -198,7 +201,8 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
 
               {/* Action Buttons */}
               <div className="pt-4 flex flex-col sm:flex-row gap-4 items-center">
-                <button
+                <AnalyticsButton
+                  analyticsId="credit_cards_view_apply_now"
                   onClick={() => {
                     const cardSlug = selectedCard.name.toLowerCase().replace(/ /g, '-');
                     handleApply(cardSlug);
@@ -208,10 +212,11 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
                 >
                   <span>Apply Now</span>
                   <ArrowRight className="w-4 h-4" />
-                </button>
+                </AnalyticsButton>
                 
                 {activeBot !== undefined && setActiveBot && (
-                  <button 
+                  <AnalyticsButton
+                    analyticsId="credit_cards_view_03" 
                     onClick={() => {
                       setActiveBot(selectedCard.botName);
                       setTimeout(() => setActiveBot(null), 4000);
@@ -219,7 +224,7 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
                     className="w-full sm:w-auto px-6 py-3.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-semibold transition-colors flex items-center justify-center space-x-2"
                   >
                     <span>Ask {selectedCard.botName.split(' ')[0]} Advisor</span>
-                  </button>
+                  </AnalyticsButton>
                 )}
               </div>
             </div>
@@ -298,13 +303,14 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
                 <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
                   To apply for a credit card, please sign in using the profile button in the top-right of the page and then proceed with your application.
                 </p>
-                <button
+                <AnalyticsButton
+                  analyticsId="credit_cards_view_acknowledge"
                   onClick={() => setIsAuthModalOpen(false)}
                   className="w-full py-2.5 rounded-xl text-slate-950 font-bold text-sm shadow-md hover:scale-[1.02] transition-all duration-300 cursor-pointer"
                   style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}
                 >
                   Acknowledge
-                </button>
+                </AnalyticsButton>
               </div>
             </div>
           )}

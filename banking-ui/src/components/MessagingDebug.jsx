@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Send, AlertCircle, CheckCircle2, Loader2, Bell, Shield, Radio, ArrowLeft } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { getCustomersList, sendNotification } from '../utils/api.js';
+import AnalyticsButton from './AnalyticsButton.jsx';
+
 
 
 
@@ -152,14 +154,15 @@ function MessagingDebug({ fbUser, customerProfile }) {
       {/* Header Navigation */}
       <div className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
         <div>
-          <button 
+          <AnalyticsButton
+            analyticsId="messaging_debug_back_to_admin_portal" 
             type="button"
             onClick={() => navigate('/admin')}
             className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors mb-3 group"
           >
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
             Back to Admin Portal
-          </button>
+          </AnalyticsButton>
           <div className="flex items-center gap-3">
             <div className="p-3 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 text-slate-950 flex items-center justify-center shadow-lg shadow-purple-500/20 animate-pulse">
               <Bell className="w-7 h-7" />
@@ -308,7 +311,8 @@ function MessagingDebug({ fbUser, customerProfile }) {
               </div>
 
               <div className="flex gap-3 justify-end pt-1">
-                <button
+                <AnalyticsButton
+                  analyticsId="messaging_debug_select_all_matches"
                   type="button"
                   onClick={() => {
                     const idsToAdd = filteredCustomers.map(c => c.user_id);
@@ -318,15 +322,16 @@ function MessagingDebug({ fbUser, customerProfile }) {
                   className="text-[10px] font-bold text-slate-500 dark:text-slate-400 hover:text-emerald-500 transition-colors cursor-pointer"
                 >
                   Select All Matches
-                </button>
+                </AnalyticsButton>
                 <span className="text-[10px] text-slate-300 dark:text-slate-700">|</span>
-                <button
+                <AnalyticsButton
+                  analyticsId="messaging_debug_clear_selection"
                   type="button"
                   onClick={() => setSelectedCustomerIds([])}
                   className="text-[10px] font-bold text-slate-500 dark:text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
                 >
                   Clear Selection
-                </button>
+                </AnalyticsButton>
               </div>
             </div>
           ) : (
@@ -385,7 +390,8 @@ function MessagingDebug({ fbUser, customerProfile }) {
 
           {/* Submit CTA */}
           <div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800/50">
-            <button
+            <AnalyticsButton
+              analyticsId="messaging_debug_04"
               type="submit"
               disabled={isSubmitting}
               className="px-6 py-2.5 text-sm font-semibold rounded-full text-slate-950 hover:scale-102 active:scale-98 transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
@@ -405,7 +411,7 @@ function MessagingDebug({ fbUser, customerProfile }) {
                   <span>Send Notification</span>
                 </>
               )}
-            </button>
+            </AnalyticsButton>
           </div>
         </form>
       </div>

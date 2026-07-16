@@ -21,7 +21,7 @@ import { logInteractionEvent } from '../utils/analytics.js';
  * Prevents the global click listener from firing a duplicate event.
  */
 export const AnalyticsLink = ({
-  trackingName,
+  analyticsId,
   eventProperties = {},
   onClick,
   children,
@@ -30,7 +30,7 @@ export const AnalyticsLink = ({
   ...props
 }) => {
   const handleClick = (e) => {
-    let nameToLog = trackingName;
+    let nameToLog = analyticsId;
     if (!nameToLog) {
       if (typeof children === 'string') {
         nameToLog = children;

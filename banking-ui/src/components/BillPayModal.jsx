@@ -15,6 +15,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, CheckCircle2, AlertCircle } from 'lucide-react';
 import { payCreditCard } from '../utils/api.js';
+import AnalyticsButton from './AnalyticsButton.jsx';
+
 
 export default function BillPayModal({ 
   isOpen, 
@@ -115,12 +117,13 @@ export default function BillPayModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl relative">
-        <button 
+        <AnalyticsButton
+          analyticsId="bill_pay_modal_01" 
           onClick={onClose}
           className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors"
         >
           <X size={20} />
-        </button>
+        </AnalyticsButton>
 
         <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Credit Card Bill Payment</h3>
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">Pay off your outstanding credit line using your checking or savings deposits.</p>
@@ -190,13 +193,14 @@ export default function BillPayModal({
               />
             </div>
 
-            <button
+            <AnalyticsButton
+              analyticsId="bill_pay_modal_02"
               type="submit"
               disabled={isSubmitting || depositAccounts.length === 0 || creditAccounts.length === 0}
               className="w-full py-3.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-bold text-xs active:scale-95 transition-all shadow-lg shadow-blue-500/20 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed"
             >
               {isSubmitting ? "Processing Payment..." : "Submit Payment"}
-            </button>
+            </AnalyticsButton>
           </form>
         )}
       </div>

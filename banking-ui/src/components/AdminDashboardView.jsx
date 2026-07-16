@@ -18,6 +18,7 @@ import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume
 import { resetDatabase, getResetDatabaseAccess, getSystemSettings, updateSystemSettings, provisionMyDemo, resetMyDemo, deprovisionMyDemo, ensureVipMexicoLeaders, getCreditCardAccount } from '../utils/api.js';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 
 import { useSettings } from '../context/SettingsContext.jsx';
@@ -351,7 +352,8 @@ function AdminDashboardView() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <AnalyticsButton
+            analyticsId="admin_dashboard_view_take_admin_dashboard_tour"
             id="admin-tour-btn"
             onClick={() => {
               localStorage.removeItem('admin-tour-completed');
@@ -362,14 +364,15 @@ function AdminDashboardView() {
             title="Take Admin Dashboard Tour"
           >
             <GoogleCompassIcon className="w-5 h-5 text-emerald-500" />
-          </button>
-            <button
+          </AnalyticsButton>
+            <AnalyticsButton
+              analyticsId="admin_dashboard_view_gcp_admin_integration_info_modal"
               onClick={() => setIsInfoModalOpen(true)}
               className="p-2.5 rounded-2xl hover:bg-slate-805/80 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
               title="GCP Admin Integration Info"
             >
               <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
-          </button>
+            </AnalyticsButton>
         </div>
       </div>
 
@@ -424,7 +427,8 @@ function AdminDashboardView() {
         </div>
         <div className="w-full xl:w-[440px] xl:shrink-0">
           {!hasSeededProfile ? (
-            <button
+            <AnalyticsButton
+              analyticsId="admin_dashboard_view_03"
               onClick={handleProvisionDemo}
               disabled={isProvisioning}
               className={`w-full px-5 py-3 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
@@ -434,10 +438,11 @@ function AdminDashboardView() {
               }`}
             >
               {isProvisioning ? 'Provisioning...' : 'Provision My Demo Profile'}
-            </button>
+            </AnalyticsButton>
           ) : (
             <div className="flex flex-col sm:flex-row gap-2">
-              <button
+              <AnalyticsButton
+                analyticsId="admin_dashboard_view_04"
                 onClick={handleResetDemo}
                 disabled={isResettingDemo || isRemovingDemo}
                 className={`w-full px-5 py-3 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
@@ -447,8 +452,9 @@ function AdminDashboardView() {
                 }`}
               >
                 {isResettingDemo ? 'Resetting Suite...' : 'Reset My Demo Suite'}
-              </button>
-              <button
+              </AnalyticsButton>
+              <AnalyticsButton
+                analyticsId="admin_dashboard_view_05"
                 onClick={handleDeprovisionDemo}
                 disabled={isResettingDemo || isRemovingDemo}
                 className={`w-full px-5 py-3 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
@@ -458,7 +464,7 @@ function AdminDashboardView() {
                 }`}
               >
                 {isRemovingDemo ? 'Removing Accounts...' : 'Remove My Demo Accounts'}
-              </button>
+              </AnalyticsButton>
             </div>
           )}
         </div>
@@ -471,7 +477,8 @@ function AdminDashboardView() {
             Ensure configured Northern California VIP customers lead all non-VIP posted Mexico spend over the last 14 days. Re-running is safe and adds transactions only when the generic spend ceiling has increased.
           </p>
         </div>
-        <button
+        <AnalyticsButton
+          analyticsId="admin_dashboard_view_06"
           type="button"
           onClick={handlePrepareVipSpend}
           disabled={isPreparingVipSpend}
@@ -482,7 +489,7 @@ function AdminDashboardView() {
           }`}
         >
           {isPreparingVipSpend ? 'Preparing Leaderboard...' : 'Ensure VIP Mexico Leaders'}
-        </button>
+        </AnalyticsButton>
       </div>
 
       {/* Settings Form */}
@@ -579,7 +586,8 @@ function AdminDashboardView() {
 
         {/* Action Button */}
         <div className="flex justify-end pt-2">
-          <button
+          <AnalyticsButton
+            analyticsId="admin_dashboard_view_07"
             type="submit"
             disabled={isSavingSettings}
             className={`px-5 py-2.5 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${
@@ -589,7 +597,7 @@ function AdminDashboardView() {
             }`}
           >
             {isSavingSettings ? 'Saving Settings...' : 'Save Configuration'}
-          </button>
+          </AnalyticsButton>
         </div>
       </form>
 
@@ -621,7 +629,8 @@ function AdminDashboardView() {
               <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Purge Apache Iceberg BigLake analytical tables</span>
             </label>
           </div>
-          <button
+          <AnalyticsButton
+            analyticsId="admin_dashboard_view_08"
             onClick={handleResetDatabase}
             disabled={isResetting}
             className={`px-5 py-2.5 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap self-start sm:self-auto ${
@@ -631,7 +640,7 @@ function AdminDashboardView() {
             }`}
           >
             {isResetting ? 'Resetting Database...' : 'Reset Database'}
-          </button>
+          </AnalyticsButton>
         </div>
       )}
 

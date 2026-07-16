@@ -35,6 +35,7 @@ import { formatVoiceLedgerAmount } from '../utils/voiceLedger.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
@@ -1452,7 +1453,8 @@ export default function VoiceSupportView() {
           Talk to our real-time AI assistant for instant credit card operations.
         </p>
         <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-3">
-          <button
+          <AnalyticsButton
+            analyticsId="voice_support_view_take_voice_support_tour"
             id="voice-tour-btn"
             onClick={() => {
               localStorage.removeItem('voice-tour-completed');
@@ -1463,20 +1465,22 @@ export default function VoiceSupportView() {
             title="Take Voice Support Tour"
           >
             <GoogleCompassIcon className="w-5 h-5 text-indigo-500" />
-          </button>
-          <button
+          </AnalyticsButton>
+          <AnalyticsButton
+            analyticsId="voice_support_view_gcp_app_integration_info_modal"
             onClick={() => setIsInfoModalOpen(true)}
             className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-800 shadow-sm text-slate-500 hover:text-slate-750 dark:text-slate-400 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
             title="GCP App Integration Info"
           >
             <GoogleCloudIcon className="w-5 h-5" />
-          </button>
+          </AnalyticsButton>
         </div>
 
         {/* Engine Selection Toggle */}
         {!isConnected && !isConnecting && (
           <div id="voice-engine-select" className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-950/60 rounded-full border border-slate-200 dark:border-slate-800/80 mt-4">
-            <button
+            <AnalyticsButton
+              analyticsId="voice_support_view_live_kit_web_rtc"
               onClick={() => setEngine('livekit')}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                 engine === 'livekit'
@@ -1485,8 +1489,9 @@ export default function VoiceSupportView() {
               }`}
             >
               LiveKit WebRTC
-            </button>
-            <button
+            </AnalyticsButton>
+            <AnalyticsButton
+              analyticsId="voice_support_view_gecx_direct_ws"
               onClick={() => setEngine('gecx')}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                 engine === 'gecx'
@@ -1495,7 +1500,7 @@ export default function VoiceSupportView() {
               }`}
             >
               GECX Direct WS
-            </button>
+            </AnalyticsButton>
           </div>
         )}
       </div>
@@ -1510,12 +1515,13 @@ export default function VoiceSupportView() {
             <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
               {errorMessage}
             </p>
-            <button
+            <AnalyticsButton
+              analyticsId="voice_support_view_acknowledge"
               onClick={() => setErrorMessage('')}
               className="w-full py-2.5 rounded-xl bg-red-500 hover:bg-red-650 text-white font-bold text-sm shadow-md transition-colors cursor-pointer"
             >
               Acknowledge
-            </button>
+            </AnalyticsButton>
           </div>
         </div>
       )}
@@ -1808,14 +1814,15 @@ export default function VoiceSupportView() {
                   placeholder={isHumanAgentActive ? 'Typing is unavailable during handoff' : 'Type a message to the same support agent'}
                   className="max-h-28 min-h-11 flex-1 resize-y rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
                 />
-                <button
+                <AnalyticsButton
+                  analyticsId="voice_support_view_send_typed_message"
                   type="submit"
                   disabled={!typedDraft.trim() || Boolean(pendingTypedMessageId) || isHumanAgentActive}
                   aria-label="Send typed message"
                   className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Send size={17} className={pendingTypedMessageId ? 'animate-pulse' : ''} />
-                </button>
+                </AnalyticsButton>
               </div>
               <div className="mt-1.5 flex min-h-4 items-center justify-between gap-3 px-1 text-[10px]">
                 <span className={typedInputError ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}>
@@ -1897,7 +1904,8 @@ export default function VoiceSupportView() {
         {/* Mode Selection Toggle */}
         {!isConnected && !isConnecting && engine === 'livekit' && enableAvatarModality && (
           <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-950/60 rounded-full border border-slate-200 dark:border-slate-800/80 mb-2">
-            <button
+            <AnalyticsButton
+              analyticsId="voice_support_view_voice_call"
               onClick={() => setMode('audio')}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                 mode === 'audio'
@@ -1907,8 +1915,9 @@ export default function VoiceSupportView() {
             >
               <Mic size={14} />
               Voice Call
-            </button>
-            <button
+            </AnalyticsButton>
+            <AnalyticsButton
+              analyticsId="voice_support_view_live_avatar"
               onClick={() => setMode('video')}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                 mode === 'video'
@@ -1918,7 +1927,7 @@ export default function VoiceSupportView() {
             >
               <Video size={14} />
               Live Avatar
-            </button>
+            </AnalyticsButton>
           </div>
         )}
 
@@ -1929,7 +1938,8 @@ export default function VoiceSupportView() {
             : 'flex w-full flex-col items-center gap-4'
           }>
             {!isConnected ? (
-              <button
+              <AnalyticsButton
+                analyticsId="voice_support_view_09"
                 onClick={startConsultation}
                 disabled={isConnecting}
                 className={`flex h-12 items-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-8 font-bold text-white shadow-lg shadow-blue-500/20 transition-all transform hover:from-blue-500 hover:to-indigo-500 active:scale-95 ${
@@ -1938,10 +1948,11 @@ export default function VoiceSupportView() {
               >
                 <Phone size={18} />
                 {isConnecting ? 'Connecting...' : 'Start Voice Consultation'}
-              </button>
+              </AnalyticsButton>
             ) : (
               <>
-                <button
+                <AnalyticsButton
+                  analyticsId="voice_support_view_10"
                   onClick={toggleMute}
                   className={`p-4 rounded-full border transition-all ${
                     micEnabled
@@ -1950,15 +1961,16 @@ export default function VoiceSupportView() {
                   }`}
                 >
                   {micEnabled ? <Mic size={20} /> : <MicOff size={20} />}
-                </button>
+                </AnalyticsButton>
 
-                <button
+                <AnalyticsButton
+                  analyticsId="voice_support_view_end_consultation"
                   onClick={endConsultation}
                   className="flex items-center gap-2 px-8 py-3 rounded-full font-bold shadow-lg shadow-red-500/20 text-white bg-red-600 hover:bg-red-500 transition-all transform active:scale-95"
                 >
                   <PhoneOff size={18} />
                   End Consultation
-                </button>
+                </AnalyticsButton>
               </>
             )}
           </div>
@@ -1969,7 +1981,8 @@ export default function VoiceSupportView() {
                 <Settings className="w-5 h-5 text-emerald-500" />
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">Options</h3>
               </div>
-              <button
+              <AnalyticsButton
+                analyticsId="voice_support_view_refresh_audio_devices"
                 type="button"
                 onClick={() => refreshAudioDevices(true)}
                 disabled={isConnecting || isRefreshingAudioDevices}
@@ -1977,7 +1990,7 @@ export default function VoiceSupportView() {
               >
                 <RefreshCw size={14} className={isRefreshingAudioDevices ? 'animate-spin' : ''} />
                 Refresh Audio Devices
-              </button>
+              </AnalyticsButton>
             </div>
 
             <div className="grid w-full min-w-0 grid-cols-1 gap-6 sm:grid-cols-2">
@@ -2020,7 +2033,8 @@ export default function VoiceSupportView() {
 
                 {/* Test Microphone Button */}
                 <div className="pt-3">
-                  <button
+                  <AnalyticsButton
+                    analyticsId="voice_support_view_13"
                     type="button"
                     onClick={() => setIsTestingMic(!isTestingMic)}
                     disabled={isConnecting || isConnected || micPermissionState === 'denied'}
@@ -2032,7 +2046,7 @@ export default function VoiceSupportView() {
                   >
                     <Mic size={16} className={isTestingMic ? 'animate-pulse' : ''} />
                     {isTestingMic ? 'Stop Testing' : 'Test Microphone'}
-                  </button>
+                  </AnalyticsButton>
                 </div>
               </div>
 

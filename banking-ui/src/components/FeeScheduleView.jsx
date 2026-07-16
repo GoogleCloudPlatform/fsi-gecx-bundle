@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import AnalyticsButton from './AnalyticsButton.jsx';
 import { 
   Shield, 
   Search, 
@@ -121,7 +122,8 @@ function FeeScheduleView({ activeBot, setActiveBot }) {
           {categories.map((cat, idx) => {
             const isSelected = selectedCategory === cat;
             return (
-              <button
+              <AnalyticsButton
+                analyticsId="fee_schedule_view_01"
                 key={idx}
                 onClick={() => setSelectedCategory(cat)}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 cursor-pointer ${
@@ -131,7 +133,7 @@ function FeeScheduleView({ activeBot, setActiveBot }) {
                 }`}
               >
                 {cat}
-              </button>
+              </AnalyticsButton>
             );
           })}
         </div>
@@ -191,7 +193,8 @@ function FeeScheduleView({ activeBot, setActiveBot }) {
             Our digital advisors instantly trace any statement line context to resolve balance queries.
           </p>
           {activeBot !== undefined && setActiveBot && (
-            <button
+            <AnalyticsButton
+              analyticsId="fee_schedule_view_launch_account_concierge"
               onClick={() => {
                 setActiveBot('Account Support Bot');
                 setTimeout(() => setActiveBot(null), 4000);
@@ -199,7 +202,7 @@ function FeeScheduleView({ activeBot, setActiveBot }) {
               className="px-5 py-2 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold text-xs hover:scale-105 transition-all"
             >
               Launch Account Concierge
-            </button>
+            </AnalyticsButton>
           )}
         </div>
       </section>

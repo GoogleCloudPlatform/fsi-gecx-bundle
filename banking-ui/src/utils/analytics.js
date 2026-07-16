@@ -38,21 +38,23 @@ export const deriveBreadcrumbFromUrl = (path) => {
 /**
  * Logs a consistent interaction event to Firebase Analytics.
  * @param {string} category - 'button_click' or 'link_click'
- * @param {string} trackingName - The name of the interaction (e.g., 'submit_loan', 'view_details')
+ * @param {string} analyticsId - The name of the interaction (e.g., 'submit_loan', 'view_details')
  * @param {Object} [additionalProps] - Any extra properties to log
  */
-export const logInteractionEvent = (category, trackingName, additionalProps = {}) => {
-  if (window.firebaseAnalytics && window.firebaseLogEvent) {
-    const payload = {
-      content_type: category,
-      item_id: trackingName,
-      page_path: window.location.pathname,
-      page_location: window.location.href,
-      view_name: PAGE_TITLES[window.location.pathname] || document.title,
-      breadcrumb_path: deriveBreadcrumbFromUrl(window.location.pathname),
-      ...additionalProps
-    };
+export const logInteractionEvent = (category, analyticsId, additionalProps = {}) => {
+  const payload = {
+    content_type: category,
+    item_id: analyticsId,
+    page_path: window.location.pathname,
+    page_location: window.location.href,
+    view_name: PAGE_TITLES[window.location.pathname] || document.title,
+    breadcrumb_path: deriveBreadcrumbFromUrl(window.location.pathname),
+    ...additionalProps
+  };
 
+  // console.log(`[Analytics Event] ${category} -> ${analyticsId}`, payload);
+
+  if (window.firebaseAnalytics && window.firebaseLogEvent) {
     // https://firebase.google.com/docs/reference/js/analytics.md#logevent_1f89527
     window.firebaseLogEvent(window.firebaseAnalytics, 'select_content', payload);
   }

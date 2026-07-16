@@ -13,6 +13,8 @@ import {
 import { useSettings } from '../context/SettingsContext.jsx';
 import AccountOpeningModal from './AccountOpeningModal.jsx';
 import SavingsMatrix from './SavingsMatrix.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
+
 
 function SavingsAccountsView() {
   const { brandColorFrom = '#10b981', brandColorTo = '#059669' } = useSettings();
@@ -258,7 +260,8 @@ function SavingsAccountsView() {
         <div className="max-w-7xl mx-auto bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-3xl p-6 md:p-8">
           
           <div className="flex border-b border-slate-200 dark:border-slate-800 mb-6 gap-6 overflow-x-auto pb-px">
-            <button 
+            <AnalyticsButton
+              analyticsId="savings_accounts_view_01" 
               onClick={() => setActiveTab("premier")}
               className={`pb-4 text-sm font-semibold relative flex items-center gap-2 cursor-pointer transition-colors ${
                 activeTab === "premier" 
@@ -271,8 +274,9 @@ function SavingsAccountsView() {
               {activeTab === "premier" && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full" />
               )}
-            </button>
-            <button 
+            </AnalyticsButton>
+            <AnalyticsButton
+              analyticsId="savings_accounts_view_02" 
               onClick={() => setActiveTab("clubs")}
               className={`pb-4 text-sm font-semibold relative flex items-center gap-2 cursor-pointer transition-colors ${
                 activeTab === "clubs" 
@@ -285,8 +289,9 @@ function SavingsAccountsView() {
               {activeTab === "clubs" && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full" />
               )}
-            </button>
-            <button 
+            </AnalyticsButton>
+            <AnalyticsButton
+              analyticsId="savings_accounts_view_03" 
               onClick={() => setActiveTab("faqs")}
               className={`pb-4 text-sm font-semibold relative flex items-center gap-2 cursor-pointer transition-colors ${
                 activeTab === "faqs" 
@@ -299,7 +304,7 @@ function SavingsAccountsView() {
               {activeTab === "faqs" && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full" />
               )}
-            </button>
+            </AnalyticsButton>
           </div>
 
           <div className="space-y-6 text-sm text-slate-600 dark:text-slate-400 leading-relaxed">

@@ -12,6 +12,8 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { certificateAccounts as ratesData } from '../utils/productData.js';
+import AnalyticsButton from './AnalyticsButton.jsx';
+
 
 function CertificateAccountsView() {
 
@@ -148,7 +150,8 @@ function CertificateAccountsView() {
                 <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Select Certificate Term</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {ratesData.map((item, idx) => (
-                    <button
+                    <AnalyticsButton
+                      analyticsId="certificate_accounts_view_01"
                       key={idx}
                       onClick={() => setSelectedTermIndex(idx)}
                       className={`py-3 px-4 rounded-xl border text-left flex flex-col justify-between h-20 transition-all ${
@@ -161,7 +164,7 @@ function CertificateAccountsView() {
                       <span className="text-sm font-black text-slate-900 dark:text-white mt-1">
                         {item.baseApy.toFixed(2)}% <span className="text-[10px] font-normal text-slate-400">APY</span>
                       </span>
-                    </button>
+                    </AnalyticsButton>
                   ))}
                 </div>
               </div>
@@ -269,7 +272,8 @@ function CertificateAccountsView() {
           
           {/* Tab Navigation */}
           <div className="flex border-b border-slate-200 dark:border-slate-800 mb-6 gap-6 overflow-x-auto pb-px">
-            <button 
+            <AnalyticsButton
+              analyticsId="certificate_accounts_view_02" 
               onClick={() => setActiveTab("laddering")}
               className={`pb-4 text-sm font-semibold relative flex items-center gap-2 cursor-pointer transition-colors ${
                 activeTab === "laddering" 
@@ -282,8 +286,9 @@ function CertificateAccountsView() {
               {activeTab === "laddering" && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full" />
               )}
-            </button>
-            <button 
+            </AnalyticsButton>
+            <AnalyticsButton
+              analyticsId="certificate_accounts_view_03" 
               onClick={() => setActiveTab("flex")}
               className={`pb-4 text-sm font-semibold relative flex items-center gap-2 cursor-pointer transition-colors ${
                 activeTab === "flex" 
@@ -296,8 +301,9 @@ function CertificateAccountsView() {
               {activeTab === "flex" && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full" />
               )}
-            </button>
-            <button 
+            </AnalyticsButton>
+            <AnalyticsButton
+              analyticsId="certificate_accounts_view_04" 
               onClick={() => setActiveTab("faqs")}
               className={`pb-4 text-sm font-semibold relative flex items-center gap-2 cursor-pointer transition-colors ${
                 activeTab === "faqs" 
@@ -310,7 +316,7 @@ function CertificateAccountsView() {
               {activeTab === "faqs" && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full" />
               )}
-            </button>
+            </AnalyticsButton>
           </div>
 
           {/* Tab Contents */}

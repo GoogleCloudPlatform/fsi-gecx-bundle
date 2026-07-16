@@ -25,6 +25,8 @@ import { useSettings } from '../context/SettingsContext.jsx';
 import AccountOpeningModal from './AccountOpeningModal.jsx';
 import { checkingAccounts as accounts } from '../utils/productData.js';
 import CheckingMatrix from './CheckingMatrix.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
+
 
 function CheckingAccountsView({ activeBot, setActiveBot }) {
   const { 
@@ -67,14 +69,15 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
           </p>
 
           <div className="flex flex-wrap justify-center gap-4">
-            <button
+            <AnalyticsButton
+              analyticsId="checking_accounts_view_open_account_instantly"
               onClick={() => setOpeningAccount(accounts[0])}
               className="px-8 py-4 rounded-full text-slate-950 font-bold text-sm shadow-xl hover:scale-105 transition-all duration-300 flex items-center space-x-2"
               style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 10px 15px -3px ${brandColorFrom}33` }}
             >
               <span>Open Account Instantly</span>
               <ArrowRight className="w-4 h-4" />
-            </button>
+            </AnalyticsButton>
             
             <a 
               href="#matrix"
@@ -94,7 +97,8 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
             {accounts.map((acc, idx) => {
               const isSelected = idx === selectedAccountIndex;
               return (
-                <button
+                <AnalyticsButton
+                  analyticsId="checking_accounts_view_02"
                   key={idx}
                   onClick={() => setSelectedAccountIndex(idx)}
                   className={`px-5 py-3 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center space-x-2 border ${
@@ -106,7 +110,7 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
                   <PiggyBank className={`w-4 h-4 ${isSelected ? 'text-teal-400 dark:text-teal-600' : ''}`} />
                   <span>{acc.name.split(' ')[1] || acc.name.split(' ')[0]}</span>
                   <span className="text-xs opacity-70 hidden sm:inline">({acc.tag.split(' ')[0]})</span>
-                </button>
+                </AnalyticsButton>
               );
             })}
           </div>
@@ -216,17 +220,19 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
 
               {/* Context Actions */}
               <div className="pt-4 flex flex-col sm:flex-row gap-4 items-center">
-                <button
+                <AnalyticsButton
+                  analyticsId="checking_accounts_view_03"
                   onClick={() => setOpeningAccount(selectedAccount)}
                   className="w-full sm:w-auto px-8 py-3.5 rounded-full text-slate-950 font-bold text-sm shadow-lg hover:scale-105 transition-all duration-300 flex items-center justify-center space-x-2"
                   style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 10px 15px -3px ${brandColorFrom}33` }}
                 >
                   <span>Open {selectedAccount.name.split(' ')[1]} Now</span>
                   <ArrowRight className="w-4 h-4" />
-                </button>
+                </AnalyticsButton>
                 
                 {activeBot !== undefined && setActiveBot && (
-                  <button 
+                  <AnalyticsButton
+                    analyticsId="checking_accounts_view_04" 
                     onClick={() => {
                       setActiveBot(selectedAccount.botName);
                       setTimeout(() => setActiveBot(null), 4000);
@@ -234,7 +240,7 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
                     className="w-full sm:w-auto px-6 py-3.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-semibold transition-colors flex items-center justify-center space-x-2"
                   >
                     <span>Ask {selectedAccount.botName.split(' ')[0]} Specialist</span>
-                  </button>
+                  </AnalyticsButton>
                 )}
               </div>
             </div>
@@ -276,12 +282,13 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
               Transferring your legacy primary payroll direct deposit lines to {bankName} takes less than 90 seconds. Existing base classic checking depositors immediately qualify for automatic waiver upgrades upon validation.
             </p>
             <div className="pt-2">
-              <button
+              <AnalyticsButton
+                analyticsId="checking_accounts_view_execute_switch_context"
                 onClick={() => setOpeningAccount(accounts[1])}
                 className="px-6 py-3 rounded-full bg-white text-slate-950 font-bold text-xs hover:bg-slate-100 transition-colors"
               >
                 Execute Switch Context
-              </button>
+              </AnalyticsButton>
             </div>
           </div>
         </div>
