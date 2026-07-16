@@ -43,6 +43,6 @@ for group in "${iam_groups[@]}"; do
     -X POST \
     -H "Authorization: Bearer ${access_token}" \
     -H "Content-Type: application/json" \
-    -d '{"userType":"ALLOYDB_IAM_GROUP","databaseRoles":["alloydbiamuser"]}' \
+    -d '{"userType":"ALLOYDB_IAM_GROUP"}' \
     "${api_root}?userId=${encoded_group}" >/dev/null
 done

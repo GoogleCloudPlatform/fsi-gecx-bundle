@@ -102,7 +102,6 @@ resource "google_alloydb_instance" "banking_primary" {
   instance_id       = "banking-primary"
   instance_type     = "PRIMARY"
   availability_type = var.alloydb_availability_type
-  gce_zone          = var.alloydb_availability_type == "ZONAL" ? var.zone : null
 
   machine_config {
     cpu_count = var.alloydb_cpu_count
@@ -115,6 +114,7 @@ resource "google_alloydb_instance" "banking_primary" {
 
   query_insights_config {
     query_string_length     = 1024
+    query_plans_per_minute  = 5
     record_application_tags = true
     record_client_address   = true
   }
