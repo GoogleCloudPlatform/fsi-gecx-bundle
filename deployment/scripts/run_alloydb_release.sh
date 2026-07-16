@@ -100,7 +100,7 @@ identity_token() {
     --audiences="$1"
 }
 curl --fail --silent --show-error -H "Authorization: Bearer $(identity_token "${banking_url}")" "${banking_url}/health" >/dev/null
-curl --fail --silent --show-error -H "Authorization: Bearer $(identity_token "${voice_url}")" "${voice_url}/healthz" >/dev/null
+curl --fail --silent --show-error -H "Authorization: Bearer $(identity_token "${voice_url}")" "${voice_url}/" >/dev/null
 curl --fail --silent --show-error -H "Authorization: Bearer $(identity_token "${generator_url}")" "${generator_url}/health" >/dev/null
 
 manifest_path="/workspace/release-manifest-${RELEASE_COMMIT}.json"
