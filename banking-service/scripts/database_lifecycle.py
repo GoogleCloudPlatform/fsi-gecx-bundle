@@ -323,7 +323,20 @@ def reconcile_grants(connection: sa.Connection) -> None:
         for schema in schemas:
             grant_rw_schema(connection, role, schema)
 
+    qreset = quote_identifier(RESET_RW_ROLE)
     qowner = quote_identifier(SCHEMA_OWNER_ROLE)
+    for schema in SCHEMAS:
+        qschema = quote_identifier(schema)
+        connection.execute(
+            sa.text(f"GRANT TRUNCATE ON ALL TABLES IN SCHEMA {qschema} TO {qreset}")
+        )
+        connection.execute(
+            sa.text(
+                f"ALTER DEFAULT PRIVILEGES FOR ROLE {qowner} IN SCHEMA {qschema} "
+                f"GRANT TRUNCATE ON TABLES TO {qreset}"
+            )
+        )
+
     qdata_generator = quote_identifier(DATA_GENERATOR_RW_ROLE)
     connection.execute(
         sa.text(f"GRANT USAGE ON SCHEMA operations TO {qdata_generator}")
