@@ -84,25 +84,13 @@ gcloud run jobs execute banking-db-reconcile --project "${PROJECT_ID}" --region 
 gcloud run services update banking-service --project "${PROJECT_ID}" --region "${REGION}" --image "${banking_image}" --quiet
 gcloud run services update credit-support-agent --project "${PROJECT_ID}" --region "${REGION}" --image "${images[credit-support-agent]}" --quiet
 gcloud run services update data-generator --project "${PROJECT_ID}" --region "${REGION}" --image "${images[data-generator]}" --quiet
+PROJECT_ID="${PROJECT_ID}" REGION="${REGION}" deployment/scripts/reconcile_datastream_after_reset.sh pause
 gcloud run jobs execute banking-db-reset --project "${PROJECT_ID}" --region "${REGION}" --wait
 gcloud run jobs execute banking-knowledge-catalog-sync --project "${PROJECT_ID}" --region "${REGION}" --wait
 
 PROJECT_ID="${PROJECT_ID}" REGION="${REGION}" deployment/scripts/reconcile_alloydb_federation.sh
-gcloud datastream streams update banking-cdc-stream --project "${PROJECT_ID}" --location "${REGION}" --state=RUNNING --update-mask=state --quiet
-datastream_state=""
-for _ in $(seq 1 30); do
-  datastream_state="$(gcloud datastream streams describe banking-cdc-stream \
-    --project "${PROJECT_ID}" --location "${REGION}" --format='value(state)')"
-  [[ "${datastream_state}" == "RUNNING" ]] && break
-  sleep 10
-done
-if [[ "${datastream_state}" != "RUNNING" ]]; then
-  gcloud datastream streams describe banking-cdc-stream \
-    --project "${PROJECT_ID}" --location "${REGION}" \
-    --format='yaml(state,errors)' >&2
-  echo "Datastream did not reach RUNNING state." >&2
-  exit 1
-fi
+PROJECT_ID="${PROJECT_ID}" REGION="${REGION}" deployment/scripts/reconcile_datastream_after_reset.sh rebuild
+gcloud run jobs execute lakehouse-view-reconcile --project "${PROJECT_ID}" --region "${REGION}" --wait
 
 banking_url="$(gcloud run services describe banking-service --project "${PROJECT_ID}" --region "${REGION}" --format='value(status.url)')"
 voice_url="$(gcloud run services describe credit-support-agent --project "${PROJECT_ID}" --region "${REGION}" --format='value(status.url)')"

@@ -39,9 +39,11 @@ flowchart LR
     Bootstrap --> Migrate["banking-db-migrate"]
     Migrate --> Reconcile["banking-db-reconcile"]
     Reconcile --> Deploy["Deploy services by digest"]
-    Deploy --> Seed["banking-db-reset"]
-    Seed --> CDC["Federation + Datastream activation"]
-    CDC --> Smoke["Service and analytics smoke tests"]
+    Deploy --> Pause["Drain and pause Datastream"]
+    Pause --> Seed["banking-db-reset"]
+    Seed --> CDC["Federation + BigQuery destination recreation + backfill"]
+    CDC --> Views["Reconcile curated views"]
+    Views --> Smoke["Service and analytics smoke tests"]
     Smoke --> Manifest["Immutable release manifest"]
 ```
 
@@ -50,6 +52,7 @@ Application services never create roles or repair grants, and they do not own sc
 ## Analytics paths
 
 - Mutable operational tables flow through PostgreSQL logical decoding and Datastream into BigQuery CDC tables.
+- Full demo reset is a coordinated source-and-destination operation. Datastream does not propagate PostgreSQL `TRUNCATE`, so the release controller drains the stream, resets AlloyDB, recreates stream-owned BigQuery tables with a 60-second freshness target, and requires a complete backfill before qualification.
 - Analysts can query the live `banking` database through the BigQuery `banking-postgres-connection`, implemented as a native AlloyDB connector configuration.
 - Transactional outbox events flow through Pub/Sub into `compliance_audit` independently of mutable-table CDC.
 - AlloyDB Dataplex integration publishes operational metadata into Universal Catalog; the application-specific fraud guidance catalog remains managed by its dedicated sync job.

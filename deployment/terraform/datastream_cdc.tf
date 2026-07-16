@@ -195,6 +195,7 @@ resource "google_datastream_stream" "banking_cdc_stream" {
   destination_config {
     destination_connection_profile = google_datastream_connection_profile.bigquery_destination.id
     bigquery_destination_config {
+      data_freshness = "60s"
       single_target_dataset {
         dataset_id = google_bigquery_dataset.iceberg_catalog.id
       }

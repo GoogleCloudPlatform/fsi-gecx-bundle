@@ -16,10 +16,11 @@ The trigger applies Terraform and then runs:
 2. `banking-db-migrate`
 3. `banking-db-reconcile`
 4. immutable-digest service rollout
-5. `banking-db-reset`
+5. Datastream drain/pause and `banking-db-reset`
 6. BigQuery federation reconciliation
-7. Datastream activation
-8. service and analytics smoke tests
+7. BigQuery CDC destination recreation and complete Datastream backfill
+8. curated-view reconciliation
+9. service and analytics smoke tests
 
 A successful qualification writes `gs://PROJECT_ID-fsi-release-manifests/alloydb/COMMIT/qualify.json`.
 
@@ -38,7 +39,9 @@ IAM tokens are short lived. SQLAlchemy pools recycle connections before token ex
 
 ## Reset and seed
 
-Run `scripts/reinit_postgres_db/reset_db_and_migrate.sh` for an ordered reset. It pauses Datastream, verifies the database lifecycle, runs the guarded reset/seed job, reconciles federation, and resumes CDC. Do not drop schemas manually in a deployed environment.
+Run `scripts/reinit_postgres_db/reset_db_and_migrate.sh` for an ordered reset. It drains and pauses Datastream, verifies the database lifecycle, runs the guarded reset/seed job, reconciles federation, recreates stream-owned BigQuery destinations, resumes CDC, backfills every configured stream object, and then reconciles curated views. Do not drop schemas manually in a deployed environment.
+
+This rebuild is required because Datastream does not replicate PostgreSQL `TRUNCATE`. Merely resuming the stream after a full demo reset leaves pre-reset rows in BigQuery. Recreating the tables also applies the stream's explicit 60-second BigQuery freshness setting; Datastream configuration changes do not retrofit that setting onto existing tables. The helper fails closed if the stream cannot pause or run, an object backfill fails, or all backfills do not complete within the bounded wait.
 
 ## CDC and federation health
 
@@ -62,9 +65,9 @@ The final pre-migration Cloud SQL backup identifier is stored in the first succe
 
 - Banking, voice, and data-generator revisions reference immutable digests from the current manifest.
 - `banking-db-reconcile` succeeds with expected Alembic revision `2ea57c78ba89`.
-- Banking `/api/health`, voice `/healthz`, and data-generator `/health` return success.
+- Banking `/health`, authenticated voice `/`, and data-generator `/health` return success.
 - A presenter reset/seed completes.
-- Datastream is running and recent rows appear in BigQuery.
+- Datastream is running, every configured backfill completed, and recent rows appear in BigQuery without pre-reset residue.
 - BigQuery AlloyDB federation returns `SELECT 1`.
 - Knowledge Catalog sync and the Real Time Analytics agent source check succeed.
 - Run one voice-support card workflow, one push notification, and the VIP Mexico-spend analytics question.
