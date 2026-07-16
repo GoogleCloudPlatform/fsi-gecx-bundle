@@ -1357,6 +1357,7 @@ function AppContent() {
                 <div
                   className="relative group py-2"
                   onClick={() => setIsProfileOpen(!isProfileOpen)}
+                  onMouseEnter={() => logInteractionEvent('button_hover', 'customer_profile_avatar_hovered')}
                   onMouseLeave={() => setIsProfileOpen(false)}
                 >
                   <div
