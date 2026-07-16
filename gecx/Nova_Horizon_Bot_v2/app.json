@@ -2,6 +2,20 @@
   "name": "e0b952c1-280d-41d0-8da5-46db4b0e6ad9",
   "displayName": "Nova Horizon Bot v2",
   "rootAgent": "root_agent",
+  "audioProcessingConfig": {
+    "synthesizeSpeechConfigs": {
+      "de-DE": {
+      },
+      "en-US": {
+      },
+      "es-ES": {
+      },
+      "fr-FR": {
+      },
+      "it-IT": {
+      }
+    }
+  },
   "loggingSettings": {
     "conversationLoggingSettings": {
       "retentionWindow": "31536000s"
@@ -40,46 +54,39 @@
     "name": "access_token",
     "description": "X-Forwarded-User-Context",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "annual_gross_income",
     "schema": {
-      "type": "NUMBER",
-      "default": null
+      "type": "NUMBER"
     }
   }, {
     "name": "application",
     "description": "The application from the CCaaS queue",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "application_id",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "chat_id",
     "description": "The chat_id from the CCaaS queue",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "customer_name",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "email",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "employment_status",
@@ -88,14 +95,12 @@
       "type": "ARRAY",
       "items": {
         "type": "STRING"
-      },
-      "default": null
+      }
     }
   }, {
     "name": "first_name",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "is_ujet_sdk",
@@ -106,44 +111,47 @@
   }, {
     "name": "last_name",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "last_transfer_details",
     "description": "Variable \"last_transfer_details\".",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "monthly_housing_payment",
     "schema": {
-      "type": "NUMBER",
-      "default": null
+      "type": "NUMBER"
     }
   }, {
     "name": "phone_number",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "product",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }, {
     "name": "user_id",
     "schema": {
-      "type": "STRING",
-      "default": null
+      "type": "STRING"
     }
   }],
   "dataStoreSettings": {
   },
+  "languageSettings": {
+    "defaultLanguageCode": "en-US",
+    "supportedLanguageCodes": ["it-IT", "fr-FR", "de-DE", "es-ES"]
+  },
+  "defaultChannelProfile": {
+  },
   "timeZoneSettings": {
     "timeZone": "America/Los_Angeles"
+  },
+  "toolExecutionMode": "PARALLEL",
+  "errorHandlingSettings": {
   }
 }
