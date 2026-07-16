@@ -21,6 +21,35 @@ export const HELP_CATEGORIES = [
   'Wealth & Budgeting'
 ];
 
+export const PAGE_TITLES = {
+  '/': 'Home',
+  '/accounts': 'Account Ledger',
+  '/admin': 'Admin Dashboard',
+  '/admin/messaging': 'Admin Messaging',
+  '/admin/monitoring': 'Admin Monitoring',
+  '/admin/simulation': 'Admin Simulation',
+  '/admin/support': 'Agent Support Dashboard',
+  '/admin/underwriting': 'Admin Underwriting',
+  '/apply/credit-card': 'Apply for Credit Card',
+  '/certificate-accounts': 'Certificate Accounts',
+  '/checking-accounts': 'Checking Accounts',
+  '/compare-products': 'Compare Products',
+  '/credit-cards': 'Credit Cards',
+  '/debug': 'Messaging Debug',
+  '/disclosures': 'Account Disclosures',
+  '/edit-profile': 'Edit Profile',
+  '/fee-schedule': 'Fee Schedule',
+  '/help-center': 'Help & Learning Center',
+  '/locator': 'Find Branch/ATM',
+  '/mortgage-rates': 'Mortgage Rates',
+  '/mortgages': 'Mortgages & Home Loans',
+  '/savings-accounts': 'Savings Accounts',
+  '/search': 'Search Site',
+  '/secure-messaging': 'Secure Messaging',
+  '/settings': 'Settings',
+  '/support/voice': 'Voice Support Consultation',
+};
+
 /**
  * Shared constants for LiveKit Data Channel event communication
  */

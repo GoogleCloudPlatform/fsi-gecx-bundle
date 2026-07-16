@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 
-import { HELP_CATEGORIES, enableCcai } from './utils/constants.js';
+import { HELP_CATEGORIES, enableCcai, PAGE_TITLES } from './utils/constants.js';
 import AppRoutes from './AppRoutes.jsx';
 import { SettingsProvider, useSettings } from './context/SettingsContext.jsx';
 import {
@@ -45,10 +45,12 @@ import {
   getAccountsSummary
 } from './utils/api.js';
 import { getFormattedBuildTime, hasReleaseNotes } from './utils/releaseNotes.js';
+import { logInteractionEvent } from './utils/analytics.js';
 import GoogleCloudIcon from './components/icons/GoogleCloudIcon.jsx';
 import CloudBuildIcon from './components/icons/CloudBuildIcon.jsx';
 import GcpInfoModal from './components/GcpInfoModal.jsx';
 import ReleaseNotesModal from './components/ReleaseNotesModal.jsx';
+import AnalyticsButton from './components/AnalyticsButton.jsx';
 
 
 const IconMap = {
@@ -165,6 +167,31 @@ function AppContent() {
     }
   }, [location.search, location.pathname, navigate]);
 
+  useEffect(() => {
+    const handleGlobalClick = (e) => {
+      const target = e.target.closest('button, a');
+      if (!target) return;
+
+      // Skip if explicitly handled by AnalyticsButton or AnalyticsLink
+      // data-analytics-handled becomes accessible as element.dataset.analyticsHandled
+      if (target.dataset.analyticsHandled === 'true') return;
+
+      const isLink = target.tagName.toLowerCase() === 'a';
+      const category = isLink ? 'link_click' : 'button_click';
+      
+      let nameToLog = target.dataset.analyticsName || target.getAttribute('aria-label') || target.innerText;
+      if (!nameToLog || typeof nameToLog !== 'string') {
+        nameToLog = isLink ? 'unknown_link' : 'unknown_button';
+      }
+      nameToLog = nameToLog.trim().substring(0, 50); // limit length
+
+      logInteractionEvent(category, nameToLog);
+    };
+
+    document.addEventListener('click', handleGlobalClick);
+    return () => document.removeEventListener('click', handleGlobalClick);
+  }, []);
+
   const [copiedField, setCopiedField] = useState(null);
   const projectId = window.firebaseConfig?.projectId;
   const cxParts = (window.env?.CX_AGENT_STUDIO_DEPLOYMENT_NAME || '').split('/');
@@ -260,26 +287,14 @@ function AppContent() {
     setIsProfileOpen(false);
 
     // Update page title dynamically
-    const pageTitles = {
-      '/': siteTitle,
-      '/checking-accounts': `Checking Accounts | ${bankName}`,
-      '/savings-accounts': `Savings Accounts | ${bankName}`,
-      '/certificate-accounts': `Certificate Accounts | ${bankName}`,
-      '/credit-cards': `Credit Cards | ${bankName}`,
-      '/mortgages': `Mortgages & Home Loans | ${bankName}`,
-      '/mortgage-rates': `Mortgage Rates | ${bankName}`,
-      '/help-center': `Help & Learning Center | ${bankName}`,
-      '/fee-schedule': `Fee Schedule | ${bankName}`,
-      '/disclosures': `Account Disclosures | ${bankName}`,
-      '/settings': `Settings | ${bankName}`,
-      '/edit-profile': `Edit Profile | ${bankName}`,
-      '/apply/credit-card': `Apply for Credit Card | ${bankName}`,
-      '/search': `Search Site | ${bankName}`,
-      '/support/voice': `Voice Support Consultation | ${bankName}`,
-      '/locator': `Find Branch/ATM | ${bankName}`,
-    };
+    let title = PAGE_TITLES[location.pathname] || 'Premium Digital Banking';
 
-    const title = pageTitles[location.pathname] || `${bankName} | Premium Digital Banking`;
+    if (location.pathname === '/') {
+      title = siteTitle;
+    } else if (location.pathname !== '/') {
+      title = `${title} | ${bankName}`;
+    }
+
     document.title = title;
   }, [location.pathname, bankName, siteTitle]);
 
@@ -409,6 +424,16 @@ function AppContent() {
     };
     registerDevice();
   }, [fbUser, fcmToken]);
+
+  useEffect(() => {
+    if (window.firebaseAnalytics && window.firebaseSetUserId) {
+      if (fbUser && fbUser.uid) {
+        window.firebaseSetUserId(window.firebaseAnalytics, fbUser.uid);
+      } else {
+        window.firebaseSetUserId(window.firebaseAnalytics, null);
+      }
+    }
+  }, [fbUser]);
 
   useEffect(() => {
     if (!fbUser) return;
@@ -2073,13 +2098,14 @@ function AppContent() {
                     )}
                     )
                   </span>
-                  <button
+                  <AnalyticsButton
                     onClick={() => setIsGcpEnvModalOpen(true)}
                     className="p-0.5 rounded hover:bg-slate-105 dark:hover:bg-slate-800/80 transition-colors cursor-pointer text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 flex items-center justify-center"
                     title="View GCP Environment Configuration"
+                    trackingName="open_gcp_env_config_modal"
                   >
                     <GoogleCloudIcon className="w-3 h-3" />
-                  </button>
+                  </AnalyticsButton>
                 </div>
                 <div className="text-[11px] text-slate-400 dark:text-slate-500 flex flex-col gap-1.5 -mt-3">
                   <span>Build Time: {getFormattedBuildTime()}</span>

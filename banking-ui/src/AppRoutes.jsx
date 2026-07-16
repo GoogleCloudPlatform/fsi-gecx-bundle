@@ -14,6 +14,7 @@
 
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { PAGE_TITLES } from './utils/constants.js';
 
 import HomeView from './components/HomeView.jsx';
 import AccountsView from './components/AccountsView.jsx';
@@ -64,15 +65,27 @@ export default function AppRoutes({
   interestRate
 }) {
   const location = useLocation();
+  const prevLocationRef = React.useRef(null);
 
   useEffect(() => {
     if (window.firebaseAnalytics && window.firebaseLogEvent) {
-      window.firebaseLogEvent(window.firebaseAnalytics, 'page_view', {
+      const payload = {
+        page_title: PAGE_TITLES[location.pathname] || document.title,
+        page_location: window.location.href,
         page_path: location.pathname,
         page_search: location.search,
         page_hash: location.hash,
-        page_title: document.title
-      });
+      };
+
+      if (prevLocationRef.current) {
+        payload.page_referrer = window.location.origin + prevLocationRef.current.pathname + prevLocationRef.current.search;
+      } else {
+        payload.page_referrer = document.referrer;
+      }
+
+      // https://firebase.google.com/docs/reference/js/analytics.md#logevent_0792e28
+      window.firebaseLogEvent(window.firebaseAnalytics, 'page_view', payload);
+      prevLocationRef.current = location;
     }
   }, [location]);
 
