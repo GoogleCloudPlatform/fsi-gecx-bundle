@@ -161,6 +161,12 @@ resource "google_project_iam_member" "gcs_pubsub_publisher" {
   member  = "serviceAccount:${data.google_storage_project_service_account.gcs_sa.email_address}"
 }
 
+resource "google_project_iam_member" "bq_connection_alloydb_client" {
+  project = var.project_id
+  role    = "roles/alloydb.client"
+  member  = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-bigqueryconnection.iam.gserviceaccount.com"
+}
+
 resource "google_project_iam_member" "jump_instance_log_writer" {
   project = var.project_id
   role    = "roles/logging.logWriter"
@@ -352,6 +358,13 @@ resource "google_project_iam_member" "database_iam_viewer_service_usage_consumer
   for_each = local.db_iam_viewer_members
   project  = data.google_project.project.project_id
   role     = "roles/serviceusage.serviceUsageConsumer"
+  member   = each.key
+}
+
+resource "google_project_iam_member" "database_iam_viewer_bigquery_connection_users" {
+  for_each = local.db_iam_viewer_members
+  project  = data.google_project.project.project_id
+  role     = "roles/bigquery.connectionUser"
   member   = each.key
 }
 

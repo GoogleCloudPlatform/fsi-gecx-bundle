@@ -60,3 +60,21 @@ resource "google_storage_bucket" "iceberg_warehouse" {
     enabled = true
   }
 }
+
+resource "google_storage_bucket" "release_manifests" {
+  name                        = "${var.project_id}-fsi-release-manifests"
+  location                    = var.region
+  uniform_bucket_level_access = true
+  force_destroy               = false
+  versioning {
+    enabled = true
+  }
+  lifecycle_rule {
+    condition {
+      num_newer_versions = 10
+    }
+    action {
+      type = "Delete"
+    }
+  }
+}

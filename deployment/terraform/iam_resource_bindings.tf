@@ -41,6 +41,27 @@ resource "google_artifact_registry_repository_iam_member" "cloudbuild_sa_fsi_gec
   member     = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
 
+resource "google_storage_bucket_iam_member" "terraform_cloudbuild_release_manifest_admin" {
+  bucket = google_storage_bucket.release_manifests.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
+}
+
+resource "google_storage_bucket_iam_member" "release_manifest_readers" {
+  for_each = toset(var.release_manifest_reader_members)
+  bucket   = google_storage_bucket.release_manifests.name
+  role     = "roles/storage.objectViewer"
+  member   = each.value
+}
+
+resource "google_artifact_registry_repository_iam_member" "release_image_consumers" {
+  for_each   = toset(var.release_image_consumer_members)
+  repository = google_artifact_registry_repository.fsi_gecx_bundle.id
+  location   = var.region
+  role       = "roles/artifactregistry.reader"
+  member     = each.value
+}
+
 resource "google_artifact_registry_repository_iam_member" "lakehouse_reconcile_sa_fsi_gecx_bundle_artifact_reader" {
   repository = google_artifact_registry_repository.fsi_gecx_bundle.id
   location   = var.region

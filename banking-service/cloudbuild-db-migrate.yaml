@@ -19,8 +19,14 @@ steps:
     args:
       - "-c"
       - |
-        echo "Executing database schema migrations..."
+        echo "Executing ordered database bootstrap, migration, and reconciliation..."
+        gcloud run jobs execute banking-db-bootstrap \
+          --region "${_REGION}" \
+          --wait
         gcloud run jobs execute banking-db-migrate \
+          --region "${_REGION}" \
+          --wait
+        gcloud run jobs execute banking-db-reconcile \
           --region "${_REGION}" \
           --wait
         if gcloud datastream streams describe banking-cdc-stream --location "${_REGION}" >/dev/null 2>&1; then

@@ -53,6 +53,18 @@ variable "alloydb_deletion_protection" {
   default     = true
 }
 
+variable "release_manifest_reader_members" {
+  description = "IAM members allowed to consume successful release manifests for promotion."
+  type        = list(string)
+  default     = []
+}
+
+variable "release_image_consumer_members" {
+  description = "Runtime service accounts in promotion targets allowed to pull qualified immutable images."
+  type        = list(string)
+  default     = []
+}
+
 variable "zone" {
   type    = string
   default = "us-central1-c"
