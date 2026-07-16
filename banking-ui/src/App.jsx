@@ -1329,9 +1329,11 @@ function AppContent() {
                 type="text"
                 placeholder="Search site..."
                 className="w-full pl-8 pr-4 py-1.5 text-xs rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-all cursor-pointer shadow-sm hover:border-slate-300 dark:hover:border-slate-700"
+                onFocus={() => logInteractionEvent('input_focus', 'search_site_input_focused')}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && e.target.value.trim()) {
                     const query = e.target.value.trim();
+                    logInteractionEvent('search_submit', 'search_site_submitted', { search_term: query });
                     e.target.value = ""; // Clear header input
                     navigate('/search', { state: { initialQuery: query } });
                   }
@@ -1342,7 +1344,7 @@ function AppContent() {
 
           <div className="flex items-center space-x-2 sm:space-x-4 shrink-0">
             {!fbUser && (
-              <AnalyticsButton trackingName="button_click_app_01"
+              <AnalyticsButton trackingName="button_click_app_sign_in"
                 id="header-signin-btn"
                 onClick={() => window.firebaseAuth ? window.firebaseAuth.signInWithGoogle() : window.location.href = '/?gcp-iap-mode=CLEAR_LOGIN_COOKIE'}
                 className="px-3 sm:px-4 text-xs sm:text-sm font-semibold rounded-full transition-all duration-300 hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer shadow-sm border border-slate-200/80 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-850 dark:text-slate-200 h-9"
@@ -1682,9 +1684,11 @@ function AppContent() {
                   type="text" 
                   placeholder="Search site..." 
                   className="w-full pl-10 pr-4 py-2 text-sm rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-all cursor-pointer shadow-sm hover:border-slate-300 dark:hover:border-slate-700"
+                  onFocus={() => logInteractionEvent('input_focus', 'search_site_input_focused')}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && e.target.value.trim()) {
                       const query = e.target.value.trim();
+                      logInteractionEvent('search_submit', 'search_site_submitted', { search_term: query });
                       e.target.value = ""; 
                       setIsMobileMenuOpen(false);
                       navigate('/search', { state: { initialQuery: query } });
