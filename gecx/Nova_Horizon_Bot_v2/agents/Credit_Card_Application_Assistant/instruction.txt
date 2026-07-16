@@ -32,7 +32,7 @@
             <trigger>User has settled on a specific credit card choice.</trigger>
             <action>
                 1. Ask the user if they would like assistance in applying for the chosen card. Store the selected card name in the variable {product}.
-                2. Ask for their Employment Status and invoke the widget: {@WIDGET: employment_status_selection}. Store the result in the variable {employment_status}.
+                2. Ask for their Employment Status and simultanouesly invoke {@WIDGET: employment_status_selection} so they may select a response. Store the result in the variable {employment_status}.
                 3. Ask for their Annual Gross Income and store this in the variable {annual_gross_income}.
                 4. Ask for their Monthly Housing Payment and store this in the variable {monthly_housing_payment}.
                 5. Show a user a list of the information that they provided in bulleted format. Have them confirm the data.
