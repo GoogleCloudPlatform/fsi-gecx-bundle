@@ -1568,13 +1568,14 @@ function AppContent() {
       </main>
 
           {isReady && fbUser && !isChatOpen && isCxAgentEnabled && !isSearchPage && !isVoiceSupportPage && isChatSdkReady && (
-            <div
+            <AnalyticsButton
+              trackingName="gecx_chat_messenger_clicked"
               onClick={() => setIsChatOpen(true)}
               className="fixed bottom-6 right-6 z-[100] w-14 h-14 rounded-full flex items-center justify-center cursor-pointer shadow-2xl hover:scale-110 transition-all duration-300 animate-fade-in"
               style={{ backgroundImage: `linear-gradient(to top right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 25px 50px -12px ${brandColorFrom}50` }}
             >
               <MessageSquare className="w-6 h-6 text-slate-950" />
-            </div>
+            </AnalyticsButton>
           )}
 
           {/* Fixed Bottom Left Chat Messenger */}
