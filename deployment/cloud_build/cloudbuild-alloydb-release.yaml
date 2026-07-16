@@ -27,6 +27,8 @@ steps:
       - "MANIFEST_URI=${_MANIFEST_URI}"
       - "ALLOW_CLOUD_SQL_CUTOVER=${_ALLOW_CLOUD_SQL_CUTOVER}"
 
+timeout: "7200s"
+
 options:
   pool:
     name: "projects/${PROJECT_ID}/locations/${_REGION}/workerPools/build-pool"
