@@ -45,10 +45,31 @@ resource "google_compute_instance" "datastream_alloydb_proxy" {
   metadata = {
     startup-script = <<-EOT
       #!/bin/bash
-      iptables -I INPUT -p tcp --dport 5432 -s 172.16.1.0/29 -j ACCEPT
-      docker run -d --restart=always --net=host alpine/socat@sha256:beb4a68d9e4fe6b0f21ea774a0fde6c31f580dde6368939ed70100c5385b015e \
-        TCP-LISTEN:5432,fork,reuseaddr TCP:${google_alloydb_instance.banking_primary.ip_address}:5432
+      set -euo pipefail
+      iptables -C INPUT -p tcp --dport 5432 -s 172.16.1.0/29 -j ACCEPT 2>/dev/null || \
+        iptables -I INPUT -p tcp --dport 5432 -s 172.16.1.0/29 -j ACCEPT
+      cat >/etc/systemd/system/datastream-alloydb-proxy.service <<'UNIT'
+      [Unit]
+      Description=Datastream to AlloyDB TCP bridge
+      After=docker.service network-online.target
+      Requires=docker.service
+
+      [Service]
+      ExecStartPre=-/usr/bin/docker rm -f datastream-alloydb-proxy
+      ExecStartPre=/usr/bin/docker pull alpine/socat@sha256:beb4a68d9e4fe6b0f21ea774a0fde6c31f580dde6368939ed70100c5385b015e
+      ExecStart=/usr/bin/docker run --rm --name datastream-alloydb-proxy --net=host alpine/socat@sha256:beb4a68d9e4fe6b0f21ea774a0fde6c31f580dde6368939ed70100c5385b015e TCP-LISTEN:5432,fork,reuseaddr TCP:${google_alloydb_instance.banking_primary.ip_address}:5432
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+      UNIT
+      systemctl daemon-reload
+      systemctl enable --now datastream-alloydb-proxy.service
     EOT
   }
-  depends_on = [google_alloydb_instance.banking_primary]
+  depends_on = [
+    google_alloydb_instance.banking_primary,
+    google_compute_router_nat.nat,
+  ]
 }
