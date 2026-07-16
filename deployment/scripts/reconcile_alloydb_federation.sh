@@ -10,7 +10,7 @@ connector_user="banking_bq_connector"
 password="$(gcloud secrets versions access latest --project "${PROJECT_ID}" --secret postgres_banking_bq_connector_password)"
 resource_uri="//alloydb.googleapis.com/projects/${PROJECT_ID}/locations/${REGION}/clusters/banking-data/instances/banking-primary"
 
-existing_connector="$(bq show --format=prettyjson --connection "${PROJECT_ID}.${location}.${connection_id}" 2>/dev/null | jq -r '.connectorConfiguration.connectorId // empty' || true)"
+existing_connector="$(bq show --format=json --connection "${PROJECT_ID}.${location}.${connection_id}" 2>/dev/null | jq -r '.configuration.connectorId // empty' || true)"
 if [[ "${existing_connector}" != "google-alloydb" ]]; then
   if [[ -n "${existing_connector}" ]] || bq show --connection "${PROJECT_ID}.${location}.${connection_id}" >/dev/null 2>&1; then
     bq rm -f --connection "${PROJECT_ID}.${location}.${connection_id}"
@@ -29,7 +29,7 @@ unset password connector_configuration
 project_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
   --member="serviceAccount:service-${project_number}@gcp-sa-bigqueryconnection.iam.gserviceaccount.com" \
-  --role=roles/alloydb.client --quiet >/dev/null
+  --role=roles/alloydb.client --condition=None --quiet >/dev/null
 
 bq query --project_id="${PROJECT_ID}" --location="${location}" --use_legacy_sql=false \
   "SELECT 1 AS federation_ok FROM EXTERNAL_QUERY('${PROJECT_ID}.${location}.${connection_id}', 'SELECT 1')"
