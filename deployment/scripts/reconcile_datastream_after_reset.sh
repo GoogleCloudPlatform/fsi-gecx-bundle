@@ -4,7 +4,7 @@ set -euo pipefail
 : "${PROJECT_ID:?PROJECT_ID is required}"
 : "${REGION:?REGION is required}"
 
-stream="banking-cdc-stream"
+stream="banking-alloydb-cdc-stream"
 dataset="iceberg_catalog"
 action="${1:?Expected pause or rebuild}"
 

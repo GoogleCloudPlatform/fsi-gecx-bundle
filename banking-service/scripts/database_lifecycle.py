@@ -56,6 +56,7 @@ RESET_RW_ROLE = "banking_reset_rw"
 SUPPORT_RW_ROLE = "banking_support_rw"
 VIEWER_RO_ROLE = "banking_viewer_ro"
 CDC_RO_ROLE = "banking_cdc_ro"
+DATASTREAM_REPLICATION_SLOT = "datastream_alloydb_replication_slot"
 
 GROUP_ROLES = (
     SCHEMA_OWNER_ROLE,
@@ -434,14 +435,14 @@ def ensure_replication_slot(engine: sa.Engine, config: LifecycleConfig) -> None:
         slot_exists = connection.execute(
             sa.text(
                 "SELECT 1 FROM pg_replication_slots "
-                "WHERE slot_name = 'datastream_replication_slot'"
+                f"WHERE slot_name = '{DATASTREAM_REPLICATION_SLOT}'"
             )
         ).scalar()
         if not slot_exists:
             connection.execute(
                 sa.text(
                     "SELECT pg_create_logical_replication_slot(" 
-                    "'datastream_replication_slot', 'pgoutput')"
+                    f"'{DATASTREAM_REPLICATION_SLOT}', 'pgoutput')"
                 )
             )
 
@@ -586,7 +587,7 @@ def verify(
             slot = connection.execute(
                 sa.text(
                     "SELECT 1 FROM pg_replication_slots "
-                    "WHERE slot_name = 'datastream_replication_slot'"
+                    f"WHERE slot_name = '{DATASTREAM_REPLICATION_SLOT}'"
                 )
             ).scalar()
             if not slot:

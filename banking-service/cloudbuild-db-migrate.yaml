@@ -29,14 +29,14 @@ steps:
         gcloud run jobs execute banking-db-reconcile \
           --region "${_REGION}" \
           --wait
-        if gcloud datastream streams describe banking-cdc-stream --location "${_REGION}" >/dev/null 2>&1; then
+        if gcloud datastream streams describe banking-alloydb-cdc-stream --location "${_REGION}" >/dev/null 2>&1; then
           echo "Starting Datastream CDC stream after successful migrations..."
-          gcloud datastream streams update banking-cdc-stream \
+          gcloud datastream streams update banking-alloydb-cdc-stream \
             --location "${_REGION}" \
             --state=RUNNING \
             --update-mask=state
         else
-          echo "Datastream stream banking-cdc-stream not found; skipping CDC bootstrap."
+          echo "Datastream stream banking-alloydb-cdc-stream not found; skipping CDC bootstrap."
         fi
         if gcloud run jobs describe lakehouse-view-reconcile --region "${_REGION}" >/dev/null 2>&1; then
           echo "Starting non-blocking lakehouse view reconciliation..."

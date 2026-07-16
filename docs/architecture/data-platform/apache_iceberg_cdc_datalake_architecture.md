@@ -6,7 +6,7 @@ This document describes the current AlloyDB CDC path and the planned Iceberg arc
 
 ```mermaid
 flowchart LR
-    AlloyDB["AlloyDB PostgreSQL 18<br/>private IP + logical decoding"] --> Publication["datastream_publication<br/>datastream_replication_slot"]
+    AlloyDB["AlloyDB PostgreSQL 18<br/>private IP + logical decoding"] --> Publication["datastream_publication<br/>datastream_alloydb_replication_slot"]
     Publication --> Bridge["Internal TCP bridge<br/>datastream-alloydb-proxy"]
     Bridge --> Datastream["Datastream private connection"]
     Datastream --> NativeBQ["BigQuery native CDC tables<br/>iceberg_catalog dataset"]
@@ -15,7 +15,7 @@ flowchart LR
 
 AlloyDB connects to the application VPC through Private Service Access, while Datastream uses a separate peered producer network (`172.16.1.0/29`). Because VPC peering is non-transitive, a Container-Optimized OS VM in the application subnet exposes TCP 5432 only to the Datastream subnet and forwards the connection to the AlloyDB private address. It runs Google's supported, digest-pinned Database Migration Service TCP proxy in host-network mode. The bridge has no public IP and does not hold database credentials.
 
-The `banking_bq_connector` built-in database user owns the Datastream password boundary. The ordered database reconciliation job creates and verifies its replication grant, publication, and logical slot after Alembic completes. Terraform creates the connection profiles and a stopped stream; the release controller starts the stream only after database and analytics prerequisites pass.
+The `banking_bq_connector` built-in database user owns the Datastream password boundary. The ordered database reconciliation job creates and verifies its replication grant, publication, and AlloyDB-specific logical slot after Alembic completes. Terraform creates a new AlloyDB-specific stream identity rather than retaining a Cloud SQL WAL checkpoint, and the release controller starts that stopped stream only after database and analytics prerequisites pass.
 
 Despite the historical dataset name, the current Datastream destination tables are BigQuery-native tables, not Apache Iceberg tables. This limitation is why the lakehouse work is a separate epic.
 
