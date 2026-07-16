@@ -17,7 +17,7 @@ steps:
       - "-c"
       - |
         apt-get update -qq && apt-get install -y -qq jq
-        export PATH="/workspace:${PATH}"
+        export PATH="/workspace:$${PATH}"
         /workspace/deployment/scripts/run_alloydb_release.sh
     env:
       - "PROJECT_ID=${PROJECT_ID}"
@@ -26,6 +26,7 @@ steps:
       - "RELEASE_COMMIT=${_RELEASE_COMMIT}"
       - "MANIFEST_URI=${_MANIFEST_URI}"
       - "ALLOW_CLOUD_SQL_CUTOVER=${_ALLOW_CLOUD_SQL_CUTOVER}"
+      - "CLOUD_SQL_BACKUP_ID=${_CLOUD_SQL_BACKUP_ID}"
 
 timeout: "7200s"
 
@@ -40,3 +41,4 @@ substitutions:
   _RELEASE_COMMIT: "REQUIRED"
   _MANIFEST_URI: ""
   _ALLOW_CLOUD_SQL_CUTOVER: "false"
+  _CLOUD_SQL_BACKUP_ID: ""

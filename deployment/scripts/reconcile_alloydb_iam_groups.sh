@@ -22,12 +22,13 @@ if [[ "${#iam_groups[@]}" -eq 0 ]]; then
   exit 0
 fi
 
+parent="projects/${PROJECT_ID}/locations/${REGION}/clusters/${CLUSTER_ID}"
+api_root="https://alloydb.googleapis.com/v1beta/${parent}/users"
+access_token="$(gcloud auth print-access-token)"
 existing_users="$(
-  gcloud alloydb users list \
-    --project "${PROJECT_ID}" \
-    --region "${REGION}" \
-    --cluster "${CLUSTER_ID}" \
-    --format=json
+  curl --fail --silent --show-error \
+    -H "Authorization: Bearer ${access_token}" \
+    "${api_root}"
 )"
 
 for group in "${iam_groups[@]}"; do
@@ -37,11 +38,11 @@ for group in "${iam_groups[@]}"; do
     continue
   fi
 
-  gcloud alloydb users create "${group}" \
-    --project "${PROJECT_ID}" \
-    --region "${REGION}" \
-    --cluster "${CLUSTER_ID}" \
-    --type IAM_GROUP \
-    --db-roles alloydbiamuser \
-    --quiet
+  encoded_group="$(jq -rn --arg value "${group}" '$value | @uri')"
+  curl --fail --silent --show-error \
+    -X POST \
+    -H "Authorization: Bearer ${access_token}" \
+    -H "Content-Type: application/json" \
+    -d '{"userType":"ALLOYDB_IAM_GROUP","databaseRoles":["alloydbiamuser"]}' \
+    "${api_root}?userId=${encoded_group}" >/dev/null
 done

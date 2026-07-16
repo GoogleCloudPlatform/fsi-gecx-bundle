@@ -8,7 +8,7 @@ RELEASE_MODE="${RELEASE_MODE:-qualify}"
 MANIFEST_URI="${MANIFEST_URI:-}"
 ALLOW_CLOUD_SQL_CUTOVER="${ALLOW_CLOUD_SQL_CUTOVER:-false}"
 EXPECTED_ALEMBIC_REVISION="2ea57c78ba89"
-cloud_sql_backup_id=""
+cloud_sql_backup_id="${CLOUD_SQL_BACKUP_ID:-}"
 
 declare -A images
 components=(banking-service credit-support-agent data-generator)
