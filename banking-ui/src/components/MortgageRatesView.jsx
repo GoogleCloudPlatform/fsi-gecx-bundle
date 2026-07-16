@@ -141,7 +141,7 @@ function MortgageRatesView() {
                 <div className="text-xs font-bold text-sky-500 uppercase tracking-wider">Simulate Rate Reservation Lock</div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">{simulatingLock.type}</h3>
               </div>
-              <AnalyticsButton trackingName="button_click_mortgage_rates_view_01" 
+              <AnalyticsButton trackingName="mortgage_rates_view_01" 
                 onClick={() => setSimulatingLock(null)}
                 className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors"
               >
@@ -185,7 +185,7 @@ function MortgageRatesView() {
                     Reserving this base pricing guarantee simulates our high-availability real estate integration framework. No initial fee check processing required.
                   </p>
 
-                  <AnalyticsButton trackingName="button_click_mortgage_rates_view_02"
+                  <AnalyticsButton trackingName="mortgage_rates_view_authorize_60_day_guarantee_lock"
                     type="submit"
                     className="w-full py-3.5 rounded-xl text-slate-950 font-bold text-sm shadow-lg hover:scale-[1.02] transition-all duration-300 flex items-center justify-center space-x-2"
                     style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}

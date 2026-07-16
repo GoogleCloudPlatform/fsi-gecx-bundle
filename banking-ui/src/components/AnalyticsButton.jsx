@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 import { logInteractionEvent } from '../utils/analytics.js';
 
 /**
@@ -26,6 +27,8 @@ export const AnalyticsButton = ({
   children,
   ...props
 }) => {
+  const location = useLocation();
+
   const handleClick = (e) => {
     // Determine the name to log: prefer trackingName, fallback to children text or aria-label
     let nameToLog = trackingName;
@@ -37,7 +40,12 @@ export const AnalyticsButton = ({
       }
     }
 
-    logInteractionEvent('button_click', nameToLog, eventProperties);
+    const enhancedProperties = {
+      ...eventProperties,
+      page_path: location.pathname
+    };
+
+    logInteractionEvent('button_click', nameToLog, enhancedProperties);
 
     // Call original onClick if provided
     if (onClick) {

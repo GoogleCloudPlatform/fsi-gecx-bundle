@@ -179,7 +179,7 @@ function DisclosuresView() {
                 <div className="text-[10px] font-mono text-sky-500 uppercase tracking-wider">Verified Certificate Record</div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white mt-0.5">{viewingDocument.title}</h3>
               </div>
-              <AnalyticsButton trackingName="button_click_disclosures_view_01" 
+              <AnalyticsButton trackingName="disclosures_view_01" 
                 onClick={() => setViewingDocument(null)}
                 className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors"
               >
@@ -203,7 +203,7 @@ function DisclosuresView() {
 
             {/* Action buttons */}
             <div className="p-5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 flex justify-end gap-3 flex-shrink-0">
-              <AnalyticsButton trackingName="button_click_disclosures_view_02" 
+              <AnalyticsButton trackingName="disclosures_view_store_document_locally" 
                 onClick={() => {
                   alert('Digital document downloaded successfully.');
                   setViewingDocument(null);
@@ -213,7 +213,7 @@ function DisclosuresView() {
                 <Download className="w-3.5 h-3.5" />
                 <span>Store Document Locally</span>
               </AnalyticsButton>
-              <AnalyticsButton trackingName="button_click_disclosures_view_03" 
+              <AnalyticsButton trackingName="disclosures_view_close_interface" 
                 onClick={() => setViewingDocument(null)}
                 className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
               >

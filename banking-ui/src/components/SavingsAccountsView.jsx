@@ -260,7 +260,7 @@ function SavingsAccountsView() {
         <div className="max-w-7xl mx-auto bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-3xl p-6 md:p-8">
           
           <div className="flex border-b border-slate-200 dark:border-slate-800 mb-6 gap-6 overflow-x-auto pb-px">
-            <AnalyticsButton trackingName="button_click_savings_accounts_view_01" 
+            <AnalyticsButton trackingName="savings_accounts_view_01" 
               onClick={() => setActiveTab("premier")}
               className={`pb-4 text-sm font-semibold relative flex items-center gap-2 cursor-pointer transition-colors ${
                 activeTab === "premier" 
@@ -274,7 +274,7 @@ function SavingsAccountsView() {
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full" />
               )}
             </AnalyticsButton>
-            <AnalyticsButton trackingName="button_click_savings_accounts_view_02" 
+            <AnalyticsButton trackingName="savings_accounts_view_02" 
               onClick={() => setActiveTab("clubs")}
               className={`pb-4 text-sm font-semibold relative flex items-center gap-2 cursor-pointer transition-colors ${
                 activeTab === "clubs" 
@@ -288,7 +288,7 @@ function SavingsAccountsView() {
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full" />
               )}
             </AnalyticsButton>
-            <AnalyticsButton trackingName="button_click_savings_accounts_view_03" 
+            <AnalyticsButton trackingName="savings_accounts_view_03" 
               onClick={() => setActiveTab("faqs")}
               className={`pb-4 text-sm font-semibold relative flex items-center gap-2 cursor-pointer transition-colors ${
                 activeTab === "faqs" 

@@ -57,7 +57,7 @@ export default function CertificateMatrix({ onOpenAccount }) {
                 ${prod.minDeposit.toLocaleString()}
               </td>
               <td className="p-5 text-right">
-                <AnalyticsButton trackingName="button_click_certificate_matrix_01"
+                <AnalyticsButton trackingName="certificate_matrix_open"
                   onClick={() => onOpenAccount && onOpenAccount(prod)}
                   className="px-4 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 font-bold text-xs transition-colors flex items-center gap-1 ml-auto"
                 >

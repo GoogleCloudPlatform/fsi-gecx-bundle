@@ -344,7 +344,7 @@ function AdminMessagingView({ fbUser }) {
       {/* Header Info */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div className="text-left">
-          <AnalyticsButton trackingName="button_click_admin_messaging_view_01" 
+          <AnalyticsButton trackingName="admin_messaging_view_back_to_admin_portal" 
             onClick={() => navigate('/admin')}
             className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors mb-3 group"
           >
@@ -444,7 +444,7 @@ function AdminMessagingView({ fbUser }) {
         <div className="md:col-span-4 border-r border-slate-200 dark:border-slate-800/80 flex flex-col h-full bg-slate-50/50 dark:bg-slate-900/50">
           <div className="p-4 border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between gap-3 bg-white dark:bg-slate-900">
             <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">Customer Conversations</span>
-            <AnalyticsButton trackingName="button_click_admin_messaging_view_02"
+            <AnalyticsButton trackingName="admin_messaging_view_new_thread"
               disabled={!selectedCustomerId}
               onClick={() => {
                 setIsComposing(true);
@@ -539,7 +539,7 @@ function AdminMessagingView({ fbUser }) {
                         </p>
                       </div>
 
-                      <AnalyticsButton trackingName="button_click_admin_messaging_view_03"
+                      <AnalyticsButton trackingName="admin_messaging_view_delete_thread"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeleteThread(thread.thread_id);
@@ -563,7 +563,7 @@ function AdminMessagingView({ fbUser }) {
           {isComposing && (
             <div className="flex flex-col h-full p-6 text-left">
               <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100 dark:border-slate-800/50">
-                <AnalyticsButton trackingName="button_click_admin_messaging_view_04" 
+                <AnalyticsButton trackingName="admin_messaging_view_04" 
                   onClick={() => setIsComposing(false)}
                   className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
                 >
@@ -605,14 +605,14 @@ function AdminMessagingView({ fbUser }) {
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800/50">
-                  <AnalyticsButton trackingName="button_click_admin_messaging_view_05"
+                  <AnalyticsButton trackingName="admin_messaging_view_cancel"
                     type="button"
                     onClick={() => setIsComposing(false)}
                     className="px-6 py-2.5 text-sm font-semibold rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
                   >
                     Cancel
                   </AnalyticsButton>
-                  <AnalyticsButton trackingName="button_click_admin_messaging_view_06"
+                  <AnalyticsButton trackingName="admin_messaging_view_06"
                     type="submit"
                     disabled={isSending || !newText.trim()}
                     className="px-6 py-2.5 text-sm font-semibold rounded-full text-slate-950 hover:scale-102 active:scale-98 transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
@@ -649,7 +649,7 @@ function AdminMessagingView({ fbUser }) {
                   </span>
                   <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
                     <span>Thread ID: {activeThreadId}</span>
-                    <AnalyticsButton trackingName="button_click_admin_messaging_view_07"
+                    <AnalyticsButton trackingName="admin_messaging_view_copy_thread_id"
                       onClick={handleCopyThreadId}
                       className="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
                       title="Copy Thread ID"
@@ -663,14 +663,14 @@ function AdminMessagingView({ fbUser }) {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <AnalyticsButton trackingName="button_click_admin_messaging_view_08"
+                  <AnalyticsButton trackingName="admin_messaging_view_refresh_messages"
                     onClick={() => fetchCustomerMessages(selectedCustomerId, true)}
                     className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer flex items-center justify-center"
                     title="Refresh Messages"
                   >
                     <RefreshCw className="w-4 h-4" />
                   </AnalyticsButton>
-                  <AnalyticsButton trackingName="button_click_admin_messaging_view_09"
+                  <AnalyticsButton trackingName="admin_messaging_view_delete_thread"
                     onClick={() => handleDeleteThread(activeThreadId)}
                     className="p-1.5 rounded-lg bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-950/50 text-red-500 transition-colors cursor-pointer flex items-center justify-center"
                     title="Delete Thread"
@@ -723,7 +723,7 @@ function AdminMessagingView({ fbUser }) {
                           </span>
                         </div>
 
-                        <AnalyticsButton trackingName="button_click_admin_messaging_view_10"
+                        <AnalyticsButton trackingName="admin_messaging_view_delete_message"
                           onClick={() => handleDeleteMessage(msg.message_id)}
                           className="opacity-0 group-hover:opacity-100 p-1 rounded-md bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-red-500 transition-all cursor-pointer"
                           title="Delete message"
@@ -752,7 +752,7 @@ function AdminMessagingView({ fbUser }) {
                   }}
                   required
                 />
-                <AnalyticsButton trackingName="button_click_admin_messaging_view_11"
+                <AnalyticsButton trackingName="admin_messaging_view_send_message"
                   type="submit"
                   disabled={isSending || !replyText.trim()}
                   className="p-3.5 rounded-2xl text-slate-950 font-semibold shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center shrink-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
@@ -783,7 +783,7 @@ function AdminMessagingView({ fbUser }) {
                   Select a customer thread on the left panel or click "New Thread" to draft a new support request to the customer.
                 </p>
               </div>
-              <AnalyticsButton trackingName="button_click_admin_messaging_view_12"
+              <AnalyticsButton trackingName="admin_messaging_view_compose_message"
                 disabled={!selectedCustomerId}
                 onClick={() => setIsComposing(true)}
                 className="mt-2 px-5 py-2 text-xs font-semibold rounded-full text-slate-950 shadow-lg hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"

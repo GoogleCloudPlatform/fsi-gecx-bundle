@@ -81,7 +81,7 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
             {cards.map((card, idx) => {
               const isSelected = idx === selectedCardIndex;
               return (
-                <AnalyticsButton trackingName="button_click_credit_cards_view_01"
+                <AnalyticsButton trackingName="credit_cards_view_01"
                   key={idx}
                   onClick={() => setSelectedCardIndex(idx)}
                   className={`px-5 py-3 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center space-x-2 border ${
@@ -200,7 +200,7 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
 
               {/* Action Buttons */}
               <div className="pt-4 flex flex-col sm:flex-row gap-4 items-center">
-                <AnalyticsButton trackingName="button_click_credit_cards_view_02"
+                <AnalyticsButton trackingName="credit_cards_view_apply_now"
                   onClick={() => {
                     const cardSlug = selectedCard.name.toLowerCase().replace(/ /g, '-');
                     handleApply(cardSlug);
@@ -213,7 +213,7 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
                 </AnalyticsButton>
                 
                 {activeBot !== undefined && setActiveBot && (
-                  <AnalyticsButton trackingName="button_click_credit_cards_view_03" 
+                  <AnalyticsButton trackingName="credit_cards_view_03" 
                     onClick={() => {
                       setActiveBot(selectedCard.botName);
                       setTimeout(() => setActiveBot(null), 4000);
@@ -300,7 +300,7 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
                 <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
                   To apply for a credit card, please sign in using the profile button in the top-right of the page and then proceed with your application.
                 </p>
-                <AnalyticsButton trackingName="button_click_credit_cards_view_04"
+                <AnalyticsButton trackingName="credit_cards_view_acknowledge"
                   onClick={() => setIsAuthModalOpen(false)}
                   className="w-full py-2.5 rounded-xl text-slate-950 font-bold text-sm shadow-md hover:scale-[1.02] transition-all duration-300 cursor-pointer"
                   style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}

@@ -67,7 +67,7 @@ function AccountOpeningModal({ openingAccount, onClose, accountType = 'CHECKING'
             <div className="text-xs text-teal-500 font-semibold uppercase tracking-wider">Secure Primary Deposit Context</div>
             <h3 className="text-xl font-bold text-slate-900 dark:text-white mt-0.5">{openingAccount.name}</h3>
           </div>
-          <AnalyticsButton trackingName="button_click_account_opening_modal_01" 
+          <AnalyticsButton trackingName="account_opening_modal_01" 
             onClick={onClose}
             className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors"
           >
@@ -107,7 +107,7 @@ function AccountOpeningModal({ openingAccount, onClose, accountType = 'CHECKING'
                   Core Ownership Layer Status
                 </label>
                 <div className="grid grid-cols-2 gap-3">
-                  <AnalyticsButton trackingName="button_click_account_opening_modal_02"
+                  <AnalyticsButton trackingName="account_opening_modal_existing_depositor"
                     type="button"
                     onClick={() => setMemberType('current')}
                     className={`p-3 rounded-xl border text-center text-sm font-bold transition-all ${
@@ -118,7 +118,7 @@ function AccountOpeningModal({ openingAccount, onClose, accountType = 'CHECKING'
                   >
                     Existing Depositor
                   </AnalyticsButton>
-                  <AnalyticsButton trackingName="button_click_account_opening_modal_03"
+                  <AnalyticsButton trackingName="account_opening_modal_new_primary_member"
                     type="button"
                     onClick={() => setMemberType('new')}
                     className={`p-3 rounded-xl border text-center text-sm font-bold transition-all ${
@@ -155,7 +155,7 @@ function AccountOpeningModal({ openingAccount, onClose, accountType = 'CHECKING'
               </div>
 
               <div className="space-y-3 pt-2">
-                <AnalyticsButton trackingName="button_click_account_opening_modal_04"
+                <AnalyticsButton trackingName="account_opening_modal_04"
                   type="submit"
                   disabled={isSubmitting}
                   className="w-full py-4 rounded-xl text-slate-950 font-bold text-sm shadow-lg hover:scale-[1.02] transition-all duration-300 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:pointer-events-none"
