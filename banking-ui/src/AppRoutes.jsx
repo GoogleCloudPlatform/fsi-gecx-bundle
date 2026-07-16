@@ -68,25 +68,28 @@ export default function AppRoutes({
   const prevLocationRef = React.useRef(null);
 
   useEffect(() => {
+    const payload = {
+      page_title: PAGE_TITLES[location.pathname] || document.title,
+      page_location: window.location.href,
+      page_path: location.pathname,
+      page_search: location.search,
+      page_hash: location.hash,
+    };
+
+    if (prevLocationRef.current) {
+      payload.page_referrer = window.location.origin + prevLocationRef.current.pathname + prevLocationRef.current.search;
+    } else {
+      payload.page_referrer = document.referrer;
+    }
+
+    // console.log(`[Analytics Event] page_view -> ${location.pathname}`, payload);
+
     if (window.firebaseAnalytics && window.firebaseLogEvent) {
-      const payload = {
-        page_title: PAGE_TITLES[location.pathname] || document.title,
-        page_location: window.location.href,
-        page_path: location.pathname,
-        page_search: location.search,
-        page_hash: location.hash,
-      };
-
-      if (prevLocationRef.current) {
-        payload.page_referrer = window.location.origin + prevLocationRef.current.pathname + prevLocationRef.current.search;
-      } else {
-        payload.page_referrer = document.referrer;
-      }
-
       // https://firebase.google.com/docs/reference/js/analytics.md#logevent_0792e28
       window.firebaseLogEvent(window.firebaseAnalytics, 'page_view', payload);
-      prevLocationRef.current = location;
     }
+
+    prevLocationRef.current = location;
   }, [location]);
 
   return (
