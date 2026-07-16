@@ -46,7 +46,7 @@ resource "google_compute_instance" "datastream_alloydb_proxy" {
     startup-script = <<-EOT
       #!/bin/bash
       iptables -I INPUT -p tcp --dport 5432 -s 172.16.1.0/29 -j ACCEPT
-      docker run -d --restart=always --net=host alpine/socat \
+      docker run -d --restart=always --net=host alpine/socat@sha256:beb4a68d9e4fe6b0f21ea774a0fde6c31f580dde6368939ed70100c5385b015e \
         TCP-LISTEN:5432,fork,reuseaddr TCP:${google_alloydb_instance.banking_primary.ip_address}:5432
     EOT
   }

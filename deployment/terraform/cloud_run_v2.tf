@@ -297,6 +297,9 @@ resource "google_cloud_run_v2_service" "banking_service" {
   depends_on = [
     google_project_service.run_googleapis_com,
     google_secret_manager_secret_iam_member.banking_service_card_network_switch_token_accessor,
+    google_alloydb_user.service_iam_users,
+    google_project_iam_member.banking_service_sa_alloydb_client,
+    google_project_iam_member.banking_service_sa_service_usage_consumer,
   ]
 }
 
@@ -1193,6 +1196,8 @@ resource "google_cloud_run_v2_job" "db_reset_job" {
     google_alloydb_user.service_iam_users,
     google_cloud_tasks_queue.data_generator_synthetic_schedule,
     google_project_iam_member.banking_reset_sa_cloudtasks_queue_admin,
+    google_project_iam_member.banking_reset_sa_alloydb_client,
+    google_project_iam_member.banking_reset_sa_service_usage_consumer,
   ]
 }
 

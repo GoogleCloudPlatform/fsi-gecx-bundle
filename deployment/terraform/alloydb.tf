@@ -29,6 +29,17 @@ locals {
       name = split(":", member)[0] == "serviceAccount" ? replace(split(":", member)[1], ".gserviceaccount.com", "") : split(":", member)[1]
     }
   }
+  # google_alloydb_user in google provider 7.28 cannot model IAM_GROUP even
+  # though the AlloyDB API supports it. The release controller reconciles these
+  # groups with gcloud; Terraform continues to own their project IAM bindings.
+  db_iam_support_users = {
+    for member, principal in local.db_iam_support_members : member => principal
+    if split(":", member)[0] != "group"
+  }
+  db_iam_viewer_users = {
+    for member, principal in local.db_iam_viewer_members : member => principal
+    if split(":", member)[0] != "group"
+  }
 }
 
 resource "random_password" "postgres_root_password" {
@@ -137,7 +148,7 @@ resource "google_alloydb_user" "migration_iam_user" {
 }
 
 resource "google_alloydb_user" "database_iam_support_users" {
-  for_each       = local.db_iam_support_members
+  for_each       = local.db_iam_support_users
   cluster        = google_alloydb_cluster.banking_data.name
   user_id        = each.value.name
   user_type      = "ALLOYDB_IAM_USER"
@@ -146,7 +157,7 @@ resource "google_alloydb_user" "database_iam_support_users" {
 }
 
 resource "google_alloydb_user" "database_iam_viewer_users" {
-  for_each       = local.db_iam_viewer_members
+  for_each       = local.db_iam_viewer_users
   cluster        = google_alloydb_cluster.banking_data.name
   user_id        = each.value.name
   user_type      = "ALLOYDB_IAM_USER"

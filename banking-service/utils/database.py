@@ -327,5 +327,10 @@ def init_db():
         logger.warning(f"Could not auto-initialize tables: {e}")
 
 
-if not _is_alembic_runtime() and os.getenv("DISABLE_INIT_DB") != "true":
+auto_init_default = "true" if DATABASE_URL.startswith("sqlite") else "false"
+if (
+    not _is_alembic_runtime()
+    and os.getenv("DISABLE_INIT_DB") != "true"
+    and os.getenv("ENABLE_INIT_DB", auto_init_default).lower() == "true"
+):
     init_db()

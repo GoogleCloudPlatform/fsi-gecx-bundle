@@ -68,6 +68,8 @@ terraform -chdir=deployment/terraform plan -input=false \
   -var-file="environment/${PROJECT_ID}/terraform.tfvars" -out=/workspace/release.tfplan
 terraform -chdir=deployment/terraform apply -input=false -auto-approve /workspace/release.tfplan
 
+PROJECT_ID="${PROJECT_ID}" REGION="${REGION}" deployment/scripts/reconcile_alloydb_iam_groups.sh
+
 banking_image="${images[banking-service]}"
 gcloud run jobs update banking-db-bootstrap --project "${PROJECT_ID}" --region "${REGION}" --image "${banking_image}" --quiet
 gcloud run jobs update banking-db-migrate --project "${PROJECT_ID}" --region "${REGION}" --image "${banking_image}" --quiet
