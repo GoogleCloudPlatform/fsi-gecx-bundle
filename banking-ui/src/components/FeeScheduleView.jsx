@@ -122,7 +122,8 @@ function FeeScheduleView({ activeBot, setActiveBot }) {
           {categories.map((cat, idx) => {
             const isSelected = selectedCategory === cat;
             return (
-              <AnalyticsButton analyticsId="fee_schedule_view_01"
+              <AnalyticsButton
+                analyticsId="fee_schedule_view_01"
                 key={idx}
                 onClick={() => setSelectedCategory(cat)}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 cursor-pointer ${
@@ -192,7 +193,8 @@ function FeeScheduleView({ activeBot, setActiveBot }) {
             Our digital advisors instantly trace any statement line context to resolve balance queries.
           </p>
           {activeBot !== undefined && setActiveBot && (
-            <AnalyticsButton analyticsId="fee_schedule_view_launch_account_concierge"
+            <AnalyticsButton
+              analyticsId="fee_schedule_view_launch_account_concierge"
               onClick={() => {
                 setActiveBot('Account Support Bot');
                 setTimeout(() => setActiveBot(null), 4000);

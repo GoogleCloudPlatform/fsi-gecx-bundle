@@ -55,7 +55,8 @@ export default function CreditCardMatrix({ onApply }) {
                 {card.regApr}
               </td>
               <td className="p-5 text-center">
-                <AnalyticsButton analyticsId="credit_card_matrix_apply"
+                <AnalyticsButton
+                  analyticsId="credit_card_matrix_apply"
                   onClick={() => {
                     const cardSlug = card.name.toLowerCase().replace(/ /g, '-');
                     if (onApply) {

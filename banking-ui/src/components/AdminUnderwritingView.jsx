@@ -417,7 +417,8 @@ function AdminUnderwritingView({ fbUser }) {
       {/* Portal Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 mb-8 pb-6 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <AnalyticsButton analyticsId="admin_underwriting_view_back_to_admin_portal" 
+          <AnalyticsButton
+            analyticsId="admin_underwriting_view_back_to_admin_portal" 
             onClick={() => navigate('/admin')}
             className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors mb-3 group"
           >
@@ -449,7 +450,8 @@ function AdminUnderwritingView({ fbUser }) {
               <div className="text-xs font-bold text-slate-700 dark:text-slate-300">Awaiting Manual Audit</div>
             </div>
           </div>
-          <AnalyticsButton analyticsId="admin_underwriting_view_take_underwriting_portal_tour"
+          <AnalyticsButton
+            analyticsId="admin_underwriting_view_take_underwriting_portal_tour"
             id="underwriting-tour-btn"
             onClick={() => {
               localStorage.removeItem('underwriting-tour-completed');
@@ -461,14 +463,16 @@ function AdminUnderwritingView({ fbUser }) {
           >
             <GoogleCompassIcon className="w-4 h-4 text-emerald-500" />
           </AnalyticsButton>
-          <AnalyticsButton analyticsId="admin_underwriting_view_03" 
+          <AnalyticsButton
+            analyticsId="admin_underwriting_view_03" 
             id="exceptions-queue-refresh"
             onClick={() => fetchExceptions()}
             className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all flex items-center justify-center hover:rotate-180"
           >
             <RefreshCw className="w-4 h-4" />
           </AnalyticsButton>
-          <AnalyticsButton analyticsId="admin_underwriting_view_gcp_app_integration_info_modal"
+          <AnalyticsButton
+            analyticsId="admin_underwriting_view_gcp_app_integration_info_modal"
             onClick={() => setIsInfoModalOpen(true)}
             className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all flex items-center justify-center active:scale-95 cursor-pointer"
             title="GCP App Integration Info"
@@ -500,7 +504,8 @@ function AdminUnderwritingView({ fbUser }) {
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-2">Ingestion Exception Queue</span>
           
           <div className="flex border-b border-slate-200 dark:border-slate-800/80 my-2 shrink-0">
-            <AnalyticsButton analyticsId="admin_underwriting_view_manual_queue_tier_1"
+            <AnalyticsButton
+              analyticsId="admin_underwriting_view_manual_queue_tier_1"
               type="button"
               onClick={() => {
                 setActiveTab('tier1');
@@ -511,7 +516,8 @@ function AdminUnderwritingView({ fbUser }) {
             >
               Manual Queue (Tier 1)
             </AnalyticsButton>
-            <AnalyticsButton analyticsId="admin_underwriting_view_spot_check_tier_2"
+            <AnalyticsButton
+              analyticsId="admin_underwriting_view_spot_check_tier_2"
               type="button"
               onClick={() => {
                 setActiveTab('tier2');
@@ -789,14 +795,16 @@ function AdminUnderwritingView({ fbUser }) {
 
                   {/* Action buttons */}
                   <div className="pt-4 flex gap-4 justify-end border-t border-slate-100 dark:border-slate-850">
-                    <AnalyticsButton analyticsId="admin_underwriting_view_cancel" 
+                    <AnalyticsButton
+                      analyticsId="admin_underwriting_view_cancel" 
                       type="button" 
                       onClick={() => setSelectedArtifact(null)}
                       className="px-5 py-2.5 text-xs font-semibold rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 text-slate-600 dark:text-slate-300 transition-all"
                     >
                       Cancel
                     </AnalyticsButton>
-                    <AnalyticsButton analyticsId="admin_underwriting_view_08" 
+                    <AnalyticsButton
+                      analyticsId="admin_underwriting_view_08" 
                       type="submit"
                       disabled={isSubmitting || (selectedArtifact.verification_tier === 'TIER_2_SPOT_CHECK' && (!wagesChecked || !employerChecked))}
                       className="px-6 py-2.5 text-xs font-bold rounded-xl text-slate-950 shadow-md hover:scale-102 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
@@ -839,7 +847,8 @@ function AdminUnderwritingView({ fbUser }) {
               </p>
             </div>
             <div className="pt-4 flex justify-center">
-              <AnalyticsButton analyticsId="admin_underwriting_view_reconcile_workspace" 
+              <AnalyticsButton
+                analyticsId="admin_underwriting_view_reconcile_workspace" 
                 onClick={() => {
                   setShowConflictModal(false);
                   setSelectedArtifact(null);

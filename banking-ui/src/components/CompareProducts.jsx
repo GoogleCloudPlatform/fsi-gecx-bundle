@@ -129,7 +129,8 @@ export default function CompareProducts({ fbUser }) {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
-              <AnalyticsButton analyticsId="compare_products_01"
+              <AnalyticsButton
+                analyticsId="compare_products_01"
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-6 py-4 rounded-2xl font-bold text-sm transition-all duration-300 flex items-center space-x-2.5 border cursor-pointer ${isActive
@@ -186,7 +187,8 @@ export default function CompareProducts({ fbUser }) {
                 <div className="text-xs font-bold text-sky-500 uppercase tracking-wider">Simulate Rate Reservation Lock</div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">{simulatingLock.type}</h3>
               </div>
-              <AnalyticsButton analyticsId="compare_products_02"
+              <AnalyticsButton
+                analyticsId="compare_products_02"
                 onClick={() => setSimulatingLock(null)}
                 className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors cursor-pointer"
               >
@@ -230,7 +232,8 @@ export default function CompareProducts({ fbUser }) {
                     Reserving this base pricing guarantee simulates our high-availability real estate integration framework. No initial fee check processing required.
                   </p>
 
-                  <AnalyticsButton analyticsId="compare_products_authorize_60_day_guarantee_lock"
+                  <AnalyticsButton
+                    analyticsId="compare_products_authorize_60_day_guarantee_lock"
                     type="submit"
                     className="w-full py-3.5 rounded-xl text-slate-950 font-bold text-sm shadow-lg hover:scale-[1.02] transition-all duration-300 flex items-center justify-center space-x-2 cursor-pointer"
                     style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}
@@ -256,7 +259,8 @@ export default function CompareProducts({ fbUser }) {
             <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
               To apply for a credit card, please sign in using the profile button in the top-right of the page and then proceed with your application.
             </p>
-            <AnalyticsButton analyticsId="compare_products_acknowledge"
+            <AnalyticsButton
+              analyticsId="compare_products_acknowledge"
               onClick={() => setIsAuthModalOpen(false)}
               className="w-full py-2.5 rounded-xl text-slate-950 font-bold text-sm shadow-md hover:scale-[1.02] transition-all duration-300 cursor-pointer"
               style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}

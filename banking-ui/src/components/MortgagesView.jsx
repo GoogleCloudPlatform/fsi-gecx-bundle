@@ -297,7 +297,8 @@ function MortgagesView({ activeBot, setActiveBot }) {
                   </div>
 
                   <div className="pt-4 flex flex-wrap gap-3 items-center justify-between">
-                    <AnalyticsButton analyticsId="mortgages_view_connect_program_context"
+                    <AnalyticsButton
+                      analyticsId="mortgages_view_connect_program_context"
                       onClick={() => setApplyingProgram(prog)}
                       className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs transition-colors"
                     >
@@ -305,7 +306,8 @@ function MortgagesView({ activeBot, setActiveBot }) {
                     </AnalyticsButton>
                     
                     {activeBot !== undefined && setActiveBot && (
-                      <AnalyticsButton analyticsId="mortgages_view_ask_advisor" 
+                      <AnalyticsButton
+                        analyticsId="mortgages_view_ask_advisor" 
                         onClick={() => {
                           setActiveBot(prog.botName);
                           setTimeout(() => setActiveBot(null), 4000);
@@ -365,7 +367,8 @@ function MortgagesView({ activeBot, setActiveBot }) {
                 </div>
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white mt-0.5">{applyingProgram.name}</h3>
               </div>
-              <AnalyticsButton analyticsId="mortgages_view_03" 
+              <AnalyticsButton
+                analyticsId="mortgages_view_03" 
                 onClick={() => setApplyingProgram(null)}
                 className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors"
               >
@@ -392,7 +395,8 @@ function MortgagesView({ activeBot, setActiveBot }) {
                       Verify Primary Member Context Line
                     </label>
                     <div className="grid grid-cols-2 gap-3">
-                      <AnalyticsButton analyticsId="mortgages_view_existing_member_line"
+                      <AnalyticsButton
+                        analyticsId="mortgages_view_existing_member_line"
                         type="button"
                         onClick={() => setMemberType('current')}
                         className={`p-3 rounded-xl border text-center text-sm font-bold transition-all ${
@@ -403,7 +407,8 @@ function MortgagesView({ activeBot, setActiveBot }) {
                       >
                         Existing Member Line
                       </AnalyticsButton>
-                      <AnalyticsButton analyticsId="mortgages_view_new_prospective_line"
+                      <AnalyticsButton
+                        analyticsId="mortgages_view_new_prospective_line"
                         type="button"
                         onClick={() => setMemberType('new')}
                         className={`p-3 rounded-xl border text-center text-sm font-bold transition-all ${
@@ -425,7 +430,8 @@ function MortgagesView({ activeBot, setActiveBot }) {
                   </div>
 
                   <div className="space-y-3 pt-2">
-                    <AnalyticsButton analyticsId="mortgages_view_06"
+                    <AnalyticsButton
+                      analyticsId="mortgages_view_06"
                       type="submit"
                       disabled={isSubmitting}
                       className="w-full py-4 rounded-xl text-slate-950 font-bold text-sm shadow-lg hover:scale-[1.02] transition-all duration-300 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:pointer-events-none"
