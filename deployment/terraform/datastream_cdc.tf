@@ -35,11 +35,11 @@ resource "google_datastream_connection_profile" "postgres_source" {
   create_without_validation = true
 
   postgresql_profile {
-    hostname = google_compute_address.proxy_internal_ip.address
+    hostname = google_compute_address.datastream_alloydb_proxy_internal_ip.address
     port     = 5432
-    username = google_sql_user.banking_bq_connector.name
+    username = google_alloydb_user.banking_bq_connector.user_id
     password = random_password.banking_bq_connector_password.result
-    database = google_sql_database.banking.name
+    database = "banking"
   }
 
   private_connectivity {
@@ -48,8 +48,8 @@ resource "google_datastream_connection_profile" "postgres_source" {
 
   depends_on = [
     google_project_service.datastream_googleapis_com,
-    google_compute_instance.cloudsql_proxy_vm,
-    google_compute_firewall.allow_datastream_to_proxy
+    google_compute_instance.datastream_alloydb_proxy,
+    google_compute_firewall.allow_datastream_to_alloydb_proxy,
   ]
 }
 

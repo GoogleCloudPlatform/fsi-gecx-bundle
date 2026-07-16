@@ -125,10 +125,7 @@ def get_iam_connection(url_str: str):
 
     url = make_url(url_str)
     credentials, _project = google.auth.default(
-        scopes=[
-            "https://www.googleapis.com/auth/sqlservice.login",
-            "https://www.googleapis.com/auth/cloud-platform",
-        ]
+        scopes=["https://www.googleapis.com/auth/cloud-platform"]
     )
     credentials.refresh(google.auth.transport.requests.Request())
 
@@ -141,7 +138,7 @@ def get_iam_connection(url_str: str):
     }
     if host_val and not host_val.startswith("/"):
         conn_params["port"] = url.port or 5432
-        conn_params["sslmode"] = url.query.get("sslmode", "verify-full")
+        conn_params["sslmode"] = url.query.get("sslmode", "require")
     return psycopg2.connect(**conn_params)
 
 

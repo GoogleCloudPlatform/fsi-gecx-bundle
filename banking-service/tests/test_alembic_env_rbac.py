@@ -17,6 +17,7 @@ from scripts.database_lifecycle import (
 def test_database_role_manifest_is_explicit_and_least_privilege() -> None:
     config = LifecycleConfig(
         project_id="example-project",
+        target_database="banking",
         migration_user="postgres",
         cdc_user="banking_bq_connector",
         create_missing_principals=False,
@@ -32,7 +33,7 @@ def test_database_role_manifest_is_explicit_and_least_privilege() -> None:
         KYC_RW_ROLE: ("kyc-service-sa@example-project.iam",),
         LEDGER_RW_ROLE: ("ledger-service-sa@example-project.iam",),
         VOICE_RW_ROLE: ("voice-agent-sa@example-project.iam",),
-        DATA_GENERATOR_RW_ROLE: ("data-generator-sa@example-project.iam",),
+        DATA_GENERATOR_RW_ROLE: ("datagen-service-sa@example-project.iam",),
         RESET_RW_ROLE: ("banking-db-reset-sa@example-project.iam",),
         SUPPORT_RW_ROLE: ("support@example.com",),
         VIEWER_RO_ROLE: ("viewer@example.com",),

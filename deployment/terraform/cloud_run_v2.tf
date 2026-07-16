@@ -47,20 +47,8 @@ resource "google_cloud_run_v2_service" "banking_service" {
       egress = "PRIVATE_RANGES_ONLY"
     }
 
-    volumes {
-      name = "cloudsql"
-      cloud_sql_instance {
-        instances = [google_sql_database_instance.banking_data.connection_name]
-      }
-    }
-
     containers {
       image = local.banking_service_url
-
-      volume_mounts {
-        name       = "cloudsql"
-        mount_path = "/cloudsql"
-      }
 
       resources {
         startup_cpu_boost = true
@@ -77,7 +65,7 @@ resource "google_cloud_run_v2_service" "banking_service" {
 
       env {
         name  = "DATABASE_URL"
-        value = "postgresql+psycopg2://${google_sql_user.banking_service_sa_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+        value = "postgresql+psycopg2://${local.alloydb_iam_users.banking_service}@${google_alloydb_instance.banking_primary.ip_address}:5432/banking?sslmode=require"
       }
 
       env {
@@ -633,20 +621,8 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
       egress = "PRIVATE_RANGES_ONLY"
     }
 
-    volumes {
-      name = "cloudsql"
-      cloud_sql_instance {
-        instances = [google_sql_database_instance.banking_data.connection_name]
-      }
-    }
-
     containers {
       image = "${var.region}-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/credit-support-agent:latest"
-
-      volume_mounts {
-        name       = "cloudsql"
-        mount_path = "/cloudsql"
-      }
 
       resources {
         cpu_idle          = false
@@ -660,7 +636,7 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
 
       env {
         name  = "DATABASE_URL"
-        value = "postgresql+asyncpg://${google_sql_user.voice_agent_sa_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+        value = "postgresql+asyncpg://${local.alloydb_iam_users.voice_agent}@${google_alloydb_instance.banking_primary.ip_address}:5432/banking?sslmode=require"
       }
 
       env {
@@ -742,9 +718,9 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
     google_project_service.run_googleapis_com,
     google_secret_manager_secret_iam_member.voice_agent_key_accessor,
     google_secret_manager_secret_iam_member.voice_agent_secret_accessor,
-    google_sql_user.voice_agent_sa_iam_user,
-    google_project_iam_member.voice_agent_sa_cloudsql_client,
-    google_project_iam_member.voice_agent_sa_cloudsql_instance_user
+    google_alloydb_user.service_iam_users,
+    google_project_iam_member.voice_agent_sa_alloydb_client,
+    google_project_iam_member.voice_agent_sa_service_usage_consumer,
   ]
 }
 
@@ -772,20 +748,8 @@ resource "google_cloud_run_v2_service" "data_generator" {
       egress = "PRIVATE_RANGES_ONLY"
     }
 
-    volumes {
-      name = "cloudsql"
-      cloud_sql_instance {
-        instances = [google_sql_database_instance.banking_data.connection_name]
-      }
-    }
-
     containers {
       image = local.data_generator_image_url
-
-      volume_mounts {
-        name       = "cloudsql"
-        mount_path = "/cloudsql"
-      }
 
       env {
         name  = "BANKING_SERVICE_URL"
@@ -794,7 +758,7 @@ resource "google_cloud_run_v2_service" "data_generator" {
 
       env {
         name  = "DATA_GENERATOR_DATABASE_URL"
-        value = "postgresql+psycopg2://${google_sql_user.data_generator_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+        value = "postgresql+psycopg2://${local.alloydb_iam_users.data_generator}@${google_alloydb_instance.banking_primary.ip_address}:5432/banking?sslmode=require"
       }
 
       env {
@@ -944,17 +908,86 @@ resource "google_cloud_run_v2_service" "data_generator" {
 
   depends_on = [
     google_project_service.run_googleapis_com,
-    google_sql_user.data_generator_iam_user,
+    google_alloydb_user.service_iam_users,
     google_cloud_tasks_queue.data_generator_synthetic_schedule,
     google_service_account_iam_member.datagen_sa_cloudtasks_oidc_act_as_self,
-    google_project_iam_member.datagen_sa_cloudsql_client,
-    google_project_iam_member.datagen_sa_cloudsql_instance_user,
+    google_project_iam_member.datagen_sa_alloydb_client,
+    google_project_iam_member.datagen_sa_service_usage_consumer,
     google_secret_manager_secret_iam_member.data_generator_card_network_switch_token_accessor,
     google_secret_manager_secret_iam_member.data_generator_redis_password_accessor,
   ]
 }
 
-# Isolated Cloud Run Job tasked with executing alembic database schema migrations
+# Creates the application database and cluster-wide group memberships before
+# Alembic runs. The built-in administrator credential is restricted to this job.
+resource "google_cloud_run_v2_job" "db_bootstrap_job" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  name     = "banking-db-bootstrap"
+  location = var.region
+
+  template {
+    template {
+      max_retries     = 1
+      timeout         = "300s"
+      service_account = google_service_account.banking_db_migration_service_account.email
+      containers {
+        image   = local.banking_service_url
+        command = ["python"]
+        args    = ["-m", "scripts.database_lifecycle", "bootstrap"]
+        env {
+          name  = "DATABASE_URL"
+          value = "postgresql+psycopg2://postgres@${google_alloydb_instance.banking_primary.ip_address}:5432/postgres?sslmode=require"
+        }
+        env {
+          name = "DB_PASSWORD"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.postgres_banking_root_password.secret_id
+              version = "latest"
+            }
+          }
+        }
+        env {
+          name  = "PROJECT_ID"
+          value = var.project_id
+        }
+        env {
+          name  = "DB_MIGRATION_DATABASE_USER"
+          value = local.alloydb_migration_user
+        }
+        env {
+          name  = "CDC_REPLICATION_USER"
+          value = google_alloydb_user.banking_bq_connector.user_id
+        }
+        env {
+          name  = "IAM_DBA_USERS"
+          value = join(",", [for _, v in local.db_iam_support_members : v.name])
+        }
+        env {
+          name  = "IAM_DB_VIEWER_USERS"
+          value = join(",", [for _, v in local.db_iam_viewer_members : v.name])
+        }
+      }
+      vpc_access {
+        network_interfaces {
+          network    = google_compute_network.fsi_gecx_vpc.name
+          subnetwork = google_compute_subnetwork.fsi_gecx_subnet.name
+        }
+        egress = "PRIVATE_RANGES_ONLY"
+      }
+    }
+  }
+  lifecycle {
+    ignore_changes = [template[0].template[0].containers[0].image, client, client_version]
+  }
+  depends_on = [
+    google_secret_manager_secret_iam_member.banking_db_migration_postgres_root_password_accessor,
+    google_alloydb_user.migration_iam_user,
+    google_alloydb_user.banking_bq_connector,
+  ]
+}
+
+# Isolated Cloud Run Job tasked with executing Alembic schema migrations.
 resource "google_cloud_run_v2_job" "db_migration_job" {
   count    = var.deploy_cloud_run_services ? 1 : 0
   name     = "banking-db-migrate"
@@ -966,41 +999,19 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
       timeout         = "300s"
       service_account = google_service_account.banking_db_migration_service_account.email
 
-      volumes {
-        name = "cloudsql"
-        cloud_sql_instance {
-          instances = [google_sql_database_instance.banking_data.connection_name]
-        }
-      }
-
       containers {
         image   = "us-central1-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/banking-service:latest"
         command = ["alembic"]
         args    = ["upgrade", "head"]
 
-        volume_mounts {
-          name       = "cloudsql"
-          mount_path = "/cloudsql"
-        }
-
         env {
           name  = "DATABASE_URL"
-          value = "postgresql+psycopg2://postgres@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+          value = "postgresql+psycopg2://${local.alloydb_migration_user}@${google_alloydb_instance.banking_primary.ip_address}:5432/banking?sslmode=require"
         }
 
         env {
           name  = "DB_IAM_AUTH"
-          value = "false"
-        }
-
-        env {
-          name = "DB_PASSWORD"
-          value_source {
-            secret_key_ref {
-              secret  = google_secret_manager_secret.postgres_banking_root_password.secret_id
-              version = "latest"
-            }
-          }
+          value = "true"
         }
 
         env {
@@ -1013,15 +1024,6 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
           value = join(",", [for k, v in local.db_iam_viewer_members : v.name])
         }
 
-        env {
-          name  = "REQUIRE_CDC_BOOTSTRAP"
-          value = "true"
-        }
-
-        env {
-          name  = "CDC_REPLICATION_USER"
-          value = google_sql_user.banking_bq_connector.name
-        }
       }
 
       vpc_access {
@@ -1044,8 +1046,75 @@ resource "google_cloud_run_v2_job" "db_migration_job" {
 
   depends_on = [
     google_project_service.run_googleapis_com,
-    google_secret_manager_secret_iam_member.banking_db_migration_postgres_root_password_accessor,
-    google_sql_user.banking_bq_connector
+    google_project_iam_member.banking_migration_sa_alloydb_client,
+    google_project_iam_member.banking_migration_sa_service_usage_consumer,
+    google_alloydb_user.migration_iam_user,
+    google_alloydb_instance.banking_primary,
+  ]
+}
+
+resource "google_cloud_run_v2_job" "db_reconcile_job" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  name     = "banking-db-reconcile"
+  location = var.region
+  template {
+    template {
+      max_retries     = 1
+      timeout         = "300s"
+      service_account = google_service_account.banking_db_migration_service_account.email
+      containers {
+        image   = local.banking_service_url
+        command = ["python"]
+        args    = ["-m", "scripts.database_lifecycle", "reconcile"]
+        env {
+          name  = "DATABASE_URL"
+          value = "postgresql+psycopg2://${local.alloydb_migration_user}@${google_alloydb_instance.banking_primary.ip_address}:5432/banking?sslmode=require"
+        }
+        env {
+          name  = "DB_IAM_AUTH"
+          value = "true"
+        }
+        env {
+          name  = "PROJECT_ID"
+          value = var.project_id
+        }
+        env {
+          name  = "DB_MIGRATION_DATABASE_USER"
+          value = local.alloydb_migration_user
+        }
+        env {
+          name  = "CDC_REPLICATION_USER"
+          value = google_alloydb_user.banking_bq_connector.user_id
+        }
+        env {
+          name  = "IAM_DBA_USERS"
+          value = join(",", [for _, v in local.db_iam_support_members : v.name])
+        }
+        env {
+          name  = "IAM_DB_VIEWER_USERS"
+          value = join(",", [for _, v in local.db_iam_viewer_members : v.name])
+        }
+        env {
+          name  = "EXPECTED_ALEMBIC_REVISION"
+          value = "2ea57c78ba89"
+        }
+      }
+      vpc_access {
+        network_interfaces {
+          network    = google_compute_network.fsi_gecx_vpc.name
+          subnetwork = google_compute_subnetwork.fsi_gecx_subnet.name
+        }
+        egress = "PRIVATE_RANGES_ONLY"
+      }
+    }
+  }
+  lifecycle {
+    ignore_changes = [template[0].template[0].containers[0].image, client, client_version]
+  }
+  depends_on = [
+    google_project_iam_member.banking_migration_sa_alloydb_client,
+    google_project_iam_member.banking_migration_sa_service_usage_consumer,
+    google_alloydb_user.banking_bq_connector,
   ]
 }
 
@@ -1060,26 +1129,14 @@ resource "google_cloud_run_v2_job" "db_reset_job" {
       timeout         = "300s"
       service_account = google_service_account.banking_db_reset_service_account.email
 
-      volumes {
-        name = "cloudsql"
-        cloud_sql_instance {
-          instances = [google_sql_database_instance.banking_data.connection_name]
-        }
-      }
-
       containers {
         image   = "us-central1-docker.pkg.dev/${var.project_id}/fsi-gecx-bundle/banking-service:latest"
         command = ["python"]
         args    = ["-m", "services.seeding_service"]
 
-        volume_mounts {
-          name       = "cloudsql"
-          mount_path = "/cloudsql"
-        }
-
         env {
           name  = "DATABASE_URL"
-          value = "postgresql+psycopg2://${google_sql_user.banking_db_reset_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+          value = "postgresql+psycopg2://${local.alloydb_iam_users.banking_reset}@${google_alloydb_instance.banking_primary.ip_address}:5432/banking?sslmode=require"
         }
 
         env {
@@ -1133,7 +1190,7 @@ resource "google_cloud_run_v2_job" "db_reset_job" {
 
   depends_on = [
     google_project_service.run_googleapis_com,
-    google_sql_user.banking_db_reset_iam_user,
+    google_alloydb_user.service_iam_users,
     google_cloud_tasks_queue.data_generator_synthetic_schedule,
     google_project_iam_member.banking_reset_sa_cloudtasks_queue_admin,
   ]
@@ -1150,26 +1207,14 @@ resource "google_cloud_run_v2_job" "fraud_alert_lifecycle" {
       timeout         = "300s"
       service_account = google_service_account.banking_service_account.email
 
-      volumes {
-        name = "cloudsql"
-        cloud_sql_instance {
-          instances = [google_sql_database_instance.banking_data.connection_name]
-        }
-      }
-
       containers {
         image   = local.banking_service_url
         command = ["python"]
         args    = ["scripts/expire_stale_fraud_alerts.py"]
 
-        volume_mounts {
-          name       = "cloudsql"
-          mount_path = "/cloudsql"
-        }
-
         env {
           name  = "DATABASE_URL"
-          value = "postgresql+psycopg2://${google_sql_user.banking_service_sa_iam_user.name}@/banking?host=/cloudsql/${google_sql_database_instance.banking_data.connection_name}"
+          value = "postgresql+psycopg2://${local.alloydb_iam_users.banking_service}@${google_alloydb_instance.banking_primary.ip_address}:5432/banking?sslmode=require"
         }
 
         env {
@@ -1213,9 +1258,9 @@ resource "google_cloud_run_v2_job" "fraud_alert_lifecycle" {
 
   depends_on = [
     google_project_service.run_googleapis_com,
-    google_sql_user.banking_service_sa_iam_user,
-    google_project_iam_member.banking_service_sa_cloudsql_client,
-    google_project_iam_member.banking_service_sa_cloudsql_instance_user,
+    google_alloydb_user.service_iam_users,
+    google_project_iam_member.banking_service_sa_alloydb_client,
+    google_project_iam_member.banking_service_sa_service_usage_consumer,
   ]
 }
 

@@ -120,6 +120,7 @@ def service_account_database_user(account_id: str, project_id: str) -> str:
 @dataclass(frozen=True)
 class LifecycleConfig:
     project_id: str
+    target_database: str
     migration_user: str
     cdc_user: str
     create_missing_principals: bool
@@ -135,6 +136,7 @@ class LifecycleConfig:
             raise RuntimeError("PROJECT_ID is required for database lifecycle operations.")
         return cls(
             project_id=project_id,
+            target_database=os.getenv("DB_TARGET_DATABASE", "banking").strip(),
             migration_user=os.getenv("DB_MIGRATION_DATABASE_USER", "postgres").strip(),
             cdc_user=os.getenv("CDC_REPLICATION_USER", "banking_bq_connector").strip(),
             create_missing_principals=env_flag("DB_BOOTSTRAP_CREATE_PRINCIPALS"),
@@ -161,7 +163,7 @@ class LifecycleConfig:
                 service_account_database_user("voice-agent-sa", self.project_id),
             ),
             DATA_GENERATOR_RW_ROLE: (
-                service_account_database_user("data-generator-sa", self.project_id),
+                service_account_database_user("datagen-service-sa", self.project_id),
             ),
             RESET_RW_ROLE: (
                 service_account_database_user("banking-db-reset-sa", self.project_id),
@@ -222,6 +224,19 @@ def bootstrap(connection: sa.Connection, config: LifecycleConfig) -> dict[str, o
         "principals": list(config.principals),
         "status": "ok",
     }
+
+
+def ensure_database(engine: sa.Engine, config: LifecycleConfig) -> None:
+    """Create the application database before Alembic runs, idempotently."""
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+        exists = connection.execute(
+            sa.text("SELECT 1 FROM pg_database WHERE datname = :database"),
+            {"database": config.target_database},
+        ).scalar()
+        if not exists:
+            connection.execute(
+                sa.text(f"CREATE DATABASE {quote_identifier(config.target_database)}")
+            )
 
 
 def grant_database_connect(connection: sa.Connection, roles: Iterable[str]) -> None:
@@ -563,6 +578,7 @@ def main() -> None:
         raise RuntimeError("Database lifecycle commands require PostgreSQL.")
 
     if args.command == "bootstrap":
+        ensure_database(engine, config)
         with engine.begin() as connection:
             result = bootstrap(connection, config)
     elif args.command == "reconcile":

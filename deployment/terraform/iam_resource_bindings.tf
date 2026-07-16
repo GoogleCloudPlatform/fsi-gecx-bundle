@@ -448,12 +448,3 @@ resource "google_bigquery_connection_iam_member" "database_viewer_iceberg_connec
   role          = "roles/bigquery.connectionUser"
   member        = each.value
 }
-
-resource "google_bigquery_connection_iam_member" "database_viewer_banking_data_postgres_connection_user" {
-  for_each      = toset(local.iam_console_viewers)
-  project       = data.google_project.project.project_id
-  location      = google_bigquery_connection.banking_data_postgres_connection.location
-  connection_id = google_bigquery_connection.banking_data_postgres_connection.connection_id
-  role          = "roles/bigquery.connectionUser"
-  member        = each.value
-}

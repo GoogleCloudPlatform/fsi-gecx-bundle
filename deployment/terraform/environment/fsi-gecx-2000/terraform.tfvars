@@ -16,6 +16,8 @@
 # in this file. Secrets should be stored in Secret Manager and accessed dynamically.
 
 project_id                                      = "fsi-gecx-2000"
+alloydb_availability_type                       = "ZONAL"
+alloydb_cpu_count                               = 2
 deploy_cloud_build_triggers                     = true
 deploy_cloud_run_services                       = true
 set_cloud_run_audiences                         = true

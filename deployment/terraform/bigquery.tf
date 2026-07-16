@@ -12,22 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-resource "google_bigquery_connection" "banking_data_postgres_connection" {
-  connection_id = "banking-postgres-connection"
-  friendly_name = "banking-postgres-connection"
-  description   = "Banking Data connection with BigQuery"
-  location      = "US"
-  cloud_sql {
-    instance_id = google_sql_database_instance.banking_data.connection_name
-    database    = google_sql_database.banking.name
-    type        = "POSTGRES"
-    credential {
-      username = google_sql_user.banking_bq_connector.name
-      password = random_password.banking_bq_connector_password.result
-    }
-  }
-}
-
 resource "google_bigquery_dataset" "compliance_audit" {
   dataset_id                  = "compliance_audit"
   friendly_name               = "Compliance Audit Dataset"

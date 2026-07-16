@@ -27,6 +27,32 @@ variable "region" {
   default = "us-central1"
 }
 
+variable "alloydb_cpu_count" {
+  description = "vCPU count for the AlloyDB primary instance. Lower environments may use 2; the prod-like environment should size from observed load."
+  type        = number
+  default     = 2
+  validation {
+    condition     = var.alloydb_cpu_count >= 2
+    error_message = "AlloyDB requires at least 2 vCPUs for this deployment profile."
+  }
+}
+
+variable "alloydb_availability_type" {
+  description = "ZONAL for cost-conscious developer environments or REGIONAL for HA prod-like environments."
+  type        = string
+  default     = "ZONAL"
+  validation {
+    condition     = contains(["ZONAL", "REGIONAL"], var.alloydb_availability_type)
+    error_message = "alloydb_availability_type must be ZONAL or REGIONAL."
+  }
+}
+
+variable "alloydb_deletion_protection" {
+  description = "Protect the AlloyDB cluster from accidental deletion after initial cutover."
+  type        = bool
+  default     = true
+}
+
 variable "zone" {
   type    = string
   default = "us-central1-c"
