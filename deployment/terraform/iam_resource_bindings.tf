@@ -251,6 +251,12 @@ resource "google_secret_manager_secret_iam_member" "banking_db_migration_postgre
   member    = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "banking_db_migration_bq_connector_password_accessor" {
+  secret_id = google_secret_manager_secret.postgres_banking_bq_connector_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
+}
+
 resource "google_bigquery_dataset_iam_member" "banking_service_account_bq_data_editor" {
   project    = data.google_project.project.project_id
   dataset_id = google_bigquery_dataset.compliance_audit.dataset_id

@@ -10,6 +10,7 @@ from scripts.database_lifecycle import (
     VIEWER_RO_ROLE,
     VOICE_RW_ROLE,
     LifecycleConfig,
+    password_database_url,
     quote_identifier,
 )
 
@@ -53,3 +54,13 @@ def test_identifier_quoting_rejects_sql_fragments() -> None:
             pass
         else:
             raise AssertionError(f"unsafe identifier was accepted: {unsafe!r}")
+
+
+def test_cdc_password_is_added_to_a_structured_database_url() -> None:
+    assert password_database_url(
+        "postgresql+psycopg2://banking_bq_connector@10.0.0.1:5432/banking?sslmode=require",
+        "secret-value",
+    ) == (
+        "postgresql+psycopg2://banking_bq_connector:secret-value@"
+        "10.0.0.1:5432/banking?sslmode=require"
+    )

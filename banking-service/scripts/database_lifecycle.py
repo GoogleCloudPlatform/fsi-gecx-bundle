@@ -433,14 +433,30 @@ def ensure_replication_slot(engine: sa.Engine, config: LifecycleConfig) -> None:
             )
 
 
-def reconcile(engine: sa.Engine, config: LifecycleConfig) -> dict[str, object]:
+def reconcile(
+    engine: sa.Engine,
+    config: LifecycleConfig,
+    *,
+    replication_engine: sa.Engine | None = None,
+) -> dict[str, object]:
     with engine.begin() as connection:
         reconcile_ownership(connection)
         reconcile_grants(connection)
         if config.reconcile_cdc:
             reconcile_cdc(connection, config)
-    ensure_replication_slot(engine, config)
+    ensure_replication_slot(replication_engine or engine, config)
     return verify(engine, config, phase="reconcile")
+
+
+def password_database_url(url: str, password: str) -> str:
+    """Add a secret-sourced password without interpolating it in Terraform."""
+    if not url or not password:
+        raise RuntimeError(
+            "CDC_DATABASE_URL and CDC_DB_PASSWORD are required for CDC reconciliation."
+        )
+    return sa.engine.make_url(url).set(password=password).render_as_string(
+        hide_password=False
+    )
 
 
 def membership_exists(connection: sa.Connection, group: str, member: str) -> bool:
@@ -589,7 +605,16 @@ def main() -> None:
         with engine.begin() as connection:
             result = bootstrap(connection, config)
     elif args.command == "reconcile":
-        result = reconcile(engine, config)
+        replication_engine = None
+        if config.reconcile_cdc:
+            replication_engine = sa.create_engine(
+                password_database_url(
+                    os.getenv("CDC_DATABASE_URL", ""),
+                    os.getenv("CDC_DB_PASSWORD", ""),
+                ),
+                pool_pre_ping=True,
+            )
+        result = reconcile(engine, config, replication_engine=replication_engine)
     else:
         result = verify(engine, config)
     print(json.dumps(result, sort_keys=True))

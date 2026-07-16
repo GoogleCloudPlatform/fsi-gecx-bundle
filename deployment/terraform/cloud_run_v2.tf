@@ -1070,20 +1070,25 @@ resource "google_cloud_run_v2_job" "db_reconcile_job" {
         command = ["python"]
         args    = ["-m", "scripts.database_lifecycle", "reconcile"]
         env {
-          name = "DATABASE_URL"
-          # Object ownership and logical replication-slot creation are
-          # administrative reconciliation operations. In PostgreSQL, the
-          # REPLICATION role attribute is not inherited through membership in
-          # alloydbsuperuser, so the IAM migration identity cannot create the
-          # slot even though it can configure the replication user. Keep this
-          # credential isolated to the two administrative lifecycle jobs.
-          value = "postgresql+psycopg2://postgres@${google_alloydb_instance.banking_primary.ip_address}:5432/banking?sslmode=require"
+          name  = "DATABASE_URL"
+          value = "postgresql+psycopg2://${local.alloydb_migration_user}@${google_alloydb_instance.banking_primary.ip_address}:5432/banking?sslmode=require"
         }
         env {
-          name = "DB_PASSWORD"
+          name  = "DB_IAM_AUTH"
+          value = "true"
+        }
+        env {
+          # PostgreSQL role attributes such as REPLICATION are not inherited.
+          # Use the dedicated Datastream login only for slot creation while
+          # keeping object ownership reconciliation on the IAM migration user.
+          name  = "CDC_DATABASE_URL"
+          value = "postgresql+psycopg2://${google_alloydb_user.banking_bq_connector.user_id}@${google_alloydb_instance.banking_primary.ip_address}:5432/banking?sslmode=require"
+        }
+        env {
+          name = "CDC_DB_PASSWORD"
           value_source {
             secret_key_ref {
-              secret  = google_secret_manager_secret.postgres_banking_root_password.secret_id
+              secret  = google_secret_manager_secret.postgres_banking_bq_connector_password.secret_id
               version = "latest"
             }
           }
@@ -1126,7 +1131,7 @@ resource "google_cloud_run_v2_job" "db_reconcile_job" {
     ignore_changes = [template[0].template[0].containers[0].image, client, client_version]
   }
   depends_on = [
-    google_secret_manager_secret_iam_member.banking_db_migration_postgres_root_password_accessor,
+    google_secret_manager_secret_iam_member.banking_db_migration_bq_connector_password_accessor,
     google_project_iam_member.banking_migration_sa_alloydb_client,
     google_project_iam_member.banking_migration_sa_service_usage_consumer,
     google_alloydb_user.banking_bq_connector,
