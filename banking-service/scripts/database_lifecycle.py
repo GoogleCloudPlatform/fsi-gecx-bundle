@@ -218,6 +218,14 @@ def bootstrap(connection: sa.Connection, config: LifecycleConfig) -> dict[str, o
     create_group_roles(connection)
     ensure_principals(connection, config)
     grant_memberships(connection, config)
+    qdatabase = quote_identifier(config.target_database)
+    qowner = quote_identifier(SCHEMA_OWNER_ROLE)
+    connection.execute(sa.text(f"ALTER DATABASE {qdatabase} OWNER TO {qowner}"))
+    connection.execute(
+        sa.text(
+            f"GRANT CONNECT, CREATE, TEMPORARY ON DATABASE {qdatabase} TO {qowner}"
+        )
+    )
     return {
         "phase": "bootstrap",
         "group_roles": list(GROUP_ROLES),
