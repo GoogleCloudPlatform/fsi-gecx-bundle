@@ -1083,16 +1083,16 @@ function SecureMessagingView({ fbUser, customerProfile }) {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Secure Message Table</h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">View message text archives, timestamps, and thread keys. Login to the banking database using IAM upon clicking 'Open Cloud SQL Studio'.</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">View message text archives, timestamps, and thread keys. Sign in to the banking database using IAM from AlloyDB Studio.</p>
               </div>
               <div className="flex flex-col items-end gap-1.5 shrink-0">
                 <a
-                  href={`https://console.cloud.google.com/sql/instances/banking-data/studio?project=${projectId}`}
+                  href={`https://console.cloud.google.com/alloydb/clusters?project=${projectId}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs hover:underline"
                 >
-                  <span>Open Cloud SQL Studio</span>
+                  <span>Open AlloyDB Studio</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
                 <AnalyticsButton

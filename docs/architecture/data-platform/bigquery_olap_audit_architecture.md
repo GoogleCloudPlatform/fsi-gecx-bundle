@@ -6,13 +6,13 @@ This document specifies the Enterprise OLAP Data Warehousing and Compliance Audi
 
 ## 🌐 1. Executive Summary & OLAP Topology
 
-To achieve FSI regulatory compliance across Equal Credit Opportunity (ECOA), Anti-Money Laundering (AML), and Data Privacy (GDPR/CCPA) laws, our platform separates live transactional OLTP processing (Cloud SQL PostgreSQL) from immutable analytical warehousing (Google Cloud BigQuery).
+To achieve FSI regulatory compliance across Equal Credit Opportunity (ECOA), Anti-Money Laundering (AML), and Data Privacy (GDPR/CCPA) laws, our platform separates live transactional OLTP processing (AlloyDB for PostgreSQL) from immutable analytical warehousing (Google Cloud BigQuery).
 
 Rather than dumping disparate system events into a single monolithic audit table, we establish a dedicated **`compliance_audit`** dataset in BigQuery segmented by Bounded Context workflows:
 
 ```mermaid
 graph TD
-    subgraph OLTP ["OLTP - Cloud SQL PostgreSQL"]
+    subgraph OLTP ["OLTP - AlloyDB PostgreSQL"]
         Outbox["audit.audit_outbox"]
     end
 
@@ -58,7 +58,7 @@ To guarantee zero loss of compliance audit events without introducing network la
 ```mermaid
 sequenceDiagram
     participant App as Banking Service (OLTP)
-    participant PG as Cloud SQL (PostgreSQL)
+    participant PG as AlloyDB (PostgreSQL)
     participant DS as Google Cloud Datastream (CDC)
     participant BQ as BigQuery Bronze (raw_audit_outbox_cdc)
     participant MV as BigQuery Silver (Materialized Views)

@@ -529,7 +529,7 @@ variable "additional_cors_allowed_origins" {
 
 variable "developer_iam_members" {
   type        = list(string)
-  description = "Explicit IAM members that receive developer IAP, Cloud SQL, and governed-data access. Keep the primary member first to preserve legacy Terraform resource addresses."
+  description = "Explicit IAM members that receive developer IAP, AlloyDB, and governed-data access. Keep the primary member first to preserve legacy Terraform resource addresses."
   default     = []
 
   validation {
