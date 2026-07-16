@@ -1344,7 +1344,7 @@ function AppContent() {
 
           <div className="flex items-center space-x-2 sm:space-x-4 shrink-0">
             {!fbUser && (
-              <AnalyticsButton trackingName="app_sign_in"
+              <AnalyticsButton analyticsId="app_sign_in"
                 id="header-signin-btn"
                 onClick={() => window.firebaseAuth ? window.firebaseAuth.signInWithGoogle() : window.location.href = '/?gcp-iap-mode=CLEAR_LOGIN_COOKIE'}
                 className="px-3 sm:px-4 text-xs sm:text-sm font-semibold rounded-full transition-all duration-300 hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer shadow-sm border border-slate-200/80 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-850 dark:text-slate-200 h-9"
@@ -1386,7 +1386,7 @@ function AppContent() {
                       }`}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <AnalyticsButton trackingName="app_firebase_identity_platform_integration_info_modal"
+                    <AnalyticsButton analyticsId="app_firebase_identity_platform_integration_info_modal"
                       onClick={() => setIsAuthInfoModalOpen(true)}
                       className="absolute top-3.5 right-3.5 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm"
                       title="Firebase & Identity Platform Integration Info"
@@ -1411,7 +1411,7 @@ function AppContent() {
                         {isAltPressed && (
                           <div className="text-xs text-slate-400 flex items-center gap-1 min-w-0">
                             <span className="font-mono text-[10px] select-all">ID: {customerProfile.user_id}</span>
-                            <AnalyticsButton trackingName="app_copy_customer_id" 
+                            <AnalyticsButton analyticsId="app_copy_customer_id" 
                               onClick={() => handleCopy(customerProfile.user_id, 'id')}
                               className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-0.5 cursor-pointer"
                               title="Copy Customer ID"
@@ -1428,7 +1428,7 @@ function AppContent() {
                         <span className="text-slate-500 dark:text-slate-400">Email:</span>
                         <div className="flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300">
                           <span>{maskEmail(customerProfile.email)}</span>
-                          <AnalyticsButton trackingName="app_copy_email" 
+                          <AnalyticsButton analyticsId="app_copy_email" 
                             onClick={() => handleCopy(customerProfile.email, 'email')}
                             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-0.5 cursor-pointer"
                             title="Copy Email"
@@ -1441,7 +1441,7 @@ function AppContent() {
                         <span className="text-slate-500 dark:text-slate-400">Phone:</span>
                         <div className="flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300">
                           <span>{maskPhone(customerProfile.phone_number)}</span>
-                          <AnalyticsButton trackingName="app_copy_phone_number" 
+                          <AnalyticsButton analyticsId="app_copy_phone_number" 
                             onClick={() => handleCopy(customerProfile.phone_number, 'phone')}
                             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-0.5 cursor-pointer"
                             title="Copy Phone Number"
@@ -1462,7 +1462,7 @@ function AppContent() {
                           <span>Secure Messages</span>
                         </Link>
                         {notificationPermission !== 'granted' && (
-                          <AnalyticsButton trackingName="app_06"
+                          <AnalyticsButton analyticsId="app_06"
                             onClick={handleEnableNotifications}
                             disabled={notificationPermission === 'denied' || notificationPermission === 'unsupported'}
                             className="flex-grow py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
@@ -1473,7 +1473,7 @@ function AppContent() {
                           </AnalyticsButton>
                         )}
                         {isAltPressed && (
-                          <AnalyticsButton trackingName="app_refresh_copy_firebase_id_token"
+                          <AnalyticsButton analyticsId="app_refresh_copy_firebase_id_token"
                             onClick={handleCopyNewToken}
                             className="flex-grow py-2 px-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 transition-all text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
                             title="Refresh & Copy Firebase ID Token"
@@ -1484,7 +1484,7 @@ function AppContent() {
                         )}
                       </div>
                       <div className="flex gap-2">
-                        <AnalyticsButton trackingName="app_08" 
+                        <AnalyticsButton analyticsId="app_08" 
                           onClick={async () => {
                             if (window.firebaseAuth) {
                               // 1. Wipe the local Firebase token on the app side
@@ -1522,14 +1522,14 @@ function AppContent() {
               </div>
             )}
 
-            <AnalyticsButton trackingName="app_open_navigation_menu"
+            <AnalyticsButton analyticsId="app_open_navigation_menu"
               onClick={() => setIsMobileMenuOpen(true)}
               className="md:hidden w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer flex items-center justify-center shrink-0"
               title="Open Navigation Menu"
             >
               <Menu className="w-5 h-5" />
             </AnalyticsButton>
-            <AnalyticsButton trackingName="app_10"
+            <AnalyticsButton analyticsId="app_10"
               onClick={() => {
                 const themes = ['light', 'dark', 'auto'];
                 const nextIndex = (themes.indexOf(theme) + 1) % themes.length;
@@ -1572,7 +1572,7 @@ function AppContent() {
 
           {isReady && fbUser && !isChatOpen && isCxAgentEnabled && !isSearchPage && !isVoiceSupportPage && isChatSdkReady && (
             <AnalyticsButton
-              trackingName="gecx_chat_messenger_clicked"
+              analyticsId="gecx_chat_messenger_clicked"
               onClick={() => setIsChatOpen(true)}
               className="fixed bottom-6 right-6 z-[100] w-14 h-14 rounded-full flex items-center justify-center cursor-pointer shadow-2xl hover:scale-110 transition-all duration-300 animate-fade-in"
               style={{ backgroundImage: `linear-gradient(to top right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 25px 50px -12px ${brandColorFrom}50` }}
@@ -1635,7 +1635,7 @@ function AppContent() {
                     title-text-expanded="Collapse"
                     title-text-collapsed="Expand"
                   ></chat-toggle-dialog-button>
-              <AnalyticsButton trackingName="app_gcp_app_integration_info_modal"
+              <AnalyticsButton analyticsId="app_gcp_app_integration_info_modal"
                 slot="titlebar-actions"
                 onClick={() => setIsGcpInfoModalOpen(true)}
                 className="p-1 rounded-lg hover:bg-slate-500/10 dark:hover:bg-white/10 transition-all cursor-pointer flex items-center justify-center mr-1"
@@ -1669,7 +1669,7 @@ function AppContent() {
                   </div>
                   <span className="text-base font-bold text-slate-900 dark:text-white tracking-tight">{bankName}</span>
                 </div>
-                <AnalyticsButton trackingName="app_12" 
+                <AnalyticsButton analyticsId="app_12" 
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="p-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
                 >
@@ -1720,7 +1720,7 @@ function AppContent() {
                         {location.pathname === '/accounts' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                       </Link>
                       {accountsSummary && (checkingAccs.length > 0 || savingsAccs.length > 0 || creditAccs.length > 0) && (
-                        <AnalyticsButton trackingName="app_13" 
+                        <AnalyticsButton analyticsId="app_13" 
                           onClick={(e) => {
                             e.stopPropagation();
                             setIsMobileAccountsOpen(!isMobileAccountsOpen);
@@ -1810,7 +1810,7 @@ function AppContent() {
                     >
                       Products
                     </Link>
-                    <AnalyticsButton trackingName="app_14" 
+                    <AnalyticsButton analyticsId="app_14" 
                       onClick={(e) => {
                         e.stopPropagation();
                         setIsMobileProductsOpen(!isMobileProductsOpen);
@@ -1899,7 +1899,7 @@ function AppContent() {
                     >
                       Help Center
                     </Link>
-                    <AnalyticsButton trackingName="app_15" 
+                    <AnalyticsButton analyticsId="app_15" 
                       onClick={(e) => {
                         e.stopPropagation();
                         setIsMobileHelpOpen(!isMobileHelpOpen);
@@ -2002,7 +2002,7 @@ function AppContent() {
                 </div>
 
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Preferences</div>
-                <AnalyticsButton trackingName="app_16"
+                <AnalyticsButton analyticsId="app_16"
                   onClick={() => {
                     const themes = ['light', 'dark', 'auto'];
                     const nextIndex = (themes.indexOf(theme) + 1) % themes.length;
@@ -2104,7 +2104,7 @@ function AppContent() {
                     )}
                     )
                   </span>
-                  <AnalyticsButton trackingName="app_view_gcp_environment_configuration"
+                  <AnalyticsButton analyticsId="app_view_gcp_environment_configuration"
                     onClick={() => setIsGcpEnvModalOpen(true)}
                     className="p-0.5 rounded hover:bg-slate-105 dark:hover:bg-slate-800/80 transition-colors cursor-pointer text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 flex items-center justify-center"
                     title="View GCP Environment Configuration"
@@ -2115,7 +2115,7 @@ function AppContent() {
                 <div className="text-[11px] text-slate-400 dark:text-slate-500 flex flex-col gap-1.5 -mt-3">
                   <span>Build Time: {getFormattedBuildTime()}</span>
                   {hasReleaseNotes() && (
-                    <AnalyticsButton trackingName="app_release_notes"
+                    <AnalyticsButton analyticsId="app_release_notes"
                       onClick={() => setIsReleaseNotesModalOpen(true)}
                       className="text-emerald-500 hover:text-emerald-600 hover:underline flex items-center gap-1 w-fit transition-colors"
                     >
@@ -2176,19 +2176,19 @@ function AppContent() {
               <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Export Settings</h2>
               <p className="text-slate-600 dark:text-slate-400 mb-6">Choose the format for the exported file.</p>
               <div className="flex justify-end space-x-4">
-              <AnalyticsButton trackingName="app_cancel"
+              <AnalyticsButton analyticsId="app_cancel"
                   onClick={() => setIsExportModalOpen(false)}
                   className="px-4 py-2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
                 >
                   Cancel
               </AnalyticsButton>
-              <AnalyticsButton trackingName="app_json"
+              <AnalyticsButton analyticsId="app_json"
                   onClick={() => handleExport('json')}
                   className="px-4 py-2 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold transition-colors"
                 >
                   JSON
               </AnalyticsButton>
-              <AnalyticsButton trackingName="app_yaml"
+              <AnalyticsButton analyticsId="app_yaml"
                   onClick={() => handleExport('yaml')}
                   className="px-4 py-2 rounded-full bg-teal-500 hover:bg-teal-600 text-white font-semibold transition-colors"
                 >
@@ -2413,7 +2413,7 @@ function AppContent() {
               {hasReleaseNotes() && (
                 <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-800">
                   <span className="font-semibold text-slate-500 dark:text-slate-400">Release Notes</span>
-                  <AnalyticsButton trackingName="app_view_notes"
+                  <AnalyticsButton analyticsId="app_view_notes"
                     onClick={() => {
                       setIsGcpEnvModalOpen(false);
                       setIsReleaseNotesModalOpen(true);
@@ -2647,7 +2647,7 @@ function AppContent() {
                   </p>
                 </div>
               </div>
-            <AnalyticsButton trackingName="app_dismiss_notification" 
+            <AnalyticsButton analyticsId="app_dismiss_notification" 
                 onClick={() => setActiveNotification(null)}
                 className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
                 title="Dismiss notification"
@@ -2659,7 +2659,7 @@ function AppContent() {
               {activeNotification.body}
             </p>
             <div className="flex justify-end pt-1 pl-10 gap-2">
-            <AnalyticsButton trackingName="app_dismiss" 
+            <AnalyticsButton analyticsId="app_dismiss" 
                 onClick={() => setActiveNotification(null)}
                 className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors text-xs font-semibold cursor-pointer"
               >
@@ -2667,7 +2667,7 @@ function AppContent() {
             </AnalyticsButton>
               {activeNotification.data?.type === 'support_message' && 
                (!activeNotification.data?.user_id || activeNotification.data.user_id === (customerProfile?.user_id || fbUser?.uid)) && (
-              <AnalyticsButton trackingName="app_view" 
+              <AnalyticsButton analyticsId="app_view" 
                   onClick={() => {
                     setActiveNotification(null);
                     navigate('/secure-messaging', { state: { selectThreadId: activeNotification.data.thread_id } });

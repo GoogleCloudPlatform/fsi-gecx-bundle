@@ -21,7 +21,7 @@ import { logInteractionEvent } from '../utils/analytics.js';
  * Prevents the global click listener from firing a duplicate event.
  */
 export const AnalyticsButton = ({
-  trackingName,
+  analyticsId,
   eventProperties = {},
   onClick,
   children,
@@ -30,8 +30,8 @@ export const AnalyticsButton = ({
   const location = useLocation();
 
   const handleClick = (e) => {
-    // Determine the name to log: prefer trackingName, fallback to children text or aria-label
-    let nameToLog = trackingName;
+    // Determine the name to log: prefer analyticsId, fallback to children text or aria-label
+    let nameToLog = analyticsId;
     if (!nameToLog) {
       if (typeof children === 'string') {
         nameToLog = children;

@@ -154,7 +154,7 @@ function MessagingDebug({ fbUser, customerProfile }) {
       {/* Header Navigation */}
       <div className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
         <div>
-          <AnalyticsButton trackingName="messaging_debug_back_to_admin_portal" 
+          <AnalyticsButton analyticsId="messaging_debug_back_to_admin_portal" 
             type="button"
             onClick={() => navigate('/admin')}
             className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors mb-3 group"
@@ -310,7 +310,7 @@ function MessagingDebug({ fbUser, customerProfile }) {
               </div>
 
               <div className="flex gap-3 justify-end pt-1">
-                <AnalyticsButton trackingName="messaging_debug_select_all_matches"
+                <AnalyticsButton analyticsId="messaging_debug_select_all_matches"
                   type="button"
                   onClick={() => {
                     const idsToAdd = filteredCustomers.map(c => c.user_id);
@@ -322,7 +322,7 @@ function MessagingDebug({ fbUser, customerProfile }) {
                   Select All Matches
                 </AnalyticsButton>
                 <span className="text-[10px] text-slate-300 dark:text-slate-700">|</span>
-                <AnalyticsButton trackingName="messaging_debug_clear_selection"
+                <AnalyticsButton analyticsId="messaging_debug_clear_selection"
                   type="button"
                   onClick={() => setSelectedCustomerIds([])}
                   className="text-[10px] font-bold text-slate-500 dark:text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
@@ -387,7 +387,7 @@ function MessagingDebug({ fbUser, customerProfile }) {
 
           {/* Submit CTA */}
           <div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800/50">
-            <AnalyticsButton trackingName="messaging_debug_04"
+            <AnalyticsButton analyticsId="messaging_debug_04"
               type="submit"
               disabled={isSubmitting}
               className="px-6 py-2.5 text-sm font-semibold rounded-full text-slate-950 hover:scale-102 active:scale-98 transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"

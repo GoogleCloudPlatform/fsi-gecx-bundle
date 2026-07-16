@@ -54,7 +54,7 @@ export default function SavingsMatrix({ onOpenAccount }) {
                 {prod.details}
               </td>
               <td className="p-5 text-right">
-                <AnalyticsButton trackingName="savings_matrix_open"
+                <AnalyticsButton analyticsId="savings_matrix_open"
                   onClick={() => onOpenAccount && onOpenAccount(prod)}
                   className="px-4 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-xs transition-colors flex items-center gap-1 ml-auto cursor-pointer"
                 >

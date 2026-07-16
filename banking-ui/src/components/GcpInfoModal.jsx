@@ -58,7 +58,7 @@ export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Inte
   return (
     <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
       <div className={`bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 ${maxWidthClass} w-full shadow-2xl animate-fade-in relative text-left flex flex-col max-h-[90dvh]`} onClick={(e) => e.stopPropagation()}>
-        <AnalyticsButton trackingName="gcp_info_modal_01"
+        <AnalyticsButton analyticsId="gcp_info_modal_01"
           onClick={onClose}
           className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
         >
@@ -81,7 +81,7 @@ export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Inte
               </p>
             )}
           </div>
-          <AnalyticsButton trackingName="gcp_info_modal_got_it"
+          <AnalyticsButton analyticsId="gcp_info_modal_got_it"
             onClick={onClose}
             className="w-full sm:w-auto whitespace-nowrap px-5 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-sm transition-colors cursor-pointer"
           >

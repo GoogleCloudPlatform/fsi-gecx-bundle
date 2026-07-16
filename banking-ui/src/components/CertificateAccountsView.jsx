@@ -150,7 +150,7 @@ function CertificateAccountsView() {
                 <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Select Certificate Term</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {ratesData.map((item, idx) => (
-                    <AnalyticsButton trackingName="certificate_accounts_view_01"
+                    <AnalyticsButton analyticsId="certificate_accounts_view_01"
                       key={idx}
                       onClick={() => setSelectedTermIndex(idx)}
                       className={`py-3 px-4 rounded-xl border text-left flex flex-col justify-between h-20 transition-all ${
@@ -271,7 +271,7 @@ function CertificateAccountsView() {
           
           {/* Tab Navigation */}
           <div className="flex border-b border-slate-200 dark:border-slate-800 mb-6 gap-6 overflow-x-auto pb-px">
-            <AnalyticsButton trackingName="certificate_accounts_view_02" 
+            <AnalyticsButton analyticsId="certificate_accounts_view_02" 
               onClick={() => setActiveTab("laddering")}
               className={`pb-4 text-sm font-semibold relative flex items-center gap-2 cursor-pointer transition-colors ${
                 activeTab === "laddering" 
@@ -285,7 +285,7 @@ function CertificateAccountsView() {
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full" />
               )}
             </AnalyticsButton>
-            <AnalyticsButton trackingName="certificate_accounts_view_03" 
+            <AnalyticsButton analyticsId="certificate_accounts_view_03" 
               onClick={() => setActiveTab("flex")}
               className={`pb-4 text-sm font-semibold relative flex items-center gap-2 cursor-pointer transition-colors ${
                 activeTab === "flex" 
@@ -299,7 +299,7 @@ function CertificateAccountsView() {
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full" />
               )}
             </AnalyticsButton>
-            <AnalyticsButton trackingName="certificate_accounts_view_04" 
+            <AnalyticsButton analyticsId="certificate_accounts_view_04" 
               onClick={() => setActiveTab("faqs")}
               className={`pb-4 text-sm font-semibold relative flex items-center gap-2 cursor-pointer transition-colors ${
                 activeTab === "faqs" 

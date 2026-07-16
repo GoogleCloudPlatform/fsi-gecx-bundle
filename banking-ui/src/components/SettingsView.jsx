@@ -30,7 +30,7 @@ function SettingsView() {
       <div className="max-w-4xl mx-auto bg-white dark:bg-slate-900 rounded-2xl p-8 border border-slate-200 dark:border-slate-800 shadow-xl">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Customization</h1>
-          <AnalyticsButton trackingName="settings_view_back_to_home"
+          <AnalyticsButton analyticsId="settings_view_back_to_home"
             onClick={() => navigate('/')}
             className="px-4 py-2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
           >
@@ -224,19 +224,19 @@ function SettingsView() {
               accept=".json,.yaml,.yml"
               onChange={handleImport}
             />
-            <AnalyticsButton trackingName="settings_view_import"
+            <AnalyticsButton analyticsId="settings_view_import"
               onClick={() => document.getElementById('import-settings').click()}
               className="px-4 py-2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
             >
               Import
             </AnalyticsButton>
-            <AnalyticsButton trackingName="settings_view_export"
+            <AnalyticsButton analyticsId="settings_view_export"
               onClick={() => setIsExportModalOpen(true)}
               className="px-4 py-2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
             >
               Export
             </AnalyticsButton>
-            <AnalyticsButton trackingName="settings_view_restore_defaults"
+            <AnalyticsButton analyticsId="settings_view_restore_defaults"
               onClick={() => setIsRestoreModalOpen(true)}
               className="px-4 py-2 rounded-full bg-red-500 hover:bg-red-600 text-white font-semibold transition-colors"
             >
@@ -249,13 +249,13 @@ function SettingsView() {
                   <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Restore Defaults</h2>
                   <p className="text-slate-600 dark:text-slate-400 mb-6">Are you sure you want to restore all settings to their default values? This action cannot be undone.</p>
                   <div className="flex justify-end space-x-4">
-                    <AnalyticsButton trackingName="settings_view_cancel"
+                    <AnalyticsButton analyticsId="settings_view_cancel"
                       onClick={() => setIsRestoreModalOpen(false)}
                       className="px-4 py-2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
                     >
                       Cancel
                     </AnalyticsButton>
-                    <AnalyticsButton trackingName="settings_view_confirm"
+                    <AnalyticsButton analyticsId="settings_view_confirm"
                       onClick={() => {
                         setIsCxAgentEnabled(true);
                         setIsCcaiAgentEnabled(false);

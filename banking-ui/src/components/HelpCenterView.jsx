@@ -226,7 +226,7 @@ function HelpCenterView({ activeBot, setActiveBot }) {
               className="w-full pl-13 pr-12 py-4 rounded-full bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-sm font-medium shadow-xl focus:border-emerald-500 dark:focus:border-emerald-500 outline-none transition-all duration-300"
             />
             {searchQuery && (
-              <AnalyticsButton trackingName="help_center_view_01"
+              <AnalyticsButton analyticsId="help_center_view_01"
                 onClick={() => setSearchQuery('')}
                 className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
               >
@@ -255,7 +255,7 @@ function HelpCenterView({ activeBot, setActiveBot }) {
             {categories.map((cat, idx) => {
               const isSelected = selectedCategory === cat;
               return (
-                <AnalyticsButton trackingName="help_center_view_02"
+                <AnalyticsButton analyticsId="help_center_view_02"
                   key={idx}
                   onClick={() => setSelectedCategory(cat)}
                   className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 cursor-pointer border ${
@@ -282,7 +282,7 @@ function HelpCenterView({ activeBot, setActiveBot }) {
               <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
                 We couldn't locate specific documentation targeting "<span className="font-semibold text-slate-700 dark:text-slate-300">{searchQuery}</span>" within this filtered category. Try expanding your search keywords or reset filter metrics.
               </p>
-              <AnalyticsButton trackingName="help_center_view_reset_knowledge_index_filters"
+              <AnalyticsButton analyticsId="help_center_view_reset_knowledge_index_filters"
                 onClick={() => { setSearchQuery(''); setSelectedCategory('All'); }}
                 className="px-4 py-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs hover:bg-emerald-500/20 transition-colors"
               >
@@ -342,7 +342,7 @@ function HelpCenterView({ activeBot, setActiveBot }) {
             
             {activeBot !== undefined && setActiveBot && (
               <div className="pt-2 flex flex-wrap justify-center gap-3">
-                <AnalyticsButton trackingName="help_center_view_launch_security_advisor"
+                <AnalyticsButton analyticsId="help_center_view_launch_security_advisor"
                   onClick={() => {
                     setActiveBot('Security & Fraud Bot');
                     setTimeout(() => setActiveBot(null), 4000);
@@ -351,7 +351,7 @@ function HelpCenterView({ activeBot, setActiveBot }) {
                 >
                   Launch Security Advisor
                 </AnalyticsButton>
-                <AnalyticsButton trackingName="help_center_view_launch_wealth_expert"
+                <AnalyticsButton analyticsId="help_center_view_launch_wealth_expert"
                   onClick={() => {
                     setActiveBot('Wealth Management Bot');
                     setTimeout(() => setActiveBot(null), 4000);
@@ -382,7 +382,7 @@ function HelpCenterView({ activeBot, setActiveBot }) {
                   {viewingArticle.readTime}
                 </span>
               </div>
-              <AnalyticsButton trackingName="help_center_view_06" 
+              <AnalyticsButton analyticsId="help_center_view_06" 
                 onClick={() => setViewingArticle(null)}
                 className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors"
               >
@@ -403,13 +403,13 @@ function HelpCenterView({ activeBot, setActiveBot }) {
               <div className="pt-6 border-t border-slate-100 dark:border-slate-800 text-center">
                 <p className="text-xs text-slate-400 mb-3">Did this documentation resolve your context needs?</p>
                 <div className="flex justify-center gap-3">
-                  <AnalyticsButton trackingName="help_center_view_yes_bounded_context_fully_met" 
+                  <AnalyticsButton analyticsId="help_center_view_yes_bounded_context_fully_met" 
                     onClick={() => setViewingArticle(null)}
                     className="px-4 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs hover:bg-emerald-500/20 transition-colors"
                   >
                     Yes, Bounded Context Fully Met
                   </AnalyticsButton>
-                  <AnalyticsButton trackingName="help_center_view_close_window" 
+                  <AnalyticsButton analyticsId="help_center_view_close_window" 
                     onClick={() => setViewingArticle(null)}
                     className="px-4 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                   >

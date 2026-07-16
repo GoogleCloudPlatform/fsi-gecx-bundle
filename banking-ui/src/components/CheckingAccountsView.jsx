@@ -69,7 +69,7 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
           </p>
 
           <div className="flex flex-wrap justify-center gap-4">
-            <AnalyticsButton trackingName="checking_accounts_view_open_account_instantly"
+            <AnalyticsButton analyticsId="checking_accounts_view_open_account_instantly"
               onClick={() => setOpeningAccount(accounts[0])}
               className="px-8 py-4 rounded-full text-slate-950 font-bold text-sm shadow-xl hover:scale-105 transition-all duration-300 flex items-center space-x-2"
               style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 10px 15px -3px ${brandColorFrom}33` }}
@@ -96,7 +96,7 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
             {accounts.map((acc, idx) => {
               const isSelected = idx === selectedAccountIndex;
               return (
-                <AnalyticsButton trackingName="checking_accounts_view_02"
+                <AnalyticsButton analyticsId="checking_accounts_view_02"
                   key={idx}
                   onClick={() => setSelectedAccountIndex(idx)}
                   className={`px-5 py-3 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center space-x-2 border ${
@@ -218,7 +218,7 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
 
               {/* Context Actions */}
               <div className="pt-4 flex flex-col sm:flex-row gap-4 items-center">
-                <AnalyticsButton trackingName="checking_accounts_view_03"
+                <AnalyticsButton analyticsId="checking_accounts_view_03"
                   onClick={() => setOpeningAccount(selectedAccount)}
                   className="w-full sm:w-auto px-8 py-3.5 rounded-full text-slate-950 font-bold text-sm shadow-lg hover:scale-105 transition-all duration-300 flex items-center justify-center space-x-2"
                   style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 10px 15px -3px ${brandColorFrom}33` }}
@@ -228,7 +228,7 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
                 </AnalyticsButton>
                 
                 {activeBot !== undefined && setActiveBot && (
-                  <AnalyticsButton trackingName="checking_accounts_view_04" 
+                  <AnalyticsButton analyticsId="checking_accounts_view_04" 
                     onClick={() => {
                       setActiveBot(selectedAccount.botName);
                       setTimeout(() => setActiveBot(null), 4000);
@@ -278,7 +278,7 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
               Transferring your legacy primary payroll direct deposit lines to {bankName} takes less than 90 seconds. Existing base classic checking depositors immediately qualify for automatic waiver upgrades upon validation.
             </p>
             <div className="pt-2">
-              <AnalyticsButton trackingName="checking_accounts_view_execute_switch_context"
+              <AnalyticsButton analyticsId="checking_accounts_view_execute_switch_context"
                 onClick={() => setOpeningAccount(accounts[1])}
                 className="px-6 py-3 rounded-full bg-white text-slate-950 font-bold text-xs hover:bg-slate-100 transition-colors"
               >
