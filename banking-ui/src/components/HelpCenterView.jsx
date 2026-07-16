@@ -333,7 +333,7 @@ function HelpCenterView({ activeBot, setActiveBot }) {
 
       {/* Direct Concierge & Help Hooks Callout */}
       <section className="px-6">
-        <div className="max-w-5xl mx-auto bg-slate-50 dark:bg-slate-905 rounded-3xl p-8 md:p-12 border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-2xl text-center relative overflow-hidden">
+        <div className="max-w-5xl mx-auto bg-slate-50 dark:bg-slate-950/50 rounded-3xl p-8 md:p-12 border border-slate-200 dark:border-slate-800/60 shadow-sm dark:shadow-none text-center relative overflow-hidden">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl"></div>
           
           <div className="relative z-10 max-w-xl mx-auto space-y-4">
