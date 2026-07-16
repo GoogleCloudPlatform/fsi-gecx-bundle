@@ -7,6 +7,36 @@ set -euo pipefail
 stream="banking-alloydb-cdc-stream"
 dataset="iceberg_catalog"
 action="${1:?Expected pause or rebuild}"
+expected_objects=(
+  catalog.credit_products
+  catalog.deposit_products
+  cards.posted_transactions
+  cards.credit_accounts
+  cards.issued_card
+  cards.transaction_authorization
+  origination.applications
+  origination.credit_card_applications
+  origination.mortgage_applications
+  origination.deposit_applications
+  origination.application_artifacts
+  identity.users
+  identity.user_addresses
+  identity.user_devices
+  identity.user_secure_messages
+  kyc.user_credit_profiles
+  ledger.accounts
+  ledger.transactions
+  ledger.account_ledger
+  merchants.merchant_master
+  merchants.merchant_stores
+  merchants.merchant_category_codes
+  operations.fraud_model_decisions
+  operations.fraud_alerts
+  operations.fraud_case_actions
+  operations.scenario_outcomes
+  operations.support_escalations
+  operations.retail_locations
+)
 
 stream_state() {
   gcloud datastream streams describe "${stream}" \
@@ -50,26 +80,7 @@ fi
   exit 2
 }
 
-objects=()
-while IFS= read -r object; do
-  objects+=("${object}")
-done < <(
-  gcloud datastream objects list --stream="${stream}" \
-    --project "${PROJECT_ID}" --location "${REGION}" --limit=10000 \
-    --format='csv[no-heading](name.basename(),displayName)'
-)
-[[ "${#objects[@]}" -gt 0 ]] || {
-  echo "No Datastream objects were found for ${stream}." >&2
-  exit 1
-}
-
-for object in "${objects[@]}"; do
-  object_id="${object%%,*}"
-  source_name="${object#*,}"
-  [[ "${source_name}" =~ ^[a-z0-9_]+\.[a-z0-9_]+$ ]] || {
-    echo "Unsafe Datastream source object name: ${source_name}" >&2
-    exit 1
-  }
+for source_name in "${expected_objects[@]}"; do
   table_name="${source_name/./_}"
   bq query --project_id="${PROJECT_ID}" --location=US --use_legacy_sql=false \
     "DROP TABLE IF EXISTS \`${PROJECT_ID}.${dataset}.${table_name}\`" >/dev/null
@@ -77,11 +88,56 @@ done
 
 set_stream_state RUNNING
 
+# A never-started stream does not expose its object resources. Wait until the
+# first start discovers the complete include list before managing backfills.
+objects=()
+for _ in $(seq 1 90); do
+  objects=()
+  while IFS= read -r object; do
+    [[ -n "${object}" ]] && objects+=("${object}")
+  done < <(
+    gcloud datastream objects list --stream="${stream}" \
+      --project "${PROJECT_ID}" --location "${REGION}" --limit=10000 \
+      --format='csv[no-heading](name.basename(),displayName)'
+  )
+  [[ "${#objects[@]}" == "${#expected_objects[@]}" ]] && break
+  sleep 10
+done
+[[ "${#objects[@]}" == "${#expected_objects[@]}" ]] || {
+  echo "Expected ${#expected_objects[@]} Datastream objects, found ${#objects[@]}." >&2
+  exit 1
+}
+
+declare -A discovered=()
+for object in "${objects[@]}"; do
+  source_name="${object#*,}"
+  [[ "${source_name}" =~ ^[a-z0-9_]+\.[a-z0-9_]+$ ]] || {
+    echo "Unsafe Datastream source object name: ${source_name}" >&2
+    exit 1
+  }
+  discovered["${source_name}"]=1
+done
+for source_name in "${expected_objects[@]}"; do
+  [[ -n "${discovered[$source_name]:-}" ]] || {
+    echo "Expected Datastream object was not discovered: ${source_name}" >&2
+    exit 1
+  }
+done
+
 for object in "${objects[@]}"; do
   object_id="${object%%,*}"
-  gcloud datastream objects start-backfill "${object_id}" \
-    --stream="${stream}" --project "${PROJECT_ID}" --location "${REGION}" \
-    --quiet >/dev/null
+  object_json="$(gcloud datastream objects describe "${object_id}" \
+    --stream="${stream}" --project "${PROJECT_ID}" \
+    --location "${REGION}" --format=json)"
+  backfill_state="$(jq -r '.backfillJob.state // "PENDING"' <<<"${object_json}")"
+  # A fresh stream starts its configured automatic backfill itself. A resumed
+  # stream has COMPLETED object jobs from the prior snapshot and needs an
+  # explicit replacement backfill after its destination tables are dropped.
+  if [[ "${backfill_state}" == "COMPLETED" ]]; then
+    gcloud datastream objects start-backfill "${object_id}" \
+      --stream="${stream}" --project "${PROJECT_ID}" --location "${REGION}" \
+      --quiet >/dev/null
+  fi
 done
 
 for _ in $(seq 1 90); do
