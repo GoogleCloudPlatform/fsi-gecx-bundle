@@ -1383,13 +1383,14 @@ function AppContent() {
                       }`}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <button
+                    <AnalyticsButton
                       onClick={() => setIsAuthInfoModalOpen(true)}
                       className="absolute top-3.5 right-3.5 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm"
                       title="Firebase & Identity Platform Integration Info"
+                      trackingName="open_identity_auth_integration_info_modal"
                     >
                       <GoogleCloudIcon className="w-4 h-4" />
-                    </button>
+                    </AnalyticsButton>
                     <div className="flex items-center space-x-3 pb-3 border-b border-slate-100 dark:border-slate-800 pr-8">
                       <div
                         className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-base text-slate-950 shrink-0"
@@ -1631,14 +1632,15 @@ function AppContent() {
                     title-text-expanded="Collapse"
                     title-text-collapsed="Expand"
                   ></chat-toggle-dialog-button>
-              <button
+              <AnalyticsButton
                 slot="titlebar-actions"
                 onClick={() => setIsGcpInfoModalOpen(true)}
                 className="p-1 rounded-lg hover:bg-slate-500/10 dark:hover:bg-white/10 transition-all cursor-pointer flex items-center justify-center mr-1"
                 title="GCP App Integration Info"
+                trackingName="open_cx_agent_studio_info_modal"
               >
                 <GoogleCloudIcon className="w-4 h-4" />
-              </button>
+              </AnalyticsButton>
                   <chat-messenger-close-button
                     slot="titlebar-actions"
                     title-text="Close"
@@ -2102,7 +2104,7 @@ function AppContent() {
                     onClick={() => setIsGcpEnvModalOpen(true)}
                     className="p-0.5 rounded hover:bg-slate-105 dark:hover:bg-slate-800/80 transition-colors cursor-pointer text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 flex items-center justify-center"
                     title="View GCP Environment Configuration"
-                    trackingName="open_gcp_env_config_modal"
+                    trackingName="open_gcp_env_config_info_modal"
                   >
                     <GoogleCloudIcon className="w-3 h-3" />
                   </AnalyticsButton>

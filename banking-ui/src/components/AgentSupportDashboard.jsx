@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
@@ -397,7 +398,7 @@ export default function AgentSupportDashboard() {
         </div>
         
         <div className="flex items-center gap-3">
-          <button
+          <AnalyticsButton
             id="supervisor-tour-btn"
             onClick={() => {
               localStorage.removeItem('supervisor-tour-completed');
@@ -406,22 +407,24 @@ export default function AgentSupportDashboard() {
             }}
             className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 cursor-pointer flex items-center justify-center"
             title="Take Supervisor Console Tour"
+            trackingName="start_supervisor_console_tour"
           >
             <GoogleCompassIcon className="w-4 h-4 text-emerald-500" />
-          </button>
+          </AnalyticsButton>
           {isConnected && (
             <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/50 rounded-full px-4 py-1.5 text-xs text-emerald-600 dark:text-emerald-300 font-bold flex items-center gap-2 animate-pulse">
               <Volume2 size={14} className="text-emerald-505 dark:text-emerald-400" />
               Live Voice Room: {activeRoomName}
             </div>
           )}
-            <button
+            <AnalyticsButton
               onClick={() => setIsInfoModalOpen(true)}
               className="p-2.5 rounded-2xl hover:bg-slate-800/80 border border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
               title="GCP Co-Browse Integration Info"
+              trackingName="open_webrtc_cobrowsing_info_modal"
             >
               <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
-          </button>
+          </AnalyticsButton>
         </div>
       </div>
 

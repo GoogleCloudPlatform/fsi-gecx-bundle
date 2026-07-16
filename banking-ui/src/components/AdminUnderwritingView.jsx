@@ -11,6 +11,7 @@ import api from '../utils/api.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 
@@ -448,7 +449,7 @@ function AdminUnderwritingView({ fbUser }) {
               <div className="text-xs font-bold text-slate-700 dark:text-slate-300">Awaiting Manual Audit</div>
             </div>
           </div>
-          <button
+          <AnalyticsButton
             id="underwriting-tour-btn"
             onClick={() => {
               localStorage.removeItem('underwriting-tour-completed');
@@ -457,9 +458,10 @@ function AdminUnderwritingView({ fbUser }) {
             }}
             className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all flex items-center justify-center active:scale-95 cursor-pointer"
             title="Take Underwriting Portal Tour"
+            trackingName="start_underwriting_portal_tour"
           >
             <GoogleCompassIcon className="w-4 h-4 text-emerald-500" />
-          </button>
+          </AnalyticsButton>
           <button 
             id="exceptions-queue-refresh"
             onClick={() => fetchExceptions()}
@@ -467,13 +469,14 @@ function AdminUnderwritingView({ fbUser }) {
           >
             <RefreshCw className="w-4 h-4" />
           </button>
-          <button
+          <AnalyticsButton
             onClick={() => setIsInfoModalOpen(true)}
             className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all flex items-center justify-center active:scale-95 cursor-pointer"
             title="GCP App Integration Info"
+            trackingName="open_document_ai_underwriting_info_modal"
           >
             <GoogleCloudIcon className="w-4 h-4" />
-          </button>
+          </AnalyticsButton>
         </div>
       </div>
 

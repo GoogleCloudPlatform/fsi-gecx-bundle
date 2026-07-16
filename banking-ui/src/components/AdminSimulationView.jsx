@@ -37,6 +37,7 @@ import {
 } from '../utils/api.js';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 
 import { useSettings } from '../context/SettingsContext.jsx';
@@ -1353,7 +1354,7 @@ function AdminSimulationView({ mode = 'studio' }) {
         </div>
         {isMonitoring && (
           <div className="flex items-center gap-2 self-start md:self-end">
-            <button
+            <AnalyticsButton
               id="operations-tour-btn"
               onClick={() => {
                 localStorage.removeItem('operations-tour-completed');
@@ -1362,9 +1363,10 @@ function AdminSimulationView({ mode = 'studio' }) {
               }}
               className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 cursor-pointer flex items-center justify-center"
               title="Take Operations Monitor Tour"
+              trackingName="start_operations_monitor_tour"
             >
               <GoogleCompassIcon className="w-4 h-4 text-emerald-500" />
-            </button>
+            </AnalyticsButton>
             <select
               id="monitor-window-select"
               value={monitorWindowMinutes}
@@ -1387,7 +1389,7 @@ function AdminSimulationView({ mode = 'studio' }) {
         )}
         {!isMonitoring && (
           <div className="flex items-center gap-2 self-start md:self-end">
-            <button
+            <AnalyticsButton
               id="studio-tour-btn"
               onClick={() => {
                 localStorage.removeItem('studio-tour-completed');
@@ -1396,9 +1398,10 @@ function AdminSimulationView({ mode = 'studio' }) {
               }}
               className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 cursor-pointer flex items-center justify-center"
               title="Take Simulation Studio Tour"
+              trackingName="start_simulation_studio_tour"
             >
               <GoogleCompassIcon className="w-4 h-4 text-emerald-500" />
-            </button>
+            </AnalyticsButton>
           </div>
         )}
       </div>

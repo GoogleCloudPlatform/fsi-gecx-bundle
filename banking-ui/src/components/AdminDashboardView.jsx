@@ -18,6 +18,7 @@ import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume
 import { resetDatabase, getResetDatabaseAccess, getSystemSettings, updateSystemSettings, provisionMyDemo, resetMyDemo, deprovisionMyDemo, ensureVipMexicoLeaders, getCreditCardAccount } from '../utils/api.js';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 
 import { useSettings } from '../context/SettingsContext.jsx';
@@ -351,7 +352,7 @@ function AdminDashboardView() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <AnalyticsButton
             id="admin-tour-btn"
             onClick={() => {
               localStorage.removeItem('admin-tour-completed');
@@ -360,16 +361,18 @@ function AdminDashboardView() {
             }}
             className="p-2.5 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 cursor-pointer flex items-center justify-center"
             title="Take Admin Dashboard Tour"
+            trackingName="start_admin_dashboard_tour"
           >
             <GoogleCompassIcon className="w-5 h-5 text-emerald-500" />
-          </button>
-            <button
+          </AnalyticsButton>
+            <AnalyticsButton
               onClick={() => setIsInfoModalOpen(true)}
               className="p-2.5 rounded-2xl hover:bg-slate-805/80 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
               title="GCP Admin Integration Info"
+              trackingName="open_cloud_system_integration_info_modal"
             >
               <GoogleCloudIcon className="w-5 h-5 text-indigo-400" />
-          </button>
+            </AnalyticsButton>
         </div>
       </div>
 

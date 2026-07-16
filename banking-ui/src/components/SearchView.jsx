@@ -18,6 +18,7 @@ import { Search, MessageSquare, RotateCcw, ExternalLink } from 'lucide-react';
 
 import { findAnswer, performSearch } from '../utils/api.js';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 
 function SearchView() {
@@ -112,13 +113,14 @@ function SearchView() {
       <div className="w-full text-center space-y-2 mb-4 shrink-0 relative">
         <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Site Search Assistant</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">Conversational site search backed by generative answers and matching documents.</p>
-        <button
+        <AnalyticsButton
           onClick={() => setIsInfoModalOpen(true)}
           className="absolute right-0 top-1/2 -translate-y-1/2 p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm"
           title="GCP App Integration Info"
+          trackingName="open_ai_app_integration_info_modal"
         >
           <GoogleCloudIcon className="w-5 h-5" />
-        </button>
+        </AnalyticsButton>
       </div>
 
       <div className="w-full grid grid-cols-1 md:grid-cols-5 gap-8 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl flex-1 min-h-0">

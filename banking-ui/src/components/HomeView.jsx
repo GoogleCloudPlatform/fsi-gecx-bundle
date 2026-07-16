@@ -19,6 +19,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import BillPayModal from './BillPayModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
@@ -263,7 +264,7 @@ function HomeView({
                   >
                     Help & Support
                   </Link>
-                  <button
+                  <AnalyticsButton
                     id="home-tour-btn-auth"
                     onClick={() => {
                       localStorage.removeItem('home-tour-auth-completed');
@@ -272,10 +273,11 @@ function HomeView({
                     }}
                     className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer shadow-sm shrink-0 w-full sm:w-auto"
                     title="Take the Tour"
+                    trackingName="start_home_tour_auth"
                   >
                     <GoogleCompassIcon className="w-5 h-5" />
                     <span>Take Tour</span>
-                  </button>
+                  </AnalyticsButton>
                 </div>
               </>
             ) : (
@@ -307,7 +309,7 @@ function HomeView({
                     >
                       Compare Products
                     </Link>
-                    <button
+                    <AnalyticsButton
                       id="home-tour-btn"
                       onClick={() => {
                         localStorage.removeItem('home-tour-completed');
@@ -316,10 +318,11 @@ function HomeView({
                       }}
                       className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer shadow-sm shrink-0 w-full sm:w-auto"
                       title="Take the Tour"
+                      trackingName="start_home_tour"
                     >
                       <GoogleCompassIcon className="w-5 h-5" />
                       <span>Take Tour</span>
-                    </button>
+                    </AnalyticsButton>
                   </div>
               </>
             )}
@@ -348,14 +351,15 @@ function HomeView({
                       </div>
                     </div>
                     {/* Schema trigger button on top right */}
-                    <button 
+                    <AnalyticsButton 
                       id="dashboard-schema-btn"
                       onClick={() => setIsSchemaModalOpen(true)}
                       className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 cursor-pointer flex items-center justify-center shrink-0"
                       title="View Schema Details"
+                      trackingName="open_data_layer_architecture_info_modal"
                     >
                       <GoogleCloudIcon className="w-4 h-4" />
-                    </button>
+                    </AnalyticsButton>
                   </div>
 
                   <div className="space-y-4 mb-8">

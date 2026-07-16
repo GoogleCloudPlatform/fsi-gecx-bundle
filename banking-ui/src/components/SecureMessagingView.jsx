@@ -22,6 +22,7 @@ import {
 import { useSettings } from '../context/SettingsContext.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { 
   getMessages, 
@@ -529,7 +530,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
         </div>
 
         <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
-          <button
+          <AnalyticsButton
             id="secure-messaging-tour-btn"
             onClick={() => {
               localStorage.removeItem('secure-messaging-tour-completed');
@@ -538,16 +539,18 @@ function SecureMessagingView({ fbUser, customerProfile }) {
             }}
             className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:hover:text-white"
             title="Take Secure Messaging Tour"
+            trackingName="start_secure_messaging_tour"
           >
             <GoogleCompassIcon className="w-5 h-5 text-emerald-500" />
-          </button>
-          <button
+          </AnalyticsButton>
+          <AnalyticsButton
             onClick={() => setIsInfoModalOpen(true)}
             className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm"
             title="GCP & Firebase Integration Info"
+            trackingName="open_secure_messaging_backend_info_modal"
           >
             <GoogleCloudIcon className="w-5 h-5" />
-          </button>
+          </AnalyticsButton>
         </div>
       </div>
 

@@ -17,6 +17,7 @@ import { MapPin, Search, Navigation, Clock, Phone, ExternalLink, Copy, Check } f
 import { getLocations } from '../utils/api.js';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
@@ -178,7 +179,7 @@ export default function LocatorView() {
           Locate your nearest bank branches and ATMs. Get directions, hours, contact info, and more.
         </p>
         <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
-          <button
+          <AnalyticsButton
             onClick={() => {
               localStorage.removeItem('locator-tour-completed');
               setTourKey(prev => prev + 1);
@@ -186,17 +187,19 @@ export default function LocatorView() {
             }}
             className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
             title="Take the Tour"
+            trackingName="start_locator_tour"
           >
             <GoogleCompassIcon className="w-5 h-5" />
-          </button>
-          <button
+          </AnalyticsButton>
+          <AnalyticsButton
             id="locator-info-btn"
             onClick={() => setIsInfoModalOpen(true)}
             className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
             title="GCP App Integration Info"
+            trackingName="open_cloud_sql_integration_info_modal"
           >
             <GoogleCloudIcon className="w-5 h-5" />
-          </button>
+          </AnalyticsButton>
         </div>
       </div>
 

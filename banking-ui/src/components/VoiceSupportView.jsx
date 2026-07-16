@@ -35,6 +35,7 @@ import { formatVoiceLedgerAmount } from '../utils/voiceLedger.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
@@ -1452,7 +1453,7 @@ export default function VoiceSupportView() {
           Talk to our real-time AI assistant for instant credit card operations.
         </p>
         <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-3">
-          <button
+          <AnalyticsButton
             id="voice-tour-btn"
             onClick={() => {
               localStorage.removeItem('voice-tour-completed');
@@ -1461,16 +1462,18 @@ export default function VoiceSupportView() {
             }}
             className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-800 shadow-sm text-slate-500 hover:text-slate-750 dark:text-slate-400 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
             title="Take Voice Support Tour"
+            trackingName="start_voice_support_tour"
           >
             <GoogleCompassIcon className="w-5 h-5 text-indigo-500" />
-          </button>
-          <button
+          </AnalyticsButton>
+          <AnalyticsButton
             onClick={() => setIsInfoModalOpen(true)}
             className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-800 shadow-sm text-slate-500 hover:text-slate-750 dark:text-slate-400 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
             title="GCP App Integration Info"
+            trackingName="open_voice_telephony_integration_info_modal"
           >
             <GoogleCloudIcon className="w-5 h-5" />
-          </button>
+          </AnalyticsButton>
         </div>
 
         {/* Engine Selection Toggle */}

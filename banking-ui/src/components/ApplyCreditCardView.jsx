@@ -20,6 +20,7 @@ import { createApplication } from '../utils/api.js';
 import { formatPhoneNumber } from '../utils/formatters.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
 
 const CARDS_MAP = {
   'aura-elite-reserve': {
@@ -206,13 +207,14 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          <button
+          <AnalyticsButton
             onClick={() => setIsInfoModalOpen(true)}
             className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-850 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-550 hover:text-slate-850 dark:hover:text-white"
             title="GCP App Integration Info"
+            trackingName="open_cc_prefill_integration_info_modal"
           >
             <GoogleCloudIcon className="w-5 h-5" />
-          </button>
+          </AnalyticsButton>
         </div>
       </div>
 
