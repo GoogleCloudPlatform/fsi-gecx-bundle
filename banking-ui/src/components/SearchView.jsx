@@ -113,11 +113,10 @@ function SearchView() {
       <div className="w-full text-center space-y-2 mb-4 shrink-0 relative">
         <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Site Search Assistant</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">Conversational site search backed by generative answers and matching documents.</p>
-        <AnalyticsButton
+        <AnalyticsButton trackingName="button_click_search_view_01"
           onClick={() => setIsInfoModalOpen(true)}
           className="absolute right-0 top-1/2 -translate-y-1/2 p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm"
           title="GCP App Integration Info"
-          trackingName="open_ai_app_integration_info_modal"
         >
           <GoogleCloudIcon className="w-5 h-5" />
         </AnalyticsButton>
@@ -129,13 +128,13 @@ function SearchView() {
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 shrink-0">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Search Assistant</span>
             {chatHistory.length > 0 && (
-              <button 
+              <AnalyticsButton trackingName="button_click_search_view_02" 
                 onClick={handleNewChat}
                 className="text-[10px] text-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400 font-bold flex items-center gap-1 cursor-pointer transition-all hover:scale-105"
               >
                 <RotateCcw className="w-3 h-3" />
                 <span>New Chat</span>
-              </button>
+              </AnalyticsButton>
             )}
           </div>
           {/* Main/Initial Search Input */}
@@ -185,13 +184,13 @@ function SearchView() {
               {!isSearchLoading && relatedQuestions.length > 0 && (
                 <div className="flex flex-wrap gap-2 pt-2 justify-start w-full">
                   {relatedQuestions.map((q, qIdx) => (
-                    <button
+                    <AnalyticsButton trackingName="button_click_search_view_03"
                       key={qIdx}
                       onClick={() => handleConversationSubmit(q)}
                       className="px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer font-medium shadow-sm"
                     >
                       {q}
-                    </button>
+                    </AnalyticsButton>
                   ))}
                 </div>
               )}

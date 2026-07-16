@@ -26,6 +26,8 @@ import {
 } from '../utils/api.js';
 import BillPayModal from './BillPayModal.jsx';
 import SpendAnalyzerModal from './SpendAnalyzerModal.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
+
 
 function AccountsView({ fbUser, customerProfile, isReady }) {
   const navigate = useNavigate();
@@ -397,12 +399,12 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
           <LockIcon className="w-16 h-16 text-rose-550 dark:text-rose-500 mx-auto animate-pulse" />
           <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white">Access Denied</h2>
           <p className="text-slate-600 dark:text-slate-400">Please sign in via your identity provider to access secure bank accounts.</p>
-          <button 
+          <AnalyticsButton trackingName="button_click_accounts_view_01" 
             onClick={() => navigate('/')}
             className="px-6 py-3 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
           >
             Back to Home
-          </button>
+          </AnalyticsButton>
         </div>
       </div>
     );
@@ -424,13 +426,13 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
           </div>
 
           {selectedAccountId && (
-            <button 
+            <AnalyticsButton trackingName="button_click_accounts_view_02" 
               onClick={handleBackToMaster}
               className="flex items-center space-x-2 px-5 py-2.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-850 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer font-semibold text-sm shadow-sm"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to Accounts</span>
-            </button>
+            </AnalyticsButton>
           )}
         </div>
 
@@ -446,7 +448,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
             <p className="text-slate-605 dark:text-slate-400 text-sm leading-relaxed">
               Your profile is verified, but you have no active ledger accounts. Provision your isolated personal demo suite to get started.
             </p>
-            <button 
+            <AnalyticsButton trackingName="button_click_accounts_view_03" 
               onClick={async () => {
                 setIsLoading(true);
                 try {
@@ -461,7 +463,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
               className="w-full py-4 rounded-xl text-slate-950 font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 hover:scale-[1.02] active:scale-95 transition-all shadow-lg"
             >
               Provision Demo Suite
-            </button>
+            </AnalyticsButton>
           </div>
         ) : !selectedAccountId ? (
           /* MASTER VIEW: Snapshot of accounts */
@@ -562,7 +564,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                   <p className="text-xs text-slate-650 dark:text-slate-400 mt-1 max-w-xl">Move your idle deposits into our high-yield growth tier. Federally insured, no monthly fees, and instant liquidity.</p>
                 </div>
               </div>
-              <button 
+              <AnalyticsButton trackingName="button_click_accounts_view_04" 
                 onClick={() => {
                   const firstSavings = savingsAccounts[0];
                   if (firstSavings) {
@@ -572,7 +574,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                 className="px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-all cursor-pointer flex-shrink-0"
               >
                 Boost Yield Now
-              </button>
+              </AnalyticsButton>
             </div>
           </div>
         ) : (
@@ -596,20 +598,20 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
-                      <button 
+                      <AnalyticsButton trackingName="button_click_accounts_view_05" 
                         onClick={() => setIsBillPayOpen(true)}
                         className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 text-slate-955 font-bold hover:bg-emerald-400 active:scale-95 transition-all text-sm cursor-pointer shadow-sm"
                       >
                         <CreditCard className="w-4 h-4" />
                         <span>Pay Bill</span>
-                      </button>
-                      <button 
+                      </AnalyticsButton>
+                      <AnalyticsButton trackingName="button_click_accounts_view_06" 
                         onClick={() => setShowDocModal(true)}
                         className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-205 dark:hover:bg-slate-700 transition text-sm cursor-pointer"
                       >
                         <FileText className="w-4 h-4" />
                         <span>Statements</span>
-                      </button>
+                      </AnalyticsButton>
                     </div>
                   </div>
 
@@ -725,20 +727,20 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                   </p>
                 </div>
                 {selectedAccountType === 'credit' && (
-                  <button
+                  <AnalyticsButton trackingName="button_click_accounts_view_07"
                     onClick={() => setIsSpendAnalyzerOpen(true)}
                     className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold shadow-sm hover:shadow transition-all cursor-pointer"
                   >
                     <TrendingUp className="w-4 h-4" />
                     <span>Spend analyzer</span>
-                  </button>
+                  </AnalyticsButton>
                 )}
               </div>
 
               {selectedAccountType === 'credit' && (
                 <div className="mb-5 flex gap-2 overflow-x-auto pb-1">
                   {ledgerQuickTabs.map(tab => (
-                    <button
+                    <AnalyticsButton trackingName="button_click_accounts_view_08"
                       key={tab.id}
                       onClick={() => setActiveLedgerTab(tab.id)}
                       className={`inline-flex min-h-10 items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition cursor-pointer whitespace-nowrap ${
@@ -755,7 +757,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                       }`}>
                         {tab.count}
                       </span>
-                    </button>
+                    </AnalyticsButton>
                   ))}
                 </div>
               )}
@@ -772,17 +774,17 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                   />
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   {searchQuery && (
-                    <button
+                    <AnalyticsButton trackingName="button_click_accounts_view_09"
                       onClick={() => setSearchQuery('')}
                       className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
                     >
                       Clear
-                    </button>
+                    </AnalyticsButton>
                   )}
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button
+                  <AnalyticsButton trackingName="button_click_accounts_view_10"
                     onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
                     className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm cursor-pointer border ${
                       isFilterMenuOpen || activeFilterCount > 0
@@ -797,7 +799,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                         {activeFilterCount}
                       </span>
                     )}
-                  </button>
+                  </AnalyticsButton>
                 </div>
               </div>
 
@@ -814,7 +816,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                         { id: 'card', label: 'Cardholder', icon: '💳' },
                         { id: 'statement', label: 'Statement Period', icon: '📄' }
                       ].map(tab => (
-                        <button
+                        <AnalyticsButton trackingName="button_click_accounts_view_11"
                           key={tab.id}
                           onClick={() => setActiveFilterTab(tab.id)}
                           className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -832,16 +834,16 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                             (tab.id === 'statement' && filters.statement !== 'ALL')) && (
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                           )}
-                        </button>
+                        </AnalyticsButton>
                       ))}
                     </div>
                     {activeFilterCount > 0 && (
-                      <button
+                      <AnalyticsButton trackingName="button_click_accounts_view_12"
                         onClick={resetFilters}
                         className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer flex items-center gap-1"
                       >
                         <span>Reset All Filters ({activeFilterCount})</span>
-                      </button>
+                      </AnalyticsButton>
                     )}
                   </div>
 
@@ -871,7 +873,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                             { id: 'FEES', label: 'Fees & Interest' },
                             { id: 'OTHER', label: 'Other' }
                           ].map(cat => (
-                            <button
+                            <AnalyticsButton trackingName="button_click_accounts_view_13"
                               key={cat.id}
                               onClick={() => setFilters(prev => ({ ...prev, category: cat.id }))}
                               className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
@@ -881,7 +883,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                               }`}
                             >
                               {cat.label}
-                            </button>
+                            </AnalyticsButton>
                           ))}
                         </div>
                       </div>
@@ -916,30 +918,30 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2 pt-1">
-                          <button
+                          <AnalyticsButton trackingName="button_click_accounts_view_14"
                             onClick={() => setFilters(prev => ({ ...prev, minAmount: '', maxAmount: '25' }))}
                             className="px-3.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
                           >
                             Under $25
-                          </button>
-                          <button
+                          </AnalyticsButton>
+                          <AnalyticsButton trackingName="button_click_accounts_view_15"
                             onClick={() => setFilters(prev => ({ ...prev, minAmount: '25', maxAmount: '100' }))}
                             className="px-3.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
                           >
                             $25 - $100
-                          </button>
-                          <button
+                          </AnalyticsButton>
+                          <AnalyticsButton trackingName="button_click_accounts_view_16"
                             onClick={() => setFilters(prev => ({ ...prev, minAmount: '100', maxAmount: '' }))}
                             className="px-3.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
                           >
                             Over $100
-                          </button>
-                          <button
+                          </AnalyticsButton>
+                          <AnalyticsButton trackingName="button_click_accounts_view_17"
                             onClick={() => setFilters(prev => ({ ...prev, minAmount: '', maxAmount: '' }))}
                             className="px-3.5 py-1.5 bg-slate-200 dark:bg-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 cursor-pointer"
                           >
                             Clear Amount
-                          </button>
+                          </AnalyticsButton>
                         </div>
                       </div>
                     )}
@@ -956,7 +958,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                             { id: '60D', label: 'Last 60 Days' },
                             { id: 'YTD', label: 'Year to Date (YTD)' }
                           ].map(d => (
-                            <button
+                            <AnalyticsButton trackingName="button_click_accounts_view_18"
                               key={d.id}
                               onClick={() => setFilters(prev => ({ ...prev, dateRange: d.id }))}
                               className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
@@ -966,7 +968,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                               }`}
                             >
                               {d.label}
-                            </button>
+                            </AnalyticsButton>
                           ))}
                         </div>
                       </div>
@@ -982,7 +984,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                             { id: 'ALL', label: 'All Cards & Account Users' },
                             ...cardFilterOptions,
                           ].map(c => (
-                            <button
+                            <AnalyticsButton trackingName="button_click_accounts_view_19"
                               key={c.id}
                               onClick={() => setFilters(prev => ({ ...prev, card: c.id }))}
                               className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
@@ -992,7 +994,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                               }`}
                             >
                               {c.label}
-                            </button>
+                            </AnalyticsButton>
                           ))}
                         </div>
                       </div>
@@ -1010,7 +1012,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                             { id: 'JUNE_2026', label: 'June 2026 Statement (Closed)' },
                             { id: 'MAY_2026', label: 'May 2026 Statement (Closed)' }
                           ].map(s => (
-                            <button
+                            <AnalyticsButton trackingName="button_click_accounts_view_20"
                               key={s.id}
                               onClick={() => setFilters(prev => ({ ...prev, statement: s.id }))}
                               className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
@@ -1020,7 +1022,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                               }`}
                             >
                               {s.label}
-                            </button>
+                            </AnalyticsButton>
                           ))}
                         </div>
                       </div>
@@ -1032,12 +1034,12 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                     <span className="text-slate-600 dark:text-slate-300 font-semibold">
                       Showing <strong className="text-slate-900 dark:text-white font-bold">{filteredTransactions.length}</strong> matching transactions
                     </span>
-                    <button
+                    <AnalyticsButton trackingName="button_click_accounts_view_21"
                       onClick={() => setIsFilterMenuOpen(false)}
                       className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white font-bold transition-all cursor-pointer shadow-sm"
                     >
                       Apply & Close Panel
-                    </button>
+                    </AnalyticsButton>
                   </div>
                 </div>
               )}
@@ -1089,7 +1091,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                                       <tr className="hover:bg-slate-100/50 dark:hover:bg-slate-900/20 transition-colors">
                                         <td className="py-3 text-xs text-slate-500 dark:text-slate-400 italic w-[16%]">Pending</td>
                                         <td className="py-3 font-medium text-slate-800 dark:text-slate-300 w-[44%]">
-                                          <button
+                                          <AnalyticsButton trackingName="button_click_accounts_view_22"
                                             onClick={() => setExpandedTransactionKey(isExpanded ? null : rowKey)}
                                             className="flex w-full min-w-0 items-center gap-2 text-left cursor-pointer"
                                           >
@@ -1098,7 +1100,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                                             {isLateFee && (
                                               <span className="hidden xl:inline text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400">Action Required</span>
                                             )}
-                                          </button>
+                                          </AnalyticsButton>
                                         </td>
                                         <td className="py-3 w-[16%]">
                                           <span className="inline-block max-w-full truncate text-xs font-semibold px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300">
@@ -1122,7 +1124,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                                                 <span><strong>Card:</strong> {formatTransactionCardDetailLabel(tx)}</span>
                                                 <span className="sm:col-span-2"><strong>Descriptor:</strong> {tx.description}</span>
                                                 <span><strong>Category:</strong> {catLabel}</span>
-                                                <button className="text-left font-bold text-blue-650 dark:text-blue-300 hover:underline cursor-pointer">Report or dispute</button>
+                                                <AnalyticsButton trackingName="button_click_accounts_view_23" className="text-left font-bold text-blue-650 dark:text-blue-300 hover:underline cursor-pointer">Report or dispute</AnalyticsButton>
                                               </div>
                                             </div>
                                           </td>
@@ -1165,13 +1167,13 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                                         {tx.posted_timestamp || tx.posted_at ? new Date(tx.posted_timestamp || tx.posted_at).toLocaleDateString() : "Pending"}
                                       </td>
                                       <td className="py-4 font-medium text-slate-800 dark:text-slate-200 w-[44%]">
-                                        <button
+                                        <AnalyticsButton trackingName="button_click_accounts_view_24"
                                           onClick={() => setExpandedTransactionKey(isExpanded ? null : rowKey)}
                                           className="flex w-full min-w-0 items-center gap-2 text-left cursor-pointer"
                                         >
                                           {isExpanded ? <ChevronDown className="w-4 h-4 flex-shrink-0 text-slate-400" /> : <ChevronRight className="w-4 h-4 flex-shrink-0 text-slate-400" />}
                                           <span className="min-w-0 truncate">{tx.description}</span>
-                                        </button>
+                                        </AnalyticsButton>
                                       </td>
                                       <td className="py-4 w-[16%]">
                                         <span className="inline-block max-w-full truncate text-xs font-semibold px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300">
@@ -1195,7 +1197,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                                               <span><strong>Card:</strong> {formatTransactionCardDetailLabel(tx)}</span>
                                               <span className="sm:col-span-2"><strong>Description:</strong> {tx.description}</span>
                                               <span><strong>Category:</strong> {catLabel}</span>
-                                              <button className="text-left font-bold text-blue-650 dark:text-blue-300 hover:underline cursor-pointer">Report or dispute</button>
+                                              <AnalyticsButton trackingName="button_click_accounts_view_25" className="text-left font-bold text-blue-650 dark:text-blue-300 hover:underline cursor-pointer">Report or dispute</AnalyticsButton>
                                             </div>
                                           </div>
                                         </td>
@@ -1301,7 +1303,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                     <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Move idle cash when you are done reviewing this card ledger.</p>
                   </div>
                 </div>
-                <button
+                <AnalyticsButton trackingName="button_click_accounts_view_26"
                   onClick={() => {
                     const firstSavings = accountsData?.deposit_accounts?.find(a => a.account_type === 'SAVINGS');
                     if (firstSavings) {
@@ -1311,7 +1313,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                   className="px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-all cursor-pointer flex-shrink-0"
                 >
                   Learn More
-                </button>
+                </AnalyticsButton>
               </div>
             )}
           </div>
@@ -1349,12 +1351,12 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white">Nova Everyday Visa</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Agreement and product specifications</p>
               </div>
-              <button 
+              <AnalyticsButton trackingName="button_click_accounts_view_27" 
                 onClick={() => setShowDocModal(false)}
                 className="text-slate-400 hover:text-slate-700 dark:hover:text-white transition"
               >
                 ✕
-              </button>
+              </AnalyticsButton>
             </div>
             
             <div className="space-y-4 text-sm text-slate-655 dark:text-slate-300 overflow-y-auto max-h-96 pr-2 leading-relaxed">
@@ -1369,12 +1371,12 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
               </p>
             </div>
 
-            <button 
+            <AnalyticsButton trackingName="button_click_accounts_view_28" 
               onClick={() => setShowDocModal(false)}
               className="w-full py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-white font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
             >
               Close Details
-            </button>
+            </AnalyticsButton>
           </div>
         </div>
       )}

@@ -4,6 +4,8 @@ import { ArrowLeft, Save, User, Phone, AlertCircle, CheckCircle2, Loader2 } from
 import { useSettings } from '../context/SettingsContext.jsx';
 import { updateCustomerProfile } from '../utils/api.js';
 import { formatPhoneNumber, getPhonePlaceholder } from '../utils/formatters.js';
+import AnalyticsButton from './AnalyticsButton.jsx';
+
 
 
 
@@ -80,13 +82,13 @@ function EditProfileView({ customerProfile, setCustomerProfile, fbUser }) {
         {/* Card Header */}
         <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-100 dark:border-slate-800/50">
           <div className="flex items-center space-x-3">
-            <button
+            <AnalyticsButton trackingName="button_click_edit_profile_view_01"
               onClick={() => navigate('/')}
               className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all hover:scale-105"
               aria-label="Back"
             >
               <ArrowLeft className="w-5 h-5" />
-            </button>
+            </AnalyticsButton>
             <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
               Edit Profile
             </h1>
@@ -181,14 +183,14 @@ function EditProfileView({ customerProfile, setCustomerProfile, fbUser }) {
 
           {/* Form Actions */}
           <div className="flex items-center justify-end gap-4 pt-4 border-t border-slate-100 dark:border-slate-800/50">
-            <button
+            <AnalyticsButton trackingName="button_click_edit_profile_view_02"
               type="button"
               onClick={() => navigate('/')}
               className="px-6 py-2.5 text-sm font-semibold rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
             >
               Cancel
-            </button>
-            <button
+            </AnalyticsButton>
+            <AnalyticsButton trackingName="button_click_edit_profile_view_03"
               type="submit"
               disabled={isSubmitting}
               className="px-6 py-2.5 text-sm font-semibold rounded-full text-slate-950 hover:scale-102 active:scale-98 transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
@@ -208,7 +210,7 @@ function EditProfileView({ customerProfile, setCustomerProfile, fbUser }) {
                   <span>Save Changes</span>
                 </>
               )}
-            </button>
+            </AnalyticsButton>
           </div>
         </form>
       </div>

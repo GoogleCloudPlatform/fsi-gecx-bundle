@@ -35,6 +35,8 @@ import CertificateMatrix from './CertificateMatrix.jsx';
 import CreditCardMatrix from './CreditCardMatrix.jsx';
 import MortgageMatrix from './MortgageMatrix.jsx';
 import AccountOpeningModal from './AccountOpeningModal.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
+
 
 export default function CompareProducts({ fbUser }) {
   const navigate = useNavigate();
@@ -127,7 +129,7 @@ export default function CompareProducts({ fbUser }) {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
-              <button
+              <AnalyticsButton trackingName="button_click_compare_products_01"
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-6 py-4 rounded-2xl font-bold text-sm transition-all duration-300 flex items-center space-x-2.5 border cursor-pointer ${isActive
@@ -137,7 +139,7 @@ export default function CompareProducts({ fbUser }) {
               >
                 <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400 dark:text-emerald-600' : ''}`} />
                 <span>{tab.label}</span>
-              </button>
+              </AnalyticsButton>
             );
           })}
         </div>
@@ -184,12 +186,12 @@ export default function CompareProducts({ fbUser }) {
                 <div className="text-xs font-bold text-sky-500 uppercase tracking-wider">Simulate Rate Reservation Lock</div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">{simulatingLock.type}</h3>
               </div>
-              <button
+              <AnalyticsButton trackingName="button_click_compare_products_02"
                 onClick={() => setSimulatingLock(null)}
                 className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
-              </button>
+              </AnalyticsButton>
             </div>
 
             {/* Body */}
@@ -228,14 +230,14 @@ export default function CompareProducts({ fbUser }) {
                     Reserving this base pricing guarantee simulates our high-availability real estate integration framework. No initial fee check processing required.
                   </p>
 
-                  <button
+                  <AnalyticsButton trackingName="button_click_compare_products_03"
                     type="submit"
                     className="w-full py-3.5 rounded-xl text-slate-950 font-bold text-sm shadow-lg hover:scale-[1.02] transition-all duration-300 flex items-center justify-center space-x-2 cursor-pointer"
                     style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}
                   >
                     <span>Authorize 60-Day Guarantee Lock</span>
                     <ArrowRight className="w-4 h-4" />
-                  </button>
+                  </AnalyticsButton>
                 </form>
               )}
             </div>
@@ -254,13 +256,13 @@ export default function CompareProducts({ fbUser }) {
             <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
               To apply for a credit card, please sign in using the profile button in the top-right of the page and then proceed with your application.
             </p>
-            <button
+            <AnalyticsButton trackingName="button_click_compare_products_04"
               onClick={() => setIsAuthModalOpen(false)}
               className="w-full py-2.5 rounded-xl text-slate-950 font-bold text-sm shadow-md hover:scale-[1.02] transition-all duration-300 cursor-pointer"
               style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}
             >
               Acknowledge
-            </button>
+            </AnalyticsButton>
           </div>
         </div>
       )}

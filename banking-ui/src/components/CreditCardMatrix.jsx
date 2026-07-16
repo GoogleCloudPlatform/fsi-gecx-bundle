@@ -15,6 +15,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { creditCards } from '../utils/productData.js';
+import AnalyticsButton from './AnalyticsButton.jsx';
+
 
 export default function CreditCardMatrix({ onApply }) {
   const navigate = useNavigate();
@@ -53,7 +55,7 @@ export default function CreditCardMatrix({ onApply }) {
                 {card.regApr}
               </td>
               <td className="p-5 text-center">
-                <button
+                <AnalyticsButton trackingName="button_click_credit_card_matrix_01"
                   onClick={() => {
                     const cardSlug = card.name.toLowerCase().replace(/ /g, '-');
                     if (onApply) {
@@ -65,7 +67,7 @@ export default function CreditCardMatrix({ onApply }) {
                   className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs transition-colors cursor-pointer"
                 >
                   Apply
-                </button>
+                </AnalyticsButton>
               </td>
             </tr>
           ))}

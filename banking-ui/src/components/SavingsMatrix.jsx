@@ -15,6 +15,8 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
 import { savingsProducts } from '../utils/productData.js';
+import AnalyticsButton from './AnalyticsButton.jsx';
+
 
 export default function SavingsMatrix({ onOpenAccount }) {
   return (
@@ -52,13 +54,13 @@ export default function SavingsMatrix({ onOpenAccount }) {
                 {prod.details}
               </td>
               <td className="p-5 text-right">
-                <button
+                <AnalyticsButton trackingName="button_click_savings_matrix_01"
                   onClick={() => onOpenAccount && onOpenAccount(prod)}
                   className="px-4 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-xs transition-colors flex items-center gap-1 ml-auto cursor-pointer"
                 >
                   <span>Open</span>
                   <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+                </AnalyticsButton>
               </td>
             </tr>
           ))}

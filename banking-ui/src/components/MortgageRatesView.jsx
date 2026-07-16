@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
 import MortgageMatrix from './MortgageMatrix.jsx';
+import AnalyticsButton from './AnalyticsButton.jsx';
+
 
 function MortgageRatesView() {
   const { 
@@ -139,12 +141,12 @@ function MortgageRatesView() {
                 <div className="text-xs font-bold text-sky-500 uppercase tracking-wider">Simulate Rate Reservation Lock</div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">{simulatingLock.type}</h3>
               </div>
-              <button 
+              <AnalyticsButton trackingName="button_click_mortgage_rates_view_01" 
                 onClick={() => setSimulatingLock(null)}
                 className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors"
               >
                 <X className="w-5 h-5" />
-              </button>
+              </AnalyticsButton>
             </div>
 
             {/* Body block */}
@@ -183,14 +185,14 @@ function MortgageRatesView() {
                     Reserving this base pricing guarantee simulates our high-availability real estate integration framework. No initial fee check processing required.
                   </p>
 
-                  <button
+                  <AnalyticsButton trackingName="button_click_mortgage_rates_view_02"
                     type="submit"
                     className="w-full py-3.5 rounded-xl text-slate-950 font-bold text-sm shadow-lg hover:scale-[1.02] transition-all duration-300 flex items-center justify-center space-x-2"
                     style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}
                   >
                     <span>Authorize 60-Day Guarantee Lock</span>
                     <ArrowRight className="w-4 h-4" />
-                  </button>
+                  </AnalyticsButton>
                 </form>
               )}
             </div>

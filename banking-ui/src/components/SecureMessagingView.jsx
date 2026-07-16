@@ -278,7 +278,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
     return parts.map((part, index) => {
       if (part === '/support/voice' || part === '/support/voice?entry=fraud-alert') {
         return (
-          <button
+          <AnalyticsButton trackingName="button_click_secure_messaging_view_01"
             key={`${part}-${index}`}
             type="button"
             onClick={() => navigate('/support/voice', { state: { entry: 'fraud-alert' } })}
@@ -286,7 +286,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
           >
             {part}
             <ExternalLink className="w-3 h-3" />
-          </button>
+          </AnalyticsButton>
         );
       }
       return <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>;
@@ -530,7 +530,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
         </div>
 
         <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
-          <AnalyticsButton
+          <AnalyticsButton trackingName="button_click_secure_messaging_view_02"
             id="secure-messaging-tour-btn"
             onClick={() => {
               localStorage.removeItem('secure-messaging-tour-completed');
@@ -539,15 +539,13 @@ function SecureMessagingView({ fbUser, customerProfile }) {
             }}
             className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:hover:text-white"
             title="Take Secure Messaging Tour"
-            trackingName="start_secure_messaging_tour"
           >
             <GoogleCompassIcon className="w-5 h-5 text-emerald-500" />
           </AnalyticsButton>
-          <AnalyticsButton
+          <AnalyticsButton trackingName="button_click_secure_messaging_view_03"
             onClick={() => setIsInfoModalOpen(true)}
             className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm"
             title="GCP & Firebase Integration Info"
-            trackingName="open_secure_messaging_backend_info_modal"
           >
             <GoogleCloudIcon className="w-5 h-5" />
           </AnalyticsButton>
@@ -561,7 +559,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
         <div className="md:col-span-4 border-r border-slate-200 dark:border-slate-800/80 flex flex-col h-full bg-slate-50/50 dark:bg-slate-900/50" id="threads-list-container">
           <div className="p-4 border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between gap-3 bg-white dark:bg-slate-900">
             <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">Conversations</span>
-            <button
+            <AnalyticsButton trackingName="button_click_secure_messaging_view_04"
               id="compose-message-btn"
               onClick={() => {
                 setIsComposing(true);
@@ -571,7 +569,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
             >
               <Plus className="w-3.5 h-3.5" />
               <span>New Thread</span>
-            </button>
+            </AnalyticsButton>
           </div>
 
           {/* List Wrapper */}
@@ -632,7 +630,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
                       </div>
 
                       {/* Deletion action */}
-                      <button
+                      <AnalyticsButton trackingName="button_click_secure_messaging_view_05"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeleteThread(thread.thread_id);
@@ -641,7 +639,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
                         title="Delete Thread"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      </AnalyticsButton>
                     </div>
                   );
                 })
@@ -656,12 +654,12 @@ function SecureMessagingView({ fbUser, customerProfile }) {
           {isComposing && (
             <div className="flex flex-col h-full p-6 text-left">
               <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100 dark:border-slate-800/50">
-                <button 
+                <AnalyticsButton trackingName="button_click_secure_messaging_view_06" 
                   onClick={() => setIsComposing(false)}
                   className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
                 >
                   <ArrowLeft className="w-4 h-4" />
-                </button>
+                </AnalyticsButton>
                 <span className="font-bold text-slate-800 dark:text-slate-100">Start New Secure Thread</span>
               </div>
 
@@ -701,14 +699,14 @@ function SecureMessagingView({ fbUser, customerProfile }) {
 
                 {/* Action CTA */}
                 <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800/50">
-                  <button
+                  <AnalyticsButton trackingName="button_click_secure_messaging_view_07"
                     type="button"
                     onClick={() => setIsComposing(false)}
                     className="px-6 py-2.5 text-sm font-semibold rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </AnalyticsButton>
+                  <AnalyticsButton trackingName="button_click_secure_messaging_view_08"
                     type="submit"
                     disabled={isSending || !newText.trim()}
                     className="px-6 py-2.5 text-sm font-semibold rounded-full text-slate-950 hover:scale-102 active:scale-98 transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
@@ -728,7 +726,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
                         <span>Send Message</span>
                       </>
                     )}
-                  </button>
+                  </AnalyticsButton>
                 </div>
               </form>
             </div>
@@ -745,7 +743,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
                   </span>
                   <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
                     <span>Thread ID: {activeThreadId}</span>
-                    <button
+                    <AnalyticsButton trackingName="button_click_secure_messaging_view_09"
                       onClick={handleCopyThreadId}
                       className="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
                       title="Copy Thread ID"
@@ -755,31 +753,31 @@ function SecureMessagingView({ fbUser, customerProfile }) {
                       ) : (
                         <Copy className="w-3.5 h-3.5" />
                       )}
-                    </button>
+                    </AnalyticsButton>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
+                  <AnalyticsButton trackingName="button_click_secure_messaging_view_10"
                     onClick={handleOpenDebugModal}
                     className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer flex items-center justify-center"
                     title="Simulate push notification for this thread"
                   >
                     <Bug className="w-4 h-4" />
-                  </button>
-                  <button
+                  </AnalyticsButton>
+                  <AnalyticsButton trackingName="button_click_secure_messaging_view_11"
                     onClick={() => fetchMessages(true)}
                     className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer flex items-center justify-center"
                     title="Refresh Messages"
                   >
                     <RefreshCw className="w-4 h-4" />
-                  </button>
-                  <button
+                  </AnalyticsButton>
+                  <AnalyticsButton trackingName="button_click_secure_messaging_view_12"
                     onClick={() => handleDeleteThread(activeThreadId)}
                     className="p-1.5 rounded-lg bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-950/50 text-red-500 transition-colors cursor-pointer flex items-center justify-center"
                     title="Delete Thread"
                   >
                     <Trash2 className="w-4 h-4" />
-                  </button>
+                  </AnalyticsButton>
                 </div>
               </div>
 
@@ -827,15 +825,15 @@ function SecureMessagingView({ fbUser, customerProfile }) {
                             <p className="whitespace-pre-line break-words">{renderMessageText(msg.message)}</p>
                             {isFraudAlertMessage(msg) && (
                               <div className="mt-3 pt-3 border-t border-slate-200/70 dark:border-slate-700/70 flex flex-col sm:flex-row gap-2">
-                                <button
+                                <AnalyticsButton trackingName="button_click_secure_messaging_view_13"
                                   type="button"
                                   onClick={() => navigate('/support/voice', { state: { entry: 'fraud-alert' } })}
                                   className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-colors"
                                 >
                                   <ExternalLink className="w-3.5 h-3.5" />
                                   Chat with support
-                                </button>
-                                <button
+                                </AnalyticsButton>
+                                <AnalyticsButton trackingName="button_click_secure_messaging_view_14"
                                   type="button"
                                   onClick={handleAcknowledgeFraudAlert}
                                   disabled={isAcknowledgingFraud}
@@ -847,7 +845,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
                                     <CheckCircle2 className="w-3.5 h-3.5" />
                                   )}
                                   I recognize these
-                                </button>
+                                </AnalyticsButton>
                               </div>
                             )}
                           </div>
@@ -857,13 +855,13 @@ function SecureMessagingView({ fbUser, customerProfile }) {
                         </div>
 
                         {/* Delete Single message on hover */}
-                        <button
+                        <AnalyticsButton trackingName="button_click_secure_messaging_view_15"
                           onClick={() => handleDeleteMessage(msg.message_id)}
                           className="opacity-0 group-hover:opacity-100 p-1 rounded-md bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-red-500 transition-all cursor-pointer"
                           title="Delete message"
                         >
                           <Trash2 className="w-3 h-3" />
-                        </button>
+                        </AnalyticsButton>
                       </div>
                     </div>
                   );
@@ -886,7 +884,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
                   }}
                   required
                 />
-                <button
+                <AnalyticsButton trackingName="button_click_secure_messaging_view_16"
                   type="submit"
                   disabled={isSending || !replyText.trim()}
                   className="p-3.5 rounded-2xl text-slate-950 font-semibold shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center shrink-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
@@ -900,7 +898,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
                   ) : (
                     <Send className="w-4 h-4" />
                   )}
-                </button>
+                </AnalyticsButton>
               </form>
             </div>
           )}
@@ -917,7 +915,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
                   Select an existing conversation from the side panel or click "New Thread" to draft a secure message to our support experts.
                 </p>
               </div>
-              <button
+              <AnalyticsButton trackingName="button_click_secure_messaging_view_17"
                 onClick={() => setIsComposing(true)}
                 className="mt-2 px-5 py-2 text-xs font-semibold rounded-full text-slate-950 shadow-lg hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
                 style={{
@@ -927,7 +925,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
               >
                 <Plus className="w-4 h-4" />
                 <span>Compose message</span>
-              </button>
+              </AnalyticsButton>
             </div>
           )}
 
@@ -1024,14 +1022,14 @@ function SecureMessagingView({ fbUser, customerProfile }) {
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <button
+                <AnalyticsButton trackingName="button_click_secure_messaging_view_18"
                   type="button"
                   onClick={() => setIsDebugOpen(false)}
                   className="px-4 py-2 text-xs font-semibold rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
                 >
                   Cancel
-                </button>
-                <button
+                </AnalyticsButton>
+                <AnalyticsButton trackingName="button_click_secure_messaging_view_19"
                   type="submit"
                   className="px-4 py-2 text-xs font-semibold rounded-full text-slate-950 hover:scale-105 active:scale-95 transition-all cursor-pointer"
                   style={{
@@ -1040,7 +1038,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
                   }}
                 >
                   Simulate Event
-                </button>
+                </AnalyticsButton>
               </div>
             </form>
           </div>
@@ -1078,7 +1076,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
                   <span>Open Cloud SQL Studio</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
-                <button
+                <AnalyticsButton trackingName="button_click_secure_messaging_view_20"
                   type="button"
                   onClick={handleCopyQuery}
                   className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs hover:underline cursor-pointer"
@@ -1094,7 +1092,7 @@ function SecureMessagingView({ fbUser, customerProfile }) {
                       <Copy className="w-3.5 h-3.5" />
                     </>
                   )}
-                </button>
+                </AnalyticsButton>
               </div>
             </div>
             <hr className="border-slate-100 dark:border-slate-800" />

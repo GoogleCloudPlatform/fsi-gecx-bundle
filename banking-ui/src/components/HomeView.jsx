@@ -264,7 +264,7 @@ function HomeView({
                   >
                     Help & Support
                   </Link>
-                  <AnalyticsButton
+                  <AnalyticsButton trackingName="button_click_home_view_01"
                     id="home-tour-btn-auth"
                     onClick={() => {
                       localStorage.removeItem('home-tour-auth-completed');
@@ -273,7 +273,6 @@ function HomeView({
                     }}
                     className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer shadow-sm shrink-0 w-full sm:w-auto"
                     title="Take the Tour"
-                    trackingName="start_home_tour_auth"
                   >
                     <GoogleCompassIcon className="w-5 h-5" />
                     <span>Take Tour</span>
@@ -294,14 +293,14 @@ function HomeView({
                 </p>
 
                   <div className="flex flex-col sm:flex-row justify-center gap-4 items-center">
-                    <button 
+                    <AnalyticsButton trackingName="button_click_home_view_02" 
                       id="become-member-btn"
                       onClick={() => setIsMemberModalOpen(true)}
                       className="flex items-center justify-center px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer w-full sm:w-auto"
                       style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
                     >
                       Become a Member
-                    </button>
+                    </AnalyticsButton>
                     <Link
                       to="/compare-products"
                       id="compare-products-link"
@@ -309,7 +308,7 @@ function HomeView({
                     >
                       Compare Products
                     </Link>
-                    <AnalyticsButton
+                    <AnalyticsButton trackingName="button_click_home_view_03"
                       id="home-tour-btn"
                       onClick={() => {
                         localStorage.removeItem('home-tour-completed');
@@ -318,7 +317,6 @@ function HomeView({
                       }}
                       className="flex items-center justify-center space-x-2 px-8 py-4 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer shadow-sm shrink-0 w-full sm:w-auto"
                       title="Take the Tour"
-                      trackingName="start_home_tour"
                     >
                       <GoogleCompassIcon className="w-5 h-5" />
                       <span>Take Tour</span>
@@ -351,12 +349,11 @@ function HomeView({
                       </div>
                     </div>
                     {/* Schema trigger button on top right */}
-                    <AnalyticsButton 
+                    <AnalyticsButton trackingName="button_click_home_view_04" 
                       id="dashboard-schema-btn"
                       onClick={() => setIsSchemaModalOpen(true)}
                       className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 cursor-pointer flex items-center justify-center shrink-0"
                       title="View Schema Details"
-                      trackingName="open_data_layer_architecture_info_modal"
                     >
                       <GoogleCloudIcon className="w-4 h-4" />
                     </AnalyticsButton>
@@ -450,14 +447,14 @@ function HomeView({
                       Provision your isolated personal demo suite to test live payments, statements, and agent calls.
                     </p>
                   </div>
-                  <button
+                  <AnalyticsButton trackingName="button_click_home_view_05"
                     id="provision-demo-btn"
                     onClick={handleProvision}
                     disabled={isProvisioning}
                     className="w-full py-3.5 rounded-xl text-slate-950 font-bold text-sm bg-gradient-to-r from-emerald-400 to-cyan-400 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all duration-300 shadow-lg shadow-emerald-500/10"
                   >
                     {isProvisioning ? "Seeding accounts & transaction history..." : "Provision Demo Suite"}
-                  </button>
+                  </AnalyticsButton>
                 </div>
               )}
             </div>
@@ -535,7 +532,7 @@ function HomeView({
                       Estimate, customize, and submit loan requests with instant approval decisions and check deposits within 24 hours.
                     </p>
                   </div>
-                  <button 
+                  <AnalyticsButton trackingName="button_click_home_view_06" 
                     onClick={() => {
                       const calcSection = document.getElementById('calculator');
                       if (calcSection) calcSection.scrollIntoView({ behavior: 'smooth' });
@@ -543,7 +540,7 @@ function HomeView({
                     className="w-full py-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer"
                   >
                     Calculate Payments
-                  </button>
+                  </AnalyticsButton>
                 </div>
               </div>
             </div>
@@ -555,13 +552,13 @@ function HomeView({
               <p className="text-slate-650 dark:text-slate-400 max-w-xl mx-auto mb-8">
                 Join thousands of members who are earning more and paying less with {bankName} Credit Union.
               </p>
-              <button
+              <AnalyticsButton trackingName="button_click_home_view_07"
                 onClick={() => setIsMemberModalOpen(true)}
                 className="px-8 py-4 rounded-full text-slate-950 font-bold text-base shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
                 style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 20px 25px -5px ${brandColorFrom}33` }}
               >
                 Open an Account in 5 Minutes
-              </button>
+              </AnalyticsButton>
             </div>
           )}
         </div>
@@ -652,13 +649,13 @@ function HomeView({
               </div>
             </div>
 
-            <button 
+            <AnalyticsButton trackingName="button_click_home_view_08" 
               onClick={() => setIsLoanModalOpen(true)}
               className="w-full py-4 rounded-xl text-slate-950 font-bold shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
               style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 10px 15px -3px ${brandColorFrom}33` }}
             >
               Apply for Loan Now
-            </button>
+            </AnalyticsButton>
           </div>
         </div>
       </section>
@@ -797,7 +794,7 @@ function HomeView({
                     {inquiry.desc}
                   </p>
                 </div>
-                <button 
+                <AnalyticsButton trackingName="button_click_home_view_09" 
                   onClick={() => {
                     setActiveBot(inquiry.botName);
                     setTimeout(() => setActiveBot(null), 3500);
@@ -805,7 +802,7 @@ function HomeView({
                   className="w-full py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-teal-500 hover:text-slate-950 dark:hover:bg-teal-500 dark:hover:text-slate-950 transition-all duration-300 shadow-sm hover:shadow-teal-500/20"
                 >
                   Launch {inquiry.botName}
-                </button>
+                </AnalyticsButton>
               </div>
             ))}
           </div>
@@ -884,13 +881,13 @@ function HomeView({
                 <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
                   To join Nova Horizon, please sign in using the top-right profile controls and then click <strong>Provision Demo Suite</strong> on the home dashboard to initialize your sandbox member profile.
                 </p>
-                <button
+                <AnalyticsButton trackingName="button_click_home_view_10"
                   onClick={() => setIsMemberModalOpen(false)}
                   className="w-full py-2.5 rounded-xl text-slate-950 font-bold text-sm shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
                   style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}
                 >
                   Acknowledge
-                </button>
+                </AnalyticsButton>
               </div>
             </div>
           )}
@@ -905,13 +902,13 @@ function HomeView({
                 <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
                   To apply, please sign in using the top-right profile button and then click the chat icon on the bottom right of the page to launch the CX Agent Studio mortgage preapproval flow.
                 </p>
-                <button
+                <AnalyticsButton trackingName="button_click_home_view_11"
                   onClick={() => setIsLoanModalOpen(false)}
                   className="w-full py-2.5 rounded-xl text-slate-950 font-bold text-sm shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
                   style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})` }}
                 >
                   Acknowledge
-                </button>
+                </AnalyticsButton>
               </div>
             </div>
           )}

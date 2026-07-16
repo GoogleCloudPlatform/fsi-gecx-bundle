@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { enableCcai } from '../utils/constants.js';
+import AnalyticsButton from './AnalyticsButton.jsx';
+
 
 function SettingsView() {
   const navigate = useNavigate();
@@ -28,12 +30,12 @@ function SettingsView() {
       <div className="max-w-4xl mx-auto bg-white dark:bg-slate-900 rounded-2xl p-8 border border-slate-200 dark:border-slate-800 shadow-xl">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Customization</h1>
-          <button
+          <AnalyticsButton trackingName="button_click_settings_view_01"
             onClick={() => navigate('/')}
             className="px-4 py-2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
           >
             Back to Home
-          </button>
+          </AnalyticsButton>
         </div>
         
         <div className="space-y-6">
@@ -222,24 +224,24 @@ function SettingsView() {
               accept=".json,.yaml,.yml"
               onChange={handleImport}
             />
-            <button
+            <AnalyticsButton trackingName="button_click_settings_view_02"
               onClick={() => document.getElementById('import-settings').click()}
               className="px-4 py-2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
             >
               Import
-            </button>
-            <button
+            </AnalyticsButton>
+            <AnalyticsButton trackingName="button_click_settings_view_03"
               onClick={() => setIsExportModalOpen(true)}
               className="px-4 py-2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
             >
               Export
-            </button>
-            <button
+            </AnalyticsButton>
+            <AnalyticsButton trackingName="button_click_settings_view_04"
               onClick={() => setIsRestoreModalOpen(true)}
               className="px-4 py-2 rounded-full bg-red-500 hover:bg-red-600 text-white font-semibold transition-colors"
             >
               Restore Defaults
-            </button>
+            </AnalyticsButton>
 
             {isRestoreModalOpen && (
               <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center">
@@ -247,13 +249,13 @@ function SettingsView() {
                   <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Restore Defaults</h2>
                   <p className="text-slate-600 dark:text-slate-400 mb-6">Are you sure you want to restore all settings to their default values? This action cannot be undone.</p>
                   <div className="flex justify-end space-x-4">
-                    <button
+                    <AnalyticsButton trackingName="button_click_settings_view_05"
                       onClick={() => setIsRestoreModalOpen(false)}
                       className="px-4 py-2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
                     >
                       Cancel
-                    </button>
-                    <button
+                    </AnalyticsButton>
+                    <AnalyticsButton trackingName="button_click_settings_view_06"
                       onClick={() => {
                         setIsCxAgentEnabled(true);
                         setIsCcaiAgentEnabled(false);
@@ -272,7 +274,7 @@ function SettingsView() {
                       className="px-4 py-2 rounded-full bg-red-500 hover:bg-red-600 text-white font-semibold transition-colors"
                     >
                       Confirm
-                    </button>
+                    </AnalyticsButton>
                   </div>
                 </div>
               </div>

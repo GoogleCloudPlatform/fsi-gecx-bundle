@@ -179,7 +179,7 @@ export default function LocatorView() {
           Locate your nearest bank branches and ATMs. Get directions, hours, contact info, and more.
         </p>
         <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
-          <AnalyticsButton
+          <AnalyticsButton trackingName="button_click_locator_view_01"
             onClick={() => {
               localStorage.removeItem('locator-tour-completed');
               setTourKey(prev => prev + 1);
@@ -187,16 +187,14 @@ export default function LocatorView() {
             }}
             className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
             title="Take the Tour"
-            trackingName="start_locator_tour"
           >
             <GoogleCompassIcon className="w-5 h-5" />
           </AnalyticsButton>
-          <AnalyticsButton
+          <AnalyticsButton trackingName="button_click_locator_view_02"
             id="locator-info-btn"
             onClick={() => setIsInfoModalOpen(true)}
             className="p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
             title="GCP App Integration Info"
-            trackingName="open_cloud_sql_integration_info_modal"
           >
             <GoogleCloudIcon className="w-5 h-5" />
           </AnalyticsButton>
@@ -221,22 +219,22 @@ export default function LocatorView() {
                 onChange={(e) => setAddress(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm transition-all"
               />
-              <button 
+              <AnalyticsButton trackingName="button_click_locator_view_03" 
                 type="submit" 
                 className="absolute right-2.5 top-2 px-4 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl transition-all cursor-pointer"
               >
                 Search
-              </button>
+              </AnalyticsButton>
             </form>
 
-            <button
+            <AnalyticsButton trackingName="button_click_locator_view_04"
                 id="locator-gps-btn"
               onClick={fetchByGPS}
               className="px-5 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md hover:shadow-lg transition-all"
             >
               <Navigation className="w-4 h-4" />
               <span>Use Current Location</span>
-            </button>
+            </AnalyticsButton>
           </div>
 
           {/* Filters & Toggle */}
@@ -244,7 +242,7 @@ export default function LocatorView() {
             {/* Type Filters */}
               <div id="locator-type-filters" className="flex justify-end gap-1.5 bg-slate-100 dark:bg-slate-900 p-1.5 rounded-2xl h-[44px] items-center">
               {["ALL", "BRANCH", "ATM"].map((t) => (
-                <button
+                <AnalyticsButton trackingName="button_click_locator_view_05"
                   key={t}
                   onClick={() => setTypeFilter(t)}
                   className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
@@ -254,7 +252,7 @@ export default function LocatorView() {
                   }`}
                 >
                   {t === "ALL" ? "All" : t === "BRANCH" ? "Branches" : "ATMs"}
-                </button>
+                </AnalyticsButton>
               ))}
             </div>
 
@@ -411,7 +409,7 @@ export default function LocatorView() {
                   <span>Open Cloud SQL Studio</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
-                <button
+                <AnalyticsButton trackingName="button_click_locator_view_06"
                   type="button"
                   onClick={handleCopyQuery}
                   className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs hover:underline cursor-pointer"
@@ -427,7 +425,7 @@ export default function LocatorView() {
                       <Copy className="w-3.5 h-3.5" />
                     </>
                   )}
-                </button>
+                </AnalyticsButton>
               </div>
             </div>
           </div>

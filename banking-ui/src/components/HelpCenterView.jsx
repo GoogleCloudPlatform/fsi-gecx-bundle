@@ -19,6 +19,8 @@ import {
 import { useLocation } from 'react-router-dom';
 
 import { HELP_CATEGORIES } from '../utils/constants.js';
+import AnalyticsButton from './AnalyticsButton.jsx';
+
 
 const articles = [
   {
@@ -224,12 +226,12 @@ function HelpCenterView({ activeBot, setActiveBot }) {
               className="w-full pl-13 pr-12 py-4 rounded-full bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-sm font-medium shadow-xl focus:border-emerald-500 dark:focus:border-emerald-500 outline-none transition-all duration-300"
             />
             {searchQuery && (
-              <button
+              <AnalyticsButton trackingName="button_click_help_center_view_01"
                 onClick={() => setSearchQuery('')}
                 className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
               >
                 <X className="w-4 h-4" />
-              </button>
+              </AnalyticsButton>
             )}
           </div>
 
@@ -253,7 +255,7 @@ function HelpCenterView({ activeBot, setActiveBot }) {
             {categories.map((cat, idx) => {
               const isSelected = selectedCategory === cat;
               return (
-                <button
+                <AnalyticsButton trackingName="button_click_help_center_view_02"
                   key={idx}
                   onClick={() => setSelectedCategory(cat)}
                   className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 cursor-pointer border ${
@@ -263,7 +265,7 @@ function HelpCenterView({ activeBot, setActiveBot }) {
                   }`}
                 >
                   {cat}
-                </button>
+                </AnalyticsButton>
               );
             })}
           </div>
@@ -280,12 +282,12 @@ function HelpCenterView({ activeBot, setActiveBot }) {
               <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
                 We couldn't locate specific documentation targeting "<span className="font-semibold text-slate-700 dark:text-slate-300">{searchQuery}</span>" within this filtered category. Try expanding your search keywords or reset filter metrics.
               </p>
-              <button
+              <AnalyticsButton trackingName="button_click_help_center_view_03"
                 onClick={() => { setSearchQuery(''); setSelectedCategory('All'); }}
                 className="px-4 py-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs hover:bg-emerald-500/20 transition-colors"
               >
                 Reset Knowledge Index Filters
-              </button>
+              </AnalyticsButton>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -340,7 +342,7 @@ function HelpCenterView({ activeBot, setActiveBot }) {
             
             {activeBot !== undefined && setActiveBot && (
               <div className="pt-2 flex flex-wrap justify-center gap-3">
-                <button
+                <AnalyticsButton trackingName="button_click_help_center_view_04"
                   onClick={() => {
                     setActiveBot('Security & Fraud Bot');
                     setTimeout(() => setActiveBot(null), 4000);
@@ -348,8 +350,8 @@ function HelpCenterView({ activeBot, setActiveBot }) {
                   className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
                 >
                   Launch Security Advisor
-                </button>
-                <button
+                </AnalyticsButton>
+                <AnalyticsButton trackingName="button_click_help_center_view_05"
                   onClick={() => {
                     setActiveBot('Wealth Management Bot');
                     setTimeout(() => setActiveBot(null), 4000);
@@ -357,7 +359,7 @@ function HelpCenterView({ activeBot, setActiveBot }) {
                   className="px-4 py-2 rounded-lg bg-emerald-500 text-xs font-bold text-slate-950 hover:bg-emerald-400 transition-colors"
                 >
                   Launch Wealth Expert
-                </button>
+                </AnalyticsButton>
               </div>
             )}
           </div>
@@ -380,12 +382,12 @@ function HelpCenterView({ activeBot, setActiveBot }) {
                   {viewingArticle.readTime}
                 </span>
               </div>
-              <button 
+              <AnalyticsButton trackingName="button_click_help_center_view_06" 
                 onClick={() => setViewingArticle(null)}
                 className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors"
               >
                 <X className="w-5 h-5" />
-              </button>
+              </AnalyticsButton>
             </div>
 
             {/* Scrolling Body block */}
@@ -401,18 +403,18 @@ function HelpCenterView({ activeBot, setActiveBot }) {
               <div className="pt-6 border-t border-slate-100 dark:border-slate-800 text-center">
                 <p className="text-xs text-slate-400 mb-3">Did this documentation resolve your context needs?</p>
                 <div className="flex justify-center gap-3">
-                  <button 
+                  <AnalyticsButton trackingName="button_click_help_center_view_07" 
                     onClick={() => setViewingArticle(null)}
                     className="px-4 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs hover:bg-emerald-500/20 transition-colors"
                   >
                     Yes, Bounded Context Fully Met
-                  </button>
-                  <button 
+                  </AnalyticsButton>
+                  <AnalyticsButton trackingName="button_click_help_center_view_08" 
                     onClick={() => setViewingArticle(null)}
                     className="px-4 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                   >
                     Close Window
-                  </button>
+                  </AnalyticsButton>
                 </div>
               </div>
             </div>

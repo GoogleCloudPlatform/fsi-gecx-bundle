@@ -15,6 +15,8 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
 import { certificateAccounts } from '../utils/productData.js';
+import AnalyticsButton from './AnalyticsButton.jsx';
+
 
 export default function CertificateMatrix({ onOpenAccount }) {
   return (
@@ -55,13 +57,13 @@ export default function CertificateMatrix({ onOpenAccount }) {
                 ${prod.minDeposit.toLocaleString()}
               </td>
               <td className="p-5 text-right">
-                <button
+                <AnalyticsButton trackingName="button_click_certificate_matrix_01"
                   onClick={() => onOpenAccount && onOpenAccount(prod)}
                   className="px-4 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 font-bold text-xs transition-colors flex items-center gap-1 ml-auto"
                 >
                   <span>Open</span>
                   <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+                </AnalyticsButton>
               </td>
             </tr>
           ))}

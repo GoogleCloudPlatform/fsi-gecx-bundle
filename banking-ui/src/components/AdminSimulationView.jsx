@@ -1331,13 +1331,13 @@ function AdminSimulationView({ mode = 'studio' }) {
       {/* Header Navigation */}
       <div className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
         <div>
-          <button 
+          <AnalyticsButton trackingName="button_click_admin_simulation_view_01" 
             onClick={() => navigate('/admin')}
             className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors mb-3 group"
           >
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
             Back to Admin Portal
-          </button>
+          </AnalyticsButton>
           <div className="flex items-center gap-3">
             <div className={`p-3 rounded-2xl bg-gradient-to-br ${pageIconGradient} text-white shadow-lg shadow-cyan-500/20`}>
               <PageIcon className="w-7 h-7" />
@@ -1354,7 +1354,7 @@ function AdminSimulationView({ mode = 'studio' }) {
         </div>
         {isMonitoring && (
           <div className="flex items-center gap-2 self-start md:self-end">
-            <AnalyticsButton
+            <AnalyticsButton trackingName="button_click_admin_simulation_view_02"
               id="operations-tour-btn"
               onClick={() => {
                 localStorage.removeItem('operations-tour-completed');
@@ -1363,7 +1363,6 @@ function AdminSimulationView({ mode = 'studio' }) {
               }}
               className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 cursor-pointer flex items-center justify-center"
               title="Take Operations Monitor Tour"
-              trackingName="start_operations_monitor_tour"
             >
               <GoogleCompassIcon className="w-4 h-4 text-emerald-500" />
             </AnalyticsButton>
@@ -1378,18 +1377,18 @@ function AdminSimulationView({ mode = 'studio' }) {
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
-            <button
+            <AnalyticsButton trackingName="button_click_admin_simulation_view_03"
               onClick={() => refreshOperationsSummary(monitorWindowMinutes)}
               className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
               title="Refresh summary metrics now. Live transaction rows continue streaming from Redis SSE."
             >
               <RefreshCw className="w-4 h-4" />
-            </button>
+            </AnalyticsButton>
           </div>
         )}
         {!isMonitoring && (
           <div className="flex items-center gap-2 self-start md:self-end">
-            <AnalyticsButton
+            <AnalyticsButton trackingName="button_click_admin_simulation_view_04"
               id="studio-tour-btn"
               onClick={() => {
                 localStorage.removeItem('studio-tour-completed');
@@ -1398,7 +1397,6 @@ function AdminSimulationView({ mode = 'studio' }) {
               }}
               className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 cursor-pointer flex items-center justify-center"
               title="Take Simulation Studio Tour"
-              trackingName="start_simulation_studio_tour"
             >
               <GoogleCompassIcon className="w-4 h-4 text-emerald-500" />
             </AnalyticsButton>
@@ -1416,13 +1414,13 @@ function AdminSimulationView({ mode = 'studio' }) {
               </div>
               <div className="flex items-center gap-2">
                 <span className={`px-3 py-1 rounded-full border text-[10px] font-black ${walStatus.className}`}>{walStatus.label}</span>
-                  <button
+                  <AnalyticsButton trackingName="button_click_admin_simulation_view_05"
                     onClick={() => setInfoModal('wal')}
                     className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
                     title="Explain live stream status, CDC freshness, event age, and throughput metrics."
                   >
                     <GoogleCloudIcon className="w-4 h-4 text-indigo-400" />
-                  </button>
+                  </AnalyticsButton>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -1468,13 +1466,13 @@ function AdminSimulationView({ mode = 'studio' }) {
                   <div className="text-[11px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">Risk & Alerts Overview</div>
                   <p className="text-xs text-slate-500 mt-1">{formatWindowLabel(monitorWindowMinutes)} operational risk posture.</p>
                 </div>
-                  <button
+                  <AnalyticsButton trackingName="button_click_admin_simulation_view_06"
                     onClick={() => setInfoModal('credit-risk')}
                     className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
                     title="Explain flagged activity, risk scoring, pending exposure, and model-version signals."
                   >
                     <GoogleCloudIcon className="w-4 h-4 text-indigo-400" />
-                  </button>
+                  </AnalyticsButton>
               </div>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 {riskOverviewCards.map((card) => (
@@ -1690,14 +1688,14 @@ function AdminSimulationView({ mode = 'studio' }) {
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">Rapid domestic card activity to exercise stream throughput and replication freshness.</div>
               </div>
             </div>
-            <button
+            <AnalyticsButton trackingName="button_click_admin_simulation_view_07"
               onClick={handleSpendSurge}
               disabled={isSurgeLoading}
               className="mt-4 w-full py-2.5 px-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-cyan-600"
             >
               {isSurgeLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
               {isSurgeLoading ? 'Injecting Surge...' : 'Run Surge'}
-            </button>
+            </AnalyticsButton>
           </div>
 
           <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-950/10 flex flex-col">
@@ -1711,14 +1709,14 @@ function AdminSimulationView({ mode = 'studio' }) {
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">Creates a customer fraud alert, secure message, and flagged risk stream activity.</div>
               </div>
             </div>
-            <button
+            <AnalyticsButton trackingName="button_click_admin_simulation_view_08"
               onClick={handleFraudAnomaly}
               disabled={isAnomalyLoading}
               className="mt-4 w-full py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-rose-600"
             >
               {isAnomalyLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldAlert className="w-4 h-4" />}
               {isAnomalyLoading ? 'Creating Alert...' : 'Inject Anomaly'}
-            </button>
+            </AnalyticsButton>
           </div>
 
           <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-950/5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-950/10 flex flex-col">
@@ -1732,14 +1730,14 @@ function AdminSimulationView({ mode = 'studio' }) {
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">Adds a standalone fee event for ledger, support, and voice-agent demonstrations.</div>
               </div>
             </div>
-            <button
+            <AnalyticsButton trackingName="button_click_admin_simulation_view_09"
               onClick={handleLateFee}
               disabled={isFeeLoading}
               className="mt-4 w-full py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-amber-600"
             >
               {isFeeLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
               {isFeeLoading ? 'Injecting Fee...' : 'Inject Fee'}
-            </button>
+            </AnalyticsButton>
           </div>
         </div>
       </div>
@@ -1753,13 +1751,13 @@ function AdminSimulationView({ mode = 'studio' }) {
             </div>
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">Scenario Composer</h2>
-                <button
+                <AnalyticsButton trackingName="button_click_admin_simulation_view_10"
                   onClick={() => setInfoModal('scenario-studio')}
                   className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
                   title="Explain dry runs, immediate launches, replays, and scheduled scenario execution."
                 >
                   <GoogleCloudIcon className="w-4 h-4 text-indigo-400" />
-                </button>
+                </AnalyticsButton>
             </div>
             <p className="text-xs text-slate-500 mt-1 max-w-2xl">
               Dry-run a scenario plan, launch it now, or schedule the run into a start/end operating window.
@@ -1965,7 +1963,7 @@ function AdminSimulationView({ mode = 'studio' }) {
             </div>
 
             <div className="grid grid-cols-2 gap-2" id="scenario-composer-actions">
-              <button
+              <AnalyticsButton trackingName="button_click_admin_simulation_view_11"
                 onClick={handleScenarioDryRun}
                 disabled={isScenarioLoading}
                 className="py-2.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-slate-800"
@@ -1973,8 +1971,8 @@ function AdminSimulationView({ mode = 'studio' }) {
               >
                 {isScenarioLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
                 Dry Run
-              </button>
-              <button
+              </AnalyticsButton>
+              <AnalyticsButton trackingName="button_click_admin_simulation_view_12"
                 onClick={handleScenarioExecute}
                 disabled={isScenarioLoading}
                 className="py-2.5 px-2 rounded-xl bg-violet-600 hover:bg-violet-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-violet-600"
@@ -1982,8 +1980,8 @@ function AdminSimulationView({ mode = 'studio' }) {
               >
                 {isScenarioLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                 Launch Now
-              </button>
-              <button
+              </AnalyticsButton>
+              <AnalyticsButton trackingName="button_click_admin_simulation_view_13"
                 onClick={handleScenarioReplay}
                 disabled={isScenarioLoading || !scenarioPlan}
                 className="py-2.5 px-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-cyan-600"
@@ -1991,8 +1989,8 @@ function AdminSimulationView({ mode = 'studio' }) {
               >
                 {isScenarioLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
                 Replay
-              </button>
-              <button
+              </AnalyticsButton>
+              <AnalyticsButton trackingName="button_click_admin_simulation_view_14"
                 onClick={handleScenarioSchedule}
                 disabled={isScenarioLoading || isScheduleLoading}
                 className="py-2.5 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:hover:bg-emerald-600"
@@ -2000,7 +1998,7 @@ function AdminSimulationView({ mode = 'studio' }) {
               >
                 {isScheduleLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CalendarClock className="w-4 h-4" />}
                 Schedule Run
-              </button>
+              </AnalyticsButton>
             </div>
           </div>
         </div>
@@ -2016,14 +2014,14 @@ function AdminSimulationView({ mode = 'studio' }) {
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">Scenario Runs & Scheduled Event Queue</h2>
             <p className="text-xs text-slate-500 mt-1">Synthetic scenario runs created by Schedule Run and dispatched by Cloud Tasks over time.</p>
           </div>
-          <button
+          <AnalyticsButton trackingName="button_click_admin_simulation_view_15"
             onClick={refreshScheduledEvents}
             className="self-start lg:self-auto px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95 flex items-center gap-2"
             title="Refresh scheduled scenario run status from banking-service."
           >
             <RefreshCw className="w-4 h-4" />
             Refresh
-          </button>
+          </AnalyticsButton>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 text-[11px]">
@@ -2193,12 +2191,12 @@ function AdminSimulationView({ mode = 'studio' }) {
               <div className="font-mono font-black text-rose-600 dark:text-rose-400">{cdcStats.operationalActiveFraudAlerts}</div>
             </div>
           </div>
-          <button
+          <AnalyticsButton trackingName="button_click_admin_simulation_view_16"
             onClick={refreshScheduledEvents}
             className="mt-4 text-xs font-bold text-cyan-700 dark:text-cyan-300 inline-flex items-center gap-1"
           >
             View details <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
-          </button>
+          </AnalyticsButton>
         </div>
 
         <div className="rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-950/5 p-4">
@@ -2240,12 +2238,12 @@ function AdminSimulationView({ mode = 'studio' }) {
           <div className="flex-1 overflow-hidden">
             <div className="flex items-center justify-between">
               <h4 className="font-bold text-base">{feedback.title}</h4>
-              <button
+              <AnalyticsButton trackingName="button_click_admin_simulation_view_17"
                 onClick={() => setFeedback({ type: '', title: '', message: '', data: null })}
                 className="px-2.5 py-1 rounded-lg bg-white/30 dark:bg-black/20 hover:bg-white/50 dark:hover:bg-black/30 text-[10px] font-bold uppercase tracking-wider transition-colors"
               >
                 Hide
-              </button>
+              </AnalyticsButton>
             </div>
             <p className="text-sm mt-1 opacity-90">{feedback.message}</p>
             {feedback.data && (
