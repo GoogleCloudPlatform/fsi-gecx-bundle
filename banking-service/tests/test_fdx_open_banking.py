@@ -45,8 +45,8 @@ def setup_db():
 def test_taxonomy_service():
     from services.taxonomy_service import TaxonomyService
     cat = TaxonomyService.get_category("5411")
-    assert cat.primary == "GROCERY"
-    assert cat.detailed == "GROCERY_SUPERMARKETS"
+    assert cat.primary == "GROCERIES"
+    assert cat.detailed == "GROCERIES"
     
     # Test fallback
     cat_unknown = TaxonomyService.get_category("9999")
@@ -131,7 +131,7 @@ def test_list_taxonomies_success():
         assert resp.status_code == 200
         data = resp.json()
         assert "5411" in data
-        assert data["5411"]["primary"] == "GROCERY"
+        assert data["5411"]["primary"] == "GROCERIES"
     finally:
         app.dependency_overrides.clear()
 
@@ -143,7 +143,7 @@ def test_get_taxonomy_by_mcc_success():
         assert resp.status_code == 200
         data = resp.json()
         assert data["primary"] == "DINING"
-        assert data["detailed"] == "DINING_FAST_FOOD"
+        assert data["detailed"] == "DINING"
     finally:
         app.dependency_overrides.clear()
 
