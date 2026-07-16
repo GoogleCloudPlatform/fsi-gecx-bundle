@@ -173,6 +173,7 @@ function AppContent() {
       if (!target) return;
 
       // Skip if explicitly handled by AnalyticsButton or AnalyticsLink
+      // data-analytics-handled becomes accessible as element.dataset.analyticsHandled
       if (target.dataset.analyticsHandled === 'true') return;
 
       const isLink = target.tagName.toLowerCase() === 'a';
