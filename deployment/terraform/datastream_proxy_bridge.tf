@@ -42,8 +42,7 @@ resource "google_compute_instance" "datastream_alloydb_proxy" {
     subnetwork = google_compute_subnetwork.fsi_gecx_subnet.id
     network_ip = google_compute_address.datastream_alloydb_proxy_internal_ip.address
   }
-  metadata = {
-    startup-script = <<-EOT
+  metadata_startup_script = <<-EOT
       #!/bin/bash
       set -euo pipefail
       iptables -C INPUT -p tcp --dport 5432 -s 172.16.1.0/29 -j ACCEPT 2>/dev/null || \
@@ -56,8 +55,8 @@ resource "google_compute_instance" "datastream_alloydb_proxy" {
 
       [Service]
       ExecStartPre=-/usr/bin/docker rm -f datastream-alloydb-proxy
-      ExecStartPre=/usr/bin/docker pull alpine/socat@sha256:beb4a68d9e4fe6b0f21ea774a0fde6c31f580dde6368939ed70100c5385b015e
-      ExecStart=/usr/bin/docker run --rm --name datastream-alloydb-proxy --net=host alpine/socat@sha256:beb4a68d9e4fe6b0f21ea774a0fde6c31f580dde6368939ed70100c5385b015e TCP-LISTEN:5432,fork,reuseaddr TCP:${google_alloydb_instance.banking_primary.ip_address}:5432
+      ExecStartPre=/usr/bin/docker pull gcr.io/dms-images/tcp-proxy@sha256:8dd502ee798710551d56b31872beac67913f02167442595b3375effc10099b15
+      ExecStart=/usr/bin/docker run --rm --name datastream-alloydb-proxy --network=host --env SOURCE_CONFIG=${google_alloydb_instance.banking_primary.ip_address}:5432 gcr.io/dms-images/tcp-proxy@sha256:8dd502ee798710551d56b31872beac67913f02167442595b3375effc10099b15
       Restart=always
       RestartSec=10
 
@@ -66,8 +65,7 @@ resource "google_compute_instance" "datastream_alloydb_proxy" {
       UNIT
       systemctl daemon-reload
       systemctl enable --now datastream-alloydb-proxy.service
-    EOT
-  }
+  EOT
   depends_on = [
     google_alloydb_instance.banking_primary,
     google_compute_router_nat.nat,

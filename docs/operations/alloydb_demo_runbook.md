@@ -48,7 +48,7 @@ This rebuild is required because Datastream does not replicate PostgreSQL `TRUNC
 - Datastream stream: `gcloud datastream streams describe banking-cdc-stream --location us-central1`.
 - Publication: `SELECT * FROM pg_publication WHERE pubname = 'datastream_publication';`
 - Slot: `SELECT slot_name, active, restart_lsn, confirmed_flush_lsn FROM pg_replication_slots WHERE slot_name = 'datastream_replication_slot';`
-- Bridge: inspect `datastream-alloydb-proxy` serial output and verify TCP 5432 is allowed only from `172.16.1.0/29`.
+- Bridge: verify the `datastream-alloydb-proxy` systemd unit runs the digest-pinned `gcr.io/dms-images/tcp-proxy` image in host-network mode, inspect serial output, and verify TCP 5432 is allowed only from `172.16.1.0/29`.
 - Federation: run `deployment/scripts/reconcile_alloydb_federation.sh`; it verifies `EXTERNAL_QUERY(..., 'SELECT 1')`.
 
 If the slot is inactive, check the bridge and Datastream source profile before recreating it. Never drop an active slot merely to clear lag; a backfill decision must be explicit.
