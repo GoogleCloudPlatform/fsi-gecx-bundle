@@ -21,6 +21,10 @@ steps:
       - |
         if [ ! -d /workspace/.git ]; then
           git init -q /workspace
+          git -C /workspace add -A
+          git -C /workspace \
+            -c user.name=cloud-build -c user.email=cloud-build@localhost \
+            commit -qm archive-build
         fi
 
   - name: "ghcr.io/github-linguist/linguist:latest"
