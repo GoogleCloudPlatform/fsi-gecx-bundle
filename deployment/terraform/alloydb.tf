@@ -128,6 +128,9 @@ resource "google_alloydb_user" "banking_bq_connector" {
   password_wo_version = 1
   database_roles      = ["alloydbsuperuser"]
   depends_on          = [google_alloydb_instance.banking_primary]
+  lifecycle {
+    ignore_changes = [database_roles]
+  }
 }
 
 resource "google_alloydb_user" "service_iam_users" {
@@ -137,6 +140,9 @@ resource "google_alloydb_user" "service_iam_users" {
   user_type      = "ALLOYDB_IAM_USER"
   database_roles = ["alloydbiamuser"]
   depends_on     = [google_alloydb_instance.banking_primary]
+  lifecycle {
+    ignore_changes = [database_roles]
+  }
 }
 
 resource "google_alloydb_user" "migration_iam_user" {
@@ -145,6 +151,9 @@ resource "google_alloydb_user" "migration_iam_user" {
   user_type      = "ALLOYDB_IAM_USER"
   database_roles = ["alloydbiamuser", "alloydbsuperuser"]
   depends_on     = [google_alloydb_instance.banking_primary]
+  lifecycle {
+    ignore_changes = [database_roles]
+  }
 }
 
 resource "google_alloydb_user" "database_iam_support_users" {
@@ -154,6 +163,9 @@ resource "google_alloydb_user" "database_iam_support_users" {
   user_type      = "ALLOYDB_IAM_USER"
   database_roles = ["alloydbiamuser"]
   depends_on     = [google_alloydb_instance.banking_primary]
+  lifecycle {
+    ignore_changes = [database_roles]
+  }
 }
 
 resource "google_alloydb_user" "database_iam_viewer_users" {
@@ -163,4 +175,7 @@ resource "google_alloydb_user" "database_iam_viewer_users" {
   user_type      = "ALLOYDB_IAM_USER"
   database_roles = ["alloydbiamuser"]
   depends_on     = [google_alloydb_instance.banking_primary]
+  lifecycle {
+    ignore_changes = [database_roles]
+  }
 }

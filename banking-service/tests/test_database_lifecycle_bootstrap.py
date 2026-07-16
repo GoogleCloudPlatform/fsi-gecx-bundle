@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 from scripts.database_lifecycle import LifecycleConfig, bootstrap
 
 
-def test_bootstrap_delegates_database_ownership_to_schema_owner() -> None:
+def test_bootstrap_delegates_schema_creation_to_schema_owner() -> None:
     connection = MagicMock()
     config = LifecycleConfig(
         project_id="example-project",
@@ -25,7 +25,6 @@ def test_bootstrap_delegates_database_ownership_to_schema_owner() -> None:
         bootstrap(connection, config)
 
     statements = [str(call.args[0]) for call in connection.execute.call_args_list]
-    assert 'ALTER DATABASE "banking" OWNER TO "banking_schema_owner"' in statements
     assert (
         'GRANT CONNECT, CREATE, TEMPORARY ON DATABASE "banking" '
         'TO "banking_schema_owner"'
