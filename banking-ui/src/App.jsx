@@ -1527,7 +1527,8 @@ function AppContent() {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <button
+            <AnalyticsButton
+              trackingName="toggle_light_dark_mode"
               onClick={() => {
                 const themes = ['light', 'dark', 'auto'];
                 const nextIndex = (themes.indexOf(theme) + 1) % themes.length;
@@ -1539,7 +1540,7 @@ function AppContent() {
               {theme === 'light' && <Sun className="w-5 h-5" />}
               {theme === 'dark' && <Moon className="w-5 h-5" />}
               {theme === 'auto' && <Monitor className="w-5 h-5" />}
-            </button>
+            </AnalyticsButton>
             <Link
               to="/settings"
               className="hidden md:block p-2.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-650 dark:text-slate-350 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
@@ -1822,7 +1823,7 @@ function AppContent() {
                       <Link 
                         to="/checking-accounts"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/checking-accounts' ? 'text-teal-600 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between text-xs font-semibold ${location.pathname === '/checking-accounts' ? 'text-teal-600 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}
                       >
                         <span>Checking</span>
                         {location.pathname === '/checking-accounts' && <div className="w-1 h-1 rounded-full bg-teal-500"></div>}
@@ -1830,7 +1831,7 @@ function AppContent() {
                       <Link 
                         to="/savings-accounts"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/savings-accounts' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between text-xs font-semibold ${location.pathname === '/savings-accounts' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
                       >
                         <span>Savings</span>
                         {location.pathname === '/savings-accounts' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
@@ -1838,7 +1839,7 @@ function AppContent() {
                       <Link 
                         to="/certificate-accounts"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/certificate-accounts' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between text-xs font-semibold ${location.pathname === '/certificate-accounts' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
                       >
                         <span>Certificate Accounts</span>
                         {location.pathname === '/certificate-accounts' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
@@ -1848,7 +1849,7 @@ function AppContent() {
                       <Link 
                         to="/credit-cards"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/credit-cards' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between text-xs font-semibold ${location.pathname === '/credit-cards' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
                       >
                         <span>Credit Cards</span>
                         {location.pathname === '/credit-cards' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
@@ -1858,7 +1859,7 @@ function AppContent() {
                       <Link 
                         to="/mortgages"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/mortgages' ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-600 dark:text-slate-400'}`}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between text-xs font-semibold ${location.pathname === '/mortgages' ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-600 dark:text-slate-400'}`}
                       >
                         <span>Mortgages</span>
                         {location.pathname === '/mortgages' && <div className="w-1 h-1 rounded-full bg-cyan-500"></div>}
@@ -1866,7 +1867,7 @@ function AppContent() {
                       <Link 
                         to="/mortgage-rates"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/mortgage-rates' ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-600 dark:text-slate-400'}`}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between text-xs font-semibold ${location.pathname === '/mortgage-rates' ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-600 dark:text-slate-400'}`}
                       >
                         <span>Mortgage Rates</span>
                         {location.pathname === '/mortgage-rates' && <div className="w-1 h-1 rounded-full bg-cyan-500"></div>}
@@ -1876,7 +1877,7 @@ function AppContent() {
                       <Link 
                         to="/compare-products"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/compare-products' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between text-xs font-semibold ${location.pathname === '/compare-products' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
                       >
                         <span>Compare Products</span>
                         {location.pathname === '/compare-products' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
@@ -1912,7 +1913,7 @@ function AppContent() {
                         to="/help-center"
                         state={{ category: 'All' }}
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/help-center' && (!location.state?.category || location.state?.category === 'All') ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between text-xs font-semibold ${location.pathname === '/help-center' && (!location.state?.category || location.state?.category === 'All') ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
                       >
                         <span>All Topics</span>
                         {location.pathname === '/help-center' && (!location.state?.category || location.state?.category === 'All') && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
@@ -1925,7 +1926,7 @@ function AppContent() {
                           to="/help-center" 
                           state={{ category: cat }} 
                           onClick={() => setIsMobileMenuOpen(false)}
-                          className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/help-center' && location.state?.category === cat ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                          className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between text-xs font-semibold ${location.pathname === '/help-center' && location.state?.category === cat ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
                         >
                           <span>{cat}</span>
                           {location.pathname === '/help-center' && location.state?.category === cat && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
@@ -1936,7 +1937,7 @@ function AppContent() {
                       <Link 
                         to="/disclosures"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/disclosures' ? 'text-sky-600 dark:text-sky-400' : 'text-slate-600 dark:text-slate-400'}`}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between text-xs font-semibold ${location.pathname === '/disclosures' ? 'text-sky-600 dark:text-sky-400' : 'text-slate-600 dark:text-slate-400'}`}
                       >
                         <span>Disclosures</span>
                         {location.pathname === '/disclosures' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
@@ -1944,7 +1945,7 @@ function AppContent() {
                       <Link 
                         to="/fee-schedule"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/fee-schedule' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between text-xs font-semibold ${location.pathname === '/fee-schedule' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
                       >
                         <span>Fee Schedule</span>
                         {location.pathname === '/fee-schedule' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
@@ -1955,7 +1956,7 @@ function AppContent() {
                         <Link 
                           to="/support/voice"
                           onClick={() => setIsMobileMenuOpen(false)}
-                          className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/support/voice' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                          className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between text-xs font-semibold ${location.pathname === '/support/voice' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
                         >
                           <span>Credit Card Support</span>
                           {location.pathname === '/support/voice' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
@@ -1964,7 +1965,7 @@ function AppContent() {
                       <Link 
                         to="/locator"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/locator' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between text-xs font-semibold ${location.pathname === '/locator' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
                       >
                         <span>Find Branch/ATM</span>
                         {location.pathname === '/locator' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
@@ -1973,7 +1974,7 @@ function AppContent() {
                         <Link 
                           to="/secure-messaging"
                           onClick={() => setIsMobileMenuOpen(false)}
-                          className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/secure-messaging' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                          className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between text-xs font-semibold ${location.pathname === '/secure-messaging' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
                         >
                           <span>Secure Messages</span>
                           {location.pathname === '/secure-messaging' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
@@ -1986,7 +1987,7 @@ function AppContent() {
                           <Link 
                             to="/admin"
                             onClick={() => setIsMobileMenuOpen(false)}
-                            className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors flex items-center justify-between text-xs font-semibold ${location.pathname === '/admin' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
+                            className={`w-full text-left px-4 py-2.5 rounded-xl transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between text-xs font-semibold ${location.pathname === '/admin' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}
                           >
                             <span>Admin Portal</span>
                             {location.pathname === '/admin' && <div className="w-1 h-1 rounded-full bg-emerald-500"></div>}
@@ -1998,13 +1999,14 @@ function AppContent() {
                 </div>
 
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pt-4 pb-1">Preferences</div>
-                <button 
+                <AnalyticsButton 
+                  trackingName="toggle_light_dark_mode_mobile"
                   onClick={() => {
                     const themes = ['light', 'dark', 'auto'];
                     const nextIndex = (themes.indexOf(theme) + 1) % themes.length;
                     setTheme(themes[nextIndex]);
                   }}
-                  className="w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between text-slate-600 dark:text-slate-400"
+                  className="w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between text-slate-600 dark:text-slate-400 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
                 >
                   <span className="flex items-center gap-2.5">
                     {theme === 'light' && <Sun className="w-4 h-4" />}
@@ -2012,7 +2014,7 @@ function AppContent() {
                     {theme === 'auto' && <Monitor className="w-4 h-4" />}
                     <span>Theme ({theme.charAt(0).toUpperCase() + theme.slice(1)})</span>
                   </span>
-                </button>
+                </AnalyticsButton>
                 <Link 
                   to="/settings"
                   onClick={() => setIsMobileMenuOpen(false)}
