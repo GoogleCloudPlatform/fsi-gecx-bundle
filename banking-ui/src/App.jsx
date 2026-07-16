@@ -1699,7 +1699,7 @@ function AppContent() {
                 <Link 
                   to="/"
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between ${location.pathname === '/' ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}
+                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center justify-between cursor-pointer ${location.pathname === '/' ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
                 >
                   <span>Home</span>
                   {location.pathname === '/' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
