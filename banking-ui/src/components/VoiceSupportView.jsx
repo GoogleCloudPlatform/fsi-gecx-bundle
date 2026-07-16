@@ -292,6 +292,7 @@ export default function VoiceSupportView() {
   const [highlightedTxId, setHighlightedTxId] = useState(null);
 
   const [mode, setMode] = useState('audio');
+  const [showLiveAvatarBetaModal, setShowLiveAvatarBetaModal] = useState(false);
   const [warningMessage, setWarningMessage] = useState('');
   const [guidanceSnapshot, setGuidanceSnapshot] = useState(null);
 
@@ -1752,6 +1753,18 @@ export default function VoiceSupportView() {
             Live Consultation Transcript
           </h2>
 
+          {mode === 'video' && (
+            <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-bold text-amber-800 dark:text-amber-300">Live Avatar Beta</h4>
+                <p className="text-xs text-amber-700 dark:text-amber-400/80 mt-1">
+                  You are using an experimental feature. Occasional latency or visual artifacts may occur.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div
             ref={chatContainerRef}
             className="min-h-[220px] flex-1 overflow-y-auto space-y-4 pr-2 scrollbar-thin"
@@ -1918,7 +1931,11 @@ export default function VoiceSupportView() {
             </AnalyticsButton>
             <AnalyticsButton
               analyticsId="voice_support_view_live_avatar"
-              onClick={() => setMode('video')}
+              onClick={() => {
+                if (mode !== 'video') {
+                  setShowLiveAvatarBetaModal(true);
+                }
+              }}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                 mode === 'video'
                   ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-650 dark:text-indigo-400'
@@ -1927,6 +1944,9 @@ export default function VoiceSupportView() {
             >
               <Video size={14} />
               Live Avatar
+              <span className="ml-1 px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 text-[9px] uppercase tracking-wider font-extrabold border border-amber-200 dark:border-amber-500/30">
+                Beta
+              </span>
             </AnalyticsButton>
           </div>
         )}
@@ -2198,6 +2218,34 @@ export default function VoiceSupportView() {
           )}
         </div>
       </GcpInfoModal>
+
+      {/* Beta Acknowledgment Modal */}
+      {showLiveAvatarBetaModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-6 max-w-sm w-full animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Live Avatar (Beta)</h3>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+              The Live Avatar feature is currently in Beta. You may experience occasional latency, visual artifacts, or unexpected behavior.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setMode('video');
+                  setShowLiveAvatarBetaModal(false);
+                }}
+                className="px-4 py-2 rounded-xl text-sm font-bold bg-amber-500 hover:bg-amber-600 text-white transition-colors shadow-sm"
+              >
+                I Understand
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Joyride Onboarding Tour */}
       {tourRun && domReady && steps.length > 0 && (
