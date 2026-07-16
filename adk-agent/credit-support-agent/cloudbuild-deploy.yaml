@@ -64,6 +64,11 @@ steps:
         if [ -z "$$COMMIT_SHA" ]; then
           COMMIT_SHA="local"
         fi
+        IMAGE_TAG="$COMMIT_SHA"
+        if [ -z "$$IMAGE_TAG" ]; then
+          IMAGE_TAG="local"
+        fi
+        printf '%s' "$$IMAGE_TAG" > /workspace/image_tag.txt
         BUILD_TIME_MS=$$(date +%s000)
         echo "Updating pyproject.toml version to: $$VERSION"
         sed -i 's/^version = "[^"]*"/version = "'"$${VERSION}"'"/g' adk-agent/credit-support-agent/pyproject.toml
@@ -89,7 +94,8 @@ steps:
     args:
       - "-c"
       - |
-        TAGS="-t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:$${COMMIT_SHA:-local} -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:latest"
+        IMAGE_TAG=$$(cat /workspace/image_tag.txt)
+        TAGS="-t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:$${IMAGE_TAG} -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:latest"
         if [ -n "$TAG_NAME" ]; then
           TAGS="$$TAGS -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:$TAG_NAME"
         fi
@@ -114,9 +120,10 @@ steps:
     args:
       - "-c"
       - |
+        IMAGE_TAG=$$(cat /workspace/image_tag.txt)
         if [ "${_TRIGGER_DEPLOY}" = "true" ]; then
           gcloud run deploy credit-support-agent \
-            --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:$${COMMIT_SHA:-local}" \
+            --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:$${IMAGE_TAG}" \
             --region "${_REGION}" \
             --cpu "${_VOICE_AGENT_CPU}" \
             --memory "${_VOICE_AGENT_MEMORY}" \

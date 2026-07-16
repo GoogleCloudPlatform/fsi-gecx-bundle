@@ -64,6 +64,11 @@ steps:
         if [ -z "$$COMMIT_SHA" ]; then
           COMMIT_SHA="local"
         fi
+        IMAGE_TAG="$COMMIT_SHA"
+        if [ -z "$$IMAGE_TAG" ]; then
+          IMAGE_TAG="local"
+        fi
+        printf '%s' "$$IMAGE_TAG" > /workspace/image_tag.txt
         BUILD_TIME_MS=$$(date +%s000)
         echo "Updating pyproject.toml version to: $$VERSION"
         sed -i 's/^version = "[^"]*"/version = "'"$${VERSION}"'"/g' banking-service/pyproject.toml
@@ -89,7 +94,8 @@ steps:
     args:
       - "-c"
       - |
-        TAGS="-t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local} -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:latest"
+        IMAGE_TAG=$$(cat /workspace/image_tag.txt)
+        TAGS="-t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${IMAGE_TAG} -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:latest"
         if [ -n "$TAG_NAME" ]; then
           TAGS="$$TAGS -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$TAG_NAME"
         fi
@@ -106,6 +112,7 @@ steps:
     args:
       - "-c"
       - |
+        IMAGE_TAG=$$(cat /workspace/image_tag.txt)
         echo "Starting ephemeral PostgreSQL container for migration validation..."
         docker rm -f pg-validate || true
         docker run --name pg-validate -e POSTGRES_PASSWORD=secret -e POSTGRES_DB=banking -d mirror.gcr.io/library/postgres:16-alpine
@@ -114,7 +121,7 @@ steps:
         until docker exec pg-validate pg_isready -U postgres; do sleep 1; done
         echo "Executing Alembic upgrade head, downgrade base, and upgrade head against PostgreSQL..."
         docker run --rm --network container:pg-validate -e SKIP_IAM_GRANTS=true -e DATABASE_URL="postgresql://postgres:secret@127.0.0.1:5432/banking" \
-          "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
+          "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${IMAGE_TAG}" \
           bash -c "alembic upgrade head && alembic downgrade base && alembic upgrade head"
 
   - name: "gcr.io/cloud-builders/docker"
@@ -132,10 +139,11 @@ steps:
     args:
       - "-c"
       - |
+        IMAGE_TAG=$$(cat /workspace/image_tag.txt)
         if [ "${_TRIGGER_DEPLOY}" = "true" ]; then
           echo "Registering latest image with Cloud Run Migration Job..."
           gcloud run jobs update banking-db-migrate \
-            --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
+            --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${IMAGE_TAG}" \
             --command "alembic" \
             --args "upgrade,head" \
             --update-env-vars "^|^IAM_DBA_USERS=${_IAM_DBA_USERS}|IAM_DB_VIEWER_USERS=${_IAM_DB_VIEWER_USERS}|REQUIRE_CDC_BOOTSTRAP=true" \
@@ -143,7 +151,7 @@ steps:
           if gcloud run jobs describe banking-db-reset --region "${_REGION}" >/dev/null 2>&1; then
             echo "Registering latest image with Cloud Run Reset Job..."
             gcloud run jobs update banking-db-reset \
-              --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
+              --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${IMAGE_TAG}" \
               --region "${_REGION}"
           else
             echo "Cloud Run reset job banking-db-reset not found; skipping reset job image update."
@@ -179,10 +187,11 @@ steps:
     args:
       - "-c"
       - |
+        IMAGE_TAG=$$(cat /workspace/image_tag.txt)
         if [ "${_TRIGGER_DEPLOY}" = "true" ]; then
           echo "Deploying application to Cloud Run Service..."
           gcloud run deploy banking-service \
-            --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${COMMIT_SHA:-local}" \
+            --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${IMAGE_TAG}" \
             --min-instances "1" \
             --max-instances "20" \
             --concurrency "16" \

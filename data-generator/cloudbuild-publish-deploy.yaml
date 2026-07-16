@@ -64,6 +64,11 @@ steps:
         if [ -z "$$COMMIT_SHA" ]; then
           COMMIT_SHA="local"
         fi
+        IMAGE_TAG="$COMMIT_SHA"
+        if [ -z "$$IMAGE_TAG" ]; then
+          IMAGE_TAG="local"
+        fi
+        printf '%s' "$$IMAGE_TAG" > /workspace/image_tag.txt
         BUILD_TIME_MS=$$(date +%s000)
         echo "Updating pyproject.toml version to: $$VERSION"
         sed -i 's/^version = "[^"]*"/version = "'"$${VERSION}"'"/g' data-generator/pyproject.toml
@@ -81,7 +86,8 @@ steps:
     args:
       - "-c"
       - |
-        TAGS="-t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:$${COMMIT_SHA:-local} -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:latest"
+        IMAGE_TAG=$$(cat /workspace/image_tag.txt)
+        TAGS="-t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:$${IMAGE_TAG} -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:latest"
         if [ -n "$TAG_NAME" ]; then
           TAGS="$$TAGS -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:$TAG_NAME"
         fi
@@ -102,9 +108,10 @@ steps:
     args:
       - "-c"
       - |
+        IMAGE_TAG=$$(cat /workspace/image_tag.txt)
         if [ "${_TRIGGER_DEPLOY}" = "true" ]; then
           gcloud run deploy data-generator \
-            --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:$${COMMIT_SHA:-local}" \
+            --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/data-generator:$${IMAGE_TAG}" \
             --region "${_REGION}"
         else
           echo "Skipping deployment because _TRIGGER_DEPLOY is not true"
