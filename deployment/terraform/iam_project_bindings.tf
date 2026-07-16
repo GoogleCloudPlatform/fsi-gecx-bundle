@@ -30,6 +30,15 @@ resource "google_project_iam_member" "cloudbuild_terraform_sa_act_as" {
   member  = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
 }
 
+# Cloud Build attached service-account credentials cannot directly mint an OIDC
+# token. The release controller impersonates its own identity for authenticated
+# Cloud Run health probes.
+resource "google_service_account_iam_member" "cloudbuild_terraform_sa_token_creator_self" {
+  service_account_id = google_service_account.cloudbuild_terraform_service_account.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
+}
+
 resource "google_project_iam_member" "cloudbuild_sa_run_admin" {
   project = var.project_id
   role    = "roles/run.admin"

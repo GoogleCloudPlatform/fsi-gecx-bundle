@@ -93,9 +93,15 @@ gcloud datastream streams update banking-cdc-stream --project "${PROJECT_ID}" --
 banking_url="$(gcloud run services describe banking-service --project "${PROJECT_ID}" --region "${REGION}" --format='value(status.url)')"
 voice_url="$(gcloud run services describe credit-support-agent --project "${PROJECT_ID}" --region "${REGION}" --format='value(status.url)')"
 generator_url="$(gcloud run services describe data-generator --project "${PROJECT_ID}" --region "${REGION}" --format='value(status.url)')"
-curl --fail --silent --show-error -H "Authorization: Bearer $(gcloud auth print-identity-token --audiences="${banking_url}")" "${banking_url}/health" >/dev/null
-curl --fail --silent --show-error -H "Authorization: Bearer $(gcloud auth print-identity-token --audiences="${voice_url}")" "${voice_url}/healthz" >/dev/null
-curl --fail --silent --show-error -H "Authorization: Bearer $(gcloud auth print-identity-token --audiences="${generator_url}")" "${generator_url}/health" >/dev/null
+release_runner="cloudbuild-terraform-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+identity_token() {
+  gcloud auth print-identity-token \
+    --impersonate-service-account="${release_runner}" \
+    --audiences="$1"
+}
+curl --fail --silent --show-error -H "Authorization: Bearer $(identity_token "${banking_url}")" "${banking_url}/health" >/dev/null
+curl --fail --silent --show-error -H "Authorization: Bearer $(identity_token "${voice_url}")" "${voice_url}/healthz" >/dev/null
+curl --fail --silent --show-error -H "Authorization: Bearer $(identity_token "${generator_url}")" "${generator_url}/health" >/dev/null
 
 manifest_path="/workspace/release-manifest-${RELEASE_COMMIT}.json"
 jq -n \
