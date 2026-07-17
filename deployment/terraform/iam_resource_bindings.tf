@@ -334,6 +334,12 @@ resource "google_storage_bucket_iam_member" "database_viewer_iceberg_warehouse_v
   member   = each.value
 }
 
+resource "google_storage_bucket_iam_member" "cloudbuild_agent_iceberg_warehouse_viewer" {
+  bucket = google_storage_bucket.iceberg_warehouse.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+}
+
 resource "google_storage_bucket_iam_member" "iceberg_connection_access" {
   bucket = google_storage_bucket.iceberg_warehouse.name
   role   = "roles/storage.objectUser"

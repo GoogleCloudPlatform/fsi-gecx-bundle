@@ -401,6 +401,21 @@ resource "google_project_iam_member" "cloudbuild_sa_bq_job_user" {
   member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
 
+# BigQuery resolves five-part Lakehouse runtime catalog identifiers at project
+# scope rather than through a BigQuery dataset ACL.
+resource "google_project_iam_member" "cloudbuild_sa_bq_data_viewer" {
+  project = data.google_project.project.project_id
+  role    = "roles/bigquery.dataViewer"
+  member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+}
+
+resource "google_project_iam_member" "database_viewer_bq_data_viewer" {
+  for_each = toset(local.iam_console_viewers)
+  project  = data.google_project.project.project_id
+  role     = "roles/bigquery.dataViewer"
+  member   = each.value
+}
+
 resource "google_project_iam_member" "cloudbuild_sa_data_agent_creator" {
   project = data.google_project.project.project_id
   role    = "roles/geminidataanalytics.dataAgentCreator"
@@ -421,6 +436,23 @@ resource "google_project_iam_member" "cloudbuild_sa_data_catalog_viewer" {
   project = data.google_project.project.project_id
   role    = "roles/datacatalog.viewer"
   member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+}
+
+# DataAgent configuration is validated with the deployer's permissions. The
+# curated compliance views resolve through the Lakehouse runtime catalog, so
+# both the deployment identity and interactive database viewers need catalog
+# data access in addition to their BigQuery dataset grants.
+resource "google_project_iam_member" "cloudbuild_sa_biglake_viewer" {
+  project = data.google_project.project.project_id
+  role    = "roles/biglake.viewer"
+  member  = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+}
+
+resource "google_project_iam_member" "database_viewer_biglake_viewer" {
+  for_each = toset(local.iam_console_viewers)
+  project  = data.google_project.project.project_id
+  role     = "roles/biglake.viewer"
+  member   = each.value
 }
 
 resource "google_project_iam_member" "lakehouse_reconcile_sa_bq_job_user" {
