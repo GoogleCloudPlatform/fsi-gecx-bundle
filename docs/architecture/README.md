@@ -64,3 +64,13 @@ Specifications detailing customer-facing banking journeys, loan origination pipe
 | Specification | Description |
 | :--- | :--- |
 | **[Fraud Detection Workflow](./domain-workflows/fraud/fraud_detection_workflow.md)** | Real-time card authorization scoring, merchant/location enrichment, fraud alert creation, support triage, and CDC-backed analytical decision history. |
+
+---
+
+## 🔐 4. Identity & Access (`identity-access/`)
+Specifications covering the authentication surface that fronts the platform: custom IAP sign-in with external identities and GCIP blocking-function access control.
+
+| Specification | Description |
+| :--- | :--- |
+| **[Custom IAP Login UI (External Identities)](./identity-access/custom_iap_login_ui.md)** | Self-hosted `gcip-iap` + FirebaseUI sign-in page served at `/login`, multi-tenant GCIP configuration, runtime config injection, and deployment gating on `use_external_identities`. |
+| **[GCIP Blocking Functions](./identity-access/gcip_blocking_functions.md)** | `beforeCreate` / `beforeSignIn` email-domain restriction, Gen2 Cloud Functions deployment, Identity Platform trigger wiring, and least-privilege credential handling. |
