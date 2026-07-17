@@ -197,7 +197,7 @@ resource "google_datastream_stream" "banking_cdc_stream" {
     bigquery_destination_config {
       data_freshness = "60s"
       single_target_dataset {
-        dataset_id = google_bigquery_dataset.iceberg_catalog.id
+        dataset_id = google_bigquery_dataset.oltp_cdc.id
       }
     }
   }
@@ -210,6 +210,6 @@ resource "google_datastream_stream" "banking_cdc_stream" {
 
   depends_on = [
     google_project_service.datastream_googleapis_com,
-    google_bigquery_dataset.iceberg_catalog
+    google_bigquery_dataset.oltp_cdc
   ]
 }

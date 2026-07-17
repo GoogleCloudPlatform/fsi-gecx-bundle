@@ -66,6 +66,20 @@ if terraform -chdir=deployment/terraform state list | grep -q '^google_sql_datab
 fi
 terraform -chdir=deployment/terraform plan -input=false \
   -var-file="environment/${PROJECT_ID}/terraform.tfvars" -out=/workspace/release.tfplan
+
+# Datastream destination changes require a paused stream. Detect any planned
+# mutation of the existing stream before apply; fresh environments have no
+# prior stream and do not need this step. The normal post-reset rebuild below
+# resumes the stream and proves every object backfill.
+if terraform -chdir=deployment/terraform show -json /workspace/release.tfplan | jq -e '
+  .resource_changes[]?
+  | select(.address == "google_datastream_stream.banking_cdc_stream")
+  | select(.change.before != null)
+  | select(.change.actions != ["no-op"])
+' >/dev/null; then
+  PROJECT_ID="${PROJECT_ID}" REGION="${REGION}" \
+    deployment/scripts/reconcile_datastream_after_reset.sh pause
+fi
 terraform -chdir=deployment/terraform apply -input=false -auto-approve /workspace/release.tfplan
 
 PROJECT_ID="${PROJECT_ID}" REGION="${REGION}" deployment/scripts/reconcile_alloydb_iam_groups.sh
@@ -127,7 +141,7 @@ jq -n \
   --arg generator "${images[data-generator]}" \
   --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --arg cloud_sql_backup_id "${cloud_sql_backup_id}" \
-  '{schema_version:1,status:(if $mode=="promote" then "promoted" else "qualified" end),mode:$mode,commit:$commit,environment:$environment,alembic_revision:$alembic,images:{"banking-service":$banking,"credit-support-agent":$voice,"data-generator":$generator},cutover:{final_cloud_sql_backup_id:(if $cloud_sql_backup_id=="" then null else $cloud_sql_backup_id end)},validation:{terraform:true,bootstrap:true,migration:true,reconciliation:true,reset_seed:true,knowledge_catalog:true,datastream:true,federation:true,audit_iceberg_dataflow:true,audit_iceberg_runtime:true,spark_interoperability:true,service_health:true},completed_at:$timestamp}' \
+  '{schema_version:1,status:(if $mode=="promote" then "promoted" else "qualified" end),mode:$mode,commit:$commit,environment:$environment,alembic_revision:$alembic,images:{"banking-service":$banking,"credit-support-agent":$voice,"data-generator":$generator},data_platform:{oltp_cdc_dataset:"oltp_cdc",curated_dataset:"analytics_curated",audit_dataset:"compliance_audit"},cutover:{final_cloud_sql_backup_id:(if $cloud_sql_backup_id=="" then null else $cloud_sql_backup_id end)},validation:{terraform:true,bootstrap:true,migration:true,reconciliation:true,reset_seed:true,knowledge_catalog:true,datastream:true,federation:true,audit_iceberg_dataflow:true,audit_iceberg_runtime:true,spark_interoperability:true,service_health:true},completed_at:$timestamp}' \
   > "${manifest_path}"
 destination="gs://${PROJECT_ID}-fsi-release-manifests/alloydb/${RELEASE_COMMIT}/${RELEASE_MODE}.json"
 gsutil cp "${manifest_path}" "${destination}"

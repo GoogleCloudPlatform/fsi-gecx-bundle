@@ -16,7 +16,7 @@ def main() -> None:
 
     spark = SparkSession.builder.appName("validate-lakehouse-catalog-interoperability").getOrCreate()
     ledger_name = f"{args.audit_catalog}.financial_ledger.account_ledger_entries"
-    native_name = f"{args.project_id}.iceberg_catalog.cards_credit_accounts"
+    native_name = f"{args.project_id}.oltp_cdc.cards_credit_accounts"
 
     ledger = spark.table(ledger_name)
     # Datastream's current-state replicas remain BigQuery-native tables. Read

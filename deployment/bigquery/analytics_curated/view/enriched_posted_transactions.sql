@@ -26,10 +26,10 @@ SELECT
   pt.posted_at,
   auth.status AS authorization_status,
   auth.decline_reason
-FROM `__PROJECT_ID__.iceberg_catalog.cards_posted_transactions` pt
-LEFT JOIN `__PROJECT_ID__.iceberg_catalog.cards_transaction_authorization` auth
+FROM `__PROJECT_ID__.oltp_cdc.cards_posted_transactions` pt
+LEFT JOIN `__PROJECT_ID__.oltp_cdc.cards_transaction_authorization` auth
   ON pt.authorization_id = auth.id
-LEFT JOIN `__PROJECT_ID__.iceberg_catalog.cards_issued_card` c
+LEFT JOIN `__PROJECT_ID__.oltp_cdc.cards_issued_card` c
   ON auth.card_id = c.id
-LEFT JOIN `__PROJECT_ID__.iceberg_catalog.cards_credit_accounts` account
+LEFT JOIN `__PROJECT_ID__.oltp_cdc.cards_credit_accounts` account
   ON pt.account_id = account.id

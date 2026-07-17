@@ -145,13 +145,13 @@ def _purge_data_lake_tables(project_id: str) -> list[str]:
     table_rows = bq_client.query(
         f"""
         SELECT table_name
-        FROM `{project_id}.iceberg_catalog.INFORMATION_SCHEMA.TABLES`
+        FROM `{project_id}.oltp_cdc.INFORMATION_SCHEMA.TABLES`
         WHERE table_name IN ({", ".join(f"'{table}'" for table in sorted(RESET_DATA_LAKE_TABLES))})
         """
     ).result()
     existing_tables = [row.table_name for row in table_rows]
     for lake_tbl in existing_tables:
-        bq_client.query(f"TRUNCATE TABLE `{project_id}.iceberg_catalog.{lake_tbl}`").result()
+        bq_client.query(f"TRUNCATE TABLE `{project_id}.oltp_cdc.{lake_tbl}`").result()
     return existing_tables
 
 

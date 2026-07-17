@@ -74,10 +74,12 @@ def test_checked_in_spec_uses_reusable_curated_building_blocks():
     assert ("analytics_curated", "enriched_posted_transactions") in references
     assert ("analytics_curated", "us_customer_metro_distribution") not in references
     assert ("analytics_curated", "customer_cross_border_spend") not in references
+    assert ("compliance_audit", "account_ledger_entries") in references
+    assert ("compliance_audit", "account_ledger_balance") in references
     assert {
-        ("iceberg_catalog", "merchants_merchant_category_codes"),
-        ("iceberg_catalog", "merchants_merchant_master"),
-        ("iceberg_catalog", "merchants_merchant_stores"),
+        ("oltp_cdc", "merchants_merchant_category_codes"),
+        ("oltp_cdc", "merchants_merchant_master"),
+        ("oltp_cdc", "merchants_merchant_stores"),
     } <= references
     assert "evo-genai-workspace" not in AGENT_SPEC_PATH.read_text(encoding="utf-8")
 

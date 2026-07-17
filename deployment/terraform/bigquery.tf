@@ -28,19 +28,26 @@ resource "google_bigquery_connection" "iceberg" {
   depends_on = [google_project_service.bigqueryconnection_googleapis_com]
 }
 
-resource "google_bigquery_dataset" "iceberg_catalog" {
-  dataset_id    = "iceberg_catalog"
-  friendly_name = "Datastream CDC Catalog Dataset"
+resource "google_bigquery_dataset" "oltp_cdc" {
+  dataset_id    = "oltp_cdc"
+  friendly_name = "OLTP Current-State CDC Replica"
+  description   = "BigQuery-native merge-mode replicas of bounded AlloyDB OLTP tables, maintained by Datastream"
   location      = "US"
 
   # Datastream owns the mutable BigQuery-native tables in this dataset.
-  delete_contents_on_destroy = false
+  # Existing environments replace the legacy, misleadingly named
+  # iceberg_catalog dataset during the controlled Datastream rebuild.
+  delete_contents_on_destroy = true
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "google_bigquery_dataset" "analytics_curated" {
   dataset_id                 = "analytics_curated"
   friendly_name              = "Curated Lakehouse Analytics"
-  description                = "Business-facing analytical views over BigQuery-native Datastream CDC tables"
+  description                = "Business-facing analytical views over BigQuery-native OLTP current-state CDC replicas and catalog-native Iceberg audit history"
   location                   = "US"
   delete_contents_on_destroy = false
 }

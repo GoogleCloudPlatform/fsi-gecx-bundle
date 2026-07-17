@@ -58,7 +58,7 @@ Spark validation configures the Iceberg REST catalog and the native BigQuery con
 - `audit`, using `bl://projects/PROJECT_ID/catalogs/nova-audit-lakehouse`; and
 - the Dataproc Spark BigQuery connector, reading the existing BigQuery-native CDC dataset directly.
 
-The validation batch reads audit ledger rows and Iceberg snapshot/file metadata, reads the existing BigQuery-native `iceberg_catalog.cards_credit_accounts` CDC table, and proves a cross-catalog join.
+The validation batch reads audit ledger rows and Iceberg snapshot/file metadata, reads the BigQuery-native `oltp_cdc.cards_credit_accounts` current-state replica, and proves a cross-catalog join.
 
 ## Operations and recovery
 

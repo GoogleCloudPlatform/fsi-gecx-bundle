@@ -1497,7 +1497,7 @@ resource "google_cloud_run_v2_job" "lakehouse_view_reconcile" {
 
         env {
           name  = "SOURCE_DATASET"
-          value = google_bigquery_dataset.iceberg_catalog.dataset_id
+          value = google_bigquery_dataset.oltp_cdc.dataset_id
         }
 
         env {
@@ -1519,7 +1519,7 @@ resource "google_cloud_run_v2_job" "lakehouse_view_reconcile" {
   depends_on = [
     google_project_service.run_googleapis_com,
     google_datastream_stream.banking_cdc_stream,
-    google_bigquery_dataset_iam_member.lakehouse_reconcile_iceberg_data_viewer,
+    google_bigquery_dataset_iam_member.lakehouse_reconcile_oltp_cdc_data_viewer,
     google_bigquery_dataset_iam_member.lakehouse_reconcile_analytics_curated_data_editor,
     google_project_iam_member.lakehouse_reconcile_sa_bq_job_user,
     google_project_iam_member.lakehouse_reconcile_sa_datastream_admin,

@@ -4,62 +4,62 @@
       "name": "enriched_posted_transactions",
       "sql": "enriched_posted_transactions.sql",
       "sources": [
-        "iceberg_catalog.cards_posted_transactions",
-        "iceberg_catalog.cards_transaction_authorization",
-        "iceberg_catalog.cards_issued_card",
-        "iceberg_catalog.cards_credit_accounts"
+        "oltp_cdc.cards_posted_transactions",
+        "oltp_cdc.cards_transaction_authorization",
+        "oltp_cdc.cards_issued_card",
+        "oltp_cdc.cards_credit_accounts"
       ]
     },
     {
       "name": "international_fraud_anomalies",
       "sql": "international_fraud_anomalies.sql",
       "sources": [
-        "iceberg_catalog.cards_transaction_authorization"
+        "oltp_cdc.cards_transaction_authorization"
       ]
     },
     {
       "name": "realtime_spend_velocity",
       "sql": "realtime_spend_velocity.sql",
       "sources": [
-        "iceberg_catalog.cards_transaction_authorization"
+        "oltp_cdc.cards_transaction_authorization"
       ]
     },
     {
       "name": "fraud_model_decision_history",
       "sql": "fraud_model_decision_history.sql",
       "sources": [
-        "iceberg_catalog.operations_fraud_model_decisions",
-        "iceberg_catalog.cards_transaction_authorization"
+        "oltp_cdc.operations_fraud_model_decisions",
+        "oltp_cdc.cards_transaction_authorization"
       ]
     },
     {
       "name": "scenario_outcome_feedback",
       "sql": "scenario_outcome_feedback.sql",
       "sources": [
-        "iceberg_catalog.operations_scenario_outcomes",
-        "iceberg_catalog.operations_fraud_model_decisions",
-        "iceberg_catalog.cards_transaction_authorization"
+        "oltp_cdc.operations_scenario_outcomes",
+        "oltp_cdc.operations_fraud_model_decisions",
+        "oltp_cdc.cards_transaction_authorization"
       ]
     },
     {
       "name": "premium_travel_offer_candidates",
       "sql": "premium_travel_offer_candidates.sql",
       "sources": [
-        "iceberg_catalog.cards_transaction_authorization",
-        "iceberg_catalog.cards_issued_card",
-        "iceberg_catalog.cards_credit_accounts",
-        "iceberg_catalog.identity_users",
-        "iceberg_catalog.identity_user_addresses"
+        "oltp_cdc.cards_transaction_authorization",
+        "oltp_cdc.cards_issued_card",
+        "oltp_cdc.cards_credit_accounts",
+        "oltp_cdc.identity_users",
+        "oltp_cdc.identity_user_addresses"
       ]
     },
     {
       "name": "customer_analytics_profiles",
       "sql": "customer_analytics_profiles.sql",
       "sources": [
-        "iceberg_catalog.cards_credit_accounts",
-        "iceberg_catalog.identity_users",
-        "iceberg_catalog.identity_user_addresses",
-        "iceberg_catalog.kyc_user_credit_profiles"
+        "oltp_cdc.cards_credit_accounts",
+        "oltp_cdc.identity_users",
+        "oltp_cdc.identity_user_addresses",
+        "oltp_cdc.kyc_user_credit_profiles"
       ]
     }
   ]

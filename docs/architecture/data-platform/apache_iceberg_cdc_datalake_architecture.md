@@ -9,7 +9,7 @@ flowchart LR
     AlloyDB["AlloyDB PostgreSQL 18<br/>private IP + logical decoding"] --> Publication["datastream_publication<br/>datastream_alloydb_replication_slot"]
     Publication --> Bridge["Internal TCP bridge<br/>datastream-alloydb-proxy"]
     Bridge --> Datastream["Datastream private connection"]
-    Datastream --> NativeBQ["BigQuery native CDC tables<br/>iceberg_catalog dataset"]
+    Datastream --> NativeBQ["BigQuery native current-state CDC tables<br/>oltp_cdc dataset"]
     NativeBQ --> Curated["analytics_curated views"]
 ```
 
@@ -17,7 +17,18 @@ AlloyDB connects to the application VPC through Private Service Access, while Da
 
 The `banking_bq_connector` built-in database user owns the Datastream password boundary. The ordered database reconciliation job creates and verifies its replication grant, publication, and AlloyDB-specific logical slot after Alembic completes. Terraform creates a new AlloyDB-specific stream identity rather than retaining a Cloud SQL WAL checkpoint, and the release controller starts that stopped stream only after database and analytics prerequisites pass.
 
-Despite the historical dataset name, the current Datastream destination tables are BigQuery-native tables, not Apache Iceberg tables. This limitation is why the lakehouse work is a separate epic.
+The `oltp_cdc` destination contains BigQuery-native merge-mode replicas, not Apache Iceberg tables and not a retained WAL event history. It exposes the latest source row state plus Datastream metadata. Immutable audit and financial-journal history follows the separate catalog-native Iceberg path below.
+
+### Current-state replica physical design
+
+The demo keeps `oltp_cdc` tables unpartitioned and lets Datastream cluster them by source primary key. This is intentional:
+
+- the tables are small current-state replicas rather than an append-only event archive;
+- most dimension and account tables do not have a useful time-partition key;
+- BigQuery CDC background apply and runtime merge work cannot use partitions to prune the mutable baseline; and
+- the curated layer already applies bounded business timestamps for time-window analysis.
+
+If production-scale query scans justify partitioning later, configure it selectively when Datastream creates new fact tables—for example `cards_posted_transactions.posted_at` and `cards_transaction_authorization.created_at` at daily granularity—and validate CDC cost as well as query cost. Datastream applies partition and clustering configuration only when it creates a destination table, so changing the design requires a controlled table recreation and backfill. See [Partition and cluster BigQuery tables](https://cloud.google.com/datastream/docs/partitioning-and-clustering) and [BigQuery CDC ingestion behavior](https://cloud.google.com/bigquery/docs/change-data-capture).
 
 ## Catalog-native Iceberg event architecture
 

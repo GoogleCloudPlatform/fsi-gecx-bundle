@@ -22,7 +22,7 @@ WITH outcomes AS (
     operational_action,
     operational_status,
     created_at AS outcome_timestamp
-  FROM `__PROJECT_ID__.iceberg_catalog.operations_scenario_outcomes`
+  FROM `__PROJECT_ID__.oltp_cdc.operations_scenario_outcomes`
 ),
 decisions AS (
   SELECT
@@ -33,7 +33,7 @@ decisions AS (
     reason_codes AS model_reason_codes,
     model_version,
     created_at AS decision_timestamp
-  FROM `__PROJECT_ID__.iceberg_catalog.operations_fraud_model_decisions`
+  FROM `__PROJECT_ID__.oltp_cdc.operations_fraud_model_decisions`
 ),
 authorizations AS (
   SELECT
@@ -45,7 +45,7 @@ authorizations AS (
     transaction_currency,
     status AS authorization_status,
     created_at AS authorization_timestamp
-  FROM `__PROJECT_ID__.iceberg_catalog.cards_transaction_authorization`
+  FROM `__PROJECT_ID__.oltp_cdc.cards_transaction_authorization`
 )
 SELECT
   o.scenario_outcome_id,

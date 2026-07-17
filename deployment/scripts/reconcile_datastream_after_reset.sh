@@ -5,7 +5,7 @@ set -euo pipefail
 : "${REGION:?REGION is required}"
 
 stream="banking-alloydb-cdc-stream"
-dataset="iceberg_catalog"
+dataset="oltp_cdc"
 action="${1:?Expected pause or rebuild}"
 expected_objects=(
   catalog.credit_products
