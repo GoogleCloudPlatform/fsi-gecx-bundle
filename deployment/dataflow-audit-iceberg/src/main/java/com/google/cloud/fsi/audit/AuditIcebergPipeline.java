@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.Serializable;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -227,13 +228,27 @@ public final class AuditIcebergPipeline {
         output.get(AUDIT_TAG).output(parsed.audit);
         parsed.ledgerEntries.forEach(output.get(LEDGER_TAG)::output);
       } catch (Exception error) {
-        Map<String, String> attributes = new HashMap<>(message.getAttributeMap());
-        String detail = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
-        attributes.put("dlq_error", detail.substring(0, Math.min(detail.length(), 512)));
-        attributes.put("dlq_stage", "validate-envelope-v1");
-        output.get(DLQ_TAG).output(new PubsubMessage(message.getPayload(), attributes));
+        output.get(DLQ_TAG).output(deadLetterMessage(message, error));
       }
     }
+  }
+
+  static PubsubMessage deadLetterMessage(PubsubMessage message, Exception error) {
+    Map<String, String> attributes = new HashMap<>(message.getAttributeMap());
+    String detail = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+    attributes.put("dlq_error", detail.substring(0, Math.min(detail.length(), 512)));
+    attributes.put("dlq_stage", "validate-envelope-v1");
+
+    // readMessagesWithAttributesAndMessageId assigns a coder that requires a
+    // non-null message ID on every output branch. Dataflow can still surface a
+    // null source ID, so use a deterministic payload-derived fallback. Pub/Sub
+    // assigns a new server-side ID when this message is written to the DLQ.
+    String messageId = message.getMessageId();
+    if (messageId == null || messageId.isBlank()) {
+      messageId = "dlq-" + Base64.getUrlEncoder().withoutPadding()
+          .encodeToString(java.util.Arrays.copyOf(message.getPayload(), Math.min(18, message.getPayload().length)));
+    }
+    return new PubsubMessage(message.getPayload(), attributes, messageId);
   }
 
   private static Map<String, String> catalogProperties(Options options) {

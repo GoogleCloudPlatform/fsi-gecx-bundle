@@ -2,6 +2,7 @@ package com.google.cloud.fsi.audit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.nio.charset.StandardCharsets;
@@ -59,6 +60,20 @@ final class AuditIcebergPipelineTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> AuditIcebergPipeline.parseMessage(message(envelope), Instant.now()));
+  }
+
+  @Test
+  void deadLetterMessageAlwaysHasCoderCompatibleMessageId() {
+    PubsubMessage malformed = message("{\"missing\":\"event_id\"}");
+
+    PubsubMessage deadLetter =
+        AuditIcebergPipeline.deadLetterMessage(
+            malformed, new IllegalArgumentException("missing string field: event_id"));
+
+    assertNotNull(deadLetter.getMessageId());
+    assertEquals("validate-envelope-v1", deadLetter.getAttribute("dlq_stage"));
+    assertEquals("missing string field: event_id", deadLetter.getAttribute("dlq_error"));
+    assertEquals("{\"missing\":\"event_id\"}", new String(deadLetter.getPayload(), StandardCharsets.UTF_8));
   }
 
   private static String quote(String value) {
