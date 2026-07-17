@@ -9,7 +9,7 @@ from pathlib import Path
 
 PROJECT_ID = os.environ.get("PROJECT_ID")
 REGION = os.environ.get("REGION", "us-central1")
-STREAM_ID = os.environ.get("DATASTREAM_STREAM_ID", "banking-alloydb-cdc-stream")
+STREAM_ID = os.environ.get("DATASTREAM_STREAM_ID", "banking-alloydb-oltp-cdc-stream")
 SOURCE_DATASET = os.environ.get("SOURCE_DATASET", "oltp_cdc")
 CURATED_DATASET = os.environ.get("CURATED_DATASET", "analytics_curated")
 VIEW_ROOT = Path(os.environ.get("VIEW_ROOT", "/app/deployment/bigquery/analytics_curated"))
