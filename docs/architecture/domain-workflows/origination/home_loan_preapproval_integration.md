@@ -17,7 +17,7 @@ sequenceDiagram
     participant Agent as GECX Agent (Google Cloud)
     participant API as banking-service (Cloud Run)
     participant DocAI as Document AI Processor (GCP)
-    participant PG as Cloud SQL (PostgreSQL)
+    participant PG as AlloyDB (PostgreSQL)
     participant BQ as BigQuery Analytics Warehousing
 
     %% Phase 1: Initiation
@@ -108,7 +108,7 @@ node.registerClientSideFunction(
 ```
 
 ### B. Ingestion API Endpoint
-The FastAPI endpoint `/applications/upload-and-validate` orchestrates Document AI invocation and commits verified records using a hybrid storage strategy across Cloud SQL PostgreSQL and BigQuery:
+The FastAPI endpoint `/applications/upload-and-validate` orchestrates Document AI invocation and commits verified records using a hybrid storage strategy across AlloyDB PostgreSQL and BigQuery:
 
 * **File Upload Router:** [underwriting.py](../../banking-service/routers/underwriting.py) or [applications.py](../../banking-service/routers/applications.py)
 * **Document AI Processing:** Calls `process_document()` using the official Vertex AI/Document AI Python Client libraries.

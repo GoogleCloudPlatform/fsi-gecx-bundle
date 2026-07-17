@@ -18,10 +18,11 @@ This environment uses an explicit, idempotent reconciliation job instead:
 
 1. Terraform creates Datastream in `NOT_STARTED` state and provisions `iceberg_catalog` plus `analytics_curated`.
 2. The database migration job creates PostgreSQL CDC prerequisites: replication grants, publication, and logical replication slot.
-3. The deploy pipeline starts the Datastream stream after migrations.
-4. The banking-service deploy pipeline launches `lakehouse-view-reconcile` with `--async` after migrations. It does not build the reconcile image.
-5. The reconcile job starts/verifies the Datastream stream, checks each view's declared source tables, and applies only views whose dependencies are queryable.
-6. A daily Cloud Scheduler job runs the same reconcile job to repair missed first-pass setup or later drift.
+3. The ordered release drains and pauses Datastream before a full reset because PostgreSQL `TRUNCATE` is not replicated.
+4. After reset, the release recreates stream-owned BigQuery tables with the configured freshness target, resumes Datastream, and requires every configured object backfill to complete.
+5. The release then runs `lakehouse-view-reconcile` synchronously. It does not build the reconcile image.
+6. The reconcile job verifies the Datastream stream, checks each view's declared source tables, and applies only views whose dependencies are queryable.
+7. A daily Cloud Scheduler job runs the same reconcile job to repair missed first-pass setup or later drift.
 
 The reconciliation image is built from:
 
@@ -104,7 +105,7 @@ gcloud logging read \
 
 The demo environment intentionally avoids noisy frequent polling:
 
-- Deploy starts one immediate non-blocking reconcile pass.
+- The ordered release waits for one immediate reconcile pass after CDC backfill.
 - Cloud Scheduler runs one daily reconcile pass.
 - Manual execution remains available for demos, repairs, and new view testing.
 

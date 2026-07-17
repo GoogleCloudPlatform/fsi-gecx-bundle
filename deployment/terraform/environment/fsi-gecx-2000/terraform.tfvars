@@ -15,7 +15,19 @@
 # WARNING: Do NOT place any secrets (passwords, private keys, API keys, OAuth tokens)
 # in this file. Secrets should be stored in Secret Manager and accessed dynamically.
 
-project_id                                      = "fsi-gecx-2000"
+project_id                = "fsi-gecx-2000"
+alloydb_availability_type = "ZONAL"
+alloydb_cpu_count         = 2
+release_manifest_reader_members = [
+  "serviceAccount:cloudbuild-terraform-sa@fsi-demo-1841.iam.gserviceaccount.com",
+]
+release_image_consumer_members = [
+  "serviceAccount:banking-service-sa@fsi-demo-1841.iam.gserviceaccount.com",
+  "serviceAccount:voice-agent-sa@fsi-demo-1841.iam.gserviceaccount.com",
+  "serviceAccount:datagen-service-sa@fsi-demo-1841.iam.gserviceaccount.com",
+  "serviceAccount:banking-db-migration-sa@fsi-demo-1841.iam.gserviceaccount.com",
+  "serviceAccount:banking-db-reset-sa@fsi-demo-1841.iam.gserviceaccount.com",
+]
 deploy_cloud_build_triggers                     = true
 deploy_cloud_run_services                       = true
 set_cloud_run_audiences                         = true

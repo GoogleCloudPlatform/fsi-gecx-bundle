@@ -1,312 +1,26 @@
-"""squashed unified schema
+"""alloydb unified baseline
 
-Revision ID: 9e8f66b3e48e
+Revision ID: 2ea57c78ba89
 Revises: 
-Create Date: 2026-07-07 09:36:38.513747
+Create Date: 2026-07-16 12:12:19.993754
 
 """
 from typing import Sequence, Union
-from pathlib import Path
-import datetime
-import logging
-import os
-import json
-import uuid
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy import text
 import utils.database
 
 
 # revision identifiers, used by Alembic.
-revision: str = '9e8f66b3e48e'
+revision: str = '2ea57c78ba89'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-RESOURCE_DATA_DIR = Path(__file__).resolve().parents[2] / "resources" / "data"
-logger = logging.getLogger(__name__)
-
-
-def _env_flag(name: str, default: bool = False) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _handle_cdc_bootstrap_issue(message: str, *, required: bool, exc: Exception | None = None) -> None:
-    if required:
-        logger.error("CDC bootstrap failed: %s", message, exc_info=exc)
-        raise RuntimeError(message) from exc
-    logger.warning("CDC bootstrap skipped or incomplete: %s", message, exc_info=exc)
-
-
-def _load_json_resource(filename: str):
-    with (RESOURCE_DATA_DIR / filename).open("r", encoding="utf-8") as handle:
-        return json.load(handle)
-
-
-def _load_jsonl_resource(filename: str) -> list[dict]:
-    with (RESOURCE_DATA_DIR / filename).open("r", encoding="utf-8") as handle:
-        return [json.loads(line) for line in handle if line.strip()]
-
-
-def _mcc_seed_row(item: dict, now: datetime.datetime) -> dict:
-    return {
-        "id": uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-category-code:{item['mcc']}"),
-        "mcc": item["mcc"],
-        "primary_category": item["primary_category"],
-        "detailed_category": item["detailed_category"],
-        "ui_label": item.get("ui_label"),
-        "canonical_title": item.get("canonical_title"),
-        "canonical_group": item.get("canonical_group"),
-        "risk_level": item.get("risk_level"),
-        "risk_score": item.get("risk_score"),
-        "spend_type": item.get("spend_type"),
-        "recurrence_likelihood": item.get("recurrence_likelihood"),
-        "velocity_risk": item.get("velocity_risk"),
-        "chargeback_prone": item.get("chargeback_prone", False),
-        "is_travel": item.get("is_travel", False),
-        "is_subscription_common": item.get("is_subscription_common", False),
-        "is_luxury": item.get("is_luxury", False),
-        "is_essential": item.get("is_essential", False),
-        "metadata_json": item.get("metadata") or {},
-        "updated_at": now,
-    }
-
-
-def _seed_reference_tables() -> None:
-    credit_products = sa.table(
-        "credit_products",
-        sa.column("product_code", sa.String),
-        sa.column("product_name", sa.String),
-        sa.column("min_credit_limit_cents", sa.BigInteger),
-        sa.column("max_credit_limit_cents", sa.BigInteger),
-        sa.column("purchase_apr", sa.Numeric),
-        sa.column("cashback_rate", sa.Numeric),
-        sa.column("travel_multiplier", sa.Integer),
-        sa.column("dining_multiplier", sa.Integer),
-        sa.column("annual_fee_cents", sa.BigInteger),
-        sa.column("is_active", sa.Boolean),
-        sa.column("created_at", sa.DateTime),
-        schema="catalog",
-    )
-    deposit_products = sa.table(
-        "deposit_products",
-        sa.column("product_code", sa.String),
-        sa.column("product_name", sa.String),
-        sa.column("annual_percentage_yield", sa.Numeric),
-        sa.column("monthly_maintenance_fee_cents", sa.BigInteger),
-        sa.column("is_active", sa.Boolean),
-        sa.column("created_at", sa.DateTime),
-        schema="catalog",
-    )
-    merchant_category_codes = sa.table(
-        "merchant_category_codes",
-        sa.column("id", utils.database.UniversalUUID()),
-        sa.column("mcc", sa.String),
-        sa.column("primary_category", sa.String),
-        sa.column("detailed_category", sa.String),
-        sa.column("ui_label", sa.String),
-        sa.column("canonical_title", sa.String),
-        sa.column("canonical_group", sa.String),
-        sa.column("risk_level", sa.String),
-        sa.column("risk_score", sa.Integer),
-        sa.column("spend_type", sa.String),
-        sa.column("recurrence_likelihood", sa.String),
-        sa.column("velocity_risk", sa.String),
-        sa.column("chargeback_prone", sa.Boolean),
-        sa.column("is_travel", sa.Boolean),
-        sa.column("is_subscription_common", sa.Boolean),
-        sa.column("is_luxury", sa.Boolean),
-        sa.column("is_essential", sa.Boolean),
-        sa.column("metadata_json", sa.JSON),
-        sa.column("updated_at", sa.DateTime),
-        schema="merchants",
-    )
-    merchant_master = sa.table(
-        "merchant_master",
-        sa.column("id", utils.database.UniversalUUID()),
-        sa.column("merchant_slug", sa.String),
-        sa.column("clean_name", sa.String),
-        sa.column("default_mcc", sa.String),
-        sa.column("merchant_domain", sa.String),
-        sa.column("logo_url", sa.String),
-        sa.column("is_subscription", sa.Boolean),
-        sa.column("created_at", sa.DateTime),
-        sa.column("updated_at", sa.DateTime),
-        schema="merchants",
-    )
-    merchant_stores = sa.table(
-        "merchant_stores",
-        sa.column("id", utils.database.UniversalUUID()),
-        sa.column("merchant_id", utils.database.UniversalUUID()),
-        sa.column("location_name", sa.String),
-        sa.column("raw_descriptor", sa.String),
-        sa.column("country_code", sa.String),
-        sa.column("is_international", sa.Boolean),
-        sa.column("risk_score", sa.Integer),
-        sa.column("created_at", sa.DateTime),
-        sa.column("updated_at", sa.DateTime),
-        schema="merchants",
-    )
-    system_settings = sa.table(
-        "system_settings",
-        sa.column("key", sa.String),
-        sa.column("value", sa.String),
-        schema="admin",
-    )
-    retail_locations = sa.table(
-        "retail_locations",
-        sa.column("id", utils.database.UniversalUUID()),
-        sa.column("name", sa.String),
-        sa.column("type", sa.String),
-        sa.column("address", sa.String),
-        sa.column("latitude", sa.Float),
-        sa.column("longitude", sa.Float),
-        sa.column("hours", sa.String),
-        sa.column("phone_number", sa.String),
-        schema="operations",
-    )
-
-    now = datetime.datetime.now(datetime.timezone.utc)
-
-    op.bulk_insert(
-        credit_products,
-        [
-            {
-                **item,
-                "is_active": item.get("is_active", True),
-                "created_at": now,
-            }
-            for item in _load_json_resource("credit_products.json")
-        ],
-    )
-    op.bulk_insert(
-        deposit_products,
-        [
-            {
-                **item,
-                "is_active": item.get("is_active", True),
-                "created_at": now,
-            }
-            for item in _load_json_resource("deposit_products.json")
-        ],
-    )
-    op.bulk_insert(
-        merchant_category_codes,
-        [_mcc_seed_row(item, now) for item in _load_json_resource("merchant_category_codes.json")],
-    )
-
-    merchant_catalog = _load_json_resource("merchant_catalog.json")
-    op.bulk_insert(
-        merchant_master,
-        [
-            {
-                "id": uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-master:{item['merchant_id']}"),
-                "merchant_slug": item["merchant_id"],
-                "clean_name": item["clean_name"],
-                "default_mcc": item["default_mcc"],
-                "merchant_domain": item.get("merchant_domain"),
-                "logo_url": item.get("logo_url"),
-                "is_subscription": item.get("is_subscription", False),
-                "created_at": now,
-                "updated_at": now,
-            }
-            for item in merchant_catalog
-        ],
-    )
-
-    store_rows = []
-    for item in merchant_catalog:
-        stores = item.get("stores", [])
-        legacy_vars = item.get("store_variations", [])
-        if stores:
-            for store in stores:
-                store_rows.append(
-                    {
-                        "id": uuid.uuid5(
-                            uuid.NAMESPACE_DNS,
-                            f"merchant-store:{item['merchant_id']}:{store['raw_descriptor']}",
-                        ),
-                        "merchant_id": uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-master:{item['merchant_id']}"),
-                        "location_name": store["location_name"],
-                        "raw_descriptor": store["raw_descriptor"],
-                        "country_code": store.get("country_code", "USA"),
-                        "is_international": store.get("is_international", False),
-                        "risk_score": store.get("risk_score", 0),
-                        "created_at": now,
-                        "updated_at": now,
-                    }
-                )
-        elif legacy_vars:
-            for idx, descriptor in enumerate(legacy_vars, start=1):
-                store_rows.append(
-                    {
-                        "id": uuid.uuid5(
-                            uuid.NAMESPACE_DNS,
-                            f"merchant-store:{item['merchant_id']}:{descriptor}",
-                        ),
-                        "merchant_id": uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-master:{item['merchant_id']}"),
-                        "location_name": f"{item['clean_name']} #{idx}",
-                        "raw_descriptor": descriptor,
-                        "country_code": "USA",
-                        "is_international": False,
-                        "risk_score": 0,
-                        "created_at": now,
-                        "updated_at": now,
-                    }
-                )
-        else:
-            store_rows.append(
-                {
-                    "id": uuid.uuid5(
-                        uuid.NAMESPACE_DNS,
-                        f"merchant-store:{item['merchant_id']}:{item['clean_name'].upper()}",
-                    ),
-                    "merchant_id": uuid.uuid5(uuid.NAMESPACE_DNS, f"merchant-master:{item['merchant_id']}"),
-                    "location_name": item["clean_name"],
-                    "raw_descriptor": item["clean_name"].upper(),
-                    "country_code": "USA",
-                    "is_international": False,
-                    "risk_score": 0,
-                    "created_at": now,
-                    "updated_at": now,
-                }
-            )
-    op.bulk_insert(merchant_stores, store_rows)
-
-    op.bulk_insert(
-        system_settings,
-        [{"key": key, "value": value} for key, value in _load_json_resource("system_settings.json").items()],
-    )
-    op.bulk_insert(
-        retail_locations,
-        [
-            {
-                "id": uuid.uuid5(uuid.NAMESPACE_DNS, f"retail-location:{item['id']}"),
-                "name": item["name"],
-                "type": item["type"],
-                "address": item["address"],
-                "latitude": item["latitude"],
-                "longitude": item["longitude"],
-                "hours": item.get("hours"),
-                "phone_number": item.get("phone_number"),
-            }
-            for item in _load_jsonl_resource("retail_locations.jsonl")
-        ],
-    )
-
-
 def upgrade() -> None:
     """Upgrade schema."""
-    schemas = ["admin", "audit", "catalog", "identity", "merchants", "operations", "cards", "kyc", "ledger", "origination", "ref_data"]
-    for s in schemas:
-        op.execute(f"CREATE SCHEMA IF NOT EXISTS {s}")
-        
     # ### commands auto generated by Alembic - please adjust! ###
     op.create_table('system_settings',
     sa.Column('key', sa.String(), nullable=False),
@@ -386,7 +100,6 @@ def upgrade() -> None:
     sa.Column('metadata_json', sa.JSON(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('mcc'),
     schema='merchants'
     )
     op.create_index(op.f('ix_merchants_merchant_category_codes_mcc'), 'merchant_category_codes', ['mcc'], unique=True, schema='merchants')
@@ -406,6 +119,79 @@ def upgrade() -> None:
     op.create_index('idx_merchants_domain', 'merchant_master', ['merchant_domain'], unique=False, schema='merchants')
     op.create_index('idx_merchants_mcc', 'merchant_master', ['default_mcc'], unique=False, schema='merchants')
     op.create_index(op.f('ix_merchants_merchant_master_merchant_slug'), 'merchant_master', ['merchant_slug'], unique=True, schema='merchants')
+    op.create_table('fraud_alerts',
+    sa.Column('id', utils.database.UniversalUUID(), nullable=False),
+    sa.Column('customer_id', utils.database.UniversalUUID(), nullable=False),
+    sa.Column('auth_provider_uid', sa.String(length=128), nullable=False),
+    sa.Column('credit_account_id', utils.database.UniversalUUID(), nullable=False),
+    sa.Column('card_id', utils.database.UniversalUUID(), nullable=False),
+    sa.Column('card_last_four', sa.String(length=4), nullable=False),
+    sa.Column('status', sa.String(length=32), nullable=False),
+    sa.Column('source', sa.String(length=64), nullable=False),
+    sa.Column('message_thread_id', sa.String(length=128), nullable=False),
+    sa.Column('suspicious_authorization_ids', sa.JSON(), nullable=False),
+    sa.Column('suspicious_transactions', sa.JSON(), nullable=False),
+    sa.Column('remediation_status', sa.String(length=32), nullable=False),
+    sa.Column('triaged_at', sa.DateTime(), nullable=True),
+    sa.Column('triage_summary', sa.String(length=512), nullable=True),
+    sa.Column('selected_disputed_authorization_ids', sa.JSON(), nullable=False),
+    sa.Column('selected_disputed_transaction_ids', sa.JSON(), nullable=False),
+    sa.Column('provisional_credit_cents', sa.BigInteger(), nullable=False),
+    sa.Column('replacement_card_id', utils.database.UniversalUUID(), nullable=True),
+    sa.Column('triage_message_thread_id', sa.String(length=128), nullable=True),
+    sa.Column('triage_message_id', sa.String(length=128), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('resolved_at', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('message_thread_id'),
+    schema='operations'
+    )
+    op.create_index('idx_fraud_alerts_customer_status', 'fraud_alerts', ['customer_id', 'status'], unique=False, schema='operations')
+    op.create_index('idx_fraud_alerts_thread_id', 'fraud_alerts', ['message_thread_id'], unique=False, schema='operations')
+    op.create_index(op.f('ix_operations_fraud_alerts_auth_provider_uid'), 'fraud_alerts', ['auth_provider_uid'], unique=False, schema='operations')
+    op.create_table('fraud_case_actions',
+    sa.Column('id', utils.database.UniversalUUID(), nullable=False),
+    sa.Column('fraud_alert_id', utils.database.UniversalUUID(), nullable=False),
+    sa.Column('action_type', sa.String(length=64), nullable=False),
+    sa.Column('status', sa.String(length=32), nullable=False),
+    sa.Column('idempotency_key', sa.String(length=128), nullable=True),
+    sa.Column('request_payload', sa.JSON(), nullable=False),
+    sa.Column('result_payload', sa.JSON(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('completed_at', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('fraud_alert_id', 'idempotency_key', name='uq_fraud_case_actions_idempotency'),
+    schema='operations'
+    )
+    op.create_index('idx_fraud_case_actions_alert', 'fraud_case_actions', ['fraud_alert_id'], unique=False, schema='operations')
+    op.create_index('idx_fraud_case_actions_status', 'fraud_case_actions', ['status'], unique=False, schema='operations')
+    op.create_index('idx_fraud_case_actions_type', 'fraud_case_actions', ['action_type'], unique=False, schema='operations')
+    op.create_table('fraud_model_decisions',
+    sa.Column('id', utils.database.UniversalUUID(), nullable=False),
+    sa.Column('authorization_id', utils.database.UniversalUUID(), nullable=False),
+    sa.Column('customer_id', utils.database.UniversalUUID(), nullable=False),
+    sa.Column('credit_account_id', utils.database.UniversalUUID(), nullable=False),
+    sa.Column('card_id', utils.database.UniversalUUID(), nullable=False),
+    sa.Column('score', sa.Integer(), nullable=False),
+    sa.Column('threshold', sa.Integer(), nullable=False),
+    sa.Column('decision', sa.String(length=32), nullable=False),
+    sa.Column('reason_codes', sa.JSON(), nullable=False),
+    sa.Column('feature_snapshot', sa.JSON(), nullable=False),
+    sa.Column('merchant_name', sa.String(length=255), nullable=True),
+    sa.Column('merchant_category_code', sa.String(length=4), nullable=True),
+    sa.Column('transaction_channel', sa.String(length=32), nullable=True),
+    sa.Column('merchant_country_code', sa.String(length=3), nullable=True),
+    sa.Column('merchant_city', sa.String(length=100), nullable=True),
+    sa.Column('merchant_region', sa.String(length=100), nullable=True),
+    sa.Column('model_version', sa.String(length=64), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('authorization_id', name='uq_fraud_model_decisions_authorization'),
+    schema='operations'
+    )
+    op.create_index('idx_fraud_model_decisions_account_created', 'fraud_model_decisions', ['credit_account_id', 'created_at'], unique=False, schema='operations')
+    op.create_index('idx_fraud_model_decisions_card_created', 'fraud_model_decisions', ['card_id', 'created_at'], unique=False, schema='operations')
+    op.create_index('idx_fraud_model_decisions_customer_created', 'fraud_model_decisions', ['customer_id', 'created_at'], unique=False, schema='operations')
     op.create_table('retail_locations',
     sa.Column('id', utils.database.UniversalUUID(), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
@@ -418,6 +204,36 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     schema='operations'
     )
+    op.create_table('scenario_outcomes',
+    sa.Column('id', utils.database.UniversalUUID(), nullable=False),
+    sa.Column('scenario_id', sa.String(length=128), nullable=False),
+    sa.Column('execution_id', sa.String(length=128), nullable=False),
+    sa.Column('event_id', sa.String(length=128), nullable=False),
+    sa.Column('authorization_id', utils.database.UniversalUUID(), nullable=True),
+    sa.Column('transaction_id', utils.database.UniversalUUID(), nullable=True),
+    sa.Column('fraud_alert_id', utils.database.UniversalUUID(), nullable=True),
+    sa.Column('customer_id', utils.database.UniversalUUID(), nullable=True),
+    sa.Column('credit_account_id', utils.database.UniversalUUID(), nullable=True),
+    sa.Column('card_id', utils.database.UniversalUUID(), nullable=True),
+    sa.Column('card_token', sa.String(length=128), nullable=True),
+    sa.Column('outcome_label', sa.String(length=64), nullable=False),
+    sa.Column('expected_reason_codes', sa.JSON(), nullable=False),
+    sa.Column('actual_reason_codes', sa.JSON(), nullable=False),
+    sa.Column('expected_score_band', sa.String(length=64), nullable=True),
+    sa.Column('actual_risk_score', sa.Integer(), nullable=True),
+    sa.Column('model_version', sa.String(length=64), nullable=True),
+    sa.Column('synthetic_label', sa.Boolean(), nullable=False),
+    sa.Column('operational_action', sa.String(length=64), nullable=True),
+    sa.Column('operational_status', sa.String(length=64), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('scenario_id', 'execution_id', 'event_id', name='uq_scenario_outcomes_event'),
+    schema='operations'
+    )
+    op.create_index('idx_scenario_outcomes_authorization', 'scenario_outcomes', ['authorization_id'], unique=False, schema='operations')
+    op.create_index('idx_scenario_outcomes_customer_created', 'scenario_outcomes', ['customer_id', 'created_at'], unique=False, schema='operations')
+    op.create_index('idx_scenario_outcomes_fraud_alert', 'scenario_outcomes', ['fraud_alert_id'], unique=False, schema='operations')
+    op.create_index('idx_scenario_outcomes_scenario_execution', 'scenario_outcomes', ['scenario_id', 'execution_id'], unique=False, schema='operations')
     op.create_table('support_escalations',
     sa.Column('id', utils.database.UniversalUUID(), nullable=False),
     sa.Column('room_name', sa.String(), nullable=False),
@@ -430,6 +246,52 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     schema='operations'
+    )
+    op.create_table('synthetic_scheduled_events',
+    sa.Column('id', utils.database.UniversalUUID(), nullable=False),
+    sa.Column('schedule_id', sa.String(length=128), nullable=False),
+    sa.Column('scenario_id', sa.String(length=128), nullable=True),
+    sa.Column('execution_id', sa.String(length=128), nullable=True),
+    sa.Column('event_id', sa.String(length=128), nullable=False),
+    sa.Column('parent_event_id', sa.String(length=128), nullable=True),
+    sa.Column('event_type', sa.String(length=64), nullable=False),
+    sa.Column('persona_id', sa.String(length=128), nullable=True),
+    sa.Column('status', sa.String(length=32), nullable=False),
+    sa.Column('idempotency_key', sa.String(length=200), nullable=False),
+    sa.Column('scheduled_for', sa.DateTime(), nullable=False),
+    sa.Column('payload', sa.JSON(), nullable=False),
+    sa.Column('result_payload', sa.JSON(), nullable=False),
+    sa.Column('attempts', sa.Integer(), nullable=False),
+    sa.Column('last_error', sa.String(length=1024), nullable=True),
+    sa.Column('dispatched_at', sa.DateTime(), nullable=True),
+    sa.Column('completed_at', sa.DateTime(), nullable=True),
+    sa.Column('canceled_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('idempotency_key', name='uq_synthetic_scheduled_events_idempotency'),
+    schema='operations'
+    )
+    op.create_index('idx_synthetic_scheduled_events_scenario', 'synthetic_scheduled_events', ['scenario_id', 'execution_id'], unique=False, schema='operations')
+    op.create_index('idx_synthetic_scheduled_events_schedule', 'synthetic_scheduled_events', ['schedule_id', 'scheduled_for'], unique=False, schema='operations')
+    op.create_index('idx_synthetic_scheduled_events_status_time', 'synthetic_scheduled_events', ['status', 'scheduled_for'], unique=False, schema='operations')
+    op.create_table('reset_epochs',
+    sa.Column('scope_type', sa.String(length=16), nullable=False),
+    sa.Column('scope_id', sa.String(length=255), nullable=False),
+    sa.Column('epoch', sa.BigInteger(), server_default=sa.text('0'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.PrimaryKeyConstraint('scope_type', 'scope_id'),
+    schema='voice_support_sessions'
+    )
+    op.execute(
+        sa.text(
+            """
+            INSERT INTO voice_support_sessions.reset_epochs
+                (scope_type, scope_id, epoch)
+            VALUES ('GLOBAL', '*', 0)
+            ON CONFLICT (scope_type, scope_id) DO NOTHING
+            """
+        )
     )
     op.create_table('credit_accounts',
     sa.Column('id', utils.database.UniversalUUID(), nullable=False),
@@ -569,6 +431,14 @@ def upgrade() -> None:
     sa.Column('location_name', sa.String(length=100), nullable=False),
     sa.Column('raw_descriptor', sa.String(length=150), nullable=False),
     sa.Column('country_code', sa.String(length=3), nullable=False),
+    sa.Column('city', sa.String(length=100), nullable=True),
+    sa.Column('region', sa.String(length=100), nullable=True),
+    sa.Column('postal_code', sa.String(length=20), nullable=True),
+    sa.Column('latitude', sa.Numeric(precision=9, scale=6), nullable=True),
+    sa.Column('longitude', sa.Numeric(precision=9, scale=6), nullable=True),
+    sa.Column('card_present_capable', sa.Boolean(), nullable=False),
+    sa.Column('ecommerce_capable', sa.Boolean(), nullable=False),
+    sa.Column('high_risk_flags', sa.String(length=255), nullable=True),
     sa.Column('is_international', sa.Boolean(), nullable=False),
     sa.Column('risk_score', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=True),
@@ -705,6 +575,17 @@ def upgrade() -> None:
     sa.Column('merchant_slug', sa.String(length=100), nullable=True),
     sa.Column('merchant_category_code', sa.String(length=4), nullable=False),
     sa.Column('merchant_name', sa.String(length=255), nullable=True),
+    sa.Column('transaction_channel', sa.String(length=32), nullable=True),
+    sa.Column('entry_mode', sa.String(length=32), nullable=True),
+    sa.Column('merchant_country_code', sa.String(length=3), nullable=True),
+    sa.Column('merchant_city', sa.String(length=100), nullable=True),
+    sa.Column('merchant_region', sa.String(length=100), nullable=True),
+    sa.Column('merchant_postal_code', sa.String(length=20), nullable=True),
+    sa.Column('merchant_latitude', sa.Numeric(precision=9, scale=6), nullable=True),
+    sa.Column('merchant_longitude', sa.Numeric(precision=9, scale=6), nullable=True),
+    sa.Column('ip_country_code', sa.String(length=3), nullable=True),
+    sa.Column('shipping_country_code', sa.String(length=3), nullable=True),
+    sa.Column('is_digital_goods', sa.Boolean(), nullable=False),
     sa.Column('fraud_risk_score', sa.Integer(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.Column('expires_at', sa.DateTime(), nullable=False),
@@ -734,176 +615,9 @@ def upgrade() -> None:
     op.create_index('idx_ledger_account_posted', 'posted_transactions', ['account_id', 'posted_at'], unique=False, schema='cards')
     # ### end Alembic commands ###
 
-    _seed_reference_tables()
-
-    if op.get_bind().dialect.name == "postgresql" and os.getenv("SKIP_IAM_GRANTS") != "true":
-        try:
-            from utils.gcp import get_project_id
-            project_id = get_project_id()
-            if str(project_id) == "None":
-                project_id = os.getenv("PROJECT_ID")
-        except Exception:
-            project_id = os.getenv("PROJECT_ID")
-
-        users_by_schema = {
-            "identity": [], "kyc": [], "ledger": [], "cards": [], "operations": [], "ref_data": [], "merchants": []
-        }
-        if project_id and str(project_id) != "None":
-            main_sa = f"banking-service-sa@{project_id}.iam"
-            for s in users_by_schema:
-                users_by_schema[s].append(main_sa)
-            users_by_schema["kyc"].append(f"kyc-service-sa@{project_id}.iam")
-            users_by_schema["ledger"].append(f"ledger-service-sa@{project_id}.iam")
-            users_by_schema["operations"].append(f"data-generator-sa@{project_id}.iam")
-            users_by_schema["ref_data"].extend([f"kyc-service-sa@{project_id}.iam", f"ledger-service-sa@{project_id}.iam"])
-            users_by_schema["merchants"].extend([f"kyc-service-sa@{project_id}.iam", f"ledger-service-sa@{project_id}.iam"])
-
-        iam_dba_users_env = os.getenv("IAM_DBA_USERS")
-        if iam_dba_users_env:
-            for user in [u.strip() for u in iam_dba_users_env.split(",") if u.strip()]:
-                for s in users_by_schema:
-                    users_by_schema[s].append(user)
-
-        all_users = set(u for u_list in users_by_schema.values() for u in u_list)
-
-        iam_viewer_users_env = os.getenv("IAM_DB_VIEWER_USERS")
-        viewer_users_by_schema = {s: [] for s in users_by_schema}
-        if iam_viewer_users_env:
-            for user in [u.strip() for u in iam_viewer_users_env.split(",") if u.strip()]:
-                for s in viewer_users_by_schema:
-                    viewer_users_by_schema[s].append(user)
-
-        all_viewer_users = set(u for u_list in viewer_users_by_schema.values() for u in u_list)
-
-        for user in all_users | all_viewer_users:
-            try:
-                op.execute(f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = \'{user}\') THEN CREATE ROLE "{user}" NOLOGIN; END IF; END $$;')
-            except Exception:
-                pass
-
-        for schema_name, users in users_by_schema.items():
-            for user in users:
-                try:
-                    op.execute(f'GRANT USAGE ON SCHEMA {schema_name} TO "{user}";')
-                    op.execute(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {schema_name} TO "{user}";')
-                    op.execute(f'GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {schema_name} TO "{user}";')
-                    op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {schema_name} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{user}";')
-                    op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {schema_name} GRANT ALL PRIVILEGES ON SEQUENCES TO "{user}";')
-                except Exception:
-                    pass
-
-        for schema_name, users in viewer_users_by_schema.items():
-            for user in users:
-                try:
-                    op.execute(f'GRANT USAGE ON SCHEMA {schema_name} TO "{user}";')
-                    op.execute(f'GRANT SELECT ON ALL TABLES IN SCHEMA {schema_name} TO "{user}";')
-                    op.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {schema_name} GRANT SELECT ON TABLES TO "{user}";')
-                except Exception:
-                    pass
-
-        db_user = os.getenv("CDC_REPLICATION_USER", "banking_bq_connector")
-        require_cdc_bootstrap = _env_flag("REQUIRE_CDC_BOOTSTRAP", default=False)
-        conn = op.get_bind()
-        try:
-            user_exists = conn.execute(text("SELECT 1 FROM pg_roles WHERE rolname = :username"), {"username": db_user}).scalar()
-            if not user_exists:
-                _handle_cdc_bootstrap_issue(
-                    f"Replication user '{db_user}' does not exist; cannot bootstrap Datastream CDC prerequisites.",
-                    required=require_cdc_bootstrap,
-                )
-            else:
-                has_priv = conn.execute(text("""
-                    SELECT EXISTS (
-                        SELECT 1 FROM pg_roles 
-                        WHERE rolname = CURRENT_USER 
-                          AND (
-                            rolsuper = true 
-                            OR rolreplication = true 
-                            OR EXISTS (
-                                SELECT 1 FROM pg_auth_members m 
-                                JOIN pg_roles r ON m.roleid = r.oid 
-                                WHERE m.member = pg_roles.oid AND r.rolname = 'cloudsqlsuperuser'
-                            )
-                          )
-                    );
-                """)).scalar()
-                if not has_priv:
-                    _handle_cdc_bootstrap_issue(
-                        "Migration user cannot grant replication privileges or create replication slots.",
-                        required=require_cdc_bootstrap,
-                    )
-                else:
-                    try:
-                        with conn.begin_nested():
-                            conn.execute(text(f'ALTER ROLE "{db_user}" WITH REPLICATION;'))
-                    except Exception as exc:
-                        _handle_cdc_bootstrap_issue(
-                            f"Failed to grant replication to '{db_user}'.",
-                            required=require_cdc_bootstrap,
-                            exc=exc,
-                        )
-                    cdc_schemas = ["catalog", "cards", "origination", "identity", "kyc", "ledger", "merchants", "operations"]
-                    for schema_name in cdc_schemas:
-                        try:
-                            with conn.begin_nested():
-                                conn.execute(text(f'GRANT USAGE ON SCHEMA "{schema_name}" TO "{db_user}";'))
-                                conn.execute(text(f'GRANT SELECT ON ALL TABLES IN SCHEMA "{schema_name}" TO "{db_user}";'))
-                                conn.execute(text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA "{schema_name}" GRANT SELECT ON TABLES TO "{db_user}";'))
-                        except Exception as exc:
-                            _handle_cdc_bootstrap_issue(
-                                f"Failed to grant CDC read access on schema '{schema_name}' to '{db_user}'.",
-                                required=require_cdc_bootstrap,
-                                exc=exc,
-                            )
-                try:
-                    with conn.begin_nested():
-                        pub_exists = conn.execute(text("SELECT 1 FROM pg_publication WHERE pubname = 'datastream_publication'")).scalar()
-                        if not pub_exists:
-                            conn.execute(text('CREATE PUBLICATION datastream_publication FOR ALL TABLES;'))
-                except Exception as exc:
-                    _handle_cdc_bootstrap_issue(
-                        "Failed to create PostgreSQL publication 'datastream_publication'.",
-                        required=require_cdc_bootstrap,
-                        exc=exc,
-                    )
-                try:
-                    wal_level = conn.execute(text("SHOW wal_level;")).scalar()
-                    if wal_level != 'logical':
-                        _handle_cdc_bootstrap_issue(
-                            f"PostgreSQL wal_level is '{wal_level}', expected 'logical' for Datastream CDC.",
-                            required=require_cdc_bootstrap,
-                        )
-                    else:
-                        with conn.begin_nested():
-                            slot_exists = conn.execute(text("SELECT 1 FROM pg_replication_slots WHERE slot_name = 'datastream_replication_slot'")).scalar()
-                            if not slot_exists:
-                                conn.execute(text("SELECT pg_create_logical_replication_slot('datastream_replication_slot', 'pgoutput');"))
-                except Exception as exc:
-                    _handle_cdc_bootstrap_issue(
-                        "Failed to create PostgreSQL replication slot 'datastream_replication_slot'.",
-                        required=require_cdc_bootstrap,
-                        exc=exc,
-                    )
-        except Exception as exc:
-            _handle_cdc_bootstrap_issue(
-                "Unexpected error while bootstrapping Datastream CDC prerequisites.",
-                required=require_cdc_bootstrap,
-                exc=exc,
-            )
-
 
 def downgrade() -> None:
     """Downgrade schema."""
-    conn = op.get_bind()
-    try:
-        if conn.dialect.name == "postgresql":
-            wal_level = conn.execute(text("SHOW wal_level;")).scalar()
-            if wal_level == 'logical':
-                with conn.begin_nested():
-                    conn.execute(text("SELECT pg_drop_replication_slot('datastream_replication_slot') WHERE EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'datastream_replication_slot');"))
-    except Exception:
-        pass
-        
     # ### commands auto generated by Alembic - please adjust! ###
     op.drop_index('idx_ledger_account_posted', table_name='posted_transactions', schema='cards')
     op.drop_index('idx_ledger_account', table_name='posted_transactions', schema='cards')
@@ -949,8 +663,30 @@ def downgrade() -> None:
     op.drop_index('idx_credit_accounts_product_code', table_name='credit_accounts', schema='cards')
     op.drop_index('idx_credit_accounts_customer_id', table_name='credit_accounts', schema='cards')
     op.drop_table('credit_accounts', schema='cards')
+    op.drop_table('reset_epochs', schema='voice_support_sessions')
+    op.drop_index('idx_synthetic_scheduled_events_status_time', table_name='synthetic_scheduled_events', schema='operations')
+    op.drop_index('idx_synthetic_scheduled_events_schedule', table_name='synthetic_scheduled_events', schema='operations')
+    op.drop_index('idx_synthetic_scheduled_events_scenario', table_name='synthetic_scheduled_events', schema='operations')
+    op.drop_table('synthetic_scheduled_events', schema='operations')
     op.drop_table('support_escalations', schema='operations')
+    op.drop_index('idx_scenario_outcomes_scenario_execution', table_name='scenario_outcomes', schema='operations')
+    op.drop_index('idx_scenario_outcomes_fraud_alert', table_name='scenario_outcomes', schema='operations')
+    op.drop_index('idx_scenario_outcomes_customer_created', table_name='scenario_outcomes', schema='operations')
+    op.drop_index('idx_scenario_outcomes_authorization', table_name='scenario_outcomes', schema='operations')
+    op.drop_table('scenario_outcomes', schema='operations')
     op.drop_table('retail_locations', schema='operations')
+    op.drop_index('idx_fraud_model_decisions_customer_created', table_name='fraud_model_decisions', schema='operations')
+    op.drop_index('idx_fraud_model_decisions_card_created', table_name='fraud_model_decisions', schema='operations')
+    op.drop_index('idx_fraud_model_decisions_account_created', table_name='fraud_model_decisions', schema='operations')
+    op.drop_table('fraud_model_decisions', schema='operations')
+    op.drop_index('idx_fraud_case_actions_type', table_name='fraud_case_actions', schema='operations')
+    op.drop_index('idx_fraud_case_actions_status', table_name='fraud_case_actions', schema='operations')
+    op.drop_index('idx_fraud_case_actions_alert', table_name='fraud_case_actions', schema='operations')
+    op.drop_table('fraud_case_actions', schema='operations')
+    op.drop_index(op.f('ix_operations_fraud_alerts_auth_provider_uid'), table_name='fraud_alerts', schema='operations')
+    op.drop_index('idx_fraud_alerts_thread_id', table_name='fraud_alerts', schema='operations')
+    op.drop_index('idx_fraud_alerts_customer_status', table_name='fraud_alerts', schema='operations')
+    op.drop_table('fraud_alerts', schema='operations')
     op.drop_index(op.f('ix_merchants_merchant_master_merchant_slug'), table_name='merchant_master', schema='merchants')
     op.drop_index('idx_merchants_mcc', table_name='merchant_master', schema='merchants')
     op.drop_index('idx_merchants_domain', table_name='merchant_master', schema='merchants')

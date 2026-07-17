@@ -35,11 +35,11 @@ resource "google_datastream_connection_profile" "postgres_source" {
   create_without_validation = true
 
   postgresql_profile {
-    hostname = google_compute_address.proxy_internal_ip.address
+    hostname = google_compute_address.datastream_alloydb_proxy_internal_ip.address
     port     = 5432
-    username = google_sql_user.banking_bq_connector.name
+    username = google_alloydb_user.banking_bq_connector.user_id
     password = random_password.banking_bq_connector_password.result
-    database = google_sql_database.banking.name
+    database = "banking"
   }
 
   private_connectivity {
@@ -48,8 +48,8 @@ resource "google_datastream_connection_profile" "postgres_source" {
 
   depends_on = [
     google_project_service.datastream_googleapis_com,
-    google_compute_instance.cloudsql_proxy_vm,
-    google_compute_firewall.allow_datastream_to_proxy
+    google_compute_instance.datastream_alloydb_proxy,
+    google_compute_firewall.allow_datastream_to_alloydb_proxy,
   ]
 }
 
@@ -66,7 +66,7 @@ resource "google_datastream_connection_profile" "bigquery_destination" {
 resource "google_datastream_stream" "banking_cdc_stream" {
   display_name = "Banking CDC Stream to BigQuery Data Lake"
   location     = var.region
-  stream_id    = "banking-cdc-stream"
+  stream_id    = "banking-alloydb-cdc-stream"
   # Create the stream without auto-starting so fresh environments can finish
   # database migrations before Datastream validates publication/slot state.
   desired_state             = "NOT_STARTED"
@@ -78,7 +78,7 @@ resource "google_datastream_stream" "banking_cdc_stream" {
     source_connection_profile = google_datastream_connection_profile.postgres_source.id
     postgresql_source_config {
       publication      = "datastream_publication"
-      replication_slot = "datastream_replication_slot"
+      replication_slot = "datastream_alloydb_replication_slot"
       include_objects {
         postgresql_schemas {
           schema = "catalog"
@@ -195,6 +195,7 @@ resource "google_datastream_stream" "banking_cdc_stream" {
   destination_config {
     destination_connection_profile = google_datastream_connection_profile.bigquery_destination.id
     bigquery_destination_config {
+      data_freshness = "60s"
       single_target_dataset {
         dataset_id = google_bigquery_dataset.iceberg_catalog.id
       }

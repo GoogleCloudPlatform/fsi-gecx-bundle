@@ -60,8 +60,8 @@ async def test_health_endpoint(async_client):
     assert response.status_code == 200
     data = response.json()
     assert data.get("status") == "ok"
-    assert "version" in data
-    assert "commit" in data
+    assert "build_version" in data
+    assert "build_commit_id" in data
 
 
 def test_should_run_startup_seeding_disabled_on_cloud_run_by_default(monkeypatch):

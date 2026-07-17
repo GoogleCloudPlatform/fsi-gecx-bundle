@@ -386,11 +386,11 @@ export default function LocatorView() {
       <GcpInfoModal
         isOpen={isInfoModalOpen}
         onClose={() => setIsInfoModalOpen(false)}
-        title="Cloud SQL Database Integration"
+        title="AlloyDB Database Integration"
       >
         <div className="space-y-4 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
           <p>
-            This branch and ATM locator search is powered by <strong>Google Cloud Platform's Cloud SQL</strong>.
+            This branch and ATM locator search is powered by <strong>AlloyDB for PostgreSQL</strong>.
           </p>
           <p>
             The backend retrieves retail location coordinates and service types in real-time by querying geographic distance metrics from the retail locations table.
@@ -402,16 +402,16 @@ export default function LocatorView() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">Retail Locations Table</h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">View schemas, columns, preview rows, and execute query analysis. Login to the banking database using IAM upon clicking 'Open Cloud SQL Studio'.</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">View schemas, columns, preview rows, and execute query analysis. Sign in to the banking database using IAM from AlloyDB Studio.</p>
               </div>
               <div className="flex flex-col items-end gap-1.5 shrink-0">
                 <a
-                  href={`https://console.cloud.google.com/sql/instances/banking-data/studio?project=${projectId}`}
+                  href={`https://console.cloud.google.com/alloydb/clusters?project=${projectId}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs hover:underline"
                 >
-                  <span>Open Cloud SQL Studio</span>
+                  <span>Open AlloyDB Studio</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
                 <AnalyticsButton
@@ -474,7 +474,7 @@ export default function LocatorView() {
             },
             {
               target: '#locator-info-btn',
-              content: 'Curious about the tech stack? Click this cloud icon to view details about the underlying Cloud SQL table schema and run query analysis.',
+              content: 'Curious about the tech stack? Click this cloud icon to view details about the underlying AlloyDB table schema and run query analysis.',
               placement: 'left',
               skipBeacon: true
             }

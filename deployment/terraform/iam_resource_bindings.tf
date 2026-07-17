@@ -41,6 +41,27 @@ resource "google_artifact_registry_repository_iam_member" "cloudbuild_sa_fsi_gec
   member     = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
 
+resource "google_storage_bucket_iam_member" "terraform_cloudbuild_release_manifest_admin" {
+  bucket = google_storage_bucket.release_manifests.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
+}
+
+resource "google_storage_bucket_iam_member" "release_manifest_readers" {
+  for_each = toset(var.release_manifest_reader_members)
+  bucket   = google_storage_bucket.release_manifests.name
+  role     = "roles/storage.objectViewer"
+  member   = each.value
+}
+
+resource "google_artifact_registry_repository_iam_member" "release_image_consumers" {
+  for_each   = toset(var.release_image_consumer_members)
+  repository = google_artifact_registry_repository.fsi_gecx_bundle.id
+  location   = var.region
+  role       = "roles/artifactregistry.reader"
+  member     = each.value
+}
+
 resource "google_artifact_registry_repository_iam_member" "lakehouse_reconcile_sa_fsi_gecx_bundle_artifact_reader" {
   repository = google_artifact_registry_repository.fsi_gecx_bundle.id
   location   = var.region
@@ -226,6 +247,12 @@ resource "google_secret_manager_secret_iam_member" "ces_secret_accessor" {
 
 resource "google_secret_manager_secret_iam_member" "banking_db_migration_postgres_root_password_accessor" {
   secret_id = google_secret_manager_secret.postgres_banking_root_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "banking_db_migration_bq_connector_password_accessor" {
+  secret_id = google_secret_manager_secret.postgres_banking_bq_connector_password.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
 }
@@ -445,15 +472,6 @@ resource "google_bigquery_connection_iam_member" "database_viewer_iceberg_connec
   project       = data.google_project.project.project_id
   location      = google_bigquery_connection.iceberg.location
   connection_id = google_bigquery_connection.iceberg.connection_id
-  role          = "roles/bigquery.connectionUser"
-  member        = each.value
-}
-
-resource "google_bigquery_connection_iam_member" "database_viewer_banking_data_postgres_connection_user" {
-  for_each      = toset(local.iam_console_viewers)
-  project       = data.google_project.project.project_id
-  location      = google_bigquery_connection.banking_data_postgres_connection.location
-  connection_id = google_bigquery_connection.banking_data_postgres_connection.connection_id
   role          = "roles/bigquery.connectionUser"
   member        = each.value
 }

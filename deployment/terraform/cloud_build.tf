@@ -86,7 +86,7 @@ resource "google_cloudbuild_trigger" "service_deploy_trigger" {
 
   substitutions = {
     _REGION              = var.region
-    _TRIGGER_DEPLOY      = "true"
+    _TRIGGER_DEPLOY      = "false"
     _IAM_DBA_USERS       = join(",", [for k, v in local.db_iam_support_members : v.name])
     _IAM_DB_VIEWER_USERS = join(",", [for k, v in local.db_iam_viewer_members : v.name])
   }
@@ -221,7 +221,7 @@ resource "google_cloudbuild_trigger" "credit_support_agent_deploy_trigger" {
 
   substitutions = {
     _REGION                                       = var.region
-    _TRIGGER_DEPLOY                               = "true"
+    _TRIGGER_DEPLOY                               = "false"
     _VOICE_AGENT_CPU                              = tostring(var.voice_agent_cpu)
     _VOICE_AGENT_MEMORY                           = var.voice_agent_memory
     _VOICE_AGENT_REQUEST_TIMEOUT_SECONDS          = tostring(var.voice_agent_request_timeout_seconds)
@@ -255,7 +255,7 @@ resource "google_cloudbuild_trigger" "data_generator_deploy_trigger" {
 
   substitutions = {
     _REGION         = var.region
-    _TRIGGER_DEPLOY = "true"
+    _TRIGGER_DEPLOY = "false"
   }
 }
 
@@ -303,6 +303,49 @@ resource "google_cloudbuild_trigger" "db_migration_manual_trigger" {
 
   substitutions = {
     _REGION = var.region
+  }
+}
+
+resource "google_cloudbuild_trigger" "alloydb_release_qualify" {
+  count    = var.deploy_cloud_build_triggers ? 1 : 0
+  name     = "alloydb-release-qualify"
+  location = var.region
+  tags     = ["alloydb", "release", "qualify", "manual"]
+  repository_event_config {
+    repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
+  }
+  service_account    = google_service_account.cloudbuild_terraform_service_account.id
+  filename           = "deployment/cloud_build/cloudbuild-alloydb-release.yaml"
+  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
+  substitutions = {
+    _REGION                  = var.region
+    _RELEASE_MODE            = "qualify"
+    _RELEASE_COMMIT          = "REQUIRED"
+    _MANIFEST_URI            = ""
+    _ALLOW_CLOUD_SQL_CUTOVER = "false"
+  }
+}
+
+resource "google_cloudbuild_trigger" "alloydb_release_promote" {
+  count    = var.deploy_cloud_build_triggers ? 1 : 0
+  name     = "alloydb-release-promote"
+  location = var.region
+  tags     = ["alloydb", "release", "promote", "manual"]
+  repository_event_config {
+    repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
+  }
+  approval_config {
+    approval_required = true
+  }
+  service_account    = google_service_account.cloudbuild_terraform_service_account.id
+  filename           = "deployment/cloud_build/cloudbuild-alloydb-release.yaml"
+  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
+  substitutions = {
+    _REGION                  = var.region
+    _RELEASE_MODE            = "promote"
+    _RELEASE_COMMIT          = "REQUIRED"
+    _MANIFEST_URI            = "REQUIRED"
+    _ALLOW_CLOUD_SQL_CUTOVER = "false"
   }
 }
 

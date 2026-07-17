@@ -171,10 +171,7 @@ async def _create_iam_database_service(db_url: str, max_events: int):
 
     async def async_creator():
         credentials, _ = google.auth.default(
-            scopes=[
-                "https://www.googleapis.com/auth/sqlservice.login",
-                "https://www.googleapis.com/auth/cloud-platform",
-            ]
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
         )
         await asyncio.to_thread(
             credentials.refresh, google.auth.transport.requests.Request()
@@ -184,6 +181,8 @@ async def _create_iam_database_service(db_url: str, max_events: int):
             password=credentials.token,
             database=url.database,
             host=url.host or url.query.get("host"),
+            port=url.port or 5432,
+            ssl=url.query.get("sslmode", "require"),
             server_settings={"search_path": SESSION_SCHEMA},
         )
 

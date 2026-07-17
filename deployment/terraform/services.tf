@@ -151,8 +151,8 @@ resource "google_project_service" "osconfig_googleapis_com" {
   disable_on_destroy = false
 }
 
-resource "google_project_service" "sqladmin_googleapis_com" {
-  service            = "sqladmin.googleapis.com"
+resource "google_project_service" "alloydb_googleapis_com" {
+  service            = "alloydb.googleapis.com"
   disable_on_destroy = false
 }
 

@@ -6,7 +6,7 @@ This document details the system architecture, event flow, security framework, a
 
 ## 📐 1. System Topology & Event Flow
 
-The secure messaging system uses an asynchronous, real-time push architecture to enable two-way support conversations between customers and bank agents. It synchronizes records in Cloud SQL PostgreSQL while dispatching low-latency push notifications via **Firebase Cloud Messaging (FCM)**.
+The secure messaging system uses an asynchronous, real-time push architecture to enable two-way support conversations between customers and bank agents. It synchronizes records in AlloyDB PostgreSQL while dispatching low-latency push notifications via **Firebase Cloud Messaging (FCM)**.
 
 ```mermaid
 sequenceDiagram
@@ -14,7 +14,7 @@ sequenceDiagram
     actor Customer as Customer (Browser)
     participant API as banking-service (Cloud Run)
     participant FCM as Firebase Cloud Messaging (FCM)
-    participant PG as Cloud SQL (PostgreSQL)
+    participant PG as AlloyDB (PostgreSQL)
     actor Agent as Support Agent (Browser)
 
     %% Phase 1: Device Registration
@@ -86,9 +86,9 @@ The secure messaging module integrates strict security compliance mechanisms to 
 
 ---
 
-## 💾 4. Database Schema & Storage (Cloud SQL PostgreSQL)
+## 💾 4. Database Schema & Storage (AlloyDB PostgreSQL)
 
-All messages, threads, and device registrations are stored persistently in Google Cloud SQL PostgreSQL under the `identity` schema.
+All messages, threads, and device registrations are stored persistently in AlloyDB for PostgreSQL under the `identity` schema.
 
 ### A. `identity.user_secure_messages`
 Stores the records of individual messages and thread properties.

@@ -266,7 +266,9 @@ async def test_secure_messaging_push_notification(mock_send, mock_send_multicast
         "thread_id": response_user.json()["thread_id"],
         "type": SUPPORT_MESSAGE_TYPE,
         "category": "Loans",
-        "user_id": user_id
+        "user_id": user_id,
+        "deep_link": "/secure-messaging",
+        "entry": "secure-message",
     }
 
 

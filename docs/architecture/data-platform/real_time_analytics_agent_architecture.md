@@ -23,7 +23,7 @@ The agent is deployed independently of `banking-service` and `banking-ui`.
 
 ```mermaid
 flowchart LR
-    CloudSQL["Cloud SQL PostgreSQL"]
+    AlloyDB["AlloyDB PostgreSQL"]
     Datastream["Datastream CDC"]
     Iceberg["BigLake Iceberg tables<br/>iceberg_catalog"]
     Audit["Compliance views and tables<br/>compliance_audit"]
@@ -33,7 +33,7 @@ flowchart LR
     Studio["BigQuery Data Studio"]
     User["Authorized analyst"]
 
-    CloudSQL --> Datastream
+    AlloyDB --> Datastream
     Datastream --> Iceberg
     Iceberg --> Reconciler
     Reconciler --> Curated
@@ -205,4 +205,3 @@ Operational failures are intentionally explicit:
 | `deployment/cloud_build/cloudbuild-data-agent-deploy.yaml` | Manual Cloud Build execution definition. |
 | `deployment/bigquery/analytics_curated/` | Curated SQL definitions and dependency manifest. |
 | `scripts/datastream/reconcile_lakehouse_views.py` | Direct curated-view reconciliation entry point. |
-

@@ -35,6 +35,8 @@ import models.kyc  # noqa: E402, F401
 import models.reference  # noqa: E402, F401
 import models.merchant  # noqa: E402, F401
 import models.fraud  # noqa: E402, F401
+import models.synthetic_schedule  # noqa: E402, F401
+import models.voice_session  # noqa: E402, F401
 
 # Set target metadata for alembic schema scanning
 target_metadata = Base.metadata
@@ -92,9 +94,13 @@ def include_object(obj, name, type_, reflected, compare_to):
     if IS_SQLITE_URL and _object_schema(obj, compare_to) in SQLITE_AUTOGEN_IGNORED_SCHEMAS:
         return False
 
-    # ADK owns its session tables and schema evolution. The reset epoch table
-    # in the same isolated schema is maintained by an explicit migration.
-    if _object_schema(obj, compare_to) == "voice_support_sessions":
+    # ADK owns all of its session tables except reset_epochs. Keeping the
+    # exclusion here prevents Alembic from trying to drop ADK-managed tables
+    # while still making reset_epochs part of the authoritative schema model.
+    if (
+        _object_schema(obj, compare_to) == "voice_support_sessions"
+        and name != "reset_epochs"
+    ):
         return False
 
     return True
@@ -221,212 +227,6 @@ def run_migrations_online() -> None:
                 logger.info("Acquiring transactional advisory migration lock (ID: 592837410)...")
                 connection.execute(sa.text("SELECT pg_advisory_xact_lock(592837410);"))
             context.run_migrations()
-
-            if is_postgres and os.getenv("SKIP_IAM_GRANTS") != "true":
-                logger.info("Applying programmatic post-migration RBAC permission grants across all schemas...")
-                try:
-                    from utils.gcp import get_project_id
-                    project_id = get_project_id()
-                    if str(project_id) == "None":
-                        project_id = os.getenv("PROJECT_ID")
-                except Exception:
-                    project_id = os.getenv("PROJECT_ID")
-
-                schemas = ["identity", "kyc", "ledger", "cards", "operations", "origination", "audit", "admin", "catalog", "ref_data", "merchants", "voice_support_sessions"]
-                reset_schemas = [s for s in schemas if s not in {"admin", "voice_support_sessions"}]
-                sa_names = ["banking-service-sa", "kyc-service-sa", "ledger-service-sa", "voice-agent-sa"]
-                roles = [f"{sa}@{project_id}.iam" if project_id and str(project_id) != "None" else sa for sa in sa_names]
-                reset_sa_names = ["banking-db-reset-sa"]
-                reset_roles = [f"{sa}@{project_id}.iam" if project_id and str(project_id) != "None" else sa for sa in reset_sa_names]
-                if os.getenv("IAM_DBA_USERS"):
-                    roles.extend([u.strip() for u in os.getenv("IAM_DBA_USERS").split(",") if u.strip()])
-
-                viewer_roles = []
-                if os.getenv("IAM_DB_VIEWER_USERS"):
-                    viewer_roles.extend([u.strip() for u in os.getenv("IAM_DB_VIEWER_USERS").split(",") if u.strip()])
-
-                # Cloud SQL IAM database users are Terraform-owned. Do not
-                # pre-create their backing PostgreSQL roles here, or a service
-                # deployment/migration can race Terraform and leave an orphan
-                # role that blocks google_sql_user creation.
-                bootstrap_roles = [
-                    role for role in roles + viewer_roles + reset_roles
-                    if "@" not in role
-                ]
-                for role in bootstrap_roles:
-                    try:
-                        with connection.begin_nested():
-                            stmt = f'DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = \'{role}\') THEN CREATE ROLE "{role}" NOLOGIN; END IF; END $$;'
-                            connection.execute(sa.text(stmt))
-                    except Exception as role_err:
-                        logger.debug(f"Notice: Could not bootstrap role {role}: {role_err}")
-
-                for role in roles:
-                    if role.startswith("kyc-service-sa"):
-                        allowed_schemas = ["kyc", "identity", "ref_data", "merchants"]
-                    elif role.startswith("ledger-service-sa"):
-                        allowed_schemas = ["ledger", "audit", "catalog", "ref_data", "merchants"]
-                    elif role.startswith("banking-service-sa"):
-                        allowed_schemas = [
-                            "identity",
-                            "ledger",
-                            "cards",
-                            "operations",
-                            "origination",
-                            "audit",
-                            "admin",
-                            "catalog",
-                            "ref_data",
-                            "merchants",
-                            "voice_support_sessions",
-                        ]
-                    elif role.startswith("voice-agent-sa"):
-                        allowed_schemas = ["voice_support_sessions"]
-                    else:
-                        allowed_schemas = schemas
-
-                    for s in allowed_schemas:
-                        try:
-                            with connection.begin_nested():
-                                connection.execute(sa.text(f'GRANT USAGE ON SCHEMA {s} TO "{role}";'))
-                                connection.execute(sa.text(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {s} TO "{role}";'))
-                                connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{role}";'))
-                                if role.startswith("voice-agent-sa"):
-                                    connection.execute(sa.text(f'GRANT CREATE ON SCHEMA {s} TO "{role}";'))
-                        except Exception as grant_err:
-                            logger.debug(f"Notice: Could not grant permissions on {s} to {role}: {grant_err}")
-
-                for role in viewer_roles:
-                    for s in reset_schemas:
-                        try:
-                            with connection.begin_nested():
-                                connection.execute(sa.text(f'GRANT USAGE ON SCHEMA {s} TO "{role}";'))
-                                connection.execute(sa.text(f'GRANT SELECT ON ALL TABLES IN SCHEMA {s} TO "{role}";'))
-                                connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT ON TABLES TO "{role}";'))
-                        except Exception as grant_err:
-                            logger.debug(f"Notice: Could not grant viewer permissions on {s} to {role}: {grant_err}")
-
-                cdc_replication_user = os.getenv("CDC_REPLICATION_USER", "banking_bq_connector")
-                require_cdc_bootstrap = os.getenv("REQUIRE_CDC_BOOTSTRAP", "").lower() in {"1", "true", "yes", "on"}
-                cdc_schemas = ["catalog", "cards", "origination", "identity", "kyc", "ledger", "merchants", "operations"]
-                try:
-                    cdc_user_exists = connection.execute(
-                        sa.text("SELECT 1 FROM pg_roles WHERE rolname = :username"),
-                        {"username": cdc_replication_user},
-                    ).scalar()
-                    if not cdc_user_exists:
-                        raise RuntimeError(f"CDC replication user '{cdc_replication_user}' does not exist.")
-
-                    with connection.begin_nested():
-                        connection.execute(sa.text(f'ALTER ROLE "{cdc_replication_user}" WITH REPLICATION;'))
-
-                    current_database = connection.execute(sa.text("SELECT current_database()")).scalar()
-                    with connection.begin_nested():
-                        connection.execute(sa.text(f'GRANT CONNECT ON DATABASE "{current_database}" TO "{cdc_replication_user}";'))
-
-                    for s in cdc_schemas:
-                        with connection.begin_nested():
-                            connection.execute(sa.text(f'GRANT USAGE ON SCHEMA {s} TO "{cdc_replication_user}";'))
-                            connection.execute(sa.text(f'GRANT SELECT ON ALL TABLES IN SCHEMA {s} TO "{cdc_replication_user}";'))
-                            connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT ON TABLES TO "{cdc_replication_user}";'))
-
-                    # Do not report a successful migration when Datastream still
-                    # cannot read the source. This catches missing grants before
-                    # the deployment pipeline starts (or resumes) the stream.
-                    cdc_role_ready = connection.execute(
-                        sa.text(
-                            "SELECT rolreplication "
-                            "FROM pg_roles WHERE rolname = :username"
-                        ),
-                        {"username": cdc_replication_user},
-                    ).scalar()
-                    cdc_can_connect = connection.execute(
-                        sa.text(
-                            "SELECT has_database_privilege(:username, current_database(), 'CONNECT')"
-                        ),
-                        {"username": cdc_replication_user},
-                    ).scalar()
-                    inaccessible_schemas = connection.execute(
-                        sa.text(
-                            "SELECT nspname FROM pg_namespace "
-                            "WHERE nspname = ANY(:schemas) "
-                            "AND NOT has_schema_privilege(:username, oid, 'USAGE')"
-                        ),
-                        {"username": cdc_replication_user, "schemas": cdc_schemas},
-                    ).scalars().all()
-                    unreadable_tables = connection.execute(
-                        sa.text(
-                            "SELECT format('%I.%I', n.nspname, c.relname) "
-                            "FROM pg_class c "
-                            "JOIN pg_namespace n ON n.oid = c.relnamespace "
-                            "WHERE n.nspname = ANY(:schemas) "
-                            "AND c.relkind IN ('r', 'p') "
-                            "AND NOT has_table_privilege(:username, c.oid, 'SELECT') "
-                            "ORDER BY 1"
-                        ),
-                        {"username": cdc_replication_user, "schemas": cdc_schemas},
-                    ).scalars().all()
-
-                    cdc_permission_errors = []
-                    if not cdc_role_ready:
-                        cdc_permission_errors.append("role is missing REPLICATION")
-                    if not cdc_can_connect:
-                        cdc_permission_errors.append("role cannot CONNECT to the database")
-                    if inaccessible_schemas:
-                        cdc_permission_errors.append(
-                            f"role lacks schema USAGE on {', '.join(inaccessible_schemas)}"
-                        )
-                    if unreadable_tables:
-                        cdc_permission_errors.append(
-                            f"role lacks table SELECT on {', '.join(unreadable_tables)}"
-                        )
-                    if cdc_permission_errors:
-                        raise RuntimeError(
-                            f"CDC source permission verification failed for '{cdc_replication_user}': "
-                            + "; ".join(cdc_permission_errors)
-                        )
-                    logger.info(
-                        "Verified CDC source permissions for %s across %d schemas.",
-                        cdc_replication_user,
-                        len(cdc_schemas),
-                    )
-                except Exception as cdc_grant_err:
-                    if require_cdc_bootstrap:
-                        raise
-                    logger.debug(f"Notice: Could not apply CDC grants to {cdc_replication_user}: {cdc_grant_err}")
-
-                current_database = connection.execute(sa.text("SELECT current_database()")).scalar()
-                for role in reset_roles:
-                    try:
-                        with connection.begin_nested():
-                            connection.execute(sa.text(f'GRANT CONNECT ON DATABASE "{current_database}" TO "{role}";'))
-                    except Exception as grant_err:
-                        logger.debug(f"Notice: Could not grant reset database connection to {role}: {grant_err}")
-
-                    for s in schemas:
-                        try:
-                            with connection.begin_nested():
-                                connection.execute(sa.text(f'GRANT USAGE ON SCHEMA {s} TO "{role}";'))
-                                connection.execute(sa.text(f'GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA {s} TO "{role}";'))
-                                connection.execute(sa.text(f'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {s} TO "{role}";'))
-                                connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON TABLES TO "{role}";'))
-                                connection.execute(sa.text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {s} GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO "{role}";'))
-                        except Exception as grant_err:
-                            logger.debug(f"Notice: Could not grant reset permissions on {s} to {role}: {grant_err}")
-
-                immutable_ledger_roles = set(roles + viewer_roles)
-                for role in immutable_ledger_roles:
-                    try:
-                        with connection.begin_nested():
-                            connection.execute(sa.text(f'REVOKE UPDATE, DELETE ON TABLE ledger.account_ledger FROM "{role}";'))
-                    except Exception as rev_err:
-                        logger.debug(f"Notice: Could not revoke immutable ledger permissions from {role}: {rev_err}")
-
-                try:
-                    with connection.begin_nested():
-                        connection.execute(sa.text('REVOKE UPDATE, DELETE ON TABLE ledger.account_ledger FROM PUBLIC;'))
-                except Exception as rev_err:
-                    logger.debug(f"Notice: Could not revoke immutable ledger permissions from PUBLIC: {rev_err}")
 
 
 if context.is_offline_mode():

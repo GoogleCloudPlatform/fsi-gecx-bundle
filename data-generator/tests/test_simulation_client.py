@@ -55,8 +55,8 @@ def test_health():
     res = response.json()
     assert res["status"] == "ok"
     assert res["service"] == "data-generator"
-    assert "version" in res
-    assert "commit" in res
+    assert "build_version" in res
+    assert "build_commit_id" in res
 
 
 @respx.mock

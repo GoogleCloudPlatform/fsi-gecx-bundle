@@ -1,0 +1,44 @@
+steps:
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "install-terraform"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        curl -sSL https://releases.hashicorp.com/terraform/1.15.7/terraform_1.15.7_linux_amd64.zip -o /workspace/terraform.zip
+        apt-get update -qq && apt-get install -y -qq unzip
+        unzip -o -q /workspace/terraform.zip -d /workspace
+        rm /workspace/terraform.zip
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "ordered-alloydb-release"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        apt-get update -qq && apt-get install -y -qq jq
+        export PATH="/workspace:$${PATH}"
+        /workspace/deployment/scripts/run_alloydb_release.sh
+    env:
+      - "PROJECT_ID=${PROJECT_ID}"
+      - "REGION=${_REGION}"
+      - "RELEASE_MODE=${_RELEASE_MODE}"
+      - "RELEASE_COMMIT=${_RELEASE_COMMIT}"
+      - "MANIFEST_URI=${_MANIFEST_URI}"
+      - "ALLOW_CLOUD_SQL_CUTOVER=${_ALLOW_CLOUD_SQL_CUTOVER}"
+      - "CLOUD_SQL_BACKUP_ID=${_CLOUD_SQL_BACKUP_ID}"
+
+timeout: "7200s"
+
+options:
+  pool:
+    name: "projects/${PROJECT_ID}/locations/${_REGION}/workerPools/build-pool"
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _REGION: "us-central1"
+  _RELEASE_MODE: "qualify"
+  _RELEASE_COMMIT: "REQUIRED"
+  _MANIFEST_URI: ""
+  _ALLOW_CLOUD_SQL_CUTOVER: "false"
+  _CLOUD_SQL_BACKUP_ID: ""

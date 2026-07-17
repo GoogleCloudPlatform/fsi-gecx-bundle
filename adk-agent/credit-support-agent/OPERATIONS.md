@@ -25,10 +25,10 @@ uv run ruff check agent tests voice_agent.py
 Also run the banking-service tests for knowledge guidance, reset integration,
 and migrations, build the banking UI, and inspect `terraform plan` for:
 
-- one Cloud SQL IAM user for `voice-agent-sa`
-- Cloud SQL client and instance-user grants for that service account
+- one AlloyDB IAM database user for `voice-agent-sa`
+- AlloyDB database-user and Service Usage Consumer grants for that service account
 - the credit-support-agent `DATABASE_URL` changing to its own async user
-- no replacement of the Cloud SQL instance or unrelated Cloud Run services
+- no replacement of the AlloyDB cluster or unrelated Cloud Run services
 
 Deploy the database migration and banking service before the agent revision so
 the reset epoch table and voice-context field exist first.

@@ -89,11 +89,8 @@ def get_iam_connection(url_str):
     from sqlalchemy.engine import make_url
 
     url = make_url(url_str)
-    credentials, project = google.auth.default(
-        scopes=[
-            "https://www.googleapis.com/auth/sqlservice.login",
-            "https://www.googleapis.com/auth/cloud-platform",
-        ]
+    credentials, _project = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-platform"]
     )
     request = google.auth.transport.requests.Request()
     logger.info(f"Refreshing GCP credentials of type: {type(credentials)}")
@@ -118,7 +115,7 @@ def get_iam_connection(url_str):
         if url.query.get("sslmode"):
             conn_params["sslmode"] = url.query["sslmode"]
         else:
-            conn_params["sslmode"] = "verify-full"
+            conn_params["sslmode"] = "require"
         
     return psycopg2.connect(**conn_params)
 
@@ -150,7 +147,7 @@ def create_db_engine(url_str=DATABASE_URL, **kwargs):
             engine_args["pool_pre_ping"] = os.getenv("DB_POOL_PRE_PING", "true").lower() == "true"
             
         if os.getenv("DB_IAM_AUTH") == "true":
-            logger.info("Using GCP IAM authentication for Cloud SQL PostgreSQL connection.")
+            logger.info("Using GCP IAM database authentication for PostgreSQL.")
             engine_args["creator"] = lambda: get_iam_connection(url_str)
             
     sanitized_url = make_url(url_str).render_as_string(hide_password=True)
@@ -330,5 +327,10 @@ def init_db():
         logger.warning(f"Could not auto-initialize tables: {e}")
 
 
-if not _is_alembic_runtime() and os.getenv("DISABLE_INIT_DB") != "true":
+auto_init_default = "true" if DATABASE_URL.startswith("sqlite") else "false"
+if (
+    not _is_alembic_runtime()
+    and os.getenv("DISABLE_INIT_DB") != "true"
+    and os.getenv("ENABLE_INIT_DB", auto_init_default).lower() == "true"
+):
     init_db()

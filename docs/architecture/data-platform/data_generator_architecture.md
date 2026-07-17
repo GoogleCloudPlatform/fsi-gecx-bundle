@@ -56,7 +56,7 @@ Data Generator supports four primary workload types:
 
 ## Durable Scheduler
 
-The durable scheduler is owned by Data Generator and stores records in the existing Cloud SQL PostgreSQL database. It does not use a separate database.
+The durable scheduler is owned by Data Generator and stores records in the existing AlloyDB PostgreSQL database. It does not use a separate database.
 
 Database:
 
@@ -81,7 +81,7 @@ The table stores one row per scheduled synthetic event. Important fields include
 * `payload` and `result_payload` for event input and execution result context.
 * `attempts`, `last_error`, `dispatched_at`, `completed_at`, and `canceled_at` for operational tracking.
 
-Data Generator connects to Cloud SQL with its own IAM database user:
+Data Generator connects to AlloyDB with its own IAM database user over private IP and TLS:
 
 ```text
 datagen-service-sa@<project-id>.iam
@@ -148,7 +148,7 @@ The Data Generator architecture uses:
 * Cloud Run for the Data Generator service.
 * Cloud Scheduler and Eventarc/Pub/Sub to trigger ambient generation pulses.
 * Cloud Tasks for durable delayed dispatch of scenario events.
-* Cloud SQL for PostgreSQL scheduler persistence and banking-domain operational data.
+* AlloyDB for PostgreSQL scheduler persistence and banking-domain operational data.
 * IAM database authentication for service-account-based Postgres access.
 * Secret Manager for the card-network switch token and Redis password.
 * Memorystore for Redis-backed pulse admission control and duplicate-event protection.

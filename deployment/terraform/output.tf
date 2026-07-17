@@ -29,6 +29,14 @@ output "region" {
   value = var.region
 }
 
+output "alloydb_iam_group_users" {
+  description = "IAM groups reconciled as AlloyDB database groups by the release controller."
+  value = distinct(concat(
+    [for member in keys(local.db_iam_support_members) : split(":", member)[1] if split(":", member)[0] == "group"],
+    [for member in keys(local.db_iam_viewer_members) : split(":", member)[1] if split(":", member)[0] == "group"],
+  ))
+}
+
 output "docai_splitter_processor_id" {
   value       = google_document_ai_processor.master_splitter.id
   description = "The ID of the Document AI Master Splitter processor."

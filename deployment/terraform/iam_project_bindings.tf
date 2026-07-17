@@ -30,6 +30,15 @@ resource "google_project_iam_member" "cloudbuild_terraform_sa_act_as" {
   member  = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
 }
 
+# Cloud Build attached service-account credentials cannot directly mint an OIDC
+# token. The release controller impersonates its own identity for authenticated
+# Cloud Run health probes.
+resource "google_service_account_iam_member" "cloudbuild_terraform_sa_token_creator_self" {
+  service_account_id = google_service_account.cloudbuild_terraform_service_account.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.cloudbuild_terraform_service_account.email}"
+}
+
 resource "google_project_iam_member" "cloudbuild_sa_run_admin" {
   project = var.project_id
   role    = "roles/run.admin"
@@ -161,10 +170,10 @@ resource "google_project_iam_member" "gcs_pubsub_publisher" {
   member  = "serviceAccount:${data.google_storage_project_service_account.gcs_sa.email_address}"
 }
 
-resource "google_project_iam_member" "bq_connection_cloudsql_client" {
+resource "google_project_iam_member" "bq_connection_alloydb_client" {
   project = var.project_id
-  role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_bigquery_connection.banking_data_postgres_connection.cloud_sql[0].service_account_id}"
+  role    = "roles/alloydb.client"
+  member  = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-bigqueryconnection.iam.gserviceaccount.com"
 }
 
 resource "google_project_iam_member" "jump_instance_log_writer" {
@@ -197,60 +206,60 @@ resource "google_service_account_iam_member" "datagen_sa_cloudtasks_oidc_act_as_
   member             = "serviceAccount:${google_service_account.data_generator_service_account.email}"
 }
 
-resource "google_project_iam_member" "datagen_sa_cloudsql_client" {
+resource "google_project_iam_member" "datagen_sa_alloydb_client" {
   project = data.google_project.project.project_id
-  role    = "roles/cloudsql.client"
+  role    = "roles/alloydb.databaseUser"
   member  = "serviceAccount:${google_service_account.data_generator_service_account.email}"
 }
 
-resource "google_project_iam_member" "datagen_sa_cloudsql_instance_user" {
+resource "google_project_iam_member" "datagen_sa_service_usage_consumer" {
   project = data.google_project.project.project_id
-  role    = "roles/cloudsql.instanceUser"
+  role    = "roles/serviceusage.serviceUsageConsumer"
   member  = "serviceAccount:${google_service_account.data_generator_service_account.email}"
 }
 
-resource "google_project_iam_member" "developer_cloudsql_client" {
+resource "google_project_iam_member" "developer_alloydb_client" {
   count   = local.primary_developer_iam_member == null ? 0 : 1
   project = data.google_project.project.project_id
-  role    = "roles/cloudsql.client"
+  role    = "roles/alloydb.databaseUser"
   member  = local.primary_developer_iam_member
 }
 
-resource "google_project_iam_member" "developer_cloudsql_instance_user" {
+resource "google_project_iam_member" "developer_service_usage_consumer" {
   count   = local.primary_developer_iam_member == null ? 0 : 1
   project = data.google_project.project.project_id
-  role    = "roles/cloudsql.instanceUser"
+  role    = "roles/serviceusage.serviceUsageConsumer"
   member  = local.primary_developer_iam_member
 }
 
-resource "google_project_iam_member" "additional_developer_cloudsql_client" {
+resource "google_project_iam_member" "additional_developer_alloydb_client" {
   for_each = local.additional_developer_iam_members
   project  = data.google_project.project.project_id
-  role     = "roles/cloudsql.client"
+  role     = "roles/alloydb.databaseUser"
   member   = each.value
 }
 
-resource "google_project_iam_member" "banking_service_sa_cloudsql_client" {
+resource "google_project_iam_member" "banking_service_sa_alloydb_client" {
   project = data.google_project.project.project_id
-  role    = "roles/cloudsql.client"
+  role    = "roles/alloydb.databaseUser"
   member  = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
-resource "google_project_iam_member" "banking_service_sa_cloudsql_instance_user" {
+resource "google_project_iam_member" "banking_service_sa_service_usage_consumer" {
   project = data.google_project.project.project_id
-  role    = "roles/cloudsql.instanceUser"
+  role    = "roles/serviceusage.serviceUsageConsumer"
   member  = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
-resource "google_project_iam_member" "voice_agent_sa_cloudsql_client" {
+resource "google_project_iam_member" "voice_agent_sa_alloydb_client" {
   project = data.google_project.project.project_id
-  role    = "roles/cloudsql.client"
+  role    = "roles/alloydb.databaseUser"
   member  = "serviceAccount:${google_service_account.voice_agent_sa.email}"
 }
 
-resource "google_project_iam_member" "voice_agent_sa_cloudsql_instance_user" {
+resource "google_project_iam_member" "voice_agent_sa_service_usage_consumer" {
   project = data.google_project.project.project_id
-  role    = "roles/cloudsql.instanceUser"
+  role    = "roles/serviceusage.serviceUsageConsumer"
   member  = "serviceAccount:${google_service_account.voice_agent_sa.email}"
 }
 
@@ -260,27 +269,27 @@ resource "google_project_iam_member" "banking_service_sa_run_developer" {
   member  = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
-resource "google_project_iam_member" "banking_migration_sa_cloudsql_client" {
+resource "google_project_iam_member" "banking_migration_sa_alloydb_client" {
   project = data.google_project.project.project_id
-  role    = "roles/cloudsql.client"
+  role    = "roles/alloydb.databaseUser"
   member  = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
 }
 
-resource "google_project_iam_member" "banking_migration_sa_cloudsql_instance_user" {
+resource "google_project_iam_member" "banking_migration_sa_service_usage_consumer" {
   project = data.google_project.project.project_id
-  role    = "roles/cloudsql.instanceUser"
+  role    = "roles/serviceusage.serviceUsageConsumer"
   member  = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
 }
 
-resource "google_project_iam_member" "banking_reset_sa_cloudsql_client" {
+resource "google_project_iam_member" "banking_reset_sa_alloydb_client" {
   project = data.google_project.project.project_id
-  role    = "roles/cloudsql.client"
+  role    = "roles/alloydb.databaseUser"
   member  = "serviceAccount:${google_service_account.banking_db_reset_service_account.email}"
 }
 
-resource "google_project_iam_member" "banking_reset_sa_cloudsql_instance_user" {
+resource "google_project_iam_member" "banking_reset_sa_service_usage_consumer" {
   project = data.google_project.project.project_id
-  role    = "roles/cloudsql.instanceUser"
+  role    = "roles/serviceusage.serviceUsageConsumer"
   member  = "serviceAccount:${google_service_account.banking_db_reset_service_account.email}"
 }
 
@@ -296,27 +305,27 @@ resource "google_project_iam_member" "banking_reset_sa_cloudtasks_queue_admin" {
   member  = "serviceAccount:${google_service_account.banking_db_reset_service_account.email}"
 }
 
-resource "google_project_iam_member" "ledger_sa_cloudsql_client" {
+resource "google_project_iam_member" "ledger_sa_alloydb_client" {
   project = data.google_project.project.project_id
-  role    = "roles/cloudsql.client"
+  role    = "roles/alloydb.databaseUser"
   member  = "serviceAccount:${google_service_account.ledger_service_account.email}"
 }
 
-resource "google_project_iam_member" "ledger_sa_cloudsql_instance_user" {
+resource "google_project_iam_member" "ledger_sa_service_usage_consumer" {
   project = data.google_project.project.project_id
-  role    = "roles/cloudsql.instanceUser"
+  role    = "roles/serviceusage.serviceUsageConsumer"
   member  = "serviceAccount:${google_service_account.ledger_service_account.email}"
 }
 
-resource "google_project_iam_member" "kyc_sa_cloudsql_client" {
+resource "google_project_iam_member" "kyc_sa_alloydb_client" {
   project = data.google_project.project.project_id
-  role    = "roles/cloudsql.client"
+  role    = "roles/alloydb.databaseUser"
   member  = "serviceAccount:${google_service_account.kyc_service_account.email}"
 }
 
-resource "google_project_iam_member" "kyc_sa_cloudsql_instance_user" {
+resource "google_project_iam_member" "kyc_sa_service_usage_consumer" {
   project = data.google_project.project.project_id
-  role    = "roles/cloudsql.instanceUser"
+  role    = "roles/serviceusage.serviceUsageConsumer"
   member  = "serviceAccount:${google_service_account.kyc_service_account.email}"
 }
 
@@ -326,17 +335,45 @@ resource "google_project_iam_member" "banking_migration_sa_log_writer" {
   member  = "serviceAccount:${google_service_account.banking_db_migration_service_account.email}"
 }
 
-resource "google_project_iam_member" "database_iam_support_instance_users" {
+resource "google_project_iam_member" "database_iam_support_database_users" {
   for_each = local.db_iam_support_members
   project  = data.google_project.project.project_id
-  role     = "roles/cloudsql.instanceUser"
+  role     = "roles/alloydb.databaseUser"
   member   = each.key
 }
 
-resource "google_project_iam_member" "database_iam_support_viewers" {
+resource "google_project_iam_member" "database_iam_support_alloydb_viewers" {
   for_each = local.db_iam_support_members
   project  = data.google_project.project.project_id
-  role     = "roles/cloudsql.viewer"
+  role     = "roles/alloydb.viewer"
+  member   = each.key
+}
+
+resource "google_project_iam_member" "database_iam_support_service_usage_consumers" {
+  for_each = local.db_iam_support_members
+  project  = data.google_project.project.project_id
+  role     = "roles/serviceusage.serviceUsageConsumer"
+  member   = each.key
+}
+
+resource "google_project_iam_member" "database_iam_viewer_database_users" {
+  for_each = local.db_iam_viewer_members
+  project  = data.google_project.project.project_id
+  role     = "roles/alloydb.databaseUser"
+  member   = each.key
+}
+
+resource "google_project_iam_member" "database_iam_viewer_service_usage_consumers" {
+  for_each = local.db_iam_viewer_members
+  project  = data.google_project.project.project_id
+  role     = "roles/serviceusage.serviceUsageConsumer"
+  member   = each.key
+}
+
+resource "google_project_iam_member" "database_iam_viewer_bigquery_connection_users" {
+  for_each = local.db_iam_viewer_members
+  project  = data.google_project.project.project_id
+  role     = "roles/bigquery.connectionUser"
   member   = each.key
 }
 

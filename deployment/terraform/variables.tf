@@ -27,6 +27,44 @@ variable "region" {
   default = "us-central1"
 }
 
+variable "alloydb_cpu_count" {
+  description = "vCPU count for the AlloyDB primary instance. Lower environments may use 2; the prod-like environment should size from observed load."
+  type        = number
+  default     = 2
+  validation {
+    condition     = var.alloydb_cpu_count >= 2
+    error_message = "AlloyDB requires at least 2 vCPUs for this deployment profile."
+  }
+}
+
+variable "alloydb_availability_type" {
+  description = "ZONAL for cost-conscious developer environments or REGIONAL for HA prod-like environments."
+  type        = string
+  default     = "ZONAL"
+  validation {
+    condition     = contains(["ZONAL", "REGIONAL"], var.alloydb_availability_type)
+    error_message = "alloydb_availability_type must be ZONAL or REGIONAL."
+  }
+}
+
+variable "alloydb_deletion_protection" {
+  description = "Protect the AlloyDB cluster from accidental deletion after initial cutover."
+  type        = bool
+  default     = true
+}
+
+variable "release_manifest_reader_members" {
+  description = "IAM members allowed to consume successful release manifests for promotion."
+  type        = list(string)
+  default     = []
+}
+
+variable "release_image_consumer_members" {
+  description = "Runtime service accounts in promotion targets allowed to pull qualified immutable images."
+  type        = list(string)
+  default     = []
+}
+
 variable "zone" {
   type    = string
   default = "us-central1-c"
@@ -491,7 +529,7 @@ variable "additional_cors_allowed_origins" {
 
 variable "developer_iam_members" {
   type        = list(string)
-  description = "Explicit IAM members that receive developer IAP, Cloud SQL, and governed-data access. Keep the primary member first to preserve legacy Terraform resource addresses."
+  description = "Explicit IAM members that receive developer IAP, AlloyDB, and governed-data access. Keep the primary member first to preserve legacy Terraform resource addresses."
   default     = []
 
   validation {

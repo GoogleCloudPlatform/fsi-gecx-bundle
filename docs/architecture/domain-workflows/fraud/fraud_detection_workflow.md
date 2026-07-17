@@ -18,7 +18,7 @@ sequenceDiagram
     participant API as banking-service
     participant Merchants as MerchantEnrichmentService
     participant Scorer as FraudScoringService
-    participant PG as Cloud SQL PostgreSQL
+    participant PG as AlloyDB PostgreSQL
     participant Alert as FraudAlertService
     participant Msg as Secure Messaging + FCM
     participant DS as Datastream CDC
