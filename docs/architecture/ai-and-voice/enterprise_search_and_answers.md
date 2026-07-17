@@ -81,16 +81,25 @@ Both modes retrieve from the same banking-site datastore, so answers stay consis
 
 ---
 
-## 4. Relationship to Conversational Agents
+## 4. Where the Datastore Content Comes From
+
+The Discovery Engine datastore does not index the live site directly; it is populated by a separate build-time crawler. The `scripts/crawl_and_upload` pipeline renders the banking UI's own pages with a headless browser, stores the content in Cloud Storage, and imports a document manifest into Discovery Engine. Running the crawler indexes the same pages customers browse, which is what keeps `/search` and `/answers` results aligned with published product content.
+
+The full crawl → render → upload → import flow, authentication, document schema, and URL rewriting are documented in [Search Content Ingestion Pipeline](./search_content_ingestion_pipeline.md).
+
+---
+
+## 5. Relationship to Conversational Agents
 
 This capability is the retrieval-augmented knowledge layer that complements the transactional agents. Where the Gemini Live and GECX agents call banking-service tools to *act* on an account, enterprise search *informs* — answering product, policy, and how-to questions from published content. The `HelpCenterView` and `SearchView` surfaces in the banking UI consume these endpoints directly.
 
 ---
 
-## 5. Related Documents
+## 6. Related Documents
 
 | Document | Relationship |
 | :--- | :--- |
+| [Search Content Ingestion Pipeline](./search_content_ingestion_pipeline.md) | Build-time crawler that renders the site and populates the Discovery Engine datastore. |
 | [GECX Telephony Voice Agent](./gecx_telephony_voice_agent.md) | Conversational agents that answer transactional (vs. knowledge) intents. |
 | [Knowledge Catalog Fraud Support Guidance](../data-platform/knowledge_catalog_fraud_support_guidance.md) | Separate Dataplex-sourced runtime guidance path for fraud handling. |
 | [Branch & ATM Locator](../domain-workflows/servicing/branch_atm_locator.md) | Companion informational self-service journey. |

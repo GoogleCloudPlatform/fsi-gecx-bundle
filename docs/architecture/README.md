@@ -30,6 +30,7 @@ Specifications detailing our Google Cloud AI integrations, conversational teleph
 | **[GECX Telephony Voice Agent](./ai-and-voice/gecx_telephony_voice_agent.md)** | Google Enterprise Contact Center Experience (GECX) integration, SIP telephony bridging, and conversational customer support workflows. |
 | **[Document AI Processing Pipeline](./ai-and-voice/doc_ai_processing_pipeline.md)** | Asynchronous optical character recognition (OCR) and structured entity extraction for W-2 tax forms, paystubs, and bank statements. |
 | **[Enterprise Search & Generative Answers](./ai-and-voice/enterprise_search_and_answers.md)** | Vertex AI Discovery Engine ranked search and grounded conversational answers over the bank's published content. |
+| **[Search Content Ingestion Pipeline](./ai-and-voice/search_content_ingestion_pipeline.md)** | Playwright crawler that renders the banking UI from its sitemap, uploads to GCS, and imports a document manifest into the Discovery Engine datastore. |
 | **[Knowledge Catalog Fraud Support Guidance](./data-platform/knowledge_catalog_fraud_support_guidance.md)** | Data-platform-owned Dataplex policy guidance consumed by the Gemini Live credit support agent at session startup. |
 
 ---
