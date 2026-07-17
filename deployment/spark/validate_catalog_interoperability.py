@@ -11,15 +11,24 @@ from pyspark.sql import SparkSession, functions as F
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--audit-catalog", default="audit")
-    parser.add_argument("--bigquery-catalog", default="bq")
+    parser.add_argument("--project-id", required=True)
     args = parser.parse_args()
 
     spark = SparkSession.builder.appName("validate-lakehouse-catalog-interoperability").getOrCreate()
     ledger_name = f"{args.audit_catalog}.financial_ledger.account_ledger_entries"
-    native_name = f"{args.bigquery_catalog}.iceberg_catalog.cards_credit_accounts"
+    native_name = f"{args.project_id}.iceberg_catalog.cards_credit_accounts"
 
     ledger = spark.table(ledger_name)
-    native_accounts = spark.table(native_name)
+    # Datastream's current-state replicas remain BigQuery-native tables. Read
+    # them through the Dataproc Spark BigQuery connector while the immutable
+    # event history is read through the BigLake Iceberg REST catalog.
+    native_accounts = (
+        spark.read.format("bigquery")
+        .option("query", f"SELECT id FROM `{native_name}`")
+        .option("viewsEnabled", "true")
+        .option("billingProject", args.project_id)
+        .load()
+    )
     linked = ledger.withColumn(
         "credit_account_id",
         F.get_json_object(F.col("source_references"), "$.credit_account_id"),
@@ -49,4 +58,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

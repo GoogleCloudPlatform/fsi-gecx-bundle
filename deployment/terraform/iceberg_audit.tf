@@ -75,6 +75,12 @@ resource "google_project_iam_member" "audit_processing_bigquery_job_user" {
   member  = "serviceAccount:${google_service_account.audit_iceberg_dataflow_service_account.email}"
 }
 
+resource "google_project_iam_member" "audit_processing_bigquery_read_session_user" {
+  project = var.project_id
+  role    = "roles/bigquery.readSessionUser"
+  member  = "serviceAccount:${google_service_account.audit_iceberg_dataflow_service_account.email}"
+}
+
 resource "google_project_iam_member" "audit_processing_bigquery_data_viewer" {
   project = var.project_id
   role    = "roles/bigquery.dataViewer"

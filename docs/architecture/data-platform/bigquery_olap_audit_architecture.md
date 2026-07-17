@@ -53,10 +53,10 @@ FROM `PROJECT_ID.nova-audit-lakehouse.compliance_audit.audit_events`;
 
 The `compliance_audit.audit_events` and `compliance_audit.account_ledger_entries` BigQuery views apply deterministic event-id and entry-id deduplication. Domain views (`origination_audit_log`, `financial_ledger_audit_log`, `identity_access_audit_log`, and `system_config_audit_log`) are ordinary views over that logical audit stream. `account_ledger_balance` exposes the debit/credit invariant; `imbalance_cents` must be zero for every transaction.
 
-Spark validation configures two REST catalogs in one session:
+Spark validation configures the Iceberg REST catalog and the native BigQuery connector in one session:
 
 - `audit`, using `bl://projects/PROJECT_ID/catalogs/nova-audit-lakehouse`; and
-- `bq`, using `bq://projects/PROJECT_ID/locations/US` for read-only BigQuery catalog federation.
+- the Dataproc Spark BigQuery connector, reading the existing BigQuery-native CDC dataset directly.
 
 The validation batch reads audit ledger rows and Iceberg snapshot/file metadata, reads the existing BigQuery-native `iceberg_catalog.cards_credit_accounts` CDC table, and proves a cross-catalog join.
 

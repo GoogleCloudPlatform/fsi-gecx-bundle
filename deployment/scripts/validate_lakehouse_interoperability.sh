@@ -23,13 +23,6 @@ properties+=",spark.sql.catalog.audit.header.x-goog-user-project=${PROJECT_ID}"
 properties+=",spark.sql.catalog.audit.rest.auth.type=org.apache.iceberg.gcp.auth.GoogleAuthManager"
 properties+=",spark.sql.catalog.audit.io-impl=org.apache.iceberg.gcp.gcs.GCSFileIO"
 properties+=",spark.sql.catalog.audit.header.X-Iceberg-Access-Delegation=vended-credentials"
-properties+=",spark.sql.catalog.bq=org.apache.iceberg.spark.SparkCatalog"
-properties+=",spark.sql.catalog.bq.type=rest"
-properties+=",spark.sql.catalog.bq.uri=${rest_uri}"
-properties+=",spark.sql.catalog.bq.warehouse=bq://projects/${PROJECT_ID}/locations/US"
-properties+=",spark.sql.catalog.bq.header.x-goog-user-project=${PROJECT_ID}"
-properties+=",spark.sql.catalog.bq.rest.auth.type=org.apache.iceberg.gcp.auth.GoogleAuthManager"
-properties+=",spark.sql.catalog.bq.io-impl=org.apache.iceberg.gcp.gcs.GCSFileIO"
 
 gcloud dataproc batches submit pyspark "${script_uri}" \
   --project "${PROJECT_ID}" \
@@ -39,4 +32,5 @@ gcloud dataproc batches submit pyspark "${script_uri}" \
   --service-account "${service_account}" \
   --subnet fsi-gecx-subnet \
   --properties "${properties}" \
-  --deps-bucket "${PROJECT_ID}_audit-dataflow-staging"
+  --deps-bucket "${PROJECT_ID}_audit-dataflow-staging" \
+  -- "--project-id=${PROJECT_ID}"

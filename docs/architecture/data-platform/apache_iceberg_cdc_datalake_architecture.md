@@ -35,7 +35,7 @@ flowchart LR
     Catalog --> Spark
 ```
 
-BigQuery queries catalog-native tables with a four-part project/catalog/namespace/table name. Spark connects to the same runtime catalog and also uses the `bq://` federation warehouse to read the mutable BigQuery-native CDC tables in the same session. See [Catalog-Native Iceberg Audit and Financial Ledger](./bigquery_olap_audit_architecture.md) for contracts and operations.
+BigQuery queries catalog-native tables with a four-part project/catalog/namespace/table name. Spark connects to the runtime catalog for immutable Iceberg history and uses the Spark BigQuery connector for the mutable BigQuery-native CDC tables in the same session. See [Catalog-Native Iceberg Audit and Financial Ledger](./bigquery_olap_audit_architecture.md) for contracts and operations.
 
 ## Curated analytics contract
 
