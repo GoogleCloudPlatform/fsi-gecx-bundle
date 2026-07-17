@@ -92,6 +92,7 @@ gcloud run services update credit-support-agent --project "${PROJECT_ID}" --regi
 gcloud run services update data-generator --project "${PROJECT_ID}" --region "${REGION}" --image "${images[data-generator]}" --quiet
 PROJECT_ID="${PROJECT_ID}" REGION="${REGION}" deployment/scripts/reconcile_datastream_after_reset.sh pause
 gcloud run jobs execute banking-db-reset --project "${PROJECT_ID}" --region "${REGION}" --wait
+runtime_validation_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 gcloud run jobs execute banking-knowledge-catalog-sync --project "${PROJECT_ID}" --region "${REGION}" --wait
 
 PROJECT_ID="${PROJECT_ID}" REGION="${REGION}" deployment/scripts/reconcile_alloydb_federation.sh
@@ -111,6 +112,10 @@ curl --fail --silent --show-error -H "Authorization: Bearer $(identity_token "${
 curl --fail --silent --show-error -H "Authorization: Bearer $(identity_token "${voice_url}")" "${voice_url}/" >/dev/null
 curl --fail --silent --show-error -H "Authorization: Bearer $(identity_token "${generator_url}")" "${generator_url}/health" >/dev/null
 
+PROJECT_ID="${PROJECT_ID}" REGION="${REGION}" \
+  VALIDATION_START_TIME="${runtime_validation_started_at}" \
+  deployment/scripts/validate_audit_iceberg_runtime.sh
+
 manifest_path="/workspace/release-manifest-${RELEASE_COMMIT}.json"
 jq -n \
   --arg commit "${RELEASE_COMMIT}" \
@@ -122,7 +127,7 @@ jq -n \
   --arg generator "${images[data-generator]}" \
   --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --arg cloud_sql_backup_id "${cloud_sql_backup_id}" \
-  '{schema_version:1,status:(if $mode=="promote" then "promoted" else "qualified" end),mode:$mode,commit:$commit,environment:$environment,alembic_revision:$alembic,images:{"banking-service":$banking,"credit-support-agent":$voice,"data-generator":$generator},cutover:{final_cloud_sql_backup_id:(if $cloud_sql_backup_id=="" then null else $cloud_sql_backup_id end)},validation:{terraform:true,bootstrap:true,migration:true,reconciliation:true,reset_seed:true,knowledge_catalog:true,datastream:true,federation:true,audit_iceberg_dataflow:true,service_health:true},completed_at:$timestamp}' \
+  '{schema_version:1,status:(if $mode=="promote" then "promoted" else "qualified" end),mode:$mode,commit:$commit,environment:$environment,alembic_revision:$alembic,images:{"banking-service":$banking,"credit-support-agent":$voice,"data-generator":$generator},cutover:{final_cloud_sql_backup_id:(if $cloud_sql_backup_id=="" then null else $cloud_sql_backup_id end)},validation:{terraform:true,bootstrap:true,migration:true,reconciliation:true,reset_seed:true,knowledge_catalog:true,datastream:true,federation:true,audit_iceberg_dataflow:true,audit_iceberg_runtime:true,spark_interoperability:true,service_health:true},completed_at:$timestamp}' \
   > "${manifest_path}"
 destination="gs://${PROJECT_ID}-fsi-release-manifests/alloydb/${RELEASE_COMMIT}/${RELEASE_MODE}.json"
 gsutil cp "${manifest_path}" "${destination}"
