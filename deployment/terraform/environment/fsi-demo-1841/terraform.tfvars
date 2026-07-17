@@ -18,6 +18,7 @@
 project_id                                      = "fsi-demo-1841"
 alloydb_availability_type                       = "REGIONAL"
 alloydb_cpu_count                               = 2
+cloudbuild_source_bucket_name                   = "fsi-demo-1841_cloudbuild"
 deploy_cloud_build_triggers                     = true
 deploy_cloud_run_services                       = true
 set_cloud_run_audiences                         = true

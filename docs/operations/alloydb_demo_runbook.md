@@ -8,6 +8,19 @@
 
 ## Ordered deployment
 
+### Release IAM prerequisites
+
+Each environment that uploads source archives with `gcloud builds submit` must set `cloudbuild_source_bucket_name` to its existing `PROJECT_ID_cloudbuild` bucket. Terraform grants that environment's custom `cloudbuild-sa` `roles/storage.objectViewer` on only that bucket so the build worker can read the archive uploaded by the caller.
+
+Each developer environment that can qualify a release must grant, at minimum, the following promotion-target principals access to its Artifact Registry repository through `release_image_consumer_members`:
+
+- The target `cloudbuild-terraform-sa`, which verifies and deploys the qualified digests.
+- The target Cloud Run service agent (`service-PROJECT_NUMBER@serverless-robot-prod.iam.gserviceaccount.com`), which imports cross-project images for Cloud Run services and jobs.
+
+Additional runtime or lifecycle principals may remain in the list when release tooling needs them, but they do not replace either required promotion principal.
+
+The promotion target's `cloudbuild-terraform-sa` must also appear in `release_manifest_reader_members`. These grants belong to the qualifying source project because it owns the release manifest bucket and immutable image repository. Do not repair a failed promotion with ad hoc project-wide roles; update the source environment's Terraform membership lists and apply them there.
+
 Use `alloydb-release-qualify` in the selected developer project. Supply the full Git commit in `_RELEASE_COMMIT`. On the one-time destructive cutover, also override `_ALLOW_CLOUD_SQL_CUTOVER=true`; this records and retains a final Cloud SQL backup before deleting the legacy instance.
 
 The trigger applies Terraform and then runs:
