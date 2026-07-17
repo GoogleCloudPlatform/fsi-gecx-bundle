@@ -10,6 +10,7 @@
     <maven.compiler.release>17</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <beam.version>2.74.0</beam.version>
+    <hadoop.version>3.3.6</hadoop.version>
     <jackson.version>2.19.2</jackson.version>
     <junit.version>5.12.2</junit.version>
   </properties>
@@ -44,6 +45,12 @@
       <groupId>org.apache.iceberg</groupId>
       <artifactId>iceberg-gcp-bundle</artifactId>
       <version>1.10.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client-runtime</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>

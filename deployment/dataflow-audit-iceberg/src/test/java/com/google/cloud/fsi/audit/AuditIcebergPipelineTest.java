@@ -1,6 +1,7 @@
 package com.google.cloud.fsi.audit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.nio.charset.StandardCharsets;
@@ -12,6 +13,12 @@ import org.junit.jupiter.api.Test;
 final class AuditIcebergPipelineTest {
   private static PubsubMessage message(String body) {
     return new PubsubMessage(body.getBytes(StandardCharsets.UTF_8), Map.of("source", "test"));
+  }
+
+  @Test
+  void packagesHadoopRuntimeRequiredByIcebergCatalog() {
+    assertDoesNotThrow(
+        () -> Class.forName("org.apache.hadoop.shaded.com.ctc.wstx.io.InputBootstrapper"));
   }
 
   @Test
