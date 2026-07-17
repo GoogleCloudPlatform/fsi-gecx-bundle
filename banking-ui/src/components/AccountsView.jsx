@@ -27,6 +27,7 @@ import {
 import BillPayModal from './BillPayModal.jsx';
 import SpendAnalyzerModal from './SpendAnalyzerModal.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
+import ConsoleAccessStep from './ConsoleAccessStep.jsx';
 
 
 function AccountsView({ fbUser, customerProfile, isReady }) {
@@ -446,7 +447,10 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
         ) : !hasAccounts ? (
           <div className="max-w-md mx-auto bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-850 rounded-3xl p-8 text-center space-y-6 shadow-xl dark:shadow-none">
             <Shield className="w-16 h-16 text-emerald-600 dark:text-emerald-400 mx-auto animate-pulse" />
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Setup Your Sandbox</h2>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Step 1</p>
+              <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">Set Up Your Sandbox</h2>
+            </div>
             <p className="text-slate-605 dark:text-slate-400 text-sm leading-relaxed">
               Your profile is verified, but you have no active ledger accounts. Provision your isolated personal demo suite to get started.
             </p>
@@ -467,6 +471,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
             >
               Provision Demo Suite
             </AnalyticsButton>
+            <ConsoleAccessStep analyticsId="accounts_view_console_access" />
           </div>
         ) : !selectedAccountId ? (
           /* MASTER VIEW: Snapshot of accounts */

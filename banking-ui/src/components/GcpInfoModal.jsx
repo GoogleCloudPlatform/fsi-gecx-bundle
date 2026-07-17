@@ -16,6 +16,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
+import { getConsoleViewerGroupUrl } from '../utils/consoleAccess.js';
 
 
 export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Integration", maxWidthClass = "max-w-lg", children }) {
@@ -51,7 +52,7 @@ export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Inte
     };
   }, [isOpen, onClose]);
 
-  const consoleViewerUrl = window.env?.CONSOLE_VIEWER_GROUP_JOIN_URL || import.meta.env.VITE_CONSOLE_VIEWER_GROUP_JOIN_URL;
+  const consoleViewerUrl = getConsoleViewerGroupUrl();
 
   if (!isOpen) return null;
 
@@ -78,7 +79,7 @@ export function GcpInfoModal({ isOpen, onClose, title = "GCP AI Application Inte
           <div>
             {hasConsoleLink && consoleViewerUrl && (
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                GCP console access viewer <a href={consoleViewerUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 underline">self join</a>.
+                Need demo console access? <a href={consoleViewerUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 underline">Join or manage the viewer group</a>. Already a member? No action is needed.
               </p>
             )}
           </div>
