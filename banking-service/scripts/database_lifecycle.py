@@ -74,6 +74,11 @@ GROUP_ROLES = (
 RW_SCHEMA_ACCESS = {
     BANKING_RW_ROLE: (
         "identity",
+        # Presenter provisioning deliberately crosses the normal KYC session
+        # boundary under enable_session_rbac_override so its user, KYC, and
+        # account records can be committed atomically. The in-process RBAC
+        # guard continues to reject ordinary SessionLocal access to KYC.
+        "kyc",
         "ledger",
         "cards",
         "operations",
@@ -504,6 +509,15 @@ def verify(
                 if role_exists(connection, group) and role_exists(connection, member):
                     if not membership_exists(connection, group, member):
                         errors.append(f"missing membership: {member} -> {group}")
+
+        for role, schemas in RW_SCHEMA_ACCESS.items():
+            for schema in schemas:
+                has_usage = connection.execute(
+                    sa.text("SELECT has_schema_privilege(:role, :schema, 'USAGE')"),
+                    {"role": role, "schema": schema},
+                ).scalar()
+                if not has_usage:
+                    errors.append(f"missing schema usage: {role} -> {schema}")
 
         wrong_schema_owners = connection.execute(
             sa.text(
