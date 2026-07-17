@@ -41,8 +41,7 @@ run_args=(
 running_job="$(gcloud dataflow jobs list \
   --project "${PROJECT_ID}" \
   --region "${REGION}" \
-  --status active \
-  --filter "name=${job_name}" \
+  --filter "name=${job_name} AND state=Running" \
   --format 'value(name)' \
   --limit 1)"
 if [[ -n "${running_job}" ]]; then
@@ -50,4 +49,3 @@ if [[ -n "${running_job}" ]]; then
 fi
 
 gcloud "${run_args[@]}"
-

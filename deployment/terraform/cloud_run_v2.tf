@@ -1145,8 +1145,10 @@ resource "google_cloud_run_v2_job" "db_reset_job" {
 
   template {
     template {
-      max_retries     = 0
-      timeout         = "300s"
+      max_retries = 0
+      # A full deterministic seed emits the corresponding audit/journal events.
+      # Keep enough headroom for larger demo populations and a cold AlloyDB job.
+      timeout         = "900s"
       service_account = google_service_account.banking_db_reset_service_account.email
 
       containers {
