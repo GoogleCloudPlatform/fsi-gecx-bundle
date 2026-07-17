@@ -1,8 +1,8 @@
 # Real Time Analytics Agent
 
 The Real Time Analytics Agent is a Gemini Data Analytics `DataAgent` grounded in the banking
-demo's environment-local BigQuery CDC catalog, curated analytical views, and compliance audit
-views. The checked-in specification never contains a Google Cloud project ID. The deployment
+demo's environment-local BigQuery current-state CDC replicas, curated analytical views, and
+Iceberg-backed compliance and financial-journal views. The checked-in specification never contains a Google Cloud project ID. The deployment
 script injects the target project into every explicit table reference.
 
 The Google Terraform provider does not currently expose a native Gemini Data Analytics

@@ -9,8 +9,10 @@ flowchart LR
     Bridge --> Datastream["Datastream CDC"]
     Datastream --> BigQuery["BigQuery CDC and curated analytics"]
     AlloyDB --> Federation["BigQuery AlloyDB federation"]
-    Outbox["audit.audit_outbox"] --> PubSub["Pub/Sub audit-events"]
-    PubSub --> Audit["BigQuery compliance_audit"]
+    Outbox["audit.audit_outbox"] --> Relay["Bounded relay"]
+    Relay --> PubSub["Pub/Sub audit-events"]
+    PubSub --> Dataflow["Dataflow Managed Iceberg I/O"]
+    Dataflow --> Audit["Runtime catalog-native Iceberg<br/>audit + financial journal"]
 ```
 
 ## OLTP ownership
@@ -27,7 +29,7 @@ The `banking` database is divided into bounded schemas: `identity`, `kyc`, `ledg
 Database deployment has three explicit owners:
 
 1. Terraform owns the AlloyDB cluster and instance, network, IAM bindings, database users, secrets, Cloud Run jobs, and Datastream resources.
-2. Alembic owns schemas, tables, indexes, constraints, and versioned application DDL. The consolidated baseline revision is `2ea57c78ba89`.
+2. Alembic owns schemas, tables, indexes, constraints, and versioned application DDL. The consolidated baseline is `2ea57c78ba89`; the current head is `7c4f2a9d1e63`.
 3. The database lifecycle jobs own cluster roles, group memberships, database creation, object ownership, grants, default privileges, immutable-ledger revocations, publication, replication slot, and invariant verification.
 
 The ordered release is:
@@ -38,7 +40,9 @@ flowchart LR
     TF --> Bootstrap["banking-db-bootstrap"]
     Bootstrap --> Migrate["banking-db-migrate"]
     Migrate --> Reconcile["banking-db-reconcile"]
-    Reconcile --> Deploy["Deploy services by digest"]
+    Reconcile --> Catalog["Bootstrap catalog-native Iceberg tables + views"]
+    Catalog --> Pipeline["Build and launch/update audit Dataflow pipeline"]
+    Pipeline --> Deploy["Deploy services by digest"]
     Deploy --> Pause["Drain and pause Datastream"]
     Pause --> Seed["banking-db-reset"]
     Seed --> CDC["Federation + BigQuery destination recreation + backfill"]
@@ -54,7 +58,7 @@ Application services never create roles or repair grants, and they do not own sc
 - Mutable operational tables flow through PostgreSQL logical decoding and Datastream into BigQuery CDC tables.
 - Full demo reset is a coordinated source-and-destination operation. Datastream does not propagate PostgreSQL `TRUNCATE`, so the release controller drains the stream, resets AlloyDB, recreates stream-owned BigQuery tables with a 60-second freshness target, and requires a complete backfill before qualification.
 - Analysts can query the live `banking` database through the BigQuery `banking-postgres-connection`, implemented as a native AlloyDB connector configuration.
-- Transactional outbox events flow through Pub/Sub into `compliance_audit` independently of mutable-table CDC.
+- Transactional outbox events flow through the bounded relay, Pub/Sub, and Dataflow into catalog-native Iceberg audit and financial-ledger tables. BigQuery domain views in `compliance_audit` provide logical deduplication independently of mutable-table CDC.
 - AlloyDB Dataplex integration publishes operational metadata into Universal Catalog; the application-specific fraud guidance catalog remains managed by its dedicated sync job.
 
 See [Apache Iceberg CDC Data Lakehouse](./apache_iceberg_cdc_datalake_architecture.md), [BigQuery OLAP Audit Architecture](./bigquery_olap_audit_architecture.md), and [Real Time Analytics Agent](./real_time_analytics_agent_architecture.md).

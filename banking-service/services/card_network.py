@@ -29,6 +29,12 @@ from services.merchant_service import MerchantEnrichmentService
 import json
 from utils.audit import record_audit_event
 from utils.database import enable_session_rbac_override
+from services.financial_journal import (
+    JournalEntrySpec,
+    ensure_credit_journal_account,
+    ensure_system_journal_account,
+    post_financial_transaction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +202,12 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
         card = repo.get_card_by_token(card_token)
         if not card:
             logger.warning(f"Swipe declined: card token not found. Token: {card_token}")
+            record_audit_event(db, "CREDIT_AUTHORIZATION_DECLINED", {
+                "retrieval_reference_number": rrn,
+                "amount_cents": amount_cents,
+                "reason": "CARD_NOT_FOUND",
+            })
+            db.commit()
             return {
                 "action_code": "75",
                 "auth_code": "000000",
@@ -205,6 +217,14 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
 
         if card.status != "ACTIVE" or not card.is_active:
             logger.warning(f"Swipe declined: card status is {card.status}. Token: {card_token}")
+            record_audit_event(db, "CREDIT_AUTHORIZATION_DECLINED", {
+                "card_id": str(card.id),
+                "account_id": str(card.account_id),
+                "retrieval_reference_number": rrn,
+                "amount_cents": amount_cents,
+                "reason": "CARD_BLOCKED",
+            })
+            db.commit()
             return {
                 "action_code": "75",
                 "auth_code": "000000",
@@ -216,6 +236,13 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
         account = repo.get_account_by_id(str(card.account_id), lock=True)
         if not account:
             logger.warning(f"Swipe declined: credit account not found for card {card.id}")
+            record_audit_event(db, "CREDIT_AUTHORIZATION_DECLINED", {
+                "card_id": str(card.id),
+                "retrieval_reference_number": rrn,
+                "amount_cents": amount_cents,
+                "reason": "ACCOUNT_NOT_FOUND",
+            })
+            db.commit()
             return {
                 "action_code": "83",
                 "auth_code": "000000",
@@ -225,6 +252,14 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
 
         if account.status != "ACTIVE":
             logger.warning(f"Swipe declined: credit account status is {account.status}")
+            record_audit_event(db, "CREDIT_AUTHORIZATION_DECLINED", {
+                "card_id": str(card.id),
+                "account_id": str(account.id),
+                "retrieval_reference_number": rrn,
+                "amount_cents": amount_cents,
+                "reason": "ACCOUNT_FROZEN",
+            })
+            db.commit()
             return {
                 "action_code": "83",
                 "auth_code": "000000",
@@ -268,6 +303,16 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
                 expires_at=datetime.datetime.now(datetime.timezone.utc)
             )
             db.add(declined_auth)
+            db.flush()
+            record_audit_event(db, "CREDIT_AUTHORIZATION_DECLINED", {
+                "authorization_id": str(declined_auth.id),
+                "card_id": str(card.id),
+                "account_id": str(account.id),
+                "retrieval_reference_number": rrn,
+                "amount_cents": amount_cents,
+                "currency": account.currency or "USD",
+                "reason": "INSUFFICIENT_FUNDS",
+            })
             db.commit()
             
             return {
@@ -379,6 +424,19 @@ def process_authorization(db: Session, payload: Dict[str, Any]) -> Dict[str, Any
         
         # Recalculate credit balances
         recalculate_available_credit(db, account)
+        record_audit_event(
+            db,
+            "CREDIT_AUTHORIZATION_FLAGGED" if auth_status == "FLAGGED" else "CREDIT_AUTHORIZATION_AUTHORIZED",
+            {
+                "authorization_id": str(auth_hold.id),
+                "card_id": str(card.id),
+                "account_id": str(account.id),
+                "retrieval_reference_number": rrn,
+                "amount_cents": amount_cents,
+                "currency": account.currency or "USD",
+                "status": auth_status,
+            },
+        )
         db.commit()
 
         logger.info(f"Swipe hold approved. Auth Code: {auth_code}. RRN: {rrn}. Account: {account.id}")
@@ -430,7 +488,9 @@ def process_settlement(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
         repo = CreditCardRepository(db)
         rrn = payload.get("retrieval_reference_number")
-        settle_amount = payload.get("amount_cents")
+        settle_amount = int(payload.get("amount_cents") or 0)
+        if settle_amount <= 0:
+            raise ValueError("Settlement amount must be positive.")
         # Find an active authorization hold. Fraud-scored holds may be FLAGGED
         # while still awaiting customer confirmation or network clearing.
         auth = repo.get_authorization_by_rrn(rrn, statuses=["PENDING", "FLAGGED"])
@@ -446,12 +506,38 @@ def process_settlement(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
         if not account:
             raise ValueError("Credit account not found")
 
-        # Add transaction charge to cleared debt (immutable statement record)
+        # Append the receivable debit and merchant-clearing credit to the
+        # canonical journal before writing the linked statement projection.
         posted_at_val = payload.get("posted_at") or datetime.datetime.now(datetime.timezone.utc)
         posted_description = _resolve_posted_transaction_description(db, auth)
+        journal_account = ensure_credit_journal_account(db, account)
+        clearing_account = ensure_system_journal_account(
+            db,
+            "SYSTEM_CARD_MERCHANT_CLEARING",
+            "Card network merchant settlement clearing",
+        )
+        posting = post_financial_transaction(
+            db,
+            idempotency_key=f"card-settlement:{rrn}",
+            user_id=account.customer_id,
+            description=posted_description,
+            source_type="CARD_SETTLEMENT",
+            source_references={
+                "authorization_id": str(auth.id),
+                "retrieval_reference_number": rrn,
+                "credit_account_id": str(account.id),
+            },
+            currency=auth.billing_currency or account.currency or "USD",
+            posted_at=posted_at_val,
+            entries=(
+                JournalEntrySpec(journal_account.id, "DEBIT", settle_amount),
+                JournalEntrySpec(clearing_account.id, "CREDIT", settle_amount),
+            ),
+        )
         posted_tx = PostedTransaction(
             account_id=account.id,
             authorization_id=auth.id,
+            journal_transaction_id=posting.transaction.id,
             auth_code=auth.auth_code,
             retrieval_reference_number=rrn,
             amount_cents=-settle_amount, # posted card charges are negative
@@ -462,12 +548,24 @@ def process_settlement(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
         
         # Update account cleared balance debt
         account.cleared_balance_cents += settle_amount
+        journal_account.cleared_balance_cents = account.cleared_balance_cents
         
         # Flush updates to DB so sum query in recalculate_available_credit captures the status change
         db.flush()
         
         # Recalculate available credit
         recalculate_available_credit(db, account)
+        journal_account.available_credit_cents = account.available_credit_cents
+        record_audit_event(db, "CREDIT_TRANSACTION_SETTLED", {
+            "authorization_id": str(auth.id),
+            "posted_transaction_id": str(posted_tx.id),
+            "transaction_id": str(posting.transaction.id),
+            "financial_event_id": posting.event_id,
+            "account_id": str(account.id),
+            "retrieval_reference_number": rrn,
+            "amount_cents": settle_amount,
+            "currency": auth.billing_currency or account.currency or "USD",
+        })
         db.commit()
 
         logger.info(f"Swipe hold settled successfully. RRN: {rrn}. Cleared Balance: {account.cleared_balance_cents}")
@@ -487,6 +585,8 @@ def process_settlement(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "status": "SETTLED",
             "posted_transaction_id": str(posted_tx.id),
+            "transaction_id": str(posting.transaction.id),
+            "financial_event_id": posting.event_id,
             "cleared_balance_cents": account.cleared_balance_cents,
             "available_credit_cents": account.available_credit_cents
         }
@@ -523,6 +623,14 @@ def process_reversal(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
 
         # Recalculate available credit (hold release)
         recalculate_available_credit(db, account)
+        record_audit_event(db, "CREDIT_AUTHORIZATION_REVERSED", {
+            "authorization_id": str(auth.id),
+            "account_id": str(account.id),
+            "retrieval_reference_number": rrn,
+            "amount_cents": int(auth.billing_amount_cents or auth.transaction_amount_cents or 0),
+            "currency": auth.billing_currency or account.currency or "USD",
+            "reason": payload.get("reason") or "NETWORK_REVERSAL",
+        })
         db.commit()
 
         logger.info(f"Swipe hold reversed successfully. RRN: {rrn}. Available Credit: {account.available_credit_cents}")

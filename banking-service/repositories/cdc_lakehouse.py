@@ -25,7 +25,7 @@ class CdcLakehouseRepository:
 
     def __init__(self):
         self.project_id = get_project_id()
-        self.dataset = os.getenv("CDC_BIGQUERY_DATASET", "iceberg_catalog")
+        self.dataset = os.getenv("CDC_BIGQUERY_DATASET", "oltp_cdc")
         self.auth_table = os.getenv("CDC_BIGQUERY_AUTH_TABLE", "cards_transaction_authorization")
         self.posted_table = os.getenv("CDC_BIGQUERY_POSTED_TABLE", "cards_posted_transactions")
         self.curated_dataset = os.getenv("CDC_BIGQUERY_CURATED_DATASET", "analytics_curated")

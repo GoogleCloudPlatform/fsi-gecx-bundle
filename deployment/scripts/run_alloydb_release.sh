@@ -7,7 +7,7 @@ set -euo pipefail
 RELEASE_MODE="${RELEASE_MODE:-qualify}"
 MANIFEST_URI="${MANIFEST_URI:-}"
 ALLOW_CLOUD_SQL_CUTOVER="${ALLOW_CLOUD_SQL_CUTOVER:-false}"
-EXPECTED_ALEMBIC_REVISION="2ea57c78ba89"
+EXPECTED_ALEMBIC_REVISION="7c4f2a9d1e63"
 cloud_sql_backup_id="${CLOUD_SQL_BACKUP_ID:-}"
 
 declare -A images
@@ -66,6 +66,20 @@ if terraform -chdir=deployment/terraform state list | grep -q '^google_sql_datab
 fi
 terraform -chdir=deployment/terraform plan -input=false \
   -var-file="environment/${PROJECT_ID}/terraform.tfvars" -out=/workspace/release.tfplan
+
+# Datastream destination changes require a paused stream. Detect any planned
+# mutation of the existing stream before apply; fresh environments have no
+# prior stream and do not need this step. The normal post-reset rebuild below
+# resumes the stream and proves every object backfill.
+if terraform -chdir=deployment/terraform show -json /workspace/release.tfplan | jq -e '
+  .resource_changes[]?
+  | select(.address == "google_datastream_stream.banking_cdc_stream")
+  | select(.change.before != null)
+  | select(.change.actions != ["no-op"])
+' >/dev/null; then
+  PROJECT_ID="${PROJECT_ID}" REGION="${REGION}" \
+    deployment/scripts/reconcile_datastream_after_reset.sh pause
+fi
 terraform -chdir=deployment/terraform apply -input=false -auto-approve /workspace/release.tfplan
 
 PROJECT_ID="${PROJECT_ID}" REGION="${REGION}" deployment/scripts/reconcile_alloydb_iam_groups.sh
@@ -76,16 +90,23 @@ gcloud run jobs update banking-db-migrate --project "${PROJECT_ID}" --region "${
 gcloud run jobs update banking-db-reconcile --project "${PROJECT_ID}" --region "${REGION}" --image "${banking_image}" --quiet
 gcloud run jobs update banking-db-reset --project "${PROJECT_ID}" --region "${REGION}" --image "${banking_image}" --quiet
 gcloud run jobs update banking-knowledge-catalog-sync --project "${PROJECT_ID}" --region "${REGION}" --image "${banking_image}" --quiet
+gcloud run jobs update audit-outbox-relay --project "${PROJECT_ID}" --region "${REGION}" --image "${banking_image}" --quiet
+gcloud run jobs update audit-iceberg-bootstrap --project "${PROJECT_ID}" --region "${REGION}" --image "${banking_image}" --quiet
 
 gcloud run jobs execute banking-db-bootstrap --project "${PROJECT_ID}" --region "${REGION}" --wait
 gcloud run jobs execute banking-db-migrate --project "${PROJECT_ID}" --region "${REGION}" --wait
 gcloud run jobs execute banking-db-reconcile --project "${PROJECT_ID}" --region "${REGION}" --wait
+gcloud run jobs execute audit-iceberg-bootstrap --project "${PROJECT_ID}" --region "${REGION}" --wait
+
+PROJECT_ID="${PROJECT_ID}" REGION="${REGION}" RELEASE_COMMIT="${RELEASE_COMMIT}" \
+  deployment/scripts/deploy_audit_iceberg_pipeline.sh
 
 gcloud run services update banking-service --project "${PROJECT_ID}" --region "${REGION}" --image "${banking_image}" --quiet
 gcloud run services update credit-support-agent --project "${PROJECT_ID}" --region "${REGION}" --image "${images[credit-support-agent]}" --quiet
 gcloud run services update data-generator --project "${PROJECT_ID}" --region "${REGION}" --image "${images[data-generator]}" --quiet
 PROJECT_ID="${PROJECT_ID}" REGION="${REGION}" deployment/scripts/reconcile_datastream_after_reset.sh pause
 gcloud run jobs execute banking-db-reset --project "${PROJECT_ID}" --region "${REGION}" --wait
+runtime_validation_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 gcloud run jobs execute banking-knowledge-catalog-sync --project "${PROJECT_ID}" --region "${REGION}" --wait
 
 PROJECT_ID="${PROJECT_ID}" REGION="${REGION}" deployment/scripts/reconcile_alloydb_federation.sh
@@ -105,6 +126,10 @@ curl --fail --silent --show-error -H "Authorization: Bearer $(identity_token "${
 curl --fail --silent --show-error -H "Authorization: Bearer $(identity_token "${voice_url}")" "${voice_url}/" >/dev/null
 curl --fail --silent --show-error -H "Authorization: Bearer $(identity_token "${generator_url}")" "${generator_url}/health" >/dev/null
 
+PROJECT_ID="${PROJECT_ID}" REGION="${REGION}" \
+  VALIDATION_START_TIME="${runtime_validation_started_at}" \
+  deployment/scripts/validate_audit_iceberg_runtime.sh
+
 manifest_path="/workspace/release-manifest-${RELEASE_COMMIT}.json"
 jq -n \
   --arg commit "${RELEASE_COMMIT}" \
@@ -116,7 +141,7 @@ jq -n \
   --arg generator "${images[data-generator]}" \
   --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --arg cloud_sql_backup_id "${cloud_sql_backup_id}" \
-  '{schema_version:1,status:(if $mode=="promote" then "promoted" else "qualified" end),mode:$mode,commit:$commit,environment:$environment,alembic_revision:$alembic,images:{"banking-service":$banking,"credit-support-agent":$voice,"data-generator":$generator},cutover:{final_cloud_sql_backup_id:(if $cloud_sql_backup_id=="" then null else $cloud_sql_backup_id end)},validation:{terraform:true,bootstrap:true,migration:true,reconciliation:true,reset_seed:true,knowledge_catalog:true,datastream:true,federation:true,service_health:true},completed_at:$timestamp}' \
+  '{schema_version:1,status:(if $mode=="promote" then "promoted" else "qualified" end),mode:$mode,commit:$commit,environment:$environment,alembic_revision:$alembic,images:{"banking-service":$banking,"credit-support-agent":$voice,"data-generator":$generator},data_platform:{oltp_cdc_dataset:"oltp_cdc",curated_dataset:"analytics_curated",audit_dataset:"compliance_audit"},cutover:{final_cloud_sql_backup_id:(if $cloud_sql_backup_id=="" then null else $cloud_sql_backup_id end)},validation:{terraform:true,bootstrap:true,migration:true,reconciliation:true,reset_seed:true,knowledge_catalog:true,datastream:true,federation:true,audit_iceberg_dataflow:true,audit_iceberg_runtime:true,spark_interoperability:true,service_health:true},completed_at:$timestamp}' \
   > "${manifest_path}"
 destination="gs://${PROJECT_ID}-fsi-release-manifests/alloydb/${RELEASE_COMMIT}/${RELEASE_MODE}.json"
 gsutil cp "${manifest_path}" "${destination}"

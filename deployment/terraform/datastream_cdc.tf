@@ -64,9 +64,9 @@ resource "google_datastream_connection_profile" "bigquery_destination" {
 }
 
 resource "google_datastream_stream" "banking_cdc_stream" {
-  display_name = "Banking CDC Stream to BigQuery Data Lake"
+  display_name = "Banking OLTP Current-State CDC Stream"
   location     = var.region
-  stream_id    = "banking-alloydb-cdc-stream"
+  stream_id    = "banking-alloydb-oltp-cdc-stream"
   # Create the stream without auto-starting so fresh environments can finish
   # database migrations before Datastream validates publication/slot state.
   desired_state             = "NOT_STARTED"
@@ -197,7 +197,7 @@ resource "google_datastream_stream" "banking_cdc_stream" {
     bigquery_destination_config {
       data_freshness = "60s"
       single_target_dataset {
-        dataset_id = google_bigquery_dataset.iceberg_catalog.id
+        dataset_id = google_bigquery_dataset.oltp_cdc.id
       }
     }
   }
@@ -210,6 +210,6 @@ resource "google_datastream_stream" "banking_cdc_stream" {
 
   depends_on = [
     google_project_service.datastream_googleapis_com,
-    google_bigquery_dataset.iceberg_catalog
+    google_bigquery_dataset.oltp_cdc
   ]
 }

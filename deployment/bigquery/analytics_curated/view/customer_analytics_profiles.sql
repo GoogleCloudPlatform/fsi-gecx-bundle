@@ -7,7 +7,7 @@ WITH primary_address AS (
     postal_code,
     country_code,
     verified_by_doc_ai
-  FROM `__PROJECT_ID__.iceberg_catalog.identity_user_addresses`
+  FROM `__PROJECT_ID__.oltp_cdc.identity_user_addresses`
   WHERE is_primary IS TRUE
   QUALIFY ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC, id DESC) = 1
 ),
@@ -17,7 +17,7 @@ latest_credit_profile AS (
     credit_score,
     credit_tier,
     stated_annual_income_cents
-  FROM `__PROJECT_ID__.iceberg_catalog.kyc_user_credit_profiles`
+  FROM `__PROJECT_ID__.oltp_cdc.kyc_user_credit_profiles`
   QUALIFY ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC, id DESC) = 1
 ),
 credit_account_summary AS (
@@ -28,7 +28,7 @@ credit_account_summary AS (
     SUM(credit_limit_cents) AS total_credit_limit_cents,
     SUM(cleared_balance_cents) AS total_cleared_balance_cents,
     SUM(available_credit_cents) AS total_available_credit_cents
-  FROM `__PROJECT_ID__.iceberg_catalog.cards_credit_accounts`
+  FROM `__PROJECT_ID__.oltp_cdc.cards_credit_accounts`
   WHERE UPPER(status) = 'ACTIVE'
   GROUP BY customer_id
 )
@@ -100,7 +100,7 @@ SELECT
   COALESCE(accounts.total_credit_limit_cents, 0) / 100.0 AS total_credit_limit_dollars,
   COALESCE(accounts.total_cleared_balance_cents, 0) / 100.0 AS total_cleared_balance_dollars,
   COALESCE(accounts.total_available_credit_cents, 0) / 100.0 AS total_available_credit_dollars
-FROM `__PROJECT_ID__.iceberg_catalog.identity_users` user
+FROM `__PROJECT_ID__.oltp_cdc.identity_users` user
 LEFT JOIN primary_address address
   ON user.id = address.user_id
 LEFT JOIN latest_credit_profile credit

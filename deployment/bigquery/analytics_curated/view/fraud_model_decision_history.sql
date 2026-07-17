@@ -19,7 +19,7 @@ WITH decisions AS (
     merchant_region,
     model_version,
     created_at AS decision_timestamp
-  FROM `__PROJECT_ID__.iceberg_catalog.operations_fraud_model_decisions`
+  FROM `__PROJECT_ID__.oltp_cdc.operations_fraud_model_decisions`
 ),
 authorizations AS (
   SELECT
@@ -34,7 +34,7 @@ authorizations AS (
     merchant_latitude AS authorization_merchant_latitude,
     merchant_longitude AS authorization_merchant_longitude,
     created_at AS authorization_timestamp
-  FROM `__PROJECT_ID__.iceberg_catalog.cards_transaction_authorization`
+  FROM `__PROJECT_ID__.oltp_cdc.cards_transaction_authorization`
 )
 SELECT
   d.fraud_decision_id,

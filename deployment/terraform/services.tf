@@ -49,6 +49,22 @@ resource "google_project_service" "bigquery_googleapis_com" {
   disable_on_destroy = false
 }
 
+resource "google_project_service" "biglake_googleapis_com" {
+  service            = "biglake.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "dataflow_googleapis_com" {
+  service            = "dataflow.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "dataproc_googleapis_com" {
+  project            = var.project_id
+  service            = "dataproc.googleapis.com"
+  disable_on_destroy = false
+}
+
 resource "google_project_service" "servicenetworking_googleapis_com" {
   service            = "servicenetworking.googleapis.com"
   disable_on_destroy = false

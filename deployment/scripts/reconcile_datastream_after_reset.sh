@@ -4,8 +4,9 @@ set -euo pipefail
 : "${PROJECT_ID:?PROJECT_ID is required}"
 : "${REGION:?REGION is required}"
 
-stream="banking-alloydb-cdc-stream"
-dataset="iceberg_catalog"
+stream="${DATASTREAM_STREAM_ID:-banking-alloydb-oltp-cdc-stream}"
+legacy_stream="banking-alloydb-cdc-stream"
+dataset="oltp_cdc"
 action="${1:?Expected pause or rebuild}"
 expected_objects=(
   catalog.credit_products
@@ -42,6 +43,18 @@ stream_state() {
   gcloud datastream streams describe "${stream}" \
     --project "${PROJECT_ID}" --location "${REGION}" --format='value(state)'
 }
+
+# During the one-time dataset rename, Terraform must replace the stream because
+# the Datastream API does not allow changing its destination dataset in place.
+# Pause the legacy stream before that replacement; rebuilds must always target
+# the new stream so data cannot accidentally flow back into the old dataset.
+if [[ "${action}" == "pause" ]] && ! gcloud datastream streams describe "${stream}" \
+  --project "${PROJECT_ID}" --location "${REGION}" >/dev/null 2>&1; then
+  if gcloud datastream streams describe "${legacy_stream}" \
+    --project "${PROJECT_ID}" --location "${REGION}" >/dev/null 2>&1; then
+    stream="${legacy_stream}"
+  fi
+fi
 
 wait_for_stream_state() {
   local expected="$1"

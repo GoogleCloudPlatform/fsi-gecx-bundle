@@ -91,7 +91,7 @@ resource "google_pubsub_topic_iam_member" "banking_service_sa_publisher" {
   project = var.project_id
 }
 
-# 5. Compliance Audit Outbox Streaming: Topic & BigQuery Subscription
+# 5. Compliance Audit Outbox Streaming: relay topic, Dataflow subscription, and DLQ
 resource "google_pubsub_topic" "audit_events" {
   name         = "audit-events"
   project      = var.project_id
@@ -99,19 +99,53 @@ resource "google_pubsub_topic" "audit_events" {
   depends_on   = [google_kms_crypto_key_iam_member.pubsub_audit_kms_binding]
 }
 
-resource "google_pubsub_subscription" "audit_events_bq_sub" {
-  name    = "audit-events-bq-sub"
+resource "google_pubsub_subscription" "audit_events_iceberg_sub" {
+  name    = "audit-events-iceberg-sub"
   topic   = google_pubsub_topic.audit_events.name
   project = var.project_id
 
-  bigquery_config {
-    table            = "${var.project_id}.compliance_audit.raw_audit_outbox_cdc"
-    use_table_schema = true
-  }
+  ack_deadline_seconds       = 600
+  message_retention_duration = "604800s"
+  retain_acked_messages      = false
 
-  depends_on = [
-    google_bigquery_dataset_iam_member.pubsub_bq_data_editor,
-    google_bigquery_dataset_iam_member.pubsub_bq_metadata_viewer
-  ]
+  retry_policy {
+    minimum_backoff = "10s"
+    maximum_backoff = "600s"
+  }
 }
 
+resource "google_pubsub_topic" "audit_events_dlq" {
+  name         = "audit-events-iceberg-dlq"
+  project      = var.project_id
+  kms_key_name = google_kms_crypto_key.audit_cmek_key.id
+  depends_on   = [google_kms_crypto_key_iam_member.pubsub_audit_kms_binding]
+}
+
+resource "google_pubsub_subscription" "audit_events_dlq_sub" {
+  name                       = "audit-events-iceberg-dlq-sub"
+  topic                      = google_pubsub_topic.audit_events_dlq.name
+  project                    = var.project_id
+  ack_deadline_seconds       = 60
+  message_retention_duration = "1209600s"
+}
+
+resource "google_pubsub_topic_iam_member" "audit_relay_publisher" {
+  topic   = google_pubsub_topic.audit_events.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.audit_outbox_relay_service_account.email}"
+  project = var.project_id
+}
+
+resource "google_pubsub_subscription_iam_member" "audit_dataflow_subscriber" {
+  subscription = google_pubsub_subscription.audit_events_iceberg_sub.name
+  role         = "roles/pubsub.subscriber"
+  member       = "serviceAccount:${google_service_account.audit_iceberg_dataflow_service_account.email}"
+  project      = var.project_id
+}
+
+resource "google_pubsub_topic_iam_member" "audit_dataflow_dlq_publisher" {
+  topic   = google_pubsub_topic.audit_events_dlq.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.audit_iceberg_dataflow_service_account.email}"
+  project = var.project_id
+}

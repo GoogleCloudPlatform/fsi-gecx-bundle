@@ -20,6 +20,7 @@ import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
+import ConsoleAccessStep from './ConsoleAccessStep.jsx';
 
 import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
@@ -468,6 +469,10 @@ function AdminDashboardView() {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="mt-4">
+        <ConsoleAccessStep analyticsId="admin_dashboard_console_access" compact />
       </div>
 
       <div className="mt-4 flex flex-col gap-5 rounded-3xl border border-violet-200 bg-violet-50/60 p-6 dark:border-violet-900/40 dark:bg-violet-950/20 xl:flex-row xl:items-center xl:justify-between" id="vip-analytics-preparation">

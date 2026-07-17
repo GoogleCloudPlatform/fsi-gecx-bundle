@@ -2,7 +2,7 @@
 
 An autonomous, cloud-native synthetic transaction data generator designed for the Nova Horizon Banking Demo suite. 
 
-The service simulates an external merchant point-of-sale (POS) terminal network and cardholder activity engine. It generates synthetic credit card authorization holds, captures, and reversals over HTTP against the authoritative issuing bank gateway in **`banking-service`**. These real-time transactions generate PostgreSQL Outbox events that stream via Google Cloud Datastream (WAL Change Data Capture) into the schema-prefixed BigQuery lakehouse dataset (`iceberg_catalog`) and curated analytical views in `analytics_curated`, powering live AI Data Canvas spend velocity visualizations and dashboards.
+The service simulates an external merchant point-of-sale (POS) terminal network and cardholder activity engine. It generates synthetic credit card authorization holds, captures, and reversals over HTTP against the authoritative issuing bank gateway in **`banking-service`**. These real-time transactions are replicated from AlloyDB PostgreSQL WAL by Google Cloud Datastream into the BigQuery-native current-state dataset (`oltp_cdc`) and curated analytical views in `analytics_curated`, powering live AI Data Canvas spend velocity visualizations and dashboards.
 
 ---
 
@@ -17,7 +17,7 @@ graph TD
     BS -->|Returns Cards & Merchants| DG
     DG -->|3. POST /api/v1/card-network/authorize<br/>4. POST /api/v1/card-network/settle<br/>5. POST /api/v1/card-network/reverse| BS
     BS -->|WAL CDC Outbox Events| DS[Google Cloud Datastream]
-    DS -->|Replication| BQ[BigQuery iceberg_catalog + analytics_curated]
+    DS -->|Merge-mode replication| BQ[BigQuery oltp_cdc + analytics_curated]
 ```
 
 ### Key Architectural Characteristics

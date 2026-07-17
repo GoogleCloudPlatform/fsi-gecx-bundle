@@ -48,6 +48,27 @@ resource "google_compute_router_nat" "nat" {
   nat_ip_allocate_option             = "AUTO_ONLY"
 }
 
+# Dataproc Serverless Spark workers and the driver receive addresses from this
+# subnet and require unrestricted east-west communication during batch startup.
+resource "google_compute_firewall" "allow_dataproc_serverless_internal" {
+  name          = "allow-dataproc-serverless-internal"
+  network       = google_compute_network.fsi_gecx_vpc.id
+  direction     = "INGRESS"
+  source_ranges = [google_compute_subnetwork.fsi_gecx_subnet.ip_cidr_range]
+
+  allow {
+    protocol = "tcp"
+  }
+
+  allow {
+    protocol = "udp"
+  }
+
+  allow {
+    protocol = "icmp"
+  }
+}
+
 resource "google_compute_global_address" "private_service_access" {
   name          = "fsi-gecx-psa-range"
   address_type  = "INTERNAL"
@@ -146,6 +167,5 @@ resource "google_compute_firewall" "deny_livekit_to_internal" {
 
   target_tags = ["livekit-server"]
 }
-
 
 

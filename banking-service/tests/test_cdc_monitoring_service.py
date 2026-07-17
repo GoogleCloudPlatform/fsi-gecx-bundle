@@ -20,7 +20,7 @@ from services.cdc_monitoring import CdcMonitoringService
 
 
 class FakeLakehouseRepository:
-    dataset = "iceberg_catalog"
+    dataset = "oltp_cdc"
 
     def __init__(self, watermark=None, rows=None, error=None, anomalies_count=0):
         self.watermark = watermark
@@ -99,7 +99,7 @@ def test_cached_cdc_status_uses_redis_snapshot():
         "replication_lag_seconds": 5,
         "replication_lag_ms": 5000,
         "lakehouse_row_count": 42,
-        "bigquery_dataset": "iceberg_catalog",
+        "bigquery_dataset": "oltp_cdc",
         "bigquery_error": None,
     }
 

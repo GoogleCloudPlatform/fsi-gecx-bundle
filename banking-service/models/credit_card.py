@@ -187,6 +187,7 @@ class PostedTransaction(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     account_id = Column(UUID(as_uuid=True), ForeignKey("cards.credit_accounts.id", ondelete="RESTRICT"), nullable=False)
     authorization_id = Column(UUID(as_uuid=True), ForeignKey("cards.transaction_authorization.id", ondelete="SET NULL"), nullable=True)
+    journal_transaction_id = Column(UUID(as_uuid=True), ForeignKey("ledger.transactions.id", ondelete="RESTRICT"), nullable=True, unique=True)
     
     # Settlement keys
     auth_code = Column(String(6), nullable=True)

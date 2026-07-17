@@ -61,14 +61,14 @@ WITH enriched_authorizations AS (
         THEN CONCAT(UPPER(address.city), ' CA')
       ELSE CONCAT(UPPER(address.city), ' ', UPPER(address.state))
     END AS home_metro
-  FROM `__PROJECT_ID__.iceberg_catalog.cards_transaction_authorization` auth
-  JOIN `__PROJECT_ID__.iceberg_catalog.cards_issued_card` card
+  FROM `__PROJECT_ID__.oltp_cdc.cards_transaction_authorization` auth
+  JOIN `__PROJECT_ID__.oltp_cdc.cards_issued_card` card
     ON auth.card_id = card.id
-  JOIN `__PROJECT_ID__.iceberg_catalog.cards_credit_accounts` account
+  JOIN `__PROJECT_ID__.oltp_cdc.cards_credit_accounts` account
     ON card.account_id = account.id
-  JOIN `__PROJECT_ID__.iceberg_catalog.identity_users` user
+  JOIN `__PROJECT_ID__.oltp_cdc.identity_users` user
     ON account.customer_id = user.id
-  LEFT JOIN `__PROJECT_ID__.iceberg_catalog.identity_user_addresses` address
+  LEFT JOIN `__PROJECT_ID__.oltp_cdc.identity_user_addresses` address
     ON user.id = address.user_id
    AND address.is_primary = TRUE
   WHERE auth.status IN ('PENDING', 'APPROVED', 'SETTLED', 'FLAGGED')

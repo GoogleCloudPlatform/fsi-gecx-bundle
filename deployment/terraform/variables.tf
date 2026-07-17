@@ -86,6 +86,40 @@ variable "deploy_cloud_run_services" {
   default = false
 }
 
+variable "audit_relay_enabled" {
+  description = "Enable committed audit outbox publication from the scheduled relay."
+  type        = bool
+  default     = true
+}
+
+variable "audit_relay_batch_size" {
+  description = "Maximum committed outbox rows published per scheduled relay execution."
+  type        = number
+  default     = 500
+  validation {
+    condition     = var.audit_relay_batch_size >= 1 && var.audit_relay_batch_size <= 1000
+    error_message = "audit_relay_batch_size must be between 1 and 1000."
+  }
+}
+
+variable "audit_relay_schedule" {
+  description = "UTC Cloud Scheduler cadence for the bounded audit relay."
+  type        = string
+  default     = "* * * * *"
+}
+
+variable "audit_iceberg_catalog_id" {
+  description = "Lakehouse runtime catalog identifier for catalog-native audit and journal history."
+  type        = string
+  default     = "nova-audit-lakehouse"
+}
+
+variable "audit_iceberg_commit_frequency_seconds" {
+  description = "Managed Iceberg streaming commit frequency; batches events to limit snapshots and small files."
+  type        = number
+  default     = 60
+}
+
 variable "banking_service_image_url" {
   type    = string
   default = null

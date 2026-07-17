@@ -15,34 +15,33 @@
 import json
 import logging
 import datetime
+import uuid
 from sqlalchemy.orm import Session
-from models.audit import AuditOutbox
+from models.audit import AuditOutbox, OutboxRelayCheckpoint
 
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 5
-
-_publisher_client = None
-
-def get_publisher_client():
-    global _publisher_client
-    if _publisher_client is None:
-        try:
-            from google.cloud import pubsub_v1
-            _publisher_client = pubsub_v1.PublisherClient()
-        except Exception as e:
-            logger.warning(f"Could not initialize Pub/Sub PublisherClient: {e}")
-    return _publisher_client
-
-
-def record_audit_event(db: Session, event_type: str, payload: dict) -> AuditOutbox:
+def record_audit_event(
+    db: Session,
+    event_type: str,
+    payload: dict,
+    *,
+    event_id: str | None = None,
+    schema_version: int = 1,
+    created_at: datetime.datetime | None = None,
+) -> AuditOutbox:
     """
     Records an immutable append-only audit event inside the active database session transaction.
-    Guarantees that the event is committed atomically with the state mutation for WAL CDC ingestion.
+    Guarantees that the event is committed atomically with the state mutation.
+    The asynchronous relay publishes committed rows; this function performs no
+    network I/O.
     """
     outbox_entry = AuditOutbox(
+        event_id=event_id or str(uuid.uuid4()),
         event_type=event_type,
-        payload=json.dumps(payload),
+        schema_version=schema_version,
+        payload=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+        created_at=created_at or datetime.datetime.now(datetime.timezone.utc),
     )
     db.add(outbox_entry)
     db.flush()  # Flush to populate default IDs without committing the transaction
@@ -50,28 +49,26 @@ def record_audit_event(db: Session, event_type: str, payload: dict) -> AuditOutb
     return outbox_entry
 
 
-def publish_pending_audit_events(db: Session, batch_size: int = 50) -> int:
+def prune_historical_audit_events(db: Session, retention_days: int = 30) -> int:
     """
-    In our WAL CDC architecture (Architecture Two), outbox ingestion occurs via zero-load WAL streaming without database polling.
-    Returns the count of recent audit events in the append-only operational log.
+    Prunes only outbox rows known to be behind the committed relay cursor.
+
+    Long-term retention is maintained in catalog-native Iceberg audit tables;
+    unrelayed rows are never eligible for deletion.
     """
-    logger.info("Outbox ingestion is managed via zero-load Datastream WAL CDC streaming.")
-    return db.query(AuditOutbox).count()
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=retention_days)
+    checkpoint = db.query(OutboxRelayCheckpoint).filter_by(relay_name="audit-events-v1").one_or_none()
+    if checkpoint is None or checkpoint.last_created_at is None:
+        return 0
+    checkpoint_time = checkpoint.last_created_at
+    if checkpoint_time.tzinfo is None:
+        checkpoint_time = checkpoint_time.replace(tzinfo=datetime.timezone.utc)
+    safe_cutoff = min(cutoff, checkpoint_time)
+    deleted_count = db.query(AuditOutbox).filter(AuditOutbox.created_at < safe_cutoff).delete()
+    db.commit()
+    return deleted_count
 
 
 def process_dlq_audit_events(db: Session, batch_size: int = 50) -> list[str]:
-    """
-    In our WAL CDC architecture, replication latency and DLQs are monitored at the infrastructure WAL stream level.
-    """
+    """Compatibility no-op: the Pub/Sub/Dataflow DLQ is externally replayed."""
     return []
-
-
-def prune_historical_audit_events(db: Session, retention_days: int = 30) -> int:
-    """
-    Prunes historical append-only audit events older than retention_days from the operational database buffer.
-    Long-term regulatory retention (7-10 years) is maintained in BigQuery compliance datasets via Datastream WAL CDC.
-    """
-    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=retention_days)
-    deleted_count = db.query(AuditOutbox).filter(AuditOutbox.created_at < cutoff).delete()
-    db.commit()
-    return deleted_count

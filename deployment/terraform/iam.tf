@@ -104,6 +104,16 @@ resource "google_service_account" "banking_db_reset_service_account" {
   }
 }
 
+resource "google_service_account" "audit_outbox_relay_service_account" {
+  account_id   = "audit-outbox-relay-sa"
+  display_name = "Audit Outbox Relay Service Account"
+}
+
+resource "google_service_account" "audit_iceberg_dataflow_service_account" {
+  account_id   = "audit-iceberg-dataflow-sa"
+  display_name = "Audit Iceberg Dataflow Service Account"
+}
+
 resource "google_service_account" "knowledge_catalog_sync_service_account" {
   account_id   = "knowledge-catalog-sync-sa"
   display_name = "Knowledge Catalog Sync Service Account"

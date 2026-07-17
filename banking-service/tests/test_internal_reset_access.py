@@ -174,6 +174,6 @@ def test_full_reset_data_lake_purge_uses_truncate(monkeypatch):
     purged = internal._purge_data_lake_tables("demo-project")
 
     assert purged == ["cards_transaction_authorization", "merchants_merchant_master"]
-    assert "TRUNCATE TABLE `demo-project.iceberg_catalog.cards_transaction_authorization`" in fake_client.queries
-    assert "TRUNCATE TABLE `demo-project.iceberg_catalog.merchants_merchant_master`" in fake_client.queries
+    assert "TRUNCATE TABLE `demo-project.oltp_cdc.cards_transaction_authorization`" in fake_client.queries
+    assert "TRUNCATE TABLE `demo-project.oltp_cdc.merchants_merchant_master`" in fake_client.queries
     assert all("DELETE FROM" not in query for query in fake_client.queries)

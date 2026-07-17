@@ -1115,7 +1115,7 @@ resource "google_cloud_run_v2_job" "db_reconcile_job" {
         }
         env {
           name  = "EXPECTED_ALEMBIC_REVISION"
-          value = "2ea57c78ba89"
+          value = "7c4f2a9d1e63"
         }
       }
       vpc_access {
@@ -1145,8 +1145,10 @@ resource "google_cloud_run_v2_job" "db_reset_job" {
 
   template {
     template {
-      max_retries     = 0
-      timeout         = "300s"
+      max_retries = 0
+      # A full deterministic seed emits the corresponding audit/journal events.
+      # Keep enough headroom for larger demo populations and a cold AlloyDB job.
+      timeout         = "900s"
       service_account = google_service_account.banking_db_reset_service_account.email
 
       containers {
@@ -1215,6 +1217,111 @@ resource "google_cloud_run_v2_job" "db_reset_job" {
     google_project_iam_member.banking_reset_sa_cloudtasks_queue_admin,
     google_project_iam_member.banking_reset_sa_alloydb_client,
     google_project_iam_member.banking_reset_sa_service_usage_consumer,
+  ]
+}
+
+# Bounded asynchronous outbox relay. Cloud Scheduler starts one singleton job;
+# a PostgreSQL advisory lock also prevents overlapping manual invocations.
+resource "google_cloud_run_v2_job" "audit_outbox_relay" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  name     = "audit-outbox-relay"
+  location = var.region
+
+  template {
+    parallelism = 1
+    task_count  = 1
+    template {
+      max_retries     = 2
+      timeout         = "300s"
+      service_account = google_service_account.audit_outbox_relay_service_account.email
+      containers {
+        image   = local.banking_service_url
+        command = ["python"]
+        args    = ["-m", "scripts.audit_outbox_relay"]
+        env {
+          name  = "DATABASE_URL"
+          value = "postgresql+psycopg2://${local.alloydb_iam_users.audit_relay}@${google_alloydb_instance.banking_primary.ip_address}:5432/banking?sslmode=require"
+        }
+        env {
+          name  = "DB_IAM_AUTH"
+          value = "true"
+        }
+        env {
+          name  = "PROJECT_ID"
+          value = var.project_id
+        }
+        env {
+          name  = "AUDIT_EVENTS_TOPIC"
+          value = google_pubsub_topic.audit_events.name
+        }
+        env {
+          name  = "AUDIT_RELAY_BATCH_SIZE"
+          value = tostring(var.audit_relay_batch_size)
+        }
+        env {
+          name  = "AUDIT_RELAY_ENABLED"
+          value = tostring(var.audit_relay_enabled)
+        }
+      }
+      vpc_access {
+        network_interfaces {
+          network    = google_compute_network.fsi_gecx_vpc.name
+          subnetwork = google_compute_subnetwork.fsi_gecx_subnet.name
+        }
+        egress = "PRIVATE_RANGES_ONLY"
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [template[0].template[0].containers[0].image, client, client_version]
+  }
+
+  depends_on = [
+    google_alloydb_user.service_iam_users,
+    google_project_iam_member.audit_relay_sa_alloydb_client,
+    google_project_iam_member.audit_relay_sa_service_usage_consumer,
+    google_pubsub_topic_iam_member.audit_relay_publisher,
+  ]
+}
+
+resource "google_cloud_run_v2_job" "audit_iceberg_bootstrap" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  name     = "audit-iceberg-bootstrap"
+  location = var.region
+
+  template {
+    template {
+      max_retries     = 2
+      timeout         = "300s"
+      service_account = google_service_account.audit_iceberg_dataflow_service_account.email
+      containers {
+        image   = local.banking_service_url
+        command = ["python"]
+        args    = ["-m", "scripts.bootstrap_iceberg_catalog"]
+        env {
+          name  = "PROJECT_ID"
+          value = var.project_id
+        }
+        env {
+          name  = "AUDIT_ICEBERG_CATALOG_ID"
+          value = google_biglake_iceberg_catalog.audit_lakehouse.name
+        }
+        env {
+          name  = "AUDIT_ICEBERG_WAREHOUSE"
+          value = "gs://${google_storage_bucket.iceberg_warehouse.name}/audit-lakehouse"
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [template[0].template[0].containers[0].image, client, client_version]
+  }
+
+  depends_on = [
+    google_storage_bucket_iam_member.audit_catalog_warehouse_object_user,
+    google_project_iam_member.audit_dataflow_biglake_editor,
   ]
 }
 
@@ -1390,7 +1497,7 @@ resource "google_cloud_run_v2_job" "lakehouse_view_reconcile" {
 
         env {
           name  = "SOURCE_DATASET"
-          value = google_bigquery_dataset.iceberg_catalog.dataset_id
+          value = google_bigquery_dataset.oltp_cdc.dataset_id
         }
 
         env {
@@ -1412,7 +1519,7 @@ resource "google_cloud_run_v2_job" "lakehouse_view_reconcile" {
   depends_on = [
     google_project_service.run_googleapis_com,
     google_datastream_stream.banking_cdc_stream,
-    google_bigquery_dataset_iam_member.lakehouse_reconcile_iceberg_data_viewer,
+    google_bigquery_dataset_iam_member.lakehouse_reconcile_oltp_cdc_data_viewer,
     google_bigquery_dataset_iam_member.lakehouse_reconcile_analytics_curated_data_editor,
     google_project_iam_member.lakehouse_reconcile_sa_bq_job_user,
     google_project_iam_member.lakehouse_reconcile_sa_datastream_admin,

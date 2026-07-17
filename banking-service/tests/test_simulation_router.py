@@ -156,7 +156,10 @@ async def test_provision_my_demo_success(async_client, db_session):
     assert user.auth_provider_uid == "new-uid-123"
     
     # Check deposit accounts
-    accounts = db_session.query(Account).filter(Account.user_id == user.id).all()
+    accounts = db_session.query(Account).filter(
+        Account.user_id == user.id,
+        Account.account_type.in_(("CHECKING", "SAVINGS")),
+    ).all()
     assert len(accounts) == 2
     
     # Check credit account
@@ -253,6 +256,7 @@ async def test_deprovision_my_demo_returns_to_one_click_provisioning_state(
         for account in db_session.query(Account).filter(
             Account.user_id == user_id,
             Account.status == "ACTIVE",
+            Account.account_type.in_(("CHECKING", "SAVINGS")),
         )
     }
 
@@ -303,6 +307,7 @@ async def test_deprovision_my_demo_returns_to_one_click_provisioning_state(
     assert db_session.query(Account).filter(
         Account.user_id == user_id,
         Account.status == "ACTIVE",
+        Account.account_type.in_(("CHECKING", "SAVINGS")),
     ).count() == 2
     assert db_session.query(CreditAccount).filter(
         CreditAccount.customer_id == user_id,

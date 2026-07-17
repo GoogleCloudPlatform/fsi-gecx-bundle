@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The `analytics_curated` dataset contains Silver/Gold BigQuery views over bronze Datastream tables in `iceberg_catalog`. Those bronze tables are created asynchronously by Datastream, so curated views must not be a deployment gate.
+The `analytics_curated` dataset contains Silver/Gold BigQuery views over current-state Datastream replicas in `oltp_cdc`. Those source tables are created asynchronously by Datastream, so curated views must not be a deployment gate.
 
 This environment uses an explicit, idempotent reconciliation job instead:
 
@@ -16,7 +16,7 @@ This environment uses an explicit, idempotent reconciliation job instead:
 
 ## Runtime Flow
 
-1. Terraform creates Datastream in `NOT_STARTED` state and provisions `iceberg_catalog` plus `analytics_curated`.
+1. Terraform creates Datastream in `NOT_STARTED` state and provisions `oltp_cdc` plus `analytics_curated`.
 2. The database migration job creates PostgreSQL CDC prerequisites: replication grants, publication, and logical replication slot.
 3. The ordered release drains and pauses Datastream before a full reset because PostgreSQL `TRUNCATE` is not replicated.
 4. After reset, the release recreates stream-owned BigQuery tables with the configured freshness target, resumes Datastream, and requires every configured object backfill to complete.
@@ -51,7 +51,7 @@ Use the project placeholder in fully qualified table names:
 ```sql
 CREATE OR REPLACE VIEW `__PROJECT_ID__.analytics_curated.example_view` AS
 SELECT ...
-FROM `__PROJECT_ID__.iceberg_catalog.cards_transaction_authorization`;
+FROM `__PROJECT_ID__.oltp_cdc.cards_transaction_authorization`;
 ```
 
 Then add an entry to:
@@ -67,7 +67,7 @@ Example:
   "name": "example_view",
   "sql": "example_view.sql",
   "sources": [
-    "iceberg_catalog.cards_transaction_authorization"
+    "oltp_cdc.cards_transaction_authorization"
   ]
 }
 ```

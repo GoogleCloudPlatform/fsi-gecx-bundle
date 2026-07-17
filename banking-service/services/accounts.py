@@ -22,12 +22,18 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from models.identity import User
-from models.origination import Account, Application, DepositApplication, Transaction, AccountLedgerEntry
+from models.origination import Account, AccountLedgerEntry, Application, DepositApplication
 from models.authentication import ValidatedToken
 from repositories.accounts import AccountsRepository
 from services.profile import ProfileService
 from utils.database import enable_session_rbac_override
 from utils.internal_execution import InternalServiceContext, apply_internal_db_access
+from services.financial_journal import (
+    JournalEntrySpec,
+    ensure_credit_journal_account,
+    ensure_system_journal_account,
+    post_financial_transaction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +58,8 @@ class AccountsService:
         amount_cents: int,
         internal_context: InternalServiceContext | None = None,
     ) -> Dict[str, Any]:
+        if amount_cents <= 0:
+            raise HTTPException(status_code=400, detail="Payment amount must be positive.")
         if internal_context is not None:
             apply_internal_db_access(self.db, internal_context, "simulation:autopaydown")
 
@@ -73,31 +81,37 @@ class AccountsService:
         if not credit_acc:
             raise HTTPException(status_code=404, detail="Target credit account not found.")
 
-        # 4. Perform atomic double-entry ledger update on checking/savings
-        tx = Transaction(
+        # 4. Post deposit decrease and card-receivable decrease to the one
+        # canonical journal. The statement row below is a linked projection.
+        credit_journal_acc = ensure_credit_journal_account(self.db, credit_acc)
+        posting = post_financial_transaction(
+            self.db,
             idempotency_key=f"IDEMP-PAY-{uuid.uuid4().hex}",
             user_id=user.id,
-            status="COMPLETED",
-            description=f"Credit Card Bill Payment to Account ending in {str(credit_acc.id)[-4:]}"
+            description=f"Credit Card Bill Payment to Account ending in {str(credit_acc.id)[-4:]}",
+            source_type="CREDIT_CARD_BILL_PAYMENT",
+            source_references={
+                "source_account_id": str(deposit_acc.id),
+                "credit_account_id": str(credit_acc.id),
+            },
+            currency=credit_acc.currency or deposit_acc.currency or "USD",
+            entries=(
+                JournalEntrySpec(deposit_acc.id, "DEBIT", amount_cents),
+                JournalEntrySpec(credit_journal_acc.id, "CREDIT", amount_cents),
+            ),
         )
-        self.accounts_repo.add_transaction(tx)
-
-        debit_split = AccountLedgerEntry(
-            transaction_id=tx.id,
-            account_id=deposit_acc.id,
-            amount_cents=-amount_cents,
-            entry_type="CREDIT"
-        )
-        self.accounts_repo.add_account_ledger_entry(debit_split)
         deposit_acc.cleared_balance_cents -= amount_cents
 
         # 5. Decrement debt on credit card account and restore available credit
         credit_acc.cleared_balance_cents -= amount_cents
         from services.card_network import recalculate_available_credit
         recalculate_available_credit(self.db, credit_acc)
+        credit_journal_acc.cleared_balance_cents = credit_acc.cleared_balance_cents
+        credit_journal_acc.available_credit_cents = credit_acc.available_credit_cents
 
         card_payment_tx = PostedTransaction(
             account_id=credit_acc.id,
+            journal_transaction_id=posting.transaction.id,
             amount_cents=amount_cents,
             description="Bill Payment Received - Thank You"
         )
@@ -110,7 +124,9 @@ class AccountsService:
             {
                 "source_account_id": source_account_id,
                 "credit_account_id": credit_account_id,
-                "amount_cents": amount_cents
+                "amount_cents": amount_cents,
+                "transaction_id": str(posting.transaction.id),
+                "statement_transaction_id": str(card_payment_tx.id),
             }
         )
 
@@ -118,6 +134,7 @@ class AccountsService:
 
         return {
             "status": "SUCCESS",
+            "transaction_id": str(posting.transaction.id),
             "message": "Bill payment successfully processed.",
             "source_cleared_balance_cents": deposit_acc.cleared_balance_cents,
             "credit_cleared_balance_cents": credit_acc.cleared_balance_cents,
@@ -188,44 +205,28 @@ class AccountsService:
             self.db.add(dep_app)
         self.db.flush()
 
-        # If initial funding provided, post double-entry journal against clearing account
+        # If initial funding is provided, credit the deposit liability and debit
+        # the external-funding clearing account in the canonical journal.
         if request.initial_deposit_cents > 0:
-            sys_acc = self.db.query(Account).filter_by(account_number="SYSTEM_EXTERNAL_FUNDING", account_type="SYSTEM").first()
-            if not sys_acc:
-                sys_acc = Account(
-                    user_id=None,
-                    account_number="SYSTEM_EXTERNAL_FUNDING",
-                    account_type="SYSTEM",
-                    product_name="System Clearing Counterparty",
-                    cleared_balance_cents=0
-                )
-                self.db.add(sys_acc)
-                self.db.flush()
-
-            tx = Transaction(
+            sys_acc = ensure_system_journal_account(
+                self.db,
+                "SYSTEM_EXTERNAL_FUNDING",
+                "External funding clearing counterparty",
+            )
+            post_financial_transaction(
+                self.db,
                 idempotency_key=idempotency_key or f"IDEMP-DEP-{uuid.uuid4().hex}",
                 user_id=user.id,
-                status="COMPLETED",
-                description=f"Initial deposit funding for {request.product_name}"
+                description=f"Initial deposit funding for {request.product_name}",
+                source_type="INITIAL_DEPOSIT_FUNDING",
+                source_references={"account_id": str(new_acc.id), "application_id": str(app.id)},
+                currency=new_acc.currency or "USD",
+                entries=(
+                    JournalEntrySpec(sys_acc.id, "DEBIT", request.initial_deposit_cents),
+                    JournalEntrySpec(new_acc.id, "CREDIT", request.initial_deposit_cents),
+                ),
             )
-            self.db.add(tx)
-            self.db.flush()
-
-            debit_split = AccountLedgerEntry(
-                transaction_id=tx.id,
-                account_id=new_acc.id,
-                amount_cents=request.initial_deposit_cents,
-                entry_type="DEBIT"
-            )
-            credit_split = AccountLedgerEntry(
-                transaction_id=tx.id,
-                account_id=sys_acc.id,
-                amount_cents=request.initial_deposit_cents,
-                entry_type="CREDIT"
-            )
-            self.db.add(debit_split)
-            self.db.add(credit_split)
-            sys_acc.cleared_balance_cents -= request.initial_deposit_cents
+            sys_acc.cleared_balance_cents += request.initial_deposit_cents
 
         self.db.commit()
         self.db.refresh(new_acc)
@@ -256,6 +257,7 @@ class AccountsService:
         deposit_accounts = self.db.query(Account).filter(
             Account.user_id == user.id,
             Account.status == "ACTIVE",
+            Account.account_type.in_(["CHECKING", "SAVINGS"]),
         ).all()
 
         # Fetch credit accounts

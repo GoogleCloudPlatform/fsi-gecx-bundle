@@ -7,7 +7,7 @@ operational, and compliance analysis over the Nova Horizon banking data platform
 authorized users a natural-language analytics surface without introducing another data copy or
 embedding analytical logic in the banking application.
 
-The agent is grounded in an explicit, source-controlled allowlist of 19 BigQuery tables and views.
+The agent is grounded in an explicit, source-controlled allowlist of 21 BigQuery tables and views.
 It prefers reusable curated views for business questions, uses compliance views for audit evidence,
 and falls back to selected CDC tables only when curated data does not contain the required detail.
 
@@ -25,8 +25,9 @@ The agent is deployed independently of `banking-service` and `banking-ui`.
 flowchart LR
     AlloyDB["AlloyDB PostgreSQL"]
     Datastream["Datastream CDC"]
-    Iceberg["BigLake Iceberg tables<br/>iceberg_catalog"]
-    Audit["Compliance views and tables<br/>compliance_audit"]
+    CDC["BigQuery current-state replicas<br/>oltp_cdc"]
+    Iceberg["Catalog-native Iceberg audit history<br/>nova-audit-lakehouse"]
+    Audit["Logical compliance views<br/>compliance_audit"]
     Reconciler["Curated view reconciler"]
     Curated["Business analytics views<br/>analytics_curated"]
     Agent["Gemini Data Analytics DataAgent<br/>real-time-analytics"]
@@ -34,17 +35,18 @@ flowchart LR
     User["Authorized analyst"]
 
     AlloyDB --> Datastream
-    Datastream --> Iceberg
-    Iceberg --> Reconciler
+    Datastream --> CDC
+    CDC --> Reconciler
     Reconciler --> Curated
-    Iceberg --> Agent
+    CDC --> Agent
+    Iceberg --> Audit
     Audit --> Agent
     Curated --> Agent
     User --> Studio
     Studio --> Agent
     Agent -->|"Queries with user credentials"| Curated
     Agent -->|"Queries with user credentials"| Audit
-    Agent -->|"Bounded detail queries"| Iceberg
+    Agent -->|"Bounded operational detail queries"| CDC
 ```
 
 The DataAgent stores instructions and source metadata, not a separate copy of banking data. At
@@ -57,7 +59,7 @@ permissions.
 | :--- | :--- | :--- |
 | Curated analytics | `analytics_curated` | Preferred source for customer, geography, spend, fraud, offer, and scenario analysis. |
 | Compliance evidence | `compliance_audit` | Audit trails, control evidence, and bounded access to the raw audit outbox. |
-| CDC detail | `iceberg_catalog` | Selected cards, merchant, fraud operations, and retail-location tables when curated views lack required detail. |
+| Current-state CDC detail | `oltp_cdc` | Selected cards, merchant, fraud operations, and retail-location replicas when curated views lack required detail. |
 
 The allowlist is intentionally explicit. Dataset IAM grants access but does not automatically add
 every table in a dataset to the agent's knowledge sources. This keeps source selection reviewable,
@@ -67,8 +69,8 @@ The system instruction establishes these source-selection rules:
 
 1. Prefer `analytics_curated` for business metrics and trends.
 2. Prefer `compliance_audit` domain views for audit and control questions.
-3. Use selected `iceberg_catalog` tables only for unavailable detail.
-4. Treat `compliance_audit.raw_audit_outbox_cdc` as a bounded, last-resort source and never return
+3. Use selected `oltp_cdc` current-state replicas only for unavailable operational detail.
+4. Treat `compliance_audit.audit_events` as a bounded, last-resort source and never return
    raw payloads verbatim.
 
 For the CDC and curated-view lifecycle, see
@@ -114,7 +116,7 @@ sequenceDiagram
     Reconciler->>BQ: Validate CDC dependencies
     Reconciler->>BQ: Create or replace ready views
     Operator->>CB: Run trigger for branch or commit
-    CB->>BQ: Validate all 19 configured sources
+    CB->>BQ: Validate all 21 configured sources
     CB->>API: Create or update real-time-analytics
     Operator->>API: Run drift check
 ```
@@ -141,7 +143,7 @@ The Cloud Build service account needs:
 - Data Catalog Viewer on the project so it can add knowledge sources.
 - BigQuery Job User on the project.
 - BigQuery Metadata Viewer and Data Viewer on `analytics_curated`, `compliance_audit`, and
-  `iceberg_catalog`.
+  `oltp_cdc`.
 
 The DataAgent API validates knowledge sources with the deployment principal's credentials. Metadata
 access alone is insufficient because the principal must also be able to read each configured source.
@@ -166,7 +168,7 @@ The managed instruction applies several high-level safeguards:
 - Convert cent-denominated monetary fields before presentation.
 - Treat fraud signals as investigative indicators, not proof of wrongdoing.
 - Prefer aggregates and avoid exposing raw customer identifiers or audit payloads.
-- Identify freshness, missing partitions, and incomplete result sets.
+- Identify freshness, missing source tables, and incomplete result sets.
 - Reject sources outside the environment-local allowlist.
 - Limit each generated query with a configured maximum billed-byte budget.
 

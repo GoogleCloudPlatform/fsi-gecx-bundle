@@ -1,0 +1,13 @@
+{
+  "name": "Nova Audit Outbox to Catalog-Native Iceberg",
+  "description": "Validates audit relay envelopes and writes raw audit events and balanced financial entries through Managed Iceberg I/O.",
+  "parameters": [
+    {"name":"inputSubscription","label":"Audit Pub/Sub subscription","helpText":"Full projects/.../subscriptions/... path","isOptional":false},
+    {"name":"dlqTopic","label":"Malformed-event DLQ topic","helpText":"Full projects/.../topics/... path","isOptional":false},
+    {"name":"warehouse","label":"BigLake catalog warehouse","helpText":"bl://projects/PROJECT/catalogs/CATALOG","isOptional":false},
+    {"name":"catalogName","label":"Managed I/O catalog name","helpText":"Local catalog alias","isOptional":true},
+    {"name":"auditTable","label":"Audit table","helpText":"Namespace-qualified Iceberg table","isOptional":true},
+    {"name":"ledgerTable","label":"Financial ledger table","helpText":"Namespace-qualified Iceberg table","isOptional":true},
+    {"name":"commitFrequencySeconds","label":"Commit frequency","helpText":"Seconds between batched Iceberg commits","isOptional":true,"regexes":["^[1-9][0-9]*$"]}
+  ]
+}

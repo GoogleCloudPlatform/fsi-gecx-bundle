@@ -14,7 +14,7 @@
 
 from typing import Optional
 import datetime
-from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Integer, Index, Text, Float, Numeric, Boolean
+from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Integer, Index, Text, Float, Numeric, Boolean, CheckConstraint
 from utils.database import UniversalUUID as UUID, generate_uuid
 from sqlalchemy.orm import relationship
 from utils.database import Base
@@ -46,6 +46,7 @@ class Account(Base):
     __table_args__ = (
         Index("idx_accounts_user_id", "user_id"),
         Index("idx_accounts_product_code", "product_code"),
+        Index("idx_accounts_credit_account_id", "credit_account_id", unique=True),
         {'schema': 'ledger'},
     )
 
@@ -54,7 +55,8 @@ class Account(Base):
     account_number = Column(String(50), unique=True, nullable=False)
     account_type = Column(String(30), nullable=False)  # 'CREDIT_CARD', 'CHECKING', 'SAVINGS', 'SYSTEM'
     product_name = Column(String(100), nullable=False)
-    product_code = Column(String(50), ForeignKey("catalog.deposit_products.product_code", ondelete="RESTRICT"), nullable=False, default="CHECKING_EVERYDAY")
+    product_code = Column(String(50), ForeignKey("catalog.deposit_products.product_code", ondelete="RESTRICT"), nullable=True, default="CHECKING_EVERYDAY")
+    credit_account_id = Column(UUID(as_uuid=True), ForeignKey("cards.credit_accounts.id", ondelete="RESTRICT"), nullable=True, unique=True)
     routing_number = Column(String(9), nullable=False, default="021000021")
     status = Column(String(20), nullable=False, default="ACTIVE")
     credit_limit_cents = Column(BigInteger, nullable=False, default=0)
@@ -241,6 +243,8 @@ class AccountLedgerEntry(Base):
     __table_args__ = (
         Index("idx_ledger_account_id", "account_id"),
         Index("idx_ledger_transaction_id", "transaction_id"),
+        CheckConstraint("amount_cents > 0", name="ck_account_ledger_positive_amount"),
+        CheckConstraint("entry_type IN ('DEBIT', 'CREDIT')", name="ck_account_ledger_entry_type"),
         {'schema': 'ledger'},
     )
 

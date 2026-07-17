@@ -12,7 +12,7 @@ SELECT
   fraud_risk_score,
   status,
   created_at AS swipe_timestamp
-FROM `__PROJECT_ID__.iceberg_catalog.cards_transaction_authorization`
+FROM `__PROJECT_ID__.oltp_cdc.cards_transaction_authorization`
 WHERE COALESCE(fraud_risk_score, 0) > 20
    OR status = 'FLAGGED'
 ORDER BY created_at DESC

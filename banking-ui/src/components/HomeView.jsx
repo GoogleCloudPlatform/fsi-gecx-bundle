@@ -21,6 +21,7 @@ import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
+import ConsoleAccessStep from './ConsoleAccessStep.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 
@@ -445,6 +446,7 @@ function HomeView({
                     <Shield className="w-8 h-8 animate-pulse" />
                   </div>
                   <div className="space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Step 1</p>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white">Set up your Sandbox</h3>
                     <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400 max-w-sm">
                       A database profile has been provisioned for <span className="text-emerald-400 font-semibold">{fbUser?.email}</span>, but you don't have any active accounts. 
@@ -460,6 +462,9 @@ function HomeView({
                   >
                     {isProvisioning ? "Seeding accounts & transaction history..." : "Provision Demo Suite"}
                   </AnalyticsButton>
+                  <div className="w-full pt-1">
+                    <ConsoleAccessStep analyticsId="home_view_console_access" />
+                  </div>
                 </div>
               )}
             </div>

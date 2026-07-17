@@ -1,5 +1,10 @@
 # AlloyDB Demo Operations Runbook
 
+For the routine build, qualification, and promotion procedure, start with
+[Build and deploy](build_and_deploy.md). This runbook covers AlloyDB-specific
+operations, recovery, CDC diagnosis, and the historical one-time Cloud SQL
+cutover.
+
 ## Environment roles
 
 - Evo and each contributor-owned project are developer environments. Any configured developer environment can qualify a release candidate.
@@ -21,23 +26,25 @@ Additional runtime or lifecycle principals may remain in the list when release t
 
 The promotion target's `cloudbuild-terraform-sa` must also appear in `release_manifest_reader_members`. These grants belong to the qualifying source project because it owns the release manifest bucket and immutable image repository. Do not repair a failed promotion with ad hoc project-wide roles; update the source environment's Terraform membership lists and apply them there.
 
-Use `alloydb-release-qualify` in the selected developer project. Supply the full Git commit in `_RELEASE_COMMIT`. On the one-time destructive cutover, also override `_ALLOW_CLOUD_SQL_CUTOVER=true`; this records and retains a final Cloud SQL backup before deleting the legacy instance.
+Use `release-qualify` in the selected developer project. Supply the full Git commit in `_RELEASE_COMMIT`. On the one-time destructive cutover, also override `_ALLOW_CLOUD_SQL_CUTOVER=true`; this records and retains a final Cloud SQL backup before deleting the legacy instance.
 
 The trigger applies Terraform and then runs:
 
 1. `banking-db-bootstrap`
 2. `banking-db-migrate`
 3. `banking-db-reconcile`
-4. immutable-digest service rollout
-5. Datastream drain/pause and `banking-db-reset`
-6. BigQuery federation reconciliation
-7. BigQuery CDC destination recreation and complete Datastream backfill
-8. curated-view reconciliation
-9. service and analytics smoke tests
+4. catalog-native Iceberg namespace/table and BigQuery-view bootstrap
+5. Dataflow audit/financial-ledger pipeline build and launch/update
+6. immutable-digest service rollout
+7. Datastream drain/pause and `banking-db-reset`
+8. Knowledge Catalog and BigQuery federation reconciliation
+9. BigQuery CDC destination recreation and complete Datastream backfill
+10. curated-view reconciliation
+11. service, analytics, relay, and Iceberg smoke tests
 
 A successful qualification writes `gs://PROJECT_ID-fsi-release-manifests/alloydb/COMMIT/qualify.json`.
 
-To promote, run `alloydb-release-promote` in `fsi-demo-1841` from the same commit, provide the qualification manifest URI, and approve the build. Promotion verifies and deploys the recorded image digests; it does not rebuild images or use `latest`.
+To promote, run `release-promote` in `fsi-demo-1841` from the same commit, provide the qualification manifest URI, and approve the build. Promotion verifies and deploys the recorded image digests; it does not rebuild images or use `latest`.
 
 ## Connection diagnosis
 
@@ -58,11 +65,14 @@ This rebuild is required because Datastream does not replicate PostgreSQL `TRUNC
 
 ## CDC and federation health
 
-- Datastream stream: `gcloud datastream streams describe banking-alloydb-cdc-stream --location us-central1`.
+- Datastream stream: `gcloud datastream streams describe banking-alloydb-oltp-cdc-stream --location us-central1`.
 - Publication: `SELECT * FROM pg_publication WHERE pubname = 'datastream_publication';`
 - Slot: `SELECT slot_name, active, restart_lsn, confirmed_flush_lsn FROM pg_replication_slots WHERE slot_name = 'datastream_alloydb_replication_slot';`
 - Bridge: verify the `datastream-alloydb-proxy` systemd unit runs the digest-pinned `gcr.io/dms-images/tcp-proxy` image in host-network mode, inspect serial output, and verify TCP 5432 is allowed only from `172.16.1.0/29`.
 - Federation: run `deployment/scripts/reconcile_alloydb_federation.sh`; it verifies `EXTERNAL_QUERY(..., 'SELECT 1')`.
+- Audit relay: execute `audit-outbox-relay` once and verify its checkpoint advances with no old-message alert.
+- Dataflow: verify `nova-audit-iceberg` is running, the Pub/Sub backlog is draining, and the Iceberg DLQ is empty.
+- Catalog interoperability: run `deployment/scripts/validate_lakehouse_interoperability.sh`; it reads catalog-native Iceberg and native BigQuery CDC tables in one Spark session.
 
 If the slot is inactive, check the bridge and Datastream source profile before recreating it. Never drop an active slot merely to clear lag; a backfill decision must be explicit.
 
@@ -77,10 +87,11 @@ The final pre-migration Cloud SQL backup identifier is stored in the first succe
 ## Demo preflight
 
 - Banking, voice, and data-generator revisions reference immutable digests from the current manifest.
-- `banking-db-reconcile` succeeds with expected Alembic revision `2ea57c78ba89`.
+- `banking-db-reconcile` succeeds with expected Alembic revision `7c4f2a9d1e63`.
 - Banking `/health`, authenticated voice `/`, and data-generator `/health` return success.
 - A presenter reset/seed completes.
 - Datastream is running, every configured backfill completed, and recent rows appear in BigQuery without pre-reset residue.
 - BigQuery AlloyDB federation returns `SELECT 1`.
+- The audit relay cursor advances, `nova-audit-iceberg` is running, and the catalog-native audit and ledger views return balanced, deduplicated rows.
 - Knowledge Catalog sync and the Real Time Analytics agent source check succeed.
 - Run one voice-support card workflow, one push notification, and the VIP Mexico-spend analytics question.

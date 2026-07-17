@@ -9,6 +9,7 @@ from scripts.database_lifecycle import (
     SUPPORT_RW_ROLE,
     VIEWER_RO_ROLE,
     VOICE_RW_ROLE,
+    AUDIT_RELAY_ROLE,
     LifecycleConfig,
     password_database_url,
     quote_identifier,
@@ -23,7 +24,7 @@ def test_database_role_manifest_is_explicit_and_least_privilege() -> None:
         cdc_user="banking_bq_connector",
         create_missing_principals=False,
         reconcile_cdc=True,
-        expected_revision="2ea57c78ba89",
+        expected_revision="7c4f2a9d1e63",
         support_users=("support@example.com",),
         viewer_users=("viewer@example.com",),
     )
@@ -39,6 +40,7 @@ def test_database_role_manifest_is_explicit_and_least_privilege() -> None:
         SUPPORT_RW_ROLE: ("support@example.com",),
         VIEWER_RO_ROLE: ("viewer@example.com",),
         CDC_RO_ROLE: ("banking_bq_connector",),
+        AUDIT_RELAY_ROLE: ("audit-outbox-relay-sa@example-project.iam",),
     }
 
 

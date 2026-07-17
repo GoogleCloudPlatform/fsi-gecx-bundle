@@ -34,7 +34,9 @@ SCHEMAS = (
     "merchants",
     "voice_support_sessions",
 )
-RESET_SCHEMAS = tuple(s for s in SCHEMAS if s not in {"admin", "voice_support_sessions"})
+RESET_SCHEMAS = tuple(
+    s for s in SCHEMAS if s not in {"admin", "voice_support_sessions"}
+)
 CDC_SCHEMAS = (
     "catalog",
     "cards",
@@ -56,6 +58,7 @@ RESET_RW_ROLE = "banking_reset_rw"
 SUPPORT_RW_ROLE = "banking_support_rw"
 VIEWER_RO_ROLE = "banking_viewer_ro"
 CDC_RO_ROLE = "banking_cdc_ro"
+AUDIT_RELAY_ROLE = "audit_outbox_relay"
 DATASTREAM_REPLICATION_SLOT = "datastream_alloydb_replication_slot"
 
 GROUP_ROLES = (
@@ -69,6 +72,7 @@ GROUP_ROLES = (
     SUPPORT_RW_ROLE,
     VIEWER_RO_ROLE,
     CDC_RO_ROLE,
+    AUDIT_RELAY_ROLE,
 )
 
 RW_SCHEMA_ACCESS = {
@@ -107,7 +111,9 @@ def quote_identifier(value: str) -> str:
 
 
 def comma_values(name: str) -> tuple[str, ...]:
-    return tuple(value.strip() for value in os.getenv(name, "").split(",") if value.strip())
+    return tuple(
+        value.strip() for value in os.getenv(name, "").split(",") if value.strip()
+    )
 
 
 def env_flag(name: str, default: bool = False) -> bool:
@@ -139,7 +145,9 @@ class LifecycleConfig:
     def from_env(cls) -> "LifecycleConfig":
         project_id = os.getenv("PROJECT_ID", "").strip()
         if not project_id:
-            raise RuntimeError("PROJECT_ID is required for database lifecycle operations.")
+            raise RuntimeError(
+                "PROJECT_ID is required for database lifecycle operations."
+            )
         return cls(
             project_id=project_id,
             target_database=os.getenv("DB_TARGET_DATABASE", "banking").strip(),
@@ -177,12 +185,17 @@ class LifecycleConfig:
             SUPPORT_RW_ROLE: self.support_users,
             VIEWER_RO_ROLE: self.viewer_users,
             CDC_RO_ROLE: (self.cdc_user,),
+            AUDIT_RELAY_ROLE: (
+                service_account_database_user("audit-outbox-relay-sa", self.project_id),
+            ),
         }
 
     @property
     def principals(self) -> tuple[str, ...]:
         return tuple(
-            sorted({member for members in self.memberships.values() for member in members})
+            sorted(
+                {member for members in self.memberships.values() for member in members}
+            )
         )
 
 
@@ -227,9 +240,7 @@ def bootstrap(connection: sa.Connection, config: LifecycleConfig) -> dict[str, o
     qdatabase = quote_identifier(config.target_database)
     qowner = quote_identifier(SCHEMA_OWNER_ROLE)
     connection.execute(
-        sa.text(
-            f"GRANT CONNECT, CREATE, TEMPORARY ON DATABASE {qdatabase} TO {qowner}"
-        )
+        sa.text(f"GRANT CONNECT, CREATE, TEMPORARY ON DATABASE {qdatabase} TO {qowner}")
     )
     return {
         "phase": "bootstrap",
@@ -253,7 +264,7 @@ def ensure_database(engine: sa.Engine, config: LifecycleConfig) -> None:
 
 
 def grant_database_connect(connection: sa.Connection, roles: Iterable[str]) -> None:
-    database = connection.execute(sa.text("SELECT current_database()")) .scalar_one()
+    database = connection.execute(sa.text("SELECT current_database()")).scalar_one()
     for role in roles:
         connection.execute(
             sa.text(
@@ -263,7 +274,60 @@ def grant_database_connect(connection: sa.Connection, roles: Iterable[str]) -> N
         )
 
 
-def reconcile_ownership(connection: sa.Connection) -> None:
+def reconcile_ownership(connection: sa.Connection, config: LifecycleConfig) -> None:
+    """Move application objects to the stable owner, including runtime-created ones.
+
+    PostgreSQL requires the actor changing an object's owner to be a member of
+    both the current and destination roles. AlloyDB's restricted superuser does
+    not bypass that rule. Runtime libraries can create objects as their IAM
+    login (ADK's session metadata is one example), so assume only known
+    application roles for the duration of this transaction and revoke those
+    memberships after the transfer.
+    """
+    current_user = connection.execute(sa.text("SELECT current_user")).scalar_one()
+    known_owners = set(config.principals) | set(GROUP_ROLES)
+    owner_rows = connection.execute(
+        sa.text(
+            """
+            SELECT DISTINCT owner
+            FROM (
+                SELECT pg_get_userbyid(n.nspowner) AS owner
+                FROM pg_namespace n
+                WHERE n.nspname = ANY(:schemas)
+                UNION ALL
+                SELECT pg_get_userbyid(c.relowner) AS owner
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = ANY(:schemas)
+                  AND c.relkind IN ('r', 'p', 'v', 'm', 'S')
+            ) owned
+            WHERE owner <> :target_owner
+              AND owner <> :current_user
+            ORDER BY owner
+            """
+        ),
+        {
+            "schemas": list(SCHEMAS),
+            "target_owner": SCHEMA_OWNER_ROLE,
+            "current_user": current_user,
+        },
+    ).scalars()
+    temporary_memberships: list[str] = []
+    for owner in owner_rows:
+        if owner not in known_owners:
+            raise RuntimeError(
+                f"Refusing to assume unexpected object owner {owner!r}; "
+                "add it to the lifecycle role manifest before reconciliation."
+            )
+        if not membership_exists(connection, owner, current_user):
+            connection.execute(
+                sa.text(
+                    f"GRANT {quote_identifier(owner)} TO "
+                    f"{quote_identifier(current_user)}"
+                )
+            )
+            temporary_memberships.append(owner)
+
     for schema in SCHEMAS:
         connection.execute(
             sa.text(
@@ -286,11 +350,27 @@ def reconcile_ownership(connection: sa.Connection) -> None:
         {"schemas": list(SCHEMAS)},
     ).all()
     for schema, name, kind in objects:
-        object_type = "SEQUENCE" if kind == "S" else "MATERIALIZED VIEW" if kind == "m" else "VIEW" if kind == "v" else "TABLE"
+        object_type = (
+            "SEQUENCE"
+            if kind == "S"
+            else "MATERIALIZED VIEW"
+            if kind == "m"
+            else "VIEW"
+            if kind == "v"
+            else "TABLE"
+        )
         connection.execute(
             sa.text(
                 f"ALTER {object_type} {quote_identifier(schema)}.{quote_identifier(name)} "
                 f"OWNER TO {quote_identifier(SCHEMA_OWNER_ROLE)}"
+            )
+        )
+
+    for owner in temporary_memberships:
+        connection.execute(
+            sa.text(
+                f"REVOKE {quote_identifier(owner)} FROM "
+                f"{quote_identifier(current_user)}"
             )
         )
 
@@ -394,7 +474,17 @@ def reconcile_grants(connection: sa.Connection) -> None:
         )
     )
 
-    for role in (
+    qrelay = quote_identifier(AUDIT_RELAY_ROLE)
+    connection.execute(sa.text(f"GRANT USAGE ON SCHEMA audit TO {qrelay}"))
+    connection.execute(sa.text(f"GRANT SELECT ON TABLE audit.audit_outbox TO {qrelay}"))
+    connection.execute(
+        sa.text(
+            "GRANT SELECT, INSERT, UPDATE ON TABLE audit.outbox_relay_checkpoint "
+            f"TO {qrelay}"
+        )
+    )
+
+    immutable_roles = (
         BANKING_RW_ROLE,
         KYC_RW_ROLE,
         LEDGER_RW_ROLE,
@@ -403,16 +493,23 @@ def reconcile_grants(connection: sa.Connection) -> None:
         SUPPORT_RW_ROLE,
         VIEWER_RO_ROLE,
         CDC_RO_ROLE,
-    ):
-        connection.execute(
-            sa.text(
-                "REVOKE UPDATE, DELETE ON TABLE ledger.account_ledger FROM "
-                f"{quote_identifier(role)}"
-            )
-        )
-    connection.execute(
-        sa.text("REVOKE UPDATE, DELETE ON TABLE ledger.account_ledger FROM PUBLIC")
+        AUDIT_RELAY_ROLE,
     )
+    for table in (
+        "ledger.account_ledger",
+        "cards.posted_transactions",
+        "audit.audit_outbox",
+    ):
+        for role in immutable_roles:
+            connection.execute(
+                sa.text(
+                    f"REVOKE UPDATE, DELETE, TRUNCATE ON TABLE {table} FROM "
+                    f"{quote_identifier(role)}"
+                )
+            )
+        connection.execute(
+            sa.text(f"REVOKE UPDATE, DELETE, TRUNCATE ON TABLE {table} FROM PUBLIC")
+        )
 
 
 def reconcile_cdc(connection: sa.Connection, config: LifecycleConfig) -> None:
@@ -446,7 +543,7 @@ def ensure_replication_slot(engine: sa.Engine, config: LifecycleConfig) -> None:
         if not slot_exists:
             connection.execute(
                 sa.text(
-                    "SELECT pg_create_logical_replication_slot(" 
+                    "SELECT pg_create_logical_replication_slot("
                     f"'{DATASTREAM_REPLICATION_SLOT}', 'pgoutput')"
                 )
             )
@@ -459,7 +556,7 @@ def reconcile(
     replication_engine: sa.Engine | None = None,
 ) -> dict[str, object]:
     with engine.begin() as connection:
-        reconcile_ownership(connection)
+        reconcile_ownership(connection, config)
         reconcile_grants(connection)
         if config.reconcile_cdc:
             reconcile_cdc(connection, config)
@@ -473,8 +570,10 @@ def password_database_url(url: str, password: str) -> str:
         raise RuntimeError(
             "CDC_DATABASE_URL and CDC_DB_PASSWORD are required for CDC reconciliation."
         )
-    return sa.engine.make_url(url).set(password=password).render_as_string(
-        hide_password=False
+    return (
+        sa.engine.make_url(url)
+        .set(password=password)
+        .render_as_string(hide_password=False)
     )
 
 
@@ -574,17 +673,35 @@ def verify(
         if global_epoch is None:
             errors.append("voice-support GLOBAL reset epoch is missing")
 
-        for role in (BANKING_RW_ROLE, SUPPORT_RW_ROLE, VIEWER_RO_ROLE, CDC_RO_ROLE):
-            can_update, can_delete = connection.execute(
-                sa.text(
-                    "SELECT "
-                    "has_table_privilege(:role, 'ledger.account_ledger', 'UPDATE'), "
-                    "has_table_privilege(:role, 'ledger.account_ledger', 'DELETE')"
-                ),
-                {"role": role},
-            ).one()
-            if can_update or can_delete:
-                errors.append(f"immutable ledger permissions are too broad for {role}")
+        for table in (
+            "ledger.account_ledger",
+            "cards.posted_transactions",
+            "audit.audit_outbox",
+        ):
+            for role in (
+                BANKING_RW_ROLE,
+                KYC_RW_ROLE,
+                LEDGER_RW_ROLE,
+                VOICE_RW_ROLE,
+                DATA_GENERATOR_RW_ROLE,
+                SUPPORT_RW_ROLE,
+                VIEWER_RO_ROLE,
+                CDC_RO_ROLE,
+                AUDIT_RELAY_ROLE,
+            ):
+                can_update, can_delete, can_truncate = connection.execute(
+                    sa.text(
+                        "SELECT "
+                        "has_table_privilege(:role, :table, 'UPDATE'), "
+                        "has_table_privilege(:role, :table, 'DELETE'), "
+                        "has_table_privilege(:role, :table, 'TRUNCATE')"
+                    ),
+                    {"role": role, "table": table},
+                ).one()
+                if can_update or can_delete or can_truncate:
+                    errors.append(
+                        f"immutable table permissions are too broad for {role}: {table}"
+                    )
 
         if config.reconcile_cdc and role_exists(connection, config.cdc_user):
             cdc_replication = connection.execute(
@@ -594,7 +711,9 @@ def verify(
             if not cdc_replication:
                 errors.append(f"CDC role lacks REPLICATION: {config.cdc_user}")
             publication = connection.execute(
-                sa.text("SELECT 1 FROM pg_publication WHERE pubname = 'datastream_publication'")
+                sa.text(
+                    "SELECT 1 FROM pg_publication WHERE pubname = 'datastream_publication'"
+                )
             ).scalar()
             if not publication:
                 errors.append("Datastream publication is missing")
