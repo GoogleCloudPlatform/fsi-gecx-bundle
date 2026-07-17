@@ -39,6 +39,4 @@ gcloud dataproc batches submit pyspark "${script_uri}" \
   --service-account "${service_account}" \
   --subnet fsi-gecx-subnet \
   --properties "${properties}" \
-  --deps-bucket "${PROJECT_ID}_audit-dataflow-staging" \
-  --wait
-
+  --deps-bucket "${PROJECT_ID}_audit-dataflow-staging"
