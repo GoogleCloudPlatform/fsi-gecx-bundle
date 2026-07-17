@@ -46,6 +46,12 @@ from models.settings import SystemSetting
 from models.reference import MerchantCategoryCode
 from services.taxonomy_service import TaxonomyService
 from services.merchant_service import MerchantEnrichmentService
+from services.financial_journal import (
+    JournalEntrySpec,
+    ensure_credit_journal_account,
+    ensure_system_journal_account,
+    post_financial_transaction,
+)
 logger = logging.getLogger(__name__)
 RESOURCE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "data")
 DEMO_SCRIPT_DOMAINS = {"google.com", "gcp.solutions", "altostrat.com", "nova.horizon.test"}
@@ -450,8 +456,11 @@ def clean_database(db: Session) -> None:
     from models.support import Escalation
     from models.identity import UserDevice, UserSecureMessage
     from models.origination import Application, MortgageApplication, CreditCardApplication, DepositApplication, ApplicationArtifact
+    from models.audit import AuditOutbox, OutboxRelayCheckpoint
 
     reset_models = [
+        OutboxRelayCheckpoint,
+        AuditOutbox,
         Escalation,
         FraudCaseAction,
         FraudAlert,
@@ -523,6 +532,8 @@ def clean_database(db: Session) -> None:
     db.query(MerchantStore).delete(synchronize_session=False)
     db.query(MerchantMaster).delete(synchronize_session=False)
     db.query(MerchantCategoryCode).delete(synchronize_session=False)
+    db.query(OutboxRelayCheckpoint).delete(synchronize_session=False)
+    db.query(AuditOutbox).delete(synchronize_session=False)
 
     db.flush()
 
@@ -826,112 +837,108 @@ def _seed_user_transactions(
     first_name: str,
     last_name: str,
     *,
-    clear_existing: bool = True,
+    clear_existing: bool = False,
 ) -> None:
     """Seeds consistent pending and posted transactions across checking, savings, and credit card accounts."""
     now = datetime.datetime.now(datetime.timezone.utc)
     card_token = card.card_token if card else None
 
-    # 1. Clear existing transactions only for reseeding flows. First-time provisioning uses
-    # brand-new accounts and must not issue no-op deletes against the append-only ledger.
+    # Canonical history is append-only. Destructive demo resets must use the
+    # privileged database lifecycle reset, which removes whole related tables in
+    # dependency order rather than leaving one-sided journal transactions.
     if clear_existing:
-        if checking_acc:
-            db.query(AccountLedgerEntry).filter(AccountLedgerEntry.account_id == checking_acc.id).delete()
-        if savings_acc:
-            db.query(AccountLedgerEntry).filter(AccountLedgerEntry.account_id == savings_acc.id).delete()
-        if cred_acc:
-            db.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == cred_acc.id).delete()
-            db.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).delete()
+        raise ValueError(
+            "Per-account destructive reseeding is not supported for the canonical journal; "
+            "run the privileged demo reset workflow instead."
+        )
+
+    seed_clearing = ensure_system_journal_account(
+        db,
+        "SYSTEM_DEMO_SEED_CLEARING",
+        "Synthetic demo history clearing",
+    )
 
     # 2. Checking Account Seeding (Pending & Posted)
     if checking_acc:
-        chk_pending_1 = Transaction(
-            id=uuid.uuid4(),
-            idempotency_key=f"idemp_chk_p1_{uuid.uuid4()}",
-            user_id=user_uuid,
-            status="PENDING",
-            description="Target Store #1042 - Pending Debit Hold"
-        )
-        chk_p1_entry = AccountLedgerEntry(
-            entry_id=uuid.uuid4(),
-            transaction_id=chk_pending_1.id,
-            account_id=checking_acc.id,
-            amount_cents=4550,
-            entry_type="CREDIT",
-            posted_at=now - datetime.timedelta(hours=4)
-        )
-        chk_pending_2 = Transaction(
-            id=uuid.uuid4(),
-            idempotency_key=f"idemp_chk_p2_{uuid.uuid4()}",
-            user_id=user_uuid,
-            status="PENDING",
-            description="Amazon.com - Pending Authorization"
-        )
-        chk_p2_entry = AccountLedgerEntry(
-            entry_id=uuid.uuid4(),
-            transaction_id=chk_pending_2.id,
-            account_id=checking_acc.id,
-            amount_cents=8999,
-            entry_type="CREDIT",
-            posted_at=now - datetime.timedelta(hours=2)
-        )
-        db.add_all([chk_pending_1, chk_p1_entry, chk_pending_2, chk_p2_entry])
+        for description, amount, hours_ago in (
+            ("Target Store #1042 - Pending Debit Hold", 4550, 4),
+            ("Amazon.com - Pending Authorization", 8999, 2),
+        ):
+            posting = post_financial_transaction(
+                db,
+                idempotency_key=f"seed-checking-hold:{checking_acc.id}:{uuid.uuid4()}",
+                user_id=user_uuid,
+                description=description,
+                source_type="SEEDED_DEPOSIT_HOLD",
+                source_references={"account_id": str(checking_acc.id)},
+                currency=checking_acc.currency or "USD",
+                posted_at=now - datetime.timedelta(hours=hours_ago),
+                entries=(
+                    JournalEntrySpec(checking_acc.id, "DEBIT", amount),
+                    JournalEntrySpec(seed_clearing.id, "CREDIT", amount),
+                ),
+            )
+            posting.transaction.status = "PENDING"
 
         chk_posted_items = [
-            ("Direct Deposit - Employer Payroll", 250000, "DEBIT", 12),
-            ("Con Edison Electric Utility", 12000, "CREDIT", 10),
-            ("Whole Foods Market", 14520, "CREDIT", 8),
-            ("Venmo Payment - Rent", 120000, "CREDIT", 6),
-            ("Spotify USA Subscription", 1699, "CREDIT", 5),
-            ("Shell Gas Station", 4850, "CREDIT", 4),
-            ("Apple Store Online", 12900, "CREDIT", 3),
-            ("Trader Joe's Grocery", 8540, "CREDIT", 1),
+            ("Direct Deposit - Employer Payroll", 250000, "CREDIT", 12),
+            ("Con Edison Electric Utility", 12000, "DEBIT", 10),
+            ("Whole Foods Market", 14520, "DEBIT", 8),
+            ("Venmo Payment - Rent", 120000, "DEBIT", 6),
+            ("Spotify USA Subscription", 1699, "DEBIT", 5),
+            ("Shell Gas Station", 4850, "DEBIT", 4),
+            ("Apple Store Online", 12900, "DEBIT", 3),
+            ("Trader Joe's Grocery", 8540, "DEBIT", 1),
         ]
         for desc, amount, etype, days_ago in chk_posted_items:
-            tx = Transaction(
-                id=uuid.uuid4(),
-                idempotency_key=f"idemp_chk_{days_ago}_{uuid.uuid4()}",
+            counter_direction = "DEBIT" if etype == "CREDIT" else "CREDIT"
+            post_financial_transaction(
+                db,
+                idempotency_key=f"seed-checking:{checking_acc.id}:{days_ago}:{uuid.uuid4()}",
                 user_id=user_uuid,
-                status="POSTED",
-                description=desc
+                description=desc,
+                source_type="SEEDED_DEPOSIT_TRANSACTION",
+                source_references={"account_id": str(checking_acc.id)},
+                currency=checking_acc.currency or "USD",
+                posted_at=now - datetime.timedelta(days=days_ago, hours=random.randint(1, 10)),
+                entries=(
+                    JournalEntrySpec(checking_acc.id, etype, amount),
+                    JournalEntrySpec(seed_clearing.id, counter_direction, amount),
+                ),
             )
-            entry = AccountLedgerEntry(
-                entry_id=uuid.uuid4(),
-                transaction_id=tx.id,
-                account_id=checking_acc.id,
-                amount_cents=amount,
-                entry_type=etype,
-                posted_at=now - datetime.timedelta(days=days_ago, hours=random.randint(1, 10))
-            )
-            db.add_all([tx, entry])
 
     # 3. Savings Account Seeding (Posted)
     if savings_acc:
         sav_items = [
-            ("Monthly Interest Paid", 4512, "DEBIT", 14),
-            ("Automated Transfer from Checking", 50000, "DEBIT", 7),
-            ("Online Transfer to Checking", 20000, "CREDIT", 2),
+            ("Monthly Interest Paid", 4512, "CREDIT", 14),
+            ("Automated Transfer from Checking", 50000, "CREDIT", 7),
+            ("Online Transfer to Checking", 20000, "DEBIT", 2),
         ]
         for desc, amount, etype, days_ago in sav_items:
-            tx = Transaction(
-                id=uuid.uuid4(),
-                idempotency_key=f"idemp_sav_{days_ago}_{uuid.uuid4()}",
+            counter_direction = "DEBIT" if etype == "CREDIT" else "CREDIT"
+            post_financial_transaction(
+                db,
+                idempotency_key=f"seed-savings:{savings_acc.id}:{days_ago}:{uuid.uuid4()}",
                 user_id=user_uuid,
-                status="POSTED",
-                description=desc
+                description=desc,
+                source_type="SEEDED_DEPOSIT_TRANSACTION",
+                source_references={"account_id": str(savings_acc.id)},
+                currency=savings_acc.currency or "USD",
+                posted_at=now - datetime.timedelta(days=days_ago, hours=random.randint(1, 10)),
+                entries=(
+                    JournalEntrySpec(savings_acc.id, etype, amount),
+                    JournalEntrySpec(seed_clearing.id, counter_direction, amount),
+                ),
             )
-            entry = AccountLedgerEntry(
-                entry_id=uuid.uuid4(),
-                transaction_id=tx.id,
-                account_id=savings_acc.id,
-                amount_cents=amount,
-                entry_type=etype,
-                posted_at=now - datetime.timedelta(days=days_ago, hours=random.randint(1, 10))
-            )
-            db.add_all([tx, entry])
 
     # 4. Credit Card Seeding (Pending Authorizations & Posted Transactions inserted as historical state)
     if cred_acc and card_token:
+        credit_journal_account = ensure_credit_journal_account(db, cred_acc)
+        card_clearing = ensure_system_journal_account(
+            db,
+            "SYSTEM_CARD_MERCHANT_CLEARING",
+            "Card network merchant settlement clearing",
+        )
         # Assign a consistent geographical home metro and international travel trip for this customer's demo card
         from models.identity import User
         user_obj = db.query(User).filter(User.id == user_uuid).first()
@@ -965,18 +972,38 @@ def _seed_user_transactions(
                 expires_at=ovr_created_at + datetime.timedelta(days=7),
             )
             db.add(ovr_auth)
-            db.add(
-                PostedTransaction(
+            posting = post_financial_transaction(
+                db,
+                idempotency_key=(
+                    f"seed-card-fee:{cred_acc.id}:{card.id}:"
+                    f"{ovr_auth.retrieval_reference_number}"
+                ),
+                user_id=user_uuid,
+                description="Overdraft Fee",
+                source_type="SEEDED_CARD_SETTLEMENT",
+                source_references={
+                    "credit_account_id": str(cred_acc.id),
+                    "authorization_id": str(ovr_auth.id),
+                    "retrieval_reference_number": ovr_auth.retrieval_reference_number,
+                },
+                currency=cred_acc.currency or "USD",
+                posted_at=ovr_posted_at,
+                entries=(
+                    JournalEntrySpec(credit_journal_account.id, "DEBIT", 3500),
+                    JournalEntrySpec(card_clearing.id, "CREDIT", 3500),
+                ),
+            )
+            db.add(PostedTransaction(
                     id=uuid.uuid4(),
                     account_id=cred_acc.id,
                     authorization_id=ovr_auth.id,
+                    journal_transaction_id=posting.transaction.id,
                     auth_code=ovr_auth.auth_code,
                     retrieval_reference_number=ovr_auth.retrieval_reference_number,
                     amount_cents=-3500,
                     description="Overdraft Fee",
                     posted_at=ovr_posted_at,
-                )
-            )
+                ))
             cleared_balance_cents += 3500
 
         demo_trip_charges = _get_demo_script_travel_charges()
@@ -1079,18 +1106,38 @@ def _seed_user_transactions(
                 pending_balance_cents += amount_cents
                 continue
 
-            db.add(
-                PostedTransaction(
+            posting = post_financial_transaction(
+                db,
+                # A presenter reset replaces the card and produces a fresh
+                # synthetic statement. Include that card generation so the new
+                # economic events never collide with retained append-only history.
+                idempotency_key=f"seed-card-settlement:{cred_acc.id}:{card.id}:{rrn}",
+                user_id=user_uuid,
+                description=store_desc,
+                source_type="SEEDED_CARD_SETTLEMENT",
+                source_references={
+                    "credit_account_id": str(cred_acc.id),
+                    "authorization_id": str(auth.id),
+                    "retrieval_reference_number": rrn,
+                },
+                currency=cred_acc.currency or "USD",
+                posted_at=posted_date,
+                entries=(
+                    JournalEntrySpec(credit_journal_account.id, "DEBIT", amount_cents),
+                    JournalEntrySpec(card_clearing.id, "CREDIT", amount_cents),
+                ),
+            )
+            db.add(PostedTransaction(
                     id=uuid.uuid4(),
                     account_id=cred_acc.id,
                     authorization_id=auth.id,
+                    journal_transaction_id=posting.transaction.id,
                     auth_code=auth.auth_code,
                     retrieval_reference_number=rrn,
                     amount_cents=-amount_cents,
                     description=store_desc,
                     posted_at=posted_date,
-                )
-            )
+                ))
             cleared_balance_cents += amount_cents
 
         cred_acc.cleared_balance_cents = cleared_balance_cents
@@ -1098,6 +1145,8 @@ def _seed_user_transactions(
             0,
             cred_acc.credit_limit_cents - cleared_balance_cents - pending_balance_cents,
         )
+        credit_journal_account.cleared_balance_cents = cred_acc.cleared_balance_cents
+        credit_journal_account.available_credit_cents = cred_acc.available_credit_cents
 
 
 def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str, Any]:
@@ -1502,6 +1551,7 @@ def deprovision_user_suite(db: Session, user_id: uuid.UUID) -> dict[str, int]:
     deposit_accounts = db.query(Account).filter(
         Account.user_id == user_id,
         Account.status == "ACTIVE",
+        Account.account_type.in_(("CHECKING", "SAVINGS")),
     ).all()
     credit_accounts = db.query(CreditAccount).filter(
         CreditAccount.customer_id == user_id,
@@ -1511,6 +1561,16 @@ def deprovision_user_suite(db: Session, user_id: uuid.UUID) -> dict[str, int]:
         raise ValueError("No active demo accounts were found for this presenter.")
 
     for account in deposit_accounts:
+        account.status = "CLOSED"
+
+    # The card receivable is a canonical journal account, not a customer-facing
+    # deposit account. Close it with the suite while retaining its ledger history.
+    credit_journal_accounts = db.query(Account).filter(
+        Account.user_id == user_id,
+        Account.status == "ACTIVE",
+        Account.account_type == "CREDIT_CARD",
+    ).all()
+    for account in credit_journal_accounts:
         account.status = "CLOSED"
 
     credit_account_ids = [account.id for account in credit_accounts]

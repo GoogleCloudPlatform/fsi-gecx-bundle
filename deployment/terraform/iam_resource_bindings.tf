@@ -124,6 +124,14 @@ resource "google_cloud_run_service_iam_member" "data_generator_invokes_self" {
   member   = "serviceAccount:${google_service_account.data_generator_service_account.email}"
 }
 
+resource "google_cloud_run_v2_job_iam_member" "audit_relay_scheduler_invokes_job" {
+  count    = var.deploy_cloud_run_services ? 1 : 0
+  name     = google_cloud_run_v2_job.audit_outbox_relay[0].name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.audit_outbox_relay_service_account.email}"
+}
+
 resource "google_cloud_run_service_iam_member" "data_generator_invokes_banking_service" {
   count    = var.deploy_cloud_run_services ? 1 : 0
   service  = google_cloud_run_v2_service.banking_service[0].name

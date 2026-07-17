@@ -49,13 +49,14 @@ def test_data_generator_runtime_mapping_matches_alembic_schema_contract() -> Non
     assert _unique_contract(schema_table) == _unique_contract(runtime_table)
 
 
-def test_alloydb_baseline_is_the_only_migration_and_has_no_deployment_side_effects() -> None:
+def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() -> None:
     versions = sorted(
         Path(__file__).parents[1].joinpath("alembic", "versions").glob("*.py")
     )
 
     assert [path.name for path in versions] == [
-        "2ea57c78ba89_alloydb_unified_baseline.py"
+        "2ea57c78ba89_alloydb_unified_baseline.py",
+        "7c4f2a9d1e63_canonical_journal_and_outbox_relay.py",
     ]
     baseline = versions[0].read_text()
     assert "down_revision: Union[str, Sequence[str], None] = None" in baseline
@@ -68,3 +69,8 @@ def test_alloydb_baseline_is_the_only_migration_and_has_no_deployment_side_effec
         "pg_create_logical_replication_slot",
     ):
         assert forbidden not in baseline
+
+    journal_migration = versions[1].read_text()
+    assert 'down_revision: Union[str, Sequence[str], None] = "2ea57c78ba89"' in journal_migration
+    assert "ck_account_ledger_positive_amount" in journal_migration
+    assert "outbox_relay_checkpoint" in journal_migration

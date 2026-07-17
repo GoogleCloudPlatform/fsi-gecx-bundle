@@ -296,20 +296,59 @@ async def process_document(
         logger.error(f"Pipeline execution failed for {filename}: {pipeline_ex}")
         raise HTTPException(status_code=500, detail=f"Document processing pipeline failed: {str(pipeline_ex)}")
 
-@router.post("/process-outbox")
-def process_outbox(batch_size: int = 50, _admin=Depends(require_admin_user)):
-    """
-    In our WAL CDC architecture (Architecture Two), outbox ingestion occurs via zero-load Datastream WAL streaming.
-    Returns operational metrics for recent append-only outbox records.
-    """
+def _outbox_relay_status() -> dict:
     from utils.database import SessionLocal
-    from utils.audit import publish_pending_audit_events
+    from models.audit import AuditOutbox, OutboxRelayCheckpoint
+    from sqlalchemy import and_, or_
+
     db = SessionLocal()
     try:
-        count = publish_pending_audit_events(db, batch_size=batch_size)
-        return {"status": "SUCCESS", "message": "Outbox is managed via real-time WAL CDC streaming.", "recorded_count": count}
+        checkpoint = db.query(OutboxRelayCheckpoint).filter_by(relay_name="audit-events-v1").one_or_none()
+        pending = db.query(AuditOutbox)
+        if checkpoint and checkpoint.last_created_at is not None:
+            pending = pending.filter(
+                or_(
+                    AuditOutbox.created_at > checkpoint.last_created_at,
+                    and_(
+                        AuditOutbox.created_at == checkpoint.last_created_at,
+                        AuditOutbox.event_id > (checkpoint.last_event_id or ""),
+                    ),
+                )
+            )
+        return {
+            "status": "SUCCESS",
+            "delivery": "alloydb-outbox-relay-pubsub-dataflow-iceberg",
+            "pending_count": pending.count(),
+            "oldest_pending_created_at": (
+                pending.order_by(AuditOutbox.created_at.asc()).with_entities(AuditOutbox.created_at).scalar()
+            ),
+            "checkpoint": (
+                {
+                    "last_event_id": checkpoint.last_event_id,
+                    "last_created_at": checkpoint.last_created_at,
+                    "published_count": checkpoint.published_count,
+                    "updated_at": checkpoint.updated_at,
+                }
+                if checkpoint
+                else None
+            ),
+        }
     finally:
         db.close()
+
+
+@router.get("/outbox-status")
+def outbox_status(_admin=Depends(require_admin_user)):
+    """Returns source backlog and relay checkpoint status without publishing."""
+    return _outbox_relay_status()
+
+
+@router.post("/process-outbox", deprecated=True)
+def process_outbox(_admin=Depends(require_admin_user)):
+    """Compatibility endpoint; delivery is owned by the scheduled relay job."""
+    result = _outbox_relay_status()
+    result["message"] = "No inline publishing was performed; run audit-outbox-relay instead."
+    return result
 
 
 @router.get("/debug/reset-db/access")

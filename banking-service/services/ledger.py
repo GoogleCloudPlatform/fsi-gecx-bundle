@@ -21,7 +21,8 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
 
-from models.origination import Account, Transaction, AccountLedgerEntry
+from models.origination import Account, Transaction
+from services.financial_journal import JournalEntrySpec, post_financial_transaction
 from utils.audit import record_audit_event
 
 logger = logging.getLogger(__name__)
@@ -104,34 +105,27 @@ class LedgerService:
             if src_acc.available_credit_cents < amount_cents:
                 raise HTTPException(status_code=422, detail="Insufficient available credit.")
 
-        # 4. Create parent transaction
-        tx = Transaction(
+        # 4. Atomically append the balanced canonical journal and outbox event.
+        posting = post_financial_transaction(
+            self.db,
             idempotency_key=idempotency_key,
             user_id=user_id if user_id else src_acc.user_id,
-            status="COMPLETED",
             description=description,
-            request_hash=req_hash
+            source_type="ACCOUNT_TRANSFER",
+            source_references={
+                "source_account_id": str(src_acc.id),
+                "destination_account_id": str(dst_acc.id),
+            },
+            currency=src_acc.currency or "USD",
+            entries=(
+                JournalEntrySpec(src_acc.id, "DEBIT", amount_cents),
+                JournalEntrySpec(dst_acc.id, "CREDIT", amount_cents),
+            ),
         )
-        self.db.add(tx)
-        self.db.flush()
+        tx = posting.transaction
+        tx.request_hash = req_hash
 
-        # 5. Create immutable double-entry journal splits
-        debit_split = AccountLedgerEntry(
-            transaction_id=tx.id,
-            account_id=src_acc.id,
-            amount_cents=amount_cents,
-            entry_type="DEBIT"
-        )
-        credit_split = AccountLedgerEntry(
-            transaction_id=tx.id,
-            account_id=dst_acc.id,
-            amount_cents=amount_cents,
-            entry_type="CREDIT"
-        )
-        self.db.add(debit_split)
-        self.db.add(credit_split)
-
-        # 6. Update cached account balances
+        # 5. Update cached account balances
         if src_acc.account_type in ('CHECKING', 'SAVINGS'):
             src_acc.cleared_balance_cents -= amount_cents
         elif src_acc.account_type == 'CREDIT_CARD':

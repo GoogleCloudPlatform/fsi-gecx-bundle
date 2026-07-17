@@ -14,16 +14,18 @@
 
 import uuid
 import datetime
-from sqlalchemy import Column, String, Text, DateTime, Index
+from sqlalchemy import Column, String, Text, DateTime, Index, BigInteger
 from utils.database import UniversalUUID as UUID, generate_uuid
 from utils.database import Base
 
 
 class AuditOutbox(Base):
     """
-    Append-only transactional event log table (`audit.audit_outbox`) for zero-load WAL CDC streaming to BigQuery.
-    Ensures zero loss of compliance audit events by persisting state changes and audit events within the same ACID transaction.
-    In a WAL CDC architecture, rows are immutable append-only records without state mutations (no status/retry updates).
+    Append-only transactional source for asynchronous Pub/Sub delivery.
+
+    State changes and audit events commit in the same AlloyDB transaction.
+    Relay progress and retries stay in a separate checkpoint table so source
+    events never require status mutations.
     """
     __tablename__ = "audit_outbox"
     __table_args__ = (
@@ -35,8 +37,27 @@ class AuditOutbox(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     event_id = Column(String(128), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     event_type = Column(String(100), nullable=False)
+    schema_version = Column(BigInteger, nullable=False, default=1)
     payload = Column(Text, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
-# Type alias for descriptive referencing in CDC architecture
+
+class OutboxRelayCheckpoint(Base):
+    """Mutable relay progress kept separate from the immutable audit outbox."""
+
+    __tablename__ = "outbox_relay_checkpoint"
+    __table_args__ = {'schema': 'audit'}
+
+    relay_name = Column(String(100), primary_key=True)
+    last_created_at = Column(DateTime, nullable=True)
+    last_event_id = Column(String(128), nullable=True)
+    published_count = Column(BigInteger, nullable=False, default=0)
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+    )
+
+# Type alias for descriptive referencing in the audit architecture.
 AuditEventLog = AuditOutbox

@@ -14,6 +14,7 @@ locals {
     data_generator  = replace(google_service_account.data_generator_service_account.email, ".gserviceaccount.com", "")
     ledger_service  = replace(google_service_account.ledger_service_account.email, ".gserviceaccount.com", "")
     kyc_service     = replace(google_service_account.kyc_service_account.email, ".gserviceaccount.com", "")
+    audit_relay     = replace(google_service_account.audit_outbox_relay_service_account.email, ".gserviceaccount.com", "")
   }
   alloydb_migration_user = replace(google_service_account.banking_db_migration_service_account.email, ".gserviceaccount.com", "")
 

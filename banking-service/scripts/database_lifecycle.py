@@ -56,6 +56,7 @@ RESET_RW_ROLE = "banking_reset_rw"
 SUPPORT_RW_ROLE = "banking_support_rw"
 VIEWER_RO_ROLE = "banking_viewer_ro"
 CDC_RO_ROLE = "banking_cdc_ro"
+AUDIT_RELAY_ROLE = "audit_outbox_relay"
 DATASTREAM_REPLICATION_SLOT = "datastream_alloydb_replication_slot"
 
 GROUP_ROLES = (
@@ -69,6 +70,7 @@ GROUP_ROLES = (
     SUPPORT_RW_ROLE,
     VIEWER_RO_ROLE,
     CDC_RO_ROLE,
+    AUDIT_RELAY_ROLE,
 )
 
 RW_SCHEMA_ACCESS = {
@@ -177,6 +179,9 @@ class LifecycleConfig:
             SUPPORT_RW_ROLE: self.support_users,
             VIEWER_RO_ROLE: self.viewer_users,
             CDC_RO_ROLE: (self.cdc_user,),
+            AUDIT_RELAY_ROLE: (
+                service_account_database_user("audit-outbox-relay-sa", self.project_id),
+            ),
         }
 
     @property
@@ -394,7 +399,19 @@ def reconcile_grants(connection: sa.Connection) -> None:
         )
     )
 
-    for role in (
+    qrelay = quote_identifier(AUDIT_RELAY_ROLE)
+    connection.execute(sa.text(f"GRANT USAGE ON SCHEMA audit TO {qrelay}"))
+    connection.execute(
+        sa.text(f"GRANT SELECT ON TABLE audit.audit_outbox TO {qrelay}")
+    )
+    connection.execute(
+        sa.text(
+            "GRANT SELECT, INSERT, UPDATE ON TABLE audit.outbox_relay_checkpoint "
+            f"TO {qrelay}"
+        )
+    )
+
+    immutable_roles = (
         BANKING_RW_ROLE,
         KYC_RW_ROLE,
         LEDGER_RW_ROLE,
@@ -403,16 +420,23 @@ def reconcile_grants(connection: sa.Connection) -> None:
         SUPPORT_RW_ROLE,
         VIEWER_RO_ROLE,
         CDC_RO_ROLE,
-    ):
-        connection.execute(
-            sa.text(
-                "REVOKE UPDATE, DELETE ON TABLE ledger.account_ledger FROM "
-                f"{quote_identifier(role)}"
-            )
-        )
-    connection.execute(
-        sa.text("REVOKE UPDATE, DELETE ON TABLE ledger.account_ledger FROM PUBLIC")
+        AUDIT_RELAY_ROLE,
     )
+    for table in (
+        "ledger.account_ledger",
+        "cards.posted_transactions",
+        "audit.audit_outbox",
+    ):
+        for role in immutable_roles:
+            connection.execute(
+                sa.text(
+                    f"REVOKE UPDATE, DELETE, TRUNCATE ON TABLE {table} FROM "
+                    f"{quote_identifier(role)}"
+                )
+            )
+        connection.execute(
+            sa.text(f"REVOKE UPDATE, DELETE, TRUNCATE ON TABLE {table} FROM PUBLIC")
+        )
 
 
 def reconcile_cdc(connection: sa.Connection, config: LifecycleConfig) -> None:
@@ -574,17 +598,33 @@ def verify(
         if global_epoch is None:
             errors.append("voice-support GLOBAL reset epoch is missing")
 
-        for role in (BANKING_RW_ROLE, SUPPORT_RW_ROLE, VIEWER_RO_ROLE, CDC_RO_ROLE):
-            can_update, can_delete = connection.execute(
-                sa.text(
-                    "SELECT "
-                    "has_table_privilege(:role, 'ledger.account_ledger', 'UPDATE'), "
-                    "has_table_privilege(:role, 'ledger.account_ledger', 'DELETE')"
-                ),
-                {"role": role},
-            ).one()
-            if can_update or can_delete:
-                errors.append(f"immutable ledger permissions are too broad for {role}")
+        for table in (
+            "ledger.account_ledger",
+            "cards.posted_transactions",
+            "audit.audit_outbox",
+        ):
+            for role in (
+                BANKING_RW_ROLE,
+                KYC_RW_ROLE,
+                LEDGER_RW_ROLE,
+                VOICE_RW_ROLE,
+                DATA_GENERATOR_RW_ROLE,
+                SUPPORT_RW_ROLE,
+                VIEWER_RO_ROLE,
+                CDC_RO_ROLE,
+                AUDIT_RELAY_ROLE,
+            ):
+                can_update, can_delete, can_truncate = connection.execute(
+                    sa.text(
+                        "SELECT "
+                        "has_table_privilege(:role, :table, 'UPDATE'), "
+                        "has_table_privilege(:role, :table, 'DELETE'), "
+                        "has_table_privilege(:role, :table, 'TRUNCATE')"
+                    ),
+                    {"role": role, "table": table},
+                ).one()
+                if can_update or can_delete or can_truncate:
+                    errors.append(f"immutable table permissions are too broad for {role}: {table}")
 
         if config.reconcile_cdc and role_exists(connection, config.cdc_user):
             cdc_replication = connection.execute(

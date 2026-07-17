@@ -121,3 +121,32 @@ resource "google_cloud_tasks_queue" "data_generator_synthetic_schedule" {
     google_project_service.cloudtasks_googleapis_com
   ]
 }
+
+resource "google_cloud_scheduler_job" "audit_outbox_relay" {
+  count            = var.deploy_cloud_run_services ? 1 : 0
+  name             = "audit-outbox-relay"
+  description      = "Publish a bounded batch of committed audit outbox rows"
+  schedule         = var.audit_relay_schedule
+  time_zone        = "Etc/UTC"
+  attempt_deadline = "300s"
+  region           = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${data.google_project.project.project_id}/jobs/${google_cloud_run_v2_job.audit_outbox_relay[0].name}:run"
+    headers = {
+      "Content-Type" = "application/json"
+    }
+    body = base64encode("{}")
+    oauth_token {
+      service_account_email = google_service_account.audit_outbox_relay_service_account.email
+      scope                 = "https://www.googleapis.com/auth/cloud-platform"
+    }
+  }
+
+  depends_on = [
+    google_project_service.cloudscheduler_googleapis_com,
+    google_cloud_run_v2_job.audit_outbox_relay,
+    google_cloud_run_v2_job_iam_member.audit_relay_scheduler_invokes_job,
+  ]
+}

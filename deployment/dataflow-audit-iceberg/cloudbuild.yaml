@@ -1,0 +1,21 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "${_IMAGE}", "."]
+  - name: gcr.io/cloud-builders/docker
+    args: ["push", "${_IMAGE}"]
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - dataflow
+      - flex-template
+      - build
+      - "gs://${PROJECT_ID}_audit-dataflow-staging/templates/audit-iceberg.json"
+      - "--image=${_IMAGE}"
+      - "--sdk-language=JAVA"
+      - "--metadata-file=metadata.json"
+substitutions:
+  _IMAGE: us-central1-docker.pkg.dev/${PROJECT_ID}/fsi-gecx-bundle/audit-iceberg-dataflow:${SHORT_SHA}
+images:
+  - ${_IMAGE}
+options:
+  logging: CLOUD_LOGGING_ONLY

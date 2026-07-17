@@ -68,7 +68,7 @@ The system instruction establishes these source-selection rules:
 1. Prefer `analytics_curated` for business metrics and trends.
 2. Prefer `compliance_audit` domain views for audit and control questions.
 3. Use selected `iceberg_catalog` tables only for unavailable detail.
-4. Treat `compliance_audit.raw_audit_outbox_cdc` as a bounded, last-resort source and never return
+4. Treat `compliance_audit.audit_events` as a bounded, last-resort source and never return
    raw payloads verbatim.
 
 For the CDC and curated-view lifecycle, see

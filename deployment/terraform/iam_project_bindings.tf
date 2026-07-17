@@ -305,6 +305,24 @@ resource "google_project_iam_member" "banking_reset_sa_cloudtasks_queue_admin" {
   member  = "serviceAccount:${google_service_account.banking_db_reset_service_account.email}"
 }
 
+resource "google_project_iam_member" "audit_relay_sa_alloydb_client" {
+  project = data.google_project.project.project_id
+  role    = "roles/alloydb.databaseUser"
+  member  = "serviceAccount:${google_service_account.audit_outbox_relay_service_account.email}"
+}
+
+resource "google_project_iam_member" "audit_relay_sa_service_usage_consumer" {
+  project = data.google_project.project.project_id
+  role    = "roles/serviceusage.serviceUsageConsumer"
+  member  = "serviceAccount:${google_service_account.audit_outbox_relay_service_account.email}"
+}
+
+resource "google_project_iam_member" "audit_relay_sa_log_writer" {
+  project = data.google_project.project.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.audit_outbox_relay_service_account.email}"
+}
+
 resource "google_project_iam_member" "ledger_sa_alloydb_client" {
   project = data.google_project.project.project_id
   role    = "roles/alloydb.databaseUser"

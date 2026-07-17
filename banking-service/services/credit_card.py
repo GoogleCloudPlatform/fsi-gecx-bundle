@@ -26,6 +26,12 @@ from models.fdx import (
     PaymentMeta, PaymentNetwork, PaginatedPaymentNetworksResult, FDXAccount
 )
 from services.taxonomy_service import TaxonomyService
+from services.financial_journal import (
+    JournalEntrySpec,
+    ensure_credit_journal_account,
+    ensure_system_journal_account,
+    post_financial_transaction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -356,29 +362,61 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
         if prior_reversal:
             raise ValueError(f"Transaction '{transaction_id}' has already been reversed in ledger (Reversal ID: {prior_reversal.id}).")
 
-        # Insert offsetting credit entry into account ledger (double-entry standard)
+        # Insert the statement projection and its balanced canonical journal post.
         reversal_amount = abs(original_tx.amount_cents) # Credit offset (positive)
         desc = reversal_description_old if original_tx.description == "LATE_FEE" else reversal_description_new
-        
+        posted_at = datetime.datetime.now(datetime.timezone.utc)
+        journal_account = ensure_credit_journal_account(db, account)
+        clearing_account = ensure_system_journal_account(
+            db,
+            "SYSTEM_CARD_REVERSAL_CLEARING",
+            "Card reversal and dispute clearing",
+        )
+        posting = post_financial_transaction(
+            db,
+            idempotency_key=f"card-reversal:{transaction_id}",
+            user_id=account.customer_id,
+            description=desc,
+            source_type="CARD_POSTED_TRANSACTION_REVERSAL",
+            source_references={
+                "credit_account_id": str(account.id),
+                "original_statement_transaction_id": str(original_tx.id),
+            },
+            currency=account.currency or "USD",
+            posted_at=posted_at,
+            entries=(
+                JournalEntrySpec(clearing_account.id, "DEBIT", reversal_amount),
+                JournalEntrySpec(journal_account.id, "CREDIT", reversal_amount),
+            ),
+        )
         reversal_entry = AccountLedger(
             account_id=account_id,
+            journal_transaction_id=posting.transaction.id,
             amount_cents=reversal_amount,
             description=desc,
-            posted_at=datetime.datetime.now(datetime.timezone.utc)
+            posted_at=posted_at,
         )
         repo.save_ledger(reversal_entry)
 
         # Recalculate account balances
         account.cleared_balance_cents -= reversal_amount   # Debt decreases
         account.available_credit_cents += reversal_amount  # Available credit increases
+        journal_account.cleared_balance_cents = account.cleared_balance_cents
+        journal_account.available_credit_cents = account.available_credit_cents
 
         repo.save_account(account)
-        record_audit_event(db, "FEE_REVERSED", {"account_id": str(account_id), "reversal_amount_cents": reversal_amount})
+        record_audit_event(db, "FEE_REVERSED", {
+            "account_id": str(account_id),
+            "reversal_amount_cents": reversal_amount,
+            "transaction_id": str(posting.transaction.id),
+            "financial_event_id": posting.event_id,
+        })
         db.commit()
         logger.info(f"Transaction reversed successfully. New Cleared Balance: {account.cleared_balance_cents} cents, Available Credit: {account.available_credit_cents} cents")
         return {
             "account_id": account_id,
             "reversed_amount_cents": reversal_amount,
+            "transaction_id": str(posting.transaction.id),
             "cleared_balance_cents": account.cleared_balance_cents,
             "available_credit_cents": account.available_credit_cents
         }
@@ -542,15 +580,43 @@ def apply_fraud_provisional_credit(
         )
 
         credit_amount = abs(int(original_tx.amount_cents))
+        posted_at = datetime.datetime.now(datetime.timezone.utc)
+        journal_account = ensure_credit_journal_account(db, account)
+        clearing_account = ensure_system_journal_account(
+            db,
+            "SYSTEM_FRAUD_LOSS_CLEARING",
+            "Fraud provisional credit loss clearing",
+        )
+        posting = post_financial_transaction(
+            db,
+            idempotency_key=f"fraud-provisional-credit-journal:{transaction_id}",
+            user_id=account.customer_id,
+            description=f"Fraud provisional credit for {transaction_id}",
+            source_type="FRAUD_PROVISIONAL_CREDIT",
+            source_references={
+                "fraud_alert_id": fraud_alert_id,
+                "original_statement_transaction_id": str(original_tx.id),
+                "credit_account_id": str(account.id),
+            },
+            currency=account.currency or "USD",
+            posted_at=posted_at,
+            entries=(
+                JournalEntrySpec(clearing_account.id, "DEBIT", credit_amount),
+                JournalEntrySpec(journal_account.id, "CREDIT", credit_amount),
+            ),
+        )
         credit_entry = AccountLedger(
             account_id=account.id,
+            journal_transaction_id=posting.transaction.id,
             amount_cents=credit_amount,
             description=f"FRAUD_PROVISIONAL_CREDIT_REF_{transaction_id}",
-            posted_at=datetime.datetime.now(datetime.timezone.utc),
+            posted_at=posted_at,
         )
         repo.save_ledger(credit_entry)
         account.cleared_balance_cents -= credit_amount
         repo.recalculate_available_credit(account)
+        journal_account.cleared_balance_cents = account.cleared_balance_cents
+        journal_account.available_credit_cents = account.available_credit_cents
 
         result = {
             "account_id": str(account.id),
@@ -558,6 +624,7 @@ def apply_fraud_provisional_credit(
             "provisional_credit_transaction_id": str(credit_entry.id),
             "fraud_alert_id": fraud_alert_id,
             "credited_amount_cents": credit_amount,
+            "journal_transaction_id": str(posting.transaction.id),
             "cleared_balance_cents": account.cleared_balance_cents,
             "available_credit_cents": account.available_credit_cents,
             "message": "Provisional fraud credit applied pending investigation.",
@@ -572,6 +639,8 @@ def apply_fraud_provisional_credit(
                 "posted_transaction_id": str(original_tx.id),
                 "provisional_credit_transaction_id": str(credit_entry.id),
                 "amount_cents": credit_amount,
+                "transaction_id": str(posting.transaction.id),
+                "financial_event_id": posting.event_id,
                 "reason": reason,
             },
         )

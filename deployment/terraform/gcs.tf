@@ -61,6 +61,22 @@ resource "google_storage_bucket" "iceberg_warehouse" {
   }
 }
 
+resource "google_storage_bucket" "audit_dataflow_staging" {
+  name                        = "${var.project_id}_audit-dataflow-staging"
+  location                    = var.region
+  uniform_bucket_level_access = true
+  force_destroy               = true
+
+  lifecycle_rule {
+    condition {
+      age = 7
+    }
+    action {
+      type = "Delete"
+    }
+  }
+}
+
 resource "google_storage_bucket" "release_manifests" {
   name                        = "${var.project_id}-fsi-release-manifests"
   location                    = var.region

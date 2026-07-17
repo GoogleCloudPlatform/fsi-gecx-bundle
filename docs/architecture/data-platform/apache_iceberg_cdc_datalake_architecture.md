@@ -1,6 +1,6 @@
 # CDC and Apache Iceberg Lakehouse Architecture
 
-This document describes the current AlloyDB CDC path and the planned Iceberg architecture. It deliberately distinguishes deployed behavior from the follow-on Iceberg epic.
+This document describes the complementary mutable-table CDC and immutable Iceberg event paths. It deliberately distinguishes BigQuery-native Datastream tables from catalog-native Iceberg tables.
 
 ## Deployed mutable-table CDC
 
@@ -19,23 +19,23 @@ The `banking_bq_connector` built-in database user owns the Datastream password b
 
 Despite the historical dataset name, the current Datastream destination tables are BigQuery-native tables, not Apache Iceberg tables. This limitation is why the lakehouse work is a separate epic.
 
-## Planned Iceberg architecture
+## Catalog-native Iceberg event architecture
 
-The strategic follow-on uses two complementary catalog paths:
+The platform uses two complementary catalog paths:
 
 1. Audit outbox events flow through Pub/Sub into Iceberg managed tables registered in the lakehouse runtime catalog.
 2. Existing BigQuery-native mutable CDC tables remain queryable from Spark through BigQuery catalog federation.
 
 ```mermaid
 flowchart LR
-    Outbox["AlloyDB audit outbox"] --> PubSub["Pub/Sub"] --> Iceberg["Managed Iceberg audit tables"]
+    Outbox["AlloyDB audit outbox"] --> Relay["Bounded relay"] --> PubSub["Pub/Sub"] --> Dataflow["Dataflow Managed Iceberg I/O"] --> Iceberg["Catalog-native Iceberg audit + ledger tables"]
     Mutable["BigQuery-native Datastream CDC tables"] --> Federation["BigQuery catalog federation"]
     Iceberg --> Catalog["Lakehouse runtime catalog"]
     Federation --> Spark["Spark / open-engine analytics"]
     Catalog --> Spark
 ```
 
-The follow-on implementation must not describe BigQuery-native Datastream tables as Iceberg. See the standalone Iceberg epic and trade-off analysis in the private planning repository for the delivery plan.
+BigQuery queries catalog-native tables with a four-part project/catalog/namespace/table name. Spark connects to the same runtime catalog and also uses the `bq://` federation warehouse to read the mutable BigQuery-native CDC tables in the same session. See [Catalog-Native Iceberg Audit and Financial Ledger](./bigquery_olap_audit_architecture.md) for contracts and operations.
 
 ## Curated analytics contract
 

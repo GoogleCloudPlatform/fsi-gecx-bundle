@@ -7,7 +7,7 @@ set -euo pipefail
 RELEASE_MODE="${RELEASE_MODE:-qualify}"
 MANIFEST_URI="${MANIFEST_URI:-}"
 ALLOW_CLOUD_SQL_CUTOVER="${ALLOW_CLOUD_SQL_CUTOVER:-false}"
-EXPECTED_ALEMBIC_REVISION="2ea57c78ba89"
+EXPECTED_ALEMBIC_REVISION="7c4f2a9d1e63"
 cloud_sql_backup_id="${CLOUD_SQL_BACKUP_ID:-}"
 
 declare -A images
@@ -76,10 +76,16 @@ gcloud run jobs update banking-db-migrate --project "${PROJECT_ID}" --region "${
 gcloud run jobs update banking-db-reconcile --project "${PROJECT_ID}" --region "${REGION}" --image "${banking_image}" --quiet
 gcloud run jobs update banking-db-reset --project "${PROJECT_ID}" --region "${REGION}" --image "${banking_image}" --quiet
 gcloud run jobs update banking-knowledge-catalog-sync --project "${PROJECT_ID}" --region "${REGION}" --image "${banking_image}" --quiet
+gcloud run jobs update audit-outbox-relay --project "${PROJECT_ID}" --region "${REGION}" --image "${banking_image}" --quiet
+gcloud run jobs update audit-iceberg-bootstrap --project "${PROJECT_ID}" --region "${REGION}" --image "${banking_image}" --quiet
 
 gcloud run jobs execute banking-db-bootstrap --project "${PROJECT_ID}" --region "${REGION}" --wait
 gcloud run jobs execute banking-db-migrate --project "${PROJECT_ID}" --region "${REGION}" --wait
 gcloud run jobs execute banking-db-reconcile --project "${PROJECT_ID}" --region "${REGION}" --wait
+gcloud run jobs execute audit-iceberg-bootstrap --project "${PROJECT_ID}" --region "${REGION}" --wait
+
+PROJECT_ID="${PROJECT_ID}" REGION="${REGION}" RELEASE_COMMIT="${RELEASE_COMMIT}" \
+  deployment/scripts/deploy_audit_iceberg_pipeline.sh
 
 gcloud run services update banking-service --project "${PROJECT_ID}" --region "${REGION}" --image "${banking_image}" --quiet
 gcloud run services update credit-support-agent --project "${PROJECT_ID}" --region "${REGION}" --image "${images[credit-support-agent]}" --quiet
@@ -116,7 +122,7 @@ jq -n \
   --arg generator "${images[data-generator]}" \
   --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --arg cloud_sql_backup_id "${cloud_sql_backup_id}" \
-  '{schema_version:1,status:(if $mode=="promote" then "promoted" else "qualified" end),mode:$mode,commit:$commit,environment:$environment,alembic_revision:$alembic,images:{"banking-service":$banking,"credit-support-agent":$voice,"data-generator":$generator},cutover:{final_cloud_sql_backup_id:(if $cloud_sql_backup_id=="" then null else $cloud_sql_backup_id end)},validation:{terraform:true,bootstrap:true,migration:true,reconciliation:true,reset_seed:true,knowledge_catalog:true,datastream:true,federation:true,service_health:true},completed_at:$timestamp}' \
+  '{schema_version:1,status:(if $mode=="promote" then "promoted" else "qualified" end),mode:$mode,commit:$commit,environment:$environment,alembic_revision:$alembic,images:{"banking-service":$banking,"credit-support-agent":$voice,"data-generator":$generator},cutover:{final_cloud_sql_backup_id:(if $cloud_sql_backup_id=="" then null else $cloud_sql_backup_id end)},validation:{terraform:true,bootstrap:true,migration:true,reconciliation:true,reset_seed:true,knowledge_catalog:true,datastream:true,federation:true,audit_iceberg_dataflow:true,service_health:true},completed_at:$timestamp}' \
   > "${manifest_path}"
 destination="gs://${PROJECT_ID}-fsi-release-manifests/alloydb/${RELEASE_COMMIT}/${RELEASE_MODE}.json"
 gsutil cp "${manifest_path}" "${destination}"

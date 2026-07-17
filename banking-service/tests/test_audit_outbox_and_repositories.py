@@ -16,7 +16,7 @@ import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from utils.database import Base
-from models.audit import AuditOutbox
+from models.audit import AuditOutbox, OutboxRelayCheckpoint
 from utils.audit import record_audit_event
 
 
@@ -85,6 +85,19 @@ def test_outbox_cdc_monitoring_and_pruning(test_db):
     entry.created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=45)
     test_db.commit()
 
+    # Unrelayed source rows are protected regardless of age.
+    deleted = prune_historical_audit_events(test_db, retention_days=30)
+    assert deleted == 0
+
+    test_db.add(
+        OutboxRelayCheckpoint(
+            relay_name="audit-events-v1",
+            last_created_at=datetime.datetime.now(datetime.timezone.utc),
+            last_event_id=entry.event_id,
+            published_count=1,
+        )
+    )
+    test_db.commit()
     deleted = prune_historical_audit_events(test_db, retention_days=30)
     assert deleted == 1
     assert test_db.query(AuditOutbox).count() == 0
