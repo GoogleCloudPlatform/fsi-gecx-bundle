@@ -35,6 +35,7 @@
     {
       "name": "scenario_outcome_feedback",
       "sql": "scenario_outcome_feedback.sql",
+      "fallback_sql": "scenario_outcome_feedback_empty.sql",
       "sources": [
         "oltp_cdc.operations_scenario_outcomes",
         "oltp_cdc.operations_fraud_model_decisions",

@@ -108,8 +108,8 @@ def source_is_queryable(source: str) -> tuple[bool, str | None]:
     return False, detail
 
 
-def apply_view(view: dict) -> tuple[bool, str | None]:
-    sql_file = VIEW_DIR / view["sql"]
+def apply_sql_file(sql_name: str) -> tuple[bool, str | None]:
+    sql_file = VIEW_DIR / sql_name
     if not sql_file.exists():
         return False, f"SQL file does not exist: {sql_file}"
 
@@ -168,11 +168,24 @@ def main() -> int:
                 missing.append(f"{source}: {reason}")
 
         if missing:
-            skipped[name] = missing
-            log(f"Skipping {name}; source tables are not queryable yet.")
+            fallback_sql = view.get("fallback_sql")
+            if not fallback_sql:
+                skipped[name] = missing
+                log(f"Skipping {name}; source tables are not queryable yet.")
+                continue
+            ok, reason = apply_sql_file(fallback_sql)
+            if ok:
+                applied.append(name)
+                log(
+                    f"Applied empty fallback for {CURATED_DATASET}.{name}; "
+                    "source tables are not queryable yet."
+                )
+            else:
+                failed[name] = reason or "unknown BigQuery fallback error"
+                log(f"Failed to apply fallback view {CURATED_DATASET}.{name}.")
             continue
 
-        ok, reason = apply_view(view)
+        ok, reason = apply_sql_file(view["sql"])
         if ok:
             applied.append(name)
             log(f"Applied curated view {CURATED_DATASET}.{name}.")
