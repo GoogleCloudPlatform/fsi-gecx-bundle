@@ -19,6 +19,7 @@ final class AuditIcebergPipelineTest {
   void packagesHadoopRuntimeRequiredByIcebergCatalog() {
     assertDoesNotThrow(
         () -> Class.forName("org.apache.hadoop.shaded.com.ctc.wstx.io.InputBootstrapper"));
+    assertDoesNotThrow(() -> Class.forName("org.apache.iceberg.gcp.auth.GoogleAuthManager"));
   }
 
   @Test
