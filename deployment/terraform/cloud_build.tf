@@ -306,11 +306,11 @@ resource "google_cloudbuild_trigger" "db_migration_manual_trigger" {
   }
 }
 
-resource "google_cloudbuild_trigger" "alloydb_release_qualify" {
+resource "google_cloudbuild_trigger" "release_qualify" {
   count    = var.deploy_cloud_build_triggers ? 1 : 0
-  name     = "alloydb-release-qualify"
+  name     = "release-qualify"
   location = var.region
-  tags     = ["alloydb", "release", "qualify", "manual"]
+  tags     = ["release", "qualify", "manual"]
   repository_event_config {
     repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
   }
@@ -326,11 +326,11 @@ resource "google_cloudbuild_trigger" "alloydb_release_qualify" {
   }
 }
 
-resource "google_cloudbuild_trigger" "alloydb_release_promote" {
+resource "google_cloudbuild_trigger" "release_promote" {
   count    = var.deploy_cloud_build_triggers ? 1 : 0
-  name     = "alloydb-release-promote"
+  name     = "release-promote"
   location = var.region
-  tags     = ["alloydb", "release", "promote", "manual"]
+  tags     = ["release", "promote", "manual"]
   repository_event_config {
     repository = google_cloudbuildv2_repository.fsi_gecx_bundle[0].id
   }
@@ -347,6 +347,16 @@ resource "google_cloudbuild_trigger" "alloydb_release_promote" {
     _MANIFEST_URI            = "REQUIRED"
     _ALLOW_CLOUD_SQL_CUTOVER = "false"
   }
+}
+
+moved {
+  from = google_cloudbuild_trigger.alloydb_release_qualify
+  to   = google_cloudbuild_trigger.release_qualify
+}
+
+moved {
+  from = google_cloudbuild_trigger.alloydb_release_promote
+  to   = google_cloudbuild_trigger.release_promote
 }
 
 resource "google_cloudbuild_trigger" "terraform_apply_trigger" {

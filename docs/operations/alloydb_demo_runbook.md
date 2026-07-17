@@ -1,5 +1,10 @@
 # AlloyDB Demo Operations Runbook
 
+For the routine build, qualification, and promotion procedure, start with
+[Build and deploy](build_and_deploy.md). This runbook covers AlloyDB-specific
+operations, recovery, CDC diagnosis, and the historical one-time Cloud SQL
+cutover.
+
 ## Environment roles
 
 - Evo and each contributor-owned project are developer environments. Any configured developer environment can qualify a release candidate.
@@ -21,7 +26,7 @@ Additional runtime or lifecycle principals may remain in the list when release t
 
 The promotion target's `cloudbuild-terraform-sa` must also appear in `release_manifest_reader_members`. These grants belong to the qualifying source project because it owns the release manifest bucket and immutable image repository. Do not repair a failed promotion with ad hoc project-wide roles; update the source environment's Terraform membership lists and apply them there.
 
-Use `alloydb-release-qualify` in the selected developer project. Supply the full Git commit in `_RELEASE_COMMIT`. On the one-time destructive cutover, also override `_ALLOW_CLOUD_SQL_CUTOVER=true`; this records and retains a final Cloud SQL backup before deleting the legacy instance.
+Use `release-qualify` in the selected developer project. Supply the full Git commit in `_RELEASE_COMMIT`. On the one-time destructive cutover, also override `_ALLOW_CLOUD_SQL_CUTOVER=true`; this records and retains a final Cloud SQL backup before deleting the legacy instance.
 
 The trigger applies Terraform and then runs:
 
@@ -39,7 +44,7 @@ The trigger applies Terraform and then runs:
 
 A successful qualification writes `gs://PROJECT_ID-fsi-release-manifests/alloydb/COMMIT/qualify.json`.
 
-To promote, run `alloydb-release-promote` in `fsi-demo-1841` from the same commit, provide the qualification manifest URI, and approve the build. Promotion verifies and deploys the recorded image digests; it does not rebuild images or use `latest`.
+To promote, run `release-promote` in `fsi-demo-1841` from the same commit, provide the qualification manifest URI, and approve the build. Promotion verifies and deploys the recorded image digests; it does not rebuild images or use `latest`.
 
 ## Connection diagnosis
 

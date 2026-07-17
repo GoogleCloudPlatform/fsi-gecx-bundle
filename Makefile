@@ -25,6 +25,7 @@ GECX_APP_ID ?= $(shell grep -E '^[[:space:]]*cx_agent_studio_voice_agent_deploym
 GECX_LOCATION ?= $(shell gecx_loc=$$(grep -E '^[[:space:]]*gecx_location[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]'); echo $${gecx_loc:-us})
 VOICE_AGENT_AUDIO_MODEL ?= publishers/google/models/gemini-live-2.5-flash-native-audio
 VOICE_AGENT_VIDEO_MODEL ?= publishers/google/models/gemini-3.1-flash-live-preview-04-2026
+BRANCH ?= $(shell git branch --show-current)
 
 LOCAL_DB_PORT ?= 5432
 LOCAL_DB_NAME ?= banking
@@ -262,7 +263,29 @@ tf-fmt: ## Format Terraform configuration files
 deploy: ## Safely apply the incremental Terraform deployment changes
 	@echo "Applying incremental Terraform deployment..."
 	cd deployment/terraform && \
-	terraform apply tfplan
+		terraform apply tfplan
+
+.PHONY: update
+update: ## Update one component in a developer environment (usage: make update COMPONENT=banking-ui [BRANCH=feature/foo])
+	@if [ -z "$(COMPONENT)" ]; then echo "Error: COMPONENT is required (banking-service, banking-ui, credit-support-agent, or data-generator)."; exit 1; fi
+	@if [ "$(PROJECT_ID)" = "fsi-demo-1841" ]; then echo "Error: make update is for developer environments only. Use the qualified release promotion flow for fsi-demo-1841."; exit 1; fi
+	@case "$(COMPONENT)" in \
+		banking-service) trigger="banking-service-deployment" ;; \
+		banking-ui) trigger="banking-ui-deployment" ;; \
+		credit-support-agent) trigger="credit-support-agent-deployment" ;; \
+		data-generator) trigger="data-generator-deployment" ;; \
+		*) echo "Error: unsupported COMPONENT '$(COMPONENT)'."; exit 1 ;; \
+	esac; \
+	echo "Updating $(COMPONENT) in developer project $(PROJECT_ID) from $(BRANCH)..."; \
+	build_id=$$(gcloud builds triggers run "$$trigger" \
+		--project="$(PROJECT_ID)" \
+		--region="$(REGION)" \
+		--branch="$(BRANCH)" \
+		--substitutions=_TRIGGER_DEPLOY=true \
+		--format='value(metadata.build.id)'); \
+	test -n "$$build_id"; \
+	echo "Cloud Build: $$build_id"; \
+	gcloud builds log "$$build_id" --project="$(PROJECT_ID)" --region="$(REGION)" --stream
 
 .PHONY: deploy-voice-agent
 deploy-voice-agent: ## Submit Cloud Build job to deploy ADK credit-support-agent (voice agent) to Cloud Run

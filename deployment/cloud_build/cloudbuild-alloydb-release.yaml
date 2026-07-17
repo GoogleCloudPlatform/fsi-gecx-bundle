@@ -11,7 +11,7 @@ steps:
         rm /workspace/terraform.zip
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    id: "ordered-alloydb-release"
+    id: "ordered-release"
     entrypoint: "bash"
     args:
       - "-c"
