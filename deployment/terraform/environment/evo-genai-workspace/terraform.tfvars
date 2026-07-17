@@ -15,13 +15,16 @@
 # WARNING: Do NOT place any secrets (passwords, private keys, API keys, OAuth tokens)
 # in this file. Secrets should be stored in Secret Manager and accessed dynamically.
 
-project_id                = "evo-genai-workspace"
-alloydb_availability_type = "ZONAL"
-alloydb_cpu_count         = 2
+project_id                    = "evo-genai-workspace"
+alloydb_availability_type     = "ZONAL"
+alloydb_cpu_count             = 2
+cloudbuild_source_bucket_name = "evo-genai-workspace_cloudbuild"
 release_manifest_reader_members = [
   "serviceAccount:cloudbuild-terraform-sa@fsi-demo-1841.iam.gserviceaccount.com",
 ]
 release_image_consumer_members = [
+  "serviceAccount:cloudbuild-terraform-sa@fsi-demo-1841.iam.gserviceaccount.com",
+  "serviceAccount:service-628355276832@serverless-robot-prod.iam.gserviceaccount.com",
   "serviceAccount:banking-service-sa@fsi-demo-1841.iam.gserviceaccount.com",
   "serviceAccount:voice-agent-sa@fsi-demo-1841.iam.gserviceaccount.com",
   "serviceAccount:datagen-service-sa@fsi-demo-1841.iam.gserviceaccount.com",

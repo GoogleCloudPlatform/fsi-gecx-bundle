@@ -60,9 +60,15 @@ variable "release_manifest_reader_members" {
 }
 
 variable "release_image_consumer_members" {
-  description = "Runtime service accounts in promotion targets allowed to pull qualified immutable images."
+  description = "Deployment and runtime principals in promotion targets allowed to read qualified immutable images. Include the promotion Cloud Build service account and target Cloud Run service agent."
   type        = list(string)
   default     = []
+}
+
+variable "cloudbuild_source_bucket_name" {
+  description = "Existing Cloud Build source staging bucket whose objects the custom Cloud Build service account must read for archive-based builds. Leave null when the environment never uses gcloud builds submit with uploaded source."
+  type        = string
+  default     = null
 }
 
 variable "zone" {

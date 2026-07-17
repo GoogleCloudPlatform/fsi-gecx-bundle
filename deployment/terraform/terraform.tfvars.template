@@ -16,6 +16,14 @@
 # in this file. Secrets should be stored in Secret Manager and accessed dynamically.
 
 project_id                                  = "${PROJECT_ID}"
+cloudbuild_source_bucket_name               = "${PROJECT_ID}_cloudbuild"
+release_manifest_reader_members = [
+  "serviceAccount:cloudbuild-terraform-sa@[PROMOTION_PROJECT_ID].iam.gserviceaccount.com",
+]
+release_image_consumer_members = [
+  "serviceAccount:cloudbuild-terraform-sa@[PROMOTION_PROJECT_ID].iam.gserviceaccount.com",
+  "serviceAccount:service-[PROMOTION_PROJECT_NUMBER]@serverless-robot-prod.iam.gserviceaccount.com",
+]
 deploy_cloud_build_triggers                 = true
 deploy_cloud_run_services                   = true
 set_cloud_run_audiences                     = true

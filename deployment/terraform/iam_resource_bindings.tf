@@ -41,6 +41,13 @@ resource "google_artifact_registry_repository_iam_member" "cloudbuild_sa_fsi_gec
   member     = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
 }
 
+resource "google_storage_bucket_iam_member" "cloudbuild_sa_source_archive_reader" {
+  count  = var.cloudbuild_source_bucket_name == null ? 0 : 1
+  bucket = var.cloudbuild_source_bucket_name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.cloudbuild_service_account.email}"
+}
+
 resource "google_storage_bucket_iam_member" "terraform_cloudbuild_release_manifest_admin" {
   bucket = google_storage_bucket.release_manifests.name
   role   = "roles/storage.objectAdmin"
