@@ -959,9 +959,13 @@ function HomeView({
               action === ACTIONS.CLOSE ||
               action === ACTIONS.SKIP
             ) {
-              if (status === STATUS.FINISHED || type === EVENTS.TOUR_END) {
-                logTutorialCompleteEvent(status === STATUS.FINISHED ? status : type);
+              let outcome = status;
+              if (action === ACTIONS.CLOSE && status !== STATUS.FINISHED) {
+                outcome = 'abandoned';
+              } else if (action === ACTIONS.SKIP && status !== STATUS.FINISHED) {
+                outcome = 'skipped';
               }
+              logTutorialCompleteEvent(outcome || 'completed');
               setTourRun(false);
               const key = fbUser ? 'home-tour-auth-completed' : 'home-tour-completed';
               localStorage.setItem(key, 'true');

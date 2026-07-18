@@ -14,6 +14,7 @@ import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
+import { logTutorialBeginEvent, logTutorialCompleteEvent } from '../utils/analytics.js';
 
 const CONFIDENCE_THRESHOLDS = {
   ssn: 0.95,
@@ -947,12 +948,24 @@ function AdminUnderwritingView({ fbUser }) {
           showCloseButton={true}
           onEvent={(data) => {
             const { status, type, action } = data;
+
+            if (type === EVENTS.TOUR_START) {
+              logTutorialBeginEvent();
+            }
+
             if (
               [STATUS.FINISHED, STATUS.SKIPPED].includes(status) ||
               type === EVENTS.TOUR_END ||
               action === ACTIONS.CLOSE ||
               action === ACTIONS.SKIP
             ) {
+              let outcome = status;
+              if (action === ACTIONS.CLOSE && status !== STATUS.FINISHED) {
+                outcome = 'abandoned';
+              } else if (action === ACTIONS.SKIP && status !== STATUS.FINISHED) {
+                outcome = 'skipped';
+              }
+              logTutorialCompleteEvent(outcome || 'completed');
               setTourRun(false);
               localStorage.setItem('underwriting-tour-completed', 'true');
             }
