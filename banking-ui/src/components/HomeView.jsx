@@ -24,6 +24,7 @@ import GcpInfoModal from './GcpInfoModal.jsx';
 import ConsoleAccessStep from './ConsoleAccessStep.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
+import { logTutorialBeginEvent, logTutorialCompleteEvent } from '../utils/analytics.js';
 
 function HomeView({
   fbUser,
@@ -947,12 +948,20 @@ function HomeView({
           showCloseButton={true}
           onEvent={(data) => {
             const { status, type, action } = data;
+            
+            if (type === EVENTS.TOUR_START) {
+              logTutorialBeginEvent();
+            }
+
             if (
               [STATUS.FINISHED, STATUS.SKIPPED].includes(status) ||
               type === EVENTS.TOUR_END ||
               action === ACTIONS.CLOSE ||
               action === ACTIONS.SKIP
             ) {
+              if (status === STATUS.FINISHED || type === EVENTS.TOUR_END) {
+                logTutorialCompleteEvent(status === STATUS.FINISHED ? status : type);
+              }
               setTourRun(false);
               const key = fbUser ? 'home-tour-auth-completed' : 'home-tour-completed';
               localStorage.setItem(key, 'true');
