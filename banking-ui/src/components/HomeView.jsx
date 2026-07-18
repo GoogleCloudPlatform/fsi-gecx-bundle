@@ -442,7 +442,7 @@ function HomeView({
                 </>
               ) : (
                 // Authenticated User with NO Accounts (Provision Sandbox CTA)
-                <div className="flex flex-col items-center text-center py-8 space-y-6">
+                <div className="flex flex-col items-center text-center space-y-6">
                   <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400">
                     <Shield className="w-8 h-8 animate-pulse" />
                   </div>
