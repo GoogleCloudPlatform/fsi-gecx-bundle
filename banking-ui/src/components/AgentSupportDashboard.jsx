@@ -21,6 +21,7 @@ import GcpInfoModal from './GcpInfoModal.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
+import { logTutorialBeginEvent, logTutorialCompleteEvent } from '../utils/analytics.js';
 import { 
   getPendingEscalations, 
   getAgentVoiceToken,
@@ -738,12 +739,24 @@ export default function AgentSupportDashboard() {
           showCloseButton={true}
           onEvent={(data) => {
             const { status, type, action } = data;
+
+            if (type === EVENTS.TOUR_START) {
+              logTutorialBeginEvent();
+            }
+
             if (
               [STATUS.FINISHED, STATUS.SKIPPED].includes(status) ||
               type === EVENTS.TOUR_END ||
               action === ACTIONS.CLOSE ||
               action === ACTIONS.SKIP
             ) {
+              let outcome = status;
+              if (action === ACTIONS.CLOSE && status !== STATUS.FINISHED) {
+                outcome = 'abandoned';
+              } else if (action === ACTIONS.SKIP && status !== STATUS.FINISHED) {
+                outcome = 'skipped';
+              }
+              logTutorialCompleteEvent(outcome || 'completed');
               setTourRun(false);
               localStorage.setItem('supervisor-tour-completed', 'true');
             }

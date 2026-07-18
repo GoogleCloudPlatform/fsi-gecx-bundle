@@ -59,3 +59,41 @@ export const logInteractionEvent = (category, analyticsId, additionalProps = {})
     window.firebaseLogEvent(window.firebaseAnalytics, 'select_content', payload);
   }
 };
+
+/**
+ * Logs a standard login event to Firebase Analytics.
+ * @param {string} method - The authentication method used (e.g., 'Google', 'IAP')
+ */
+export const logLoginEvent = (method = 'Google') => {
+  if (window.firebaseAnalytics && window.firebaseLogEvent) {
+    window.firebaseLogEvent(window.firebaseAnalytics, 'login', { method });
+  }
+};
+
+/**
+ * Logs a custom logout event to Firebase Analytics.
+ */
+export const logLogoutEvent = () => {
+  if (window.firebaseAnalytics && window.firebaseLogEvent) {
+    window.firebaseLogEvent(window.firebaseAnalytics, 'logout');
+  }
+};
+
+/**
+ * Logs a standard tutorial_begin event to Firebase Analytics.
+ */
+export const logTutorialBeginEvent = () => {
+  if (window.firebaseAnalytics && window.firebaseLogEvent) {
+    window.firebaseLogEvent(window.firebaseAnalytics, 'tutorial_begin');
+  }
+};
+
+/**
+ * Logs a standard tutorial_complete event to Firebase Analytics.
+ * @param {string} [status] - Optional status string for the completion event
+ */
+export const logTutorialCompleteEvent = (status) => {
+  if (window.firebaseAnalytics && window.firebaseLogEvent) {
+    window.firebaseLogEvent(window.firebaseAnalytics, 'tutorial_complete', { status });
+  }
+};
