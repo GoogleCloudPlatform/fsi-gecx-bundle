@@ -1,7 +1,7 @@
 ## ✨ New Features
 
 # Week of July 27
-* **Analytics** Enabled Analytics throughout the application flows.
+* **Analytics**: Enabled Google Analytics throughout the application interaction areas.
 
 # Week of July 20
 * **Fraud Mitigation & Triage**: Introduced comprehensive Gemini Live fraud triage flows, MCP tooling for remediation, and Dataplex knowledge catalog guidance for voice support.
