@@ -1,4 +1,9 @@
 ## ✨ New Features
+
+# Week of July 27
+* **Analytics** Enabled Analytics throughout the application flows.
+
+# Week of July 20
 * **Fraud Mitigation & Triage**: Introduced comprehensive Gemini Live fraud triage flows, MCP tooling for remediation, and Dataplex knowledge catalog guidance for voice support.
 * **Advanced Data Generator**: Exposed new direct scenario control surfaces, fraud campaign templates, and travel geography scenarios with persona-aware baselines.
 * **Fraud Observability**: Surfaced fraud model risk metrics, alert generation from model decisions, and detailed decision history through the lakehouse.
