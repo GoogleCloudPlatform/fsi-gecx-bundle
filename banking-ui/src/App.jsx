@@ -45,7 +45,7 @@ import {
   getAccountsSummary
 } from './utils/api.js';
 import { getFormattedBuildTime, hasReleaseNotes } from './utils/releaseNotes.js';
-import { logInteractionEvent, logLoginEvent } from './utils/analytics.js';
+import { logInteractionEvent, logLoginEvent, logLogoutEvent } from './utils/analytics.js';
 import GoogleCloudIcon from './components/icons/GoogleCloudIcon.jsx';
 import CloudBuildIcon from './components/icons/CloudBuildIcon.jsx';
 import GcpInfoModal from './components/GcpInfoModal.jsx';
@@ -1503,6 +1503,7 @@ function AppContent() {
                         <AnalyticsButton
                           analyticsId="app_08" 
                           onClick={async () => {
+                            logLogoutEvent();
                             if (window.firebaseAuth) {
                               // 1. Wipe the local Firebase token on the app side
                               await window.firebaseAuth.signOut();

@@ -71,6 +71,15 @@ export const logLoginEvent = (method = 'Google') => {
 };
 
 /**
+ * Logs a custom logout event to Firebase Analytics.
+ */
+export const logLogoutEvent = () => {
+  if (window.firebaseAnalytics && window.firebaseLogEvent) {
+    window.firebaseLogEvent(window.firebaseAnalytics, 'logout');
+  }
+};
+
+/**
  * Logs a standard tutorial_begin event to Firebase Analytics.
  */
 export const logTutorialBeginEvent = () => {
