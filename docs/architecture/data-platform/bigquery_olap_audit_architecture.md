@@ -42,6 +42,8 @@ The scheduled Cloud Run relay reads by the immutable `(created_at, event_id)` cu
 
 Dataflow validates the envelope and the balanced financial contract, writes the complete event to `compliance_audit.audit_events`, and fans financial entries into `financial_ledger.account_ledger_entries`. Invalid records go to `audit-events-iceberg-dlq` with the validation stage and error. Managed Iceberg I/O commits snapshots at the configured interval and authenticates with workload ADC through Iceberg's renewable Google auth manager; no one-hour static token is embedded in the job.
 
+The one-minute commit interval is independent of history retention. Both catalog tables opt in to BigLake automatic table management. The catalog expires snapshots older than six hours while retaining at least 60 snapshots, garbage-collects unreferenced files, and compacts small data files in the background. Because these tables are append-only, snapshot expiration removes superseded time-travel metadata rather than current audit or ledger rows. Iceberg also deletes old metadata versions after each successful commit and retains the 20 most recent metadata documents.
+
 ## Query contract
 
 Catalog tables use BigQuery four-part names:
@@ -63,6 +65,8 @@ The validation batch reads audit ledger rows and Iceberg snapshot/file metadata,
 ## Operations and recovery
 
 - Cloud Monitoring alerts on relay failures, Dataflow job failures, excessive Pub/Sub age/backlog, and any DLQ backlog.
+- `audit-iceberg-bootstrap` idempotently enforces the lifecycle properties for new and existing tables on every qualified deployment.
+- `deployment/scripts/manage_audit_iceberg_tables.sh` is the explicit operator reconciliation command. It expires history to the configured horizon, applies the same table-management properties, and reports before/after snapshot counts for both tables.
 - A full transactional reset truncates the outbox and relay checkpoint before seeding, so the new demo lifecycle starts from a coherent cursor.
 - Iceberg history is retained independently. Catalog deletion or recreation is a separate privileged operation and must not be coupled to ordinary presenter reset.
 - Replay is safe: reset the relay cursor or replay Pub/Sub messages, then rely on logical BigQuery deduplication by stable IDs.
@@ -72,7 +76,7 @@ The validation batch reads audit ledger rows and Iceberg snapshot/file metadata,
 
 1. Apply Terraform APIs, IAM, catalog, buckets, topics, subscriptions, jobs, and views.
 2. Run database bootstrap, Alembic migration, and grant reconciliation.
-3. Run `audit-iceberg-bootstrap` to create the two namespaces and Iceberg v2 tables through the REST API.
+3. Run `audit-iceberg-bootstrap` to create or reconcile the two namespaces, Iceberg v2 tables, and automatic table-management policy through the REST API.
 4. Build and launch or update the `nova-audit-iceberg` Flex Template job.
 5. Reset/seed the transactional database, run the relay, and verify BigQuery balance and deduplication views.
 6. Run `deployment/scripts/validate_lakehouse_interoperability.sh` for Spark cross-catalog proof.

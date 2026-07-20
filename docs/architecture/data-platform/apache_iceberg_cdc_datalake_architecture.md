@@ -48,6 +48,8 @@ flowchart LR
 
 BigQuery queries catalog-native tables with a four-part project/catalog/namespace/table name. Spark connects to the runtime catalog for immutable Iceberg history and uses the Spark BigQuery connector for the mutable BigQuery-native CDC tables in the same session. See [Catalog-Native Iceberg Audit and Financial Ledger](./bigquery_olap_audit_architecture.md) for contracts and operations.
 
+The immutable tables retain the one-minute streaming commit cadence and use catalog-native automatic table management. A six-hour snapshot-history horizon with a minimum of 60 snapshots bounds metadata growth without removing any rows from the current append-only table state. BigLake performs snapshot expiration, orphan-file garbage collection, and small-file compaction asynchronously; the deployment bootstrap reconciles the policy on existing as well as newly created tables.
+
 ## Curated analytics contract
 
 The `analytics_curated` views provide stable business-facing names over raw CDC tables. They include enriched posted transactions, spend velocity, international fraud anomalies, and premium travel offer candidates. The view reconciler runs after Datastream activation and fails closed only for required dependencies; optional demo sources may remain deferred until their first backfill.

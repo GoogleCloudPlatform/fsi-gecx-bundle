@@ -72,6 +72,7 @@ This rebuild is required because Datastream does not replicate PostgreSQL `TRUNC
 - Federation: run `deployment/scripts/reconcile_alloydb_federation.sh`; it verifies `EXTERNAL_QUERY(..., 'SELECT 1')`.
 - Audit relay: execute `audit-outbox-relay` once and verify its checkpoint advances with no old-message alert.
 - Dataflow: verify `nova-audit-iceberg` is running, the Pub/Sub backlog is draining, and the Iceberg DLQ is empty.
+- Iceberg table management: the bootstrap enforces a six-hour history horizon, at least 60 retained snapshots, metadata cleanup, and BigLake automatic maintenance. To reconcile and report the two tables explicitly, run `PROJECT_ID=PROJECT_ID REGION=us-central1 deployment/scripts/manage_audit_iceberg_tables.sh`.
 - Catalog interoperability: run `deployment/scripts/validate_lakehouse_interoperability.sh`; it reads catalog-native Iceberg and native BigQuery CDC tables in one Spark session.
 
 If the slot is inactive, check the bridge and Datastream source profile before recreating it. Never drop an active slot merely to clear lag; a backfill decision must be explicit.
