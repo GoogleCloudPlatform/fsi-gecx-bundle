@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any
 
 import google.auth
@@ -17,6 +18,17 @@ from google.cloud import bigquery
 
 
 REST_ROOT = "https://biglake.googleapis.com/iceberg/v1/restcatalog/v1"
+
+TABLE_PROPERTIES = {
+    "format-version": "2",
+    "write.format.default": "parquet",
+    "write.parquet.compression-codec": "zstd",
+    "gcp.biglake.table-management.enabled": "true",
+    "history.expire.max-snapshot-age-ms": "21600000",
+    "history.expire.min-snapshots-to-keep": "60",
+    "write.metadata.delete-after-commit.enabled": "true",
+    "write.metadata.previous-versions-max": "20",
+}
 
 
 AUDIT_FIELDS = [
@@ -147,7 +159,9 @@ def _view_queries(project_id: str, catalog_id: str) -> dict[str, str]:
     }
 
 
-def reconcile_bigquery_views(client: Any, *, project_id: str, catalog_id: str) -> list[str]:
+def reconcile_bigquery_views(
+    client: Any, *, project_id: str, catalog_id: str
+) -> list[str]:
     """Creates logical deduplication and domain views after REST tables exist."""
     reconciled = []
     for name, query in _view_queries(project_id, catalog_id).items():
@@ -169,7 +183,9 @@ def _schema(fields: list[tuple[int, str, str, bool]]) -> dict[str, Any]:
 
 
 class CatalogBootstrap:
-    def __init__(self, session: Any, *, project_id: str, catalog_id: str, warehouse: str) -> None:
+    def __init__(
+        self, session: Any, *, project_id: str, catalog_id: str, warehouse: str
+    ) -> None:
         self.session = session
         self.project_id = project_id
         self.catalog_id = catalog_id
@@ -191,6 +207,53 @@ class CatalogBootstrap:
             f"Lakehouse catalog request failed ({response.status_code}) {url}: {response.text}"
         )
 
+    def _load_table(self, namespace: str, table: str) -> dict[str, Any]:
+        url = f"{self.base_url}/namespaces/{namespace}/tables/{table}"
+        response = self.session.get(url, headers=self.headers, timeout=60)
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"Lakehouse catalog request failed ({response.status_code}) {url}: "
+                f"{response.text}"
+            )
+        return response.json()
+
+    def _reconcile_table_properties(self, namespace: str, table: str) -> str:
+        url = f"{self.base_url}/namespaces/{namespace}/tables/{table}"
+        for attempt in range(5):
+            loaded = self._load_table(namespace, table)
+            metadata = loaded["metadata"]
+            current = metadata.get("properties", {})
+            updates = {
+                key: value
+                for key, value in TABLE_PROPERTIES.items()
+                if current.get(key) != value
+            }
+            if not updates:
+                return "exists"
+
+            response = self.session.post(
+                url,
+                headers=self.headers,
+                json={
+                    "identifier": {"namespace": [namespace], "name": table},
+                    "requirements": [
+                        {"type": "assert-table-uuid", "uuid": metadata["table-uuid"]}
+                    ],
+                    "updates": [{"action": "set-properties", "updates": updates}],
+                },
+                timeout=60,
+            )
+            if response.status_code in {200, 201}:
+                return "reconciled"
+            if response.status_code == 409 and attempt < 4:
+                time.sleep(0.25 * (attempt + 1))
+                continue
+            raise RuntimeError(
+                f"Lakehouse catalog request failed ({response.status_code}) {url}: "
+                f"{response.text}"
+            )
+        raise AssertionError("unreachable")
+
     def ensure_namespace(self, namespace: str) -> str:
         return self._post(
             f"{self.base_url}/namespaces",
@@ -206,7 +269,7 @@ class CatalogBootstrap:
         table: str,
         fields: list[tuple[int, str, str, bool]],
     ) -> str:
-        return self._post(
+        result = self._post(
             f"{self.base_url}/namespaces/{namespace}/tables",
             {
                 "name": table,
@@ -214,13 +277,12 @@ class CatalogBootstrap:
                 "partition-spec": {"spec-id": 0, "fields": []},
                 "write-order": {"order-id": 0, "fields": []},
                 "stage-create": False,
-                "properties": {
-                    "format-version": "2",
-                    "write.format.default": "parquet",
-                    "write.parquet.compression-codec": "zstd",
-                },
+                "properties": TABLE_PROPERTIES,
             },
         )
+        if result == "exists":
+            return self._reconcile_table_properties(namespace, table)
+        return result
 
     def run(self) -> dict[str, str]:
         result = {
