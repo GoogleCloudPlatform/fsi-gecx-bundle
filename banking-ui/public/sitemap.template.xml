@@ -70,4 +70,25 @@
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
+  <!-- Settings -->
+  <url>
+    <loc>$SITEMAP_BASE_URL/settings</loc>
+    <lastmod>2026-07-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <!-- Locator -->
+  <url>
+    <loc>$SITEMAP_BASE_URL/locator</loc>
+    <lastmod>2026-07-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <!-- Compare Products -->
+  <url>
+    <loc>$SITEMAP_BASE_URL/compare-products</loc>
+    <lastmod>2026-07-20</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
 </urlset>
