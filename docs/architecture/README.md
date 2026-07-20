@@ -75,3 +75,12 @@ Specifications covering the authentication surface that fronts the platform: cus
 | :--- | :--- |
 | **[Custom IAP Login UI (External Identities)](./identity-access/custom_iap_login_ui.md)** | Self-hosted `gcip-iap` + FirebaseUI sign-in page served at `/login`, multi-tenant GCIP configuration, runtime config injection, and deployment gating on `use_external_identities`. |
 | **[GCIP Blocking Functions](./identity-access/gcip_blocking_functions.md)** | `beforeCreate` / `beforeSignIn` email-domain restriction, Gen2 Cloud Functions deployment, Identity Platform trigger wiring, and least-privilege credential handling. |
+
+---
+
+## 🖥️ 5. Web Experience & Client Instrumentation (`web-experience/`)
+Specifications covering the browser-side concerns of the `banking-ui` single-page application: runtime configuration of the client and measurement of user behavior.
+
+| Specification | Description |
+| :--- | :--- |
+| **[Google Analytics Instrumentation (Banking UI)](./web-experience/google_analytics_banking_ui.md)** | Firebase Analytics / GA4 bootstrap and runtime config injection, SPA `page_view` emission, the `select_content` interaction taxonomy, two-layer click capture with `AnalyticsButton` / `AnalyticsLink`, and user-ID binding. |
