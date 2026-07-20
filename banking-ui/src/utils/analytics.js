@@ -42,9 +42,10 @@ export const deriveBreadcrumbFromUrl = (path) => {
  * @param {Object} [additionalProps] - Any extra properties to log
  */
 export const logInteractionEvent = (category, analyticsId, additionalProps = {}) => {
+  // https://developers.google.com/analytics/devguides/collection/ga4/reference/events?client_type=gtag#select_content
   const payload = {
     content_type: category,
-    item_id: analyticsId,
+    content_id: analyticsId,
     page_path: window.location.pathname,
     page_location: window.location.href,
     view_name: PAGE_TITLES[window.location.pathname] || document.title,
