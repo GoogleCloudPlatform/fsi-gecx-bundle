@@ -4,7 +4,9 @@ This repository is a collection of resources for the Financial Services Industry
 
 ## Solution Diagram
 
-![A diagram of the solution](solution_diagram.svg)
+The full solution architecture — the edge/identity layer, Cloud Run application and voice runtimes, AI/document/search services, eventing and job orchestration, and the operational data plane with its CDC and lakehouse paths — is documented in **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+
+For component-by-component detail, see [docs/architecture/](docs/architecture/README.md).
 
 ## Prerequisites
 
