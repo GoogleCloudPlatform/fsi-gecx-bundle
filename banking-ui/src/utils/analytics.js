@@ -44,7 +44,7 @@ export const deriveBreadcrumbFromUrl = (path) => {
 export const logInteractionEvent = (category, analyticsId, additionalProps = {}) => {
   const payload = {
     content_type: category,
-    item_id: analyticsId,
+    content_id: analyticsId,
     page_path: window.location.pathname,
     page_location: window.location.href,
     view_name: PAGE_TITLES[window.location.pathname] || document.title,
