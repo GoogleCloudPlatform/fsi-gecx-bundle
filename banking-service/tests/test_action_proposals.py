@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from models.action_proposal import ActionProposal
 from models.fraud import FraudAlert
+from models.identity import User
+from services.action_proposal_context import ProposalRuntimeContext
 from services.action_proposals import (
     ActionProposalService,
     ProposalConflictError,
@@ -19,6 +21,7 @@ from services.action_proposals import (
 @pytest.fixture(name="db_session")
 def fixture_db_session():
     engine = create_engine("sqlite:///:memory:")
+    User.__table__.create(bind=engine, checkfirst=True)
     FraudAlert.__table__.create(bind=engine, checkfirst=True)
     ActionProposal.__table__.create(bind=engine, checkfirst=True)
     with Session(engine) as session:
@@ -28,13 +31,19 @@ def fixture_db_session():
             session.rollback()
     ActionProposal.__table__.drop(bind=engine)
     FraudAlert.__table__.drop(bind=engine)
+    User.__table__.drop(bind=engine)
     engine.dispose()
 
 
 @pytest.fixture(name="fraud_alert")
 def fixture_fraud_alert(db_session):
+    user = User(
+        id=uuid.uuid4(),
+        auth_provider_uid="proposal-customer",
+        email="proposal@example.com",
+    )
     alert = FraudAlert(
-        customer_id=uuid.uuid4(),
+        customer_id=user.id,
         auth_provider_uid="proposal-customer",
         credit_account_id=uuid.uuid4(),
         card_id=uuid.uuid4(),
@@ -57,7 +66,7 @@ def fixture_fraud_alert(db_session):
             },
         ],
     )
-    db_session.add(alert)
+    db_session.add_all([user, alert])
     db_session.flush()
     return alert
 
@@ -274,3 +283,69 @@ def test_expired_proposal_cannot_be_presented(db_session, fraud_alert):
             now=expires_at + datetime.timedelta(seconds=1),
         )
     assert proposal.status == "EXPIRED"
+
+
+def test_authenticated_adapter_binds_transport_scope_and_returns_safe_view(
+    db_session, fraud_alert
+):
+    context = ProposalRuntimeContext(
+        support_session_id="support-session-1",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="adk-session-1",
+        customer_turn_id="customer-turn-10",
+        reset_generation="3:9",
+        catalog_snapshot_id="fraud-guidance-v7",
+    )
+
+    result = ActionProposalService(db_session).propose_fraud_triage_for_identity(
+        customer_identity="proposal-customer",
+        fraud_alert_id=fraud_alert.id,
+        disputed_authorization_ids=["auth-1"],
+        disputed_transaction_ids=[],
+        issue_replacement=True,
+        escalate=False,
+        runtime_context=context,
+        idempotency_key="adapter-turn-10",
+    )
+
+    proposal = db_session.query(ActionProposal).one()
+    assert result["proposal_id"] == str(proposal.id)
+    assert result["customer_safe_summary"] == proposal.customer_safe_summary
+    assert result["display_selection"]["disputed_authorization_ids"] == ["auth-1"]
+    assert proposal.customer_id == fraud_alert.customer_id
+    assert proposal.support_session_id == "support-session-1"
+
+
+def test_authenticated_commit_adapter_records_protected_later_turn_evidence(
+    db_session, fraud_alert, monkeypatch
+):
+    service = ActionProposalService(db_session)
+    proposal = _propose(service, fraud_alert)
+    context = ProposalRuntimeContext(
+        support_session_id="support-session-1",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="adk-session-1",
+        customer_turn_id="customer-turn-11",
+        reset_generation="3:9",
+        presentation_turn_id="assistant-turn-10",
+        confirmation_turn_id="customer-turn-11",
+        confirmation_method="EXPLICIT_VERBAL",
+        confirmation_classification="CONFIRMED",
+    )
+    monkeypatch.setattr(
+        service,
+        "commit_fraud_triage",
+        lambda *args, **kwargs: {"success": True, "status": "COMMITTED"},
+    )
+
+    result = service.commit_fraud_triage_for_identity(
+        proposal.id,
+        customer_identity="proposal@example.com",
+        runtime_context=context,
+    )
+
+    assert result["success"] is True
+    assert proposal.status == "CONFIRMED"
+    assert proposal.presented_assistant_turn_id == "assistant-turn-10"
+    assert proposal.confirmation_customer_turn_id == "customer-turn-11"
+    assert proposal.confirmation_evidence["method"] == "EXPLICIT_VERBAL"

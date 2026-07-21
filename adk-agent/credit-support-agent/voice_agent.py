@@ -134,7 +134,13 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     record_session_started(mode)
     logger.info("Initializing voice agent session %s", session_log_context(room_name, customer_id, session_id, mode))
     import agent.agent as agent_module
-    session_context_tokens = bind_session_context(customer_id, None)
+    session_context_tokens = bind_session_context(
+        customer_id,
+        None,
+        support_session_id=session_id,
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id=session_id,
+    )
     terminal_outcome = TerminalOutcome.NORMAL_DISCONNECT
 
     # Load typed runtime settings and customer workflow context.
@@ -200,6 +206,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         "token": "0:0",
     }
     session_state["reset_generation"] = reset_generation
+    agent_module.configure_proposal_runtime_context(
+        reset_generation=str(reset_generation.get("token") or ""),
+        catalog_snapshot_id=support_guidance.get("snapshot_id"),
+    )
     # Create the session dynamically using the passed IDs
     user_id = f"user-{customer_id}"
     _, resumed, resume_reason = await open_or_resume_session(

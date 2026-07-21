@@ -46,6 +46,8 @@ from services.credit_card import (
     unfreeze_card,
 )
 from services.fraud_alerts import FraudAlertService
+from services.action_proposal_context import ProposalRuntimeContext, RuntimeContextError
+from services.action_proposals import ActionProposalService, ProposalError
 from services.taxonomy_service import TaxonomyService
 from services.simulation import SimulationService
 from utils.auth import get_current_user, is_support_staff
@@ -438,7 +440,9 @@ async def trigger_voice_agent_session_async(
                 timeout=5.0,
             )
             if res.status_code == 200:
-                logger.info("Voice agent dispatch trigger successful: %s", res.status_code)
+                logger.info(
+                    "Voice agent dispatch trigger successful: %s", res.status_code
+                )
             else:
                 logger.error(
                     f"Voice agent dispatcher returned non-success status {res.status_code}: {res.text}"
@@ -502,6 +506,54 @@ def get_voice_session_context(
     return _to_json_safe(
         FraudAlertService(db).get_active_voice_context(auth_provider_uid=customer_id)
     )
+
+
+class FraudTriageProposalRequest(BaseModel):
+    fraud_alert_id: str
+    disputed_authorization_ids: list[str] = Field(default_factory=list)
+    disputed_transaction_ids: list[str] = Field(default_factory=list)
+    issue_replacement: bool = True
+    escalate: bool = False
+    idempotency_key: str = Field(..., min_length=1, max_length=128)
+
+
+@router.post("/action-proposals/fraud-triage")
+def create_fraud_triage_proposal(
+    request: FraudTriageProposalRequest,
+    db: Session = Depends(get_db),
+    customer_id: str = Depends(_get_active_customer_id),
+    x_support_session_id: str = Header(...),
+    x_runtime_name: str = Header(...),
+    x_runtime_session_id: str = Header(...),
+    x_customer_turn_id: str = Header(...),
+    x_reset_generation: str = Header(...),
+    x_catalog_snapshot_id: str | None = Header(None),
+):
+    """Protected ADK/CES adapter for creating a banking-owned proposal."""
+    try:
+        runtime_context = ProposalRuntimeContext.from_headers(
+            {
+                "x-support-session-id": x_support_session_id,
+                "x-runtime-name": x_runtime_name,
+                "x-runtime-session-id": x_runtime_session_id,
+                "x-customer-turn-id": x_customer_turn_id,
+                "x-reset-generation": x_reset_generation,
+                "x-catalog-snapshot-id": x_catalog_snapshot_id or "",
+            }
+        )
+        return ActionProposalService(db).propose_fraud_triage_for_identity(
+            customer_identity=customer_id,
+            fraud_alert_id=request.fraud_alert_id,
+            disputed_authorization_ids=request.disputed_authorization_ids,
+            disputed_transaction_ids=request.disputed_transaction_ids,
+            issue_replacement=request.issue_replacement,
+            escalate=request.escalate,
+            runtime_context=runtime_context,
+            idempotency_key=request.idempotency_key,
+        )
+    except (ProposalError, RuntimeContextError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/fraud-alert/acknowledge")

@@ -10,12 +10,17 @@ from __future__ import annotations
 import datetime
 import hashlib
 import json
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import or_
+
 from models.action_proposal import ActionProposal
 from models.fraud import FraudAlert
+from models.identity import User
 from repositories.fraud import FraudAlertRepository
+from services.action_proposal_context import ProposalRuntimeContext
 from utils.audit import record_audit_event
 
 
@@ -174,6 +179,39 @@ class ActionProposalService:
             idempotency_key=idempotency_key,
             expires_at=expires_at,
         )
+
+    def propose_fraud_triage_for_identity(
+        self,
+        *,
+        customer_identity: str,
+        fraud_alert_id,
+        disputed_authorization_ids: list[str] | None,
+        disputed_transaction_ids: list[str] | None,
+        issue_replacement: bool,
+        escalate: bool,
+        runtime_context: ProposalRuntimeContext,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Create a typed proposal using authenticated transport identity/context."""
+        runtime_context.require_customer_turn()
+        customer_id = self._resolve_customer_id(customer_identity)
+        proposal = self.propose_fraud_triage(
+            customer_id=customer_id,
+            fraud_alert_id=fraud_alert_id,
+            disputed_authorization_ids=disputed_authorization_ids,
+            disputed_transaction_ids=disputed_transaction_ids,
+            issue_replacement=issue_replacement,
+            escalate=escalate,
+            support_session_id=runtime_context.support_session_id,
+            runtime_name=runtime_context.runtime_name,
+            runtime_session_id=runtime_context.runtime_session_id,
+            originating_customer_turn_id=runtime_context.customer_turn_id,
+            reset_generation=runtime_context.reset_generation,
+            catalog_snapshot_id=runtime_context.catalog_snapshot_id,
+            idempotency_key=idempotency_key,
+        )
+        self.db.commit()
+        return self.proposal_view(proposal)
 
     def mark_presented(
         self,
@@ -476,6 +514,75 @@ class ActionProposalService:
             self.db.rollback()
             raise
 
+    def commit_fraud_triage_for_identity(
+        self,
+        proposal_id,
+        *,
+        customer_identity: str,
+        runtime_context: ProposalRuntimeContext,
+    ) -> dict[str, Any]:
+        """Attest protected later-turn evidence and commit an opaque proposal id."""
+        runtime_context.require_confirmation()
+        customer_id = self._resolve_customer_id(customer_identity)
+        proposal = self._get_locked(proposal_id)
+        self._validate_scope(
+            proposal,
+            customer_id=customer_id,
+            support_session_id=runtime_context.support_session_id,
+            runtime_name=runtime_context.runtime_name,
+            runtime_session_id=runtime_context.runtime_session_id,
+            expected_action_type=TRIAGE_FRAUD_CASE,
+        )
+        if proposal.status == "PROPOSED":
+            self.mark_presented(
+                proposal.id,
+                assistant_turn_id=str(runtime_context.presentation_turn_id),
+            )
+        if proposal.status == "PRESENTED":
+            self.confirm(
+                proposal.id,
+                customer_turn_id=str(runtime_context.confirmation_turn_id),
+                protected_evidence={
+                    "method": runtime_context.confirmation_method,
+                    "classification": runtime_context.confirmation_classification,
+                    "runtime_name": runtime_context.runtime_name,
+                    "runtime_session_id": runtime_context.runtime_session_id,
+                    "presentation_turn_id": runtime_context.presentation_turn_id,
+                    "confirmation_turn_id": runtime_context.confirmation_turn_id,
+                },
+            )
+        return self.commit_fraud_triage(
+            proposal.id,
+            customer_id=customer_id,
+            support_session_id=runtime_context.support_session_id,
+            runtime_name=runtime_context.runtime_name,
+            runtime_session_id=runtime_context.runtime_session_id,
+            reset_generation=runtime_context.reset_generation,
+        )
+
+    @staticmethod
+    def proposal_view(proposal: ActionProposal) -> dict[str, Any]:
+        payload = dict(proposal.action_payload or {})
+        return {
+            "success": True,
+            "proposal_id": str(proposal.id),
+            "action_type": proposal.action_type,
+            "contract_version": proposal.contract_version,
+            "status": proposal.status,
+            "confirmation_policy": proposal.confirmation_policy,
+            "customer_safe_summary": proposal.customer_safe_summary,
+            "display_selection": {
+                "fraud_alert_id": payload.get("fraud_alert_id"),
+                "disputed_authorization_ids": payload.get(
+                    "disputed_authorization_ids", []
+                ),
+                "disputed_transaction_ids": payload.get("disputed_transaction_ids", []),
+                "issue_replacement": bool(payload.get("issue_replacement")),
+                "escalate": bool(payload.get("escalate")),
+            },
+            "expires_at": _as_utc(proposal.expires_at).isoformat(),
+        }
+
     def _create(self, **values) -> ActionProposal:
         required_strings = (
             "contract_version",
@@ -621,6 +728,23 @@ class ActionProposalService:
         if not proposal:
             raise ProposalError("Action proposal was not found.")
         return proposal
+
+    def _resolve_customer_id(self, customer_identity: str):
+        identity = str(customer_identity or "").strip()
+        identity_filters = [
+            User.auth_provider_uid == identity,
+            User.email == identity,
+        ]
+        try:
+            identity_filters.append(User.id == uuid.UUID(identity))
+        except (TypeError, ValueError):
+            pass
+        user = self.db.query(User).filter(or_(*identity_filters)).first()
+        if not user:
+            raise ProposalScopeError(
+                "Authenticated customer identity does not resolve to a banking customer."
+            )
+        return user.id
 
     def _expire_if_needed(
         self, proposal: ActionProposal, now: datetime.datetime

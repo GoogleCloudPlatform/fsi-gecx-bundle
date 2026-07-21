@@ -13,6 +13,7 @@ def test_agent_build_and_terraform_share_capacity_contract() -> None:
         "VOICE_AGENT_MAX_CONCURRENT_SESSIONS",
         "VOICE_AGENT_AUDIO_SESSION_CAPACITY_UNITS",
         "VOICE_AGENT_VIDEO_SESSION_CAPACITY_UNITS",
+        "VOICE_AGENT_USE_ACTION_PROPOSALS",
     )
     for setting in settings:
         assert setting in cloudbuild

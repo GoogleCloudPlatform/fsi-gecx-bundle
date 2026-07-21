@@ -25,6 +25,7 @@ from utils.auth import validate_firebase_token
 from utils.env import is_running_locally
 from utils.database import SessionLocal
 from utils.log_safety import stable_log_reference
+from services.action_proposal_context import ProposalRuntimeContext
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,9 @@ def _mask_ein(ein_value: str) -> str:
 
 verified_customer_id_var: ContextVar[str] = ContextVar("verified_customer_id", default=None)
 assertion_token_var: ContextVar[str] = ContextVar("assertion_token", default=None)
+proposal_runtime_context_var: ContextVar[ProposalRuntimeContext | None] = ContextVar(
+    "proposal_runtime_context", default=None
+)
 
 def requires_user_assertion(func):
     @functools.wraps(func)
@@ -208,6 +212,10 @@ def requires_user_assertion(func):
         # Set ContextVars for internal resolution
         t_cust = verified_customer_id_var.set(effective_id)
         t_assert = assertion_token_var.set(assertion_token)
+        runtime_context = None
+        if headers.get("x-support-session-id"):
+            runtime_context = ProposalRuntimeContext.from_headers(headers)
+        t_runtime = proposal_runtime_context_var.set(runtime_context)
 
         try:
             # Check wrapped function signature and dynamically inject kwargs if declared
@@ -227,6 +235,7 @@ def requires_user_assertion(func):
             else:
                 return func(*args, **kwargs)
         finally:
+            proposal_runtime_context_var.reset(t_runtime)
             verified_customer_id_var.reset(t_cust)
             assertion_token_var.reset(t_assert)
             

@@ -13,6 +13,9 @@
   hydrated and expire after `VOICE_SESSION_TTL_SECONDS` (default 12 hours).
 - The agent fails closed before a consequential tool when the banking reset
   generation cannot be verified or has changed.
+- `VOICE_AGENT_USE_ACTION_PROPOSALS` defaults to `true`. It makes active-alert
+  fraud triage commit the banking-owned proposal id; `false` temporarily restores
+  the direct `triage_fraud_case` compatibility path.
 
 ## Pre-deployment checks
 
@@ -194,7 +197,11 @@ loopback. Never expose it or deploy it as an application service.
 ## Rollback
 
 First route traffic to the prior Cloud Run revision. The database additions are
-backward compatible and can remain in place. If a source rollback is required,
+backward compatible and can remain in place. For a proposal-only rollback, set
+`VOICE_AGENT_USE_ACTION_PROPOSALS=false` on the ADK service and leave the banking
+proposal tables and tools deployed; prepared but uncommitted proposals expire
+without mutating banking state. Rehearse one recognized and one disputed case
+through the direct path before returning traffic. If a source rollback is required,
 restore `google-adk==2.3.0` and its lock file, disable
 `VOICE_AGENT_SESSION_RESUMPTION_ENABLED`, and deploy the prior agent image. No
 banking or UI rollback is required because MCP and data-channel payloads remain

@@ -14,12 +14,18 @@
 
 import time
 import datetime
+import hashlib
+import json
 import logging
 import re
 from fastmcp import Context
 
 from . import mcp  # Import shared FastMCP server instance
-from routers.mcp.utils import requires_user_assertion, verified_customer_id_var
+from routers.mcp.utils import (
+    proposal_runtime_context_var,
+    requires_user_assertion,
+    verified_customer_id_var,
+)
 from utils.database import SessionLocal
 from utils.log_safety import stable_log_reference
 from repositories.credit_card import CreditCardRepository
@@ -32,6 +38,8 @@ from services.credit_card import (
     get_transaction_history_dto,
 )
 from services.fraud_alerts import FraudAlertService
+from services.action_proposal_context import RuntimeContextError
+from services.action_proposals import ActionProposalService, ProposalError
 from services.voice_bidi import send_session_event
 
 logger = logging.getLogger(__name__)
@@ -454,6 +462,135 @@ async def resolve_fraud_alert(
             "success": False,
             "message": "Internal error resolving fraud alert.",
             "fraud_alert": None,
+        }
+    finally:
+        db.close()
+
+
+def _proposal_idempotency_key(runtime_context, payload: dict) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    fingerprint = hashlib.sha256(encoded).hexdigest()[:32]
+    return (
+        f"{runtime_context.runtime_name}:{runtime_context.runtime_session_id}:"
+        f"{runtime_context.customer_turn_id}:{fingerprint}"
+    )[:128]
+
+
+@mcp.tool()
+@requires_user_assertion
+async def propose_fraud_triage(
+    fraud_alert_id: str,
+    disputed_authorization_ids: list[str] = None,
+    disputed_transaction_ids: list[str] = None,
+    issue_replacement: bool = True,
+    escalate: bool = False,
+    ctx: Context = None,
+) -> dict:
+    """Prepare an immutable active-alert fraud proposal for later confirmation."""
+    verified_customer_id = verified_customer_id_var.get()
+    runtime_context = proposal_runtime_context_var.get()
+    if runtime_context is None:
+        return {
+            "success": False,
+            "error": "TRUSTED_RUNTIME_CONTEXT_REQUIRED",
+            "message": "Trusted runtime session context is required.",
+        }
+    payload = {
+        "fraud_alert_id": str(fraud_alert_id or "").strip(),
+        "disputed_authorization_ids": disputed_authorization_ids or [],
+        "disputed_transaction_ids": disputed_transaction_ids or [],
+        "issue_replacement": bool(issue_replacement),
+        "escalate": bool(escalate),
+    }
+    db = SessionLocal()
+    try:
+        return ActionProposalService(db).propose_fraud_triage_for_identity(
+            customer_identity=verified_customer_id,
+            runtime_context=runtime_context,
+            idempotency_key=_proposal_idempotency_key(runtime_context, payload),
+            **payload,
+        )
+    except (ProposalError, RuntimeContextError) as exc:
+        db.rollback()
+        return {"success": False, "error": "PROPOSAL_REJECTED", "message": str(exc)}
+    except Exception as exc:
+        db.rollback()
+        logger.error(
+            "Error in FastMCP propose_fraud_triage error_type=%s",
+            type(exc).__name__,
+        )
+        return {
+            "success": False,
+            "error": "PROPOSAL_FAILED",
+            "message": "Internal error preparing fraud confirmation.",
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def commit_fraud_triage(
+    proposal_id: str,
+    ctx: Context = None,
+) -> dict:
+    """Commit one confirmed fraud proposal by opaque proposal id only."""
+    verified_customer_id = verified_customer_id_var.get()
+    runtime_context = proposal_runtime_context_var.get()
+    if runtime_context is None:
+        return {
+            "success": False,
+            "error": "TRUSTED_RUNTIME_CONTEXT_REQUIRED",
+            "message": "Trusted runtime session context is required.",
+        }
+    if not re.match(r"^[a-fA-F0-9-]{32,36}$", str(proposal_id or "")):
+        return {
+            "success": False,
+            "error": "INVALID_PROPOSAL_ID",
+            "message": "Invalid action proposal id.",
+        }
+    db = SessionLocal()
+    try:
+        result = ActionProposalService(db).commit_fraud_triage_for_identity(
+            proposal_id,
+            customer_identity=verified_customer_id,
+            runtime_context=runtime_context,
+        )
+        if result.get("success"):
+            try:
+                await send_session_event(
+                    f"session-{verified_customer_id}",
+                    {
+                        "type": "FRAUD_CASE_TRIAGED",
+                        "proposal_id": str(proposal_id),
+                        "outcome": result.get("outcome"),
+                        "fraud_alert": result.get("fraud_alert"),
+                        "voided_authorizations": result.get("voided_authorizations", []),
+                        "provisional_credits": result.get("provisional_credits", []),
+                        "replacement_card": result.get("replacement_card"),
+                        "secure_message": result.get("secure_message"),
+                        "escalated": result.get("escalated", False),
+                    },
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Committed fraud proposal UI event failed error_type=%s",
+                    type(exc).__name__,
+                )
+        return result
+    except (ProposalError, RuntimeContextError) as exc:
+        db.rollback()
+        return {"success": False, "error": "COMMIT_REJECTED", "message": str(exc)}
+    except Exception as exc:
+        db.rollback()
+        logger.error(
+            "Error in FastMCP commit_fraud_triage error_type=%s",
+            type(exc).__name__,
+        )
+        return {
+            "success": False,
+            "error": "COMMIT_FAILED",
+            "message": "Internal error committing fraud proposal.",
         }
     finally:
         db.close()
