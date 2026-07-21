@@ -48,6 +48,26 @@ def test_runtime_context_requires_real_customer_turn() -> None:
         ).require_customer_turn()
 
 
+def test_read_only_mcp_tool_ignores_partial_proposal_headers() -> None:
+    partial_headers = {
+        "x-support-session-id": "support-1",
+        "x-runtime-name": "CES_GEMINI_LIVE",
+        "x-runtime-session-id": "runtime-1",
+        "x-reset-generation": "3:9",
+    }
+
+    assert (
+        mcp_utils._proposal_context_for_tool(
+            "get_open_fraud_alert", partial_headers
+        )
+        is None
+    )
+    with pytest.raises(RuntimeContextError, match="x-customer-turn-id"):
+        mcp_utils._proposal_context_for_tool(
+            "propose_fraud_triage", partial_headers
+        )
+
+
 def test_confirmation_evidence_is_transport_owned_and_explicit() -> None:
     context = ProposalRuntimeContext.from_headers(
         _headers(

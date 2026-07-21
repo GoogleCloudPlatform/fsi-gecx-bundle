@@ -101,6 +101,18 @@ assertion_token_var: ContextVar[str] = ContextVar("assertion_token", default=Non
 proposal_runtime_context_var: ContextVar[ProposalRuntimeContext | None] = ContextVar(
     "proposal_runtime_context", default=None
 )
+PROPOSAL_CONTEXT_TOOL_NAMES = frozenset(
+    {"propose_fraud_triage", "commit_fraud_triage"}
+)
+
+
+def _proposal_context_for_tool(
+    tool_name: str, headers: dict[str, str]
+) -> ProposalRuntimeContext | None:
+    """Parse protected proposal headers only for proposal lifecycle tools."""
+    if tool_name not in PROPOSAL_CONTEXT_TOOL_NAMES:
+        return None
+    return ProposalRuntimeContext.from_headers(headers)
 
 def requires_user_assertion(func):
     @functools.wraps(func)
@@ -212,9 +224,7 @@ def requires_user_assertion(func):
         # Set ContextVars for internal resolution
         t_cust = verified_customer_id_var.set(effective_id)
         t_assert = assertion_token_var.set(assertion_token)
-        runtime_context = None
-        if headers.get("x-support-session-id"):
-            runtime_context = ProposalRuntimeContext.from_headers(headers)
+        runtime_context = _proposal_context_for_tool(func.__name__, headers)
         t_runtime = proposal_runtime_context_var.set(runtime_context)
 
         try:
