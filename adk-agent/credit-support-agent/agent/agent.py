@@ -48,7 +48,6 @@ from agent.workflow_authorization import (
     PUSH_CARD_TO_GOOGLE_WALLET,
     TRIAGE_CUSTOMER_REPORTED_FRAUD,
     TRIAGE_FRAUD_CASE,
-    apply_customer_authorization_response,
     action_payload_fingerprint,
     create_workflow_authorization,
     invalidate_workflow_authorization,
@@ -155,7 +154,10 @@ def bind_session_context(
         # the same session signals.
         "should_end": session_should_end_var.set({"requested": False}),
         "is_processing": is_processing_tool_var.set({"active": False}),
-        "latest_customer_turn": latest_customer_turn_var.set({"latest": None}),
+        "latest_customer_turn": latest_customer_turn_var.set({
+            "latest": None,
+            "authorization_decision": None,
+        }),
         "proposal_runtime_context": proposal_runtime_context_var.set({
             "support_session_id": support_session_id or runtime_session_id or "",
             "runtime_name": runtime_name,
@@ -264,58 +266,84 @@ def record_customer_turn(
     *,
     event_id: str | None = None,
     observed_at_epoch_s: float | None = None,
-) -> None:
-    """Record bounded confirmation evidence before a Live tool call is emitted."""
+    pending_ingress: bool = False,
+    consume_pending: bool = False,
+) -> dict | None:
+    """Register a customer turn and return its canonical runtime evidence."""
     text = str(transcript or "").strip()
     if not text:
-        return
+        return None
     observed_at = time.time() if observed_at_epoch_s is None else observed_at_epoch_s
+    holder = latest_customer_turn_var.get()
+    if holder is None:
+        holder = {"latest": None, "authorization_decision": None}
+        latest_customer_turn_var.set(holder)
+    latest = holder.get("latest") or {}
+    if (
+        consume_pending
+        and latest.get("pending_ingress")
+        and " ".join(str(latest.get("transcript") or "").lower().split())
+        == " ".join(text.lower().split())
+    ):
+        turn = dict(latest)
+        turn["pending_ingress"] = False
+        if event_id and event_id != turn.get("event_id"):
+            turn["runtime_event_id"] = event_id
+        holder["latest"] = turn
+        return turn
     turn = {
         "transcript": text[:1000],
         "event_id": event_id or f"customer-turn-{time.time_ns()}",
         "observed_at_epoch_s": observed_at,
+        "pending_ingress": pending_ingress,
     }
+    holder["latest"] = turn
+    holder["authorization_decision"] = None
+    return turn
+
+
+def record_customer_authorization_decision(authorization: dict) -> None:
+    """Publish the plugin's classified decision for same-turn tool reconciliation."""
     holder = latest_customer_turn_var.get()
     if holder is None:
-        latest_customer_turn_var.set({"latest": turn})
-    else:
-        holder["latest"] = turn
+        holder = {"latest": None, "authorization_decision": None}
+        latest_customer_turn_var.set(holder)
+    holder["authorization_decision"] = dict(authorization)
 
 
-def apply_latest_customer_turn_to_authorization(
+def apply_recorded_authorization_decision(
     fraud_playbook: dict,
 ) -> tuple[dict, bool]:
-    """Reconcile Live/typed input that ADK has not yet committed to session state."""
+    """Reconcile a plugin-classified decision not yet committed to ADK state."""
     authorization = dict(fraud_playbook.get("workflow_authorization") or {})
     holder = latest_customer_turn_var.get() or {}
-    turn = holder.get("latest") or {}
+    latest_turn = holder.get("latest") or {}
+    decision = dict(holder.get("authorization_decision") or {})
     if authorization.get("status") not in {"PENDING", "UNCLEAR"}:
         return fraud_playbook, False
-    if not authorization.get("assistant_event_id"):
+    if decision.get("status") not in {"CONFIRMED", "DECLINED", "EXPIRED", "UNCLEAR"}:
         return fraud_playbook, False
-    if float(turn.get("observed_at_epoch_s") or 0) <= float(
-        authorization.get("issued_at_epoch_s") or 0
-    ):
-        return fraud_playbook, False
-    if not turn.get("event_id") or turn.get("event_id") == authorization.get(
-        "customer_event_id"
-    ):
-        return fraud_playbook, False
-
-    updated_authorization = apply_customer_authorization_response(
-        authorization,
-        transcript=turn.get("transcript"),
-        customer_event_id=str(turn["event_id"]),
-        now_epoch_s=float(turn["observed_at_epoch_s"]),
+    identity_fields = (
+        "action",
+        "session_id",
+        "issued_at_epoch_s",
+        "payload_fingerprint",
+        "proposal_id",
     )
-    if updated_authorization == authorization:
+    if any(decision.get(field) != authorization.get(field) for field in identity_fields):
+        return fraud_playbook, False
+    if not decision.get("customer_event_id"):
+        return fraud_playbook, False
+    if decision.get("customer_event_id") != latest_turn.get("event_id"):
+        return fraud_playbook, False
+    if decision == authorization:
         return fraud_playbook, False
     updated_playbook = dict(fraud_playbook)
-    updated_playbook["workflow_authorization"] = updated_authorization
-    if updated_authorization.get("action") == PUSH_CARD_TO_GOOGLE_WALLET:
-        updated_playbook["wallet_response_status"] = updated_authorization.get("status")
+    updated_playbook["workflow_authorization"] = decision
+    if decision.get("action") == PUSH_CARD_TO_GOOGLE_WALLET:
+        updated_playbook["wallet_response_status"] = decision.get("status")
         updated_playbook["wallet_customer_confirmed"] = (
-            updated_authorization.get("status") == "CONFIRMED"
+            decision.get("status") == "CONFIRMED"
         )
     return updated_playbook, True
 
@@ -842,12 +870,12 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
     authorization_to_execute = None
     if authorization_action:
         fraud_playbook, authorization_reconciled = (
-            apply_latest_customer_turn_to_authorization(fraud_playbook)
+            apply_recorded_authorization_decision(fraud_playbook)
         )
         if authorization_reconciled:
             tool_context.state["fraud_playbook"] = fraud_playbook
             logger.info(
-                "[CALLBACK] reconciled latest customer turn before tool validation %s",
+                "[CALLBACK] reconciled classified authorization before tool validation %s",
                 format_log_context(
                     state=tool_context.state,
                     tool_name=tool_name,

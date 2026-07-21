@@ -21,6 +21,7 @@ from agent.agent import (
     create_voice_agent,
     is_session_end_requested,
     is_tool_processing,
+    record_customer_authorization_decision,
     record_customer_turn,
     reset_session_context,
 )
@@ -301,7 +302,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         app=App(
             name="credit-support-agent",
             root_agent=session_agent,
-            plugins=[FraudWorkflowStatePlugin()],
+            plugins=[FraudWorkflowStatePlugin(
+                customer_turn_observer=record_customer_turn,
+                authorization_observer=record_customer_authorization_decision,
+            )],
         ),
         session_service=session_service,
     )
@@ -574,6 +578,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 record_customer_turn(
                     message.text,
                     event_id=f"typed-{message.message_id}",
+                    pending_ingress=True,
                 )
 
                 async def release_stalled_typed_turn() -> None:
@@ -895,7 +900,6 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                             
                 # Broadcast transcriptions over data channel for UI display when complete
                 if live_event.input_transcript is not None:
-                    record_customer_turn(live_event.input_transcript)
                     if live_event.input_transcript in pending_typed_transcripts:
                         pending_typed_transcripts.remove(live_event.input_transcript)
                     else:

@@ -286,3 +286,61 @@ async def test_plugin_accepts_typed_customer_confirmation() -> None:
     assert updated["workflow_authorization"]["customer_event_id"] == (
         "typed-user-event"
     )
+
+
+@pytest.mark.asyncio
+async def test_plugin_reuses_ingress_id_and_publishes_one_classified_decision() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    authorization = create_workflow_authorization(
+        action=TRIAGE_FRAUD_CASE,
+        payload={
+            "fraud_alert_id": "fraud-123",
+            "disputed_authorization_ids": ["auth-1"],
+            "disputed_transaction_ids": [],
+            "issue_replacement": True,
+        },
+        session_id="session-1",
+    )
+    authorization["status"] = "PENDING"
+    authorization["assistant_event_id"] = "agent-prompt"
+    playbook["workflow_authorization"] = authorization
+    session = SimpleNamespace(
+        state={"session_id": "session-1", "fraud_playbook": playbook}
+    )
+    context = SimpleNamespace(session=session)
+    observed_turns = []
+    decisions = []
+
+    def observe_turn(text, **kwargs):
+        observed_turns.append((text, kwargs))
+        return {"event_id": "typed-message-123"}
+
+    plugin = FraudWorkflowStatePlugin(
+        customer_turn_observer=observe_turn,
+        authorization_observer=decisions.append,
+    )
+    event = Event(
+        id="adk-user-event",
+        author="user",
+        actions={},
+        content=types.Content(
+            role="user", parts=[types.Part(text="Yes, that is correct.")]
+        ),
+    )
+
+    await plugin.on_event_callback(invocation_context=context, event=event)
+
+    updated = event.actions.state_delta["fraud_playbook"]
+    assert observed_turns[0][1]["event_id"] == "adk-user-event"
+    assert observed_turns[0][1]["consume_pending"] is True
+    assert updated["workflow_authorization"]["customer_event_id"] == (
+        "typed-message-123"
+    )
+    assert len(decisions) == 1
+    assert decisions[0]["status"] == "CONFIRMED"
+    assert decisions[0]["customer_event_id"] == "typed-message-123"

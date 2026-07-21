@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from google.adk.plugins import BasePlugin
 
 from agent.closeout import apply_closeout_transcript_event
@@ -46,8 +48,15 @@ def _record_proposal_transition(
 class FraudWorkflowStatePlugin(BasePlugin):
     """Persist completed Live transcript transitions into ADK session state."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        customer_turn_observer: Callable[..., dict | None] | None = None,
+        authorization_observer: Callable[[dict], None] | None = None,
+    ) -> None:
         super().__init__(name="fraud_workflow_state")
+        self._customer_turn_observer = customer_turn_observer
+        self._authorization_observer = authorization_observer
 
     async def on_event_callback(self, *, invocation_context, event):
         playbook = invocation_context.session.state.get("fraud_playbook") or {}
@@ -83,6 +92,15 @@ class FraudWorkflowStatePlugin(BasePlugin):
             text_parts = [part.text for part in parts if getattr(part, "text", None)]
             customer_text = "\n".join(text_parts).strip() or None
         if customer_text is not None:
+            if self._customer_turn_observer:
+                turn = self._customer_turn_observer(
+                    customer_text,
+                    event_id=event_id,
+                    observed_at_epoch_s=event.timestamp,
+                    consume_pending=True,
+                )
+                if turn and turn.get("event_id"):
+                    event_id = str(turn["event_id"])
             checkpoint = invocation_context.session.state.get("closeout_checkpoint")
             updated_checkpoint = apply_closeout_transcript_event(
                 checkpoint,
@@ -101,6 +119,9 @@ class FraudWorkflowStatePlugin(BasePlugin):
                     customer_event_id=event_id,
                 )
                 updated["workflow_authorization"] = authorization
+                if authorization != (playbook.get("workflow_authorization") or {}):
+                    if self._authorization_observer:
+                        self._authorization_observer(authorization)
                 if authorization.get("status") != prior_status:
                     _record_proposal_transition(
                         invocation_context.session.state,
