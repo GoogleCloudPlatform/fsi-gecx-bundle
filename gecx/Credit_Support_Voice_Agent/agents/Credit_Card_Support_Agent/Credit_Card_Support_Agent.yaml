@@ -3,9 +3,24 @@ displayName: Credit Card Support Agent
 instruction: agents/Credit_Card_Support_Agent/instruction.txt
 tools:
 - end_session
+beforeModelCallbacks:
+- pythonCode: agents/Credit_Card_Support_Agent/before_model_callbacks/classify_confirmation.py
+  description: Classify only a later completed customer turn against the active proposal.
+beforeToolCallbacks:
+- pythonCode: agents/Credit_Card_Support_Agent/before_tool_callbacks/enforce_proposal_context.py
+  description: Bind proposal calls to callback-owned turn evidence and block unsafe commits.
+afterToolCallbacks:
+- pythonCode: agents/Credit_Card_Support_Agent/after_tool_callbacks/capture_proposal.py
+  description: Capture the opaque proposal and banking-authored presentation summary.
+afterModelCallbacks:
+- pythonCode: agents/Credit_Card_Support_Agent/after_model_callbacks/record_presentation.py
+  description: Record when the model actually presents the banking-authored summary.
 toolsets:
 - toolset: banking_service_mcp_toolset
   toolIds:
+  - get_open_fraud_alert
+  - propose_fraud_triage
+  - commit_fraud_triage
   - report_lost_stolen_card
   - request_credit_limit_increase
   - reverse_overdraft_fee

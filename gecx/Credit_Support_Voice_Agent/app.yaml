@@ -1,4 +1,4 @@
-name: 42345105-29cb-492d-8a60-07171bb72190
+name: de51bcc7-fb3b-4a40-9b97-f52bcb0a0622
 displayName: Credit_Support_Voice_Agent
 rootAgent: Credit Card Support Agent
 loggingSettings:
@@ -74,6 +74,42 @@ variableDeclarations:
     type: STRING
 - name: language_selection_source
   description: Source of the active language selection.
+  schema:
+    type: STRING
+- name: customer_turn_id
+  description: CES callback-owned identifier for the current completed customer turn.
+  schema:
+    type: STRING
+- name: proposal_id
+  description: Opaque active proposal identifier captured from the banking tool response.
+  schema:
+    type: STRING
+- name: proposal_customer_safe_summary
+  description: Banking-authored summary that must be presented before confirmation.
+  schema:
+    type: STRING
+- name: proposal_originating_turn_id
+  description: CES callback-owned customer turn that originated the proposal.
+  schema:
+    type: STRING
+- name: proposal_presentation_turn_id
+  description: CES callback-owned turn in which the banking summary was presented.
+  schema:
+    type: STRING
+- name: proposal_confirmation_turn_id
+  description: CES callback-owned later customer confirmation turn.
+  schema:
+    type: STRING
+- name: proposal_confirmation_method
+  description: CES callback-owned normalized confirmation method.
+  schema:
+    type: STRING
+- name: proposal_confirmation_classification
+  description: CES callback-owned CONFIRMED, DECLINED, or UNCLEAR classification.
+  schema:
+    type: STRING
+- name: proposal_last_classified_turn_id
+  description: CES callback-owned guard against reclassifying one invocation.
   schema:
     type: STRING
 timeZoneSettings:
