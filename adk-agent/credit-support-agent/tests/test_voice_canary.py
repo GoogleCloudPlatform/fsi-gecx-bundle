@@ -87,6 +87,32 @@ def test_extract_deployed_trajectory_hashes_explicit_session_id() -> None:
     assert found_session == session_ref
 
 
+def test_non_error_checkpoint_is_a_successful_tool_result() -> None:
+    session_ref = "session_c27700199f20"
+    entries = [
+        entry(
+            "2026-07-14T20:00:00Z",
+            f"Opened ADK session state session_ref={session_ref} reset_generation=0:3",
+        ),
+        entry(
+            "2026-07-14T20:00:01Z",
+            "[CALLBACK] before_tool_callback triggered "
+            f"session_ref={session_ref} tool_name=prepare_fraud_triage_confirmation",
+        ),
+        entry(
+            "2026-07-14T20:00:02Z",
+            "[CALLBACK] after_tool_callback triggered "
+            f"session_ref={session_ref} tool_name=prepare_fraud_triage_confirmation "
+            "result={'is_error': False, 'structured': False}",
+        ),
+    ]
+
+    _, events = voice_canary.extract_trajectory(entries, session_selector=session_ref)
+
+    tool_result = next(event for event in events if event["type"] == "TOOL_RESULT")
+    assert tool_result["success"] is True
+
+
 def test_deployed_log_fetch_keeps_the_newest_sessions(monkeypatch) -> None:
     observed = {}
 

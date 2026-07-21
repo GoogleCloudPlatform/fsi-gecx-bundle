@@ -219,6 +219,8 @@ def extract_trajectory(
                         "'success': True",
                         '"success": true',
                         "'status': 'SUCCESS'",
+                        "'is_error': False",
+                        '"is_error": false',
                     )
                 )
                 events.append(
