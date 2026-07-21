@@ -1411,7 +1411,7 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
         raise e
 
 def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
-    """Resets the user's personal checking/savings balances to default and clears credit card transactions."""
+    """Reset a presenter by retiring accounts while preserving financial history."""
     enable_session_rbac_override(db)
 
     user = db.query(User).filter(User.id == user_id).first()
@@ -1484,20 +1484,57 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
         UserSecureMessage.is_user_read.is_(False),
     ).delete(synchronize_session=False)
 
-    # 3. Fetch credit accounts belonging to user
+    # 3. Retire the current card account and instruments. Posted transactions
+    # and their journal entries are immutable, so a presenter reset creates a
+    # fresh account rather than deleting historical statement rows.
     credit_accounts = db.query(CreditAccount).filter(
         CreditAccount.customer_id == user_id,
         CreditAccount.status == "ACTIVE",
     ).all()
-    cred_acc = credit_accounts[0] if credit_accounts else None
-    card = None
-    if cred_acc:
-        db.query(PostedTransaction).filter(PostedTransaction.account_id == cred_acc.id).delete(synchronize_session=False)
-        db.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == cred_acc.id).delete(synchronize_session=False)
-        cred_acc.cleared_balance_cents = 0
-        cred_acc.available_credit_cents = cred_acc.credit_limit_cents
-        db.query(IssuedCard).filter(IssuedCard.account_id == cred_acc.id).delete(synchronize_session=False)
+    prior_credit_account = credit_accounts[0] if credit_accounts else None
+    for account in credit_accounts:
+        account.status = "CLOSED"
+        for issued_card in db.query(IssuedCard).filter(
+            IssuedCard.account_id == account.id
+        ):
+            issued_card.status = "CLOSED"
+            issued_card.is_active = False
+        journal_account = db.query(Account).filter(
+            Account.credit_account_id == account.id
+        ).one_or_none()
+        if journal_account:
+            journal_account.status = "CLOSED"
 
+    cred_acc = None
+    card = None
+    if prior_credit_account:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        cred_acc = CreditAccount(
+            id=uuid.uuid4(),
+            customer_id=user_id,
+            product_code=prior_credit_account.product_code,
+            status="ACTIVE",
+            credit_limit_cents=prior_credit_account.credit_limit_cents,
+            cleared_balance_cents=0,
+            available_credit_cents=prior_credit_account.credit_limit_cents,
+            payment_due_date=now + datetime.timedelta(days=15),
+            statement_close_date=now - datetime.timedelta(days=15),
+            last_payment_amount_cents=0,
+            currency=prior_credit_account.currency or "USD",
+        )
+        db.add(cred_acc)
+        db.flush()
+        record_audit_event(
+            db,
+            "CREDIT_ACCOUNT_CREATED",
+            {
+                "user_id": str(user_id),
+                "account_id": str(cred_acc.id),
+                "product_code": cred_acc.product_code,
+                "reset": True,
+                "replaces_account_id": str(prior_credit_account.id),
+            },
+        )
         card_num = generate_luhn_card_number(prefix="4111", length=16)
         card = IssuedCard(
             id=uuid.uuid4(),
@@ -1521,6 +1558,7 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
                 "account_id": str(cred_acc.id),
                 "card_token": card.card_token,
                 "reset": True,
+                "replaces_account_id": str(prior_credit_account.id),
             },
         )
     
