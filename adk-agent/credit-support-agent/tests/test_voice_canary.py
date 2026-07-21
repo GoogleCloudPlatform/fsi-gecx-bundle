@@ -113,6 +113,34 @@ def test_non_error_checkpoint_is_a_successful_tool_result() -> None:
     assert tool_result["success"] is True
 
 
+def test_structured_business_failure_is_not_a_successful_tool_result() -> None:
+    session_ref = "session_64aa9875e42b"
+    entries = [
+        entry(
+            "2026-07-14T20:00:00Z",
+            f"Opened ADK session state session_ref={session_ref} reset_generation=0:3",
+        ),
+        entry(
+            "2026-07-14T20:00:01Z",
+            "[CALLBACK] after_tool_callback triggered "
+            f"session_ref={session_ref} tool_name=commit_fraud_triage "
+            "result={'is_error': False, 'structured': True, 'success': False}",
+        ),
+        entry(
+            "2026-07-14T20:00:02Z",
+            "[CALLBACK] after_tool_callback triggered "
+            f"session_ref={session_ref} tool_name=commit_fraud_triage "
+            "result={'is_error': False, 'status': 'AUTHORIZATION_REQUIRED'}",
+        ),
+    ]
+
+    _, events = voice_canary.extract_trajectory(entries, session_selector=session_ref)
+
+    assert [
+        event["success"] for event in events if event["type"] == "TOOL_RESULT"
+    ] == [False, False]
+
+
 def test_deployed_log_fetch_keeps_the_newest_sessions(monkeypatch) -> None:
     observed = {}
 

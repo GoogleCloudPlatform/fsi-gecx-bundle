@@ -191,16 +191,20 @@ def configure_proposal_runtime_context(
 
 def _proposal_transport_headers(*, customer_turn_id: str) -> dict[str, str]:
     holder = proposal_runtime_context_var.get() or {}
+    confirmation = holder.get("confirmation") or {}
+    protected_confirmation_turn_id = str(
+        confirmation.get("confirmation_turn_id") or ""
+    )
     headers = {
         "x-support-session-id": str(holder.get("support_session_id") or ""),
         "x-runtime-name": str(holder.get("runtime_name") or ""),
         "x-runtime-session-id": str(holder.get("runtime_session_id") or ""),
-        "x-customer-turn-id": str(customer_turn_id or ""),
+        "x-customer-turn-id": protected_confirmation_turn_id
+        or str(customer_turn_id or ""),
         "x-reset-generation": str(holder.get("reset_generation") or ""),
     }
     if holder.get("catalog_snapshot_id"):
         headers["x-catalog-snapshot-id"] = str(holder["catalog_snapshot_id"])
-    confirmation = holder.get("confirmation") or {}
     if confirmation:
         headers.update({
             "x-proposal-presentation-turn-id": str(confirmation.get("presentation_turn_id") or ""),

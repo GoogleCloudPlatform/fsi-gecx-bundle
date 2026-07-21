@@ -213,20 +213,45 @@ def extract_trajectory(
         elif "[CALLBACK] after_tool_callback triggered" in message:
             match = TOOL_PATTERN.search(message)
             if match:
-                success = any(
+                tool_name = match.group(1)
+                explicit_failure = any(
+                    marker in message
+                    for marker in (
+                        "'success': False",
+                        '"success": false',
+                        "'is_error': True",
+                        '"is_error": true',
+                    )
+                )
+                explicit_success = any(
                     marker in message
                     for marker in (
                         "'success': True",
                         '"success": true',
                         "'status': 'SUCCESS'",
-                        "'is_error': False",
-                        '"is_error": false',
                     )
+                )
+                expected_checkpoint = (
+                    tool_name
+                    in {
+                        "prepare_fraud_triage_confirmation",
+                        "prepare_customer_reported_fraud_confirmation",
+                    }
+                    and any(
+                        marker in message
+                        for marker in (
+                            "'is_error': False",
+                            '"is_error": false',
+                        )
+                    )
+                )
+                success = not explicit_failure and (
+                    explicit_success or expected_checkpoint
                 )
                 events.append(
                     {
                         "type": "TOOL_RESULT",
-                        "tool": match.group(1),
+                        "tool": tool_name,
                         "success": success,
                         "elapsed_ms": elapsed_ms,
                     }

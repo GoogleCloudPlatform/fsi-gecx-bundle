@@ -171,6 +171,7 @@ async def test_commit_uses_only_proposal_id_and_protected_transport_evidence(
             headers = authorized_request.headers
         assert headers["x-proposal-presentation-turn-id"] == "assistant-turn-10"
         assert headers["x-proposal-confirmation-turn-id"] == "customer-turn-11"
+        assert headers["x-customer-turn-id"] == "customer-turn-11"
         assert headers["x-proposal-confirmation-method"] == "EXPLICIT_VERBAL"
         assert headers["x-proposal-confirmation-classification"] == "CONFIRMED"
     finally:
