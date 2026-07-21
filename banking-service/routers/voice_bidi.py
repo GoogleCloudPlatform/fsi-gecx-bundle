@@ -13,10 +13,10 @@
 # limitations under the License.
 
 import os
-import time
 import json
 import logging
 import asyncio
+import uuid
 from fastapi import APIRouter, WebSocket
 
 from utils.auth import validate_firebase_token
@@ -53,16 +53,20 @@ async def gecx_voice_stream(websocket: WebSocket):
                 validated_token = validate_firebase_token(auth_frame["token"])
                 user_id = validated_token.claims.get("sub")
                 fb_token = auth_frame["token"]
-                # Append a timestamp to GECX session ID to force a fresh session context on every connect
-                session_id = f"session-{user_id}-{int(time.time())}"
+                if not user_id:
+                    raise ValueError("Authenticated token is missing a subject claim.")
+                session_id = f"ces-{uuid.uuid4().hex}"
                 
-            logger.info(f"First-frame authentication succeeded. Session: {session_id} (User: {user_id})")
+            logger.info("First-frame authentication succeeded for CES voice session.")
         except asyncio.TimeoutError:
             logger.warning("Auth timeout: First-frame auth token not received within 5 seconds.")
             await websocket.close(code=4001, reason="Authentication timeout.")
             return
         except Exception as auth_err:
-            logger.warning(f"Auth failed: Invalid Firebase token details. {auth_err}")
+            logger.warning(
+                "CES first-frame authentication failed error_type=%s",
+                type(auth_err).__name__,
+            )
             await websocket.close(code=4001, reason="Authentication failed.")
             return
 
@@ -81,6 +85,21 @@ async def gecx_voice_stream(websocket: WebSocket):
         await session.start()
         
     except Exception as e:
-        logger.error(f"Session failure for session {session_id}: {e}")
+        logger.error(
+            "CES voice session failed session_present=%s error_type=%s",
+            bool(session_id),
+            type(e).__name__,
+        )
+        try:
+            await websocket.send_json(
+                {
+                    "type": "ERROR",
+                    "message": "Unable to start voice consultation.",
+                }
+            )
+            await websocket.close(code=1011, reason="Voice session unavailable.")
+        except RuntimeError:
+            # The browser or upstream session may already have disconnected.
+            pass
     finally:
         logger.info("WebSocket session clean-up completed.")

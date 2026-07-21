@@ -16,5 +16,65 @@ variableDeclarations:
   description: Variable "user_token" containing Firebase ID token.
   schema:
     type: STRING
+- name: support_session_id
+  description: Server-issued support session identifier.
+  schema:
+    type: STRING
+- name: runtime_name
+  description: Trusted conversational runtime name.
+  schema:
+    type: STRING
+- name: runtime_session_id
+  description: Server-issued CES runtime session identifier.
+  schema:
+    type: STRING
+- name: customer_ref
+  description: One-way customer reference for safe correlation.
+  schema:
+    type: STRING
+- name: reset_generation
+  description: Banking voice reset-generation token.
+  schema:
+    type: STRING
+- name: catalog_snapshot_id
+  description: Knowledge Catalog guidance snapshot identifier.
+  schema:
+    type: STRING
+- name: catalog_content_version
+  description: Knowledge Catalog guidance content version.
+  schema:
+    type: STRING
+- name: entry_reason
+  description: Bounded voice-support entry reason.
+  schema:
+    type: STRING
+- name: has_active_fraud_alert
+  description: Whether banking reports an active fraud alert at session start.
+  schema:
+    type: BOOLEAN
+- name: fraud_support_guidance_summary
+  description: Bounded, catalog-grounded support guidance for this session.
+  schema:
+    type: STRING
+- name: ces_app_id
+  description: CES application identifier used by this session.
+  schema:
+    type: STRING
+- name: ces_version_or_deployment_id
+  description: CES version or deployment identifier used by this session.
+  schema:
+    type: STRING
+- name: language_code
+  description: Product language code, initially English.
+  schema:
+    type: STRING
+- name: runtime_language_code
+  description: Provider-specific spoken-language locale.
+  schema:
+    type: STRING
+- name: language_selection_source
+  description: Source of the active language selection.
+  schema:
+    type: STRING
 timeZoneSettings:
   timeZone: America/Los_Angeles

@@ -22,6 +22,8 @@ from typing import Dict
 from fastapi import WebSocket, WebSocketDisconnect
 
 from utils.gcp import get_project_id
+from utils.log_safety import stable_log_reference
+from services.ces_session_bootstrap import build_ces_session_bootstrap
 import google.auth
 import google.auth.transport.requests
 
@@ -37,9 +39,16 @@ async def send_session_event(session_key: str, event_payload: dict):
     queue = active_sessions.get(user_id)
     if queue:
         await queue.put(event_payload)
-        logger.info(f"OOB event queued for user {user_id}: {event_payload}")
+        logger.info(
+            "CES OOB event queued customer_ref=%s event_type=%s",
+            stable_log_reference(user_id, "customer"),
+            event_payload.get("type"),
+        )
     else:
-        logger.debug(f"OOB event discarded, user {user_id} is offline.")
+        logger.debug(
+            "CES OOB event discarded customer_ref=%s reason=offline",
+            stable_log_reference(user_id, "customer"),
+        )
 
 
 class GCPTokenManager:
@@ -90,50 +99,74 @@ class VoiceBidiSession:
         self.location = location
         self.client_to_gecx_queue = asyncio.Queue(maxsize=100)
         self.gecx_to_client_queue = asyncio.Queue(maxsize=100)
+        self.bootstrap = None
+        self._active_session_keys: set[str] = set()
 
     async def start(self):
         """Starts the active session streaming loops."""
-        # Register queue for out-of-band updates
-        active_sessions[self.user_id] = self.gecx_to_client_queue
-        
-        # Also register under customer ID to route tool-triggered UI update pushes
         from utils.database import SessionLocal
-        from repositories.credit_card import CreditCardRepository
-        db = SessionLocal()
-        repo = CreditCardRepository(db)
-        customer_id = self.user_id
-        try:
-            account = repo.get_account_by_customer(self.user_id)
-            if not account:
-                accounts = repo.get_all_accounts()
-                if accounts:
-                    customer_id = str(accounts[0].customer_id)
-        except Exception as e:
-            logger.warning(f"Error resolving customer ID for active sessions: {e}")
-        finally:
-            db.close()
-            
-        self.customer_id = customer_id
-        active_sessions[self.customer_id] = self.gecx_to_client_queue
-        logger.info(f"Registered active session for user {self.user_id} (Customer ID: {self.customer_id})")
-        
+
+        def load_bootstrap():
+            db = SessionLocal()
+            try:
+                return build_ces_session_bootstrap(
+                    db,
+                    auth_provider_uid=self.user_id,
+                    runtime_session_id=self.session_id,
+                    gecx_app_id=self.gecx_app_id,
+                )
+            finally:
+                db.close()
+
+        self.bootstrap = await asyncio.to_thread(load_bootstrap)
+
+        self.customer_id = self.bootstrap.customer_id
+        self._active_session_keys = {self.user_id, self.customer_id}
+        for key in self._active_session_keys:
+            active_sessions[key] = self.gecx_to_client_queue
+        logger.info(
+            "CES session bootstrap established customer_ref=%s "
+            "support_session_ref=%s runtime_session_ref=%s runtime=%s "
+            "catalog_snapshot_ref=%s ces_app_id=%s ces_version_or_deployment_id=%s "
+            "language_code=%s runtime_language_code=%s",
+            self.bootstrap.customer_ref,
+            stable_log_reference(
+                self.bootstrap.support_session_id, "support-session"
+            ),
+            stable_log_reference(
+                self.bootstrap.runtime_session_id, "runtime-session"
+            ),
+            self.bootstrap.runtime_name,
+            stable_log_reference(
+                self.bootstrap.catalog_snapshot_id, "catalog-snapshot"
+            ),
+            self.bootstrap.ces_app_id,
+            self.bootstrap.ces_version_or_deployment_id,
+            self.bootstrap.language_code,
+            self.bootstrap.runtime_language_code,
+        )
+
         try:
             await self._run_pipeline()
         finally:
-            active_sessions.pop(self.user_id, None)
-            active_sessions.pop(self.customer_id, None)
+            for key in self._active_session_keys:
+                if active_sessions.get(key) is self.gecx_to_client_queue:
+                    active_sessions.pop(key, None)
 
     async def _run_pipeline(self):
         project_id = get_project_id()
         
-        app_id = self.gecx_app_id
+        app_id = self.bootstrap.ces_app_id
         deployment_path = None
         if "deployments/" in self.gecx_app_id:
             deployment_path = self.gecx_app_id
             parts = self.gecx_app_id.split("/")
             app_id = parts[parts.index("apps") + 1]
 
-        session_name = f"projects/{project_id}/locations/us/apps/{app_id}/sessions/{self.session_id}"
+        session_name = (
+            f"projects/{project_id}/locations/{self.location}/apps/{app_id}/"
+            f"sessions/{self.session_id}"
+        )
         gecx_uri = f"wss://ces.googleapis.com/ws/google.cloud.ces.v1.SessionService/BidiRunSession/locations/{self.location}"
         
         gcp_token = await token_manager.get_token()
@@ -141,7 +174,10 @@ class VoiceBidiSession:
             "Authorization": f"Bearer {gcp_token}"
         }
         
-        logger.info(f"Opening GECX Bidi Session at {gecx_uri} (Session: {session_name})...")
+        logger.info(
+            "Opening CES Bidi session runtime_session_ref=%s",
+            stable_log_reference(self.session_id, "runtime-session"),
+        )
         async with websockets.connect(gecx_uri, additional_headers=headers) as gecx_ws:
             logger.info("Connected to GECX. Performing handshake...")
             
@@ -169,10 +205,9 @@ class VoiceBidiSession:
             # Send initial session variables to populate context before triggering agent
             variables_msg = {
                 "realtimeInput": {
-                    "variables": {
-                        "user_token": self.fb_token,
-                        "access_token": self.fb_token
-                    }
+                    "variables": self.bootstrap.ces_variables(
+                        user_token=self.fb_token
+                    )
                 }
             }
             await gecx_ws.send(json.dumps(variables_msg))
