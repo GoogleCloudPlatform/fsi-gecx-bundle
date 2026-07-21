@@ -57,6 +57,7 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
     assert [path.name for path in versions] == [
         "2ea57c78ba89_alloydb_unified_baseline.py",
         "7c4f2a9d1e63_canonical_journal_and_outbox_relay.py",
+        "91d7b4a6c2ef_runtime_neutral_action_proposals.py",
     ]
     baseline = versions[0].read_text()
     assert "down_revision: Union[str, Sequence[str], None] = None" in baseline
@@ -74,3 +75,8 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
     assert 'down_revision: Union[str, Sequence[str], None] = "2ea57c78ba89"' in journal_migration
     assert "ck_account_ledger_positive_amount" in journal_migration
     assert "outbox_relay_checkpoint" in journal_migration
+
+    proposal_migration = versions[2].read_text()
+    assert 'down_revision: Union[str, Sequence[str], None] = "7c4f2a9d1e63"' in proposal_migration
+    assert "action_proposals" in proposal_migration
+    assert "uq_action_proposals_scope_idempotency" in proposal_migration

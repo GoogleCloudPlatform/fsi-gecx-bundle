@@ -40,6 +40,7 @@ from models.kyc import KYCRecord, UserCreditProfile
 from models.origination import Account, AccountLedgerEntry, Transaction
 from models.credit_card import CreditAccount, IssuedCard, PostedTransaction, CreditProduct, TransactionAuthorization
 from models.fraud import FraudAlert, FraudCaseAction
+from models.action_proposal import ActionProposal
 from models.merchant import MerchantMaster, MerchantStore
 from models.origination import DepositProduct
 from models.settings import SystemSetting
@@ -462,6 +463,7 @@ def clean_database(db: Session) -> None:
         OutboxRelayCheckpoint,
         AuditOutbox,
         Escalation,
+        ActionProposal,
         FraudCaseAction,
         FraudAlert,
         UserSecureMessage,
@@ -499,6 +501,7 @@ def clean_database(db: Session) -> None:
         return
 
     db.query(Escalation).delete(synchronize_session=False)
+    db.query(ActionProposal).delete(synchronize_session=False)
     db.query(FraudCaseAction).delete(synchronize_session=False)
     db.query(FraudAlert).delete(synchronize_session=False)
     db.query(UserSecureMessage).delete(synchronize_session=False)
@@ -1464,6 +1467,9 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
         for thread_id in (alert.message_thread_id, alert.triage_message_thread_id)
         if thread_id
     }
+    db.query(ActionProposal).filter(ActionProposal.customer_id == user_id).delete(
+        synchronize_session=False
+    )
     if fraud_alert_ids:
         db.query(FraudCaseAction).filter(FraudCaseAction.fraud_alert_id.in_(fraud_alert_ids)).delete(synchronize_session=False)
         db.query(FraudAlert).filter(FraudAlert.id.in_(fraud_alert_ids)).delete(synchronize_session=False)
@@ -1593,6 +1599,9 @@ def deprovision_user_suite(db: Session, user_id: uuid.UUID) -> dict[str, int]:
         for thread_id in (alert.message_thread_id, alert.triage_message_thread_id)
         if thread_id
     }
+    db.query(ActionProposal).filter(ActionProposal.customer_id == user_id).delete(
+        synchronize_session=False
+    )
     if fraud_alert_ids:
         db.query(FraudCaseAction).filter(
             FraudCaseAction.fraud_alert_id.in_(fraud_alert_ids)
