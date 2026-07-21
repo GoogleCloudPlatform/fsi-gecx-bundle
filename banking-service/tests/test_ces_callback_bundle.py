@@ -4,6 +4,8 @@ import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 
+import yaml
+
 
 AGENT_DIR = (
     Path(__file__).resolve().parents[2]
@@ -12,6 +14,7 @@ AGENT_DIR = (
     / "agents"
     / "Credit_Card_Support_Agent"
 )
+APP_DIR = AGENT_DIR.parents[1]
 
 
 def _load(relative_path: str):
@@ -115,3 +118,21 @@ def test_proposal_capture_and_exact_presentation_recording():
     )
     presentation.after_model_callback(context, response)
     assert variables["proposal_presentation_turn_id"] == "turn-1"
+
+
+def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
+    app = yaml.safe_load((APP_DIR / "app.yaml").read_text())
+    instruction = (AGENT_DIR / "instruction.txt").read_text()
+
+    assert app["audioProcessingConfig"]["inactivityTimeout"] == "300s"
+    assert app["loggingSettings"]["redactionConfig"]["enableRedaction"] is True
+    assert "Hi, I'm Nova with Nova Horizon Bank." in instruction
+    for tool_name in (
+        "get_open_fraud_alert",
+        "propose_fraud_triage",
+        "commit_fraud_triage",
+        "report_lost_stolen_card",
+        "reverse_overdraft_fee",
+        "request_credit_limit_increase",
+    ):
+        assert f"{{@TOOL: {tool_name}}}" not in instruction

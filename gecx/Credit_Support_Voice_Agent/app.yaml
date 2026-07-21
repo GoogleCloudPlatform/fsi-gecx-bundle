@@ -4,6 +4,10 @@ rootAgent: Credit Card Support Agent
 loggingSettings:
   conversationLoggingSettings:
     retentionWindow: 31536000s
+  redactionConfig:
+    enableRedaction: true
+audioProcessingConfig:
+  inactivityTimeout: 300s
 guardrails:
 - Default Safety Guardrail
 - Default Prompt Guardrail
