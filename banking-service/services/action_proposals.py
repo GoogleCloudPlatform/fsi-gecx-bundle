@@ -15,6 +15,8 @@ from typing import Any
 
 from models.action_proposal import ActionProposal
 from models.fraud import FraudAlert
+from repositories.fraud import FraudAlertRepository
+from utils.audit import record_audit_event
 
 
 TRIAGE_FRAUD_CASE = "TRIAGE_FRAUD_CASE"
@@ -334,6 +336,146 @@ class ActionProposalService:
         self.db.flush()
         return proposal
 
+    def commit_fraud_triage(
+        self,
+        proposal_id,
+        *,
+        customer_id,
+        support_session_id: str,
+        runtime_name: str,
+        runtime_session_id: str,
+        reset_generation: str,
+        now: datetime.datetime | None = None,
+    ) -> dict[str, Any]:
+        """Execute a confirmed fraud proposal in one caller-owned transaction."""
+        proposal = self._get_locked(proposal_id)
+        try:
+            claim = self.claim_commit(
+                proposal.id,
+                customer_id=customer_id,
+                support_session_id=support_session_id,
+                runtime_name=runtime_name,
+                runtime_session_id=runtime_session_id,
+                reset_generation=reset_generation,
+                expected_action_type=TRIAGE_FRAUD_CASE,
+                now=now,
+            )
+        except (ProposalScopeError, ProposalTransitionError):
+            if proposal.status in {"INVALIDATED", "EXPIRED"}:
+                try:
+                    self._record_disposition_event(proposal)
+                    self.db.commit()
+                except Exception:
+                    self.db.rollback()
+                    raise
+            else:
+                self.db.rollback()
+            raise
+
+        workflow_key = self._fraud_workflow_idempotency_key(proposal)
+        if not claim.should_execute:
+            if proposal.status == "COMMITTED":
+                return self._proposal_result(proposal, idempotent_replay=True)
+            try:
+                reconciled = self._reconcile_committing_fraud_proposal(
+                    proposal, workflow_key=workflow_key, now=now
+                )
+            except Exception:
+                self.db.rollback()
+                raise
+            if reconciled:
+                self.db.commit()
+                return self._proposal_result(proposal, idempotent_replay=True)
+            return {
+                "success": False,
+                "proposal_id": str(proposal.id),
+                "action_type": proposal.action_type,
+                "status": "COMMITTING",
+                "idempotent_replay": True,
+                "message": "Fraud proposal commit is already in progress.",
+            }
+
+        payload = dict(proposal.action_payload or {})
+        alert = (
+            self.db.query(FraudAlert)
+            .filter(
+                FraudAlert.id == payload.get("fraud_alert_id"),
+                FraudAlert.customer_id == proposal.customer_id,
+                FraudAlert.credit_account_id == proposal.account_id,
+            )
+            .with_for_update()
+            .first()
+        )
+        if not alert or alert.status != "OPEN":
+            proposal.status = "INVALIDATED"
+            proposal.invalidation_reason = "FRAUD_ALERT_NO_LONGER_OPEN"
+            proposal.completed_at = _as_utc(now or _utcnow())
+            try:
+                self._record_disposition_event(proposal)
+                self.db.commit()
+            except Exception:
+                self.db.rollback()
+                raise
+            raise ProposalTransitionError(
+                "Fraud alert is no longer open; create a new proposal from current state."
+            )
+
+        try:
+            record_audit_event(
+                self.db,
+                "ACTION_PROPOSAL_COMMIT_STARTED",
+                {
+                    "proposal_id": str(proposal.id),
+                    "correlation_id": str(proposal.id),
+                    "action_type": proposal.action_type,
+                    "contract_version": proposal.contract_version,
+                    "customer_id": str(proposal.customer_id),
+                    "account_id": str(proposal.account_id),
+                    "support_session_id": proposal.support_session_id,
+                    "runtime_name": proposal.runtime_name,
+                    "fraud_alert_id": str(alert.id),
+                    "payload_fingerprint": proposal.payload_fingerprint,
+                },
+            )
+            from services.fraud_alerts import FraudAlertService
+
+            result = FraudAlertService(self.db)._triage_fraud_case_in_transaction(
+                auth_provider_uid=alert.auth_provider_uid,
+                fraud_alert_id=str(alert.id),
+                disputed_authorization_ids=payload.get("disputed_authorization_ids"),
+                disputed_transaction_ids=payload.get("disputed_transaction_ids"),
+                issue_replacement=bool(payload.get("issue_replacement")),
+                escalate=bool(payload.get("escalate")),
+                idempotency_key=workflow_key,
+            )
+            committed = self.mark_committed(
+                proposal.id,
+                result_payload=result,
+                now=now,
+            )
+            record_audit_event(
+                self.db,
+                "ACTION_PROPOSAL_COMMITTED",
+                {
+                    "proposal_id": str(committed.id),
+                    "correlation_id": str(committed.id),
+                    "action_type": committed.action_type,
+                    "contract_version": committed.contract_version,
+                    "customer_id": str(committed.customer_id),
+                    "account_id": str(committed.account_id),
+                    "support_session_id": committed.support_session_id,
+                    "runtime_name": committed.runtime_name,
+                    "fraud_alert_id": str(alert.id),
+                    "outcome": result.get("outcome"),
+                    "payload_fingerprint": committed.payload_fingerprint,
+                },
+            )
+            self.db.commit()
+            return self._proposal_result(committed, idempotent_replay=False)
+        except Exception:
+            self.db.rollback()
+            raise
+
     def _create(self, **values) -> ActionProposal:
         required_strings = (
             "contract_version",
@@ -397,6 +539,77 @@ class ActionProposalService:
         self.db.add(proposal)
         self.db.flush()
         return proposal
+
+    def _reconcile_committing_fraud_proposal(
+        self,
+        proposal: ActionProposal,
+        *,
+        workflow_key: str,
+        now: datetime.datetime | None,
+    ) -> bool:
+        """Finish proposal state when its durable domain result already exists."""
+        fraud_alert_id = (proposal.action_payload or {}).get("fraud_alert_id")
+        if not fraud_alert_id:
+            return False
+        action = FraudAlertRepository(self.db).get_case_action_by_idempotency_key(
+            fraud_alert_id=fraud_alert_id,
+            idempotency_key=workflow_key,
+        )
+        if not action or action.status != "SUCCEEDED":
+            return False
+        result = dict(action.result_payload or {})
+        self.mark_committed(proposal.id, result_payload=result, now=now)
+        record_audit_event(
+            self.db,
+            "ACTION_PROPOSAL_COMMIT_RECONCILED",
+            {
+                "proposal_id": str(proposal.id),
+                "correlation_id": str(proposal.id),
+                "action_type": proposal.action_type,
+                "customer_id": str(proposal.customer_id),
+                "fraud_alert_id": str(fraud_alert_id),
+                "domain_action_id": str(action.id),
+                "outcome": result.get("outcome"),
+            },
+        )
+        return True
+
+    @staticmethod
+    def _fraud_workflow_idempotency_key(proposal: ActionProposal) -> str:
+        return f"proposal:{proposal.id}:{proposal.payload_fingerprint[:48]}"
+
+    @staticmethod
+    def _proposal_result(
+        proposal: ActionProposal, *, idempotent_replay: bool
+    ) -> dict[str, Any]:
+        result = dict(proposal.result_payload or {})
+        result.update(
+            {
+                "proposal_id": str(proposal.id),
+                "action_type": proposal.action_type,
+                "contract_version": proposal.contract_version,
+                "status": proposal.status,
+                "idempotent_replay": idempotent_replay,
+            }
+        )
+        return result
+
+    def _record_disposition_event(self, proposal: ActionProposal) -> None:
+        record_audit_event(
+            self.db,
+            f"ACTION_PROPOSAL_{proposal.status}",
+            {
+                "proposal_id": str(proposal.id),
+                "correlation_id": str(proposal.id),
+                "action_type": proposal.action_type,
+                "contract_version": proposal.contract_version,
+                "customer_id": str(proposal.customer_id),
+                "account_id": str(proposal.account_id or "") or None,
+                "support_session_id": proposal.support_session_id,
+                "runtime_name": proposal.runtime_name,
+                "reason": proposal.invalidation_reason,
+            },
+        )
 
     def _get_locked(self, proposal_id) -> ActionProposal:
         proposal = (

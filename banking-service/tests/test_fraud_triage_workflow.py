@@ -6,7 +6,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import models.audit  # noqa: F401
+import models.action_proposal  # noqa: F401
 import models.fraud  # noqa: F401
+import models.merchant  # noqa: F401
+import models.origination  # noqa: F401
+from models.action_proposal import ActionProposal
 from models.audit import AuditOutbox
 from models.credit_card import (
     AccountLedger,
@@ -19,6 +23,11 @@ from models.credit_card import (
 from models.fraud import FraudCaseAction, ScenarioOutcome
 from models.identity import User, UserSecureMessage
 from repositories.fraud import FraudAlertRepository
+from services.action_proposals import (
+    ActionProposalService,
+    ProposalScopeError,
+    ProposalTransitionError,
+)
 from services.fraud_alerts import FraudAlertService
 
 
@@ -27,7 +36,11 @@ DATABASE_URL = "sqlite:///:memory:"
 
 @pytest.fixture(name="db_session")
 def fixture_db_session():
-    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        execution_options={"schema_translate_map": {"merchants": "ref_data"}},
+    )
     testing_session_local = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     Base.metadata.create_all(bind=engine)
 
@@ -129,6 +142,50 @@ def fraud_alert(db_session):
             },
         ],
     )
+
+
+def _confirmed_fraud_proposal(
+    db_session,
+    fraud_alert,
+    *,
+    idempotency_key: str = "proposal-turn-10",
+    turn_suffix: str = "10",
+) -> ActionProposal:
+    service = ActionProposalService(db_session)
+    proposal = service.propose_fraud_triage(
+        customer_id=fraud_alert.customer_id,
+        fraud_alert_id=fraud_alert.id,
+        disputed_authorization_ids=[
+            "02000000-0000-4000-8000-000000000002"
+        ],
+        disputed_transaction_ids=[
+            "01000000-0000-4000-8000-000000000001"
+        ],
+        issue_replacement=True,
+        escalate=False,
+        support_session_id="support-proposal-session",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="adk-proposal-session",
+        originating_customer_turn_id=f"customer-turn-{turn_suffix}",
+        reset_generation="3:9",
+        idempotency_key=idempotency_key,
+        catalog_snapshot_id="fraud-guidance-v7",
+    )
+    service.mark_presented(
+        proposal.id,
+        assistant_turn_id=f"assistant-turn-{turn_suffix}",
+    )
+    service.confirm(
+        proposal.id,
+        customer_turn_id=f"customer-turn-{turn_suffix}-confirmed",
+        protected_evidence={
+            "channel": "VOICE",
+            "method": "EXPLICIT_VERBAL",
+            "runtime_event_id": f"event-{turn_suffix}-confirmed",
+        },
+    )
+    db_session.commit()
+    return proposal
 
 
 @pytest.fixture(autouse=True)
@@ -441,6 +498,279 @@ def test_triage_fraud_case_disputed_activity_applies_remediation_and_message(
     assert triage_event is not None
     assert message_event is not None
     assert str(fraud_alert.id) in triage_event.payload
+
+
+def test_proposal_commit_persists_fraud_outcome_and_proposal_atomically(
+    db_session, fraud_alert
+):
+    proposal = _confirmed_fraud_proposal(db_session, fraud_alert)
+    service = ActionProposalService(db_session)
+
+    result = service.commit_fraud_triage(
+        proposal.id,
+        customer_id=fraud_alert.customer_id,
+        support_session_id="support-proposal-session",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="adk-proposal-session",
+        reset_generation="3:9",
+    )
+
+    refreshed_proposal = db_session.get(ActionProposal, proposal.id)
+    refreshed_alert = FraudAlertRepository(db_session).get_alert_by_id(
+        fraud_alert_id=fraud_alert.id
+    )
+    workflow_actions = (
+        db_session.query(FraudCaseAction)
+        .filter_by(
+            fraud_alert_id=fraud_alert.id,
+            action_type="FRAUD_CASE_TRIAGED",
+        )
+        .all()
+    )
+    proposal_events = {
+        row.event_type
+        for row in db_session.query(AuditOutbox)
+        .filter(
+            AuditOutbox.event_type.in_(
+                [
+                    "ACTION_PROPOSAL_COMMIT_STARTED",
+                    "ACTION_PROPOSAL_COMMITTED",
+                ]
+            )
+        )
+        .all()
+    }
+
+    assert result["success"] is True
+    assert result["proposal_id"] == str(proposal.id)
+    assert result["status"] == "COMMITTED"
+    assert result["idempotent_replay"] is False
+    assert refreshed_proposal.status == "COMMITTED"
+    assert refreshed_proposal.result_payload["outcome"] == (
+        "PENDING_SPECIALIST_REVIEW"
+    )
+    assert refreshed_alert.status == "TRIAGED_PENDING_REVIEW"
+    assert len(workflow_actions) == 1
+    assert workflow_actions[0].idempotency_key.startswith(
+        f"proposal:{proposal.id}:"
+    )
+    assert proposal_events == {
+        "ACTION_PROPOSAL_COMMIT_STARTED",
+        "ACTION_PROPOSAL_COMMITTED",
+    }
+
+    replay = service.commit_fraud_triage(
+        proposal.id,
+        customer_id=fraud_alert.customer_id,
+        support_session_id="support-proposal-session",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="adk-proposal-session",
+        reset_generation="3:9",
+    )
+    assert replay["status"] == "COMMITTED"
+    assert replay["idempotent_replay"] is True
+    assert (
+        db_session.query(FraudCaseAction)
+        .filter_by(
+            fraud_alert_id=fraud_alert.id,
+            action_type="FRAUD_CASE_TRIAGED",
+        )
+        .count()
+        == 1
+    )
+
+
+def test_proposal_commit_rolls_back_fraud_mutation_when_completion_fails(
+    db_session, fraud_alert
+):
+    proposal = _confirmed_fraud_proposal(db_session, fraud_alert)
+    service = ActionProposalService(db_session)
+
+    with (
+        patch.object(
+            service,
+            "mark_committed",
+            side_effect=RuntimeError("proposal completion failed"),
+        ),
+        pytest.raises(RuntimeError, match="proposal completion failed"),
+    ):
+        service.commit_fraud_triage(
+            proposal.id,
+            customer_id=fraud_alert.customer_id,
+            support_session_id="support-proposal-session",
+            runtime_name="ADK_GEMINI_LIVE",
+            runtime_session_id="adk-proposal-session",
+            reset_generation="3:9",
+        )
+
+    db_session.expire_all()
+    refreshed_proposal = db_session.get(ActionProposal, proposal.id)
+    refreshed_alert = FraudAlertRepository(db_session).get_alert_by_id(
+        fraud_alert_id=fraud_alert.id
+    )
+    authorization = (
+        db_session.query(TransactionAuthorization)
+        .filter_by(id="02000000-0000-4000-8000-000000000002")
+        .first()
+    )
+
+    assert refreshed_proposal.status == "CONFIRMED"
+    assert refreshed_alert.status == "OPEN"
+    assert authorization.status == "PENDING"
+    assert db_session.query(FraudCaseAction).count() == 0
+    assert (
+        db_session.query(AuditOutbox)
+        .filter_by(event_type="ACTION_PROPOSAL_COMMIT_STARTED")
+        .count()
+        == 0
+    )
+    assert (
+        db_session.query(UserSecureMessage)
+        .filter_by(thread_id="thread-fraud-workflow")
+        .count()
+        == 0
+    )
+
+
+def test_proposal_commit_invalidates_when_alert_is_no_longer_open(
+    db_session, fraud_alert
+):
+    proposal = _confirmed_fraud_proposal(db_session, fraud_alert)
+    fraud_alert.status = "RESOLVED_CUSTOMER_RECOGNIZED"
+    db_session.commit()
+
+    with pytest.raises(ProposalTransitionError, match="no longer open"):
+        ActionProposalService(db_session).commit_fraud_triage(
+            proposal.id,
+            customer_id=fraud_alert.customer_id,
+            support_session_id="support-proposal-session",
+            runtime_name="ADK_GEMINI_LIVE",
+            runtime_session_id="adk-proposal-session",
+            reset_generation="3:9",
+        )
+
+    refreshed = db_session.get(ActionProposal, proposal.id)
+    assert refreshed.status == "INVALIDATED"
+    assert refreshed.invalidation_reason == "FRAUD_ALERT_NO_LONGER_OPEN"
+    assert (
+        db_session.query(AuditOutbox)
+        .filter_by(event_type="ACTION_PROPOSAL_INVALIDATED")
+        .count()
+        == 1
+    )
+    assert db_session.query(FraudCaseAction).count() == 0
+
+
+def test_proposal_commit_persists_reset_invalidation_without_fraud_mutation(
+    db_session, fraud_alert
+):
+    proposal = _confirmed_fraud_proposal(db_session, fraud_alert)
+
+    with pytest.raises(ProposalScopeError, match="session reset"):
+        ActionProposalService(db_session).commit_fraud_triage(
+            proposal.id,
+            customer_id=fraud_alert.customer_id,
+            support_session_id="support-proposal-session",
+            runtime_name="ADK_GEMINI_LIVE",
+            runtime_session_id="adk-proposal-session",
+            reset_generation="4:0",
+        )
+
+    refreshed = db_session.get(ActionProposal, proposal.id)
+    alert = FraudAlertRepository(db_session).get_alert_by_id(
+        fraud_alert_id=fraud_alert.id
+    )
+    assert refreshed.status == "INVALIDATED"
+    assert refreshed.invalidation_reason == "RESET_GENERATION_CHANGED"
+    assert alert.status == "OPEN"
+    assert db_session.query(FraudCaseAction).count() == 0
+    assert (
+        db_session.query(AuditOutbox)
+        .filter_by(event_type="ACTION_PROPOSAL_INVALIDATED")
+        .count()
+        == 1
+    )
+
+
+def test_competing_confirmed_proposal_is_invalidated_after_first_commit(
+    db_session, fraud_alert
+):
+    first = _confirmed_fraud_proposal(db_session, fraud_alert)
+    second = _confirmed_fraud_proposal(
+        db_session,
+        fraud_alert,
+        idempotency_key="proposal-turn-12",
+        turn_suffix="12",
+    )
+    service = ActionProposalService(db_session)
+
+    first_result = service.commit_fraud_triage(
+        first.id,
+        customer_id=fraud_alert.customer_id,
+        support_session_id="support-proposal-session",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="adk-proposal-session",
+        reset_generation="3:9",
+    )
+    with pytest.raises(ProposalTransitionError, match="no longer open"):
+        service.commit_fraud_triage(
+            second.id,
+            customer_id=fraud_alert.customer_id,
+            support_session_id="support-proposal-session",
+            runtime_name="ADK_GEMINI_LIVE",
+            runtime_session_id="adk-proposal-session",
+            reset_generation="3:9",
+        )
+
+    assert first_result["status"] == "COMMITTED"
+    assert db_session.get(ActionProposal, second.id).status == "INVALIDATED"
+    assert (
+        db_session.query(FraudCaseAction)
+        .filter_by(
+            fraud_alert_id=fraud_alert.id,
+            action_type="FRAUD_CASE_TRIAGED",
+        )
+        .count()
+        == 1
+    )
+
+
+def test_committing_proposal_reconciles_from_durable_domain_result(
+    db_session, fraud_alert
+):
+    proposal = _confirmed_fraud_proposal(db_session, fraud_alert)
+    service = ActionProposalService(db_session)
+    first = service.commit_fraud_triage(
+        proposal.id,
+        customer_id=fraud_alert.customer_id,
+        support_session_id="support-proposal-session",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="adk-proposal-session",
+        reset_generation="3:9",
+    )
+    proposal.status = "COMMITTING"
+    proposal.result_payload = None
+    proposal.completed_at = None
+    db_session.commit()
+
+    reconciled = service.commit_fraud_triage(
+        proposal.id,
+        customer_id=fraud_alert.customer_id,
+        support_session_id="support-proposal-session",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="adk-proposal-session",
+        reset_generation="3:9",
+    )
+
+    assert first["status"] == "COMMITTED"
+    assert reconciled["status"] == "COMMITTED"
+    assert reconciled["idempotent_replay"] is True
+    assert (
+        db_session.query(AuditOutbox)
+        .filter_by(event_type="ACTION_PROPOSAL_COMMIT_RECONCILED")
+        .count()
+        == 1
+    )
 
 
 def test_triage_fraud_case_is_idempotent(db_session, fraud_alert):

@@ -607,6 +607,34 @@ class FraudAlertService:
         The method deliberately centralizes business sequencing so the live agent
         can confirm customer intent once and invoke a single workflow operation.
         """
+        try:
+            result = self._triage_fraud_case_in_transaction(
+                auth_provider_uid=auth_provider_uid,
+                fraud_alert_id=fraud_alert_id,
+                disputed_authorization_ids=disputed_authorization_ids,
+                disputed_transaction_ids=disputed_transaction_ids,
+                issue_replacement=issue_replacement,
+                escalate=escalate,
+                idempotency_key=idempotency_key,
+            )
+            self.db.commit()
+            return result
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def _triage_fraud_case_in_transaction(
+        self,
+        *,
+        auth_provider_uid: str,
+        fraud_alert_id: str,
+        disputed_authorization_ids: list[str] | None = None,
+        disputed_transaction_ids: list[str] | None = None,
+        issue_replacement: bool = True,
+        escalate: bool = False,
+        idempotency_key: str | None = None,
+    ) -> dict:
+        """Execute fraud triage without committing the caller-owned transaction."""
         disputed_authorization_ids = disputed_authorization_ids or []
         disputed_transaction_ids = disputed_transaction_ids or []
         alert = self.repo.get_alert_for_customer(
@@ -684,6 +712,7 @@ class FraudAlertService:
                 auth_provider_uid=auth_provider_uid,
                 alert=resolved,
                 message_body=self._build_recognized_triage_message(resolved),
+                commit_transaction=False,
             )
             self.repo.mark_triaged(
                 fraud_alert_id=resolved.id,
@@ -750,7 +779,6 @@ class FraudAlertService:
             self.repo.complete_case_action(
                 action_id=workflow_action.id, status="SUCCEEDED", result_payload=result
             )
-            self.db.commit()
             return result
 
         from services.credit_card import (
@@ -765,6 +793,7 @@ class FraudAlertService:
                 account_id=str(alert.credit_account_id),
                 authorization_id=authorization_id,
                 fraud_alert_id=str(alert.id),
+                commit_transaction=False,
             )
             for authorization_id in disputed_authorization_ids
         ]
@@ -774,6 +803,7 @@ class FraudAlertService:
                 account_id=str(alert.credit_account_id),
                 transaction_id=transaction_id,
                 fraud_alert_id=str(alert.id),
+                commit_transaction=False,
             )
             for transaction_id in disputed_transaction_ids
         ]
@@ -785,6 +815,7 @@ class FraudAlertService:
                 reason="CUSTOMER_FRAUD_REISSUE",
                 fraud_alert_id=str(alert.id),
                 compromised_card_id=str(alert.card_id),
+                commit_transaction=False,
             )
 
         provisional_credit_total = sum(
@@ -803,6 +834,7 @@ class FraudAlertService:
                 disputed_authorization_ids=disputed_authorization_ids,
                 disputed_transaction_ids=disputed_transaction_ids,
             ),
+            commit_transaction=False,
         )
         triaged = self.repo.mark_triaged(
             fraud_alert_id=alert.id,
@@ -869,7 +901,6 @@ class FraudAlertService:
         self.repo.complete_case_action(
             action_id=workflow_action.id, status="SUCCEEDED", result_payload=result
         )
-        self.db.commit()
         return result
 
     def execute_scenario_customer_action(
@@ -1091,7 +1122,12 @@ class FraudAlertService:
         return "\n".join(lines)
 
     def _send_triage_secure_message(
-        self, *, auth_provider_uid: str, alert, message_body: str
+        self,
+        *,
+        auth_provider_uid: str,
+        alert,
+        message_body: str,
+        commit_transaction: bool = True,
     ):
         message_request = SecureMessageCreateRequest(
             category="Fraud Alert",
@@ -1105,6 +1141,7 @@ class FraudAlertService:
             ValidatedToken(
                 claims={"sub": auth_provider_uid, "email": auth_provider_uid}
             ),
+            commit_transaction=commit_transaction,
         )
 
     @staticmethod

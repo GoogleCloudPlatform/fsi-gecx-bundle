@@ -190,6 +190,7 @@ def issue_replacement_card(
     issue_virtual_card: bool = True,
     fraud_alert_id: str | None = None,
     compromised_card_id: str | None = None,
+    commit_transaction: bool = True,
 ) -> dict:
     """
     Issues a replacement card for an account after fraud or loss workflows.
@@ -263,7 +264,10 @@ def issue_replacement_card(
                 "correlation_id": fraud_alert_id or replacement_card.card_token,
             },
         )
-        db.commit()
+        if commit_transaction:
+            db.commit()
+        else:
+            db.flush()
         return {
             "account_id": str(account.id),
             "old_card_id": str(current_card.id),
@@ -279,7 +283,8 @@ def issue_replacement_card(
             "message": "Replacement virtual card issued.",
         }
     except Exception as e:
-        db.rollback()
+        if commit_transaction:
+            db.rollback()
         logger.error(f"Error issuing replacement card: {e}")
         raise e
 
@@ -433,6 +438,7 @@ def void_fraud_authorization_hold(
     authorization_id: str,
     fraud_alert_id: str,
     reason: str = "CUSTOMER_CONFIRMED_FRAUD",
+    commit_transaction: bool = True,
 ) -> dict:
     """
     Releases a disputed pending card authorization and records fraud-specific audit/action state.
@@ -513,10 +519,14 @@ def void_fraud_authorization_hold(
             status="SUCCEEDED",
             result_payload=result,
         )
-        db.commit()
+        if commit_transaction:
+            db.commit()
+        else:
+            db.flush()
         return result
     except Exception as e:
-        db.rollback()
+        if commit_transaction:
+            db.rollback()
         logger.error(f"Error voiding fraud authorization hold: {e}")
         raise e
 
@@ -528,6 +538,7 @@ def apply_fraud_provisional_credit(
     transaction_id: str,
     fraud_alert_id: str,
     reason: str = "CUSTOMER_CONFIRMED_FRAUD",
+    commit_transaction: bool = True,
 ) -> dict:
     """
     Applies an offsetting provisional credit for a disputed posted debit transaction.
@@ -649,10 +660,14 @@ def apply_fraud_provisional_credit(
             status="SUCCEEDED",
             result_payload=result,
         )
-        db.commit()
+        if commit_transaction:
+            db.commit()
+        else:
+            db.flush()
         return result
     except Exception as e:
-        db.rollback()
+        if commit_transaction:
+            db.rollback()
         logger.error(f"Error applying fraud provisional credit: {e}")
         raise e
 

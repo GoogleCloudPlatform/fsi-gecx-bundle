@@ -150,7 +150,13 @@ class MessagingService:
                 "message_id": message_id
             }
 
-    def create_message(self, request: SecureMessageCreateRequest, token: ValidatedToken) -> SecureMessageResponse:
+    def create_message(
+        self,
+        request: SecureMessageCreateRequest,
+        token: ValidatedToken,
+        *,
+        commit_transaction: bool = True,
+    ) -> SecureMessageResponse:
         sender = request.sender or SENDER_TYPE_USER
 
         if sender == SENDER_TYPE_USER:
@@ -175,7 +181,8 @@ class MessagingService:
             sender=sender,
             message=request.message,
             category=request.category,
-            thread_id=thread_id
+            thread_id=thread_id,
+            commit_transaction=commit_transaction,
         )
 
         if sender != SENDER_TYPE_USER:
