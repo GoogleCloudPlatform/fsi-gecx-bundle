@@ -29,7 +29,7 @@ The `banking` database is divided into bounded schemas: `identity`, `kyc`, `ledg
 Database deployment has three explicit owners:
 
 1. Terraform owns the AlloyDB cluster and instance, network, IAM bindings, database users, secrets, Cloud Run jobs, and Datastream resources.
-2. Alembic owns schemas, tables, indexes, constraints, and versioned application DDL. The consolidated baseline is `2ea57c78ba89`; the current head is `7c4f2a9d1e63`.
+2. Alembic owns schemas, tables, indexes, constraints, and versioned application DDL. The consolidated baseline is `2ea57c78ba89`; the current head is `91d7b4a6c2ef`.
 3. The database lifecycle jobs own cluster roles, group memberships, database creation, object ownership, grants, default privileges, immutable-ledger revocations, publication, replication slot, and invariant verification.
 
 The ordered release is:
