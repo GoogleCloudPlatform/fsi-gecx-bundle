@@ -9,6 +9,7 @@ from services.action_proposal_context import (
     ProposalRuntimeContext,
     RuntimeContextError,
 )
+from services.action_proposals import ProposalTransitionError
 
 
 def _headers(**overrides) -> dict[str, str]:
@@ -143,3 +144,50 @@ async def test_commit_projection_returns_authoritative_result_when_ui_event_fail
     assert result["status"] == "COMMITTED"
     assert result["outcome"] == "CUSTOMER_RECOGNIZED"
     db.rollback.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_commit_projection_returns_scoped_terminal_disposition(monkeypatch) -> None:
+    runtime_context = ProposalRuntimeContext.from_headers(
+        _headers(
+            **{
+                "x-customer-turn-id": "customer-turn-11",
+                "x-proposal-presentation-turn-id": "assistant-turn-10",
+                "x-proposal-confirmation-turn-id": "customer-turn-11",
+                "x-proposal-confirmation-method": "EXPLICIT_VERBAL",
+                "x-proposal-confirmation-classification": "CONFIRMED",
+            }
+        )
+    )
+    db = MagicMock()
+    service = MagicMock()
+    service.commit_fraud_triage_for_identity.side_effect = ProposalTransitionError(
+        "Action proposal has expired."
+    )
+    service.proposal_disposition_for_identity.return_value = {
+        "proposal_id": "11111111-1111-4111-8111-111111111111",
+        "contract_version": "fraud-triage.v1",
+        "status": "EXPIRED",
+        "invalidation_reason": "TTL_EXPIRED",
+    }
+    monkeypatch.setattr("routers.mcp.credit_card.SessionLocal", lambda: db)
+    monkeypatch.setattr("routers.mcp.credit_card.ActionProposalService", lambda _: service)
+    customer_token = mcp_utils.verified_customer_id_var.set("customer-auth-1")
+    runtime_token = mcp_utils.proposal_runtime_context_var.set(runtime_context)
+    try:
+        result = await commit_fraud_triage.__wrapped__(
+            proposal_id="11111111-1111-4111-8111-111111111111"
+        )
+    finally:
+        mcp_utils.proposal_runtime_context_var.reset(runtime_token)
+        mcp_utils.verified_customer_id_var.reset(customer_token)
+
+    assert result["success"] is False
+    assert result["status"] == "EXPIRED"
+    assert result["invalidation_reason"] == "TTL_EXPIRED"
+    service.proposal_disposition_for_identity.assert_called_once_with(
+        "11111111-1111-4111-8111-111111111111",
+        customer_identity="customer-auth-1",
+        runtime_context=runtime_context,
+    )
+    db.rollback.assert_called_once()

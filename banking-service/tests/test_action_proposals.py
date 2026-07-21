@@ -268,6 +268,43 @@ def test_reset_generation_change_invalidates_confirmed_proposal(
     assert proposal.status == "INVALIDATED"
     assert proposal.invalidation_reason == "RESET_GENERATION_CHANGED"
 
+    disposition = service.proposal_disposition_for_identity(
+        proposal.id,
+        customer_identity="proposal-customer",
+        runtime_context=ProposalRuntimeContext(
+            support_session_id="support-session-1",
+            runtime_name="ADK_GEMINI_LIVE",
+            runtime_session_id="adk-session-1",
+            customer_turn_id="customer-turn-12",
+            reset_generation="4:0",
+        ),
+    )
+    assert disposition == {
+        "proposal_id": str(proposal.id),
+        "action_type": TRIAGE_FRAUD_CASE,
+        "contract_version": "fraud-triage.v1",
+        "status": "INVALIDATED",
+        "invalidation_reason": "RESET_GENERATION_CHANGED",
+    }
+
+
+def test_disposition_lookup_remains_bound_to_trusted_session(db_session, fraud_alert):
+    service = ActionProposalService(db_session)
+    proposal = _propose(service, fraud_alert)
+
+    with pytest.raises(ProposalScopeError, match="runtime session"):
+        service.proposal_disposition_for_identity(
+            proposal.id,
+            customer_identity="proposal-customer",
+            runtime_context=ProposalRuntimeContext(
+                support_session_id="another-support-session",
+                runtime_name="ADK_GEMINI_LIVE",
+                runtime_session_id="adk-session-1",
+                customer_turn_id="customer-turn-12",
+                reset_generation="3:9",
+            ),
+        )
+
 
 def test_expired_proposal_cannot_be_presented(db_session, fraud_alert):
     service = ActionProposalService(db_session)

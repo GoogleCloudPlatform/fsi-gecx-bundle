@@ -18,7 +18,11 @@ import httpx
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from agent.trajectory_eval import TrajectoryExpectation, evaluate_trajectory  # noqa: E402
+from agent.trajectory_eval import (  # noqa: E402
+    TrajectoryExpectation,
+    compare_trajectory_outcomes,
+    evaluate_trajectory,
+)
 from agent.log_safety import stable_log_reference  # noqa: E402
 
 
@@ -31,21 +35,66 @@ OUTCOME_PATTERN = re.compile(r"terminal_outcome=([A-Z_]+)")
 
 SCENARIOS = {
     "fraud": TrajectoryExpectation(
+        required_tools={"get_open_fraud_alert": 1, "commit_fraud_triage": 1},
+        forbidden_tools=("triage_fraud_case",),
+        required_proposal_outcomes=("PROPOSED", "PRESENTED", "CONFIRMED", "COMMITTED"),
+        required_ui_events=("FRAUD_ALERT_RESOLVED",),
+    ),
+    "fraud-direct": TrajectoryExpectation(
         required_tools={"get_open_fraud_alert": 1, "triage_fraud_case": 1},
+        forbidden_tools=("commit_fraud_triage",),
+        required_proposal_outcomes=("DIRECT_COMPLETED",),
         required_ui_events=("FRAUD_ALERT_RESOLVED",),
     ),
     "fraud-wallet": TrajectoryExpectation(
         required_tools={
             "get_open_fraud_alert": 1,
-            "triage_fraud_case": 1,
+            "commit_fraud_triage": 1,
             "push_card_to_google_wallet": 1,
         },
+        forbidden_tools=("triage_fraud_case",),
+        required_proposal_outcomes=("PROPOSED", "PRESENTED", "CONFIRMED", "COMMITTED"),
         required_ui_events=("FRAUD_ALERT_RESOLVED", "WALLET_PROVISIONING_QUEUED"),
     ),
     "wallet-decline": TrajectoryExpectation(
-        required_tools={"get_open_fraud_alert": 1, "triage_fraud_case": 1},
-        forbidden_tools=("push_card_to_google_wallet",),
+        required_tools={"get_open_fraud_alert": 1, "commit_fraud_triage": 1},
+        forbidden_tools=("triage_fraud_case", "push_card_to_google_wallet"),
+        required_proposal_outcomes=("PROPOSED", "PRESENTED", "CONFIRMED", "COMMITTED"),
         required_ui_events=("FRAUD_ALERT_RESOLVED",),
+    ),
+    "fraud-decline": TrajectoryExpectation(
+        required_tools={"get_open_fraud_alert": 1},
+        forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
+        required_proposal_outcomes=("PROPOSED", "PRESENTED", "DECLINED"),
+    ),
+    "fraud-ambiguous": TrajectoryExpectation(
+        required_tools={"get_open_fraud_alert": 1},
+        forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
+        required_proposal_outcomes=("PROPOSED", "PRESENTED", "UNCLEAR"),
+    ),
+    "fraud-interrupted": TrajectoryExpectation(
+        required_tools={"get_open_fraud_alert": 1},
+        forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
+        required_proposal_outcomes=("PROPOSED", "INVALIDATED"),
+    ),
+    "fraud-reset": TrajectoryExpectation(
+        required_tools={"get_open_fraud_alert": 1},
+        required_failed_tools={"commit_fraud_triage": 1},
+        forbidden_tools=("triage_fraud_case",),
+        required_proposal_outcomes=("PROPOSED", "PRESENTED", "CONFIRMED", "INVALIDATED"),
+    ),
+    "fraud-expired": TrajectoryExpectation(
+        required_tools={"get_open_fraud_alert": 1},
+        required_failed_tools={"commit_fraud_triage": 1},
+        forbidden_tools=("triage_fraud_case",),
+        required_proposal_outcomes=("PROPOSED", "PRESENTED", "EXPIRED"),
+    ),
+    "fraud-tool-failure": TrajectoryExpectation(
+        required_tools={"get_open_fraud_alert": 1},
+        required_failed_tools={"commit_fraud_triage": 1},
+        forbidden_tools=("triage_fraud_case",),
+        required_proposal_outcomes=("PROPOSED", "PRESENTED", "CONFIRMED", "TOOL_ERROR"),
+        allowed_terminal_outcomes=("TOOL_FAILURE", "NORMAL_DISCONNECT"),
     ),
     "customer-reported": TrajectoryExpectation(
         required_tools={
@@ -60,6 +109,21 @@ SCENARIOS = {
 
 def _message(entry: dict[str, Any]) -> str:
     return str(entry.get("textPayload") or (entry.get("jsonPayload") or {}).get("message") or "")
+
+
+def _proposal_payload(entry: dict[str, Any]) -> dict[str, Any] | None:
+    payload = entry.get("jsonPayload") or {}
+    if payload.get("message") == "voice_action_proposal_event":
+        return payload
+    text = str(entry.get("textPayload") or "").strip()
+    if text.startswith("{"):
+        try:
+            decoded = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+        if decoded.get("message") == "voice_action_proposal_event":
+            return decoded
+    return None
 
 
 def _elapsed_ms(timestamp: str, start: datetime) -> float:
@@ -95,6 +159,7 @@ def extract_trajectory(
         entry
         for entry in ordered
         if f"session_ref={session_ref}" in _message(entry)
+        or (_proposal_payload(entry) or {}).get("support_session_ref") == session_ref
     ]
     if not selected:
         raise ValueError(f"No log entries found for session reference {session_ref}.")
@@ -103,7 +168,22 @@ def extract_trajectory(
     for entry in selected:
         message = _message(entry)
         elapsed_ms = _elapsed_ms(entry["timestamp"], start)
-        if "Opened ADK session state" in message:
+        proposal_payload = _proposal_payload(entry)
+        if proposal_payload:
+            events.append(
+                {
+                    "type": "ACTION_PROPOSAL",
+                    "proposal_ref": proposal_payload.get("proposal_ref"),
+                    "contract_version": proposal_payload.get("contract_version"),
+                    "tool": proposal_payload.get("tool"),
+                    "outcome": proposal_payload.get("outcome"),
+                    "banking_outcome": proposal_payload.get("banking_outcome"),
+                    "invalidation_reason": proposal_payload.get("invalidation_reason"),
+                    "latency_ms": proposal_payload.get("latency_ms"),
+                    "elapsed_ms": elapsed_ms,
+                }
+            )
+        elif "Opened ADK session state" in message:
             match = RESET_PATTERN.search(message)
             events.append(
                 {
@@ -227,6 +307,7 @@ def main() -> int:
     parser.add_argument("--region", default="us-central1")
     parser.add_argument("--scenario", choices=sorted(SCENARIOS), default="fraud-wallet")
     parser.add_argument("--session-id")
+    parser.add_argument("--baseline-session-id")
     parser.add_argument("--customer-id")
     parser.add_argument("--freshness", default="2h")
     parser.add_argument("--readiness-only", action="store_true")
@@ -243,8 +324,9 @@ def main() -> int:
             port=args.proxy_port,
         )
     if not args.readiness_only:
+        deployed_logs = load_deployed_logs(args.project, args.region, args.freshness)
         session_ref, events = extract_trajectory(
-            load_deployed_logs(args.project, args.region, args.freshness),
+            deployed_logs,
             session_selector=args.session_id,
         )
         result = evaluate_trajectory(events, SCENARIOS[args.scenario])
@@ -255,9 +337,24 @@ def main() -> int:
             "failures": result.failures,
             "metrics": result.metrics,
         }
+        if args.baseline_session_id:
+            baseline_ref, baseline_events = extract_trajectory(
+                deployed_logs,
+                session_selector=args.baseline_session_id,
+            )
+            baseline = evaluate_trajectory(baseline_events, SCENARIOS["fraud-direct"])
+            comparison = compare_trajectory_outcomes(baseline, result)
+            output["parity"] = {
+                "baseline_session_ref": baseline_ref,
+                "proposal_session_ref": session_ref,
+                "matched": comparison.matched,
+                "mismatches": comparison.mismatches,
+            }
     print(json.dumps(output, indent=2, sort_keys=True))
     return 0 if all(
-        item.get("status") == "ready" or item.get("passed") is True
+        item.get("status") == "ready"
+        or item.get("passed") is True
+        or item.get("matched") is True
         for item in output.values()
     ) else 1
 

@@ -15,6 +15,10 @@ def entry(timestamp: str, message: str) -> dict:
     return {"timestamp": timestamp, "textPayload": message}
 
 
+def json_entry(timestamp: str, payload: dict) -> dict:
+    return {"timestamp": timestamp, "jsonPayload": payload}
+
+
 def test_extract_deployed_trajectory() -> None:
     session = "11111111-1111-4111-8111-111111111111"
     session_ref = stable_log_reference(session, prefix="session")
@@ -97,3 +101,44 @@ def test_deployed_log_fetch_keeps_the_newest_sessions(monkeypatch) -> None:
     assert "--order=desc" in observed["command"]
     assert "--order=asc" not in observed["command"]
     assert observed["text"] is True
+
+
+def test_extracts_normalized_proposal_event_for_same_hashed_session() -> None:
+    session = "11111111-1111-4111-8111-111111111111"
+    session_ref = stable_log_reference(session, prefix="session")
+    entries = [
+        entry(
+            "2026-07-14T20:00:00Z",
+            f"Opened ADK session state session_ref={session_ref} reset_generation=0:3",
+        ),
+        json_entry(
+            "2026-07-14T20:00:01Z",
+            {
+                "message": "voice_action_proposal_event",
+                "support_session_ref": session_ref,
+                "proposal_ref": "proposal_abc123",
+                "contract_version": "fraud-triage.v1",
+                "tool": "commit_fraud_triage",
+                "outcome": "COMMITTED",
+                "banking_outcome": "CONFIRMED_FRAUD_REMEDIATED",
+                "latency_ms": 125.0,
+            },
+        ),
+        entry(
+            "2026-07-14T20:00:02Z",
+            f"Cleaning up connections and tasks session_ref={session_ref} terminal_outcome=NORMAL_DISCONNECT",
+        ),
+    ]
+
+    _, events = voice_canary.extract_trajectory(entries, session_selector=session)
+
+    proposal = next(event for event in events if event["type"] == "ACTION_PROPOSAL")
+    assert proposal["proposal_ref"] == "proposal_abc123"
+    assert proposal["outcome"] == "COMMITTED"
+    assert proposal["banking_outcome"] == "CONFIRMED_FRAUD_REMEDIATED"
+
+
+def test_canary_scenarios_use_proposal_commit_and_keep_direct_baseline() -> None:
+    assert voice_canary.SCENARIOS["fraud"].required_tools["commit_fraud_triage"] == 1
+    assert "triage_fraud_case" in voice_canary.SCENARIOS["fraud"].forbidden_tools
+    assert voice_canary.SCENARIOS["fraud-direct"].required_tools["triage_fraud_case"] == 1

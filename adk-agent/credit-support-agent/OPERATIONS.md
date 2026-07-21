@@ -62,6 +62,52 @@ tool outcomes, required UI events, interruptions, duration, and terminal
 outcome. Use `--readiness-only` before beginning a rehearsal and `--session-id`
 to evaluate a specific completed session.
 
+### Action-proposal qualification
+
+Proposal rollout is an explicit operator gate. This repository does not change
+Cloud Run traffic or deploy revisions as part of the canary. First record a
+completed direct-path baseline with `VOICE_AGENT_USE_ACTION_PROPOSALS=false`,
+then record the equivalent proposal-path session with the default enabled. Keep
+both support session ids and compare their normalized banking outcomes:
+
+```bash
+uv run python scripts/voice_canary.py \
+  --project evo-genai-workspace \
+  --region us-central1 \
+  --customer-id <presenter-auth-provider-uid> \
+  --scenario fraud \
+  --session-id <proposal-support-session-id> \
+  --baseline-session-id <direct-support-session-id>
+```
+
+Promotion requires `trajectory.passed=true` and `parity.matched=true`. The
+comparison intentionally permits different tool names while requiring the same
+banking and terminal outcomes and no tool failures in either trajectory.
+
+Exercise each protected edge as its own completed session and evaluate it with
+the matching scenario:
+
+```bash
+uv run python scripts/voice_canary.py --project evo-genai-workspace \
+  --scenario fraud-decline --session-id <session-id> --skip-readiness
+uv run python scripts/voice_canary.py --project evo-genai-workspace \
+  --scenario fraud-ambiguous --session-id <session-id> --skip-readiness
+uv run python scripts/voice_canary.py --project evo-genai-workspace \
+  --scenario fraud-interrupted --session-id <session-id> --skip-readiness
+uv run python scripts/voice_canary.py --project evo-genai-workspace \
+  --scenario fraud-reset --session-id <session-id> --skip-readiness
+uv run python scripts/voice_canary.py --project evo-genai-workspace \
+  --scenario fraud-expired --session-id <session-id> --skip-readiness
+uv run python scripts/voice_canary.py --project evo-genai-workspace \
+  --scenario fraud-tool-failure --session-id <session-id> --skip-readiness
+```
+
+The normalized proposal event records runtime and build version, hashed support
+session and proposal references, contract version, catalog snapshot, tool,
+outcome, banking outcome, latency, and invalidation reason. Raw customer,
+session, proposal, transaction, and transcript values must not appear in these
+events or metric attributes.
+
 Run each audio path once, then run the all-disputed fraud path three consecutive
 times before a demo:
 
@@ -138,6 +184,10 @@ does not misclassify an otherwise normal session.
   using low-cardinality attributes. Export through the environment's
   configured OpenTelemetry provider; transcript content is never a metric
   attribute.
+- Action-proposal telemetry uses the `voice.action_proposal.events` counter and
+  `voice.action_proposal.duration` histogram. Metric attributes are limited to
+  runtime, runtime version, contract version, tool, and outcome; correlation
+  references and diagnostic reasons remain in bounded structured logs.
 
 ## Local voice UI acceptance fixture
 

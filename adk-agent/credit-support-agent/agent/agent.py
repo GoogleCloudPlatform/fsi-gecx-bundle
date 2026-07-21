@@ -33,7 +33,7 @@ from agent.log_safety import (
     tool_response_succeeded,
     tool_result_log_summary,
 )
-from agent.telemetry import record_tool_completed
+from agent.telemetry import record_action_proposal_event, record_tool_completed
 from agent.fraud_voice import (
     build_triage_model_result,
     invalidate_wallet_authorization,
@@ -209,6 +209,26 @@ def _proposal_transport_headers(*, customer_turn_id: str) -> dict[str, str]:
             "x-proposal-confirmation-classification": "CONFIRMED",
         })
     return headers
+
+
+def _record_commit_proposal_event(
+    *, state: dict, args: dict, result: dict | None, outcome: str, latency_ms: float
+) -> None:
+    runtime_context = proposal_runtime_context_var.get() or {}
+    authorization = (state.get("fraud_playbook") or {}).get("workflow_authorization") or {}
+    structured = result or {}
+    record_action_proposal_event(
+        runtime=str(runtime_context.get("runtime_name") or "ADK_GEMINI_LIVE"),
+        support_session_id=str(runtime_context.get("support_session_id") or state.get("session_id") or ""),
+        proposal_id=str(args.get("proposal_id") or authorization.get("proposal_id") or "") or None,
+        contract_version=str(authorization.get("contract_version") or structured.get("contract_version") or "fraud-triage.v1"),
+        catalog_snapshot_id=runtime_context.get("catalog_snapshot_id"),
+        tool="commit_fraud_triage",
+        outcome=str(structured.get("status") or outcome),
+        latency_ms=latency_ms,
+        invalidation_reason=structured.get("invalidation_reason") or structured.get("error"),
+        banking_outcome=structured.get("outcome"),
+    )
 
 
 def is_session_end_requested() -> bool:
@@ -448,6 +468,7 @@ def prepare_fraud_triage_confirmation(
             f"adk:{state.get('session_id')}:{originating_turn_id}:"
             f"{action_payload_fingerprint(TRIAGE_FRAUD_CASE, payload)[:32]}"
         )[:128]
+        proposal_started_at = time.monotonic()
         try:
             with httpx.Client(timeout=10.0) as client:
                 response = client.post(
@@ -458,18 +479,54 @@ def prepare_fraud_triage_confirmation(
             response.raise_for_status()
             proposal_result = response.json()
         except Exception as exc:
+            runtime_context = proposal_runtime_context_var.get() or {}
+            record_action_proposal_event(
+                runtime=str(runtime_context.get("runtime_name") or "ADK_GEMINI_LIVE"),
+                support_session_id=str(runtime_context.get("support_session_id") or state.get("session_id") or ""),
+                proposal_id=None,
+                contract_version="fraud-triage.v1",
+                catalog_snapshot_id=runtime_context.get("catalog_snapshot_id"),
+                tool="prepare_fraud_triage_confirmation",
+                outcome="PREPARE_FAILED",
+                latency_ms=(time.monotonic() - proposal_started_at) * 1000,
+                invalidation_reason=type(exc).__name__,
+            )
             return {
                 "success": False,
                 "error": "PROPOSAL_PREPARATION_FAILED",
                 "message": "I could not prepare a durable fraud confirmation.",
                 "error_type": type(exc).__name__,
             }
+        runtime_context = proposal_runtime_context_var.get() or {}
+        record_action_proposal_event(
+            runtime=str(runtime_context.get("runtime_name") or "ADK_GEMINI_LIVE"),
+            support_session_id=str(runtime_context.get("support_session_id") or state.get("session_id") or ""),
+            proposal_id=proposal_result.get("proposal_id"),
+            contract_version=proposal_result.get("contract_version"),
+            catalog_snapshot_id=runtime_context.get("catalog_snapshot_id"),
+            tool="prepare_fraud_triage_confirmation",
+            outcome=proposal_result.get("status") or "PROPOSED",
+            latency_ms=(time.monotonic() - proposal_started_at) * 1000,
+        )
     existing = playbook.get("workflow_authorization") or {}
     if existing:
         existing = invalidate_workflow_authorization(
             existing,
             reason="REPLACED_BY_NEW_TRIAGE_SELECTION",
         )
+        if existing.get("proposal_id"):
+            runtime_context = proposal_runtime_context_var.get() or {}
+            record_action_proposal_event(
+                runtime=str(runtime_context.get("runtime_name") or "ADK_GEMINI_LIVE"),
+                support_session_id=str(runtime_context.get("support_session_id") or state.get("session_id") or ""),
+                proposal_id=existing.get("proposal_id"),
+                contract_version=existing.get("contract_version"),
+                catalog_snapshot_id=runtime_context.get("catalog_snapshot_id"),
+                tool="prepare_fraud_triage_confirmation",
+                outcome="INVALIDATED",
+                latency_ms=0,
+                invalidation_reason="REPLACED_BY_NEW_TRIAGE_SELECTION",
+            )
         playbook["last_workflow_authorization"] = existing
     authorization = create_workflow_authorization(
         action=TRIAGE_FRAUD_CASE,
@@ -478,6 +535,7 @@ def prepare_fraud_triage_confirmation(
     )
     if proposal_result:
         authorization["proposal_id"] = proposal_result["proposal_id"]
+        authorization["contract_version"] = proposal_result["contract_version"]
         authorization["customer_safe_summary"] = proposal_result["customer_safe_summary"]
     playbook["workflow_authorization"] = authorization
     state["fraud_playbook"] = playbook
@@ -956,7 +1014,16 @@ async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> N
     tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
     started_at = tool_started.pop(tool_name, time.monotonic())
     tool_context.state["_voice_tool_started_at"] = tool_started
-    record_tool_completed(tool_name, "error", time.monotonic() - started_at)
+    duration_seconds = time.monotonic() - started_at
+    record_tool_completed(tool_name, "error", duration_seconds)
+    if tool_name == "commit_fraud_triage":
+        _record_commit_proposal_event(
+            state=tool_context.state,
+            args=args,
+            result={"error": type(error).__name__},
+            outcome="TOOL_ERROR",
+            latency_ms=duration_seconds * 1000,
+        )
     notify_event(
         {
             "type": INTERNAL_TOOL_RUNTIME_STATUS,
@@ -1008,11 +1075,34 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
     tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
     started_at = tool_started.pop(tool_name, time.monotonic())
     tool_context.state["_voice_tool_started_at"] = tool_started
+    duration_seconds = time.monotonic() - started_at
     record_tool_completed(
         tool_name,
         outcome,
-        time.monotonic() - started_at,
+        duration_seconds,
     )
+    if tool_name == "commit_fraud_triage":
+        _record_commit_proposal_event(
+            state=tool_context.state,
+            args=args,
+            result=structured if isinstance(structured, dict) else None,
+            outcome=outcome,
+            latency_ms=duration_seconds * 1000,
+        )
+    elif tool_name == "triage_fraud_case" and isinstance(structured, dict):
+        runtime_context = proposal_runtime_context_var.get() or {}
+        record_action_proposal_event(
+            runtime=str(runtime_context.get("runtime_name") or "ADK_GEMINI_LIVE"),
+            support_session_id=str(runtime_context.get("support_session_id") or tool_context.state.get("session_id") or ""),
+            proposal_id=None,
+            contract_version="direct-fraud-triage.v0",
+            catalog_snapshot_id=runtime_context.get("catalog_snapshot_id"),
+            tool="triage_fraud_case",
+            outcome="DIRECT_COMPLETED" if success else "DIRECT_FAILED",
+            latency_ms=duration_seconds * 1000,
+            invalidation_reason=structured.get("error"),
+            banking_outcome=structured.get("outcome"),
+        )
     if isinstance(structured, dict):
         guidance = structured.get("support_guidance")
         if isinstance(guidance, dict) and guidance:

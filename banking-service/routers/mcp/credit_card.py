@@ -550,8 +550,9 @@ async def commit_fraud_triage(
             "message": "Invalid action proposal id.",
         }
     db = SessionLocal()
+    service = ActionProposalService(db)
     try:
-        result = ActionProposalService(db).commit_fraud_triage_for_identity(
+        result = service.commit_fraud_triage_for_identity(
             proposal_id,
             customer_identity=verified_customer_id,
             runtime_context=runtime_context,
@@ -580,7 +581,21 @@ async def commit_fraud_triage(
         return result
     except (ProposalError, RuntimeContextError) as exc:
         db.rollback()
-        return {"success": False, "error": "COMMIT_REJECTED", "message": str(exc)}
+        disposition = {}
+        try:
+            disposition = service.proposal_disposition_for_identity(
+                proposal_id,
+                customer_identity=verified_customer_id,
+                runtime_context=runtime_context,
+            )
+        except ProposalError:
+            db.rollback()
+        return {
+            "success": False,
+            "error": "COMMIT_REJECTED",
+            "message": str(exc),
+            **disposition,
+        }
     except Exception as exc:
         db.rollback()
         logger.error(

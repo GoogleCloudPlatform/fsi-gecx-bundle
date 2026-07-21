@@ -583,6 +583,32 @@ class ActionProposalService:
             "expires_at": _as_utc(proposal.expires_at).isoformat(),
         }
 
+    def proposal_disposition_for_identity(
+        self,
+        proposal_id,
+        *,
+        customer_identity: str,
+        runtime_context: ProposalRuntimeContext,
+    ) -> dict[str, Any]:
+        """Return a compact terminal/checkpoint disposition within trusted scope."""
+        customer_id = self._resolve_customer_id(customer_identity)
+        proposal = self._get_locked(proposal_id)
+        self._validate_scope(
+            proposal,
+            customer_id=customer_id,
+            support_session_id=runtime_context.support_session_id,
+            runtime_name=runtime_context.runtime_name,
+            runtime_session_id=runtime_context.runtime_session_id,
+            expected_action_type=TRIAGE_FRAUD_CASE,
+        )
+        return {
+            "proposal_id": str(proposal.id),
+            "action_type": proposal.action_type,
+            "contract_version": proposal.contract_version,
+            "status": proposal.status,
+            "invalidation_reason": proposal.invalidation_reason,
+        }
+
     def _create(self, **values) -> ActionProposal:
         required_strings = (
             "contract_version",
