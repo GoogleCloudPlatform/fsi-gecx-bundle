@@ -154,6 +154,7 @@ def requires_user_assertion(func):
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         is_support = True  # Default to True locally
+        is_ces_caller = True  # Default to True locally
 
         # 1. Verify Caller Identity (Google OIDC ID Token)
         ctx = kwargs.get("ctx") or (
@@ -183,10 +184,15 @@ def requires_user_assertion(func):
 
                 token = auth_header.split("Bearer ")[1].strip()
                 try:
-                    from utils.auth import validate_google_id_token, is_support_staff
+                    from utils.auth import (
+                        is_ces_service_agent,
+                        is_support_staff,
+                        validate_google_id_token,
+                    )
 
                     caller_token = validate_google_id_token(token)
                     is_support = is_support_staff(caller_token)
+                    is_ces_caller = is_ces_service_agent(caller_token)
                 except Exception as exc:
                     logger.error(
                         "GECX caller token verification failed error_type=%s",
@@ -210,7 +216,7 @@ def requires_user_assertion(func):
         assertion_token = None
 
         if session_capability:
-            if not is_support:
+            if not is_ces_caller:
                 raise PermissionError(
                     "Access Denied: CES capability requires an authorized service caller."
                 )
@@ -228,7 +234,7 @@ def requires_user_assertion(func):
                     "Access Denied: Invalid CES session capability."
                 ) from exc
             logger.info(
-                "FastMCP invocation authorized tool=%s support_caller=true "
+                "FastMCP invocation authorized tool=%s ces_caller=true "
                 "target_customer_ref=%s capability_present=true",
                 func.__name__,
                 stable_log_reference(effective_id, "customer"),

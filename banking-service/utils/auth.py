@@ -39,8 +39,13 @@ bearer_scheme = HTTPBearer(auto_error=False)
 forwarded_bearer_scheme = HTTPForwardedBearer(auto_error=False)
 
 SERVICE_NAME = "banking-service"
-SUPPORT_DOMAINS = os.getenv("SUPPORT_EMAIL_DOMAINS", "google.com,novahorizon.com").split(",")
-ADMIN_EMAIL_DOMAINS = os.getenv("ADMIN_EMAIL_DOMAINS", "google.com,gcp.solutions,altostrat.com").split(",")
+SUPPORT_DOMAINS = os.getenv(
+    "SUPPORT_EMAIL_DOMAINS", "google.com,novahorizon.com"
+).split(",")
+ADMIN_EMAIL_DOMAINS = os.getenv(
+    "ADMIN_EMAIL_DOMAINS", "google.com,gcp.solutions,altostrat.com"
+).split(",")
+
 
 def is_support_staff(token: ValidatedToken) -> bool:
     if not token or not hasattr(token, "claims"):
@@ -48,7 +53,7 @@ def is_support_staff(token: ValidatedToken) -> bool:
     email = token.claims.get("email")
     if not email:
         return False
-    
+
     # Check if voice agent service account
     if email == f"voice-agent-sa@{PROJECT_ID}.iam.gserviceaccount.com":
         return True
@@ -58,6 +63,15 @@ def is_support_staff(token: ValidatedToken) -> bool:
     if domain in SUPPORT_DOMAINS or email == "underwriter@nova.horizon":
         return True
     return False
+
+
+def is_ces_service_agent(token: ValidatedToken) -> bool:
+    """Return whether the verified caller is this project's CES service agent."""
+    if not token or not hasattr(token, "claims"):
+        return False
+    email = token.claims.get("email", "")
+    expected_email = os.getenv("CES_SERVICE_AGENT_EMAIL", "").strip()
+    return bool(expected_email and email == expected_email)
 
 
 def mint_cxas_token(user_data: ValidatedToken) -> dict:
@@ -72,23 +86,23 @@ def mint_cxas_token(user_data: ValidatedToken) -> dict:
 
     now = int(time.time())
     payload = {
-        'iss': SERVICE_NAME,
+        "iss": SERVICE_NAME,
         "aud": SERVICE_NAME,
         "client_id": client_id,
-        'iat': now,
-        'exp': now + 3600,
+        "iat": now,
+        "exp": now + 3600,
     }
 
     # Use values from verified IAP JWT
     if user_data:
-        payload['identifier'] = user_data.user_id
-        payload['sub'] = user_data.user_id
-        payload['name'] = user_data.name
-        payload['email'] = user_data.email
-        payload['type'] = ForwardedUserContextType.CXAS_AGENT.value
+        payload["identifier"] = user_data.user_id
+        payload["sub"] = user_data.user_id
+        payload["name"] = user_data.name
+        payload["email"] = user_data.email
+        payload["type"] = ForwardedUserContextType.CXAS_AGENT.value
 
-    token = jwt.encode({'alg': 'HS256'}, payload, secret_key)
-    return {'token': token}
+    token = jwt.encode({"alg": "HS256"}, payload, secret_key)
+    return {"token": token}
 
 
 def validate_cxas_token(jwt_token: str) -> ValidatedToken:
@@ -130,37 +144,38 @@ def validate_cxas_token(jwt_token: str) -> ValidatedToken:
 
 
 def validate_iap_token(
-        jwt_token: str | None, throws_error: bool = True
+    jwt_token: str | None, throws_error: bool = True
 ) -> ValidatedToken | None:
     """
     Validates a JWT token assertion from Google IAP.
-    
+
     Args:
         jwt_token: The signed JWT token from the x-goog-iap-jwt-assertion header.
         throws_error: Whether to raise HTTPException on failure.
 
     Returns:
         ValidatedToken | None: The decoded JWT claims, or None if validation fails and throws_error is False.
-        
+
     Raises:
         HTTPException: If verification fails or claims are invalid (only if throws_error is True).
     """
     if not jwt_token:
         if throws_error:
             raise HTTPException(
-                status_code=401,
-                detail="Missing IAP JWT assertion header"
+                status_code=401, detail="Missing IAP JWT assertion header"
             )
         return None
 
     expected_audiences_str = os.getenv("IAP_AUDIENCES", "")
-    expected_audiences: list[str] = [a.strip() for a in expected_audiences_str.split(",") if a.strip()]
+    expected_audiences: list[str] = [
+        a.strip() for a in expected_audiences_str.split(",") if a.strip()
+    ]
 
     if not expected_audiences:
         logger.error("IAP_AUDIENCES environment variable not set on backend")
         raise HTTPException(
             status_code=500,
-            detail="IAP_AUDIENCES environment variable not set on backend"
+            detail="IAP_AUDIENCES environment variable not set on backend",
         )
 
     try:
@@ -169,25 +184,24 @@ def validate_iap_token(
             jwt_token,
             requests.Request(),
             audience=expected_audiences,
-            certs_url="https://www.gstatic.com/iap/verify/public_key"
+            certs_url="https://www.gstatic.com/iap/verify/public_key",
         )
 
         # Validate audience
         if decoded_jwt.get("aud") not in expected_audiences:
-            raise ValueError(f"Audience mismatch: expected one of {expected_audiences}, got {decoded_jwt.get('aud')}")
+            raise ValueError(
+                f"Audience mismatch: expected one of {expected_audiences}, got {decoded_jwt.get('aud')}"
+            )
 
         # Validate the issuer (optional but recommended)
-        if decoded_jwt.get('iss') != 'https://cloud.google.com/iap':
-            raise ValueError('Invalid issuer')
+        if decoded_jwt.get("iss") != "https://cloud.google.com/iap":
+            raise ValueError("Invalid issuer")
 
         return ValidatedToken(claims=decoded_jwt)
     except Exception as e:
         logger.error(f"Token validation failed: {e}")
         if throws_error:
-            raise HTTPException(
-                status_code=401,
-                detail=f"Invalid IAP JWT: {e}"
-            )
+            raise HTTPException(status_code=401, detail=f"Invalid IAP JWT: {e}")
         return None
 
 
@@ -200,18 +214,20 @@ def validate_firebase_token(jwt_token: str) -> ValidatedToken:
             jwt_token = jwt_token.strip().strip('"').strip("'")
         decoded_token = firebase_auth.verify_id_token(jwt_token)
         claims = {
-            'iss': 'https://securetoken.google.com/' + decoded_token.get('aud', ''),
-            'aud': decoded_token.get('aud'),
-            'sub': decoded_token.get('uid'),
-            'identifier': decoded_token.get('uid'),
-            'email': decoded_token.get('email'),
-            'name': decoded_token.get('name'),
-            'exp': decoded_token.get('exp')
+            "iss": "https://securetoken.google.com/" + decoded_token.get("aud", ""),
+            "aud": decoded_token.get("aud"),
+            "sub": decoded_token.get("uid"),
+            "identifier": decoded_token.get("uid"),
+            "email": decoded_token.get("email"),
+            "name": decoded_token.get("name"),
+            "exp": decoded_token.get("exp"),
         }
         return ValidatedToken(claims=claims)
     except Exception as e:
         logger.warning("Firebase ID token validation failed: %s", e)
-        raise HTTPException(status_code=401, detail="Invalid or expired authentication credentials.")
+        raise HTTPException(
+            status_code=401, detail="Invalid or expired authentication credentials."
+        )
 
 
 def validate_google_id_token(jwt_token: str) -> ValidatedToken:
@@ -219,13 +235,15 @@ def validate_google_id_token(jwt_token: str) -> ValidatedToken:
     Validates a Google ID token (e.g., from a service agent).
     """
     expected_audiences_str = os.getenv("IAP_AUDIENCES", "")
-    expected_audiences: list[str] = [a.strip() for a in expected_audiences_str.split(",") if a.strip()]
+    expected_audiences: list[str] = [
+        a.strip() for a in expected_audiences_str.split(",") if a.strip()
+    ]
 
     if not is_running_locally() and not expected_audiences:
         logger.error("IAP_AUDIENCES environment variable not set on backend")
         raise HTTPException(
             status_code=500,
-            detail="IAP_AUDIENCES environment variable not set on backend"
+            detail="IAP_AUDIENCES environment variable not set on backend",
         )
 
     try:
@@ -237,10 +255,13 @@ def validate_google_id_token(jwt_token: str) -> ValidatedToken:
             # audience=expected_audiences, # Audience will be different for each endpoint
         )
 
-        email = decoded_jwt.get('email', '')
+        email = decoded_jwt.get("email", "")
         allowed_sa = f"voice-agent-sa@{PROJECT_ID}.iam.gserviceaccount.com"
-        if not (email.endswith('@gcp-sa-ces.iam.gserviceaccount.com') or email == allowed_sa):
-            raise ValueError('Invalid email domain or unauthorized service account')
+        ces_service_agent = os.getenv("CES_SERVICE_AGENT_EMAIL", "").strip()
+        if not (
+            email == allowed_sa or (ces_service_agent and email == ces_service_agent)
+        ):
+            raise ValueError("Invalid email domain or unauthorized service account")
 
         return ValidatedToken(claims=decoded_jwt)
     except Exception as e:
@@ -250,12 +271,12 @@ def validate_google_id_token(jwt_token: str) -> ValidatedToken:
 
 def get_unverified_claims(token: str) -> dict:
     try:
-        parts = token.split('.')
+        parts = token.split(".")
         if len(parts) != 3:
             return {}
         payload = parts[1]
-        payload += '=' * (4 - len(payload) % 4)
-        decoded = base64.urlsafe_b64decode(payload).decode('utf-8')
+        payload += "=" * (4 - len(payload) % 4)
+        decoded = base64.urlsafe_b64decode(payload).decode("utf-8")
         return json.loads(decoded)
     except Exception:
         return {}
@@ -272,7 +293,9 @@ def validate_token_by_issuer(token: str) -> ValidatedToken:
     elif iss == expected_firebase_iss:
         return validate_firebase_token(token)
     else:
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+        raise HTTPException(
+            status_code=401, detail="Invalid authentication credentials"
+        )
 
 
 def is_route_allowed(method: str, path: str, context_type: str | None) -> bool:
@@ -284,15 +307,21 @@ def is_route_allowed(method: str, path: str, context_type: str | None) -> bool:
     for route in allowed_routes:
         route_path = route["path"].rstrip("/")
         if route["method"] == method:
-            if path == route_path or path.endswith(route_path) or f"{route_path}/" in path:
+            if (
+                path == route_path
+                or path.endswith(route_path)
+                or f"{route_path}/" in path
+            ):
                 return True
     return False
 
 
 async def get_current_user(
-        request: Request,
-        auth: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
-        forwarded_auth: Annotated[HTTPAuthorizationCredentials | None, Depends(forwarded_bearer_scheme)] = None,
+    request: Request,
+    auth: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
+    forwarded_auth: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(forwarded_bearer_scheme)
+    ] = None,
 ) -> ValidatedToken:
     called_path = request.url.path
     called_method = request.method
@@ -306,10 +335,11 @@ async def get_current_user(
         token_type = validated.claims.get("type")
         if not is_route_allowed(called_method, called_path, token_type):
             logger.warning(
-                f"Forbidden access to {called_method} {called_path} with type '{token_type}' in forwarded_auth")
+                f"Forbidden access to {called_method} {called_path} with type '{token_type}' in forwarded_auth"
+            )
             raise HTTPException(
                 status_code=403,
-                detail="Forbidden: Route not allowed for forwarded authentication context type"
+                detail="Forbidden: Route not allowed for forwarded authentication context type",
             )
         return validated
 
@@ -319,7 +349,9 @@ async def get_current_user(
             return validate_token_by_issuer(auth.credentials)
         except HTTPException as auth_err:
             if is_running_locally():
-                logger.info(f"Local environment: ignoring invalid token '{auth.credentials}' and falling back to mock user token")
+                logger.info(
+                    f"Local environment: ignoring invalid token '{auth.credentials}' and falling back to mock user token"
+                )
                 return ValidatedToken.get_mock_token()
             raise auth_err
 
@@ -331,13 +363,19 @@ async def get_current_user(
     raise HTTPException(status_code=401, detail="Unauthorized")
 
 
-async def require_admin_user(token: ValidatedToken = Depends(get_current_user)) -> ValidatedToken:
+async def require_admin_user(
+    token: ValidatedToken = Depends(get_current_user),
+) -> ValidatedToken:
     if is_running_locally():
         return token
     email = (token.email or "").lower()
-    if email and any(email.endswith(f"@{domain.strip().lower()}") for domain in ADMIN_EMAIL_DOMAINS):
+    if email and any(
+        email.endswith(f"@{domain.strip().lower()}") for domain in ADMIN_EMAIL_DOMAINS
+    ):
         return token
-    raise HTTPException(status_code=403, detail="Admin access is required for this operation.")
+    raise HTTPException(
+        status_code=403, detail="Admin access is required for this operation."
+    )
 
 
 async def verify_eventarc_oidc_token(
@@ -349,23 +387,27 @@ async def verify_eventarc_oidc_token(
     if not auth_header or not auth_header.startswith("Bearer "):
         logger.error("Missing or invalid Authorization header in Eventarc invocation.")
         raise HTTPException(status_code=401, detail="Unauthorized Eventarc invocation.")
-    
+
     token = auth_header.split("Bearer ")[1]
     try:
         project_id = get_project_id()
         expected_sa = f"banking-eventarc-sa@{project_id}.iam.gserviceaccount.com"
         # Verify the OIDC token signature and integrity via Google's public keys (audience checked manually below)
         id_info = id_token.verify_oauth2_token(token, requests.Request(), audience=None)
-        
+
         # Manually validate the token audience belongs to your service endpoint prefix
         audience = id_info.get("aud", "")
         if not audience.startswith("https://banking-service-"):
             logger.error(f"Untrusted token audience: {audience}")
-            raise HTTPException(status_code=403, detail="Untrusted OIDC token audience.")
+            raise HTTPException(
+                status_code=403, detail="Untrusted OIDC token audience."
+            )
 
         if id_info.get("email") != expected_sa:
             logger.error(f"Untrusted service account email: {id_info.get('email')}")
-            raise HTTPException(status_code=403, detail="Untrusted Eventarc service account.")
+            raise HTTPException(
+                status_code=403, detail="Untrusted Eventarc service account."
+            )
         return id_info
     except HTTPException:
         raise

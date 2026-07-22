@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from models.authentication import ValidatedToken
 from routers.mcp.credit_card import commit_fraud_triage, propose_fraud_triage
 from routers.mcp import utils as mcp_utils
 from services.action_proposal_context import (
@@ -115,6 +116,72 @@ async def test_mcp_decorator_prefers_ces_capability_over_reusable_assertion(
         return verified_customer_id
 
     assert await read_tool(ctx=context) == "firebase-user-1"
+
+
+@pytest.mark.asyncio
+async def test_mcp_decorator_accepts_project_ces_service_agent_for_capability(
+    monkeypatch,
+) -> None:
+    ces_email = "service-123@gcp-sa-ces.iam.gserviceaccount.com"
+    headers = _headers(
+        **{
+            "authorization": "Bearer google-id-token",
+            "x-banking-session-capability": "opaque-capability",
+            "x-ces-app-id": "app-1",
+            "x-ces-version-or-deployment-id": "deployment-7",
+        }
+    )
+    context = MagicMock()
+    context.request_context.request.headers = headers
+    monkeypatch.setenv("CES_SERVICE_AGENT_EMAIL", ces_email)
+    monkeypatch.setattr(mcp_utils, "is_running_locally", lambda: False)
+    monkeypatch.setattr(
+        "utils.auth.validate_google_id_token",
+        lambda *_: ValidatedToken(claims={"email": ces_email}),
+    )
+    monkeypatch.setattr(
+        mcp_utils,
+        "_identity_from_ces_capability",
+        lambda *_: "firebase-user-1",
+    )
+
+    @mcp_utils.requires_user_assertion
+    async def read_tool(*, ctx=None, verified_customer_id=None):
+        return verified_customer_id
+
+    assert await read_tool(ctx=context) == "firebase-user-1"
+
+
+@pytest.mark.asyncio
+async def test_mcp_decorator_rejects_other_google_caller_for_ces_capability(
+    monkeypatch,
+) -> None:
+    headers = _headers(
+        **{
+            "authorization": "Bearer google-id-token",
+            "x-banking-session-capability": "opaque-capability",
+            "x-ces-app-id": "app-1",
+            "x-ces-version-or-deployment-id": "deployment-7",
+        }
+    )
+    context = MagicMock()
+    context.request_context.request.headers = headers
+    monkeypatch.setenv(
+        "CES_SERVICE_AGENT_EMAIL",
+        "service-123@gcp-sa-ces.iam.gserviceaccount.com",
+    )
+    monkeypatch.setattr(mcp_utils, "is_running_locally", lambda: False)
+    monkeypatch.setattr(
+        "utils.auth.validate_google_id_token",
+        lambda *_: ValidatedToken(claims={"email": "support@google.com"}),
+    )
+
+    @mcp_utils.requires_user_assertion
+    async def read_tool(*, ctx=None, verified_customer_id=None):
+        return verified_customer_id
+
+    with pytest.raises(PermissionError, match="authorized service caller"):
+        await read_tool(ctx=context)
 
 
 def test_confirmation_evidence_is_transport_owned_and_explicit() -> None:

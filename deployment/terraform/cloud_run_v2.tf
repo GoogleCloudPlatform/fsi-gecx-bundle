@@ -276,6 +276,11 @@ resource "google_cloud_run_v2_service" "banking_service" {
         value = var.gecx_location
       }
 
+      env {
+        name  = "CES_SERVICE_AGENT_EMAIL"
+        value = "service-${data.google_project.project.number}@gcp-sa-ces.iam.gserviceaccount.com"
+      }
+
       dynamic "env" {
         for_each = var.set_cloud_run_audiences ? [1] : []
         content {
