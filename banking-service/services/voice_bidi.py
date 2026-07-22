@@ -43,6 +43,13 @@ def _configured_sample_rate(name: str, default: int = 16_000) -> int:
     return value
 
 
+def _pcm_peak(chunk: bytes) -> int:
+    """Return the absolute peak of little-endian LINEAR16 PCM for diagnostics."""
+    if not chunk or len(chunk) % 2:
+        return 0
+    return max((abs(sample) for sample in memoryview(chunk).cast("h")), default=0)
+
+
 async def send_session_event(session_key: str, event_payload: dict):
     """Pushes out-of-band events (like tool-driven card lock) directly into the WebSocket playout loop."""
     user_id = session_key.replace("session-", "")
@@ -175,10 +182,19 @@ class VoiceBidiSession:
             "input_bytes": 0,
             "browser_input_frames": 0,
             "browser_input_bytes": 0,
+            "input_speech_like_frames": 0,
+            "input_peak": 0,
             "first_browser_input_at": None,
             "last_browser_input_at": None,
             "output_frames": 0,
             "output_bytes": 0,
+            "output_gap_over_250ms": 0,
+            "max_output_gap_ms": 0,
+            "last_output_at": None,
+            "recognition_results": 0,
+            "interruption_signals": 0,
+            "completed_turns": 0,
+            "provider_end_signal": "none",
         }
         transport_started_at = time.monotonic()
 
@@ -305,6 +321,12 @@ class VoiceBidiSession:
                         await gecx_ws.send(json.dumps(realtime_input))
                         transport_stats["input_frames"] += 1
                         transport_stats["input_bytes"] += len(chunk)
+                        peak = _pcm_peak(chunk)
+                        transport_stats["input_peak"] = max(
+                            transport_stats["input_peak"], peak
+                        )
+                        if peak >= 512:
+                            transport_stats["input_speech_like_frames"] += 1
                 except Exception as ex:
                     logger.error(f"Error in send_to_gecx: {ex}")
 
@@ -317,6 +339,19 @@ class VoiceBidiSession:
                         if session_output:
                             b64_audio = session_output.get("audio", "")
                             if b64_audio:
+                                received_at = time.monotonic()
+                                last_output_at = transport_stats["last_output_at"]
+                                if last_output_at is not None:
+                                    output_gap_ms = round(
+                                        (received_at - last_output_at) * 1000
+                                    )
+                                    transport_stats["max_output_gap_ms"] = max(
+                                        transport_stats["max_output_gap_ms"],
+                                        output_gap_ms,
+                                    )
+                                    if output_gap_ms > 250:
+                                        transport_stats["output_gap_over_250ms"] += 1
+                                transport_stats["last_output_at"] = received_at
                                 raw_pcm = base64.b64decode(b64_audio)
                                 transport_stats["output_frames"] += 1
                                 transport_stats["output_bytes"] += len(raw_pcm)
@@ -333,9 +368,14 @@ class VoiceBidiSession:
                                         "author": "agent",
                                     }
                                 )
+                            if session_output.get(
+                                "turnCompleted"
+                            ) or session_output.get("turn_completed"):
+                                transport_stats["completed_turns"] += 1
 
                         recognition_result = response.get("recognitionResult", {})
                         if recognition_result:
+                            transport_stats["recognition_results"] += 1
                             user_transcript = recognition_result.get("transcript", "")
                             if user_transcript:
                                 await self.gecx_to_client_queue.put(
@@ -350,10 +390,26 @@ class VoiceBidiSession:
                             "interruptionSignal"
                         ) or response.get("interruption_signal")
                         if interruption_signal:
+                            transport_stats["interruption_signals"] += 1
                             logger.info(
                                 f"Barge-in interruption signal received from GECX: {interruption_signal}"
                             )
                             await self.gecx_to_client_queue.put({"type": "INTERRUPT"})
+
+                        if "endSession" in response or "end_session" in response:
+                            transport_stats["provider_end_signal"] = "end_session"
+                            logger.info("CES end-session signal received.")
+                            await self.gecx_to_client_queue.put(
+                                {"type": "SESSION_END", "reason": "CES_END_SESSION"}
+                            )
+                            break
+                        if "goAway" in response or "go_away" in response:
+                            transport_stats["provider_end_signal"] = "go_away"
+                            logger.info("CES go-away signal received.")
+                            await self.gecx_to_client_queue.put(
+                                {"type": "SESSION_END", "reason": "CES_GO_AWAY"}
+                            )
+                            break
                 except Exception as ex:
                     logger.error(f"Error in read_from_gecx: {ex}")
                 finally:
@@ -363,14 +419,20 @@ class VoiceBidiSession:
                     logger.info(
                         "CES audio transport summary input_frames=%d input_bytes=%d "
                         "browser_input_frames=%d browser_input_bytes=%d "
+                        "input_speech_like_frames=%d input_peak=%d "
                         "first_browser_input_delay_ms=%s "
                         "last_browser_input_gap_ms=%s "
                         "output_frames=%d output_bytes=%d input_rate_hz=%d "
-                        "output_rate_hz=%d",
+                        "output_rate_hz=%d output_gap_over_250ms=%d "
+                        "max_output_gap_ms=%d recognition_results=%d "
+                        "interruption_signals=%d completed_turns=%d "
+                        "provider_end_signal=%s",
                         transport_stats["input_frames"],
                         transport_stats["input_bytes"],
                         transport_stats["browser_input_frames"],
                         transport_stats["browser_input_bytes"],
+                        transport_stats["input_speech_like_frames"],
+                        transport_stats["input_peak"],
                         (
                             round((first_input_at - transport_started_at) * 1000)
                             if first_input_at is not None
@@ -385,6 +447,12 @@ class VoiceBidiSession:
                         transport_stats["output_bytes"],
                         input_sample_rate_hz,
                         output_sample_rate_hz,
+                        transport_stats["output_gap_over_250ms"],
+                        transport_stats["max_output_gap_ms"],
+                        transport_stats["recognition_results"],
+                        transport_stats["interruption_signals"],
+                        transport_stats["completed_turns"],
+                        transport_stats["provider_end_signal"],
                     )
                     await self.gecx_to_client_queue.put(None)
 

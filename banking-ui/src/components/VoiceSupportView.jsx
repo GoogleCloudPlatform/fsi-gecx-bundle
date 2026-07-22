@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import {
   getCreditCardAccount,
+  getCreditCardVoiceContext,
   getCreditCardVoiceToken,
   getCreditCardTransactions
 } from '../utils/api.js';
@@ -48,6 +49,8 @@ import { logTutorialBeginEvent, logTutorialCompleteEvent } from '../utils/analyt
 
 const AUDIO_INPUT_STORAGE_KEY = 'voice-support-audio-input';
 const AUDIO_OUTPUT_STORAGE_KEY = 'voice-support-audio-output';
+const GECX_INPUT_CHUNK_DURATION_SECONDS = 0.08;
+const GECX_PLAYOUT_LOOKAHEAD_SECONDS = 0.2;
 
 function persistAudioDeviceSelection(storageKey, deviceId) {
   if (deviceId) {
@@ -59,7 +62,13 @@ function persistAudioDeviceSelection(storageKey, deviceId) {
 
 function microphoneConstraints(deviceId) {
   return {
-    audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+    audio: {
+      ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+      channelCount: 1,
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    },
   };
 }
 
@@ -532,7 +541,7 @@ export default function VoiceSupportView() {
 
     const audioCtx = audioContextRef.current;
     if (audioCtx) {
-      nextPlayoutTimeRef.current = audioCtx.currentTime + 0.05;
+      nextPlayoutTimeRef.current = audioCtx.currentTime + GECX_PLAYOUT_LOOKAHEAD_SECONDS;
     }
   }, []);
 
@@ -901,7 +910,113 @@ export default function VoiceSupportView() {
     return url.replace(/^http/, 'ws') + '/voice/gecx-stream';
   };
 
-
+  const handleOperationalVoiceEvent = useCallback((event) => {
+    if (event.type === DataChannelEvent.FRAUD_ALERT_INSPECTED) {
+      setFraudContext(prev => prev ? {
+        ...prev,
+        has_active_fraud_alert: true,
+        fraud_alert: prev.fraud_alert ? {
+          ...prev.fraud_alert,
+          inspected: true,
+          status: event.status || prev.fraud_alert.status,
+        } : prev.fraud_alert,
+      } : prev);
+      setTranscripts(prev => [
+        ...prev,
+        {
+          author: 'system',
+          text: `CASE UPDATE: Fraud alert reviewed. ${event.suspicious_transactions_count || 0} suspicious charge${event.suspicious_transactions_count === 1 ? '' : 's'} ready for confirmation.`,
+        },
+      ]);
+      return true;
+    }
+    if (event.type === DataChannelEvent.CARD_STATUS_LOCK) {
+      setCardStatus(event.status);
+      setTranscripts(prev => [...prev, { author: 'system', text: `SECURITY ALERT: Card status updated to ${event.status}.` }]);
+      return true;
+    }
+    if (event.type === DataChannelEvent.CARD_REPLACED) {
+      setCardStatus(event.status || 'ACTIVE');
+      setAccount(prev => prev ? {
+        ...prev,
+        cards: applyReplacementCardEvent(prev.cards, event),
+      } : prev);
+      setTranscripts(prev => [
+        ...prev,
+        {
+          author: 'system',
+          text: `ACCOUNT UPDATE: Replacement ${event.is_virtual ? 'virtual ' : ''}card ending in ${event.new_last_four} is ready.`,
+        },
+      ]);
+      return true;
+    }
+    if (event.type === DataChannelEvent.WALLET_PROVISIONING_QUEUED) {
+      setFraudTriage(prev => ({ ...prev, walletQueued: true }));
+      setAccount(prev => prev ? {
+        ...prev,
+        cards: applyWalletProvisioningEvent(prev.cards, event),
+      } : prev);
+      setTranscripts(prev => [
+        ...prev,
+        {
+          author: 'system',
+          text: `ACCOUNT UPDATE: Virtual card provisioning to ${event.wallet_provider || 'Google Wallet'} is queued.`,
+        },
+      ]);
+      return true;
+    }
+    if (event.type === DataChannelEvent.FRAUD_ALERT_RESOLVED || event.type === DataChannelEvent.FRAUD_CASE_TRIAGED) {
+      const isRecognized = event.resolution === 'CUSTOMER_RECOGNIZED' || event.outcome === 'CUSTOMER_RECOGNIZED';
+      const replacement = event.replacement_card || null;
+      setFraudTriage(prev => ({
+        ...prev,
+        outcome: event.outcome || event.resolution || prev.outcome,
+        voided_authorizations: event.voided_authorizations || prev.voided_authorizations,
+        provisional_credits: event.provisional_credits || prev.provisional_credits,
+        replacement_card: replacement || prev.replacement_card,
+        secure_message: event.secure_message || prev.secure_message,
+        escalated: event.escalated ?? prev.escalated,
+      }));
+      if (replacement) {
+        setAccount(prev => prev ? {
+          ...prev,
+          cards: applyReplacementCardEvent(prev.cards, replacement),
+        } : prev);
+      }
+      if (event.secure_message) {
+        window.dispatchEvent(new CustomEvent('secure-message-created', {
+          detail: {
+            thread_id: event.secure_message.thread_id,
+            message_id: event.secure_message.message_id,
+          },
+        }));
+        window.dispatchEvent(new CustomEvent('refresh-unread-count'));
+      }
+      refreshCreditCardData().catch(err => {
+        console.error('Failed to refresh credit card data after fraud triage:', err);
+      });
+      setFraudContext(prev => prev ? {
+        ...prev,
+        has_active_fraud_alert: false,
+        fraud_alert: prev.fraud_alert ? {
+          ...prev.fraud_alert,
+          status: event.status || prev.fraud_alert.status,
+          resolution: event.resolution || prev.fraud_alert.resolution,
+        } : prev.fraud_alert,
+      } : prev);
+      setTranscripts(prev => [
+        ...prev,
+        {
+          author: 'system',
+          text: isRecognized
+            ? 'CASE UPDATE: Fraud alert reviewed as recognized activity.'
+            : `CASE UPDATE: Fraud case triaged. ${(event.voided_authorizations || []).length} pending hold${(event.voided_authorizations || []).length === 1 ? '' : 's'} released, ${(event.provisional_credits || []).length} provisional credit${(event.provisional_credits || []).length === 1 ? '' : 's'} applied.`,
+        },
+      ]);
+      return true;
+    }
+    return false;
+  }, [refreshCreditCardData]);
 
   const handleGecxAudioChunk = (arrayBuffer) => {
     const audioCtx = audioContextRef.current;
@@ -924,7 +1039,7 @@ export default function VoiceSupportView() {
     const now = audioCtx.currentTime;
     let playTime = nextPlayoutTimeRef.current;
     if (playTime < now) {
-      playTime = now + 0.05; // 50ms playout lookahead to prevent jitter
+      playTime = now + GECX_PLAYOUT_LOOKAHEAD_SECONDS;
     }
 
     const sourceNode = audioCtx.createBufferSource();
@@ -946,6 +1061,7 @@ export default function VoiceSupportView() {
   };
 
   const handleGecxControlMessage = useCallback((payload) => {
+    if (handleOperationalVoiceEvent(payload)) return;
     if (payload.type === 'TRANSCRIPT') {
       setTranscripts(prev => [...prev, { author: payload.author, text: payload.text }]);
       if (payload.author === 'agent') {
@@ -986,8 +1102,10 @@ export default function VoiceSupportView() {
       stopPlayoutQueue();
     } else if (payload.type === 'ERROR') {
       setErrorMessage(payload.message);
+    } else if (payload.type === DataChannelEvent.SESSION_END) {
+      startDisconnectCountdown();
     }
-  }, [startDisconnectCountdown, stopPlayoutQueue]);
+  }, [handleOperationalVoiceEvent, startDisconnectCountdown, stopPlayoutQueue]);
 
   const startGecxConsultation = async () => {
     if (isConnecting || isConnected) return;
@@ -1001,6 +1119,12 @@ export default function VoiceSupportView() {
         microphoneConstraints(selectedAudioInputId)
       );
       micStreamRef.current = micStream;
+      try {
+        const voiceContext = await getCreditCardVoiceContext();
+        setFraudContext(voiceContext || null);
+      } catch (contextError) {
+        console.error('Failed to load CES fraud session context:', contextError);
+      }
       pendingGecxAudioRef.current = [];
       gecxInputSampleRateRef.current = null;
       gecxOutputSampleRateRef.current = null;
@@ -1170,7 +1294,7 @@ export default function VoiceSupportView() {
       sourceNodeRef.current = sourceNode;
       const workletNode = new AudioWorkletNode(audioCtx, 'pcm-processor', {
         processorOptions: {
-          sendChunkSize: Math.max(1, Math.round(inputSampleRate * 0.128)),
+          sendChunkSize: Math.max(1, Math.round(inputSampleRate * GECX_INPUT_CHUNK_DURATION_SECONDS)),
         },
       });
       workletNodeRef.current = workletNode;
@@ -1284,6 +1408,8 @@ export default function VoiceSupportView() {
           const event = JSON.parse(decoder.decode(payload));
           console.log('Received data channel event:', event);
 
+          if (handleOperationalVoiceEvent(event)) return;
+
           const typedDelivery = resolveTypedDelivery(
             event,
             pendingTypedMessageIdRef.current,
@@ -1325,103 +1451,6 @@ export default function VoiceSupportView() {
             ]);
           } else if (event.type === DataChannelEvent.GUIDANCE_SNAPSHOT) {
             setGuidanceSnapshot(event);
-          } else if (event.type === DataChannelEvent.FRAUD_ALERT_INSPECTED) {
-            setFraudContext(prev => prev ? {
-              ...prev,
-              has_active_fraud_alert: true,
-              fraud_alert: prev.fraud_alert ? {
-                ...prev.fraud_alert,
-                inspected: true,
-                status: event.status || prev.fraud_alert.status,
-              } : prev.fraud_alert,
-            } : prev);
-            setTranscripts(prev => [
-              ...prev,
-              {
-                author: 'system',
-                text: `CASE UPDATE: Fraud alert reviewed. ${event.suspicious_transactions_count || 0} suspicious charge${event.suspicious_transactions_count === 1 ? '' : 's'} ready for confirmation.`,
-              },
-            ]);
-          } else if (event.type === DataChannelEvent.CARD_STATUS_LOCK) {
-            setCardStatus(event.status);
-            setTranscripts(prev => [...prev, { author: 'system', text: `SECURITY ALERT: Card status updated to ${event.status}.` }]);
-          } else if (event.type === DataChannelEvent.CARD_REPLACED) {
-            setCardStatus(event.status || 'ACTIVE');
-            setAccount(prev => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                cards: applyReplacementCardEvent(prev.cards, event),
-              };
-            });
-            setTranscripts(prev => [
-              ...prev,
-              {
-                author: 'system',
-                text: `ACCOUNT UPDATE: Replacement ${event.is_virtual ? 'virtual ' : ''}card ending in ${event.new_last_four} is ready.`,
-              },
-            ]);
-          } else if (event.type === DataChannelEvent.WALLET_PROVISIONING_QUEUED) {
-            setFraudTriage(prev => ({ ...prev, walletQueued: true }));
-            setAccount(prev => prev ? {
-              ...prev,
-              cards: applyWalletProvisioningEvent(prev.cards, event),
-            } : prev);
-            setTranscripts(prev => [
-              ...prev,
-              {
-                author: 'system',
-                text: `ACCOUNT UPDATE: Virtual card provisioning to ${event.wallet_provider || 'Google Wallet'} is queued.`,
-              },
-            ]);
-          } else if (event.type === DataChannelEvent.FRAUD_ALERT_RESOLVED || event.type === DataChannelEvent.FRAUD_CASE_TRIAGED) {
-            const isRecognized = event.resolution === 'CUSTOMER_RECOGNIZED' || event.outcome === 'CUSTOMER_RECOGNIZED';
-            const replacement = event.replacement_card || null;
-            setFraudTriage(prev => ({
-              ...prev,
-              outcome: event.outcome || event.resolution || prev.outcome,
-              voided_authorizations: event.voided_authorizations || prev.voided_authorizations,
-              provisional_credits: event.provisional_credits || prev.provisional_credits,
-              replacement_card: replacement || prev.replacement_card,
-              secure_message: event.secure_message || prev.secure_message,
-              escalated: event.escalated ?? prev.escalated,
-            }));
-            if (replacement) {
-              setAccount(prev => prev ? {
-                ...prev,
-                cards: applyReplacementCardEvent(prev.cards, replacement),
-              } : prev);
-            }
-            if (event.secure_message) {
-              window.dispatchEvent(new CustomEvent('secure-message-created', {
-                detail: {
-                  thread_id: event.secure_message.thread_id,
-                  message_id: event.secure_message.message_id,
-                },
-              }));
-              window.dispatchEvent(new CustomEvent('refresh-unread-count'));
-            }
-            refreshCreditCardData().catch(err => {
-              console.error('Failed to refresh credit card data after fraud triage:', err);
-            });
-            setFraudContext(prev => prev ? {
-              ...prev,
-              has_active_fraud_alert: false,
-              fraud_alert: prev.fraud_alert ? {
-                ...prev.fraud_alert,
-                status: event.status || prev.fraud_alert.status,
-                resolution: event.resolution || prev.fraud_alert.resolution,
-              } : prev.fraud_alert,
-            } : prev);
-            setTranscripts(prev => [
-              ...prev,
-              {
-                author: 'system',
-                text: isRecognized
-                  ? 'CASE UPDATE: Fraud alert reviewed as recognized activity.'
-                  : `CASE UPDATE: Fraud case triaged. ${(event.voided_authorizations || []).length} pending hold${(event.voided_authorizations || []).length === 1 ? '' : 's'} released, ${(event.provisional_credits || []).length} provisional credit${(event.provisional_credits || []).length === 1 ? '' : 's'} applied.`,
-              },
-            ]);
           } else if (event.type === DataChannelEvent.LIMIT_UPDATED) {
             setCreditLimit(event.credit_limit_cents / 100);
             setAvailableCredit(event.available_credit_cents / 100);
