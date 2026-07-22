@@ -91,19 +91,28 @@ def test_gecx_voice_stream_success(
             json.dumps({"type": "AUTH", "token": "valid-firebase-session-token"})
         )
 
-        # B. Await response message forwarded from GECX
+        # B. The server advertises the exact audio contract it negotiated.
+        audio_config = websocket.receive_json()
+        assert audio_config == {
+            "type": "AUDIO_CONFIG",
+            "input_sample_rate_hz": 16000,
+            "output_sample_rate_hz": 16000,
+            "encoding": "LINEAR16",
+        }
+
+        # C. Await response message forwarded from GECX
         response = websocket.receive_json()
 
-        # C. Verify forwarded transcript properties
+        # D. Verify forwarded transcript properties
         assert response["type"] == "TRANSCRIPT"
         assert response["text"] == "Welcome to Horizon Financial support."
         assert response["author"] == "agent"
 
-        # C2. Await second response, which should be the INTERRUPT event
+        # D2. Await second response, which should be the INTERRUPT event
         interrupt_response = websocket.receive_json()
         assert interrupt_response["type"] == "INTERRUPT"
 
-        # D. Verify backend handshake call payload parameters
+        # E. Verify backend handshake call payload parameters
         sent_messages = [json.loads(c[0][0]) for c in mock_gecx_ws.send.call_args_list]
         config_msg = next((msg for msg in sent_messages if "config" in msg), None)
         assert config_msg is not None

@@ -15,6 +15,7 @@
 import base64
 import json
 import logging
+import os
 import time
 import asyncio
 import websockets
@@ -33,6 +34,13 @@ logger = logging.getLogger(__name__)
 # Registry of active session queues for out-of-band updates (e.g. card locking sync)
 # Keyed by user_id
 active_sessions: Dict[str, asyncio.Queue] = {}
+
+
+def _configured_sample_rate(name: str, default: int = 16_000) -> int:
+    value = int(os.getenv(name, str(default)))
+    if value < 8_000 or value > 48_000:
+        raise ValueError(f"{name} must be between 8000 and 48000 Hz.")
+    return value
 
 
 async def send_session_event(session_key: str, event_payload: dict):
@@ -160,6 +168,14 @@ class VoiceBidiSession:
 
     async def _run_pipeline(self):
         project_id = get_project_id()
+        input_sample_rate_hz = _configured_sample_rate("CES_INPUT_SAMPLE_RATE_HZ")
+        output_sample_rate_hz = _configured_sample_rate("CES_OUTPUT_SAMPLE_RATE_HZ")
+        transport_stats = {
+            "input_frames": 0,
+            "input_bytes": 0,
+            "output_frames": 0,
+            "output_bytes": 0,
+        }
 
         app_id = self.bootstrap.ces_app_id
         deployment_path = None
@@ -189,11 +205,11 @@ class VoiceBidiSession:
                 "session": session_name,
                 "inputAudioConfig": {
                     "audioEncoding": "LINEAR16",
-                    "sampleRateHertz": 16000,
+                    "sampleRateHertz": input_sample_rate_hz,
                 },
                 "outputAudioConfig": {
                     "audioEncoding": "LINEAR16",
-                    "sampleRateHertz": 16000,
+                    "sampleRateHertz": output_sample_rate_hz,
                 },
             }
             if deployment_path:
@@ -202,6 +218,14 @@ class VoiceBidiSession:
             config_msg = {"config": config}
             await gecx_ws.send(json.dumps(config_msg))
             logger.info("Handshake configurations transmitted.")
+            await self.client_ws.send_json(
+                {
+                    "type": "AUDIO_CONFIG",
+                    "input_sample_rate_hz": input_sample_rate_hz,
+                    "output_sample_rate_hz": output_sample_rate_hz,
+                    "encoding": "LINEAR16",
+                }
+            )
 
             # Send initial session variables to populate context before triggering agent
             variables_msg = {
@@ -266,6 +290,8 @@ class VoiceBidiSession:
                         b64_audio = base64.b64encode(chunk).decode("utf-8")
                         realtime_input = {"realtimeInput": {"audio": b64_audio}}
                         await gecx_ws.send(json.dumps(realtime_input))
+                        transport_stats["input_frames"] += 1
+                        transport_stats["input_bytes"] += len(chunk)
                         self.client_to_gecx_queue.task_done()
                 except Exception as ex:
                     logger.error(f"Error in send_to_gecx: {ex}")
@@ -280,6 +306,8 @@ class VoiceBidiSession:
                             b64_audio = session_output.get("audio", "")
                             if b64_audio:
                                 raw_pcm = base64.b64decode(b64_audio)
+                                transport_stats["output_frames"] += 1
+                                transport_stats["output_bytes"] += len(raw_pcm)
                                 await self.gecx_to_client_queue.put(
                                     {"type": "AUDIO", "data": raw_pcm}
                                 )
@@ -317,6 +345,17 @@ class VoiceBidiSession:
                 except Exception as ex:
                     logger.error(f"Error in read_from_gecx: {ex}")
                 finally:
+                    logger.info(
+                        "CES audio transport summary input_frames=%d input_bytes=%d "
+                        "output_frames=%d output_bytes=%d input_rate_hz=%d "
+                        "output_rate_hz=%d",
+                        transport_stats["input_frames"],
+                        transport_stats["input_bytes"],
+                        transport_stats["output_frames"],
+                        transport_stats["output_bytes"],
+                        input_sample_rate_hz,
+                        output_sample_rate_hz,
+                    )
                     await self.gecx_to_client_queue.put(None)
 
             # Task D: Forward payloads back to client browser WebSocket

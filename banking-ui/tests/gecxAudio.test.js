@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   connectSilentPcmSink,
   pcmFrameForMicrophoneState,
+  remainingPlayoutSeconds,
 } from '../src/utils/gecxAudio.js';
 
 
@@ -44,4 +45,10 @@ test('muting preserves the continuous CES PCM stream with silent frames', () => 
     [...new Uint8Array(pcmFrameForMicrophoneState(rawBuffer, false))],
     [0, 0, 0, 0],
   );
+});
+
+test('remote close drains only audio that is still scheduled', () => {
+  assert.equal(remainingPlayoutSeconds(10, 13.5, 2), 3.5);
+  assert.equal(remainingPlayoutSeconds(14, 13.5, 2), 0);
+  assert.equal(remainingPlayoutSeconds(10, 13.5, 0), 0);
 });

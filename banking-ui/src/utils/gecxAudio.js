@@ -10,3 +10,9 @@ export function pcmFrameForMicrophoneState(rawBuffer, microphoneEnabled) {
   if (microphoneEnabled) return rawBuffer;
   return new ArrayBuffer(rawBuffer.byteLength);
 }
+
+export function remainingPlayoutSeconds(currentTime, nextPlayoutTime, activeSourceCount) {
+  if (!Number.isFinite(currentTime) || !Number.isFinite(nextPlayoutTime)) return 0;
+  if (activeSourceCount <= 0) return 0;
+  return Math.max(0, nextPlayoutTime - currentTime);
+}
