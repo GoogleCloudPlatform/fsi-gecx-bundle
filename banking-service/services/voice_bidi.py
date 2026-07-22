@@ -183,6 +183,7 @@ class VoiceBidiSession:
             "browser_input_frames": 0,
             "browser_input_bytes": 0,
             "input_speech_like_frames": 0,
+            "input_speech_bursts": 0,
             "input_peak": 0,
             "first_browser_input_at": None,
             "last_browser_input_at": None,
@@ -292,6 +293,19 @@ class VoiceBidiSession:
                                         "timestamp": payload.get("timestamp"),
                                     }
                                 )
+                            elif payload.get("type") == "AUDIO_DIAGNOSTICS":
+                                logger.info(
+                                    "CES browser audio settings sample_rate_hz=%s "
+                                    "channel_count=%s echo_cancellation=%s "
+                                    "noise_suppression=%s auto_gain_control=%s "
+                                    "latency_seconds=%s",
+                                    payload.get("sample_rate_hz"),
+                                    payload.get("channel_count"),
+                                    payload.get("echo_cancellation"),
+                                    payload.get("noise_suppression"),
+                                    payload.get("auto_gain_control"),
+                                    payload.get("latency_seconds"),
+                                )
                 except (WebSocketDisconnect, RuntimeError) as ex:
                     if (
                         isinstance(ex, RuntimeError)
@@ -310,6 +324,8 @@ class VoiceBidiSession:
             # Re-clocking here creates a second timing loop and can discard valid
             # microphone audio when provider sends are backpressured.
             async def send_to_gecx():
+                speech_active = False
+                quiet_frames = 0
                 try:
                     while True:
                         chunk = await self.client_to_gecx_queue.get()
@@ -327,6 +343,15 @@ class VoiceBidiSession:
                         )
                         if peak >= 512:
                             transport_stats["input_speech_like_frames"] += 1
+                            quiet_frames = 0
+                            if not speech_active:
+                                speech_active = True
+                                transport_stats["input_speech_bursts"] += 1
+                        elif speech_active:
+                            quiet_frames += 1
+                            if quiet_frames >= 4:
+                                speech_active = False
+                                quiet_frames = 0
                 except Exception as ex:
                     logger.error(f"Error in send_to_gecx: {ex}")
 
@@ -419,7 +444,8 @@ class VoiceBidiSession:
                     logger.info(
                         "CES audio transport summary input_frames=%d input_bytes=%d "
                         "browser_input_frames=%d browser_input_bytes=%d "
-                        "input_speech_like_frames=%d input_peak=%d "
+                        "input_speech_like_frames=%d input_speech_bursts=%d "
+                        "input_peak=%d "
                         "first_browser_input_delay_ms=%s "
                         "last_browser_input_gap_ms=%s "
                         "output_frames=%d output_bytes=%d input_rate_hz=%d "
@@ -432,6 +458,7 @@ class VoiceBidiSession:
                         transport_stats["browser_input_frames"],
                         transport_stats["browser_input_bytes"],
                         transport_stats["input_speech_like_frames"],
+                        transport_stats["input_speech_bursts"],
                         transport_stats["input_peak"],
                         (
                             round((first_input_at - transport_started_at) * 1000)

@@ -190,6 +190,9 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     assert "x-forwarded-user-context" not in custom_headers
     assert "user_token" not in instruction
     assert "Hi, I'm Nova with Nova Horizon Bank." in instruction
+    assert "Do not restate that selection and ask whether it is correct" in instruction
+    assert "Proposal confirmation authorizes only the proposed banking action" in instruction
+    assert "Never append a farewell or call `end_session` immediately" in instruction
     for tool_name in (
         "get_open_fraud_alert",
         "propose_fraud_triage",

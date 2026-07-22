@@ -1156,6 +1156,16 @@ export default function VoiceSupportView() {
           type: "AUTH",
           token: fbToken
         }));
+        const micSettings = micStream.getAudioTracks()[0]?.getSettings?.() || {};
+        ws.send(JSON.stringify({
+          type: 'AUDIO_DIAGNOSTICS',
+          sample_rate_hz: micSettings.sampleRate,
+          channel_count: micSettings.channelCount,
+          echo_cancellation: micSettings.echoCancellation,
+          noise_suppression: micSettings.noiseSuppression,
+          auto_gain_control: micSettings.autoGainControl,
+          latency_seconds: micSettings.latency,
+        }));
 
         // Start latency diagnostics ping loop
         pingIntervalRef.current = setInterval(() => {
@@ -1331,12 +1341,17 @@ export default function VoiceSupportView() {
   };
 
   const startConsultation = async () => {
+    if (isTestingMic) {
+      setIsTestingMic(false);
+      // Let React unmount MicTester and release its MediaStream before the
+      // consultation acquires the same device with call-specific processing.
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
     if (engine === 'gecx') {
       return startGecxConsultation();
     }
     if (isConnecting || isConnected) return;
     setIsConnecting(true);
-    setIsTestingMic(false);
     setErrorMessage('');
     setTranscripts([{ author: 'system', text: 'Connecting to voice room...' }]);
 
