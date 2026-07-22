@@ -497,18 +497,29 @@ class VoiceBidiSession:
                 except Exception:
                     pass
 
-            # Gather all loops with a 10-minute timeout
-            try:
-                await asyncio.wait_for(
-                    asyncio.gather(
-                        read_client(),
-                        send_to_gecx(),
-                        read_from_gecx(),
-                        send_to_client(),
-                        send_pings(),
-                    ),
-                    timeout=600.0,
+            # End the provider session as soon as either endpoint disconnects.
+            # The prior gather waited for every loop, including the perpetual
+            # ping loop, and could leak CES sessions after a browser closed.
+            tasks = {
+                "read_client": asyncio.create_task(read_client()),
+                "send_to_gecx": asyncio.create_task(send_to_gecx()),
+                "read_from_gecx": asyncio.create_task(read_from_gecx()),
+                "send_to_client": asyncio.create_task(send_to_client()),
+                "send_pings": asyncio.create_task(send_pings()),
+            }
+
+            async def wait_for_endpoint_close():
+                done, _ = await asyncio.wait(
+                    (tasks["read_client"], tasks["read_from_gecx"]),
+                    return_when=asyncio.FIRST_COMPLETED,
                 )
+                if tasks["read_from_gecx"] in done:
+                    # read_from_gecx queues its sentinel only after all CES audio
+                    # has been queued. Let the client writer flush that buffer.
+                    await tasks["send_to_client"]
+
+            try:
+                await asyncio.wait_for(wait_for_endpoint_close(), timeout=600.0)
             except asyncio.TimeoutError:
                 logger.warning(f"Session {self.session_id} timed out after 10 minutes.")
                 await self.client_ws.send_json(
@@ -517,3 +528,8 @@ class VoiceBidiSession:
                         "message": "Maximum session duration (10 minutes) exceeded.",
                     }
                 )
+            finally:
+                for task in tasks.values():
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*tasks.values(), return_exceptions=True)
