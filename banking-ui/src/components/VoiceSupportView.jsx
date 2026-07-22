@@ -32,6 +32,7 @@ import {
 import { DataChannelEvent } from '../utils/constants.js';
 import { encodeTypedCustomerTurn, resolveTypedDelivery } from '../utils/voiceTypedInput.js';
 import { formatVoiceLedgerAmount } from '../utils/voiceLedger.js';
+import { connectSilentPcmSink, pcmFrameForMicrophoneState } from '../utils/gecxAudio.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
@@ -422,6 +423,7 @@ export default function VoiceSupportView() {
   const audioContextRef = useRef(null);
   const micStreamRef = useRef(null);
   const workletNodeRef = useRef(null);
+  const captureSinkNodeRef = useRef(null);
   const sourceNodeRef = useRef(null);
   const activeSourcesRef = useRef([]);
   const nextPlayoutTimeRef = useRef(0);
@@ -547,6 +549,14 @@ export default function VoiceSupportView() {
         // Ignore error
       }
       workletNodeRef.current = null;
+    }
+    if (captureSinkNodeRef.current) {
+      try {
+        captureSinkNodeRef.current.disconnect();
+      } catch {
+        // Ignore error
+      }
+      captureSinkNodeRef.current = null;
     }
     if (sourceNodeRef.current) {
       try {
@@ -1063,10 +1073,19 @@ export default function VoiceSupportView() {
       const workletNode = new AudioWorkletNode(audioCtx, 'pcm-processor');
       workletNodeRef.current = workletNode;
 
+      // AudioWorklet processing is driven by the rendered graph. Keep capture
+      // connected to a zero-gain sink so Chrome emits PCM continuously without
+      // playing the microphone back through the speakers.
+      captureSinkNodeRef.current = connectSilentPcmSink(audioCtx, workletNode);
+
       workletNode.port.onmessage = (e) => {
         const rawBuffer = e.data;
-        if (micEnabledRef.current && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.send(rawBuffer);
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          // CES requires continuous audio, including silence. Muting therefore
+          // substitutes a zero-valued frame instead of pausing the stream.
+          wsRef.current.send(
+            pcmFrameForMicrophoneState(rawBuffer, micEnabledRef.current)
+          );
         }
       };
 
