@@ -236,6 +236,99 @@ def test_proposal_capture_supports_ces_mcp_text_output_shape():
     )
 
 
+def test_categorical_all_disputed_answer_forces_proposal_tool_call():
+    capture = _load("after_tool_callbacks/capture_proposal.py")
+    track_prompt = _load("after_model_callbacks/track_fraud_selection_prompt.py")
+    route = _load("before_model_callbacks/route_fraud_selection.py")
+    variables = {}
+
+    capture.after_tool_callback(
+        SimpleNamespace(name="banking_service_mcp_toolset.get_open_fraud_alert"),
+        {},
+        Context(invocation_id="turn-1", variables=variables, user_text=None),
+        {
+            "output": {
+                "success": True,
+                "fraud_alert": {
+                    "fraud_alert_id": "alert-1",
+                    "suspicious_transactions": [
+                        {"authorization_id": "auth-1"},
+                        {"transaction_id": "txn-1"},
+                    ],
+                },
+            }
+        },
+    )
+    track_prompt.after_model_callback(
+        Context(invocation_id="turn-1", variables=variables, user_text=None),
+        SimpleNamespace(
+            partial=False,
+            content=SimpleNamespace(parts=[Part("Do you recognize these transactions?")]),
+        ),
+    )
+
+    class FunctionCall:
+        def __init__(self, *, name, args):
+            self.name = name
+            self.args = args
+
+    class FunctionPart:
+        def __init__(self, *, function_call):
+            self.function_call = function_call
+
+    class Content:
+        def __init__(self, *, parts, role):
+            self.parts = parts
+            self.role = role
+
+    class LlmResponse:
+        def __init__(self, *, content):
+            self.content = content
+
+    route.FunctionCall = FunctionCall
+    route.Part = FunctionPart
+    route.Content = Content
+    route.LlmResponse = LlmResponse
+
+    response = route.before_model_callback(
+        Context(invocation_id="turn-2", variables=variables, user_text="No, I don't."),
+        object(),
+    )
+
+    function_call = response.content.parts[0].function_call
+    assert function_call.name == "propose_fraud_triage"
+    assert function_call.args == {
+        "fraud_alert_id": "alert-1",
+        "disputed_authorization_ids": ["auth-1"],
+        "disputed_transaction_ids": ["txn-1"],
+        "issue_replacement": True,
+        "escalate": False,
+    }
+    assert variables["fraud_selection_pending"] is False
+
+
+def test_fraud_selection_router_leaves_partial_answer_to_model():
+    route = _load("before_model_callbacks/route_fraud_selection.py")
+    variables = {
+        "active_fraud_alert_id": "alert-1",
+        "active_fraud_authorization_ids": "auth-1,auth-2",
+        "fraud_selection_prompt_turn_id": "turn-1",
+        "fraud_selection_pending": True,
+    }
+
+    response = route.before_model_callback(
+        Context(
+            invocation_id="turn-2",
+            variables=variables,
+            user_text="I don't recognize the Apple transaction.",
+        ),
+        object(),
+    )
+
+    assert response is None
+    assert variables["fraud_selection_pending"] is True
+
+
 def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     app = yaml.safe_load((APP_DIR / "app.yaml").read_text())
     instruction = (AGENT_DIR / "instruction.txt").read_text()
@@ -255,6 +348,8 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     }
     assert "session_capability" in declared_variables
     assert "user_token" not in declared_variables
+    assert "active_fraud_alert_id" in declared_variables
+    assert "fraud_selection_pending" in declared_variables
     custom_headers = toolset["mcpToolset"]["customHeaders"]
     assert custom_headers["x-banking-session-capability"] == (
         "$context.variables.session_capability"
@@ -278,3 +373,8 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
         "request_credit_limit_increase",
     ):
         assert f"{{@TOOL: {tool_name}}}" not in instruction
+
+    agent = yaml.safe_load((AGENT_DIR / "Credit_Card_Support_Agent.yaml").read_text())
+    assert agent["beforeModelCallbacks"][0]["pythonCode"].endswith(
+        "route_fraud_selection.py"
+    )

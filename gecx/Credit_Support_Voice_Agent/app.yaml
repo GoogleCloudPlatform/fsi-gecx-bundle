@@ -116,5 +116,25 @@ variableDeclarations:
   description: CES callback-owned guard against reclassifying one invocation.
   schema:
     type: STRING
+- name: active_fraud_alert_id
+  description: Banking-owned active fraud alert captured from the read tool.
+  schema:
+    type: STRING
+- name: active_fraud_authorization_ids
+  description: Comma-delimited pending authorization ids captured from the active alert.
+  schema:
+    type: STRING
+- name: active_fraud_transaction_ids
+  description: Comma-delimited posted transaction ids captured from the active alert.
+  schema:
+    type: STRING
+- name: fraud_selection_prompt_turn_id
+  description: CES callback-owned turn that asked the customer to classify the flagged activity.
+  schema:
+    type: STRING
+- name: fraud_selection_pending
+  description: Whether the next customer turn is answering the flagged-activity recognition question.
+  schema:
+    type: BOOLEAN
 timeZoneSettings:
   timeZone: America/Los_Angeles

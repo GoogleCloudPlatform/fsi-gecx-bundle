@@ -4,6 +4,8 @@ instruction: agents/Credit_Card_Support_Agent/instruction.txt
 tools:
 - end_session
 beforeModelCallbacks:
+- pythonCode: agents/Credit_Card_Support_Agent/before_model_callbacks/route_fraud_selection.py
+  description: Deterministically route a categorical all-disputed answer to the banking proposal tool.
 - pythonCode: agents/Credit_Card_Support_Agent/before_model_callbacks/classify_confirmation.py
   description: Classify only a later completed customer turn against the active proposal.
 beforeToolCallbacks:
@@ -11,8 +13,10 @@ beforeToolCallbacks:
   description: Bind proposal calls to callback-owned turn evidence and block unsafe commits.
 afterToolCallbacks:
 - pythonCode: agents/Credit_Card_Support_Agent/after_tool_callbacks/capture_proposal.py
-  description: Capture the opaque proposal and banking-authored presentation summary.
+  description: Capture active-alert identifiers plus the opaque proposal and banking-authored summary.
 afterModelCallbacks:
+- pythonCode: agents/Credit_Card_Support_Agent/after_model_callbacks/track_fraud_selection_prompt.py
+  description: Mark the exact turn in which CES asks the customer to classify flagged activity.
 - pythonCode: agents/Credit_Card_Support_Agent/after_model_callbacks/record_presentation.py
   description: Record when the model actually presents the banking-authored summary.
 toolsets:

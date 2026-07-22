@@ -17,6 +17,7 @@ def before_tool_callback(tool, input, callback_context):
     if tool_name.endswith("propose_fraud_triage"):
         callback_context.variables["customer_turn_id"] = invocation_id
         callback_context.variables["proposal_originating_turn_id"] = invocation_id
+        callback_context.variables["fraud_selection_pending"] = False
         callback_context.variables["proposal_id"] = ""
         callback_context.variables["proposal_customer_safe_summary"] = ""
         _clear_confirmation(callback_context)
