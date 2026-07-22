@@ -75,14 +75,17 @@ def test_ces_capability_identity_rejects_stale_reset_generation(monkeypatch) -> 
     db = MagicMock()
     monkeypatch.setattr(mcp_utils, "validate_ces_session_capability", lambda *_: claims)
     monkeypatch.setattr(mcp_utils, "SessionLocal", lambda: db)
-    monkeypatch.setattr(
-        mcp_utils,
-        "get_reset_generation",
-        lambda *_: {"token": "3:10"},
-    )
+    checked_identities = []
+
+    def get_generation(_db, customer_identity):
+        checked_identities.append(customer_identity)
+        return {"token": "3:10"}
+
+    monkeypatch.setattr(mcp_utils, "get_reset_generation", get_generation)
 
     with pytest.raises(PermissionError, match="demo reset"):
         mcp_utils._identity_from_ces_capability("opaque-capability", _headers())
+    assert checked_identities == ["firebase-user-1"]
     db.close.assert_called_once()
 
 

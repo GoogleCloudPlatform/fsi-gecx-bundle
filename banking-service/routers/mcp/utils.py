@@ -139,7 +139,7 @@ def _identity_from_ces_capability(capability: str, headers: dict[str, str]) -> s
     db = SessionLocal()
     try:
         current_generation = str(
-            get_reset_generation(db, claims.customer_id).get("token") or ""
+            get_reset_generation(db, claims.customer_identity).get("token") or ""
         )
     finally:
         db.close()
