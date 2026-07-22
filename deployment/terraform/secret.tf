@@ -106,6 +106,23 @@ resource "google_secret_manager_secret_version" "card_network_switch_token_versi
   secret_data = random_password.card_network_switch_token.result
 }
 
+resource "google_secret_manager_secret" "ces_session_capability_key" {
+  secret_id = "ces-session-capability-key"
+  replication {
+    auto {}
+  }
+}
+
+resource "random_password" "ces_session_capability_key" {
+  length  = 64
+  special = false
+}
+
+resource "google_secret_manager_secret_version" "ces_session_capability_key_version" {
+  secret      = google_secret_manager_secret.ces_session_capability_key.id
+  secret_data = random_password.ces_session_capability_key.result
+}
+
 data "external" "database_iam_support_users" {
   program = ["bash", "${path.module}/scripts/get_secret_safe.sh", "database-iam-support-users", var.project_id, "true"]
 }

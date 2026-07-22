@@ -16,8 +16,8 @@ variableDeclarations:
   description: Variable "user_id".
   schema:
     type: STRING
-- name: user_token
-  description: Variable "user_token" containing Firebase ID token.
+- name: session_capability
+  description: Opaque, short-lived banking authority for this CES session.
   schema:
     type: STRING
 - name: support_session_id

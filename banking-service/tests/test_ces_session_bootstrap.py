@@ -63,6 +63,7 @@ def test_build_bootstrap_resolves_exact_identity_and_bounded_context(
     assert bootstrap.support_session_id == "support-session-1"
     assert bootstrap.runtime_name == "CES_GEMINI_LIVE"
     assert bootstrap.runtime_session_id == "ces-runtime-1"
+    assert bootstrap.customer_identity == "firebase-user-1"
     assert bootstrap.reset_generation == "2:4"
     assert bootstrap.catalog_snapshot_id == "snapshot-123"
     assert bootstrap.catalog_content_version == "2.1"
@@ -136,9 +137,10 @@ def test_ces_variables_are_declared_bounded_and_english_first(
         gecx_app_id="app-1",
     )
 
-    variables = bootstrap.ces_variables(user_token="firebase-token")
+    variables = bootstrap.ces_variables(session_capability="opaque-capability")
 
-    assert variables["user_token"] == "firebase-token"
+    assert variables["session_capability"] == "opaque-capability"
+    assert "user_token" not in variables
     assert "access_token" not in variables
     assert len(variables["fraud_support_guidance_summary"]) == (
         MAX_GUIDANCE_SUMMARY_LENGTH

@@ -123,9 +123,28 @@ def test_proposal_capture_and_exact_presentation_recording():
 def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     app = yaml.safe_load((APP_DIR / "app.yaml").read_text())
     instruction = (AGENT_DIR / "instruction.txt").read_text()
+    toolset = yaml.safe_load(
+        (
+            APP_DIR
+            / "toolsets"
+            / "banking_service_mcp_toolset"
+            / "banking_service_mcp_toolset.yaml"
+        ).read_text()
+    )
 
     assert app["audioProcessingConfig"]["inactivityTimeout"] == "300s"
     assert app["loggingSettings"]["redactionConfig"]["enableRedaction"] is True
+    declared_variables = {
+        declaration["name"] for declaration in app["variableDeclarations"]
+    }
+    assert "session_capability" in declared_variables
+    assert "user_token" not in declared_variables
+    custom_headers = toolset["mcpToolset"]["customHeaders"]
+    assert custom_headers["x-banking-session-capability"] == (
+        "$context.variables.session_capability"
+    )
+    assert "x-forwarded-user-context" not in custom_headers
+    assert "user_token" not in instruction
     assert "Hi, I'm Nova with Nova Horizon Bank." in instruction
     for tool_name in (
         "get_open_fraud_alert",

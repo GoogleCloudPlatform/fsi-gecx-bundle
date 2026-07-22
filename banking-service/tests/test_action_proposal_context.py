@@ -57,15 +57,64 @@ def test_read_only_mcp_tool_ignores_partial_proposal_headers() -> None:
     }
 
     assert (
-        mcp_utils._proposal_context_for_tool(
-            "get_open_fraud_alert", partial_headers
-        )
+        mcp_utils._proposal_context_for_tool("get_open_fraud_alert", partial_headers)
         is None
     )
     with pytest.raises(RuntimeContextError, match="x-customer-turn-id"):
-        mcp_utils._proposal_context_for_tool(
-            "propose_fraud_triage", partial_headers
-        )
+        mcp_utils._proposal_context_for_tool("propose_fraud_triage", partial_headers)
+
+
+def test_ces_capability_identity_rejects_stale_reset_generation(monkeypatch) -> None:
+    claims = MagicMock(
+        customer_identity="firebase-user-1",
+        customer_id="customer-1",
+        runtime_name="CES_GEMINI_LIVE",
+        reset_generation="3:9",
+    )
+    db = MagicMock()
+    monkeypatch.setattr(mcp_utils, "validate_ces_session_capability", lambda *_: claims)
+    monkeypatch.setattr(mcp_utils, "SessionLocal", lambda: db)
+    monkeypatch.setattr(
+        mcp_utils,
+        "get_reset_generation",
+        lambda *_: {"token": "3:10"},
+    )
+
+    with pytest.raises(PermissionError, match="demo reset"):
+        mcp_utils._identity_from_ces_capability("opaque-capability", _headers())
+    db.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_mcp_decorator_prefers_ces_capability_over_reusable_assertion(
+    monkeypatch,
+) -> None:
+    headers = _headers(
+        **{
+            "x-banking-session-capability": "opaque-capability",
+            "x-ces-app-id": "app-1",
+            "x-ces-version-or-deployment-id": "deployment-7",
+        }
+    )
+    context = MagicMock()
+    context.request_context.request.headers = headers
+    monkeypatch.setattr(mcp_utils, "is_running_locally", lambda: True)
+    monkeypatch.setattr(
+        mcp_utils,
+        "_identity_from_ces_capability",
+        lambda *_: "firebase-user-1",
+    )
+    monkeypatch.setattr(
+        mcp_utils,
+        "validate_firebase_token",
+        lambda *_: pytest.fail("Firebase token must not reach CES MCP auth"),
+    )
+
+    @mcp_utils.requires_user_assertion
+    async def read_tool(*, ctx=None, verified_customer_id=None):
+        return verified_customer_id
+
+    assert await read_tool(ctx=context) == "firebase-user-1"
 
 
 def test_confirmation_evidence_is_transport_owned_and_explicit() -> None:
@@ -87,7 +136,9 @@ def test_confirmation_evidence_is_transport_owned_and_explicit() -> None:
 
 
 @pytest.mark.asyncio
-async def test_typed_mcp_projection_injects_identity_and_runtime_context(monkeypatch) -> None:
+async def test_typed_mcp_projection_injects_identity_and_runtime_context(
+    monkeypatch,
+) -> None:
     runtime_context = ProposalRuntimeContext.from_headers(
         _headers(**{"x-catalog-snapshot-id": "catalog-7"})
     )
@@ -98,7 +149,9 @@ async def test_typed_mcp_projection_injects_identity_and_runtime_context(monkeyp
         "proposal_id": "11111111-1111-4111-8111-111111111111",
     }
     monkeypatch.setattr("routers.mcp.credit_card.SessionLocal", lambda: db)
-    monkeypatch.setattr("routers.mcp.credit_card.ActionProposalService", lambda _: service)
+    monkeypatch.setattr(
+        "routers.mcp.credit_card.ActionProposalService", lambda _: service
+    )
     customer_token = mcp_utils.verified_customer_id_var.set("customer-auth-1")
     runtime_token = mcp_utils.proposal_runtime_context_var.set(runtime_context)
     try:
@@ -149,7 +202,9 @@ async def test_commit_projection_returns_authoritative_result_when_ui_event_fail
         raise RuntimeError("websocket unavailable")
 
     monkeypatch.setattr("routers.mcp.credit_card.SessionLocal", lambda: db)
-    monkeypatch.setattr("routers.mcp.credit_card.ActionProposalService", lambda _: service)
+    monkeypatch.setattr(
+        "routers.mcp.credit_card.ActionProposalService", lambda _: service
+    )
     monkeypatch.setattr("routers.mcp.credit_card.send_session_event", event_failure)
     customer_token = mcp_utils.verified_customer_id_var.set("customer-auth-1")
     runtime_token = mcp_utils.proposal_runtime_context_var.set(runtime_context)
@@ -167,7 +222,9 @@ async def test_commit_projection_returns_authoritative_result_when_ui_event_fail
 
 
 @pytest.mark.asyncio
-async def test_commit_projection_returns_scoped_terminal_disposition(monkeypatch) -> None:
+async def test_commit_projection_returns_scoped_terminal_disposition(
+    monkeypatch,
+) -> None:
     runtime_context = ProposalRuntimeContext.from_headers(
         _headers(
             **{
@@ -191,7 +248,9 @@ async def test_commit_projection_returns_scoped_terminal_disposition(monkeypatch
         "invalidation_reason": "TTL_EXPIRED",
     }
     monkeypatch.setattr("routers.mcp.credit_card.SessionLocal", lambda: db)
-    monkeypatch.setattr("routers.mcp.credit_card.ActionProposalService", lambda _: service)
+    monkeypatch.setattr(
+        "routers.mcp.credit_card.ActionProposalService", lambda _: service
+    )
     customer_token = mcp_utils.verified_customer_id_var.set("customer-auth-1")
     runtime_token = mcp_utils.proposal_runtime_context_var.set(runtime_context)
     try:

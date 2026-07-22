@@ -36,6 +36,7 @@ class CesSessionBootstrap:
     support_session_id: str
     runtime_name: str
     runtime_session_id: str
+    customer_identity: str
     customer_id: str
     customer_ref: str
     reset_generation: str
@@ -50,10 +51,10 @@ class CesSessionBootstrap:
     runtime_language_code: str = DEFAULT_RUNTIME_LANGUAGE_CODE
     language_selection_source: str = DEFAULT_LANGUAGE_SELECTION_SOURCE
 
-    def ces_variables(self, *, user_token: str) -> dict:
+    def ces_variables(self, *, session_capability: str) -> dict:
         """Return declared, bounded CES variables sent before ``sys.welcome``."""
         return {
-            "user_token": user_token,
+            "session_capability": session_capability,
             "support_session_id": self.support_session_id,
             "runtime_name": self.runtime_name,
             "runtime_session_id": self.runtime_session_id,
@@ -129,24 +130,20 @@ def build_ces_session_bootstrap(
 
     return CesSessionBootstrap(
         support_session_id=(
-            str(support_session_id or "").strip()
-            or f"ces-support-{uuid.uuid4().hex}"
+            str(support_session_id or "").strip() or f"ces-support-{uuid.uuid4().hex}"
         ),
         runtime_name=CES_RUNTIME_NAME,
         runtime_session_id=runtime_session_id,
+        customer_identity=identity,
         customer_id=str(user.id),
         customer_ref=stable_log_reference(identity, "customer"),
         reset_generation=reset_token,
-        catalog_snapshot_id=(
-            str(guidance.get("snapshot_id") or "").strip() or None
-        ),
+        catalog_snapshot_id=(str(guidance.get("snapshot_id") or "").strip() or None),
         catalog_content_version=(
             str(guidance.get("content_version") or "").strip() or None
         ),
         entry_reason=str(voice_context.get("entry_reason") or "general_support"),
-        has_active_fraud_alert=bool(
-            voice_context.get("has_active_fraud_alert", False)
-        ),
+        has_active_fraud_alert=bool(voice_context.get("has_active_fraud_alert", False)),
         guidance_summary=str(guidance.get("agent_guidance_summary") or ""),
         ces_app_id=app_id,
         ces_version_or_deployment_id=version_or_deployment_id,

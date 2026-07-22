@@ -5,13 +5,15 @@ mcpToolset:
   apiAuthentication:
     serviceAgentIdTokenAuthConfig: {}
   customHeaders:
-    x-forwarded-user-context: $context.variables.user_token
+    x-banking-session-capability: $context.variables.session_capability
     x-support-session-id: $context.variables.support_session_id
     x-runtime-name: $context.variables.runtime_name
     x-runtime-session-id: $context.variables.runtime_session_id
     x-customer-turn-id: $context.variables.customer_turn_id
     x-reset-generation: $context.variables.reset_generation
     x-catalog-snapshot-id: $context.variables.catalog_snapshot_id
+    x-ces-app-id: $context.variables.ces_app_id
+    x-ces-version-or-deployment-id: $context.variables.ces_version_or_deployment_id
     x-proposal-presentation-turn-id: $context.variables.proposal_presentation_turn_id
     x-proposal-confirmation-turn-id: $context.variables.proposal_confirmation_turn_id
     x-proposal-confirmation-method: $context.variables.proposal_confirmation_method
