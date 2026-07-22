@@ -66,8 +66,11 @@ function microphoneConstraints(deviceId) {
       ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
       channelCount: 1,
       echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
+      // Preserve speech energy through browser resampling. CES performs the
+      // negotiated stream's noise suppression; a second browser gate was
+      // clipping peaks and discarding short customer utterances.
+      noiseSuppression: false,
+      autoGainControl: false,
     },
   };
 }

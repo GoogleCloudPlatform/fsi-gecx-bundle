@@ -43,6 +43,15 @@ def _configured_sample_rate(name: str, default: int = 16_000) -> int:
     return value
 
 
+def _configured_noise_suppression_level() -> str:
+    value = os.getenv("CES_INPUT_NOISE_SUPPRESSION_LEVEL", "moderate").strip().lower()
+    if value not in {"low", "moderate", "high", "very_high"}:
+        raise ValueError(
+            "CES_INPUT_NOISE_SUPPRESSION_LEVEL must be low, moderate, high, or very_high."
+        )
+    return value
+
+
 def _pcm_peak(chunk: bytes) -> int:
     """Return the absolute peak of little-endian LINEAR16 PCM for diagnostics."""
     if not chunk or len(chunk) % 2:
@@ -177,6 +186,7 @@ class VoiceBidiSession:
         project_id = get_project_id()
         input_sample_rate_hz = _configured_sample_rate("CES_INPUT_SAMPLE_RATE_HZ")
         output_sample_rate_hz = _configured_sample_rate("CES_OUTPUT_SAMPLE_RATE_HZ")
+        noise_suppression_level = _configured_noise_suppression_level()
         transport_stats = {
             "input_frames": 0,
             "input_bytes": 0,
@@ -228,6 +238,7 @@ class VoiceBidiSession:
                 "inputAudioConfig": {
                     "audioEncoding": "LINEAR16",
                     "sampleRateHertz": input_sample_rate_hz,
+                    "noiseSuppressionLevel": noise_suppression_level,
                 },
                 "outputAudioConfig": {
                     "audioEncoding": "LINEAR16",

@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 from main import app
 from services.ces_session_bootstrap import CesSessionBootstrap
-from services.voice_bidi import _pcm_peak
+from services.voice_bidi import _configured_noise_suppression_level, _pcm_peak
 
 client = TestClient(app)
 
@@ -29,6 +29,15 @@ def test_pcm_peak_reports_signal_without_recording_audio():
     assert _pcm_peak(bytes(8)) == 0
     assert _pcm_peak((1024).to_bytes(2, "little", signed=True) + bytes(2)) == 1024
     assert _pcm_peak(b"odd") == 0
+
+
+def test_ces_noise_suppression_level_is_validated(monkeypatch):
+    monkeypatch.setenv("CES_INPUT_NOISE_SUPPRESSION_LEVEL", "high")
+    assert _configured_noise_suppression_level() == "high"
+
+    monkeypatch.setenv("CES_INPUT_NOISE_SUPPRESSION_LEVEL", "maximum")
+    with pytest.raises(ValueError, match="must be low, moderate, high, or very_high"):
+        _configured_noise_suppression_level()
 
 
 @pytest.fixture
