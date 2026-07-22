@@ -5,7 +5,14 @@ def _payload(tool_response):
     if not isinstance(tool_response, dict):
         return {}
     output = tool_response.get("output")
-    return output if isinstance(output, dict) else tool_response
+    if isinstance(output, dict):
+        return output
+    text_output = tool_response.get("text_output")
+    if isinstance(text_output, list) and text_output:
+        first = text_output[0]
+        if isinstance(first, dict):
+            return first
+    return tool_response
 
 
 def after_tool_callback(tool, input, callback_context, tool_response):

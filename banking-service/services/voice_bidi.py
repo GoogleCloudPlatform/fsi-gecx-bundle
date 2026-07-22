@@ -43,41 +43,6 @@ def _configured_sample_rate(name: str, default: int = 16_000) -> int:
     return value
 
 
-def _configured_frame_duration_ms() -> int:
-    value = int(os.getenv("CES_INPUT_FRAME_DURATION_MS", "128"))
-    if value < 20 or value > 200:
-        raise ValueError("CES_INPUT_FRAME_DURATION_MS must be between 20 and 200 ms.")
-    return value
-
-
-class _PcmFrameBuffer:
-    """Produces provider-sized PCM frames without allowing stale audio to accumulate."""
-
-    def __init__(self, frame_bytes: int, max_buffered_frames: int = 8):
-        self.frame_bytes = frame_bytes
-        self.max_buffer_bytes = frame_bytes * max_buffered_frames
-        self._buffer = bytearray()
-        self.dropped_bytes = 0
-
-    def append(self, chunk: bytes) -> None:
-        self._buffer.extend(chunk)
-        overflow = len(self._buffer) - self.max_buffer_bytes
-        if overflow > 0:
-            # Old microphone audio is actively harmful to a live conversation.
-            # Keep the newest complete-frame window when the browser catches up.
-            del self._buffer[:overflow]
-            self.dropped_bytes += overflow
-
-    def next_frame(self) -> tuple[bytes, int]:
-        available = min(len(self._buffer), self.frame_bytes)
-        frame = bytes(self._buffer[:available])
-        del self._buffer[:available]
-        silence_bytes = self.frame_bytes - available
-        if silence_bytes:
-            frame += bytes(silence_bytes)
-        return frame, silence_bytes
-
-
 async def send_session_event(session_key: str, event_payload: dict):
     """Pushes out-of-band events (like tool-driven card lock) directly into the WebSocket playout loop."""
     user_id = session_key.replace("session-", "")
@@ -205,19 +170,11 @@ class VoiceBidiSession:
         project_id = get_project_id()
         input_sample_rate_hz = _configured_sample_rate("CES_INPUT_SAMPLE_RATE_HZ")
         output_sample_rate_hz = _configured_sample_rate("CES_OUTPUT_SAMPLE_RATE_HZ")
-        input_frame_duration_ms = _configured_frame_duration_ms()
-        input_frame_duration_seconds = input_frame_duration_ms / 1000
-        input_frame_bytes = (
-            round(input_sample_rate_hz * input_frame_duration_seconds) * 2
-        )
         transport_stats = {
             "input_frames": 0,
             "input_bytes": 0,
             "browser_input_frames": 0,
             "browser_input_bytes": 0,
-            "input_underrun_frames": 0,
-            "input_silence_bytes": 0,
-            "input_dropped_bytes": 0,
             "first_browser_input_at": None,
             "last_browser_input_at": None,
             "output_frames": 0,
@@ -333,52 +290,21 @@ class VoiceBidiSession:
                 finally:
                     await self.client_to_gecx_queue.put(None)
 
-            # Task B: Own the provider input clock. Browsers may pause or batch
-            # AudioWorklet messages, but CES requires continuous real-time PCM.
+            # Task B: Forward browser AudioWorklet PCM at the negotiated rate.
+            # Re-clocking here creates a second timing loop and can discard valid
+            # microphone audio when provider sends are backpressured.
             async def send_to_gecx():
-                frame_buffer = _PcmFrameBuffer(input_frame_bytes)
-                loop = asyncio.get_running_loop()
-                next_deadline = loop.time() + input_frame_duration_seconds
-                browser_connected = True
                 try:
-                    while browser_connected:
-                        while True:
-                            remaining = next_deadline - loop.time()
-                            if remaining <= 0:
-                                break
-                            try:
-                                chunk = await asyncio.wait_for(
-                                    self.client_to_gecx_queue.get(),
-                                    timeout=remaining,
-                                )
-                            except asyncio.TimeoutError:
-                                break
-                            self.client_to_gecx_queue.task_done()
-                            if chunk is None:
-                                browser_connected = False
-                                break
-                            frame_buffer.append(chunk)
-
-                        if not browser_connected:
+                    while True:
+                        chunk = await self.client_to_gecx_queue.get()
+                        self.client_to_gecx_queue.task_done()
+                        if chunk is None:
                             break
-
-                        frame, silence_bytes = frame_buffer.next_frame()
-                        b64_audio = base64.b64encode(frame).decode("utf-8")
+                        b64_audio = base64.b64encode(chunk).decode("utf-8")
                         realtime_input = {"realtimeInput": {"audio": b64_audio}}
                         await gecx_ws.send(json.dumps(realtime_input))
                         transport_stats["input_frames"] += 1
-                        transport_stats["input_bytes"] += len(frame)
-                        transport_stats["input_silence_bytes"] += silence_bytes
-                        if silence_bytes:
-                            transport_stats["input_underrun_frames"] += 1
-                        transport_stats["input_dropped_bytes"] = (
-                            frame_buffer.dropped_bytes
-                        )
-
-                        next_deadline += input_frame_duration_seconds
-                        if loop.time() > next_deadline + input_frame_duration_seconds:
-                            # Do not burst stale frames after an event-loop stall.
-                            next_deadline = loop.time() + input_frame_duration_seconds
+                        transport_stats["input_bytes"] += len(chunk)
                 except Exception as ex:
                     logger.error(f"Error in send_to_gecx: {ex}")
 
@@ -437,18 +363,14 @@ class VoiceBidiSession:
                     logger.info(
                         "CES audio transport summary input_frames=%d input_bytes=%d "
                         "browser_input_frames=%d browser_input_bytes=%d "
-                        "input_underrun_frames=%d input_silence_bytes=%d "
-                        "input_dropped_bytes=%d first_browser_input_delay_ms=%s "
+                        "first_browser_input_delay_ms=%s "
                         "last_browser_input_gap_ms=%s "
                         "output_frames=%d output_bytes=%d input_rate_hz=%d "
-                        "output_rate_hz=%d input_frame_duration_ms=%d",
+                        "output_rate_hz=%d",
                         transport_stats["input_frames"],
                         transport_stats["input_bytes"],
                         transport_stats["browser_input_frames"],
                         transport_stats["browser_input_bytes"],
-                        transport_stats["input_underrun_frames"],
-                        transport_stats["input_silence_bytes"],
-                        transport_stats["input_dropped_bytes"],
                         (
                             round((first_input_at - transport_started_at) * 1000)
                             if first_input_at is not None
@@ -463,7 +385,6 @@ class VoiceBidiSession:
                         transport_stats["output_bytes"],
                         input_sample_rate_hz,
                         output_sample_rate_hz,
-                        input_frame_duration_ms,
                     )
                     await self.gecx_to_client_queue.put(None)
 

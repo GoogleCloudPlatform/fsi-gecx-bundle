@@ -20,44 +20,8 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 from main import app
 from services.ces_session_bootstrap import CesSessionBootstrap
-from services.voice_bidi import _PcmFrameBuffer, _configured_frame_duration_ms
 
 client = TestClient(app)
-
-
-def test_pcm_frame_buffer_pads_input_underruns_with_silence():
-    buffer = _PcmFrameBuffer(frame_bytes=8)
-    buffer.append(b"voice")
-
-    frame, silence_bytes = buffer.next_frame()
-
-    assert frame == b"voice\x00\x00\x00"
-    assert silence_bytes == 3
-
-
-def test_pcm_frame_buffer_drops_stale_audio_from_front():
-    buffer = _PcmFrameBuffer(frame_bytes=4, max_buffered_frames=2)
-    buffer.append(b"0123456789")
-
-    first_frame, first_silence_bytes = buffer.next_frame()
-    second_frame, second_silence_bytes = buffer.next_frame()
-
-    assert first_frame == b"2345"
-    assert second_frame == b"6789"
-    assert first_silence_bytes == 0
-    assert second_silence_bytes == 0
-    assert buffer.dropped_bytes == 2
-
-
-def test_ces_input_frame_duration_is_configurable(monkeypatch):
-    monkeypatch.setenv("CES_INPUT_FRAME_DURATION_MS", "80")
-    assert _configured_frame_duration_ms() == 80
-
-
-def test_ces_input_frame_duration_rejects_unsafe_values(monkeypatch):
-    monkeypatch.setenv("CES_INPUT_FRAME_DURATION_MS", "500")
-    with pytest.raises(ValueError, match="between 20 and 200"):
-        _configured_frame_duration_ms()
 
 
 @pytest.fixture

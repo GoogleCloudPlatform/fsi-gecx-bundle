@@ -8,12 +8,15 @@ AFFIRMATIVE_PHRASES = {
     "confirmed",
     "correct",
     "go ahead",
+    "i can confirm",
     "i confirm",
     "please do",
     "proceed",
     "that is correct",
     "thats correct",
     "yes",
+    "yes i can confirm",
+    "yes i confirm",
     "yes please",
 }
 

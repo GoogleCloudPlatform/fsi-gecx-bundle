@@ -67,6 +67,25 @@ def test_confirmation_classifier_accepts_only_bounded_explicit_phrase():
     assert variables["proposal_confirmation_classification"] == "UNCLEAR"
 
 
+def test_confirmation_classifier_accepts_observed_customer_phrases():
+    callback = _load("before_model_callbacks/classify_confirmation.py")
+
+    for index, phrase in enumerate(
+        ("I can confirm.", "Confirmed", "Yes I confirm."), start=2
+    ):
+        variables = {
+            "proposal_id": "proposal-1",
+            "proposal_presentation_turn_id": "turn-1",
+        }
+        context = Context(
+            invocation_id=f"turn-{index}", variables=variables, user_text=phrase
+        )
+
+        callback.before_model_callback(context, object())
+
+        assert variables["proposal_confirmation_classification"] == "CONFIRMED"
+
+
 def test_before_tool_blocks_missing_or_mismatched_confirmation():
     callback = _load("before_tool_callbacks/enforce_proposal_context.py")
     variables = {
@@ -118,6 +137,31 @@ def test_proposal_capture_and_exact_presentation_recording():
     )
     presentation.after_model_callback(context, response)
     assert variables["proposal_presentation_turn_id"] == "turn-1"
+
+
+def test_proposal_capture_supports_ces_mcp_text_output_shape():
+    capture = _load("after_tool_callbacks/capture_proposal.py")
+    variables = {}
+
+    capture.after_tool_callback(
+        SimpleNamespace(name="banking_service_mcp_toolset.propose_fraud_triage"),
+        {},
+        Context(invocation_id="turn-1", variables=variables, user_text=None),
+        {
+            "text_output": [
+                {
+                    "success": True,
+                    "proposal_id": "proposal-ces-1",
+                    "customer_safe_summary": "Confirm the selected charges.",
+                }
+            ]
+        },
+    )
+
+    assert variables["proposal_id"] == "proposal-ces-1"
+    assert variables["proposal_customer_safe_summary"] == (
+        "Confirm the selected charges."
+    )
 
 
 def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
