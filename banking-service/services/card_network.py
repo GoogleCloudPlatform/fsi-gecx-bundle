@@ -149,13 +149,15 @@ def _resolve_posted_transaction_description(db: Session, auth: TransactionAuthor
 def _publish_redis_event(event_type: str, item_dict: dict):
     """Helper to publish real-time events to the Redis bus for the UI stream."""
     try:
-        from utils.redis_client import get_redis_client
-        r = get_redis_client()
-        if r:
+        from utils.redis_client import execute_redis_command
+
+        def publish(r):
             payload = json.dumps(item_dict)
             r.lpush("recent_transactions", payload)
             r.ltrim("recent_transactions", 0, 99)
             r.publish("channel:transactions:live", payload)
+
+        execute_redis_command(publish)
     except Exception as e:
         logger.warning(f"Failed to publish transaction to Redis event bus: {e}")
 

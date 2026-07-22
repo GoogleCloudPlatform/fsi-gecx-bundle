@@ -28,11 +28,9 @@ from repositories.cdc_lakehouse import CdcLakehouseRepository
 from repositories.fraud import FraudAlertRepository
 from utils.database import enable_session_rbac_override
 from utils.gcp import get_project_id
-from utils.redis_client import get_redis_client
+from utils.redis_client import execute_redis_command
 
 logger = logging.getLogger(__name__)
-
-_cache = get_redis_client()
 
 
 class CdcMonitoringService:
@@ -117,14 +115,15 @@ class CdcMonitoringService:
         return datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=bounded)
 
     def _get_recent_operational_events(self, limit: int = 20) -> list[dict]:
-        redis_client = get_redis_client()
-        if not redis_client:
-            return []
-
         try:
-            recent_values = redis_client.lrange("recent_transactions", 0, max(0, limit - 1))
+            recent_values = execute_redis_command(
+                lambda redis_client: redis_client.lrange("recent_transactions", 0, max(0, limit - 1))
+            )
         except Exception as exc:
             logger.warning(f"Redis event bus read failed: {exc}")
+            return []
+
+        if not recent_values:
             return []
 
         events = []
@@ -541,21 +540,18 @@ class CdcMonitoringService:
         }
 
     def get_cached_cdc_status(self) -> dict:
-        global _cache
-        if _cache:
-            try:
-                cached = _cache.get("cdc_status")
-                if cached:
-                    return json.loads(cached)
-            except Exception as exc:
-                logger.warning(f"Redis CDC status cache error: {exc}")
+        try:
+            cached = execute_redis_command(lambda redis_client: redis_client.get("cdc_status"))
+            if cached:
+                return json.loads(cached)
+        except Exception as exc:
+            logger.warning(f"Redis CDC status cache error: {exc}")
 
         status = self.get_cdc_status()
-        if _cache:
-            try:
-                _cache.setex("cdc_status", 15, json.dumps(status))
-            except Exception:
-                pass
+        try:
+            execute_redis_command(lambda redis_client: redis_client.setex("cdc_status", 15, json.dumps(status)))
+        except Exception:
+            pass
         return status
 
     def get_lakehouse_stream(self, limit: int = 20) -> dict:
@@ -566,18 +562,16 @@ class CdcMonitoringService:
         }
 
     def get_cached_datastream_metrics(self) -> dict:
-        global _cache
-        if _cache:
-            try:
-                cached = _cache.get("datastream_metrics")
-                if cached:
-                    metrics = json.loads(cached)
-                    open_alerts = self.get_open_fraud_alert_count()
-                    metrics["operational_active_fraud_alerts"] = open_alerts
-                    metrics["active_anomalies"] = open_alerts
-                    return metrics
-            except Exception as exc:
-                logger.warning(f"Redis cache error: {exc}")
+        try:
+            cached = execute_redis_command(lambda redis_client: redis_client.get("datastream_metrics"))
+            if cached:
+                metrics = json.loads(cached)
+                open_alerts = self.get_open_fraud_alert_count()
+                metrics["operational_active_fraud_alerts"] = open_alerts
+                metrics["active_anomalies"] = open_alerts
+                return metrics
+        except Exception as exc:
+            logger.warning(f"Redis cache error: {exc}")
 
         metrics = {
             "system_lag_ms": None,
@@ -645,10 +639,9 @@ class CdcMonitoringService:
             logger.warning(f"Error fetching cloud monitoring metrics: {exc}")
             metrics["status"] = "DEGRADED"
 
-        if _cache:
-            try:
-                _cache.setex("datastream_metrics", 15, json.dumps(metrics))
-            except Exception:
-                pass
+        try:
+            execute_redis_command(lambda redis_client: redis_client.setex("datastream_metrics", 15, json.dumps(metrics)))
+        except Exception:
+            pass
 
         return metrics

@@ -29,12 +29,16 @@ class FakeRedis:
     def __init__(self):
         self.store = {}
         self.raise_on_set = False
+        self.raise_once_on_set = False
 
     def ping(self):
         return True
 
     def set(self, key, value, nx=False, ex=None):
         del ex
+        if self.raise_once_on_set:
+            self.raise_once_on_set = False
+            raise RuntimeError("connection closed by server")
         if self.raise_on_set:
             raise RuntimeError("redis unavailable")
         if nx and key in self.store:
@@ -695,6 +699,23 @@ def test_generate_skips_active_distributed_pulse_without_generating(monkeypatch)
     assert response.status_code == 200
     assert response.json()["status"] == "SKIPPED_ACTIVE_PULSE"
     assert response.json()["event_id"] == "event-active"
+
+
+def test_generate_retries_transient_redis_connection_close(monkeypatch):
+    fake_redis = FakeRedis()
+    fake_redis.raise_once_on_set = True
+    monkeypatch.setattr(main, "get_pulse_redis_client", lambda: fake_redis)
+
+    async def fake_execute(event_id=None):
+        return {"status": "SUCCESS", "event_id": event_id}
+
+    monkeypatch.setattr(main, "execute_simulation_pulse", fake_execute)
+
+    response = client.post("/generate", headers={"ce-id": "event-transient"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "SUCCESS"
+    assert fake_redis.store["data-generator:pulse:event:event-transient"]
 
 
 def test_generate_skips_when_admission_control_unavailable_in_deployed_mode(
