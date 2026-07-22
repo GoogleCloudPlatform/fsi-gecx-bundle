@@ -587,7 +587,9 @@ variable "developer_iam_members" {
 variable "banking_service_timeout_seconds" {
   type        = number
   description = "Timeout in seconds for the banking-service Cloud Run instance."
-  default     = 30
+  # The banking service owns long-lived voice WebSockets. Keep this aligned
+  # with VoiceBidiSession's 10-minute maximum session duration.
+  default = 600
 }
 
 variable "stable_env_url" {
