@@ -76,6 +76,13 @@ def test_confirmation_classifier_accepts_observed_customer_phrases():
             "Confirmed",
             "Yes I confirm.",
             "Yes, that would be great.",
+            "I can firm.",
+            "Yes, that's what I want.",
+            "I confirm all the proposed actions.",
+            (
+                "I want to dispute the charges, have the card blocked and have "
+                "a replacement issued."
+            ),
         ),
         start=2,
     ):
@@ -90,6 +97,31 @@ def test_confirmation_classifier_accepts_observed_customer_phrases():
         callback.before_model_callback(context, object())
 
         assert variables["proposal_confirmation_classification"] == "CONFIRMED"
+
+
+def test_confirmation_classifier_rejects_qualified_or_partial_approval():
+    callback = _load("before_model_callbacks/classify_confirmation.py")
+
+    for index, phrase in enumerate(
+        (
+            "Yes, but don't block the card.",
+            "I do not confirm.",
+            "Dispute the charges.",
+            "Block the card and send a replacement.",
+        ),
+        start=20,
+    ):
+        variables = {
+            "proposal_id": "proposal-1",
+            "proposal_presentation_turn_id": "turn-1",
+        }
+        context = Context(
+            invocation_id=f"turn-{index}", variables=variables, user_text=phrase
+        )
+
+        callback.before_model_callback(context, object())
+
+        assert variables["proposal_confirmation_classification"] != "CONFIRMED"
 
 
 def test_before_tool_blocks_missing_or_mismatched_confirmation():
