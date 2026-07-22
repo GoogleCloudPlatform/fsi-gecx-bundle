@@ -615,7 +615,6 @@ export default function VoiceSupportView() {
         )
       : 0;
     if (drainPlayout && drainSeconds > 0) {
-      setWarningMessage('Connection ended; finishing buffered agent audio.');
       playoutDrainTimerRef.current = setTimeout(
         finishAudioCleanup,
         Math.ceil((drainSeconds + 0.1) * 1000),
