@@ -71,7 +71,13 @@ def test_confirmation_classifier_accepts_observed_customer_phrases():
     callback = _load("before_model_callbacks/classify_confirmation.py")
 
     for index, phrase in enumerate(
-        ("I can confirm.", "Confirmed", "Yes I confirm."), start=2
+        (
+            "I can confirm.",
+            "Confirmed",
+            "Yes I confirm.",
+            "Yes, that would be great.",
+        ),
+        start=2,
     ):
         variables = {
             "proposal_id": "proposal-1",
@@ -139,6 +145,40 @@ def test_proposal_capture_and_exact_presentation_recording():
     assert variables["proposal_presentation_turn_id"] == "turn-1"
 
 
+def test_proposal_presentation_replaces_model_paraphrase_deterministically():
+    presentation = _load("after_model_callbacks/record_presentation.py")
+
+    class ReplacementPart:
+        @classmethod
+        def from_text(cls, *, text):
+            return Part(text)
+
+    class ReplacementResponse:
+        @classmethod
+        def from_parts(cls, *, parts):
+            return SimpleNamespace(
+                partial=False,
+                content=SimpleNamespace(parts=parts),
+            )
+
+    presentation.Part = ReplacementPart
+    presentation.LlmResponse = ReplacementResponse
+    variables = {
+        "proposal_id": "proposal-1",
+        "proposal_customer_safe_summary": "Confirm the exact protected action.",
+    }
+    context = Context(invocation_id="turn-1", variables=variables, user_text=None)
+    response = SimpleNamespace(
+        partial=False,
+        content=SimpleNamespace(parts=[Part("Does that sound right?")]),
+    )
+
+    replacement = presentation.after_model_callback(context, response)
+
+    assert replacement.content.parts[0].text == "Confirm the exact protected action."
+    assert variables["proposal_presentation_turn_id"] == "turn-1"
+
+
 def test_proposal_capture_supports_ces_mcp_text_output_shape():
     capture = _load("after_tool_callbacks/capture_proposal.py")
     variables = {}
@@ -191,7 +231,10 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     assert "user_token" not in instruction
     assert "Hi, I'm Nova with Nova Horizon Bank." in instruction
     assert "Do not restate that selection and ask whether it is correct" in instruction
-    assert "Proposal confirmation authorizes only the proposed banking action" in instruction
+    assert (
+        "Proposal confirmation authorizes only the proposed banking action"
+        in instruction
+    )
     assert "Never append a farewell or call `end_session` immediately" in instruction
     for tool_name in (
         "get_open_fraud_alert",

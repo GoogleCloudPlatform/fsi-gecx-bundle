@@ -8,7 +8,7 @@ def _normalized(value: str) -> str:
 
 
 def after_model_callback(callback_context, llm_response):
-    """Record presentation only when the complete model output contains the summary."""
+    """Ensure the customer hears the exact banking-authored proposal summary."""
     if llm_response.partial is True:
         return None
     summary = str(
@@ -22,8 +22,15 @@ def after_model_callback(callback_context, llm_response):
     output = " ".join(
         str(part.text_or_transcript() or "") for part in parts
     )
+    invocation_id = str(callback_context.invocation_id or "")
+    if not invocation_id:
+        return None
+
+    callback_context.variables["proposal_presentation_turn_id"] = invocation_id
     if _normalized(summary) in _normalized(output):
-        callback_context.variables["proposal_presentation_turn_id"] = str(
-            callback_context.invocation_id or ""
-        )
-    return None
+        return None
+
+    # A protected commit must not depend on the model reproducing an exact
+    # banking-authored string. Replace paraphrases deterministically so the
+    # recorded presentation evidence matches what the customer actually hears.
+    return LlmResponse.from_parts(parts=[Part.from_text(text=summary)])
