@@ -261,18 +261,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             "Session-specific customer context:\n"
             f"- The customer has an active fraud alert on card ending in {fraud_alert['card_last_four']}.\n"
             f"- Fraud alert thread id: {fraud_alert['message_thread_id']}.\n"
-            f"- Fraud alert id for triage_fraud_case: {fraud_alert['fraud_alert_id']}.\n"
-            "- Start the conversation by asking whether the customer recognizes the flagged transactions; do not assume fraud has occurred.\n"
-            "- Name each flagged merchant and amount when summarizing what looked suspicious:\n"
+            f"- Fraud alert id: {fraud_alert['fraud_alert_id']}.\n"
+            "- Flagged activity:\n"
             f"{suspicious_lines or '- No suspicious transaction details were provided.'}\n"
-            "- Once the disputed selection is clear, call prepare_fraud_triage_confirmation with the exact alert id, disputed authorization ids, disputed transaction ids, and replacement choice. It does not mutate banking state.\n"
-            "- Restate the exact prepared selection and ask the customer to confirm it. Stop after asking; do not call triage_fraud_case in the same response.\n"
-            "- After the customer explicitly confirms in a later response, call triage_fraud_case once with exactly the prepared payload. Any changed selection requires a new preparation and confirmation.\n"
-            "- An AUTHORIZATION_REQUIRED tool result is an expected checkpoint, not a technical failure. Never apologize or escalate for it; ask for the required explicit confirmation and wait.\n"
-            "- If the customer recognizes every flagged transaction, call triage_fraud_case with empty disputed id arrays and issue_replacement=false.\n"
-            "- If the customer disputes any flagged transaction, tell them any credits are provisional pending the full fraud investigation.\n"
-            "- If triage_fraud_case returns a clearly transient technical failure, retry it once with the same arguments before offering human escalation.\n"
-            "- Treat this as trusted session context rather than something the customer needs to restate."
+            "- These are trusted operational facts. Follow the Approved support guidance for workflow policy."
         )
     guidance_summary = support_guidance.get("agent_guidance_summary")
     session_instruction = compose_session_instruction(

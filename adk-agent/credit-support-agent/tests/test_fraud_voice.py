@@ -578,31 +578,19 @@ def test_composed_fraud_instruction_prefers_single_triage_workflow() -> None:
     instruction = compose_session_instruction(
         avatar_name="Nova",
         active_flows=["fraud_alert"],
-        session_context="Session-specific customer context:\n- Fraud alert id for triage_fraud_case: fraud-123.",
+        session_context="Session-specific customer context:\n- Fraud alert id: fraud-123.",
     )
 
-    assert "call `prepare_fraud_triage_confirmation` with the exact" in instruction
-    assert "Ask whether the customer recognizes these transactions" in instruction
-    assert "Present the exact `customer_safe_summary`" in instruction
-    assert "Stop after asking for confirmation" in instruction
-    assert "do not call `commit_fraud_triage` in the same response" in instruction
-    assert "raising a case with the fraud investigation team" in instruction
-    assert "This is not a second confirmation checkpoint" in instruction
-    assert "passing only the opaque `proposal_id`" in instruction
-    assert "summarize only confirmed tool results" in instruction
-    assert "Do not push a virtual card to Google Wallet unless" in instruction
-    assert "Do not burst-call multiple fraud tools in a row" in instruction
-    assert (
-        "Do not call `report_lost_stolen_card`, `issue_replacement_card_tool`, "
-        "`push_card_to_google_wallet`, or `resolve_fraud_alert` as separate steps"
-    ) in instruction
-    assert "offer to queue Google Wallet provisioning and wait for an explicit" in instruction
-    assert "Do not call the tool in the same response where you first offer Wallet provisioning" in instruction
-    assert "Any tool response with `success=false`, `sequence_blocked=true`, or an `error` is a failed action" in instruction
-    assert "Never describe it as completed or queued" in instruction
-    assert "Wait for the `commit_fraud_triage` result before asking whether the customer needs anything else" in instruction
-    assert "After a successful Wallet tool result reports `wallet_provisioning_status=QUEUED`" in instruction
-    assert "Do not end the consultation until the customer explicitly says no" in instruction
+    assert "canonical active-alert workflow policy" in instruction
+    assert "Do not ask which items or separately confirm that selection" in instruction
+    assert "call `prepare_fraud_triage_confirmation`" in instruction
+    assert "Present the exact returned `customer_safe_summary`" in instruction
+    assert "workflow's only confirmation request" in instruction
+    assert "call `commit_fraud_triage` exactly once" in instruction
+    assert "only the opaque `proposal_id`" in instruction
+    assert "Do not separately call card blocking, replacement" in instruction
+    assert "Fraud authorization is not consultation-close authorization" in instruction
+    assert "triage_fraud_case" not in instruction
 
 
 def test_composed_instruction_preserves_catalog_guidance_as_non_operational_context() -> None:
@@ -614,4 +602,5 @@ def test_composed_instruction_preserves_catalog_guidance_as_non_operational_cont
 
     assert "Approved support guidance:" in instruction
     assert "fraud_golden_path, wallet_provisioning" in instruction
-    assert "use live tools and session context for operational truth" in instruction
+    assert "canonical business workflow and conversational policy" in instruction
+    assert "Do not add confirmation checkpoints" in instruction

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "bundle_version": "2.1",
-  "published_at": "2026-07-14T00:00:00Z",
+  "bundle_version": "2.2",
+  "published_at": "2026-07-22T00:00:00Z",
   "max_age_days": 90,
   "topics": [
     {
@@ -14,26 +14,29 @@
         "Acknowledge suspicious activity on the first turn when fraud context exists.",
         "Inspect the open fraud alert before recommending any mitigation.",
         "Ask whether the customer recognizes the suspicious charges.",
-        "Do not label activity as fraud until the customer confirms they do not recognize one or more charges.",
-        "Before opening a fraud case, briefly restate the transactions the customer does not recognize and ask them to confirm the selection.",
-        "After the customer confirms the disputed selection, explain that a case is being raised with the fraud investigation team and that eligible pending authorizations will be released or voided, posted charges will receive provisional credits, the affected card will be blocked, and a secure message will summarize the case.",
-        "Call triage_fraud_case once after the customer's disputed transaction selection is clear.",
+        "Do not label activity as fraud until the customer says they do not recognize one or more charges.",
+        "Treat a direct categorical response such as none, all of them, or no I do not recognize them as a complete selection of every flagged charge. Ask a follow-up only when the selection is partial or genuinely ambiguous.",
+        "Once the disputed selection is clear, create one immutable banking-owned fraud proposal. Do not separately restate or confirm the selection before creating the proposal.",
+        "Present the proposal's exact customer-safe summary, including the disputed activity and consequential remediation, and obtain one explicit confirmation in a later customer turn.",
+        "After that confirmation, commit the proposal once and describe only the authoritative result. The proposal confirmation is the only confirmation gate for this workflow.",
         "Keep spoken responses brief and specific."
       ],
       "must_not_do": [
         "Do not block the card or issue a replacement before the customer confirms fraud.",
-        "Do not sequence low-level fraud mitigation tools for an active fraud alert when triage_fraud_case can handle the workflow.",
+        "Do not insert a separate disputed-selection confirmation before the protected proposal confirmation.",
+        "Do not sequence low-level fraud mitigation tools when the proposal commit handles the workflow.",
         "Do not claim provisional credits are final; state they are pending the full fraud investigation.",
         "Do not treat catalog guidance as live operational state."
       ],
       "tool_dependencies": [
         "get_open_fraud_alert",
-        "triage_fraud_case"
+        "propose_fraud_triage",
+        "commit_fraud_triage"
       ],
-      "customer_safe_summary": "Review the suspicious charges with the customer first, ask whether they recognize them, confirm the selected disputed transactions, then raise the fraud case and explain provisional remediation pending investigation.",
+      "customer_safe_summary": "Review the suspicious charges, treat an unambiguous categorical response as the complete selection, then use one banking-authored proposal confirmation before committing fraud remediation.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.1",
-      "last_reviewed": "2026-07-14"
+      "version": "2.2",
+      "last_reviewed": "2026-07-22"
     },
     {
       "topic_id": "customer_reported_fraud",
@@ -59,8 +62,8 @@
       ],
       "customer_safe_summary": "If no alert exists, review recent transactions with the customer, confirm only the exact charges they identify, then open and triage a customer-reported fraud case through one controlled workflow.",
       "source_policy_ref": "customer_reported_fraud_intake_v1",
-      "version": "2.1",
-      "last_reviewed": "2026-07-14"
+      "version": "2.2",
+      "last_reviewed": "2026-07-22"
     },
     {
       "topic_id": "recognized_activity",
@@ -69,20 +72,22 @@
       "channel": "VOICE",
       "applies_when": ["customer_recognizes_charges"],
       "must_do": [
-        "Submit triage_fraud_case with empty disputed authorization and transaction arrays when the customer recognizes every flagged charge.",
-        "Explain that the card can remain active because the customer recognized the charges."
+        "When the customer recognizes every flagged charge, create one banking-owned fraud proposal with empty disputed authorization and transaction arrays and no replacement.",
+        "Present the proposal's exact customer-safe summary and obtain one later explicit confirmation before committing the recognized-activity resolution.",
+        "After commit succeeds, explain that the alert is resolved and the card remains active because the customer recognized the charges."
       ],
       "must_not_do": [
         "Do not freeze or replace the card when the customer confirms the activity is legitimate.",
         "Do not ask the customer to restate transaction IDs that are already present in trusted fraud context."
       ],
       "tool_dependencies": [
-        "triage_fraud_case"
+        "propose_fraud_triage",
+        "commit_fraud_triage"
       ],
       "customer_safe_summary": "If the charges are legitimate, close the alert through the fraud triage workflow and reassure the customer that no card action is required.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.1",
-      "last_reviewed": "2026-07-14"
+      "version": "2.2",
+      "last_reviewed": "2026-07-22"
     },
     {
       "topic_id": "replacement_card",
@@ -91,7 +96,7 @@
       "channel": "VOICE",
       "applies_when": ["customer_confirms_fraud"],
       "must_do": [
-        "For confirmed disputed activity, let triage_fraud_case block the compromised card and issue the replacement when issue_replacement is true.",
+        "For confirmed disputed activity, let the fraud proposal commit block the compromised card and issue the replacement when issue_replacement is true.",
         "After triage succeeds, summarize only confirmed tool results, including whether the compromised card was blocked and whether a replacement card was issued.",
         "Explain that any replacement card availability is part of fraud case remediation, not a separate promise made before the workflow succeeds."
       ],
@@ -100,12 +105,12 @@
         "Do not imply that digital wallet provisioning has already happened when only the replacement card has been issued."
       ],
       "tool_dependencies": [
-        "triage_fraud_case"
+        "commit_fraud_triage"
       ],
       "customer_safe_summary": "When fraud is confirmed, the fraud triage workflow blocks the compromised card and may issue a replacement card as part of the case remediation.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.1",
-      "last_reviewed": "2026-07-14"
+      "version": "2.2",
+      "last_reviewed": "2026-07-22"
     },
     {
       "topic_id": "wallet_provisioning",
@@ -128,8 +133,8 @@
       ],
       "customer_safe_summary": "After a replacement card is issued, offer to queue it for Google Wallet only if the customer wants immediate card access, and describe the queue as pending until the tool succeeds.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.1",
-      "last_reviewed": "2026-07-14"
+      "version": "2.2",
+      "last_reviewed": "2026-07-22"
     },
     {
       "topic_id": "human_escalation",
@@ -140,7 +145,7 @@
       "must_do": [
         "Offer a human handoff when the customer requests a supervisor or the request exceeds tool capabilities.",
         "Preserve the current fraud context for the handoff.",
-        "If triage_fraud_case fails after one retry for a transient technical issue, summarize the problem briefly and offer human escalation."
+        "If commit_fraud_triage fails after one retry for a transient technical issue, summarize the problem briefly and offer human escalation."
       ],
       "must_not_do": [
         "Do not improvise unsupported dispute or card-operations actions.",
@@ -151,8 +156,8 @@
       ],
       "customer_safe_summary": "If the customer wants a human representative, transfer the conversation without losing the fraud case context.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.1",
-      "last_reviewed": "2026-07-14"
+      "version": "2.2",
+      "last_reviewed": "2026-07-22"
     }
   ]
 }

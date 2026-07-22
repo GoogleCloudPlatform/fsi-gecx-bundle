@@ -28,6 +28,7 @@ class TrajectoryExpectation:
     required_proposal_outcomes: tuple[str, ...] = ()
     forbidden_proposal_outcomes: tuple[str, ...] = ()
     expected_banking_outcome: str | None = None
+    require_direct_selection_to_proposal: bool = False
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,58 @@ def evaluate_trajectory(
     )
     proposal_events = _events_of_type(events, "ACTION_PROPOSAL")
     proposal_outcomes = [str(event.get("outcome") or "UNKNOWN") for event in proposal_events]
+    redundant_preproposal_turns = 0
+
+    if expectation.require_direct_selection_to_proposal:
+        alert_result_index = next(
+            (
+                index
+                for index, event in enumerate(events)
+                if event.get("type") == "TOOL_RESULT"
+                and event.get("tool") == "get_open_fraud_alert"
+                and event.get("success") is True
+            ),
+            None,
+        )
+        selection_index = next(
+            (
+                index
+                for index, event in enumerate(events)
+                if alert_result_index is not None
+                and index > alert_result_index
+                and event.get("type") == "TRANSCRIPT"
+                and event.get("author") == "customer"
+            ),
+            None,
+        )
+        proposal_index = next(
+            (
+                index
+                for index, event in enumerate(events)
+                if selection_index is not None
+                and index > selection_index
+                and event.get("type") == "ACTION_PROPOSAL"
+                and event.get("outcome") == "PROPOSED"
+            ),
+            None,
+        )
+        if selection_index is None:
+            failures.append("No customer fraud-selection turn followed the alert read.")
+        elif proposal_index is None:
+            failures.append("No fraud proposal followed the customer selection.")
+        else:
+            redundant_preproposal_turns = sum(
+                1
+                for event in events[selection_index + 1 : proposal_index]
+                if event.get("type") == "TRANSCRIPT"
+                and event.get("author") in {"agent", "customer"}
+            )
+            if redundant_preproposal_turns:
+                failures.append(
+                    "Expected an unambiguous customer selection to create the "
+                    "proposal directly, but observed "
+                    f"{redundant_preproposal_turns} intervening conversational turn(s)."
+                )
 
     for tool_name, expected_count in expectation.required_tools.items():
         actual = calls_by_name[tool_name]
@@ -217,6 +270,7 @@ def evaluate_trajectory(
             "terminal_outcome": terminal_outcome,
             "proposal_outcomes": proposal_outcomes,
             "banking_outcome": banking_outcomes[-1] if banking_outcomes else None,
+            "redundant_preproposal_turns": redundant_preproposal_turns,
         },
     )
 

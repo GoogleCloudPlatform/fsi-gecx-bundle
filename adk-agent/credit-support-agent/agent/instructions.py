@@ -34,7 +34,7 @@ def compose_session_instruction(
         sections.append(
             "Approved support guidance:\n"
             f"{guidance_summary}\n"
-            "- Use this guidance to shape phrasing and sequencing, but use live tools and session context for operational truth."
+            "- This is the canonical business workflow and conversational policy for the active flow. Runtime instructions only map it to ADK tools. Do not add confirmation checkpoints. Live tools and trusted session context remain operational truth; fail closed if policy conflicts with a protected banking requirement."
         )
     return "\n\n".join(section.strip() for section in sections if section and section.strip())
 

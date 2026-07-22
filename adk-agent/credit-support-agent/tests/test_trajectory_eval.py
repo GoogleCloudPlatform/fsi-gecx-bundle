@@ -181,7 +181,10 @@ def test_failures_name_dependency_tool_ui_and_terminal_layers() -> None:
 
 def proposal_confirmation_events(classification: str) -> list[dict]:
     return [
-        {"type": "TRANSCRIPT", "author": "customer", "text": "selected charges", "elapsed_ms": 70},
+        {"type": "TRANSCRIPT", "author": "agent", "text": "Do you recognize these transactions?", "elapsed_ms": 65},
+        {"type": "TRANSCRIPT", "author": "customer", "text": "No, I don't recognize any of them.", "elapsed_ms": 70},
+        {"type": "TOOL_CALL", "tool": "propose_fraud_triage", "elapsed_ms": 75},
+        {"type": "TOOL_RESULT", "tool": "propose_fraud_triage", "success": True, "elapsed_ms": 78},
         {"type": "ACTION_PROPOSAL", "outcome": "PROPOSED", "proposal_ref": "proposal_1", "elapsed_ms": 80},
         {"type": "TRANSCRIPT", "author": "agent", "text": "Please confirm the exact summary", "elapsed_ms": 90},
         {"type": "ACTION_PROPOSAL", "outcome": "PRESENTED", "proposal_ref": "proposal_1", "elapsed_ms": 100},
@@ -243,10 +246,65 @@ def test_explicit_yes_proposal_trajectory_passes() -> None:
             required_ui_events=("FRAUD_ALERT_RESOLVED",),
             required_proposal_outcomes=("PROPOSED", "PRESENTED", "CONFIRMED", "COMMITTED"),
             expected_banking_outcome="CONFIRMED_FRAUD_REMEDIATED",
+            require_direct_selection_to_proposal=True,
         ),
     )
 
     assert result.passed is True
+    assert result.metrics["redundant_preproposal_turns"] == 0
+
+
+def test_redundant_selection_confirmation_fails_one_gate_trajectory() -> None:
+    events = proposal_trajectory()
+    proposal_index = next(
+        index
+        for index, event in enumerate(events)
+        if event.get("type") == "TOOL_CALL"
+        and event.get("tool") == "propose_fraud_triage"
+    )
+    events[proposal_index:proposal_index] = [
+        {
+            "type": "TRANSCRIPT",
+            "author": "agent",
+            "text": "Which transactions do you not recognize?",
+            "elapsed_ms": 71,
+        },
+        {
+            "type": "TRANSCRIPT",
+            "author": "customer",
+            "text": "I don't recognize any of them.",
+            "elapsed_ms": 72,
+        },
+        {
+            "type": "TRANSCRIPT",
+            "author": "agent",
+            "text": "You want to dispute all of them. Is that right?",
+            "elapsed_ms": 73,
+        },
+        {
+            "type": "TRANSCRIPT",
+            "author": "customer",
+            "text": "That's correct.",
+            "elapsed_ms": 74,
+        },
+    ]
+
+    result = evaluate_trajectory(
+        events,
+        TrajectoryExpectation(
+            required_tools={
+                "get_open_fraud_alert": 1,
+                "propose_fraud_triage": 1,
+                "commit_fraud_triage": 1,
+            },
+            required_ui_events=("FRAUD_ALERT_RESOLVED",),
+            require_direct_selection_to_proposal=True,
+        ),
+    )
+
+    assert result.passed is False
+    assert result.metrics["redundant_preproposal_turns"] == 4
+    assert any("intervening conversational turn" in failure for failure in result.failures)
 
 
 @pytest.mark.parametrize("classification", ["DECLINED", "UNCLEAR"])

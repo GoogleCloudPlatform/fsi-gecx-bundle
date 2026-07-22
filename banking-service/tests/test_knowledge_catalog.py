@@ -7,7 +7,7 @@ def test_local_guidance_bundle_for_voice_fraud_returns_expected_topics():
 
     assert bundle["source"] == "local_file"
     assert bundle["schema_version"] == 1
-    assert bundle["content_version"] == "2.1"
+    assert bundle["content_version"] == "2.2"
     assert bundle["snapshot_id"]
     assert bundle["retrieved_at"].endswith("Z")
     assert bundle["fallback_reason"] == "KNOWLEDGE_CATALOG_DISABLED"
@@ -21,11 +21,13 @@ def test_local_guidance_bundle_for_voice_fraud_returns_expected_topics():
     ]
     assert "Fraud Golden Path" in bundle["agent_guidance_summary"]
     assert "get_open_fraud_alert" in bundle["agent_guidance_summary"]
-    assert "triage_fraud_case" in bundle["agent_guidance_summary"]
+    assert "propose_fraud_triage" in bundle["agent_guidance_summary"]
+    assert "commit_fraud_triage" in bundle["agent_guidance_summary"]
     assert "Ask whether the customer recognizes the suspicious charges" in bundle["agent_guidance_summary"]
-    assert "Before opening a fraud case" in bundle["agent_guidance_summary"]
-    assert "case is being raised with the fraud investigation team" in bundle["agent_guidance_summary"]
-    assert "Do not sequence low-level fraud mitigation tools" in bundle["agent_guidance_summary"]
+    assert "complete selection of every flagged charge" in bundle["agent_guidance_summary"]
+    assert "only confirmation gate" in bundle["agent_guidance_summary"]
+    assert "Do not insert a separate disputed-selection confirmation" in bundle["agent_guidance_summary"]
+    assert "triage_fraud_case" not in bundle["agent_guidance_summary"]
 
 
 def test_customer_reported_guidance_uses_intake_specific_catalog_topics():
@@ -109,7 +111,7 @@ def test_local_guidance_release_validation_passes_current_bundle():
     result = KnowledgeCatalogService().validate_local_guidance(strict_freshness=True)
 
     assert result["schema_version"] == 1
-    assert result["bundle_version"] == "2.1"
+    assert result["bundle_version"] == "2.2"
     assert result["topic_count"] == 6
 
 
