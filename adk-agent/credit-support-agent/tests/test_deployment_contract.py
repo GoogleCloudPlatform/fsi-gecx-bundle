@@ -38,3 +38,13 @@ def test_agent_build_and_terraform_share_capacity_contract() -> None:
         ui_start,
     )
     assert "_VOICE_AGENT_" not in cloud_build_tf[ui_start:ui_end]
+
+
+def test_agent_archive_build_prepares_repository_for_linguist() -> None:
+    cloudbuild = (ROOT / "adk-agent/credit-support-agent/cloudbuild-deploy.yaml").read_text()
+
+    prepare_index = cloudbuild.index('id: "prepare-linguist-repository"')
+    linguist_index = cloudbuild.index('id: "run-linguist"')
+
+    assert prepare_index < linguist_index
+    assert "git init -q /workspace" in cloudbuild
