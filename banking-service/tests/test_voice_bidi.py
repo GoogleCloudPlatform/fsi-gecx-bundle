@@ -96,6 +96,7 @@ def test_gecx_voice_stream_success(
         json.dumps(
             {"sessionOutput": {"text": "Welcome to Horizon Financial support."}}
         ),
+        json.dumps({"recognitionResult": {"transcript": "Hello are you there?"}}),
         json.dumps({"interruptionSignal": {"bargeIn": True}}),
         json.dumps({"endSession": {}}),
     ]
@@ -125,7 +126,15 @@ def test_gecx_voice_stream_success(
         assert response["text"] == "Welcome to Horizon Financial support."
         assert response["author"] == "agent"
 
-        # D2. Await second response, which should be the INTERRUPT event
+        recognition_response = websocket.receive_json()
+        assert recognition_response == {
+            "type": "TRANSCRIPT",
+            "text": "Hello are you there?",
+            "author": "user",
+            "replace_previous": True,
+        }
+
+        # D2. Await the interruption event
         interrupt_response = websocket.receive_json()
         assert interrupt_response["type"] == "INTERRUPT"
 

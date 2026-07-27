@@ -419,6 +419,9 @@ class VoiceBidiSession:
                                         "type": "TRANSCRIPT",
                                         "text": user_transcript,
                                         "author": "user",
+                                        # CES recognition results are cumulative
+                                        # hypotheses for the current customer turn.
+                                        "replace_previous": True,
                                     }
                                 )
 

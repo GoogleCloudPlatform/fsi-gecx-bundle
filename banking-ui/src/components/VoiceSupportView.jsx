@@ -38,6 +38,7 @@ import {
   pcmFrameForMicrophoneState,
   remainingPlayoutSeconds,
 } from '../utils/gecxAudio.js';
+import { mergeGecxTranscript } from '../utils/gecxTranscript.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
@@ -1066,7 +1067,7 @@ export default function VoiceSupportView() {
   const handleGecxControlMessage = useCallback((payload) => {
     if (handleOperationalVoiceEvent(payload)) return;
     if (payload.type === 'TRANSCRIPT') {
-      setTranscripts(prev => [...prev, { author: payload.author, text: payload.text }]);
+      setTranscripts(prev => mergeGecxTranscript(prev, payload));
       if (payload.author === 'agent') {
         const text = payload.text.toLowerCase();
         if (text.includes("goodbye") || text.includes("bye") || (text.includes("have a") && text.includes("good") && text.includes("day"))) {
