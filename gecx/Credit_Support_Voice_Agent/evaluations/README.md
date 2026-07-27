@@ -18,11 +18,16 @@ Run it from the repository root:
   --project PROJECT_ID \
   --account ACCOUNT \
   --app projects/PROJECT_ID/locations/us/apps/APP_ID \
-  --conversation projects/PROJECT_ID/locations/us/apps/APP_ID/conversations/CONVERSATION_ID \
+  --latest \
   --app-version projects/PROJECT_ID/locations/us/apps/APP_ID/versions/VERSION_ID \
   --managed \
   --output /tmp/ces-qualification.json
 ```
+
+`--latest` selects the newest completed conversation whose CES source is
+`LIVE`. It ignores evaluation conversations and live conversations that have
+not ended. To evaluate a specific recorded consultation instead, replace
+`--latest` with its full `--conversation` resource name.
 
 The persisted report contains resource provenance and aggregate metrics only.
 It never includes tool arguments, transcripts, session capabilities, customer

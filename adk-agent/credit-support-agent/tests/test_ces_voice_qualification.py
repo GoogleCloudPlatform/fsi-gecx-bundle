@@ -98,3 +98,73 @@ def test_evaluation_fake_tools_are_synthetic_and_tool_specific() -> None:
     assert "secret" not in repr(response)
     assert "eval-alert-1" in response["output"]
     assert fake_tools.fake_tool_call({"id": "unsupported"}, {}, None) is None
+
+
+def test_latest_conversation_selects_completed_live_across_pages() -> None:
+    class FakeApi:
+        def request(self, method, path, body=None, query=None):
+            assert method == "GET"
+            assert path == "projects/example/locations/us/apps/app/conversations"
+            if not query.get("pageToken"):
+                return {
+                    "conversations": [
+                        {
+                            "name": f"{path}/live-old",
+                            "source": "LIVE",
+                            "startTime": "2026-07-27T01:00:00Z",
+                            "endTime": "2026-07-27T01:01:00Z",
+                        },
+                        {
+                            "name": f"{path}/evaluation-newer",
+                            "source": "EVAL",
+                            "startTime": "2026-07-27T04:00:00Z",
+                            "endTime": "2026-07-27T04:01:00Z",
+                        },
+                    ],
+                    "nextPageToken": "page-2",
+                }
+            assert query["pageToken"] == "page-2"
+            return {
+                "conversations": [
+                    {
+                        "name": f"{path}/live-running",
+                        "source": "LIVE",
+                        "startTime": "2026-07-27T05:00:00Z",
+                    },
+                    {
+                        "name": f"{path}/live-latest",
+                        "source": "LIVE",
+                        "startTime": "2026-07-27T02:00:00Z",
+                        "endTime": "2026-07-27T02:01:00Z",
+                    },
+                ]
+            }
+
+    selected = qualification._latest_live_conversation(
+        FakeApi(), "projects/example/locations/us/apps/app"
+    )
+
+    assert selected.endswith("/conversations/live-latest")
+
+
+def test_latest_conversation_fails_when_no_completed_live_session_exists() -> None:
+    class FakeApi:
+        def request(self, method, path, body=None, query=None):
+            return {
+                "conversations": [
+                    {
+                        "name": f"{path}/evaluation",
+                        "source": "EVAL",
+                        "endTime": "2026-07-27T01:00:00Z",
+                    }
+                ]
+            }
+
+    try:
+        qualification._latest_live_conversation(
+            FakeApi(), "projects/example/locations/us/apps/app"
+        )
+    except ValueError as error:
+        assert "No completed LIVE conversations" in str(error)
+    else:
+        raise AssertionError("Expected a missing-live-conversation error.")

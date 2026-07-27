@@ -133,6 +133,44 @@ def _resource_id(name: str | None) -> str | None:
     return name.rsplit("/", 1)[-1] if name else None
 
 
+def _latest_live_conversation(api: CesApi, app: str) -> str:
+    """Return the newest completed LIVE conversation, following all list pages."""
+    candidates: list[dict[str, Any]] = []
+    page_token = ""
+    seen_tokens: set[str] = set()
+    while True:
+        query = {"pageSize": "100"}
+        if page_token:
+            query["pageToken"] = page_token
+        response = api.request("GET", f"{app}/conversations", query=query)
+        candidates.extend(
+            conversation
+            for conversation in response.get("conversations") or []
+            if conversation.get("source") == "LIVE"
+            and conversation.get("name")
+            and conversation.get("endTime")
+        )
+        next_token = str(response.get("nextPageToken") or "")
+        if not next_token:
+            break
+        if next_token in seen_tokens:
+            raise RuntimeError("CES returned a repeated conversations page token.")
+        seen_tokens.add(next_token)
+        page_token = next_token
+
+    if not candidates:
+        raise ValueError(f"No completed LIVE conversations were found for {app}.")
+    latest = max(
+        candidates,
+        key=lambda conversation: (
+            str(conversation.get("endTime") or ""),
+            str(conversation.get("startTime") or ""),
+            str(conversation["name"]),
+        ),
+    )
+    return str(latest["name"])
+
+
 def _managed_fake_output(tool: str) -> dict[str, Any]:
     authorizations = [
         {
@@ -454,7 +492,13 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project", required=True)
     parser.add_argument("--app", required=True)
-    parser.add_argument("--conversation", required=True)
+    conversation_group = parser.add_mutually_exclusive_group(required=True)
+    conversation_group.add_argument("--conversation")
+    conversation_group.add_argument(
+        "--latest",
+        action="store_true",
+        help="Use the newest completed LIVE conversation for the specified app.",
+    )
     parser.add_argument("--app-version")
     parser.add_argument("--account")
     parser.add_argument("--matrix", type=Path, default=DEFAULT_MATRIX)
@@ -467,8 +511,13 @@ def main() -> int:
     matrix = json.loads(args.matrix.read_text())
     scenario = _scenario(matrix, args.scenario)
     api = CesApi(project=args.project, account=args.account)
+    conversation_name = (
+        _latest_live_conversation(api, args.app)
+        if args.latest
+        else args.conversation
+    )
     conversation = api.request(
-        "GET", args.conversation, query={"source": "LIVE"}
+        "GET", conversation_name, query={"source": "LIVE"}
     )
     events = normalize_ces_conversation(conversation)
     result = evaluate_trajectory(events, _expectation(scenario["expectation"]))
@@ -493,7 +542,7 @@ def main() -> int:
             api,
             app=args.app,
             app_version=app_version,
-            conversation_name=args.conversation,
+            conversation_name=conversation_name,
             dataset_id=args.dataset_id,
             display_name="Bounded CES fraud qualification work item 1",
         )
