@@ -31,6 +31,10 @@ class TrajectoryExpectation:
     require_direct_selection_to_proposal: bool = False
     required_review_stages: tuple[str, ...] = ()
     require_ready_review_before_proposal: bool = False
+    expected_runtime_name: str | None = None
+    require_runtime_version: bool = False
+    require_catalog_identity: bool = False
+    required_contract_version: str | None = None
 
 
 @dataclass(frozen=True)
@@ -78,6 +82,11 @@ def evaluate_trajectory(
     proposal_events = _events_of_type(events, "ACTION_PROPOSAL")
     review_events = _events_of_type(events, "FRAUD_REVIEW")
     proposal_outcomes = [str(event.get("outcome") or "UNKNOWN") for event in proposal_events]
+    contract_versions = [
+        str(event.get("contract_version"))
+        for event in proposal_events
+        if event.get("contract_version")
+    ]
     redundant_preproposal_turns = 0
 
     if expectation.require_direct_selection_to_proposal:
@@ -266,6 +275,28 @@ def evaluate_trajectory(
         "reset_generation"
     ):
         failures.append("The trajectory does not record a reset generation.")
+    if (
+        expectation.expected_runtime_name
+        and session_start.get("runtime_name") != expectation.expected_runtime_name
+    ):
+        failures.append(
+            "Expected runtime "
+            f"{expectation.expected_runtime_name}, observed "
+            f"{session_start.get('runtime_name') or 'MISSING'}."
+        )
+    if expectation.require_runtime_version and not session_start.get("runtime_version"):
+        failures.append("The trajectory does not record a runtime version.")
+    if expectation.require_catalog_identity and (
+        not guidance.get("snapshot_id") or not guidance.get("content_version")
+    ):
+        failures.append("The trajectory does not record catalog snapshot identity.")
+    if expectation.required_contract_version and (
+        expectation.required_contract_version not in contract_versions
+    ):
+        failures.append(
+            "Required proposal contract version "
+            f"{expectation.required_contract_version} was not observed."
+        )
 
     terminal_events = _events_of_type(events, "SESSION_ENDED")
     terminal_outcome = (
@@ -293,8 +324,14 @@ def evaluate_trajectory(
             "interruptions": len(_events_of_type(events, "INTERRUPTION")),
             "duration_ms": max(timestamps, default=0.0),
             "guidance_source": guidance.get("source"),
+            "catalog_snapshot_id": guidance.get("snapshot_id"),
+            "catalog_content_version": guidance.get("content_version"),
+            "runtime_name": session_start.get("runtime_name"),
+            "runtime_version": session_start.get("runtime_version"),
+            "deployment": session_start.get("deployment"),
             "terminal_outcome": terminal_outcome,
             "proposal_outcomes": proposal_outcomes,
+            "contract_versions": contract_versions,
             "banking_outcome": banking_outcomes[-1] if banking_outcomes else None,
             "redundant_preproposal_turns": redundant_preproposal_turns,
             "fraud_review_stages": review_stages,

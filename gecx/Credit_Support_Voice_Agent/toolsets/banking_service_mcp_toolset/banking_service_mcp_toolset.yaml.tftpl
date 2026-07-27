@@ -19,3 +19,7 @@ mcpToolset:
     x-proposal-confirmation-method: $context.variables.proposal_confirmation_method
     x-proposal-confirmation-classification: $context.variables.proposal_confirmation_classification
 executionType: SYNCHRONOUS
+toolFakeConfig:
+  enableFakeMode: true
+  codeBlock:
+    pythonCode: toolsets/banking_service_mcp_toolset/evaluation_fake_tools.py
