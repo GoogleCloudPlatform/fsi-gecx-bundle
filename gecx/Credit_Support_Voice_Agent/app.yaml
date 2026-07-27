@@ -136,5 +136,21 @@ variableDeclarations:
   description: Whether the next customer turn is answering the flagged-activity recognition question.
   schema:
     type: BOOLEAN
+- name: fraud_review_stage
+  description: Callback-owned fraud review stage.
+  schema:
+    type: STRING
+- name: fraud_review_status
+  description: Banking-validated UNCERTAIN, PARTIAL, or COMPLETE review status.
+  schema:
+    type: STRING
+- name: fraud_review_fingerprint
+  description: Banking-issued fingerprint of the current classified selection.
+  schema:
+    type: STRING
+- name: fraud_review_ready
+  description: Whether banking validated every flagged item as recognized or disputed.
+  schema:
+    type: BOOLEAN
 timeZoneSettings:
   timeZone: America/Los_Angeles

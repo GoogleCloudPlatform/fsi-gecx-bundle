@@ -46,6 +46,27 @@ def after_tool_callback(tool, input, callback_context, tool_response):
                 )
         return None
 
+    if tool_name.endswith("review_fraud_selection"):
+        if payload.get("success") is True:
+            fingerprint = str(payload.get("selection_fingerprint") or "")
+            previous = str(
+                callback_context.variables.get("fraud_review_fingerprint") or ""
+            )
+            callback_context.variables["fraud_review_stage"] = str(
+                payload.get("stage") or ""
+            )
+            callback_context.variables["fraud_review_status"] = str(
+                payload.get("selection_status") or ""
+            )
+            callback_context.variables["fraud_review_fingerprint"] = fingerprint
+            callback_context.variables["fraud_review_ready"] = bool(
+                payload.get("ready_to_propose")
+            )
+            if previous and fingerprint and previous != fingerprint:
+                callback_context.variables["proposal_id"] = ""
+                callback_context.variables["proposal_customer_safe_summary"] = ""
+        return None
+
     if not tool_name.endswith("propose_fraud_triage"):
         return None
 
@@ -55,4 +76,7 @@ def after_tool_callback(tool, input, callback_context, tool_response):
         callback_context.variables["proposal_id"] = proposal_id
         callback_context.variables["proposal_customer_safe_summary"] = summary
         callback_context.variables["fraud_selection_pending"] = False
+        callback_context.variables["fraud_review_stage"] = "AWAITING_ACTION_CONFIRMATION"
+        callback_context.variables["fraud_review_status"] = "COMPLETE"
+        callback_context.variables["fraud_review_ready"] = True
     return None

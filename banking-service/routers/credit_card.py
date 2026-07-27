@@ -510,8 +510,11 @@ def get_voice_session_context(
 
 class FraudTriageProposalRequest(BaseModel):
     fraud_alert_id: str
+    selection_status: str
     disputed_authorization_ids: list[str] = Field(default_factory=list)
     disputed_transaction_ids: list[str] = Field(default_factory=list)
+    recognized_authorization_ids: list[str] = Field(default_factory=list)
+    recognized_transaction_ids: list[str] = Field(default_factory=list)
     issue_replacement: bool = True
     escalate: bool = False
     idempotency_key: str = Field(..., min_length=1, max_length=128)
@@ -541,6 +544,21 @@ def create_fraud_triage_proposal(
                 "x-catalog-snapshot-id": x_catalog_snapshot_id or "",
             }
         )
+        review = FraudAlertService(db).review_open_alert_selection(
+            auth_provider_uid=customer_id,
+            fraud_alert_id=request.fraud_alert_id,
+            selection_status=request.selection_status,
+            disputed_authorization_ids=request.disputed_authorization_ids,
+            disputed_transaction_ids=request.disputed_transaction_ids,
+            recognized_authorization_ids=request.recognized_authorization_ids,
+            recognized_transaction_ids=request.recognized_transaction_ids,
+        )
+        if review.get("success") is not True or review.get("ready_to_propose") is not True:
+            raise HTTPException(
+                status_code=409,
+                detail=review.get("message")
+                or "Complete the fraud review before proposing an action.",
+            )
         return ActionProposalService(db).propose_fraud_triage_for_identity(
             customer_identity=customer_id,
             fraud_alert_id=request.fraud_alert_id,

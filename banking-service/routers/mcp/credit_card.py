@@ -420,6 +420,49 @@ async def get_open_fraud_alert(
 
 @mcp.tool()
 @requires_user_assertion
+async def review_fraud_selection(
+    fraud_alert_id: str,
+    selection_status: str,
+    disputed_authorization_ids: list[str] = None,
+    disputed_transaction_ids: list[str] = None,
+    recognized_authorization_ids: list[str] = None,
+    recognized_transaction_ids: list[str] = None,
+    ctx: Context = None,
+) -> dict:
+    """Validate the customer's current alert review without taking action.
+
+    Use UNCERTAIN or PARTIAL while the customer is asking questions or has only
+    classified some flagged activity. Use COMPLETE only after every flagged
+    item is explicitly recognized or disputed.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    db = SessionLocal()
+    try:
+        return FraudAlertService(db).review_open_alert_selection(
+            auth_provider_uid=verified_customer_id,
+            fraud_alert_id=fraud_alert_id,
+            selection_status=selection_status,
+            disputed_authorization_ids=disputed_authorization_ids,
+            disputed_transaction_ids=disputed_transaction_ids,
+            recognized_authorization_ids=recognized_authorization_ids,
+            recognized_transaction_ids=recognized_transaction_ids,
+        )
+    except Exception as exc:
+        logger.error(
+            "Error in FastMCP review_fraud_selection error_type=%s",
+            type(exc).__name__,
+        )
+        return {
+            "success": False,
+            "error": "FRAUD_SELECTION_REVIEW_FAILED",
+            "message": "Internal error reviewing the fraud selection.",
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
 async def resolve_fraud_alert(
     resolution: str,
     ctx: Context = None,
@@ -480,8 +523,11 @@ def _proposal_idempotency_key(runtime_context, payload: dict) -> str:
 @requires_user_assertion
 async def propose_fraud_triage(
     fraud_alert_id: str,
+    selection_status: str,
     disputed_authorization_ids: list[str] = None,
     disputed_transaction_ids: list[str] = None,
+    recognized_authorization_ids: list[str] = None,
+    recognized_transaction_ids: list[str] = None,
     issue_replacement: bool = True,
     escalate: bool = False,
     ctx: Context = None,
@@ -504,6 +550,23 @@ async def propose_fraud_triage(
     }
     db = SessionLocal()
     try:
+        review = FraudAlertService(db).review_open_alert_selection(
+            auth_provider_uid=verified_customer_id,
+            fraud_alert_id=fraud_alert_id,
+            selection_status=selection_status,
+            disputed_authorization_ids=disputed_authorization_ids,
+            disputed_transaction_ids=disputed_transaction_ids,
+            recognized_authorization_ids=recognized_authorization_ids,
+            recognized_transaction_ids=recognized_transaction_ids,
+        )
+        if review.get("success") is not True or review.get("ready_to_propose") is not True:
+            return {
+                "success": False,
+                "error": review.get("error") or "FRAUD_SELECTION_INCOMPLETE",
+                "message": review.get("message")
+                or "Complete the fraud review before proposing an action.",
+                "fraud_review": review,
+            }
         return ActionProposalService(db).propose_fraud_triage_for_identity(
             customer_identity=verified_customer_id,
             runtime_context=runtime_context,

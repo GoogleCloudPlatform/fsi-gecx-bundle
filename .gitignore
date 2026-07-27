@@ -3,6 +3,9 @@
 .vscode
 *.zip
 *.db
+# SQLite shared-memory schema attachments become literal files if a test
+# connection is opened without URI handling.
+file:*mode=memory*cache=shared
 
 # Ignore implementation plans and temp folders
 docs/impl-plans/

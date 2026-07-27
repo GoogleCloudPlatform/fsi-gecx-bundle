@@ -23,6 +23,7 @@ toolsets:
 - toolset: banking_service_mcp_toolset
   toolIds:
   - get_open_fraud_alert
+  - review_fraud_selection
   - propose_fraud_triage
   - commit_fraud_triage
   - report_lost_stolen_card

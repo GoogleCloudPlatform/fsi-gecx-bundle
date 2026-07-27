@@ -69,8 +69,11 @@ def before_model_callback(callback_context, llm_request):
                         name="banking_service_mcp_toolset_propose_fraud_triage",
                         args={
                             "fraud_alert_id": alert_id,
+                            "selection_status": "COMPLETE",
                             "disputed_authorization_ids": authorization_ids,
                             "disputed_transaction_ids": transaction_ids,
+                            "recognized_authorization_ids": [],
+                            "recognized_transaction_ids": [],
                             "issue_replacement": True,
                             "escalate": False,
                         },

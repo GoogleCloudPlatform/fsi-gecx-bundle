@@ -183,6 +183,7 @@ def proposal_confirmation_events(classification: str) -> list[dict]:
     return [
         {"type": "TRANSCRIPT", "author": "agent", "text": "Do you recognize these transactions?", "elapsed_ms": 65},
         {"type": "TRANSCRIPT", "author": "customer", "text": "No, I don't recognize any of them.", "elapsed_ms": 70},
+        {"type": "FRAUD_REVIEW", "stage": "READY_TO_PROPOSE", "ready_to_propose": True, "elapsed_ms": 72},
         {"type": "TOOL_CALL", "tool": "propose_fraud_triage", "elapsed_ms": 75},
         {"type": "TOOL_RESULT", "tool": "propose_fraud_triage", "success": True, "elapsed_ms": 78},
         {"type": "ACTION_PROPOSAL", "outcome": "PROPOSED", "proposal_ref": "proposal_1", "elapsed_ms": 80},
@@ -191,6 +192,36 @@ def proposal_confirmation_events(classification: str) -> list[dict]:
         {"type": "TRANSCRIPT", "author": "customer", "text": classification.lower(), "elapsed_ms": 110},
         {"type": "ACTION_PROPOSAL", "outcome": classification, "proposal_ref": "proposal_1", "elapsed_ms": 120},
     ]
+
+
+def test_uncertainty_and_partial_review_cannot_propose_before_ready():
+    events = golden_events()[:4] + [
+        {"type": "FRAUD_REVIEW", "stage": "CLARIFYING_SELECTION", "ready_to_propose": False},
+        {"type": "FRAUD_REVIEW", "stage": "READY_TO_PROPOSE", "ready_to_propose": True},
+        {"type": "ACTION_PROPOSAL", "outcome": "PROPOSED"},
+        {"type": "SESSION_ENDED", "outcome": "NORMAL_DISCONNECT"},
+    ]
+    result = evaluate_trajectory(
+        events,
+        TrajectoryExpectation(
+            required_review_stages=("CLARIFYING_SELECTION", "READY_TO_PROPOSE"),
+            require_ready_review_before_proposal=True,
+        ),
+    )
+    assert result.passed is True
+
+
+def test_proposal_before_complete_review_fails_trajectory():
+    events = golden_events()[:4] + [
+        {"type": "FRAUD_REVIEW", "stage": "CLARIFYING_SELECTION", "ready_to_propose": False},
+        {"type": "ACTION_PROPOSAL", "outcome": "PROPOSED"},
+        {"type": "SESSION_ENDED", "outcome": "NORMAL_DISCONNECT"},
+    ]
+    result = evaluate_trajectory(
+        events,
+        TrajectoryExpectation(require_ready_review_before_proposal=True),
+    )
+    assert any("before a complete validated review" in item for item in result.failures)
 
 
 def proposal_trajectory(

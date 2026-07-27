@@ -479,8 +479,15 @@ def prepare_fraud_triage_confirmation(
 
     payload = {
         "fraud_alert_id": requested_alert_id,
+        "selection_status": "COMPLETE",
         "disputed_authorization_ids": list(requested_authorization_ids),
         "disputed_transaction_ids": list(requested_transaction_ids),
+        "recognized_authorization_ids": sorted(
+            allowed_authorization_ids - requested_authorization_ids
+        ),
+        "recognized_transaction_ids": sorted(
+            allowed_transaction_ids - requested_transaction_ids
+        ),
         "issue_replacement": issue_replacement,
         "escalate": False,
     }
@@ -1194,6 +1201,51 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
                 outcome="PROPOSED",
                 latency_ms=duration_seconds * 1000,
             )
+        if tool_name == "review_fraud_selection" and structured.get("success") is True:
+            playbook = dict(tool_context.state.get("fraud_playbook") or {})
+            previous_review = playbook.get("fraud_review") or {}
+            review = {
+                "stage": structured.get("stage"),
+                "selection_status": structured.get("selection_status"),
+                "selection_fingerprint": structured.get("selection_fingerprint"),
+                "ready_to_propose": bool(structured.get("ready_to_propose")),
+                "remaining_item_count": structured.get("remaining_item_count"),
+                "disputed_authorization_ids": structured.get(
+                    "disputed_authorization_ids", []
+                ),
+                "disputed_transaction_ids": structured.get(
+                    "disputed_transaction_ids", []
+                ),
+                "recognized_authorization_ids": structured.get(
+                    "recognized_authorization_ids", []
+                ),
+                "recognized_transaction_ids": structured.get(
+                    "recognized_transaction_ids", []
+                ),
+            }
+            if (
+                previous_review.get("selection_fingerprint")
+                and previous_review.get("selection_fingerprint")
+                != review.get("selection_fingerprint")
+            ):
+                authorization = playbook.get("workflow_authorization") or {}
+                if authorization:
+                    playbook["last_workflow_authorization"] = (
+                        invalidate_workflow_authorization(
+                            authorization,
+                            reason="FRAUD_SELECTION_CHANGED",
+                        )
+                    )
+                    playbook["workflow_authorization"] = None
+            playbook["fraud_review"] = review
+            tool_context.state["fraud_playbook"] = playbook
+            logger.info(
+                "[FRAUD_REVIEW] stage=%s status=%s ready=%s remaining=%s",
+                review.get("stage"),
+                review.get("selection_status"),
+                review.get("ready_to_propose"),
+                review.get("remaining_item_count"),
+            )
         if tool_name == "get_open_fraud_alert" and structured.get("fraud_alert") is None:
             playbook = dict(tool_context.state.get("fraud_playbook") or {})
             playbook["open_alert_inspected"] = True
@@ -1382,7 +1434,6 @@ def create_voice_agent(*, model=None, instruction: str = INSTRUCTION_TEXT) -> Ag
         instruction=instruction,
         tools=[
             create_mcp_toolset(),
-            prepare_fraud_triage_confirmation,
             prepare_customer_reported_fraud_confirmation,
             end_consultation,
             transfer_to_human,

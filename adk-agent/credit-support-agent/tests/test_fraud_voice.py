@@ -583,7 +583,8 @@ def test_composed_fraud_instruction_prefers_single_triage_workflow() -> None:
 
     assert "canonical active-alert workflow policy" in instruction
     assert "Do not ask which items or separately confirm that selection" in instruction
-    assert "call `prepare_fraud_triage_confirmation`" in instruction
+    assert "call `review_fraud_selection`" in instruction
+    assert "call `propose_fraud_triage` with COMPLETE status" in instruction
     assert "Present the exact returned `customer_safe_summary`" in instruction
     assert "workflow's only confirmation request" in instruction
     assert "call `commit_fraud_triage` exactly once" in instruction

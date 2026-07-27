@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "bundle_version": "2.2",
-  "published_at": "2026-07-22T00:00:00Z",
+  "bundle_version": "2.3",
+  "published_at": "2026-07-26T00:00:00Z",
   "max_age_days": 90,
   "topics": [
     {
@@ -16,6 +16,8 @@
         "Ask whether the customer recognizes the suspicious charges.",
         "Do not label activity as fraud until the customer says they do not recognize one or more charges.",
         "Treat a direct categorical response such as none, all of them, or no I do not recognize them as a complete selection of every flagged charge. Ask a follow-up only when the selection is partial or genuinely ambiguous.",
+        "For uncertainty, questions, or partial classification, preserve the known recognized and disputed items in a read-only fraud review and continue the conversation without creating a proposal.",
+        "Before creating a proposal, classify every flagged item as recognized or disputed. Banking must validate complete, non-overlapping coverage.",
         "Once the disputed selection is clear, create one immutable banking-owned fraud proposal. Do not separately restate or confirm the selection before creating the proposal.",
         "Present the proposal's exact customer-safe summary, including the disputed activity and consequential remediation, and obtain one explicit confirmation in a later customer turn.",
         "After that confirmation, commit the proposal once and describe only the authoritative result. The proposal confirmation is the only confirmation gate for this workflow.",
@@ -24,19 +26,21 @@
       "must_not_do": [
         "Do not block the card or issue a replacement before the customer confirms fraud.",
         "Do not insert a separate disputed-selection confirmation before the protected proposal confirmation.",
+        "Do not turn uncertainty, an informational question, or a partial selection into a proposal.",
         "Do not sequence low-level fraud mitigation tools when the proposal commit handles the workflow.",
         "Do not claim provisional credits are final; state they are pending the full fraud investigation.",
         "Do not treat catalog guidance as live operational state."
       ],
       "tool_dependencies": [
         "get_open_fraud_alert",
+        "review_fraud_selection",
         "propose_fraud_triage",
         "commit_fraud_triage"
       ],
       "customer_safe_summary": "Review the suspicious charges, treat an unambiguous categorical response as the complete selection, then use one banking-authored proposal confirmation before committing fraud remediation.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.2",
-      "last_reviewed": "2026-07-22"
+      "version": "2.3",
+      "last_reviewed": "2026-07-26"
     },
     {
       "topic_id": "customer_reported_fraud",
@@ -73,6 +77,7 @@
       "applies_when": ["customer_recognizes_charges"],
       "must_do": [
         "When the customer recognizes every flagged charge, create one banking-owned fraud proposal with empty disputed authorization and transaction arrays and no replacement.",
+        "Classify every flagged identifier as recognized and submit a COMPLETE selection for banking validation before the proposal is created.",
         "Present the proposal's exact customer-safe summary and obtain one later explicit confirmation before committing the recognized-activity resolution.",
         "After commit succeeds, explain that the alert is resolved and the card remains active because the customer recognized the charges."
       ],
@@ -81,13 +86,14 @@
         "Do not ask the customer to restate transaction IDs that are already present in trusted fraud context."
       ],
       "tool_dependencies": [
+        "review_fraud_selection",
         "propose_fraud_triage",
         "commit_fraud_triage"
       ],
       "customer_safe_summary": "If the charges are legitimate, close the alert through the fraud triage workflow and reassure the customer that no card action is required.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.2",
-      "last_reviewed": "2026-07-22"
+      "version": "2.3",
+      "last_reviewed": "2026-07-26"
     },
     {
       "topic_id": "replacement_card",

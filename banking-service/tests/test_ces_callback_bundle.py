@@ -299,8 +299,11 @@ def test_categorical_all_disputed_answer_forces_proposal_tool_call():
     assert function_call.name == "banking_service_mcp_toolset_propose_fraud_triage"
     assert function_call.args == {
         "fraud_alert_id": "alert-1",
+        "selection_status": "COMPLETE",
         "disputed_authorization_ids": ["auth-1"],
         "disputed_transaction_ids": ["txn-1"],
+        "recognized_authorization_ids": [],
+        "recognized_transaction_ids": [],
         "issue_replacement": True,
         "escalate": False,
     }
@@ -350,6 +353,7 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     assert "user_token" not in declared_variables
     assert "active_fraud_alert_id" in declared_variables
     assert "fraud_selection_pending" in declared_variables
+    assert "fraud_review_stage" in declared_variables
     custom_headers = toolset["mcpToolset"]["customHeaders"]
     assert custom_headers["x-banking-session-capability"] == (
         "$context.variables.session_capability"
@@ -366,6 +370,7 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     assert "{fraud_support_guidance_summary}" in instruction
     for tool_name in (
         "get_open_fraud_alert",
+        "review_fraud_selection",
         "propose_fraud_triage",
         "commit_fraud_triage",
         "report_lost_stolen_card",

@@ -1,5 +1,6 @@
 import hashlib
 import datetime
+import json
 import uuid
 from typing import Iterable
 
@@ -286,6 +287,116 @@ class FraudAlertService:
             "message": "Open fraud alert retrieved successfully.",
             "fraud_alert": context["fraud_alert"],
             "support_guidance": context.get("support_guidance"),
+        }
+
+    def review_open_alert_selection(
+        self,
+        *,
+        auth_provider_uid: str,
+        fraud_alert_id: str,
+        selection_status: str,
+        disputed_authorization_ids: list[str] | None = None,
+        disputed_transaction_ids: list[str] | None = None,
+        recognized_authorization_ids: list[str] | None = None,
+        recognized_transaction_ids: list[str] | None = None,
+    ) -> dict:
+        """Validate a non-consequential customer review of one open alert."""
+        alert = self.repo.get_latest_open_alert_for_customer(
+            auth_provider_uid=auth_provider_uid
+        )
+        if not alert or str(alert.id) != str(fraud_alert_id or "").strip():
+            return {
+                "success": False,
+                "error": "ACTIVE_FRAUD_ALERT_REQUIRED",
+                "message": "The selected fraud alert is not open for this customer.",
+            }
+
+        status = str(selection_status or "").strip().upper()
+        if status not in {"UNCERTAIN", "PARTIAL", "COMPLETE"}:
+            return {
+                "success": False,
+                "error": "INVALID_SELECTION_STATUS",
+                "message": "Selection status must be UNCERTAIN, PARTIAL, or COMPLETE.",
+            }
+
+        def normalized(values):
+            return sorted(
+                {str(value).strip() for value in (values or []) if str(value).strip()}
+            )
+
+        disputed_authorizations = normalized(disputed_authorization_ids)
+        disputed_transactions = normalized(disputed_transaction_ids)
+        recognized_authorizations = normalized(recognized_authorization_ids)
+        recognized_transactions = normalized(recognized_transaction_ids)
+        allowed_authorizations = {
+            str(value) for value in (alert.suspicious_authorization_ids or [])
+        }
+        allowed_transactions = {
+            str(item.get("transaction_id"))
+            for item in (alert.suspicious_transactions or [])
+            if isinstance(item, dict) and item.get("transaction_id")
+        }
+
+        selected_authorizations = set(disputed_authorizations) | set(
+            recognized_authorizations
+        )
+        selected_transactions = set(disputed_transactions) | set(
+            recognized_transactions
+        )
+        if set(disputed_authorizations) & set(recognized_authorizations) or set(
+            disputed_transactions
+        ) & set(recognized_transactions):
+            return {
+                "success": False,
+                "error": "CONFLICTING_FRAUD_SELECTION",
+                "message": "The same activity cannot be both recognized and disputed.",
+            }
+        if (
+            selected_authorizations - allowed_authorizations
+            or selected_transactions - allowed_transactions
+        ):
+            return {
+                "success": False,
+                "error": "FRAUD_SELECTION_OUT_OF_SCOPE",
+                "message": "The selection contains activity outside the open fraud alert.",
+            }
+
+        coverage_complete = (
+            selected_authorizations == allowed_authorizations
+            and selected_transactions == allowed_transactions
+        )
+        if status == "COMPLETE" and not coverage_complete:
+            return {
+                "success": False,
+                "error": "FRAUD_SELECTION_INCOMPLETE",
+                "message": "Every flagged item must be recognized or disputed before proposing an action.",
+            }
+        if status != "COMPLETE" and coverage_complete:
+            status = "COMPLETE"
+
+        canonical = {
+            "fraud_alert_id": str(alert.id),
+            "selection_status": status,
+            "disputed_authorization_ids": disputed_authorizations,
+            "disputed_transaction_ids": disputed_transactions,
+            "recognized_authorization_ids": recognized_authorizations,
+            "recognized_transaction_ids": recognized_transactions,
+        }
+        encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+        return {
+            "success": True,
+            **canonical,
+            "selection_fingerprint": hashlib.sha256(encoded.encode()).hexdigest(),
+            "stage": (
+                "READY_TO_PROPOSE"
+                if status == "COMPLETE"
+                else "CLARIFYING_SELECTION"
+            ),
+            "ready_to_propose": status == "COMPLETE",
+            "remaining_item_count": (
+                len(allowed_authorizations - selected_authorizations)
+                + len(allowed_transactions - selected_transactions)
+            ),
         }
 
     def triage_customer_reported_fraud(

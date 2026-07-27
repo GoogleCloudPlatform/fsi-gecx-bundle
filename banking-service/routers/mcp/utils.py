@@ -118,7 +118,9 @@ assertion_token_var: ContextVar[str] = ContextVar("assertion_token", default=Non
 proposal_runtime_context_var: ContextVar[ProposalRuntimeContext | None] = ContextVar(
     "proposal_runtime_context", default=None
 )
-PROPOSAL_CONTEXT_TOOL_NAMES = frozenset({"propose_fraud_triage", "commit_fraud_triage"})
+PROPOSAL_CONTEXT_TOOL_NAMES = frozenset(
+    {"review_fraud_selection", "propose_fraud_triage", "commit_fraud_triage"}
+)
 
 
 def _proposal_context_for_tool(

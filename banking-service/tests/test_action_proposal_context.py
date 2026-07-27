@@ -4,7 +4,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from models.authentication import ValidatedToken
-from routers.mcp.credit_card import commit_fraud_triage, propose_fraud_triage
+from routers.mcp.credit_card import (
+    commit_fraud_triage,
+    propose_fraud_triage,
+    review_fraud_selection,
+)
 from routers.mcp import utils as mcp_utils
 from services.action_proposal_context import (
     ProposalRuntimeContext,
@@ -28,6 +32,7 @@ def _headers(**overrides) -> dict[str, str]:
 def test_model_visible_commit_has_only_opaque_proposal_input() -> None:
     commit_parameters = set(inspect.signature(commit_fraud_triage).parameters)
     propose_parameters = set(inspect.signature(propose_fraud_triage).parameters)
+    review_parameters = set(inspect.signature(review_fraud_selection).parameters)
 
     assert commit_parameters == {"proposal_id", "ctx"}
     forbidden_scope = {
@@ -39,6 +44,7 @@ def test_model_visible_commit_has_only_opaque_proposal_input() -> None:
         "customer_turn_id",
     }
     assert propose_parameters.isdisjoint(forbidden_scope)
+    assert review_parameters.isdisjoint(forbidden_scope)
     assert commit_parameters.isdisjoint(forbidden_scope)
 
 
@@ -222,13 +228,24 @@ async def test_typed_mcp_projection_injects_identity_and_runtime_context(
     monkeypatch.setattr(
         "routers.mcp.credit_card.ActionProposalService", lambda _: service
     )
+    review_service = MagicMock()
+    review_service.review_open_alert_selection.return_value = {
+        "success": True,
+        "ready_to_propose": True,
+    }
+    monkeypatch.setattr(
+        "routers.mcp.credit_card.FraudAlertService", lambda _: review_service
+    )
     customer_token = mcp_utils.verified_customer_id_var.set("customer-auth-1")
     runtime_token = mcp_utils.proposal_runtime_context_var.set(runtime_context)
     try:
         result = await propose_fraud_triage.__wrapped__(
             fraud_alert_id="22222222-2222-4222-8222-222222222222",
+            selection_status="COMPLETE",
             disputed_authorization_ids=["auth-1"],
             disputed_transaction_ids=[],
+            recognized_authorization_ids=[],
+            recognized_transaction_ids=[],
             issue_replacement=True,
             escalate=False,
         )

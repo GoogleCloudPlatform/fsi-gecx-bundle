@@ -29,6 +29,8 @@ class TrajectoryExpectation:
     forbidden_proposal_outcomes: tuple[str, ...] = ()
     expected_banking_outcome: str | None = None
     require_direct_selection_to_proposal: bool = False
+    required_review_stages: tuple[str, ...] = ()
+    require_ready_review_before_proposal: bool = False
 
 
 @dataclass(frozen=True)
@@ -74,6 +76,7 @@ def evaluate_trajectory(
         if event.get("success") is not True
     )
     proposal_events = _events_of_type(events, "ACTION_PROPOSAL")
+    review_events = _events_of_type(events, "FRAUD_REVIEW")
     proposal_outcomes = [str(event.get("outcome") or "UNKNOWN") for event in proposal_events]
     redundant_preproposal_turns = 0
 
@@ -126,6 +129,29 @@ def evaluate_trajectory(
                     "Expected an unambiguous customer selection to create the "
                     "proposal directly, but observed "
                     f"{redundant_preproposal_turns} intervening conversational turn(s)."
+                )
+
+    review_stages = [str(event.get("stage") or "") for event in review_events]
+    for required_stage in expectation.required_review_stages:
+        if required_stage not in review_stages:
+            failures.append(
+                f"Required fraud review stage {required_stage} was not observed."
+            )
+    if expectation.require_ready_review_before_proposal:
+        ready_positions = [
+            index
+            for index, event in enumerate(events)
+            if event.get("type") == "FRAUD_REVIEW"
+            and event.get("ready_to_propose") is True
+        ]
+        for index, event in enumerate(events):
+            if (
+                event.get("type") == "ACTION_PROPOSAL"
+                and event.get("outcome") == "PROPOSED"
+                and not any(position < index for position in ready_positions)
+            ):
+                failures.append(
+                    "Fraud proposal was created before a complete validated review."
                 )
 
     for tool_name, expected_count in expectation.required_tools.items():
@@ -271,6 +297,7 @@ def evaluate_trajectory(
             "proposal_outcomes": proposal_outcomes,
             "banking_outcome": banking_outcomes[-1] if banking_outcomes else None,
             "redundant_preproposal_turns": redundant_preproposal_turns,
+            "fraud_review_stages": review_stages,
         },
     )
 
