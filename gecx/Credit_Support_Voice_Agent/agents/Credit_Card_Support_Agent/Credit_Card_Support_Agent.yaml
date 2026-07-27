@@ -1,5 +1,7 @@
 name: 80f02b21-5b77-4907-94a3-bd67534bff66
 displayName: Credit Card Support Agent
+modelSettings:
+  model: gemini-3.1-flash-live
 instruction: agents/Credit_Card_Support_Agent/instruction.txt
 tools:
 - end_session

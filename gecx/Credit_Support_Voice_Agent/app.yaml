@@ -1,6 +1,8 @@
 name: de51bcc7-fb3b-4a40-9b97-f52bcb0a0622
 displayName: Credit_Support_Voice_Agent
 rootAgent: Credit Card Support Agent
+modelSettings:
+  model: gemini-3.1-flash-live
 loggingSettings:
   conversationLoggingSettings:
     retentionWindow: 31536000s

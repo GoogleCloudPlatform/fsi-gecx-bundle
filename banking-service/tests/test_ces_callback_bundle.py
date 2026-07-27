@@ -473,6 +473,7 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
         ).read_text()
     )
 
+    assert app["modelSettings"]["model"] == "gemini-3.1-flash-live"
     assert app["audioProcessingConfig"]["inactivityTimeout"] == "300s"
     assert app["loggingSettings"]["redactionConfig"]["enableRedaction"] is True
     declared_variables = {
@@ -509,6 +510,7 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
         assert f"{{@TOOL: {tool_name}}}" not in instruction
 
     agent = yaml.safe_load((AGENT_DIR / "Credit_Card_Support_Agent.yaml").read_text())
+    assert agent["modelSettings"]["model"] == "gemini-3.1-flash-live"
     assert agent["beforeModelCallbacks"][0]["pythonCode"].endswith(
         "start_fraud_review.py"
     )
