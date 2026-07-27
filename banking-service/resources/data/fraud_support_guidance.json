@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "bundle_version": "2.4",
+  "bundle_version": "2.5",
   "published_at": "2026-07-26T00:00:00Z",
   "max_age_days": 90,
   "topics": [
@@ -13,20 +13,22 @@
       "must_do": [
         "Acknowledge suspicious activity on the first turn when fraud context exists.",
         "Inspect the open fraud alert before recommending any mitigation.",
-        "Ask whether the customer recognizes the suspicious charges.",
+        "Enumerate every flagged transaction by merchant and exact amount, then ask whether the customer recognizes the suspicious charges.",
+        "Preserve each canonical currency value from banking in text, such as $1,499.00, and pronounce it in standard full form, such as one thousand four hundred ninety-nine dollars, rather than grouped shorthand such as fourteen hundred ninety-nine dollars.",
         "Do not label activity as fraud until the customer says they do not recognize one or more charges.",
         "Treat a direct categorical response such as none, all of them, or no I do not recognize them as a complete selection of every flagged charge. Ask a follow-up only when the selection is partial or genuinely ambiguous.",
         "For uncertainty, questions, or partial classification, preserve the known recognized and disputed items in a read-only fraud review and continue the conversation without creating a proposal.",
         "After answering an informational question, clearly ask the customer to classify all, some, or none of the flagged activity, then stop and wait for their answer.",
         "Before creating a proposal, classify every flagged item as recognized or disputed. Banking must validate complete, non-overlapping coverage.",
         "Once the disputed selection is clear, create one immutable banking-owned fraud proposal. Do not separately restate or confirm the selection before creating the proposal.",
-        "Present the proposal's exact customer-safe summary, including the disputed activity and consequential remediation, and obtain one explicit confirmation in a later customer turn.",
+        "Present the proposal naturally while preserving every listed disputed merchant and exact amount and every consequential remediation action, then obtain one explicit confirmation in a later customer turn.",
         "After that confirmation, commit the proposal once and describe only the authoritative result. The proposal confirmation is the only confirmation gate for this workflow.",
-        "Keep spoken responses brief and specific."
+        "Keep non-transaction narration brief and specific; never shorten the transaction inventory."
       ],
       "must_not_do": [
         "Do not block the card or issue a replacement before the customer confirms fraud.",
         "Do not insert a separate disputed-selection confirmation before the protected proposal confirmation.",
+        "Do not collapse flagged or disputed transactions into phrases such as other charges, the remaining charges, or a count.",
         "Do not turn uncertainty, an informational question, or a partial selection into a proposal.",
         "Do not sequence low-level fraud mitigation tools when the proposal commit handles the workflow.",
         "Do not claim provisional credits are final; state they are pending the full fraud investigation.",
@@ -40,7 +42,7 @@
       ],
       "customer_safe_summary": "Review the suspicious charges, treat an unambiguous categorical response as the complete selection, then use one banking-authored proposal confirmation before committing fraud remediation.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.4",
+      "version": "2.5",
       "last_reviewed": "2026-07-26"
     },
     {

@@ -1418,10 +1418,14 @@ class FraudAlertService:
     ) -> str:
         if not suspicious_transactions:
             return f"Customer has an active fraud alert on card ending in {card_last_four}."
-        top_merchants = ", ".join(
-            txn["merchant_name"] for txn in suspicious_transactions[:3]
+        transaction_descriptions = ", ".join(
+            (
+                f"{FraudAlertService._format_cents(int(txn.get('amount_cents') or 0))} "
+                f"at {txn.get('merchant_name') or 'Unknown merchant'}"
+            )
+            for txn in suspicious_transactions
         )
         return (
             f"Customer has an active fraud alert on card ending in {card_last_four}. "
-            f"Recent suspicious transactions include {top_merchants}."
+            f"Flagged transactions are {transaction_descriptions}."
         )
