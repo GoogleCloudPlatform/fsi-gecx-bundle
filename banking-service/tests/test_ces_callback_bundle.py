@@ -44,55 +44,6 @@ class Context:
         return self._user_parts
 
 
-def test_fraud_welcome_routes_to_alert_read_before_speech():
-    callback = _load("before_model_callbacks/start_fraud_review.py")
-
-    class FunctionCall:
-        def __init__(self, *, name, args):
-            self.name = name
-            self.args = args
-
-    class FunctionPart:
-        def __init__(self, *, function_call):
-            self.function_call = function_call
-
-    class Content:
-        def __init__(self, *, parts, role):
-            self.parts = parts
-            self.role = role
-
-    class LlmResponse:
-        def __init__(self, *, content):
-            self.content = content
-
-    callback.FunctionCall = FunctionCall
-    callback.Part = FunctionPart
-    callback.Content = Content
-    callback.LlmResponse = LlmResponse
-    variables = {"has_active_fraud_alert": True}
-
-    response = callback.before_model_callback(
-        Context(
-            invocation_id="welcome-1",
-            variables=variables,
-            user_text="<event>sys.welcome</event>",
-        ),
-        object(),
-    )
-
-    function_call = response.content.parts[0].function_call
-    assert function_call.name == "banking_service_mcp_toolset_get_open_fraud_alert"
-    assert function_call.args == {}
-    assert variables["fraud_welcome_routed"] is True
-    assert (
-        callback.before_model_callback(
-            Context(variables=variables, user_text="<event>sys.welcome</event>"),
-            object(),
-        )
-        is None
-    )
-
-
 def test_confirmation_classifier_accepts_only_bounded_explicit_phrase():
     callback = _load("before_model_callbacks/classify_confirmation.py")
     variables = {
@@ -196,7 +147,7 @@ def test_before_tool_blocks_missing_or_mismatched_confirmation():
     assert variables["customer_turn_id"] == "turn-2"
 
 
-def test_proposal_capture_and_exact_presentation_recording():
+def test_proposal_capture_and_non_generative_presentation_recording():
     capture = _load("after_tool_callbacks/capture_proposal.py")
     presentation = _load("after_model_callbacks/record_presentation.py")
     variables = {}
@@ -222,28 +173,13 @@ def test_proposal_capture_and_exact_presentation_recording():
             parts=[Part("Confirm the selected charge. Please answer yes or no.")]
         ),
     )
-    presentation.after_model_callback(context, response)
+    replacement = presentation.after_model_callback(context, response)
+    assert replacement is None
     assert variables["proposal_presentation_turn_id"] == "turn-1"
 
 
-def test_proposal_presentation_replaces_model_paraphrase_deterministically():
+def test_proposal_presentation_never_replaces_native_audio():
     presentation = _load("after_model_callbacks/record_presentation.py")
-
-    class ReplacementPart:
-        @classmethod
-        def from_text(cls, *, text):
-            return Part(text)
-
-    class ReplacementResponse:
-        @classmethod
-        def from_parts(cls, *, parts):
-            return SimpleNamespace(
-                partial=False,
-                content=SimpleNamespace(parts=parts),
-            )
-
-    presentation.Part = ReplacementPart
-    presentation.LlmResponse = ReplacementResponse
     variables = {
         "proposal_id": "proposal-1",
         "proposal_customer_safe_summary": "Confirm the exact protected action.",
@@ -256,7 +192,7 @@ def test_proposal_presentation_replaces_model_paraphrase_deterministically():
 
     replacement = presentation.after_model_callback(context, response)
 
-    assert replacement.content.parts[0].text == "Confirm the exact protected action."
+    assert replacement is None
     assert variables["proposal_presentation_turn_id"] == "turn-1"
 
 
@@ -283,182 +219,6 @@ def test_proposal_capture_supports_ces_mcp_text_output_shape():
     assert variables["proposal_customer_safe_summary"] == (
         "Confirm the selected charges."
     )
-
-
-def test_commit_result_is_presented_without_model_added_fulfillment_claims():
-    capture = _load("after_tool_callbacks/capture_proposal.py")
-    presentation = _load("after_model_callbacks/present_commit_result.py")
-
-    class ReplacementPart:
-        @classmethod
-        def from_text(cls, *, text):
-            return Part(text)
-
-    class ReplacementResponse:
-        @classmethod
-        def from_parts(cls, *, parts):
-            return SimpleNamespace(partial=False, content=SimpleNamespace(parts=parts))
-
-    presentation.Part = ReplacementPart
-    presentation.LlmResponse = ReplacementResponse
-    variables = {}
-    context = Context(invocation_id="turn-3", variables=variables, user_text=None)
-    safe_summary = (
-        "Your fraud report was submitted for specialist review. "
-        "A replacement virtual card ending in 1900 is active."
-    )
-    capture.after_tool_callback(
-        SimpleNamespace(name="banking_service_mcp_toolset.commit_fraud_triage"),
-        {},
-        context,
-        {
-            "text_output": [
-                {
-                    "success": True,
-                    "customer_safe_result_summary": safe_summary,
-                }
-            ]
-        },
-    )
-    response = SimpleNamespace(
-        partial=False,
-        content=SimpleNamespace(
-            parts=[Part("Your physical card will arrive in 7-10 business days.")]
-        ),
-    )
-
-    replacement = presentation.after_model_callback(context, response)
-
-    output = replacement.content.parts[0].text
-    assert output.startswith(safe_summary)
-    assert output.endswith("Is there anything else I can help you with today?")
-    assert "business days" not in output
-    assert variables["fraud_result_pending"] is False
-
-
-def test_voice_output_sanitizer_removes_standalone_spoken_punctuation():
-    sanitizer = _load("after_model_callbacks/sanitize_voice_output.py")
-
-    class ReplacementPart:
-        @classmethod
-        def from_text(cls, *, text):
-            return Part(text)
-
-    class ReplacementResponse:
-        @classmethod
-        def from_parts(cls, *, parts):
-            return SimpleNamespace(partial=False, content=SimpleNamespace(parts=parts))
-
-    sanitizer.Part = ReplacementPart
-    sanitizer.LlmResponse = ReplacementResponse
-    response = SimpleNamespace(
-        partial=False,
-        content=SimpleNamespace(
-            parts=[Part("Let's review it together.\n.")]
-        ),
-    )
-
-    replacement = sanitizer.after_model_callback(
-        Context(variables={}, user_text=None), response
-    )
-
-    assert replacement.content.parts[0].text == "Let's review it together."
-
-
-def test_categorical_all_disputed_answer_forces_proposal_tool_call():
-    capture = _load("after_tool_callbacks/capture_proposal.py")
-    track_prompt = _load("after_model_callbacks/track_fraud_selection_prompt.py")
-    route = _load("before_model_callbacks/route_fraud_selection.py")
-    variables = {}
-
-    capture.after_tool_callback(
-        SimpleNamespace(name="banking_service_mcp_toolset.get_open_fraud_alert"),
-        {},
-        Context(invocation_id="turn-1", variables=variables, user_text=None),
-        {
-            "output": {
-                "success": True,
-                "fraud_alert": {
-                    "fraud_alert_id": "alert-1",
-                    "suspicious_transactions": [
-                        {"authorization_id": "auth-1"},
-                        {"transaction_id": "txn-1"},
-                    ],
-                },
-            }
-        },
-    )
-    track_prompt.after_model_callback(
-        Context(invocation_id="turn-1", variables=variables, user_text=None),
-        SimpleNamespace(
-            partial=False,
-            content=SimpleNamespace(parts=[Part("Do you recognize these transactions?")]),
-        ),
-    )
-
-    class FunctionCall:
-        def __init__(self, *, name, args):
-            self.name = name
-            self.args = args
-
-    class FunctionPart:
-        def __init__(self, *, function_call):
-            self.function_call = function_call
-
-    class Content:
-        def __init__(self, *, parts, role):
-            self.parts = parts
-            self.role = role
-
-    class LlmResponse:
-        def __init__(self, *, content):
-            self.content = content
-
-    route.FunctionCall = FunctionCall
-    route.Part = FunctionPart
-    route.Content = Content
-    route.LlmResponse = LlmResponse
-
-    response = route.before_model_callback(
-        Context(invocation_id="turn-2", variables=variables, user_text="No, I don't."),
-        object(),
-    )
-
-    function_call = response.content.parts[0].function_call
-    assert function_call.name == "banking_service_mcp_toolset_propose_fraud_triage"
-    assert function_call.args == {
-        "fraud_alert_id": "alert-1",
-        "selection_status": "COMPLETE",
-        "disputed_authorization_ids": ["auth-1"],
-        "disputed_transaction_ids": ["txn-1"],
-        "recognized_authorization_ids": [],
-        "recognized_transaction_ids": [],
-        "issue_replacement": True,
-        "escalate": False,
-    }
-    assert variables["fraud_selection_pending"] is False
-
-
-def test_fraud_selection_router_leaves_partial_answer_to_model():
-    route = _load("before_model_callbacks/route_fraud_selection.py")
-    variables = {
-        "active_fraud_alert_id": "alert-1",
-        "active_fraud_authorization_ids": "auth-1,auth-2",
-        "fraud_selection_prompt_turn_id": "turn-1",
-        "fraud_selection_pending": True,
-    }
-
-    response = route.before_model_callback(
-        Context(
-            invocation_id="turn-2",
-            variables=variables,
-            user_text="I don't recognize the Apple transaction.",
-        ),
-        object(),
-    )
-
-    assert response is None
-    assert variables["fraud_selection_pending"] is True
 
 
 def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
@@ -490,13 +250,10 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     )
     assert "x-forwarded-user-context" not in custom_headers
     assert "user_token" not in instruction
-    assert "Hi, I'm Nova with Nova Horizon Bank." in instruction
-    assert "Do not restate or separately confirm a clear selection" in instruction
-    assert (
-        "This is the only confirmation request"
-        in instruction
-    )
-    assert "Completing or confirming a banking action never means the consultation is finished" in instruction
+    assert "You own the natural spoken wording" in instruction
+    assert "Do not add a preliminary selection confirmation" in instruction
+    assert "ask once for confirmation" in instruction
+    assert "Completing a banking action never means the consultation is finished" in instruction
     assert "{fraud_support_guidance_summary}" in instruction
     for tool_name in (
         "get_open_fraud_alert",
@@ -511,9 +268,21 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
 
     agent = yaml.safe_load((AGENT_DIR / "Credit_Card_Support_Agent.yaml").read_text())
     assert agent["modelSettings"]["model"] == "gemini-3.1-flash-live"
+    assert len(agent["beforeModelCallbacks"]) == 1
     assert agent["beforeModelCallbacks"][0]["pythonCode"].endswith(
-        "start_fraud_review.py"
+        "classify_confirmation.py"
     )
-    assert agent["beforeModelCallbacks"][1]["pythonCode"].endswith(
-        "route_fraud_selection.py"
-    )
+    callback_paths = {
+        callback["pythonCode"]
+        for callback_group in (
+            agent["beforeModelCallbacks"],
+            agent["beforeToolCallbacks"],
+            agent["afterToolCallbacks"],
+            agent["afterModelCallbacks"],
+        )
+        for callback in callback_group
+    }
+    assert not any("sanitize_voice_output.py" in path for path in callback_paths)
+    assert not any("present_commit_result.py" in path for path in callback_paths)
+    assert not any("start_fraud_review.py" in path for path in callback_paths)
+    assert not any("route_fraud_selection.py" in path for path in callback_paths)

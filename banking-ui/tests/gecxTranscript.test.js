@@ -27,6 +27,60 @@ test('CES cumulative recognition hypotheses replace the active user turn', () =>
   ]);
 });
 
+test('Gemini Live agent deltas update one transcript entry per provider turn', () => {
+  let transcripts = [];
+  for (const text of [
+    "Hi, I'm Nova",
+    "Hi, I'm Nova with Nova Horizon Bank.",
+    "Hi, I'm Nova with Nova Horizon Bank. How can I help?",
+  ]) {
+    transcripts = mergeGecxTranscript(transcripts, {
+      type: 'TRANSCRIPT',
+      author: 'agent',
+      text,
+      transcript_id: 'ces-1:agent:1',
+      replace_previous: true,
+    });
+  }
+
+  assert.deepEqual(transcripts, [
+    {
+      author: 'agent',
+      text: "Hi, I'm Nova with Nova Horizon Bank. How can I help?",
+      transcript_id: 'ces-1:agent:1',
+    },
+  ]);
+});
+
+
+test('agent transcript identity survives interleaved operational events', () => {
+  const transcripts = [
+    {
+      author: 'agent',
+      text: 'Your fraud report was submitted',
+      transcript_id: 'ces-1:agent:2',
+    },
+    { author: 'system', text: 'CASE UPDATE: Fraud case triaged.' },
+  ];
+
+  const merged = mergeGecxTranscript(transcripts, {
+    type: 'TRANSCRIPT',
+    author: 'agent',
+    text: 'Your fraud report was submitted for specialist review.',
+    transcript_id: 'ces-1:agent:2',
+    replace_previous: true,
+  });
+
+  assert.deepEqual(merged, [
+    {
+      author: 'agent',
+      text: 'Your fraud report was submitted for specialist review.',
+      transcript_id: 'ces-1:agent:2',
+    },
+    { author: 'system', text: 'CASE UPDATE: Fraud case triaged.' },
+  ]);
+});
+
 
 test('CES agent and completed customer turns remain separate transcript entries', () => {
   const transcripts = [

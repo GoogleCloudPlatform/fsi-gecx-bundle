@@ -68,10 +68,7 @@ def after_tool_callback(tool, input, callback_context, tool_response):
         return None
 
     if tool_name.endswith("commit_fraud_triage"):
-        summary = str(payload.get("customer_safe_result_summary") or "").strip()
-        if payload.get("success") is True and summary:
-            callback_context.variables["fraud_customer_safe_result_summary"] = summary
-            callback_context.variables["fraud_result_pending"] = True
+        if payload.get("success") is True:
             callback_context.variables["fraud_review_stage"] = "COMMITTED"
         return None
 

@@ -154,17 +154,5 @@ variableDeclarations:
   description: Whether banking validated every flagged item as recognized or disputed.
   schema:
     type: BOOLEAN
-- name: fraud_welcome_routed
-  description: Whether the fraud-led welcome event has been routed to the alert read.
-  schema:
-    type: BOOLEAN
-- name: fraud_customer_safe_result_summary
-  description: Banking-authored fraud commit result that must be presented exactly.
-  schema:
-    type: STRING
-- name: fraud_result_pending
-  description: Whether the next agent response must present the banking-authored result.
-  schema:
-    type: BOOLEAN
 timeZoneSettings:
   timeZone: America/Los_Angeles

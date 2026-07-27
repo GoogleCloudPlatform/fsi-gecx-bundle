@@ -368,6 +368,9 @@ class VoiceBidiSession:
 
             # Task C: Read text and audio frames from Google GECX API
             async def read_from_gecx():
+                agent_transcript = ""
+                agent_transcript_id = None
+                agent_transcript_sequence = 0
                 try:
                     async for message in gecx_ws:
                         response = json.loads(message)
@@ -397,17 +400,32 @@ class VoiceBidiSession:
 
                             text = session_output.get("text", "")
                             if text:
+                                if agent_transcript_id is None:
+                                    agent_transcript_sequence += 1
+                                    agent_transcript_id = (
+                                        f"{self.session_id}:agent:"
+                                        f"{agent_transcript_sequence}"
+                                    )
+                                # Gemini Live emits text deltas aligned to its
+                                # native audio stream. Preserve the provider's
+                                # exact boundary whitespace while publishing a
+                                # cumulative value for one evolving UI entry.
+                                agent_transcript += text
                                 await self.gecx_to_client_queue.put(
                                     {
                                         "type": "TRANSCRIPT",
-                                        "text": text,
+                                        "text": agent_transcript,
                                         "author": "agent",
+                                        "transcript_id": agent_transcript_id,
+                                        "replace_previous": True,
                                     }
                                 )
                             if session_output.get(
                                 "turnCompleted"
                             ) or session_output.get("turn_completed"):
                                 transport_stats["completed_turns"] += 1
+                                agent_transcript = ""
+                                agent_transcript_id = None
 
                         recognition_result = response.get("recognitionResult", {})
                         if recognition_result:
@@ -430,6 +448,8 @@ class VoiceBidiSession:
                         ) or response.get("interruption_signal")
                         if interruption_signal:
                             transport_stats["interruption_signals"] += 1
+                            agent_transcript = ""
+                            agent_transcript_id = None
                             logger.info(
                                 f"Barge-in interruption signal received from GECX: {interruption_signal}"
                             )

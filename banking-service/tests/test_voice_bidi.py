@@ -94,7 +94,15 @@ def test_gecx_voice_stream_success(
     # Mock the GECX response: Yield a single transcript json frame, then exit loop
     mock_gecx_ws.__aiter__.return_value = [
         json.dumps(
-            {"sessionOutput": {"text": "Welcome to Horizon Financial support."}}
+            {"sessionOutput": {"text": "Welcome to Horizon"}}
+        ),
+        json.dumps(
+            {
+                "sessionOutput": {
+                    "text": " Financial support.",
+                    "turnCompleted": True,
+                }
+            }
         ),
         json.dumps({"recognitionResult": {"transcript": "Hello are you there?"}}),
         json.dumps({"interruptionSignal": {"bargeIn": True}}),
@@ -123,8 +131,19 @@ def test_gecx_voice_stream_success(
 
         # D. Verify forwarded transcript properties
         assert response["type"] == "TRANSCRIPT"
-        assert response["text"] == "Welcome to Horizon Financial support."
+        assert response["text"] == "Welcome to Horizon"
         assert response["author"] == "agent"
+        assert response["replace_previous"] is True
+        assert response["transcript_id"].endswith(":agent:1")
+
+        cumulative_response = websocket.receive_json()
+        assert cumulative_response == {
+            "type": "TRANSCRIPT",
+            "text": "Welcome to Horizon Financial support.",
+            "author": "agent",
+            "transcript_id": response["transcript_id"],
+            "replace_previous": True,
+        }
 
         recognition_response = websocket.receive_json()
         assert recognition_response == {
