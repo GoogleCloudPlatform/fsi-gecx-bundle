@@ -296,7 +296,7 @@ def test_categorical_all_disputed_answer_forces_proposal_tool_call():
     )
 
     function_call = response.content.parts[0].function_call
-    assert function_call.name == "propose_fraud_triage"
+    assert function_call.name == "banking_service_mcp_toolset_propose_fraud_triage"
     assert function_call.args == {
         "fraud_alert_id": "alert-1",
         "disputed_authorization_ids": ["auth-1"],

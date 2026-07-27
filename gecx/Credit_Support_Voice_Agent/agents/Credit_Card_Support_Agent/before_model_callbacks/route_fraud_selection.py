@@ -66,7 +66,7 @@ def before_model_callback(callback_context, llm_request):
             parts=[
                 Part(
                     function_call=FunctionCall(
-                        name="propose_fraud_triage",
+                        name="banking_service_mcp_toolset_propose_fraud_triage",
                         args={
                             "fraud_alert_id": alert_id,
                             "disputed_authorization_ids": authorization_ids,
