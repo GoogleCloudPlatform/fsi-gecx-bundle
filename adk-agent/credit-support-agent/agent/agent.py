@@ -881,8 +881,12 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
                     tool_name=tool_name,
                 ),
             )
-        authorization = fraud_playbook.get("workflow_authorization")
-        validation_payload = authorization.get("payload") if tool_name == "commit_fraud_triage" else args
+        authorization = fraud_playbook.get("workflow_authorization") or {}
+        validation_payload = (
+            authorization.get("payload")
+            if tool_name == "commit_fraud_triage"
+            else args
+        )
         authorization_error = validate_workflow_authorization(
             authorization,
             action=authorization_action,
@@ -1144,6 +1148,51 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
                     "type": DataChannelEvent.GUIDANCE_SNAPSHOT.value,
                     **guidance_observability_payload(guidance),
                 }
+            )
+        if tool_name == "propose_fraud_triage" and structured.get("success") is True:
+            playbook = dict(tool_context.state.get("fraud_playbook") or {})
+            existing = playbook.get("workflow_authorization") or {}
+            if existing:
+                playbook["last_workflow_authorization"] = (
+                    invalidate_workflow_authorization(
+                        existing,
+                        reason="REPLACED_BY_NEW_TRIAGE_SELECTION",
+                    )
+                )
+            authorization = create_workflow_authorization(
+                action=TRIAGE_FRAUD_CASE,
+                payload=args,
+                session_id=str(tool_context.state.get("session_id") or ""),
+            )
+            authorization.update(
+                {
+                    "proposal_id": str(structured.get("proposal_id") or ""),
+                    "contract_version": str(
+                        structured.get("contract_version") or "fraud-triage.v1"
+                    ),
+                    "customer_safe_summary": str(
+                        structured.get("customer_safe_summary") or ""
+                    ),
+                }
+            )
+            playbook["workflow_authorization"] = authorization
+            tool_context.state["fraud_playbook"] = playbook
+            runtime_context = proposal_runtime_context_var.get() or {}
+            record_action_proposal_event(
+                runtime=str(
+                    runtime_context.get("runtime_name") or "ADK_GEMINI_LIVE"
+                ),
+                support_session_id=str(
+                    runtime_context.get("support_session_id")
+                    or tool_context.state.get("session_id")
+                    or ""
+                ),
+                proposal_id=authorization.get("proposal_id"),
+                contract_version=authorization.get("contract_version"),
+                catalog_snapshot_id=runtime_context.get("catalog_snapshot_id"),
+                tool="propose_fraud_triage",
+                outcome="PROPOSED",
+                latency_ms=duration_seconds * 1000,
             )
         if tool_name == "get_open_fraud_alert" and structured.get("fraud_alert") is None:
             playbook = dict(tool_context.state.get("fraud_playbook") or {})

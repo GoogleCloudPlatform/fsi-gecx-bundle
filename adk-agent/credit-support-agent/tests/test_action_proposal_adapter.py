@@ -176,3 +176,85 @@ async def test_commit_uses_only_proposal_id_and_protected_transport_evidence(
         assert headers["x-proposal-confirmation-classification"] == "CONFIRMED"
     finally:
         agent.reset_session_context(tokens)
+
+
+@pytest.mark.asyncio
+async def test_direct_mcp_proposal_is_captured_as_adk_authorization(
+    monkeypatch,
+) -> None:
+    async def account_details():
+        return {}
+
+    monkeypatch.setattr(agent, "fetch_updated_account_details", account_details)
+    context = SimpleNamespace(
+        state={
+            "session_id": "session-1",
+            "fraud_context": {"fraud_alert_id": "fraud-123"},
+            "fraud_playbook": {
+                "entry_mode": "FRAUD_ALERT",
+                "open_alert_inspected": True,
+                "fraud_alert_id": "fraud-123",
+                "workflow_authorization": None,
+            },
+            "_voice_tool_started_at": {},
+        }
+    )
+    payload = {
+        "fraud_alert_id": "fraud-123",
+        "disputed_authorization_ids": ["auth-1"],
+        "disputed_transaction_ids": [],
+        "issue_replacement": True,
+        "escalate": False,
+    }
+
+    await agent.after_tool_callback(
+        SimpleNamespace(name="propose_fraud_triage"),
+        payload,
+        context,
+        {
+            "structuredContent": {
+                "success": True,
+                "proposal_id": "11111111-1111-4111-8111-111111111111",
+                "contract_version": "fraud-triage.v1",
+                "customer_safe_summary": "Confirm the selected fraud actions.",
+                "status": "PROPOSED",
+            }
+        },
+    )
+
+    authorization = context.state["fraud_playbook"]["workflow_authorization"]
+    assert authorization["status"] == "PREPARED"
+    assert authorization["proposal_id"] == "11111111-1111-4111-8111-111111111111"
+    assert authorization["payload"] == payload
+
+
+@pytest.mark.asyncio
+async def test_commit_without_captured_proposal_fails_closed_instead_of_crashing(
+    monkeypatch,
+) -> None:
+    async def generation_is_valid(**kwargs):
+        return True, None
+
+    monkeypatch.setattr(agent, "validate_reset_generation", generation_is_valid)
+    monkeypatch.setattr(agent, "get_auth_headers", lambda: {})
+    context = SimpleNamespace(
+        state={
+            "session_id": "session-1",
+            "reset_generation_token": "3:9",
+            "fraud_context": {"fraud_alert_id": "fraud-123"},
+            "fraud_playbook": {
+                "entry_mode": "FRAUD_ALERT",
+                "open_alert_inspected": True,
+                "workflow_authorization": None,
+            },
+        }
+    )
+
+    result = await agent.before_tool_callback(
+        SimpleNamespace(name="commit_fraud_triage"),
+        {"proposal_id": "11111111-1111-4111-8111-111111111111"},
+        context,
+    )
+
+    assert result["status"] == "AUTHORIZATION_REQUIRED"
+    assert result["authorization_blocked"] is True
