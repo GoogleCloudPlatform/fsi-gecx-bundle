@@ -44,6 +44,55 @@ class Context:
         return self._user_parts
 
 
+def test_fraud_welcome_routes_to_alert_read_before_speech():
+    callback = _load("before_model_callbacks/start_fraud_review.py")
+
+    class FunctionCall:
+        def __init__(self, *, name, args):
+            self.name = name
+            self.args = args
+
+    class FunctionPart:
+        def __init__(self, *, function_call):
+            self.function_call = function_call
+
+    class Content:
+        def __init__(self, *, parts, role):
+            self.parts = parts
+            self.role = role
+
+    class LlmResponse:
+        def __init__(self, *, content):
+            self.content = content
+
+    callback.FunctionCall = FunctionCall
+    callback.Part = FunctionPart
+    callback.Content = Content
+    callback.LlmResponse = LlmResponse
+    variables = {"has_active_fraud_alert": True}
+
+    response = callback.before_model_callback(
+        Context(
+            invocation_id="welcome-1",
+            variables=variables,
+            user_text="<event>sys.welcome</event>",
+        ),
+        object(),
+    )
+
+    function_call = response.content.parts[0].function_call
+    assert function_call.name == "banking_service_mcp_toolset_get_open_fraud_alert"
+    assert function_call.args == {}
+    assert variables["fraud_welcome_routed"] is True
+    assert (
+        callback.before_model_callback(
+            Context(variables=variables, user_text="<event>sys.welcome</event>"),
+            object(),
+        )
+        is None
+    )
+
+
 def test_confirmation_classifier_accepts_only_bounded_explicit_phrase():
     callback = _load("before_model_callbacks/classify_confirmation.py")
     variables = {
@@ -236,6 +285,86 @@ def test_proposal_capture_supports_ces_mcp_text_output_shape():
     )
 
 
+def test_commit_result_is_presented_without_model_added_fulfillment_claims():
+    capture = _load("after_tool_callbacks/capture_proposal.py")
+    presentation = _load("after_model_callbacks/present_commit_result.py")
+
+    class ReplacementPart:
+        @classmethod
+        def from_text(cls, *, text):
+            return Part(text)
+
+    class ReplacementResponse:
+        @classmethod
+        def from_parts(cls, *, parts):
+            return SimpleNamespace(partial=False, content=SimpleNamespace(parts=parts))
+
+    presentation.Part = ReplacementPart
+    presentation.LlmResponse = ReplacementResponse
+    variables = {}
+    context = Context(invocation_id="turn-3", variables=variables, user_text=None)
+    safe_summary = (
+        "Your fraud report was submitted for specialist review. "
+        "A replacement virtual card ending in 1900 is active."
+    )
+    capture.after_tool_callback(
+        SimpleNamespace(name="banking_service_mcp_toolset.commit_fraud_triage"),
+        {},
+        context,
+        {
+            "text_output": [
+                {
+                    "success": True,
+                    "customer_safe_result_summary": safe_summary,
+                }
+            ]
+        },
+    )
+    response = SimpleNamespace(
+        partial=False,
+        content=SimpleNamespace(
+            parts=[Part("Your physical card will arrive in 7-10 business days.")]
+        ),
+    )
+
+    replacement = presentation.after_model_callback(context, response)
+
+    output = replacement.content.parts[0].text
+    assert output.startswith(safe_summary)
+    assert output.endswith("Is there anything else I can help you with today?")
+    assert "business days" not in output
+    assert variables["fraud_result_pending"] is False
+
+
+def test_voice_output_sanitizer_removes_standalone_spoken_punctuation():
+    sanitizer = _load("after_model_callbacks/sanitize_voice_output.py")
+
+    class ReplacementPart:
+        @classmethod
+        def from_text(cls, *, text):
+            return Part(text)
+
+    class ReplacementResponse:
+        @classmethod
+        def from_parts(cls, *, parts):
+            return SimpleNamespace(partial=False, content=SimpleNamespace(parts=parts))
+
+    sanitizer.Part = ReplacementPart
+    sanitizer.LlmResponse = ReplacementResponse
+    response = SimpleNamespace(
+        partial=False,
+        content=SimpleNamespace(
+            parts=[Part("Let's review it together.\n.")]
+        ),
+    )
+
+    replacement = sanitizer.after_model_callback(
+        Context(variables={}, user_text=None), response
+    )
+
+    assert replacement.content.parts[0].text == "Let's review it together."
+
+
 def test_categorical_all_disputed_answer_forces_proposal_tool_call():
     capture = _load("after_tool_callbacks/capture_proposal.py")
     track_prompt = _load("after_model_callbacks/track_fraud_selection_prompt.py")
@@ -381,5 +510,8 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
 
     agent = yaml.safe_load((AGENT_DIR / "Credit_Card_Support_Agent.yaml").read_text())
     assert agent["beforeModelCallbacks"][0]["pythonCode"].endswith(
+        "start_fraud_review.py"
+    )
+    assert agent["beforeModelCallbacks"][1]["pythonCode"].endswith(
         "route_fraud_selection.py"
     )

@@ -86,3 +86,16 @@ def test_changed_selection_has_a_different_fingerprint():
     )
 
     assert first["selection_fingerprint"] != changed["selection_fingerprint"]
+
+
+def test_customer_safe_result_summary_never_invents_delivery_timing():
+    summary = FraudAlertService._customer_safe_triage_result_summary(
+        voided_authorizations=[{"authorization_id": "auth-1"}],
+        provisional_credits=[],
+        replacement_result={"new_last_four": "1900"},
+        escalated=False,
+    )
+
+    assert "1 pending charge was released" in summary
+    assert "replacement virtual card ending in 1900 is active" in summary
+    assert "business days" not in summary

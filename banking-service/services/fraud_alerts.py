@@ -876,6 +876,12 @@ class FraudAlertService:
             result = {
                 "success": True,
                 "message": "Fraud alert marked as recognized activity.",
+                "customer_safe_result_summary": (
+                    "The fraud alert has been resolved because you recognized all "
+                    "reviewed activity. Your card remains active, no dispute was "
+                    "opened, and no replacement was issued. A secure message with "
+                    "the details was sent."
+                ),
                 "fraud_alert": self._alert_result(resolved),
                 "outcome": "CUSTOMER_RECOGNIZED",
                 "voided_authorizations": [],
@@ -998,6 +1004,12 @@ class FraudAlertService:
         result = {
             "success": True,
             "message": "Fraud case triaged and pending specialist review.",
+            "customer_safe_result_summary": self._customer_safe_triage_result_summary(
+                voided_authorizations=voided_authorizations,
+                provisional_credits=provisional_credits,
+                replacement_result=replacement_result,
+                escalated=escalate,
+            ),
             "fraud_alert": self._alert_result(triaged),
             "outcome": triaged.remediation_status,
             "voided_authorizations": voided_authorizations,
@@ -1013,6 +1025,40 @@ class FraudAlertService:
             action_id=workflow_action.id, status="SUCCEEDED", result_payload=result
         )
         return result
+
+    @staticmethod
+    def _customer_safe_triage_result_summary(
+        *,
+        voided_authorizations: list[dict],
+        provisional_credits: list[dict],
+        replacement_result: dict | None,
+        escalated: bool,
+    ) -> str:
+        parts = [
+            (
+                "Your fraud report was submitted for specialist review."
+                if not escalated
+                else "Your fraud report was escalated to a specialist."
+            )
+        ]
+        if voided_authorizations:
+            count = len(voided_authorizations)
+            parts.append(
+                f"{count} pending {'charge was' if count == 1 else 'charges were'} released."
+            )
+        if provisional_credits:
+            count = len(provisional_credits)
+            parts.append(
+                f"{count} provisional {'credit was' if count == 1 else 'credits were'} applied."
+            )
+        if replacement_result:
+            last_four = str(replacement_result.get("new_last_four") or "")
+            suffix = f" ending in {last_four}" if last_four else ""
+            parts.append(
+                f"Your compromised card was blocked, and a replacement virtual card{suffix} is active."
+            )
+        parts.append("A secure message with the case details was sent.")
+        return " ".join(parts)
 
     def execute_scenario_customer_action(
         self,
