@@ -57,7 +57,9 @@ from agent.workflow_authorization import (
 )
 
 LOCATION = os.getenv("LOCATION", "us-central1")
-credentials, project_id = google.auth.default()
+project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+if not project_id:
+    _, project_id = google.auth.default()
 os.environ.setdefault("GOOGLE_CLOUD_PROJECT", project_id)
 os.environ.setdefault("GOOGLE_CLOUD_LOCATION", LOCATION)
 os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")

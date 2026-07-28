@@ -105,6 +105,7 @@ def test_confirmation_classifier_rejects_qualified_or_partial_approval():
     for index, phrase in enumerate(
         (
             "Yes, but don't block the card.",
+            "Yes, I really like the weather today.",
             "I do not confirm.",
             "Dispute the charges.",
             "Block the card and send a replacement.",
@@ -272,13 +273,17 @@ def test_proposal_capture_supports_ces_mcp_text_output_shape():
 def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     app = yaml.safe_load((APP_DIR / "app.yaml").read_text())
     instruction = (AGENT_DIR / "instruction.txt").read_text()
+    toolset_template = (
+        APP_DIR
+        / "toolsets"
+        / "banking_service_mcp_toolset"
+        / "banking_service_mcp_toolset.yaml.tftpl"
+    ).read_text()
     toolset = yaml.safe_load(
-        (
-            APP_DIR
-            / "toolsets"
-            / "banking_service_mcp_toolset"
-            / "banking_service_mcp_toolset.yaml"
-        ).read_text()
+        toolset_template.replace(
+            "${banking_service_url}",
+            "https://banking.example.test",
+        )
     )
 
     assert app["modelSettings"]["model"] == "gemini-3.1-flash-live"
@@ -300,7 +305,7 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     assert "user_token" not in instruction
     assert "You own the natural spoken wording" in instruction
     assert "Do not add a preliminary selection confirmation" in instruction
-    assert "ask once for confirmation" in instruction
+    assert "ask once for confirmation" in instruction.casefold()
     assert (
         "Completing a banking action never means the consultation is finished"
         in instruction
