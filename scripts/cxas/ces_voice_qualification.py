@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluate a CES conversation and optionally create a pinned managed replay."""
+"""Evaluate a CES conversation and optionally run contract and quality replays."""
 
 from __future__ import annotations
 
@@ -25,6 +25,13 @@ DEFAULT_MATRIX = (
     / "Credit_Support_Voice_Agent"
     / "evaluations"
     / "ces_fraud_qualification_matrix.json"
+)
+DEFAULT_CONVERSATIONAL_REFERENCE = (
+    ROOT
+    / "gecx"
+    / "Credit_Support_Voice_Agent"
+    / "evaluations"
+    / "ces_fraud_conversational_reference.json"
 )
 sys.path.insert(0, str(AGENT_ROOT))
 
@@ -197,6 +204,13 @@ def _managed_fake_output(tool: str) -> dict[str, Any]:
                 "status": "OPEN",
                 "card_last_four": "0001",
                 "suspicious_transactions": authorizations,
+                "summary": (
+                    "Customer has an active fraud alert on card ending in 0001. "
+                    "Flagged transactions are $4.99 at GAME*TEST TOKEN ONLINE, "
+                    "$1,499.00 at APPLE.COM*ONLINE, $2,150.00 at BEST "
+                    "BUY*MKTPLACE, $1,250.00 at RAZER GOLD GIFT CARD, and "
+                    "$950.00 at TARGET.COM GIFT CARDS."
+                ),
             },
             "support_guidance": {
                 "source": "knowledge_catalog",
@@ -213,8 +227,11 @@ def _managed_fake_output(tool: str) -> dict[str, Any]:
             "contract_version": "fraud-triage.v1",
             "proposal_id": "eval-proposal-1",
             "customer_safe_summary": (
-                "Confirm that you want to dispute all five listed charges on card "
-                "ending 0001, block the current card, and issue a replacement."
+                "Confirm that you want to dispute $4.99 at GAME*TEST TOKEN ONLINE, "
+                "$1,499.00 at APPLE.COM*ONLINE, $2,150.00 at BEST BUY*MKTPLACE, "
+                "$1,250.00 at RAZER GOLD GIFT CARD, and $950.00 at TARGET.COM "
+                "GIFT CARDS on card ending 0001, block the current card, and issue "
+                "a replacement."
             ),
         }
     if tool == "commit_fraud_triage":
@@ -237,11 +254,19 @@ def _managed_fake_output(tool: str) -> dict[str, Any]:
                 "message with the case details was sent."
             ),
         }
+    if tool == "push_card_to_google_wallet":
+        return {
+            "success": True,
+            "message": "Virtual card provisioning is queued for Google Wallet.",
+            "card_token": "eval-replacement-token",
+            "wallet_provider": "GOOGLE_WALLET",
+            "wallet_provisioning_status": "QUEUED",
+        }
     return {}
 
 
 def _curate_generated_golden(golden: dict[str, Any]) -> dict[str, Any]:
-    """Remove live credentials/state and retain only reusable golden expectations."""
+    """Sanitize a generated CES Golden fixture used only for contract replay."""
     safe_session_variables = {
         "has_active_fraud_alert",
         "entry_reason",
@@ -327,7 +352,7 @@ def _tool_resource_id(payload: dict[str, Any]) -> str:
     )[-1]
 
 
-def _managed_evaluation(
+def _managed_contract_evaluation(
     api: CesApi,
     *,
     app: str,
@@ -352,12 +377,20 @@ def _managed_evaluation(
         raise RuntimeError(
             "CES generated a response without a golden evaluation."
         )
-    evaluation_id = f"{dataset_id}-golden"
+    evaluation_id = f"{dataset_id}-replay"
     evaluation_path = f"{app}/evaluations/{evaluation_id}"
     evaluation_body = {
-        "displayName": f"{display_name} golden",
-        "description": "Generated from the bounded, locally qualified live CES trace.",
-        "tags": ["bounded-qualification", "fraud", "work-item-1"],
+        "displayName": f"{display_name} contract replay",
+        "description": (
+            "Generated from a locally qualified live CES trace. This gates tool "
+            "and workflow invariants only; it is not approved conversational copy."
+        ),
+        "tags": [
+            "bounded-qualification",
+            "contract-replay",
+            "fraud",
+            "work-item-1",
+        ],
         "golden": _curate_generated_golden(generated["golden"]),
         "evaluationMetricsThresholdOverride": {
             "goldenHallucinationMetricBehavior": "DISABLED",
@@ -427,7 +460,7 @@ def _managed_evaluation(
             {
                 "evaluationDataset": dataset["name"],
                 "displayName": (
-                    f"{display_name} managed replay "
+                    f"{display_name} contract replay "
                     f"{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
                 ),
                 "appVersion": app_version,
@@ -488,6 +521,552 @@ def _managed_evaluation(
     }
 
 
+def _tool_expectation(
+    app: str,
+    tool: str,
+    invocation_id: str,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if tool == "end_session":
+        tool_call = {
+            "id": invocation_id,
+            "tool": f"{app}/tools/end_session",
+            "args": args or {},
+            "displayName": "end_session",
+        }
+    else:
+        tool_call = {
+            "id": invocation_id,
+            "args": args or {},
+            "displayName": "banking_service_mcp_toolset",
+            "toolsetTool": {
+                "toolset": f"{app}/toolsets/banking-service-mcp",
+                "toolId": tool,
+            },
+        }
+    return {"expectation": {"toolCall": tool_call}}
+
+
+def _tool_response_expectation(
+    app: str,
+    tool: str,
+    invocation_id: str,
+) -> dict[str, Any]:
+    return {
+        "expectation": {
+            "toolResponse": {
+                "id": invocation_id,
+                "response": {
+                    "output": json.dumps(
+                        _managed_fake_output(tool), separators=(",", ":")
+                    )
+                },
+                "displayName": "banking_service_mcp_toolset",
+                "toolsetTool": {
+                    "toolset": f"{app}/toolsets/banking-service-mcp",
+                    "toolId": tool,
+                },
+            }
+        }
+    }
+
+
+def _agent_response_expectation(text: str) -> dict[str, Any]:
+    return {
+        "expectation": {
+            "agentResponse": {
+                "role": "Credit Card Support Agent",
+                "chunks": [{"text": text}],
+            }
+        }
+    }
+
+
+def _conversational_golden(
+    app: str,
+    reference: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a stable CES Golden fixture from the reviewed reference dialogue."""
+    turns_by_id = {
+        str(turn["id"]): turn for turn in reference.get("turns") or []
+    }
+    required_ids = (
+        "alert-readout",
+        "proposal",
+        "commit",
+        "recovery-question",
+        "wallet-provisioning",
+        "close",
+    )
+    missing = [turn_id for turn_id in required_ids if turn_id not in turns_by_id]
+    if missing:
+        raise ValueError(
+            "Conversational reference is missing required turns: "
+            + ", ".join(missing)
+        )
+
+    alert = turns_by_id["alert-readout"]
+    proposal = turns_by_id["proposal"]
+    commit = turns_by_id["commit"]
+    recovery = turns_by_id["recovery-question"]
+    wallet = turns_by_id["wallet-provisioning"]
+    close = turns_by_id["close"]
+    proposal_summary = _managed_fake_output("propose_fraud_triage")[
+        "customer_safe_summary"
+    ]
+
+    return {
+        "turns": [
+            {
+                "steps": [
+                    {
+                        "userInput": {
+                            "variables": {
+                                "has_active_fraud_alert": True,
+                                "entry_reason": "fraud_alert",
+                                "runtime_name": "CES_GEMINI_LIVE",
+                                "catalog_content_version": "2.2+2.4+2.5",
+                                "catalog_snapshot_id": "eval-catalog-snapshot",
+                                "reset_generation": "eval-reset-1",
+                                "language_code": "en",
+                                "runtime_language_code": "en-US",
+                                "language_selection_source": "default",
+                                "ces_app_id": _resource_id(app),
+                                "ces_version_or_deployment_id": "eval-version",
+                                "fraud_support_guidance_summary": (
+                                    "Enumerate every flagged merchant and exact amount. "
+                                    "Use one proposal confirmation. After commit, continue "
+                                    "helping and offer Google Wallet only when requested."
+                                ),
+                            }
+                        }
+                    },
+                    {"userInput": {"event": {"event": str(alert["event"])}}},
+                    _tool_expectation(
+                        app, "get_open_fraud_alert", "eval-alert-read"
+                    ),
+                    {
+                        "expectation": {
+                            "updatedVariables": {
+                                "active_fraud_alert_id": "eval-alert-1",
+                                "active_fraud_authorization_ids": (
+                                    "eval-auth-1,eval-auth-2,eval-auth-3,"
+                                    "eval-auth-4,eval-auth-5"
+                                ),
+                                "active_fraud_transaction_ids": "",
+                            }
+                        }
+                    },
+                    _tool_response_expectation(
+                        app, "get_open_fraud_alert", "eval-alert-read"
+                    ),
+                    {
+                        "expectation": {
+                            "updatedVariables": {
+                                "fraud_selection_prompt_turn_id": "eval-turn-alert",
+                                "fraud_selection_pending": True,
+                            }
+                        }
+                    },
+                    _agent_response_expectation(str(alert["expected_agent"])),
+                ]
+            },
+            {
+                "steps": [
+                    {"userInput": {"text": str(proposal["user"])}},
+                    _tool_expectation(
+                        app, "propose_fraud_triage", "eval-proposal"
+                    ),
+                    {
+                        "expectation": {
+                            "updatedVariables": {
+                                "customer_turn_id": "eval-turn-proposal",
+                                "proposal_originating_turn_id": "eval-turn-proposal",
+                                "proposal_id": "eval-proposal-1",
+                                "proposal_customer_safe_summary": proposal_summary,
+                                "proposal_presentation_turn_id": "",
+                                "proposal_confirmation_turn_id": "",
+                                "proposal_confirmation_method": "",
+                                "proposal_confirmation_classification": "",
+                                "proposal_last_classified_turn_id": "",
+                                "fraud_selection_pending": False,
+                                "fraud_review_stage": "AWAITING_ACTION_CONFIRMATION",
+                                "fraud_review_status": "COMPLETE",
+                                "fraud_review_ready": True,
+                            }
+                        }
+                    },
+                    _tool_response_expectation(
+                        app, "propose_fraud_triage", "eval-proposal"
+                    ),
+                    {
+                        "expectation": {
+                            "updatedVariables": {
+                                "proposal_presentation_turn_id": "eval-turn-proposal"
+                            }
+                        }
+                    },
+                    _agent_response_expectation(str(proposal["expected_agent"])),
+                ]
+            },
+            {
+                "steps": [
+                    {"userInput": {"text": str(commit["user"])}},
+                    {
+                        "expectation": {
+                            "updatedVariables": {
+                                "customer_turn_id": "eval-turn-confirmation",
+                                "proposal_confirmation_turn_id": (
+                                    "eval-turn-confirmation"
+                                ),
+                                "proposal_confirmation_method": "EXPLICIT_VERBAL",
+                                "proposal_confirmation_classification": "CONFIRMED",
+                                "proposal_last_classified_turn_id": (
+                                    "eval-turn-confirmation"
+                                ),
+                            }
+                        }
+                    },
+                    _tool_expectation(
+                        app,
+                        "commit_fraud_triage",
+                        "eval-commit",
+                    ),
+                    {
+                        "expectation": {
+                            "updatedVariables": {
+                                "fraud_review_stage": "COMMITTED"
+                            }
+                        }
+                    },
+                    _tool_response_expectation(
+                        app, "commit_fraud_triage", "eval-commit"
+                    ),
+                    _agent_response_expectation(str(commit["expected_agent"])),
+                ]
+            },
+            {
+                "steps": [
+                    {"userInput": {"text": str(recovery["user"])}},
+                    _agent_response_expectation(str(recovery["expected_agent"])),
+                ]
+            },
+            {
+                "steps": [
+                    {"userInput": {"text": str(wallet["user"])}},
+                    _tool_expectation(
+                        app,
+                        "push_card_to_google_wallet",
+                        "eval-wallet-provisioning",
+                    ),
+                    _tool_response_expectation(
+                        app,
+                        "push_card_to_google_wallet",
+                        "eval-wallet-provisioning",
+                    ),
+                    _agent_response_expectation(str(wallet["expected_agent"])),
+                ]
+            },
+            {
+                "steps": [
+                    {"userInput": {"text": str(close["user"])}},
+                    _agent_response_expectation(str(close["expected_agent"])),
+                    _tool_expectation(app, "end_session", "eval-end-session"),
+                ]
+            },
+        ]
+    }
+
+
+def _observed_agent_texts(result: dict[str, Any]) -> list[str]:
+    texts: list[str] = []
+    replay_turns = (result.get("goldenResult") or {}).get(
+        "turnReplayResults"
+    ) or []
+    for turn in replay_turns:
+        for outcome in turn.get("expectationOutcome") or []:
+            response = outcome.get("observedAgentResponse") or {}
+            text = " ".join(
+                str(chunk.get("text") or "")
+                for chunk in response.get("chunks") or []
+                if isinstance(chunk, dict)
+            ).strip()
+            if text:
+                texts.append(text)
+    return texts
+
+
+def _evaluate_conversational_quality(
+    texts: list[str],
+    reference: dict[str, Any],
+) -> dict[str, Any]:
+    rules = reference.get("quality_rules") or {}
+    failures: list[str] = []
+    if not texts:
+        failures.append("No observed agent responses were returned by CES.")
+        return {"passed": False, "failures": failures, "observed_turns": 0}
+
+    first = texts[0].lower()
+    brand = str(rules.get("required_brand") or "")
+    if brand and brand.lower() not in first:
+        failures.append(f"Initial readout omitted required brand {brand!r}.")
+    for alternatives in rules.get("initial_required_phrases") or []:
+        values = [str(value) for value in alternatives]
+        if values and not any(value.lower() in first for value in values):
+            failures.append(
+                "Initial readout omitted required context: "
+                + " or ".join(repr(value) for value in values)
+                + "."
+            )
+
+    def normalized_spoken(value: str) -> str:
+        return " ".join(
+            value.lower()
+            .replace("-", " ")
+            .replace(",", "")
+            .replace(".", " ")
+            .split()
+        )
+
+    def numeric_currency_variants(canonical: str) -> set[str]:
+        raw = canonical.strip().removeprefix("$").replace(",", "")
+        try:
+            dollars_text, cents_text = f"{float(raw):.2f}".split(".")
+        except ValueError:
+            return set()
+        variants = {f"{dollars_text} dollars"}
+        if cents_text != "00":
+            variants.update(
+                {
+                    f"{dollars_text} dollars {cents_text} cents",
+                    f"{dollars_text} dollars and {cents_text} cents",
+                }
+            )
+        return variants
+
+    def check_inventory(label: str, text: str) -> None:
+        normalized_text = normalized_spoken(text)
+        for item in rules.get("transaction_inventory") or []:
+            merchant = str(item.get("merchant") or "")
+            canonical_amount = str(item.get("canonical_amount") or "")
+            spoken_amounts = [
+                normalized_spoken(str(value))
+                for value in item.get("spoken_amounts") or []
+            ]
+            if merchant and merchant.lower() not in text.lower():
+                failures.append(f"{label} omitted merchant {merchant!r}.")
+            amount_present = (
+                canonical_amount
+                and canonical_amount.lower() in text.lower()
+            ) or any(
+                value in normalized_text
+                for value in (
+                    spoken_amounts
+                    + sorted(numeric_currency_variants(canonical_amount))
+                )
+            )
+            if canonical_amount and not amount_present:
+                failures.append(
+                    f"{label} omitted exact amount {canonical_amount!r}."
+                )
+
+    check_inventory("Initial readout", texts[0])
+    proposal_turn_index = int(rules.get("proposal_turn_index", 1))
+    if proposal_turn_index >= len(texts):
+        failures.append("Observed dialogue omitted the proposal turn.")
+    else:
+        check_inventory("Proposal confirmation", texts[proposal_turn_index])
+
+    commit_turn_index = int(rules.get("commit_turn_index", 2))
+    if commit_turn_index >= len(texts):
+        failures.append("Observed dialogue omitted the commit-result turn.")
+    else:
+        commit_text = texts[commit_turn_index].lower()
+        for alternatives in rules.get("commit_required_phrases") or []:
+            values = [str(value) for value in alternatives]
+            if values and not any(value.lower() in commit_text for value in values):
+                failures.append(
+                    "Commit result omitted required outcome: "
+                    + " or ".join(repr(value) for value in values)
+                    + "."
+                )
+
+    joined = "\n".join(texts).lower()
+    for phrase in rules.get("forbidden_phrases") or []:
+        if str(phrase).lower() in joined:
+            failures.append(f"Observed forbidden phrase {phrase!r}.")
+
+    confirmation_markers = (
+        "do you confirm",
+        "please confirm",
+        "is that correct",
+        "does that sound right",
+        "does that sound good",
+        "do you want to proceed",
+    )
+    confirmation_turns = sum(
+        any(marker in text.lower() for marker in confirmation_markers)
+        for text in texts
+    )
+    expected_confirmation_turns = int(
+        rules.get("proposal_confirmation_turns", 1)
+    )
+    if confirmation_turns != expected_confirmation_turns:
+        failures.append(
+            "Expected "
+            f"{expected_confirmation_turns} proposal confirmation turn(s), "
+            f"observed {confirmation_turns}."
+        )
+    return {
+        "passed": not failures,
+        "failures": failures,
+        "observed_turns": len(texts),
+        "proposal_confirmation_turns": confirmation_turns,
+    }
+
+
+def _managed_conversational_evaluation(
+    api: CesApi,
+    *,
+    app: str,
+    app_version: str,
+    reference: dict[str, Any],
+) -> dict[str, Any]:
+    reference_id = str(reference["reference_id"])
+    display_name = str(reference["display_name"])
+    evaluation_path = f"{app}/evaluations/{reference_id}"
+    threshold = int(
+        (reference.get("quality_rules") or {}).get(
+            "semantic_similarity_success_threshold", 3
+        )
+    )
+    evaluation_body = {
+        "displayName": display_name,
+        "description": str(reference["description"]),
+        "tags": ["conversational-reference", "fraud", "customer-experience"],
+        "golden": _conversational_golden(app, reference),
+        "evaluationMetricsThresholdOverride": {
+            "goldenEvaluationMetricsThresholds": {
+                "turnLevelMetricsThresholds": {
+                    "semanticSimilaritySuccessThreshold": threshold,
+                    "overallToolInvocationCorrectnessThreshold": 1,
+                    "semanticSimilarityChannel": "TEXT",
+                },
+                "expectationLevelMetricsThresholds": {
+                    "toolInvocationParameterCorrectnessThreshold": 1
+                },
+            }
+        },
+    }
+    try:
+        existing = api.request("GET", evaluation_path)
+        evaluation = api.request(
+            "PATCH",
+            evaluation_path,
+            {"name": existing["name"], **evaluation_body},
+            {
+                "updateMask": (
+                    "display_name,description,tags,golden,"
+                    "evaluation_metrics_threshold_override"
+                )
+            },
+        )
+    except RuntimeError as error:
+        if "HTTP 404" not in str(error):
+            raise
+        evaluation = api.request(
+            "POST",
+            f"{app}/evaluations",
+            evaluation_body,
+            {"evaluationId": reference_id},
+        )
+
+    dataset_id = reference_id
+    dataset_path = f"{app}/evaluationDatasets/{dataset_id}"
+    try:
+        existing_dataset = api.request("GET", dataset_path)
+        dataset = api.request(
+            "PATCH",
+            dataset_path,
+            {
+                "name": existing_dataset["name"],
+                "displayName": display_name,
+                "evaluations": [evaluation["name"]],
+            },
+            {"updateMask": "display_name,evaluations"},
+        )
+    except RuntimeError as error:
+        if "HTTP 404" not in str(error):
+            raise
+        dataset = api.request(
+            "POST",
+            f"{app}/evaluationDatasets",
+            {
+                "displayName": display_name,
+                "evaluations": [evaluation["name"]],
+            },
+            {"evaluationDatasetId": dataset_id},
+        )
+
+    operation = api.wait_operation(
+        api.request(
+            "POST",
+            f"{app}:runEvaluation",
+            {
+                "evaluationDataset": dataset["name"],
+                "displayName": (
+                    f"{display_name} "
+                    f"{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+                ),
+                "appVersion": app_version,
+                "goldenRunMethod": "STABLE",
+                "runCount": int(reference.get("run_count", 3)),
+                "config": {
+                    "evaluationChannel": "TEXT",
+                    "toolCallBehaviour": "FAKE",
+                },
+            },
+        )
+    )
+    response = operation.get("response") or {}
+    run_name = response.get("name") or response.get("evaluationRun")
+    if not run_name:
+        raise RuntimeError(
+            "CES completed the conversational run without a run resource name."
+        )
+    run = api.request("GET", run_name)
+    results: list[dict[str, Any]] = []
+    for result_name in run.get("evaluationResults") or []:
+        result = api.request("GET", result_name)
+        texts = _observed_agent_texts(result)
+        quality = _evaluate_conversational_quality(texts, reference)
+        results.append(
+            {
+                "name": result.get("name"),
+                "execution_state": result.get("executionState"),
+                "evaluation_status": result.get("evaluationStatus"),
+                "app_version": result.get("appVersion"),
+                "quality": quality,
+            }
+        )
+    return {
+        "evaluation": evaluation.get("name"),
+        "dataset": dataset.get("name"),
+        "run": run.get("name"),
+        "run_id": _resource_id(run.get("name")),
+        "run_state": run.get("state"),
+        "app_version": run.get("appVersion"),
+        "results": results,
+        "passed": bool(results)
+        and all(
+            result.get("execution_state") == "COMPLETED"
+            and result.get("evaluation_status") == "PASS"
+            and (result.get("quality") or {}).get("passed") is True
+            for result in results
+        ),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project", required=True)
@@ -502,9 +1081,14 @@ def main() -> int:
     parser.add_argument("--app-version")
     parser.add_argument("--account")
     parser.add_argument("--matrix", type=Path, default=DEFAULT_MATRIX)
-    parser.add_argument("--scenario", default="fraud-golden")
+    parser.add_argument("--scenario", default="fraud-contract")
     parser.add_argument("--managed", action="store_true")
-    parser.add_argument("--dataset-id", default="bounded-ces-work-item-1")
+    parser.add_argument(
+        "--conversational-reference",
+        type=Path,
+        default=DEFAULT_CONVERSATIONAL_REFERENCE,
+    )
+    parser.add_argument("--dataset-id", default="ces-fraud-contract-v1")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
@@ -538,7 +1122,7 @@ def main() -> int:
         app_version = args.app_version or conversation.get("appVersion")
         if not app_version:
             raise ValueError("--app-version is required when the conversation omits it.")
-        report["managed_evaluation"] = _managed_evaluation(
+        report["managed_evaluation"] = _managed_contract_evaluation(
             api,
             app=args.app,
             app_version=app_version,
@@ -546,9 +1130,24 @@ def main() -> int:
             dataset_id=args.dataset_id,
             display_name="Bounded CES fraud qualification work item 1",
         )
+        conversational_reference = json.loads(
+            args.conversational_reference.read_text()
+        )
+        report["conversational_evaluation"] = (
+            _managed_conversational_evaluation(
+                api,
+                app=args.app,
+                app_version=app_version,
+                reference=conversational_reference,
+            )
+        )
 
     report["passed"] = result.passed and (
-        not args.managed or report["managed_evaluation"]["passed"]
+        not args.managed
+        or (
+            report["managed_evaluation"]["passed"]
+            and report["conversational_evaluation"]["passed"]
+        )
     )
     rendered = json.dumps(report, indent=2, sort_keys=True)
     if args.output:

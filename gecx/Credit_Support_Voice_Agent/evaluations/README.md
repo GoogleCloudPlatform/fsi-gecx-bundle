@@ -7,8 +7,10 @@ qualification case. The runner:
 2. normalizes it into the shared ADK/CES trajectory vocabulary
 3. checks runtime, version, catalog, proposal, confirmation, commit, banking,
    and terminal invariants
-4. optionally creates a sanitized CES golden evaluation and runs stable replay
-   against a named app version
+4. optionally creates a sanitized CES `GOLDEN`-type contract replay and runs
+   it against a named app version
+5. separately runs the hand-curated conversational reference in
+   `ces_fraud_conversational_reference.json`
 
 Run it from the repository root:
 
@@ -31,15 +33,33 @@ not ended. To evaluate a specific recorded consultation instead, replace
 
 The persisted report contains resource provenance and aggregate metrics only.
 It never includes tool arguments, transcripts, session capabilities, customer
-identifiers, or raw tool responses. The generated CES golden is also curated
+identifiers, or raw tool responses. The generated contract fixture is curated
 before storage to remove live credentials and ephemeral customer/session state.
+
+CES calls both stable-replay resources `GOLDEN` evaluations. In this repository,
+only the hand-authored conversational reference is approved copy. A captured
+live trace is never promoted to conversational gold merely because its
+workflow contract passed.
 
 ## Evaluation Boundary
 
-The CES managed replay gates exact tool selection and rejects missing or extra
-tool calls. Its MCP fake-tool payload is not exposed to CES semantic and
-hallucination metrics as grounded output parameters, so those two metrics are
-disabled for this evaluation only.
+The CES contract replay gates exact tool selection and rejects missing or extra
+tool calls. Its semantic threshold is intentionally zero because the replay
+exists only to pin the workflow shape. It must never be used as evidence that
+the wording or customer experience passed.
+
+The conversational reference uses a semantic threshold of 3 and additional
+deterministic checks over observed agent responses. It rejects:
+
+- incorrect or missing Nova Horizon Bank branding
+- phone/calling terminology in the in-app web voice session
+- omission of any flagged merchant or exact amount in the initial readout
+- more or fewer than one protected proposal confirmation
+
+Its reference trajectory also verifies that the consultation remains open
+after fraud remediation, answers an immediate-card-access question, queues the
+virtual replacement for Google Wallet only after customer agreement, and then
+closes on a later customer turn.
 
 Conversation grounding and banking truth are not waived. They are checked
 against the real live-audio conversation by the shared trajectory evaluator:

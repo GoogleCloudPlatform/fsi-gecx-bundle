@@ -28,6 +28,12 @@ def before_tool_callback(tool, input, callback_context):
 
     proposal_id = str(callback_context.variables.get("proposal_id") or "")
     requested_id = str(input.get("proposal_id") or "")
+    # The opaque proposal identifier is trusted workflow state captured from
+    # banking, not conversational content the model should have to repeat.
+    # Bind it when omitted, but reject a conflicting model-authored value.
+    if proposal_id and not requested_id:
+        input["proposal_id"] = proposal_id
+        requested_id = proposal_id
     presentation_turn = str(
         callback_context.variables.get("proposal_presentation_turn_id") or ""
     )

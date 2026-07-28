@@ -1,10 +1,10 @@
 {
   "schema_version": "1.0",
   "qualification_id": "bounded-ces-work-item-1",
-  "description": "First bounded CES qualification: active-alert fraud golden trajectory.",
+  "description": "First bounded CES qualification: active-alert fraud contract trajectory.",
   "scenarios": [
     {
-      "id": "fraud-golden",
+      "id": "fraud-contract",
       "description": "Agent-first active-alert review, complete disputed selection, one protected confirmation, and one commit.",
       "expectation": {
         "required_tools": {

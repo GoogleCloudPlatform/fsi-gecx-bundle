@@ -1,7 +1,5 @@
 """Synthetic banking responses used only when a CES evaluation selects fake mode."""
 
-import json
-
 
 def fake_tool_call(tool, input, callback_context):
     tool_id = (
@@ -12,6 +10,23 @@ def fake_tool_call(tool, input, callback_context):
     if isinstance(tool, dict):
         tool_id = tool.get("id") or tool.get("name") or tool_id
     tool_id = str(tool_id).rsplit("/", 1)[-1]
+    # CES supplies MCP tool names with the toolset display-name prefix in
+    # managed replays (for example,
+    # banking_service_mcp_toolset_get_open_fraud_alert).
+    known_tool_ids = (
+        "get_open_fraud_alert",
+        "propose_fraud_triage",
+        "commit_fraud_triage",
+        "push_card_to_google_wallet",
+    )
+    tool_id = next(
+        (
+            known_tool_id
+            for known_tool_id in known_tool_ids
+            if tool_id.endswith(known_tool_id)
+        ),
+        tool_id,
+    )
     authorizations = [
         {
             "authorization_id": "eval-auth-1",
@@ -47,6 +62,13 @@ def fake_tool_call(tool, input, callback_context):
                 "status": "OPEN",
                 "card_last_four": "0001",
                 "suspicious_transactions": authorizations,
+                "summary": (
+                    "Customer has an active fraud alert on card ending in 0001. "
+                    "Flagged transactions are $4.99 at GAME*TEST TOKEN ONLINE, "
+                    "$1,499.00 at APPLE.COM*ONLINE, $2,150.00 at BEST "
+                    "BUY*MKTPLACE, $1,250.00 at RAZER GOLD GIFT CARD, and "
+                    "$950.00 at TARGET.COM GIFT CARDS."
+                ),
             },
             "support_guidance": {
                 "source": "knowledge_catalog",
@@ -63,8 +85,11 @@ def fake_tool_call(tool, input, callback_context):
             "contract_version": "fraud-triage.v1",
             "proposal_id": "eval-proposal-1",
             "customer_safe_summary": (
-                "Confirm that you want to dispute all five listed charges on card "
-                "ending 0001, block the current card, and issue a replacement."
+                "Confirm that you want to dispute $4.99 at GAME*TEST TOKEN ONLINE, "
+                "$1,499.00 at APPLE.COM*ONLINE, $2,150.00 at BEST BUY*MKTPLACE, "
+                "$1,250.00 at RAZER GOLD GIFT CARD, and $950.00 at TARGET.COM "
+                "GIFT CARDS on card ending 0001, block the current card, and issue "
+                "a replacement."
             ),
         }
     elif tool_id == "commit_fraud_triage":
@@ -87,9 +112,21 @@ def fake_tool_call(tool, input, callback_context):
                 "message with the case details was sent."
             ),
         }
+    elif tool_id == "push_card_to_google_wallet":
+        output = {
+            "success": True,
+            "message": "Virtual card provisioning is queued for Google Wallet.",
+            "card_token": "eval-replacement-token",
+            "wallet_provider": "GOOGLE_WALLET",
+            "wallet_provisioning_status": "QUEUED",
+        }
     else:
         return None
-    return {"output": json.dumps(output, separators=(",", ":"))}
+    # ToolFakeConfig callbacks return the tool's logical response directly.
+    # The MCP transport envelope is added only by the real remote MCP client;
+    # returning that envelope here causes CES to expose an empty response to
+    # the model during stable replay.
+    return output
 
 
 def fake_get_open_fraud_alert(tool, input, callback_context):
@@ -102,3 +139,7 @@ def fake_propose_fraud_triage(tool, input, callback_context):
 
 def fake_commit_fraud_triage(tool, input, callback_context):
     return fake_tool_call({"id": "commit_fraud_triage"}, input, callback_context)
+
+
+def fake_push_card_to_google_wallet(tool, input, callback_context):
+    return fake_tool_call({"id": "push_card_to_google_wallet"}, input, callback_context)

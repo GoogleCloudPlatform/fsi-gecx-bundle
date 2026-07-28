@@ -26,6 +26,7 @@ toolsets:
   - review_fraud_selection
   - propose_fraud_triage
   - commit_fraud_triage
+  - push_card_to_google_wallet
   - report_lost_stolen_card
   - request_credit_limit_increase
   - reverse_overdraft_fee
