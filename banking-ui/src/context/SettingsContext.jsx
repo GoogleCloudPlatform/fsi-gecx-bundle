@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 
 const SettingsContext = createContext();
 
