@@ -1,9 +1,10 @@
 import datetime
+import threading
 import uuid
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import Session, sessionmaker
 
 from models.action_proposal import ActionProposal
 from models.fraud import FraudAlert
@@ -35,8 +36,7 @@ def fixture_db_session():
     engine.dispose()
 
 
-@pytest.fixture(name="fraud_alert")
-def fixture_fraud_alert(db_session):
+def _add_fraud_alert(db_session):
     user = User(
         id=uuid.uuid4(),
         auth_provider_uid="proposal-customer",
@@ -69,6 +69,11 @@ def fixture_fraud_alert(db_session):
     db_session.add_all([user, alert])
     db_session.flush()
     return alert
+
+
+@pytest.fixture(name="fraud_alert")
+def fixture_fraud_alert(db_session):
+    return _add_fraud_alert(db_session)
 
 
 def _propose(service, alert, **overrides):
@@ -135,6 +140,56 @@ def test_proposal_creation_retries_idempotently_and_rejects_payload_drift(
             fraud_alert,
             disputed_authorization_ids=["auth-1"],
         )
+
+
+def test_concurrent_proposal_creation_returns_the_same_idempotent_row(tmp_path):
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'proposal-race.db'}",
+        connect_args={"check_same_thread": False, "timeout": 10},
+    )
+    User.__table__.create(bind=engine, checkfirst=True)
+    FraudAlert.__table__.create(bind=engine, checkfirst=True)
+    ActionProposal.__table__.create(bind=engine, checkfirst=True)
+    session_factory = sessionmaker(bind=engine)
+    with session_factory() as seed_session:
+        alert = _add_fraud_alert(seed_session)
+        alert_id = alert.id
+        seed_session.commit()
+
+    flush_barrier = threading.Barrier(2)
+
+    @event.listens_for(session_factory, "before_flush")
+    def synchronize_proposal_inserts(session, _flush_context, _instances):
+        if any(isinstance(item, ActionProposal) for item in session.new):
+            flush_barrier.wait(timeout=5)
+
+    proposal_ids = []
+    errors = []
+
+    def create_proposal():
+        try:
+            with session_factory() as session:
+                alert = session.get(FraudAlert, alert_id)
+                proposal = _propose(ActionProposalService(session), alert)
+                session.commit()
+                proposal_ids.append(proposal.id)
+        except Exception as exc:  # pragma: no cover - assertion reports the error
+            errors.append(exc)
+
+    workers = [threading.Thread(target=create_proposal) for _ in range(2)]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=15)
+
+    event.remove(session_factory, "before_flush", synchronize_proposal_inserts)
+    assert all(not worker.is_alive() for worker in workers)
+    assert errors == []
+    assert len(proposal_ids) == 2
+    assert proposal_ids[0] == proposal_ids[1]
+    with session_factory() as session:
+        assert session.query(ActionProposal).count() == 1
+    engine.dispose()
 
 
 def test_proposal_rejects_selection_outside_customer_alert(db_session, fraud_alert):

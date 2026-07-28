@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 
 from models.action_proposal import ActionProposal
 from models.fraud import FraudAlert
@@ -627,33 +628,13 @@ class ActionProposalService:
                 raise ProposalError(f"{field} is required.")
 
         payload, fingerprint = _canonical_payload(values.pop("action_payload"))
-        existing = (
-            self.db.query(ActionProposal)
-            .filter(
-                ActionProposal.customer_id == values["customer_id"],
-                ActionProposal.support_session_id == values["support_session_id"],
-                ActionProposal.action_type == values["action_type"],
-                ActionProposal.idempotency_key == values["idempotency_key"],
-            )
-            .first()
-        )
+        existing = self._find_idempotent_proposal(values)
         if existing:
-            immutable_match = (
-                existing.payload_fingerprint == fingerprint
-                and str(existing.account_id or "")
-                == str(values.get("account_id") or "")
-                and existing.runtime_name == values["runtime_name"]
-                and existing.runtime_session_id == values["runtime_session_id"]
-                and existing.originating_customer_turn_id
-                == values["originating_customer_turn_id"]
-                and existing.reset_generation == values["reset_generation"]
-                and existing.catalog_snapshot_id == values.get("catalog_snapshot_id")
+            return self._validate_idempotent_replay(
+                existing,
+                values=values,
+                fingerprint=fingerprint,
             )
-            if not immutable_match:
-                raise ProposalConflictError(
-                    "Idempotency key is already bound to a different proposal."
-                )
-            return existing
 
         now = _utcnow()
         expires_at = values.pop("expires_at", None) or (
@@ -669,9 +650,58 @@ class ActionProposalService:
             payload_fingerprint=fingerprint,
             expires_at=expires_at,
         )
-        self.db.add(proposal)
-        self.db.flush()
+        try:
+            with self.db.begin_nested():
+                self.db.add(proposal)
+                self.db.flush()
+        except IntegrityError:
+            existing = self._find_idempotent_proposal(values)
+            if existing is None:
+                raise
+            return self._validate_idempotent_replay(
+                existing,
+                values=values,
+                fingerprint=fingerprint,
+            )
         return proposal
+
+    def _find_idempotent_proposal(self, values: dict[str, Any]):
+        return (
+            self.db.query(ActionProposal)
+            .filter(
+                ActionProposal.customer_id == values["customer_id"],
+                ActionProposal.support_session_id == values["support_session_id"],
+                ActionProposal.action_type == values["action_type"],
+                ActionProposal.idempotency_key == values["idempotency_key"],
+            )
+            .first()
+        )
+
+    @staticmethod
+    def _validate_idempotent_replay(
+        existing: ActionProposal,
+        *,
+        values: dict[str, Any],
+        fingerprint: str,
+    ) -> ActionProposal:
+        immutable_match = (
+            existing.payload_fingerprint == fingerprint
+            and str(existing.account_id or "") == str(values.get("account_id") or "")
+            and existing.contract_version == values["contract_version"]
+            and existing.runtime_name == values["runtime_name"]
+            and existing.runtime_session_id == values["runtime_session_id"]
+            and existing.originating_customer_turn_id
+            == values["originating_customer_turn_id"]
+            and existing.reset_generation == values["reset_generation"]
+            and existing.confirmation_policy == values["confirmation_policy"]
+            and existing.customer_safe_summary == values["customer_safe_summary"]
+            and existing.catalog_snapshot_id == values.get("catalog_snapshot_id")
+        )
+        if not immutable_match:
+            raise ProposalConflictError(
+                "Idempotency key is already bound to a different proposal."
+            )
+        return existing
 
     def _reconcile_committing_fraud_proposal(
         self,
