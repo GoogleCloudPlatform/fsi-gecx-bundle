@@ -345,7 +345,10 @@ async def test_get_open_fraud_alert_success(mock_validate_token, db_session):
 
 @pytest.mark.asyncio
 @patch("routers.mcp.utils.validate_firebase_token")
-async def test_push_card_to_google_wallet_success(mock_validate_token, db_session):
+@patch("routers.mcp.credit_card.send_session_event")
+async def test_push_card_to_google_wallet_success(
+    mock_send_event, mock_validate_token, db_session
+):
     """Verify wallet provisioning can be queued for the verified customer's active card."""
     mock_validate_token.return_value = MagicMock(claims={"sub": "jane.doe@example.com", "email": "customer@example.com"})
 
@@ -358,6 +361,39 @@ async def test_push_card_to_google_wallet_success(mock_validate_token, db_sessio
     assert result["success"] is True
     assert result["wallet_provider"] == "GOOGLE_WALLET"
     assert result["wallet_provisioning_status"] == "QUEUED"
+    mock_send_event.assert_awaited_once_with(
+        "session-jane.doe@example.com",
+        {
+            "type": "WALLET_PROVISIONING_QUEUED",
+            "card_token": result["card_token"],
+            "wallet_provider": "GOOGLE_WALLET",
+            "wallet_provisioning_status": "QUEUED",
+            "fraud_alert_id": None,
+        },
+    )
+
+
+@pytest.mark.asyncio
+@patch("routers.mcp.utils.validate_firebase_token")
+@patch("routers.mcp.credit_card.send_session_event")
+async def test_push_card_to_google_wallet_preserves_committed_success_when_ui_event_fails(
+    mock_send_event, mock_validate_token, db_session
+):
+    """A failed real-time notification must not misreport a committed operation."""
+    mock_validate_token.return_value = MagicMock(
+        claims={"sub": "jane.doe@example.com", "email": "customer@example.com"}
+    )
+    mock_send_event.side_effect = RuntimeError("session disconnected")
+
+    result = await push_card_to_google_wallet(
+        account_id="88888888-8888-4888-8888-999999999999",
+        assertion_token="valid-token",
+        ctx=MagicMock(),
+    )
+
+    assert result["success"] is True
+    assert result["wallet_provisioning_status"] == "QUEUED"
+    mock_send_event.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -384,6 +420,16 @@ async def test_push_card_to_google_wallet_accepts_replacement_card_id(mock_send_
     assert result["wallet_provider"] == "GOOGLE_WALLET"
     assert result["wallet_provisioning_status"] == "QUEUED"
     assert result["card_token"] == replacement["new_card_token"]
+    assert mock_send_event.await_args_list[-1].args == (
+        "session-jane.doe@example.com",
+        {
+            "type": "WALLET_PROVISIONING_QUEUED",
+            "card_token": result["card_token"],
+            "wallet_provider": "GOOGLE_WALLET",
+            "wallet_provisioning_status": "QUEUED",
+            "fraud_alert_id": None,
+        },
+    )
 
 
 @pytest.mark.asyncio

@@ -368,6 +368,24 @@ async def push_card_to_google_wallet(
             initiated_by="CUSTOMER_VOICE_SUPPORT",
             fraud_alert_id=open_alert["fraud_alert_id"] if open_alert else None,
         )
+        try:
+            await send_session_event(
+                f"session-{verified_customer_id}",
+                {
+                    "type": "WALLET_PROVISIONING_QUEUED",
+                    "card_token": result["card_token"],
+                    "wallet_provider": result["wallet_provider"],
+                    "wallet_provisioning_status": result[
+                        "wallet_provisioning_status"
+                    ],
+                    "fraud_alert_id": result.get("fraud_alert_id"),
+                },
+            )
+        except Exception as exc:
+            logger.warning(
+                "Wallet provisioning UI event failed error_type=%s",
+                type(exc).__name__,
+            )
         return {
             "success": True,
             "message": result["message"],
