@@ -52,6 +52,15 @@ def _configured_noise_suppression_level() -> str:
     return value
 
 
+def _configured_session_timeout_seconds() -> float:
+    value = float(os.getenv("VOICE_BIDI_SESSION_TIMEOUT_SECONDS", "600"))
+    if value < 60 or value > 3_540:
+        raise ValueError(
+            "VOICE_BIDI_SESSION_TIMEOUT_SECONDS must be between 60 and 3540 seconds."
+        )
+    return value
+
+
 def _pcm_peak(chunk: bytes) -> int:
     """Return the absolute peak of little-endian LINEAR16 PCM for diagnostics."""
     if not chunk or len(chunk) % 2:
@@ -569,13 +578,21 @@ class VoiceBidiSession:
                     await tasks["send_to_client"]
 
             try:
-                await asyncio.wait_for(wait_for_endpoint_close(), timeout=600.0)
+                session_timeout_seconds = _configured_session_timeout_seconds()
+                await asyncio.wait_for(
+                    wait_for_endpoint_close(),
+                    timeout=session_timeout_seconds,
+                )
             except asyncio.TimeoutError:
-                logger.warning(f"Session {self.session_id} timed out after 10 minutes.")
+                logger.warning(
+                    "Session %s timed out after %s seconds.",
+                    self.session_id,
+                    session_timeout_seconds,
+                )
                 await self.client_ws.send_json(
                     {
                         "type": "ERROR",
-                        "message": "Maximum session duration (10 minutes) exceeded.",
+                        "message": "Maximum session duration exceeded.",
                     }
                 )
             finally:

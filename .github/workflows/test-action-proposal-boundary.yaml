@@ -57,6 +57,7 @@ jobs:
             tests/test_ces_session_bootstrap.py \
             tests/test_ces_callback_bundle.py \
             tests/test_voice_bidi.py \
+            tests/test_voice_deployment_contract.py \
             tests/test_database_schema_contract.py
         working-directory: banking-service
 

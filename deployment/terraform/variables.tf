@@ -587,9 +587,25 @@ variable "developer_iam_members" {
 variable "banking_service_timeout_seconds" {
   type        = number
   description = "Timeout in seconds for the banking-service Cloud Run instance."
-  # The banking service owns long-lived voice WebSockets. Keep this aligned
-  # with VoiceBidiSession's 10-minute maximum session duration.
-  default = 600
+  # Cloud Run starts this timer before application bootstrap and the CES
+  # handshake, so keep headroom beyond the application-owned voice timeout.
+  default = 720
+
+  validation {
+    condition     = var.banking_service_timeout_seconds >= 120 && var.banking_service_timeout_seconds <= 3600
+    error_message = "banking_service_timeout_seconds must be between 120 and 3600."
+  }
+}
+
+variable "banking_service_voice_session_timeout_seconds" {
+  type        = number
+  description = "Application-owned maximum duration for a banking-service CES voice session."
+  default     = 600
+
+  validation {
+    condition     = var.banking_service_voice_session_timeout_seconds >= 60 && var.banking_service_voice_session_timeout_seconds <= 3540
+    error_message = "banking_service_voice_session_timeout_seconds must be between 60 and 3540."
+  }
 }
 
 variable "stable_env_url" {

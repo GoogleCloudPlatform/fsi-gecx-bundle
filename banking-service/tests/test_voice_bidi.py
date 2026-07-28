@@ -20,7 +20,11 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 from main import app
 from services.ces_session_bootstrap import CesSessionBootstrap
-from services.voice_bidi import _configured_noise_suppression_level, _pcm_peak
+from services.voice_bidi import (
+    _configured_noise_suppression_level,
+    _configured_session_timeout_seconds,
+    _pcm_peak,
+)
 
 client = TestClient(app)
 
@@ -38,6 +42,18 @@ def test_ces_noise_suppression_level_is_validated(monkeypatch):
     monkeypatch.setenv("CES_INPUT_NOISE_SUPPRESSION_LEVEL", "maximum")
     with pytest.raises(ValueError, match="must be low, moderate, high, or very_high"):
         _configured_noise_suppression_level()
+
+
+def test_voice_session_timeout_is_named_and_validated(monkeypatch):
+    monkeypatch.delenv("VOICE_BIDI_SESSION_TIMEOUT_SECONDS", raising=False)
+    assert _configured_session_timeout_seconds() == 600
+
+    monkeypatch.setenv("VOICE_BIDI_SESSION_TIMEOUT_SECONDS", "480")
+    assert _configured_session_timeout_seconds() == 480
+
+    monkeypatch.setenv("VOICE_BIDI_SESSION_TIMEOUT_SECONDS", "3599")
+    with pytest.raises(ValueError, match="between 60 and 3540"):
+        _configured_session_timeout_seconds()
 
 
 @pytest.fixture
@@ -93,9 +109,7 @@ def test_gecx_voice_stream_success(
     mock_gecx_ws = AsyncMock()
     # Mock the GECX response: Yield a single transcript json frame, then exit loop
     mock_gecx_ws.__aiter__.return_value = [
-        json.dumps(
-            {"sessionOutput": {"text": "Welcome to Horizon"}}
-        ),
+        json.dumps({"sessionOutput": {"text": "Welcome to Horizon"}}),
         json.dumps(
             {
                 "sessionOutput": {

@@ -64,6 +64,11 @@ resource "google_cloud_run_v2_service" "banking_service" {
       }
 
       env {
+        name  = "VOICE_BIDI_SESSION_TIMEOUT_SECONDS"
+        value = tostring(var.banking_service_voice_session_timeout_seconds)
+      }
+
+      env {
         name  = "DATABASE_URL"
         value = "postgresql+psycopg2://${local.alloydb_iam_users.banking_service}@${google_alloydb_instance.banking_primary.ip_address}:5432/banking?sslmode=require"
       }
@@ -292,6 +297,14 @@ resource "google_cloud_run_v2_service" "banking_service" {
   }
 
   lifecycle {
+    precondition {
+      condition = (
+        var.banking_service_timeout_seconds >=
+        var.banking_service_voice_session_timeout_seconds + 60
+      )
+      error_message = "banking-service Cloud Run timeout must retain at least 60 seconds of headroom beyond the application voice-session timeout."
+    }
+
     ignore_changes = [
       template[0].containers[0].image,
       client,
