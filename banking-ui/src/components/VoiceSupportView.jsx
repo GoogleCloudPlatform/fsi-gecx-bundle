@@ -1496,9 +1496,10 @@ export default function VoiceSupportView() {
           } else if (event.type === DataChannelEvent.SESSION_END) {
             startDisconnectCountdown();
           } else if (event.type === DataChannelEvent.TRANSCRIPT) {
-            setTranscripts(prev => [...prev, { author: event.author, text: event.text }]);
-            if (event.author === 'agent') {
-              const text = event.text.toLowerCase();
+            setTranscripts(prev => mergeGecxTranscript(prev, event));
+            const transcriptText = typeof event.text === 'string' ? event.text.trim() : '';
+            if (event.author === 'agent' && transcriptText) {
+              const text = transcriptText.toLowerCase();
               if (text.includes("goodbye") || text.includes("bye") || (text.includes("have a") && text.includes("day") && text.includes("good"))) {
                 console.log("Agent farewell detected in transcript. Auto-initiating disconnect countdown...");
                 startDisconnectCountdown();

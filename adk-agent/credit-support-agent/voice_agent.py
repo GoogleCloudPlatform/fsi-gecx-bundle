@@ -891,7 +891,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                                     logger.warning("ffmpeg_proc or ffmpeg_proc.stdin is not available!")
                             
                 # Broadcast transcriptions over data channel for UI display when complete
-                if live_event.input_transcript is not None:
+                if (
+                    live_event.input_transcript is not None
+                    and live_event.input_transcript.strip()
+                ):
                     if live_event.input_transcript in pending_typed_transcripts:
                         pending_typed_transcripts.remove(live_event.input_transcript)
                     else:
@@ -900,7 +903,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                             "author": "user",
                             "text": live_event.input_transcript
                         })
-                if live_event.output_transcript is not None:
+                if (
+                    live_event.output_transcript is not None
+                    and live_event.output_transcript.strip()
+                ):
                     on_agent_event({
                         "type": "TRANSCRIPT",
                         "author": "agent",

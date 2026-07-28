@@ -4,6 +4,22 @@ import test from 'node:test';
 import { mergeGecxTranscript } from '../src/utils/gecxTranscript.js';
 
 
+test('blank provider transcripts do not create assistant entries', () => {
+  const transcripts = [{ author: 'user', text: 'No, I do not.' }];
+
+  for (const text of ['', '   ', '\n']) {
+    assert.equal(
+      mergeGecxTranscript(transcripts, {
+        type: 'TRANSCRIPT',
+        author: 'agent',
+        text,
+      }),
+      transcripts,
+    );
+  }
+});
+
+
 test('CES cumulative recognition hypotheses replace the active user turn', () => {
   let transcripts = [];
   for (const text of [
