@@ -41,7 +41,7 @@ sequenceDiagram
     Note over MCP: GECX injects x-banking-session-capability and bound session headers
     
     MCP->>MCP: Validate caller Google OIDC Token (Auth Header)
-    MCP->>MCP: Decrypt capability; validate expiry, session binding, and reset generation
+    MCP->>MCP: Decrypt capability and validate expiry, session binding, and reset generation
     MCP-->>GECX: Opaque proposal id + banking-authored summary
     GECX->>GECX: Record presentation only if all material facts match
     GECX-->>User: Present merchants, amounts, card suffix, and actions
