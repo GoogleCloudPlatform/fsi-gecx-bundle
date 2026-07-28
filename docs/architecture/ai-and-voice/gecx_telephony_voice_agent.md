@@ -32,25 +32,32 @@ sequenceDiagram
     GECX-->>Proxy: GECX welcome greeting audio stream
     Proxy-->>User: Forward welcome greeting audio stream
     
-    User->>Proxy: User speaks: "Increase my credit limit"
+    User->>Proxy: User rejects the suspicious transactions
     Proxy->>GECX: Stream raw PCM audio packets
     
     Note over GECX: GECX Agent processes intent & decides to call tool
     
-    GECX->>MCP: POST /mcp/ (Call Tool: request_credit_limit_increase)
+    GECX->>MCP: POST /mcp/ (Call Tool: propose_fraud_triage)
     Note over MCP: GECX injects x-banking-session-capability and bound session headers
     
     MCP->>MCP: Validate caller Google OIDC Token (Auth Header)
     MCP->>MCP: Decrypt capability; validate expiry, session binding, and reset generation
-    MCP->>DB: Fetch Account & Apply pessimistic row lock (with_for_update)
-    DB-->>MCP: Balance Updated & Committed
-    
+    MCP-->>GECX: Opaque proposal id + banking-authored summary
+    GECX->>GECX: Record presentation only if all material facts match
+    GECX-->>User: Present merchants, amounts, card suffix, and actions
+    User->>Proxy: Later explicit confirmation
+    GECX->>GECX: Classify complete customer utterance
+    GECX->>MCP: POST /mcp/ (commit_fraud_triage)
+    MCP->>MCP: Validate presentation and confirmation turn evidence
+    MCP->>DB: Claim and execute immutable proposal exactly once
+    DB-->>MCP: Committed fraud result
+
     %% OOB UI Sync
-    MCP->>Proxy: send_session_event(session_id, available_credit_cents)
-    Proxy-->>User: Push WebSocket EVENT (Update available credit UI in real-time)
+    MCP->>Proxy: send_session_event(session_id, fraud outcome and card state)
+    Proxy-->>User: Push WebSocket EVENT (Update fraud and card UI)
     
     MCP-->>GECX: HTTP 200 (Success result)
-    GECX-->>Proxy: GECX audio stream response: "Your credit limit has been increased."
+    GECX-->>Proxy: GECX audio stream response from structured commit result
     Proxy-->>User: Forward audio response
 ```
 
@@ -62,6 +69,18 @@ Because GECX operates as a Google-managed cloud agent orchestrator, it must secu
 
 1. **Google OIDC ID Token Verification**: The FastMCP router ensures that invocations come exclusively from Google Cloud Customer Experience Suite services by verifying the Google service account OIDC token in the `Authorization: Bearer <JWT>` header.
 2. **Banking-Issued Session Capability (`x-banking-session-capability`)**: The Firebase token terminates at the banking WebSocket gateway and is never sent to CES. After resolving the exact customer and reset generation, banking mints an encrypted 15-minute capability bound to the support session, CES runtime session, reset generation, app, and deployment. CES forwards the opaque capability with those protected headers. The MCP boundary accepts it only from an authorized CES service caller, verifies every binding, and checks the current reset generation before resolving the customer identity.
+3. **Transport-Owned Consent Evidence**: CES callbacks, rather than model-authored tool arguments, own the proposal id, presentation turn, confirmation turn, method, and classification headers. Banking-service accepts a commit only when those values describe a later explicit confirmation for the active proposal.
+
+### Protected action callback chain
+
+The `Credit_Card_Support_Agent` callback chain keeps consent state outside the prompt:
+
+1. `capture_proposal.py` records the opaque proposal id and banking-authored summary after `propose_fraud_triage`.
+2. `record_presentation.py` records `proposal_presentation_turn_id` only when a completed assistant response asks for confirmation and contains every material fact from the summary. Equivalent written and spoken amounts are accepted; missing or altered merchants, amounts, card suffixes, or actions are rejected.
+3. `classify_confirmation.py` classifies only a later customer turn. A bounded whole-utterance affirmative is `CONFIRMED`; negative or qualified language is `DECLINED`; partial or unrelated speech is `UNCLEAR`.
+4. `enforce_proposal_context.py` binds an omitted proposal id from callback-owned state and blocks `commit_fraud_triage` unless the presentation turn, later confirmation turn, invocation id, explicit-verbal method, and `CONFIRMED` classification all agree.
+
+The model can attempt a blocked tool call, but the callback returns `PROTECTED_CONFIRMATION_REQUIRED` before the banking or evaluation fake tool executes.
 
 ---
 
@@ -97,3 +116,23 @@ Because GECX operates as a Google-managed cloud agent orchestrator, it must secu
 
 * **The Pitfall**: CES built-in conversation redaction does not guarantee that a JWT stored in an updated session variable will be de-identified. Forwarding the Firebase ID token therefore risks retaining a reusable credential in managed conversation history.
 * **The Solution**: Keep the Firebase credential inside the banking gateway. Send only the encrypted, short-lived session capability described above. A demo reset invalidates the capability immediately, and expiry limits replay even if its opaque value is retained in a trace.
+
+### E. Voice Session and Cloud Run Timeout Headroom
+
+* **The Pitfall**: If the Cloud Run request timeout and CES Bidi session timeout are equal, infrastructure termination can interrupt cleanup, terminal telemetry, and the final audio frames.
+* **The Solution**: The banking proxy enforces `VOICE_BIDI_SESSION_TIMEOUT_SECONDS` independently from Cloud Run. The deployment contract requires Cloud Run to retain shutdown headroom beyond the voice session; the current defaults are 600 seconds for the CES session and 720 seconds for the Cloud Run request.
+
+---
+
+## 🧪 4. Trajectory Evaluation and Managed Qualification
+
+Completed CES conversations are normalized into the same event vocabulary as ADK sessions. The checked-in fraud matrix requires one alert read, one proposal, one protected presentation, one later confirmation, one commit, Knowledge Catalog and reset provenance, `fraud-triage.v1`, `PENDING_SPECIALIST_REVIEW`, and normal termination.
+
+Managed CES qualification has two separate resources:
+
+- a generated, sanitized contract replay with strict tool correctness and no conversational-copy claim
+- a hand-authored conversational reference that checks branding, complete transaction readout, exactly one protected confirmation, post-remediation wallet guidance, and closeout
+
+Consent-related releases additionally exercise exact confirmation, an affirmative embedded in unrelated speech, and an altered or incomplete proposal presentation. Negative samples pass only when the callback blocks every commit attempt and no fake or real banking commit executes.
+
+See [Agent Trajectory Evaluation Architecture](./agent_trajectory_evaluation.md) for the shared evaluator and evidence model, and [CES Voice Qualification](../../../gecx/Credit_Support_Voice_Agent/evaluations/README.md) for commands and fixture boundaries.

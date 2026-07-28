@@ -10,7 +10,7 @@ flowchart TB
     USER["End-User Browser"]
     OPS["Operator / Engineer"]
     AGG["Aggregator / FDX Client"]
-    CCAI["CCAI Platform / GECX<br/>CX Agent Studio"]
+    CCAI["Customer Experience Suite<br/>CX Agent Studio / CES"]
     GH["GitHub Repository"]
   end
 
@@ -90,6 +90,8 @@ flowchart TB
   AGENT <--> LKVM
   AGENT <--> GLIVE
   AGENT -->|MCP tools| SVC
+  UI -->|CES Bidi audio via banking proxy| SVC
+  SVC <-->|Bidi session| CCAI
 
   %% banking-service dependencies
   SVC --> ADB
@@ -166,5 +168,6 @@ flowchart TB
 | :--- | :--- |
 | Data platform, CDC, lakehouse, migrations, DB access | [docs/architecture/data-platform/](docs/architecture/data-platform/README.md) |
 | AI, voice, document processing, search & ingestion | [docs/architecture/ai-and-voice/](docs/architecture/ai-and-voice/README.md) |
+| ADK/CES trajectory evaluation and release evidence | [docs/architecture/ai-and-voice/agent_trajectory_evaluation.md](docs/architecture/ai-and-voice/agent_trajectory_evaluation.md) |
 | Domain workflows (origination, servicing, open banking, support, fraud) | [docs/architecture/domain-workflows/](docs/architecture/domain-workflows/README.md) |
 | Identity & access (custom IAP login, blocking functions) | [docs/architecture/identity-access/](docs/architecture/identity-access/README.md) |

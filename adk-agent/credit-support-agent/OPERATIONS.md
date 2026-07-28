@@ -64,6 +64,10 @@ to evaluate a specific completed session.
 
 ### Action-proposal qualification
 
+The runtime-neutral event contract, CES adapter, and evidence-layer boundaries
+are documented in
+[Agent Trajectory Evaluation Architecture](../../docs/architecture/ai-and-voice/agent_trajectory_evaluation.md).
+
 Proposal rollout is an explicit operator gate. This repository does not change
 Cloud Run traffic or deploy revisions as part of the canary. First record a
 completed direct-path baseline with `VOICE_AGENT_USE_ACTION_PROPOSALS=false`,

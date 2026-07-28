@@ -41,7 +41,12 @@ sequenceDiagram
     API-->>Worker: Suspicious transactions and alert id
     Worker-->>Customer: Ask whether customer recognizes each suspicious transaction
     Customer->>UI: Confirms disputed selection
-    Worker->>API: POST /api/mcp/ (triage_fraud_case)
+    Worker->>API: POST /api/mcp/ (propose_fraud_triage)
+    API-->>Worker: Opaque proposal id + banking-authored customer-safe summary
+    Worker-->>Customer: Present all merchants, amounts, card suffix, and actions
+    Customer->>UI: Later explicit confirmation
+    Worker->>API: POST /api/mcp/ (commit_fraud_triage with proposal id)
+    API->>API: Validate presentation and later-turn confirmation evidence
     API->>DB: Void pending auths, apply provisional credits, block compromised card, issue replacement, write audit/secure message
     API-->>Worker: Triage result
     
@@ -66,16 +71,25 @@ sequenceDiagram
   1. A new, offsetting positive credit transaction is appended to the `account_ledger` table with the description `"FEE_REVERSAL_REF_<original_tx_id>"`.
   2. The account balances (`cleared_balance_cents` and `available_credit_cents`) are re-computed and committed.
 
-### C. Deterministic Fraud Workflow Behind MCP
-* **Context**: Gemini Live is good at conversational slot-filling, but brittle if asked to sequence several low-level card operations in one live turn. Fraud remediation also needs idempotency, audit events, provisional-credit semantics, secure messaging, and card targeting based on the active fraud alert.
-* **Decision**: The agent uses a high-level MCP tool, `triage_fraud_case`, after it has inspected the alert and the customer has confirmed which transactions are disputed. Banking-service owns the business workflow:
+### C. Banking-Owned Action Proposal and Deterministic Fraud Commit
+* **Context**: Gemini Live is good at conversational slot-filling, but it must not construct or mutate a consequential banking payload from free-form conversation. Fraud remediation also needs immutable consent scope, idempotency, audit events, provisional-credit semantics, secure messaging, and card targeting based on the active fraud alert.
+* **Decision**: The agent uses a two-phase banking-owned action proposal:
+  1. `prepare_fraud_triage_confirmation` validates the completed selection and calls banking-service `propose_fraud_triage`.
+  2. Banking-service normalizes the immutable action payload and returns an opaque proposal id plus a customer-safe summary.
+  3. The agent presents the complete summary and stops. The presentation validator requires the same merchants, amounts, card suffix, and consequential actions, while accepting equivalent spoken-number formatting such as “one hundred dollars” for `$100.00`.
+  4. A later customer turn is classified as confirmed, declined, or unclear. Negatives and qualifications win over affirmative tokens; an affirmative embedded in unrelated speech is not authorization.
+  5. Only a valid later confirmation permits `commit_fraud_triage`, whose model-visible input is the opaque proposal id. Banking-service revalidates the transport-owned evidence before claiming and executing the proposal exactly once.
+
+Banking-service then owns the deterministic business workflow:
   1. Validate the alert belongs to the customer and target `FraudAlert.card_id`.
   2. Void or release pending suspicious authorizations.
   3. Apply provisional credit entries for posted disputed charges.
   4. Block the compromised card and issue a replacement when requested by the workflow.
   5. Emit audit events and send secure-message follow-up.
 
-The agent can still use existing support capabilities such as late fee reversal, credit limit increase, human escalation, card replacement, and wallet provisioning. During an active fraud alert, however, it must prefer the high-level fraud triage workflow rather than burst-calling low-level fraud tools.
+The proposal row also provides the idempotency and concurrency boundary. Concurrent creation using the same idempotency key resolves to the same immutable proposal or rejects payload drift; commit claims prevent duplicate execution and reconcile a durable domain result if the first response is interrupted.
+
+The agent can still use existing support capabilities such as late fee reversal, credit limit increase, human escalation, card replacement, and wallet provisioning. During an active fraud alert, however, it must prefer the proposal/commit workflow rather than the compatibility-only direct `triage_fraud_case` path or burst-calling low-level fraud tools.
 
 ### D. Session-Specific Prompt Composition
 * **Context**: The base voice instruction should remain reusable for future specialized flows such as overdraft remediation. Baking every workflow into a monolithic prompt would make the reference architecture hard to extend.
@@ -154,3 +168,11 @@ Stateful WebRTC real-time media agents have vastly different compute profiles co
 Bidirectional asynchronous loop libraries (like `asyncio` and `livekit-rtc`) can experience deadlock if threads block, while the parent Python process continues running.
 * **Mitigation**: Implement a secondary Python HTTP daemon thread inside the worker running a health probe. This thread checks the health of the WebRTC connection loop.
 * **Terraform Integration**: Wire this health endpoint to Cloud Run's native **Liveness and Readiness Probes** so that GCP automatically recycles any deadlocked container instances.
+
+### Runtime-neutral trajectory evaluation
+
+The agent emits bounded proposal, tool, UI, interruption, and terminal telemetry keyed by stable hashed references. `scripts/voice_canary.py` converts those deployed logs into the shared trajectory event vocabulary and applies machine-checkable scenarios for success, decline, ambiguity, interruption, reset invalidation, expiry, and tool failure.
+
+Release qualification checks ordered outcomes rather than only individual tool success. A normal proposal path must contain `PROPOSED → PRESENTED → CONFIRMED → COMMITTED`, must not call the direct compatibility tool, and must not claim spoken success before the structured commit result. A direct-path baseline can be compared with the proposal path for equivalent banking and terminal outcomes.
+
+See [Agent Trajectory Evaluation Architecture](./agent_trajectory_evaluation.md) for the shared ADK/CES event contract, evidence layers, and qualification commands.
