@@ -353,6 +353,19 @@ def get_pulse_redis_client():
     return _redis_client
 
 
+def reset_pulse_redis_client() -> None:
+    global _redis_client
+    global _redis_disabled
+
+    if _redis_client is not None:
+        try:
+            _redis_client.connection_pool.disconnect()
+        except Exception:
+            pass
+    _redis_client = None
+    _redis_disabled = False
+
+
 def extract_pulse_event_id(request: Request, body: Any | None = None) -> str | None:
     """Resolve an idempotency key from Eventarc/CloudEvents or Pub/Sub payloads."""
     for header_name in ("ce-id", "Ce-Id", "CE-ID"):
@@ -396,49 +409,57 @@ def admit_pulse(event_id: str | None) -> PulseAdmission:
             event_id=event_id,
         )
 
-    try:
-        if event_id:
-            event_key = f"data-generator:pulse:event:{event_id}"
-            event_admitted = redis_client.set(
-                event_key,
+    for attempt in range(2):
+        try:
+            if event_id:
+                event_key = f"data-generator:pulse:event:{event_id}"
+                event_admitted = redis_client.set(
+                    event_key,
+                    pulse_token,
+                    nx=True,
+                    ex=PULSE_EVENT_DEDUP_TTL_SECONDS,
+                )
+                if not event_admitted:
+                    return PulseAdmission(
+                        admitted=False,
+                        status="SKIPPED_DUPLICATE_EVENT",
+                        message="Scheduler/Eventarc pulse event was already admitted.",
+                        event_id=event_id,
+                        redis_client=redis_client,
+                    )
+
+            active_lock_key = "data-generator:pulse:active"
+            active_admitted = redis_client.set(
+                active_lock_key,
                 pulse_token,
                 nx=True,
-                ex=PULSE_EVENT_DEDUP_TTL_SECONDS,
+                ex=PULSE_ACTIVE_LOCK_TTL_SECONDS,
             )
-            if not event_admitted:
+            if not active_admitted:
                 return PulseAdmission(
                     admitted=False,
-                    status="SKIPPED_DUPLICATE_EVENT",
-                    message="Scheduler/Eventarc pulse event was already admitted.",
+                    status="SKIPPED_ACTIVE_PULSE",
+                    message="Another simulation pulse is already active.",
                     event_id=event_id,
                     redis_client=redis_client,
                 )
-
-        active_lock_key = "data-generator:pulse:active"
-        active_admitted = redis_client.set(
-            active_lock_key,
-            pulse_token,
-            nx=True,
-            ex=PULSE_ACTIVE_LOCK_TTL_SECONDS,
-        )
-        if not active_admitted:
+            break
+        except Exception as exc:
+            if attempt == 0:
+                logger.warning("Pulse admission Redis command failed; reconnecting once: %s", exc)
+                reset_pulse_redis_client()
+                redis_client = get_pulse_redis_client()
+                if redis_client:
+                    continue
+            logger.warning(
+                "Pulse admission failed; skipping pulse to avoid duplicate traffic: %s", exc
+            )
             return PulseAdmission(
                 admitted=False,
-                status="SKIPPED_ACTIVE_PULSE",
-                message="Another simulation pulse is already active.",
+                status="SKIPPED_ADMISSION_UNAVAILABLE",
+                message="Pulse admission control failed; skipped to avoid scheduler retry amplification.",
                 event_id=event_id,
-                redis_client=redis_client,
             )
-    except Exception as exc:
-        logger.warning(
-            "Pulse admission failed; skipping pulse to avoid duplicate traffic: %s", exc
-        )
-        return PulseAdmission(
-            admitted=False,
-            status="SKIPPED_ADMISSION_UNAVAILABLE",
-            message="Pulse admission control failed; skipped to avoid scheduler retry amplification.",
-            event_id=event_id,
-        )
 
     return PulseAdmission(
         admitted=True,

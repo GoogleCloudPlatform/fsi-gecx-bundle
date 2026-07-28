@@ -88,7 +88,7 @@ The final pre-migration Cloud SQL backup identifier is stored in the first succe
 ## Demo preflight
 
 - Banking, voice, and data-generator revisions reference immutable digests from the current manifest.
-- `banking-db-reconcile` succeeds with expected Alembic revision `7c4f2a9d1e63`.
+- `banking-db-reconcile` succeeds with expected Alembic revision `91d7b4a6c2ef`.
 - Banking `/health`, authenticated voice `/`, and data-generator `/health` return success.
 - A presenter reset/seed completes.
 - Datastream is running, every configured backfill completed, and recent rows appear in BigQuery without pre-reset residue.

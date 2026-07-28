@@ -6,7 +6,7 @@ from typing import Iterator
 
 from fastapi import HTTPException, status
 
-from utils.redis_client import get_redis_client
+from utils.redis_client import execute_redis_command
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +16,8 @@ DEFAULT_DRAIN_SECONDS = 2.0
 
 
 def get_maintenance_state() -> dict | None:
-    redis_client = get_redis_client()
-    if not redis_client:
-        return None
-
     try:
-        raw = redis_client.get(MAINTENANCE_KEY)
+        raw = execute_redis_command(lambda redis_client: redis_client.get(MAINTENANCE_KEY))
     except Exception as exc:
         logger.warning("Failed to read maintenance state from Redis: %s", exc)
         return None
@@ -57,28 +53,26 @@ def enable_maintenance_mode(
     message: str,
     ttl_seconds: int = DEFAULT_RESET_TTL_SECONDS,
 ) -> bool:
-    redis_client = get_redis_client()
-    if not redis_client:
-        logger.warning("Redis is unavailable; cannot coordinate maintenance mode across services.")
-        return False
-
     payload = {
         "active": True,
         "reason": reason,
         "message": message,
         "started_at_epoch_ms": int(time.time() * 1000),
     }
-    redis_client.set(MAINTENANCE_KEY, json.dumps(payload), ex=ttl_seconds)
-    return True
+    try:
+        return bool(
+            execute_redis_command(
+                lambda redis_client: redis_client.set(MAINTENANCE_KEY, json.dumps(payload), ex=ttl_seconds)
+            )
+        )
+    except Exception as exc:
+        logger.warning("Failed to enable maintenance mode in Redis: %s", exc)
+        return False
 
 
 def disable_maintenance_mode() -> None:
-    redis_client = get_redis_client()
-    if not redis_client:
-        return
-
     try:
-        redis_client.delete(MAINTENANCE_KEY)
+        execute_redis_command(lambda redis_client: redis_client.delete(MAINTENANCE_KEY))
     except Exception as exc:
         logger.warning("Failed to clear maintenance state in Redis: %s", exc)
 

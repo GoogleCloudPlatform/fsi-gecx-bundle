@@ -240,6 +240,12 @@ resource "google_secret_manager_secret_iam_member" "banking_service_card_network
   member    = "serviceAccount:${google_service_account.banking_service_account.email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "banking_service_ces_session_capability_key_accessor" {
+  secret_id = google_secret_manager_secret.ces_session_capability_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.banking_service_account.email}"
+}
+
 resource "google_secret_manager_secret_iam_member" "data_generator_card_network_switch_token_accessor" {
   secret_id = google_secret_manager_secret.card_network_switch_token.id
   role      = "roles/secretmanager.secretAccessor"

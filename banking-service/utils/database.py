@@ -125,6 +125,10 @@ def create_db_engine(url_str=DATABASE_URL, **kwargs):
     
     if url_str.startswith("sqlite"):
         connect_args["check_same_thread"] = False
+        # Required for ATTACH DATABASE 'file:...?mode=memory&cache=shared'.
+        # Without URI handling SQLite silently creates literal `file:*`
+        # databases in the process working directory.
+        connect_args["uri"] = True
         exec_opts = engine_args.get("execution_options", {}).copy()
         exec_opts["schema_translate_map"] = {"merchants": "ref_data"}
         engine_args["execution_options"] = exec_opts
@@ -316,6 +320,7 @@ def init_db():
     import models.credit_card  # noqa: F401
     import models.fraud  # noqa: F401
     import models.support  # noqa: F401
+    import models.action_proposal  # noqa: F401
     import models.settings  # noqa: F401
     import models.kyc  # noqa: F401
     import models.reference  # noqa: F401

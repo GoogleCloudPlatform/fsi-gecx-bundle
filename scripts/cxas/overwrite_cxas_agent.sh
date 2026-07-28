@@ -23,6 +23,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENT_DIR="${SCRIPT_DIR}/../../gecx" # Directory containing your agent configs
 AGENT_FOLDER="${AGENT_FOLDER:-Nova_Horizon_Bot_v2}"
 ZIP_OUT="/tmp/agent_export.zip"
+EXPECTED_MODEL="${EXPECTED_MODEL:-}"
+
+if [ -z "$EXPECTED_MODEL" ]; then
+  EXPECTED_MODEL=$(awk '
+    /^modelSettings:/ { in_model_settings = 1; next }
+    in_model_settings && /^  model:/ { print $2; exit }
+    in_model_settings && /^[^ ]/ { exit }
+  ' "$AGENT_DIR/$AGENT_FOLDER/app.yaml")
+fi
 
 # Check required parameters
 if [ -z "$PROJECT_ID" ]; then
@@ -126,7 +135,65 @@ fi
 
 echo "App ID: $APP_ID"
 
-# 7. Get the list of existing deployments
+# 7. Verify the imported root-agent model before creating or moving a deployment.
+if [ -n "$EXPECTED_MODEL" ]; then
+  echo "Verifying imported root-agent model is $EXPECTED_MODEL..."
+  APP_RESPONSE=$(curl -s \
+    -H "Authorization: Bearer $ACCESS_TOKEN" \
+    -H "x-goog-user-project: $PROJECT_ID" \
+    "${BASE_URL}/projects/${PROJECT_ID}/locations/${LOCATION}/apps/${APP_ID}")
+
+  ACTUAL_APP_MODEL=$(echo "$APP_RESPONSE" | python3 -c "
+import sys, json
+try:
+    print(json.load(sys.stdin).get('modelSettings', {}).get('model', ''))
+except Exception:
+    pass
+")
+
+  if [ "$ACTUAL_APP_MODEL" != "$EXPECTED_MODEL" ]; then
+    echo "Error: Imported app model is '$ACTUAL_APP_MODEL'; expected '$EXPECTED_MODEL'."
+    echo "App response: $APP_RESPONSE"
+    exit 1
+  fi
+
+  ROOT_AGENT_NAME=$(echo "$APP_RESPONSE" | python3 -c "
+import sys, json
+try:
+    print(json.load(sys.stdin).get('rootAgent', ''))
+except Exception:
+    pass
+")
+
+  if [ -z "$ROOT_AGENT_NAME" ]; then
+    echo "Error: Imported app did not report a root agent."
+    echo "Response: $APP_RESPONSE"
+    exit 1
+  fi
+
+  AGENT_RESPONSE=$(curl -s \
+    -H "Authorization: Bearer $ACCESS_TOKEN" \
+    -H "x-goog-user-project: $PROJECT_ID" \
+    "${BASE_URL}/${ROOT_AGENT_NAME}")
+
+  ACTUAL_MODEL=$(echo "$AGENT_RESPONSE" | python3 -c "
+import sys, json
+try:
+    print(json.load(sys.stdin).get('modelSettings', {}).get('model', ''))
+except Exception:
+    pass
+")
+
+  if [ "$ACTUAL_MODEL" != "$EXPECTED_MODEL" ]; then
+    echo "Error: Imported root-agent model is '$ACTUAL_MODEL'; expected '$EXPECTED_MODEL'."
+    echo "Agent response: $AGENT_RESPONSE"
+    exit 1
+  fi
+
+  echo "Verified imported app and root-agent model: $ACTUAL_MODEL"
+fi
+
+# 8. Get the list of existing deployments
 echo "Retrieving existing deployments..."
 DEPLOYMENTS_RESPONSE=$(curl -s \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
@@ -154,7 +221,7 @@ else
   echo "$DEPLOYMENT_NAMES"
 fi
 
-# 8. Create a new agent version
+# 9. Create a new agent version
 echo "Creating a new agent version..."
 VERSION_TIMESTAMP=$(date +"%-m/%-d/%Y, %-I:%M:%S %p")
 CREATE_VERSION_RESPONSE=$(curl -s -X POST \
@@ -174,7 +241,7 @@ if [ -z "$VERSION_RESOURCE_NAME" ]; then
 fi
 echo "New Version Resource Name: $VERSION_RESOURCE_NAME"
 
-# 9. Update the existing deployments to use the new version
+# 10. Update the existing deployments to use the new version
 if [ -n "$DEPLOYMENT_NAMES" ]; then
   echo "$DEPLOYMENT_NAMES" | while read -r DEPLOYMENT_NAME; do
     if [ -n "$DEPLOYMENT_NAME" ]; then
@@ -205,4 +272,3 @@ except Exception:
 else
   echo "Warning: No existing deployments were updated because none were found."
 fi
-

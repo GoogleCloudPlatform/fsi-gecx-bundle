@@ -166,6 +166,7 @@ def create_message(
     message: str,
     category: Optional[str],
     thread_id: str,
+    commit_transaction: bool = True,
 ) -> None:
     user = db.query(User).filter(User.auth_provider_uid == auth_provider_uid).first()
     if not user:
@@ -195,7 +196,10 @@ def create_message(
             "thread_id": thread_id,
         },
     )
-    db.commit()
+    if commit_transaction:
+        db.commit()
+    else:
+        db.flush()
 
 
 def get_messages_for_customer(db: Session, auth_provider_uid: str) -> List[Dict[str, Any]]:

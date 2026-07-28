@@ -13,6 +13,20 @@
 # limitations under the License.
 
 steps:
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "prepare-linguist-repository"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        if [ ! -d /workspace/.git ]; then
+          git init -q /workspace
+          git -C /workspace add -A
+          git -C /workspace \
+            -c user.name=cloud-build -c user.email=cloud-build@localhost \
+            commit -qm archive-build
+        fi
+
   - name: "ghcr.io/github-linguist/linguist:latest"
     id: "run-linguist"
     entrypoint: "sh"

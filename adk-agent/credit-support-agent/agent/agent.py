@@ -33,7 +33,7 @@ from agent.log_safety import (
     tool_response_succeeded,
     tool_result_log_summary,
 )
-from agent.telemetry import record_tool_completed
+from agent.telemetry import record_action_proposal_event, record_tool_completed
 from agent.fraud_voice import (
     build_triage_model_result,
     invalidate_wallet_authorization,
@@ -48,7 +48,6 @@ from agent.workflow_authorization import (
     PUSH_CARD_TO_GOOGLE_WALLET,
     TRIAGE_CUSTOMER_REPORTED_FRAUD,
     TRIAGE_FRAUD_CASE,
-    apply_customer_authorization_response,
     action_payload_fingerprint,
     create_workflow_authorization,
     invalidate_workflow_authorization,
@@ -58,7 +57,9 @@ from agent.workflow_authorization import (
 )
 
 LOCATION = os.getenv("LOCATION", "us-central1")
-credentials, project_id = google.auth.default()
+project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+if not project_id:
+    _, project_id = google.auth.default()
 os.environ.setdefault("GOOGLE_CLOUD_PROJECT", project_id)
 os.environ.setdefault("GOOGLE_CLOUD_LOCATION", LOCATION)
 os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")
@@ -74,6 +75,9 @@ is_processing_tool_var: contextvars.ContextVar[dict | None] = contextvars.Contex
 )
 latest_customer_turn_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
     "latest_customer_turn", default=None
+)
+proposal_runtime_context_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "proposal_runtime_context", default=None
 )
 
 
@@ -134,7 +138,14 @@ def register_event_callback(cb):
     session_event_callback_var.set(cb)
 
 
-def bind_session_context(customer_id: str, callback):
+def bind_session_context(
+    customer_id: str,
+    callback,
+    *,
+    support_session_id: str | None = None,
+    runtime_name: str = "ADK_GEMINI_LIVE",
+    runtime_session_id: str | None = None,
+):
     """Binds per-session customer and callback context and resets transient flags."""
     return {
         "customer": active_customer_id_var.set(customer_id),
@@ -145,7 +156,18 @@ def bind_session_context(customer_id: str, callback):
         # the same session signals.
         "should_end": session_should_end_var.set({"requested": False}),
         "is_processing": is_processing_tool_var.set({"active": False}),
-        "latest_customer_turn": latest_customer_turn_var.set({"latest": None}),
+        "latest_customer_turn": latest_customer_turn_var.set({
+            "latest": None,
+            "authorization_decision": None,
+        }),
+        "proposal_runtime_context": proposal_runtime_context_var.set({
+            "support_session_id": support_session_id or runtime_session_id or "",
+            "runtime_name": runtime_name,
+            "runtime_session_id": runtime_session_id or support_session_id or "",
+            "reset_generation": "",
+            "catalog_snapshot_id": None,
+            "confirmation": None,
+        }),
     }
 
 
@@ -153,11 +175,68 @@ def reset_session_context(tokens: dict) -> None:
     """Restores prior context-var state for a completed session."""
     if not tokens:
         return
+    proposal_runtime_context_var.reset(tokens["proposal_runtime_context"])
     is_processing_tool_var.reset(tokens["is_processing"])
     latest_customer_turn_var.reset(tokens["latest_customer_turn"])
     session_should_end_var.reset(tokens["should_end"])
     session_event_callback_var.reset(tokens["callback"])
     active_customer_id_var.reset(tokens["customer"])
+
+
+def configure_proposal_runtime_context(
+    *, reset_generation: str, catalog_snapshot_id: str | None
+) -> None:
+    holder = proposal_runtime_context_var.get()
+    if holder is None:
+        return
+    holder["reset_generation"] = str(reset_generation or "")
+    holder["catalog_snapshot_id"] = catalog_snapshot_id
+
+
+def _proposal_transport_headers(*, customer_turn_id: str) -> dict[str, str]:
+    holder = proposal_runtime_context_var.get() or {}
+    confirmation = holder.get("confirmation") or {}
+    protected_confirmation_turn_id = str(
+        confirmation.get("confirmation_turn_id") or ""
+    )
+    headers = {
+        "x-support-session-id": str(holder.get("support_session_id") or ""),
+        "x-runtime-name": str(holder.get("runtime_name") or ""),
+        "x-runtime-session-id": str(holder.get("runtime_session_id") or ""),
+        "x-customer-turn-id": protected_confirmation_turn_id
+        or str(customer_turn_id or ""),
+        "x-reset-generation": str(holder.get("reset_generation") or ""),
+    }
+    if holder.get("catalog_snapshot_id"):
+        headers["x-catalog-snapshot-id"] = str(holder["catalog_snapshot_id"])
+    if confirmation:
+        headers.update({
+            "x-proposal-presentation-turn-id": str(confirmation.get("presentation_turn_id") or ""),
+            "x-proposal-confirmation-turn-id": str(confirmation.get("confirmation_turn_id") or ""),
+            "x-proposal-confirmation-method": "EXPLICIT_VERBAL",
+            "x-proposal-confirmation-classification": "CONFIRMED",
+        })
+    return headers
+
+
+def _record_commit_proposal_event(
+    *, state: dict, args: dict, result: dict | None, outcome: str, latency_ms: float
+) -> None:
+    runtime_context = proposal_runtime_context_var.get() or {}
+    authorization = (state.get("fraud_playbook") or {}).get("workflow_authorization") or {}
+    structured = result or {}
+    record_action_proposal_event(
+        runtime=str(runtime_context.get("runtime_name") or "ADK_GEMINI_LIVE"),
+        support_session_id=str(runtime_context.get("support_session_id") or state.get("session_id") or ""),
+        proposal_id=str(args.get("proposal_id") or authorization.get("proposal_id") or "") or None,
+        contract_version=str(authorization.get("contract_version") or structured.get("contract_version") or "fraud-triage.v1"),
+        catalog_snapshot_id=runtime_context.get("catalog_snapshot_id"),
+        tool="commit_fraud_triage",
+        outcome=str(structured.get("status") or outcome),
+        latency_ms=latency_ms,
+        invalidation_reason=structured.get("invalidation_reason") or structured.get("error"),
+        banking_outcome=structured.get("outcome"),
+    )
 
 
 def is_session_end_requested() -> bool:
@@ -189,58 +268,84 @@ def record_customer_turn(
     *,
     event_id: str | None = None,
     observed_at_epoch_s: float | None = None,
-) -> None:
-    """Record bounded confirmation evidence before a Live tool call is emitted."""
+    pending_ingress: bool = False,
+    consume_pending: bool = False,
+) -> dict | None:
+    """Register a customer turn and return its canonical runtime evidence."""
     text = str(transcript or "").strip()
     if not text:
-        return
+        return None
     observed_at = time.time() if observed_at_epoch_s is None else observed_at_epoch_s
+    holder = latest_customer_turn_var.get()
+    if holder is None:
+        holder = {"latest": None, "authorization_decision": None}
+        latest_customer_turn_var.set(holder)
+    latest = holder.get("latest") or {}
+    if (
+        consume_pending
+        and latest.get("pending_ingress")
+        and " ".join(str(latest.get("transcript") or "").lower().split())
+        == " ".join(text.lower().split())
+    ):
+        turn = dict(latest)
+        turn["pending_ingress"] = False
+        if event_id and event_id != turn.get("event_id"):
+            turn["runtime_event_id"] = event_id
+        holder["latest"] = turn
+        return turn
     turn = {
         "transcript": text[:1000],
         "event_id": event_id or f"customer-turn-{time.time_ns()}",
         "observed_at_epoch_s": observed_at,
+        "pending_ingress": pending_ingress,
     }
+    holder["latest"] = turn
+    holder["authorization_decision"] = None
+    return turn
+
+
+def record_customer_authorization_decision(authorization: dict) -> None:
+    """Publish the plugin's classified decision for same-turn tool reconciliation."""
     holder = latest_customer_turn_var.get()
     if holder is None:
-        latest_customer_turn_var.set({"latest": turn})
-    else:
-        holder["latest"] = turn
+        holder = {"latest": None, "authorization_decision": None}
+        latest_customer_turn_var.set(holder)
+    holder["authorization_decision"] = dict(authorization)
 
 
-def apply_latest_customer_turn_to_authorization(
+def apply_recorded_authorization_decision(
     fraud_playbook: dict,
 ) -> tuple[dict, bool]:
-    """Reconcile Live/typed input that ADK has not yet committed to session state."""
+    """Reconcile a plugin-classified decision not yet committed to ADK state."""
     authorization = dict(fraud_playbook.get("workflow_authorization") or {})
     holder = latest_customer_turn_var.get() or {}
-    turn = holder.get("latest") or {}
+    latest_turn = holder.get("latest") or {}
+    decision = dict(holder.get("authorization_decision") or {})
     if authorization.get("status") not in {"PENDING", "UNCLEAR"}:
         return fraud_playbook, False
-    if not authorization.get("assistant_event_id"):
+    if decision.get("status") not in {"CONFIRMED", "DECLINED", "EXPIRED", "UNCLEAR"}:
         return fraud_playbook, False
-    if float(turn.get("observed_at_epoch_s") or 0) <= float(
-        authorization.get("issued_at_epoch_s") or 0
-    ):
-        return fraud_playbook, False
-    if not turn.get("event_id") or turn.get("event_id") == authorization.get(
-        "customer_event_id"
-    ):
-        return fraud_playbook, False
-
-    updated_authorization = apply_customer_authorization_response(
-        authorization,
-        transcript=turn.get("transcript"),
-        customer_event_id=str(turn["event_id"]),
-        now_epoch_s=float(turn["observed_at_epoch_s"]),
+    identity_fields = (
+        "action",
+        "session_id",
+        "issued_at_epoch_s",
+        "payload_fingerprint",
+        "proposal_id",
     )
-    if updated_authorization == authorization:
+    if any(decision.get(field) != authorization.get(field) for field in identity_fields):
+        return fraud_playbook, False
+    if not decision.get("customer_event_id"):
+        return fraud_playbook, False
+    if decision.get("customer_event_id") != latest_turn.get("event_id"):
+        return fraud_playbook, False
+    if decision == authorization:
         return fraud_playbook, False
     updated_playbook = dict(fraud_playbook)
-    updated_playbook["workflow_authorization"] = updated_authorization
-    if updated_authorization.get("action") == PUSH_CARD_TO_GOOGLE_WALLET:
-        updated_playbook["wallet_response_status"] = updated_authorization.get("status")
+    updated_playbook["workflow_authorization"] = decision
+    if decision.get("action") == PUSH_CARD_TO_GOOGLE_WALLET:
+        updated_playbook["wallet_response_status"] = decision.get("status")
         updated_playbook["wallet_customer_confirmed"] = (
-            updated_authorization.get("status") == "CONFIRMED"
+            decision.get("status") == "CONFIRMED"
         )
     return updated_playbook, True
 
@@ -267,6 +372,10 @@ class DynamicGoogleAuth(httpx.Auth):
         token = get_auth_token_for_audience(BANKING_SERVICE_URL)
         request.headers["Authorization"] = f"Bearer {token}"
         request.headers["x-target-customer-id"] = active_customer_id_var.get()
+        latest_turn = (latest_customer_turn_var.get() or {}).get("latest") or {}
+        request.headers.update(_proposal_transport_headers(
+            customer_turn_id=str(latest_turn.get("event_id") or "unknown-turn")
+        ))
         yield request
 
 def get_auth_token_for_audience(audience: str) -> str:
@@ -372,35 +481,122 @@ def prepare_fraud_triage_confirmation(
 
     payload = {
         "fraud_alert_id": requested_alert_id,
+        "selection_status": "COMPLETE",
         "disputed_authorization_ids": list(requested_authorization_ids),
         "disputed_transaction_ids": list(requested_transaction_ids),
+        "recognized_authorization_ids": sorted(
+            allowed_authorization_ids - requested_authorization_ids
+        ),
+        "recognized_transaction_ids": sorted(
+            allowed_transaction_ids - requested_transaction_ids
+        ),
         "issue_replacement": issue_replacement,
+        "escalate": False,
     }
+    proposal_result = None
+    if os.getenv("VOICE_AGENT_USE_ACTION_PROPOSALS", "true").lower() == "true":
+        latest_turn = (latest_customer_turn_var.get() or {}).get("latest") or {}
+        originating_turn_id = str(latest_turn.get("event_id") or "").strip()
+        if not originating_turn_id:
+            return {
+                "success": False,
+                "error": "CUSTOMER_TURN_EVIDENCE_REQUIRED",
+                "message": "Wait for a real customer turn before preparing confirmation.",
+            }
+        headers = get_auth_headers()
+        headers.update(_proposal_transport_headers(customer_turn_id=originating_turn_id))
+        idempotency_key = (
+            f"adk:{state.get('session_id')}:{originating_turn_id}:"
+            f"{action_payload_fingerprint(TRIAGE_FRAUD_CASE, payload)[:32]}"
+        )[:128]
+        proposal_started_at = time.monotonic()
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.post(
+                    f"{BANKING_SERVICE_URL}/credit-card/action-proposals/fraud-triage",
+                    headers=headers,
+                    json={**payload, "idempotency_key": idempotency_key},
+                )
+            response.raise_for_status()
+            proposal_result = response.json()
+        except Exception as exc:
+            runtime_context = proposal_runtime_context_var.get() or {}
+            record_action_proposal_event(
+                runtime=str(runtime_context.get("runtime_name") or "ADK_GEMINI_LIVE"),
+                support_session_id=str(runtime_context.get("support_session_id") or state.get("session_id") or ""),
+                proposal_id=None,
+                contract_version="fraud-triage.v1",
+                catalog_snapshot_id=runtime_context.get("catalog_snapshot_id"),
+                tool="prepare_fraud_triage_confirmation",
+                outcome="PREPARE_FAILED",
+                latency_ms=(time.monotonic() - proposal_started_at) * 1000,
+                invalidation_reason=type(exc).__name__,
+            )
+            return {
+                "success": False,
+                "error": "PROPOSAL_PREPARATION_FAILED",
+                "message": "I could not prepare a durable fraud confirmation.",
+                "error_type": type(exc).__name__,
+            }
+        runtime_context = proposal_runtime_context_var.get() or {}
+        record_action_proposal_event(
+            runtime=str(runtime_context.get("runtime_name") or "ADK_GEMINI_LIVE"),
+            support_session_id=str(runtime_context.get("support_session_id") or state.get("session_id") or ""),
+            proposal_id=proposal_result.get("proposal_id"),
+            contract_version=proposal_result.get("contract_version"),
+            catalog_snapshot_id=runtime_context.get("catalog_snapshot_id"),
+            tool="prepare_fraud_triage_confirmation",
+            outcome=proposal_result.get("status") or "PROPOSED",
+            latency_ms=(time.monotonic() - proposal_started_at) * 1000,
+        )
     existing = playbook.get("workflow_authorization") or {}
     if existing:
         existing = invalidate_workflow_authorization(
             existing,
             reason="REPLACED_BY_NEW_TRIAGE_SELECTION",
         )
+        if existing.get("proposal_id"):
+            runtime_context = proposal_runtime_context_var.get() or {}
+            record_action_proposal_event(
+                runtime=str(runtime_context.get("runtime_name") or "ADK_GEMINI_LIVE"),
+                support_session_id=str(runtime_context.get("support_session_id") or state.get("session_id") or ""),
+                proposal_id=existing.get("proposal_id"),
+                contract_version=existing.get("contract_version"),
+                catalog_snapshot_id=runtime_context.get("catalog_snapshot_id"),
+                tool="prepare_fraud_triage_confirmation",
+                outcome="INVALIDATED",
+                latency_ms=0,
+                invalidation_reason="REPLACED_BY_NEW_TRIAGE_SELECTION",
+            )
         playbook["last_workflow_authorization"] = existing
     authorization = create_workflow_authorization(
         action=TRIAGE_FRAUD_CASE,
         payload=payload,
         session_id=str(state.get("session_id") or ""),
     )
+    if proposal_result:
+        authorization["proposal_id"] = proposal_result["proposal_id"]
+        authorization["contract_version"] = proposal_result["contract_version"]
+        authorization["customer_safe_summary"] = proposal_result["customer_safe_summary"]
     playbook["workflow_authorization"] = authorization
     state["fraud_playbook"] = playbook
-    return {
+    result = {
         "success": True,
         "confirmation_required": True,
         "action": TRIAGE_FRAUD_CASE,
         "payload": authorization["payload"],
         "payload_fingerprint": authorization["payload_fingerprint"],
         "model_instruction": (
-            "Restate this exact selection in customer-safe language and ask for explicit confirmation. "
+            "Present the exact customer_safe_summary and ask for explicit confirmation. "
+            "Do not commit the proposal until a later customer turn confirms it."
+            if proposal_result
+            else "Restate this exact selection in customer-safe language and ask for explicit confirmation. "
             "Do not call triage_fraud_case until a later customer turn confirms it."
         ),
     }
+    if proposal_result:
+        result.update(proposal_result)
+    return result
 
 
 def prepare_customer_reported_fraud_confirmation(
@@ -579,6 +775,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
         "push_card_to_google_wallet",
         "resolve_fraud_alert",
         "triage_fraud_case",
+        "commit_fraud_triage",
         "triage_customer_reported_fraud",
     }
     if tool_name in consequential_tools:
@@ -618,6 +815,31 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
         args.clear()
         args.update(prepared_args)
     if (
+        tool_name == "triage_fraud_case"
+        and os.getenv("VOICE_AGENT_USE_ACTION_PROPOSALS", "true").lower() == "true"
+        and (fraud_playbook.get("workflow_authorization") or {}).get("proposal_id")
+    ):
+        return {
+            "success": False,
+            "isError": False,
+            "status": "PROPOSAL_COMMIT_REQUIRED",
+            "action_completed": False,
+            "message": "The prepared banking proposal must be committed by proposal id.",
+            "model_instruction": "Call commit_fraud_triage with only the proposal_id returned by prepare_fraud_triage_confirmation.",
+        }
+    if (
+        tool_name == "commit_fraud_triage"
+        and os.getenv("VOICE_AGENT_USE_ACTION_PROPOSALS", "true").lower() != "true"
+    ):
+        return {
+            "success": False,
+            "isError": False,
+            "status": "DIRECT_TRIAGE_ROLLBACK_ENABLED",
+            "action_completed": False,
+            "message": "The proposal path is disabled by the runtime rollback flag.",
+            "model_instruction": "Call triage_fraud_case once using exactly the payload returned by prepare_fraud_triage_confirmation.",
+        }
+    if (
         tool_name not in {
             "push_card_to_google_wallet",
             "prepare_fraud_triage_confirmation",
@@ -632,7 +854,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
         tool_context.state["fraud_playbook"] = fraud_playbook
 
     authorization_action = None
-    if tool_name == "triage_fraud_case":
+    if tool_name in {"triage_fraud_case", "commit_fraud_triage"}:
         authorization_action = TRIAGE_FRAUD_CASE
     elif tool_name == "triage_customer_reported_fraud":
         authorization_action = TRIAGE_CUSTOMER_REPORTED_FRAUD
@@ -657,24 +879,35 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
     authorization_to_execute = None
     if authorization_action:
         fraud_playbook, authorization_reconciled = (
-            apply_latest_customer_turn_to_authorization(fraud_playbook)
+            apply_recorded_authorization_decision(fraud_playbook)
         )
         if authorization_reconciled:
             tool_context.state["fraud_playbook"] = fraud_playbook
             logger.info(
-                "[CALLBACK] reconciled latest customer turn before tool validation %s",
+                "[CALLBACK] reconciled classified authorization before tool validation %s",
                 format_log_context(
                     state=tool_context.state,
                     tool_name=tool_name,
                 ),
             )
-        authorization = fraud_playbook.get("workflow_authorization")
+        authorization = fraud_playbook.get("workflow_authorization") or {}
+        validation_payload = (
+            authorization.get("payload")
+            if tool_name == "commit_fraud_triage"
+            else args
+        )
         authorization_error = validate_workflow_authorization(
             authorization,
             action=authorization_action,
-            payload=args,
+            payload=validation_payload,
             session_id=str(tool_context.state.get("session_id") or ""),
         )
+        if (
+            not authorization_error
+            and tool_name == "commit_fraud_triage"
+            and str(args.get("proposal_id") or "") != str(authorization.get("proposal_id") or "")
+        ):
+            authorization_error = "The proposal id differs from the exact banking proposal the customer confirmed."
         if authorization_error:
             logger.warning(
                 "[CALLBACK] workflow authorization blocked %s",
@@ -738,9 +971,12 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
         "push_card_to_google_wallet",
         "resolve_fraud_alert",
         "triage_fraud_case",
+        "commit_fraud_triage",
         "triage_customer_reported_fraud",
     }
-    sequencing_error = validate_fraud_tool_sequence(fraud_playbook, tool_name, args)
+    sequencing_tool_name = "triage_fraud_case" if tool_name == "commit_fraud_triage" else tool_name
+    sequencing_args = (authorization_to_execute or {}).get("payload", {}) if tool_name == "commit_fraud_triage" else args
+    sequencing_error = validate_fraud_tool_sequence(fraud_playbook, sequencing_tool_name, sequencing_args)
     if sequencing_error:
         logger.warning(
             "[CALLBACK] fraud playbook drift %s",
@@ -776,6 +1012,13 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
         fraud_playbook["workflow_authorization"] = mark_authorization_executing(
             authorization_to_execute
         )
+        if tool_name == "commit_fraud_triage":
+            holder = proposal_runtime_context_var.get()
+            if holder is not None:
+                holder["confirmation"] = {
+                    "presentation_turn_id": authorization_to_execute.get("assistant_event_id"),
+                    "confirmation_turn_id": authorization_to_execute.get("customer_event_id"),
+                }
         if tool_name in {"triage_fraud_case", "triage_customer_reported_fraud"}:
             action = (
                 TRIAGE_FRAUD_CASE
@@ -796,6 +1039,10 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
 
 async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> None:
     tool_name = getattr(tool, "name", str(tool))
+    if tool_name == "commit_fraud_triage":
+        holder = proposal_runtime_context_var.get()
+        if holder is not None:
+            holder["confirmation"] = None
     import logging
     logger = logging.getLogger("voice_agent")
     logger.error(
@@ -812,7 +1059,16 @@ async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> N
     tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
     started_at = tool_started.pop(tool_name, time.monotonic())
     tool_context.state["_voice_tool_started_at"] = tool_started
-    record_tool_completed(tool_name, "error", time.monotonic() - started_at)
+    duration_seconds = time.monotonic() - started_at
+    record_tool_completed(tool_name, "error", duration_seconds)
+    if tool_name == "commit_fraud_triage":
+        _record_commit_proposal_event(
+            state=tool_context.state,
+            args=args,
+            result={"error": type(error).__name__},
+            outcome="TOOL_ERROR",
+            latency_ms=duration_seconds * 1000,
+        )
     notify_event(
         {
             "type": INTERNAL_TOOL_RUNTIME_STATUS,
@@ -838,6 +1094,10 @@ async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> N
 
 async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs) -> dict | None:
     tool_name = getattr(tool, "name", str(tool))
+    if tool_name == "commit_fraud_triage":
+        holder = proposal_runtime_context_var.get()
+        if holder is not None:
+            holder["confirmation"] = None
     import logging
     logger = logging.getLogger("voice_agent")
     logger.info(
@@ -860,11 +1120,34 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
     tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
     started_at = tool_started.pop(tool_name, time.monotonic())
     tool_context.state["_voice_tool_started_at"] = tool_started
+    duration_seconds = time.monotonic() - started_at
     record_tool_completed(
         tool_name,
         outcome,
-        time.monotonic() - started_at,
+        duration_seconds,
     )
+    if tool_name == "commit_fraud_triage":
+        _record_commit_proposal_event(
+            state=tool_context.state,
+            args=args,
+            result=structured if isinstance(structured, dict) else None,
+            outcome=outcome,
+            latency_ms=duration_seconds * 1000,
+        )
+    elif tool_name == "triage_fraud_case" and isinstance(structured, dict):
+        runtime_context = proposal_runtime_context_var.get() or {}
+        record_action_proposal_event(
+            runtime=str(runtime_context.get("runtime_name") or "ADK_GEMINI_LIVE"),
+            support_session_id=str(runtime_context.get("support_session_id") or tool_context.state.get("session_id") or ""),
+            proposal_id=None,
+            contract_version="direct-fraud-triage.v0",
+            catalog_snapshot_id=runtime_context.get("catalog_snapshot_id"),
+            tool="triage_fraud_case",
+            outcome="DIRECT_COMPLETED" if success else "DIRECT_FAILED",
+            latency_ms=duration_seconds * 1000,
+            invalidation_reason=structured.get("error"),
+            banking_outcome=structured.get("outcome"),
+        )
     if isinstance(structured, dict):
         guidance = structured.get("support_guidance")
         if isinstance(guidance, dict) and guidance:
@@ -874,6 +1157,96 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
                     "type": DataChannelEvent.GUIDANCE_SNAPSHOT.value,
                     **guidance_observability_payload(guidance),
                 }
+            )
+        if tool_name == "propose_fraud_triage" and structured.get("success") is True:
+            playbook = dict(tool_context.state.get("fraud_playbook") or {})
+            existing = playbook.get("workflow_authorization") or {}
+            if existing:
+                playbook["last_workflow_authorization"] = (
+                    invalidate_workflow_authorization(
+                        existing,
+                        reason="REPLACED_BY_NEW_TRIAGE_SELECTION",
+                    )
+                )
+            authorization = create_workflow_authorization(
+                action=TRIAGE_FRAUD_CASE,
+                payload=args,
+                session_id=str(tool_context.state.get("session_id") or ""),
+            )
+            authorization.update(
+                {
+                    "proposal_id": str(structured.get("proposal_id") or ""),
+                    "contract_version": str(
+                        structured.get("contract_version") or "fraud-triage.v1"
+                    ),
+                    "customer_safe_summary": str(
+                        structured.get("customer_safe_summary") or ""
+                    ),
+                }
+            )
+            playbook["workflow_authorization"] = authorization
+            tool_context.state["fraud_playbook"] = playbook
+            runtime_context = proposal_runtime_context_var.get() or {}
+            record_action_proposal_event(
+                runtime=str(
+                    runtime_context.get("runtime_name") or "ADK_GEMINI_LIVE"
+                ),
+                support_session_id=str(
+                    runtime_context.get("support_session_id")
+                    or tool_context.state.get("session_id")
+                    or ""
+                ),
+                proposal_id=authorization.get("proposal_id"),
+                contract_version=authorization.get("contract_version"),
+                catalog_snapshot_id=runtime_context.get("catalog_snapshot_id"),
+                tool="propose_fraud_triage",
+                outcome="PROPOSED",
+                latency_ms=duration_seconds * 1000,
+            )
+        if tool_name == "review_fraud_selection" and structured.get("success") is True:
+            playbook = dict(tool_context.state.get("fraud_playbook") or {})
+            previous_review = playbook.get("fraud_review") or {}
+            review = {
+                "stage": structured.get("stage"),
+                "selection_status": structured.get("selection_status"),
+                "selection_fingerprint": structured.get("selection_fingerprint"),
+                "ready_to_propose": bool(structured.get("ready_to_propose")),
+                "remaining_item_count": structured.get("remaining_item_count"),
+                "disputed_authorization_ids": structured.get(
+                    "disputed_authorization_ids", []
+                ),
+                "disputed_transaction_ids": structured.get(
+                    "disputed_transaction_ids", []
+                ),
+                "recognized_authorization_ids": structured.get(
+                    "recognized_authorization_ids", []
+                ),
+                "recognized_transaction_ids": structured.get(
+                    "recognized_transaction_ids", []
+                ),
+            }
+            if (
+                previous_review.get("selection_fingerprint")
+                and previous_review.get("selection_fingerprint")
+                != review.get("selection_fingerprint")
+            ):
+                authorization = playbook.get("workflow_authorization") or {}
+                if authorization:
+                    playbook["last_workflow_authorization"] = (
+                        invalidate_workflow_authorization(
+                            authorization,
+                            reason="FRAUD_SELECTION_CHANGED",
+                        )
+                    )
+                    playbook["workflow_authorization"] = None
+            playbook["fraud_review"] = review
+            tool_context.state["fraud_playbook"] = playbook
+            logger.info(
+                "[FRAUD_REVIEW] stage=%s status=%s ready=%s remaining=%s",
+                review.get("stage"),
+                review.get("selection_status"),
+                review.get("ready_to_propose"),
+                review.get("remaining_item_count"),
             )
         if tool_name == "get_open_fraud_alert" and structured.get("fraud_alert") is None:
             playbook = dict(tool_context.state.get("fraud_playbook") or {})
@@ -920,9 +1293,10 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
                 authorization
             )
             tool_context.state["fraud_playbook"] = completed_playbook
+        completed_tool_name = "triage_fraud_case" if tool_name == "commit_fraud_triage" else tool_name
         updated_playbook = mark_fraud_tool_completed(
             tool_context.state.get("fraud_playbook", {}),
-            tool_name,
+            completed_tool_name,
             structured,
         )
         if updated_playbook:
@@ -965,7 +1339,7 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
             })
             return None
 
-        if tool_name in {"triage_fraud_case", "triage_customer_reported_fraud"}:
+        if tool_name in {"triage_fraud_case", "commit_fraud_triage", "triage_customer_reported_fraud"}:
             logger.info(
                 "[CALLBACK] FRAUD_CASE_TRIAGED event broadcasted %s",
                 format_log_context(
@@ -1062,7 +1436,6 @@ def create_voice_agent(*, model=None, instruction: str = INSTRUCTION_TEXT) -> Ag
         instruction=instruction,
         tools=[
             create_mcp_toolset(),
-            prepare_fraud_triage_confirmation,
             prepare_customer_reported_fraud_confirmation,
             end_consultation,
             transfer_to_human,

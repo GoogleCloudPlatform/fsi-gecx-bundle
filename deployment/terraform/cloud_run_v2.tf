@@ -64,6 +64,11 @@ resource "google_cloud_run_v2_service" "banking_service" {
       }
 
       env {
+        name  = "VOICE_BIDI_SESSION_TIMEOUT_SECONDS"
+        value = tostring(var.banking_service_voice_session_timeout_seconds)
+      }
+
+      env {
         name  = "DATABASE_URL"
         value = "postgresql+psycopg2://${local.alloydb_iam_users.banking_service}@${google_alloydb_instance.banking_primary.ip_address}:5432/banking?sslmode=require"
       }
@@ -276,6 +281,11 @@ resource "google_cloud_run_v2_service" "banking_service" {
         value = var.gecx_location
       }
 
+      env {
+        name  = "CES_SERVICE_AGENT_EMAIL"
+        value = "service-${data.google_project.project.number}@gcp-sa-ces.iam.gserviceaccount.com"
+      }
+
       dynamic "env" {
         for_each = var.set_cloud_run_audiences ? [1] : []
         content {
@@ -287,6 +297,14 @@ resource "google_cloud_run_v2_service" "banking_service" {
   }
 
   lifecycle {
+    precondition {
+      condition = (
+        var.banking_service_timeout_seconds >=
+        var.banking_service_voice_session_timeout_seconds + 60
+      )
+      error_message = "banking-service Cloud Run timeout must retain at least 60 seconds of headroom beyond the application voice-session timeout."
+    }
+
     ignore_changes = [
       template[0].containers[0].image,
       client,
@@ -706,6 +724,11 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
         name  = "VOICE_AGENT_VIDEO_SESSION_CAPACITY_UNITS"
         value = tostring(var.voice_agent_video_session_capacity_units)
       }
+
+      env {
+        name  = "VOICE_AGENT_USE_ACTION_PROPOSALS"
+        value = "true"
+      }
     }
   }
 
@@ -1115,7 +1138,7 @@ resource "google_cloud_run_v2_job" "db_reconcile_job" {
         }
         env {
           name  = "EXPECTED_ALEMBIC_REVISION"
-          value = "7c4f2a9d1e63"
+          value = "91d7b4a6c2ef"
         }
       }
       vpc_access {

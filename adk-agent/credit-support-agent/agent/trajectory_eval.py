@@ -8,6 +8,7 @@ from typing import Any, Iterable
 
 
 CONSEQUENTIAL_TOOLS = {
+    "commit_fraud_triage",
     "triage_fraud_case",
     "triage_customer_reported_fraud",
     "push_card_to_google_wallet",
@@ -18,11 +19,22 @@ CONSEQUENTIAL_TOOLS = {
 @dataclass(frozen=True)
 class TrajectoryExpectation:
     required_tools: dict[str, int] = field(default_factory=dict)
+    required_failed_tools: dict[str, int] = field(default_factory=dict)
     forbidden_tools: tuple[str, ...] = ()
     required_ui_events: tuple[str, ...] = ()
     allowed_terminal_outcomes: tuple[str, ...] = ("NORMAL_DISCONNECT",)
     require_guidance: bool = True
     require_reset_generation: bool = True
+    required_proposal_outcomes: tuple[str, ...] = ()
+    forbidden_proposal_outcomes: tuple[str, ...] = ()
+    expected_banking_outcome: str | None = None
+    require_direct_selection_to_proposal: bool = False
+    required_review_stages: tuple[str, ...] = ()
+    require_ready_review_before_proposal: bool = False
+    expected_runtime_name: str | None = None
+    require_runtime_version: bool = False
+    require_catalog_identity: bool = False
+    required_contract_version: str | None = None
 
 
 @dataclass(frozen=True)
@@ -30,6 +42,12 @@ class TrajectoryResult:
     passed: bool
     failures: tuple[str, ...]
     metrics: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class OutcomeComparison:
+    matched: bool
+    mismatches: tuple[str, ...]
 
 
 def _events_of_type(events: list[dict[str, Any]], event_type: str) -> list[dict[str, Any]]:
@@ -56,6 +74,94 @@ def evaluate_trajectory(
         for event in tool_results
         if event.get("success") is True
     )
+    failed_results = Counter(
+        str(event.get("tool"))
+        for event in tool_results
+        if event.get("success") is not True
+    )
+    proposal_events = _events_of_type(events, "ACTION_PROPOSAL")
+    review_events = _events_of_type(events, "FRAUD_REVIEW")
+    proposal_outcomes = [str(event.get("outcome") or "UNKNOWN") for event in proposal_events]
+    contract_versions = [
+        str(event.get("contract_version"))
+        for event in proposal_events
+        if event.get("contract_version")
+    ]
+    redundant_preproposal_turns = 0
+
+    if expectation.require_direct_selection_to_proposal:
+        alert_result_index = next(
+            (
+                index
+                for index, event in enumerate(events)
+                if event.get("type") == "TOOL_RESULT"
+                and event.get("tool") == "get_open_fraud_alert"
+                and event.get("success") is True
+            ),
+            None,
+        )
+        selection_index = next(
+            (
+                index
+                for index, event in enumerate(events)
+                if alert_result_index is not None
+                and index > alert_result_index
+                and event.get("type") == "TRANSCRIPT"
+                and event.get("author") == "customer"
+            ),
+            None,
+        )
+        proposal_index = next(
+            (
+                index
+                for index, event in enumerate(events)
+                if selection_index is not None
+                and index > selection_index
+                and event.get("type") == "ACTION_PROPOSAL"
+                and event.get("outcome") == "PROPOSED"
+            ),
+            None,
+        )
+        if selection_index is None:
+            failures.append("No customer fraud-selection turn followed the alert read.")
+        elif proposal_index is None:
+            failures.append("No fraud proposal followed the customer selection.")
+        else:
+            redundant_preproposal_turns = sum(
+                1
+                for event in events[selection_index + 1 : proposal_index]
+                if event.get("type") == "TRANSCRIPT"
+                and event.get("author") in {"agent", "customer"}
+            )
+            if redundant_preproposal_turns:
+                failures.append(
+                    "Expected an unambiguous customer selection to create the "
+                    "proposal directly, but observed "
+                    f"{redundant_preproposal_turns} intervening conversational turn(s)."
+                )
+
+    review_stages = [str(event.get("stage") or "") for event in review_events]
+    for required_stage in expectation.required_review_stages:
+        if required_stage not in review_stages:
+            failures.append(
+                f"Required fraud review stage {required_stage} was not observed."
+            )
+    if expectation.require_ready_review_before_proposal:
+        ready_positions = [
+            index
+            for index, event in enumerate(events)
+            if event.get("type") == "FRAUD_REVIEW"
+            and event.get("ready_to_propose") is True
+        ]
+        for index, event in enumerate(events):
+            if (
+                event.get("type") == "ACTION_PROPOSAL"
+                and event.get("outcome") == "PROPOSED"
+                and not any(position < index for position in ready_positions)
+            ):
+                failures.append(
+                    "Fraud proposal was created before a complete validated review."
+                )
 
     for tool_name, expected_count in expectation.required_tools.items():
         actual = calls_by_name[tool_name]
@@ -69,9 +175,70 @@ def evaluate_trajectory(
                 f"observed {successful_results[tool_name]}."
             )
 
+    for tool_name, expected_count in expectation.required_failed_tools.items():
+        actual = calls_by_name[tool_name]
+        if actual != expected_count:
+            failures.append(
+                f"Expected {expected_count} failed-path {tool_name} call(s), observed {actual}."
+            )
+        if failed_results[tool_name] != expected_count:
+            failures.append(
+                f"Expected {expected_count} failed {tool_name} result(s), "
+                f"observed {failed_results[tool_name]}."
+            )
     for tool_name in expectation.forbidden_tools:
         if calls_by_name[tool_name]:
             failures.append(f"Forbidden tool {tool_name} was called.")
+
+    for required_outcome in expectation.required_proposal_outcomes:
+        if required_outcome not in proposal_outcomes:
+            failures.append(
+                f"Required proposal outcome {required_outcome} was not observed."
+            )
+    for forbidden_outcome in expectation.forbidden_proposal_outcomes:
+        if forbidden_outcome in proposal_outcomes:
+            failures.append(
+                f"Forbidden proposal outcome {forbidden_outcome} was observed."
+            )
+
+    banking_outcomes = [
+        str(event.get("banking_outcome"))
+        for event in proposal_events
+        if event.get("banking_outcome")
+    ]
+    if expectation.expected_banking_outcome and (
+        not banking_outcomes
+        or banking_outcomes[-1] != expectation.expected_banking_outcome
+    ):
+        failures.append(
+            "Expected banking outcome "
+            f"{expectation.expected_banking_outcome}, observed "
+            f"{banking_outcomes[-1] if banking_outcomes else 'MISSING'}."
+        )
+
+    if proposal_events:
+        confirmed_positions = [
+            index
+            for index, event in enumerate(events)
+            if event.get("type") == "ACTION_PROPOSAL"
+            and event.get("outcome") == "CONFIRMED"
+        ]
+        for index, event in enumerate(events):
+            if (
+                event.get("type") == "TOOL_RESULT"
+                and event.get("tool") == "commit_fraud_triage"
+                and event.get("success") is True
+                and not any(position < index for position in confirmed_positions)
+            ):
+                failures.append(
+                    "Fraud proposal committed without a prior protected confirmation event."
+                )
+        non_authorizing_outcomes = {"DECLINED", "UNCLEAR", "EXPIRED", "INVALIDATED"}
+        if proposal_outcomes and proposal_outcomes[-1] in non_authorizing_outcomes:
+            if successful_results["commit_fraud_triage"]:
+                failures.append(
+                    f"Proposal committed after terminal {proposal_outcomes[-1]} evidence."
+                )
 
     for tool_name in CONSEQUENTIAL_TOOLS:
         if calls_by_name[tool_name] > max(
@@ -108,6 +275,28 @@ def evaluate_trajectory(
         "reset_generation"
     ):
         failures.append("The trajectory does not record a reset generation.")
+    if (
+        expectation.expected_runtime_name
+        and session_start.get("runtime_name") != expectation.expected_runtime_name
+    ):
+        failures.append(
+            "Expected runtime "
+            f"{expectation.expected_runtime_name}, observed "
+            f"{session_start.get('runtime_name') or 'MISSING'}."
+        )
+    if expectation.require_runtime_version and not session_start.get("runtime_version"):
+        failures.append("The trajectory does not record a runtime version.")
+    if expectation.require_catalog_identity and (
+        not guidance.get("snapshot_id") or not guidance.get("content_version")
+    ):
+        failures.append("The trajectory does not record catalog snapshot identity.")
+    if expectation.required_contract_version and (
+        expectation.required_contract_version not in contract_versions
+    ):
+        failures.append(
+            "Required proposal contract version "
+            f"{expectation.required_contract_version} was not observed."
+        )
 
     terminal_events = _events_of_type(events, "SESSION_ENDED")
     terminal_outcome = (
@@ -135,6 +324,33 @@ def evaluate_trajectory(
             "interruptions": len(_events_of_type(events, "INTERRUPTION")),
             "duration_ms": max(timestamps, default=0.0),
             "guidance_source": guidance.get("source"),
+            "catalog_snapshot_id": guidance.get("snapshot_id"),
+            "catalog_content_version": guidance.get("content_version"),
+            "runtime_name": session_start.get("runtime_name"),
+            "runtime_version": session_start.get("runtime_version"),
+            "deployment": session_start.get("deployment"),
             "terminal_outcome": terminal_outcome,
+            "proposal_outcomes": proposal_outcomes,
+            "contract_versions": contract_versions,
+            "banking_outcome": banking_outcomes[-1] if banking_outcomes else None,
+            "redundant_preproposal_turns": redundant_preproposal_turns,
+            "fraud_review_stages": review_stages,
         },
     )
+
+
+def compare_trajectory_outcomes(
+    direct: TrajectoryResult, proposal: TrajectoryResult
+) -> OutcomeComparison:
+    """Compare normalized banking outcomes without requiring identical tool names."""
+    mismatches: list[str] = []
+    for metric_name in ("banking_outcome", "terminal_outcome"):
+        direct_value = direct.metrics.get(metric_name)
+        proposal_value = proposal.metrics.get(metric_name)
+        if direct_value != proposal_value:
+            mismatches.append(
+                f"{metric_name} differs: direct={direct_value!r}, proposal={proposal_value!r}."
+            )
+    if direct.metrics.get("tool_failures") or proposal.metrics.get("tool_failures"):
+        mismatches.append("One or both trajectories contain tool failures.")
+    return OutcomeComparison(matched=not mismatches, mismatches=tuple(mismatches))

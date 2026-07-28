@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import datetime
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -103,13 +104,15 @@ def test_cached_cdc_status_uses_redis_snapshot():
         "bigquery_error": None,
     }
 
-    class FakeCache:
-        def get(self, key):
-            assert key == "cdc_status"
-            import json
-            return json.dumps(cached_status)
+    def fake_execute(operation):
+        class FakeCache:
+            def get(self, key):
+                assert key == "cdc_status"
+                return json.dumps(cached_status)
 
-    with patch("services.cdc_monitoring._cache", FakeCache()):
+        return operation(FakeCache())
+
+    with patch("services.cdc_monitoring.execute_redis_command", fake_execute):
         result = service.get_cached_cdc_status()
 
     assert result == cached_status
@@ -163,8 +166,11 @@ def test_datastream_metrics_keep_operational_fraud_alert_floor():
         FakeLakehouseRepository(anomalies_count=0),
     )
 
-    with patch("services.cdc_monitoring._cache", None), \
-         patch("services.cdc_monitoring.monitoring_v3.MetricServiceClient") as mock_client:
+    with patch(
+        "services.cdc_monitoring.execute_redis_command", return_value=None
+    ), patch(
+        "services.cdc_monitoring.monitoring_v3.MetricServiceClient"
+    ) as mock_client:
         mock_client.return_value.list_time_series.return_value = []
         result = service.get_cached_datastream_metrics()
 
@@ -178,8 +184,11 @@ def test_datastream_metrics_do_not_treat_historical_lakehouse_rows_as_active():
         FakeLakehouseRepository(anomalies_count=3),
     )
 
-    with patch("services.cdc_monitoring._cache", None), \
-         patch("services.cdc_monitoring.monitoring_v3.MetricServiceClient") as mock_client:
+    with patch(
+        "services.cdc_monitoring.execute_redis_command", return_value=None
+    ), patch(
+        "services.cdc_monitoring.monitoring_v3.MetricServiceClient"
+    ) as mock_client:
         mock_client.return_value.list_time_series.return_value = []
         result = service.get_cached_datastream_metrics()
 

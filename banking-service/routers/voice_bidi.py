@@ -13,10 +13,10 @@
 # limitations under the License.
 
 import os
-import time
 import json
 import logging
 import asyncio
+import uuid
 from fastapi import APIRouter, WebSocket
 
 from utils.auth import validate_firebase_token
@@ -30,57 +30,79 @@ logger = logging.getLogger(__name__)
 @router.websocket("/voice/gecx-stream")
 async def gecx_voice_stream(websocket: WebSocket):
     await websocket.accept()
-    logger.info("WebSocket proxy connection accepted. Awaiting first-frame authorization...")
+    logger.info(
+        "WebSocket proxy connection accepted. Awaiting first-frame authorization..."
+    )
 
     user_id = None
     session_id = None
-    
+
     try:
         # 1. First-Frame Authentication Gate (enforces JWT token context)
         try:
             # Enforce strict 5-second timeout for authentication frame
-            auth_frame_str = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
+            auth_frame_str = await asyncio.wait_for(
+                websocket.receive_text(), timeout=5.0
+            )
             auth_frame = json.loads(auth_frame_str)
-            
+
             if auth_frame.get("type") != "AUTH" or not auth_frame.get("token"):
                 raise ValueError("Missing type 'AUTH' or 'token' in first-frame.")
-                
+
             if is_running_locally() and auth_frame.get("token") == "mock-local-token":
                 user_id = "mock_user_id"
                 session_id = "mock_session_id"
-                fb_token = "mock-local-token"
             else:
                 validated_token = validate_firebase_token(auth_frame["token"])
                 user_id = validated_token.claims.get("sub")
-                fb_token = auth_frame["token"]
-                # Append a timestamp to GECX session ID to force a fresh session context on every connect
-                session_id = f"session-{user_id}-{int(time.time())}"
-                
-            logger.info(f"First-frame authentication succeeded. Session: {session_id} (User: {user_id})")
+                if not user_id:
+                    raise ValueError("Authenticated token is missing a subject claim.")
+                session_id = f"ces-{uuid.uuid4().hex}"
+
+            logger.info("First-frame authentication succeeded for CES voice session.")
         except asyncio.TimeoutError:
-            logger.warning("Auth timeout: First-frame auth token not received within 5 seconds.")
+            logger.warning(
+                "Auth timeout: First-frame auth token not received within 5 seconds."
+            )
             await websocket.close(code=4001, reason="Authentication timeout.")
             return
         except Exception as auth_err:
-            logger.warning(f"Auth failed: Invalid Firebase token details. {auth_err}")
+            logger.warning(
+                "CES first-frame authentication failed error_type=%s",
+                type(auth_err).__name__,
+            )
             await websocket.close(code=4001, reason="Authentication failed.")
             return
 
         # 2. Delegate real-time session execution to service
         gecx_app_id = os.getenv("GECX_APP_ID")
         location = os.getenv("GECX_LOCATION", "us")
-        
+
         session = VoiceBidiSession(
             user_id=user_id,
             session_id=session_id,
-            fb_token=fb_token,
             websocket=websocket,
             gecx_app_id=gecx_app_id,
-            location=location
+            location=location,
         )
         await session.start()
-        
+
     except Exception as e:
-        logger.error(f"Session failure for session {session_id}: {e}")
+        logger.error(
+            "CES voice session failed session_present=%s error_type=%s",
+            bool(session_id),
+            type(e).__name__,
+        )
+        try:
+            await websocket.send_json(
+                {
+                    "type": "ERROR",
+                    "message": "Unable to start voice consultation.",
+                }
+            )
+            await websocket.close(code=1011, reason="Voice session unavailable.")
+        except RuntimeError:
+            # The browser or upstream session may already have disconnected.
+            pass
     finally:
         logger.info("WebSocket session clean-up completed.")

@@ -21,6 +21,7 @@ from agent.agent import (
     create_voice_agent,
     is_session_end_requested,
     is_tool_processing,
+    record_customer_authorization_decision,
     record_customer_turn,
     reset_session_context,
 )
@@ -134,7 +135,13 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     record_session_started(mode)
     logger.info("Initializing voice agent session %s", session_log_context(room_name, customer_id, session_id, mode))
     import agent.agent as agent_module
-    session_context_tokens = bind_session_context(customer_id, None)
+    session_context_tokens = bind_session_context(
+        customer_id,
+        None,
+        support_session_id=session_id,
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id=session_id,
+    )
     terminal_outcome = TerminalOutcome.NORMAL_DISCONNECT
 
     # Load typed runtime settings and customer workflow context.
@@ -200,6 +207,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         "token": "0:0",
     }
     session_state["reset_generation"] = reset_generation
+    agent_module.configure_proposal_runtime_context(
+        reset_generation=str(reset_generation.get("token") or ""),
+        catalog_snapshot_id=support_guidance.get("snapshot_id"),
+    )
     # Create the session dynamically using the passed IDs
     user_id = f"user-{customer_id}"
     _, resumed, resume_reason = await open_or_resume_session(
@@ -250,18 +261,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             "Session-specific customer context:\n"
             f"- The customer has an active fraud alert on card ending in {fraud_alert['card_last_four']}.\n"
             f"- Fraud alert thread id: {fraud_alert['message_thread_id']}.\n"
-            f"- Fraud alert id for triage_fraud_case: {fraud_alert['fraud_alert_id']}.\n"
-            "- Start the conversation by asking whether the customer recognizes the flagged transactions; do not assume fraud has occurred.\n"
-            "- Name each flagged merchant and amount when summarizing what looked suspicious:\n"
+            f"- Fraud alert id: {fraud_alert['fraud_alert_id']}.\n"
+            "- Flagged activity:\n"
             f"{suspicious_lines or '- No suspicious transaction details were provided.'}\n"
-            "- Once the disputed selection is clear, call prepare_fraud_triage_confirmation with the exact alert id, disputed authorization ids, disputed transaction ids, and replacement choice. It does not mutate banking state.\n"
-            "- Restate the exact prepared selection and ask the customer to confirm it. Stop after asking; do not call triage_fraud_case in the same response.\n"
-            "- After the customer explicitly confirms in a later response, call triage_fraud_case once with exactly the prepared payload. Any changed selection requires a new preparation and confirmation.\n"
-            "- An AUTHORIZATION_REQUIRED tool result is an expected checkpoint, not a technical failure. Never apologize or escalate for it; ask for the required explicit confirmation and wait.\n"
-            "- If the customer recognizes every flagged transaction, call triage_fraud_case with empty disputed id arrays and issue_replacement=false.\n"
-            "- If the customer disputes any flagged transaction, tell them any credits are provisional pending the full fraud investigation.\n"
-            "- If triage_fraud_case returns a clearly transient technical failure, retry it once with the same arguments before offering human escalation.\n"
-            "- Treat this as trusted session context rather than something the customer needs to restate."
+            "- These are trusted operational facts. Follow the Approved support guidance for workflow policy."
         )
     guidance_summary = support_guidance.get("agent_guidance_summary")
     session_instruction = compose_session_instruction(
@@ -291,7 +294,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         app=App(
             name="credit-support-agent",
             root_agent=session_agent,
-            plugins=[FraudWorkflowStatePlugin()],
+            plugins=[FraudWorkflowStatePlugin(
+                customer_turn_observer=record_customer_turn,
+                authorization_observer=record_customer_authorization_decision,
+            )],
         ),
         session_service=session_service,
     )
@@ -564,6 +570,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 record_customer_turn(
                     message.text,
                     event_id=f"typed-{message.message_id}",
+                    pending_ingress=True,
                 )
 
                 async def release_stalled_typed_turn() -> None:
@@ -884,8 +891,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                                     logger.warning("ffmpeg_proc or ffmpeg_proc.stdin is not available!")
                             
                 # Broadcast transcriptions over data channel for UI display when complete
-                if live_event.input_transcript is not None:
-                    record_customer_turn(live_event.input_transcript)
+                if (
+                    live_event.input_transcript is not None
+                    and live_event.input_transcript.strip()
+                ):
                     if live_event.input_transcript in pending_typed_transcripts:
                         pending_typed_transcripts.remove(live_event.input_transcript)
                     else:
@@ -894,7 +903,10 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                             "author": "user",
                             "text": live_event.input_transcript
                         })
-                if live_event.output_transcript is not None:
+                if (
+                    live_event.output_transcript is not None
+                    and live_event.output_transcript.strip()
+                ):
                     on_agent_event({
                         "type": "TRANSCRIPT",
                         "author": "agent",

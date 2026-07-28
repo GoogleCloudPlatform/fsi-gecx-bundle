@@ -26,12 +26,19 @@ import {
 } from 'lucide-react';
 import {
   getCreditCardAccount,
+  getCreditCardVoiceContext,
   getCreditCardVoiceToken,
   getCreditCardTransactions
 } from '../utils/api.js';
 import { DataChannelEvent } from '../utils/constants.js';
 import { encodeTypedCustomerTurn, resolveTypedDelivery } from '../utils/voiceTypedInput.js';
 import { formatVoiceLedgerAmount } from '../utils/voiceLedger.js';
+import {
+  connectSilentPcmSink,
+  pcmFrameForMicrophoneState,
+  remainingPlayoutSeconds,
+} from '../utils/gecxAudio.js';
+import { mergeGecxTranscript } from '../utils/gecxTranscript.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
@@ -43,6 +50,8 @@ import { logTutorialBeginEvent, logTutorialCompleteEvent } from '../utils/analyt
 
 const AUDIO_INPUT_STORAGE_KEY = 'voice-support-audio-input';
 const AUDIO_OUTPUT_STORAGE_KEY = 'voice-support-audio-output';
+const GECX_INPUT_CHUNK_DURATION_SECONDS = 0.08;
+const GECX_PLAYOUT_LOOKAHEAD_SECONDS = 0.2;
 
 function persistAudioDeviceSelection(storageKey, deviceId) {
   if (deviceId) {
@@ -54,7 +63,16 @@ function persistAudioDeviceSelection(storageKey, deviceId) {
 
 function microphoneConstraints(deviceId) {
   return {
-    audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+    audio: {
+      ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+      channelCount: 1,
+      echoCancellation: true,
+      // Preserve speech energy through browser resampling. CES performs the
+      // negotiated stream's noise suppression; a second browser gate was
+      // clipping peaks and discarding short customer utterances.
+      noiseSuppression: false,
+      autoGainControl: false,
+    },
   };
 }
 
@@ -422,9 +440,14 @@ export default function VoiceSupportView() {
   const audioContextRef = useRef(null);
   const micStreamRef = useRef(null);
   const workletNodeRef = useRef(null);
+  const captureSinkNodeRef = useRef(null);
   const sourceNodeRef = useRef(null);
   const activeSourcesRef = useRef([]);
   const nextPlayoutTimeRef = useRef(0);
+  const gecxInputSampleRateRef = useRef(null);
+  const gecxOutputSampleRateRef = useRef(null);
+  const pendingGecxAudioRef = useRef([]);
+  const playoutDrainTimerRef = useRef(null);
   const volumeRef = useRef(0.8);
   const micEnabledRef = useRef(true);
   const pingIntervalRef = useRef(null);
@@ -522,12 +545,16 @@ export default function VoiceSupportView() {
 
     const audioCtx = audioContextRef.current;
     if (audioCtx) {
-      nextPlayoutTimeRef.current = audioCtx.currentTime + 0.05;
+      nextPlayoutTimeRef.current = audioCtx.currentTime + GECX_PLAYOUT_LOOKAHEAD_SECONDS;
     }
   }, []);
 
-  const cleanupGecxSession = useCallback(() => {
-    stopPlayoutQueue();
+  const cleanupGecxSession = useCallback((options = {}) => {
+    const { drainPlayout = false, onDrained } = options;
+    if (playoutDrainTimerRef.current) {
+      clearTimeout(playoutDrainTimerRef.current);
+      playoutDrainTimerRef.current = null;
+    }
     if (pingIntervalRef.current) {
       clearInterval(pingIntervalRef.current);
       pingIntervalRef.current = null;
@@ -548,6 +575,14 @@ export default function VoiceSupportView() {
       }
       workletNodeRef.current = null;
     }
+    if (captureSinkNodeRef.current) {
+      try {
+        captureSinkNodeRef.current.disconnect();
+      } catch {
+        // Ignore error
+      }
+      captureSinkNodeRef.current = null;
+    }
     if (sourceNodeRef.current) {
       try {
         sourceNodeRef.current.disconnect();
@@ -564,16 +599,42 @@ export default function VoiceSupportView() {
       }
       micStreamRef.current = null;
     }
-    if (audioContextRef.current) {
-      try {
-        audioContextRef.current.close();
-      } catch {
-        // Ignore error
+    const audioCtx = audioContextRef.current;
+    const finishAudioCleanup = () => {
+      stopPlayoutQueue();
+      if (audioContextRef.current === audioCtx) {
+        if (audioCtx) {
+          try {
+            audioCtx.close();
+          } catch {
+            // Ignore error
+          }
+        }
+        audioContextRef.current = null;
       }
-      audioContextRef.current = null;
+      pendingGecxAudioRef.current = [];
+      gecxInputSampleRateRef.current = null;
+      gecxOutputSampleRateRef.current = null;
+      playoutDrainTimerRef.current = null;
+      setIsConnected(false);
+      setLatency(0);
+      onDrained?.();
+    };
+    const drainSeconds = audioCtx
+      ? remainingPlayoutSeconds(
+          audioCtx.currentTime,
+          nextPlayoutTimeRef.current,
+          activeSourcesRef.current.length,
+        )
+      : 0;
+    if (drainPlayout && drainSeconds > 0) {
+      playoutDrainTimerRef.current = setTimeout(
+        finishAudioCleanup,
+        Math.ceil((drainSeconds + 0.1) * 1000),
+      );
+      return;
     }
-    setIsConnected(false);
-    setLatency(0);
+    finishAudioCleanup();
   }, [stopPlayoutQueue]);
 
   const endConsultation = useCallback(() => {
@@ -853,7 +914,113 @@ export default function VoiceSupportView() {
     return url.replace(/^http/, 'ws') + '/voice/gecx-stream';
   };
 
-
+  const handleOperationalVoiceEvent = useCallback((event) => {
+    if (event.type === DataChannelEvent.FRAUD_ALERT_INSPECTED) {
+      setFraudContext(prev => prev ? {
+        ...prev,
+        has_active_fraud_alert: true,
+        fraud_alert: prev.fraud_alert ? {
+          ...prev.fraud_alert,
+          inspected: true,
+          status: event.status || prev.fraud_alert.status,
+        } : prev.fraud_alert,
+      } : prev);
+      setTranscripts(prev => [
+        ...prev,
+        {
+          author: 'system',
+          text: `CASE UPDATE: Fraud alert reviewed. ${event.suspicious_transactions_count || 0} suspicious charge${event.suspicious_transactions_count === 1 ? '' : 's'} ready for confirmation.`,
+        },
+      ]);
+      return true;
+    }
+    if (event.type === DataChannelEvent.CARD_STATUS_LOCK) {
+      setCardStatus(event.status);
+      setTranscripts(prev => [...prev, { author: 'system', text: `SECURITY ALERT: Card status updated to ${event.status}.` }]);
+      return true;
+    }
+    if (event.type === DataChannelEvent.CARD_REPLACED) {
+      setCardStatus(event.status || 'ACTIVE');
+      setAccount(prev => prev ? {
+        ...prev,
+        cards: applyReplacementCardEvent(prev.cards, event),
+      } : prev);
+      setTranscripts(prev => [
+        ...prev,
+        {
+          author: 'system',
+          text: `ACCOUNT UPDATE: Replacement ${event.is_virtual ? 'virtual ' : ''}card ending in ${event.new_last_four} is ready.`,
+        },
+      ]);
+      return true;
+    }
+    if (event.type === DataChannelEvent.WALLET_PROVISIONING_QUEUED) {
+      setFraudTriage(prev => ({ ...prev, walletQueued: true }));
+      setAccount(prev => prev ? {
+        ...prev,
+        cards: applyWalletProvisioningEvent(prev.cards, event),
+      } : prev);
+      setTranscripts(prev => [
+        ...prev,
+        {
+          author: 'system',
+          text: `ACCOUNT UPDATE: Virtual card provisioning to ${event.wallet_provider || 'Google Wallet'} is queued.`,
+        },
+      ]);
+      return true;
+    }
+    if (event.type === DataChannelEvent.FRAUD_ALERT_RESOLVED || event.type === DataChannelEvent.FRAUD_CASE_TRIAGED) {
+      const isRecognized = event.resolution === 'CUSTOMER_RECOGNIZED' || event.outcome === 'CUSTOMER_RECOGNIZED';
+      const replacement = event.replacement_card || null;
+      setFraudTriage(prev => ({
+        ...prev,
+        outcome: event.outcome || event.resolution || prev.outcome,
+        voided_authorizations: event.voided_authorizations || prev.voided_authorizations,
+        provisional_credits: event.provisional_credits || prev.provisional_credits,
+        replacement_card: replacement || prev.replacement_card,
+        secure_message: event.secure_message || prev.secure_message,
+        escalated: event.escalated ?? prev.escalated,
+      }));
+      if (replacement) {
+        setAccount(prev => prev ? {
+          ...prev,
+          cards: applyReplacementCardEvent(prev.cards, replacement),
+        } : prev);
+      }
+      if (event.secure_message) {
+        window.dispatchEvent(new CustomEvent('secure-message-created', {
+          detail: {
+            thread_id: event.secure_message.thread_id,
+            message_id: event.secure_message.message_id,
+          },
+        }));
+        window.dispatchEvent(new CustomEvent('refresh-unread-count'));
+      }
+      refreshCreditCardData().catch(err => {
+        console.error('Failed to refresh credit card data after fraud triage:', err);
+      });
+      setFraudContext(prev => prev ? {
+        ...prev,
+        has_active_fraud_alert: false,
+        fraud_alert: prev.fraud_alert ? {
+          ...prev.fraud_alert,
+          status: event.status || prev.fraud_alert.status,
+          resolution: event.resolution || prev.fraud_alert.resolution,
+        } : prev.fraud_alert,
+      } : prev);
+      setTranscripts(prev => [
+        ...prev,
+        {
+          author: 'system',
+          text: isRecognized
+            ? 'CASE UPDATE: Fraud alert reviewed as recognized activity.'
+            : `CASE UPDATE: Fraud case triaged. ${(event.voided_authorizations || []).length} pending hold${(event.voided_authorizations || []).length === 1 ? '' : 's'} released, ${(event.provisional_credits || []).length} provisional credit${(event.provisional_credits || []).length === 1 ? '' : 's'} applied.`,
+        },
+      ]);
+      return true;
+    }
+    return false;
+  }, [refreshCreditCardData]);
 
   const handleGecxAudioChunk = (arrayBuffer) => {
     const audioCtx = audioContextRef.current;
@@ -865,13 +1032,18 @@ export default function VoiceSupportView() {
       float32Array[i] = int16Array[i] / (int16Array[i] < 0 ? 0x8000 : 0x7FFF);
     }
 
-    const audioBuffer = audioCtx.createBuffer(1, float32Array.length, 16000);
+    const outputSampleRate = gecxOutputSampleRateRef.current;
+    if (!outputSampleRate) {
+      pendingGecxAudioRef.current.push(arrayBuffer);
+      return;
+    }
+    const audioBuffer = audioCtx.createBuffer(1, float32Array.length, outputSampleRate);
     audioBuffer.copyToChannel(float32Array, 0);
 
     const now = audioCtx.currentTime;
     let playTime = nextPlayoutTimeRef.current;
     if (playTime < now) {
-      playTime = now + 0.05; // 50ms playout lookahead to prevent jitter
+      playTime = now + GECX_PLAYOUT_LOOKAHEAD_SECONDS;
     }
 
     const sourceNode = audioCtx.createBufferSource();
@@ -893,8 +1065,9 @@ export default function VoiceSupportView() {
   };
 
   const handleGecxControlMessage = useCallback((payload) => {
+    if (handleOperationalVoiceEvent(payload)) return;
     if (payload.type === 'TRANSCRIPT') {
-      setTranscripts(prev => [...prev, { author: payload.author, text: payload.text }]);
+      setTranscripts(prev => mergeGecxTranscript(prev, payload));
       if (payload.author === 'agent') {
         const text = payload.text.toLowerCase();
         if (text.includes("goodbye") || text.includes("bye") || (text.includes("have a") && text.includes("good") && text.includes("day"))) {
@@ -904,6 +1077,9 @@ export default function VoiceSupportView() {
     } else if (payload.type === 'PONG') {
       const rtt = Date.now() - payload.timestamp;
       setLatency(rtt);
+    } else if (payload.type === 'AUDIO_CONFIG') {
+      gecxInputSampleRateRef.current = payload.input_sample_rate_hz;
+      gecxOutputSampleRateRef.current = payload.output_sample_rate_hz;
     } else if (payload.type === 'CARD_STATUS') {
       setCardStatus(payload.status);
       setTranscripts(prev => [...prev, { author: 'system', text: `SECURITY ALERT: Card status updated to ${payload.status}.` }]);
@@ -930,8 +1106,10 @@ export default function VoiceSupportView() {
       stopPlayoutQueue();
     } else if (payload.type === 'ERROR') {
       setErrorMessage(payload.message);
+    } else if (payload.type === DataChannelEvent.SESSION_END) {
+      startDisconnectCountdown();
     }
-  }, [startDisconnectCountdown, stopPlayoutQueue]);
+  }, [handleOperationalVoiceEvent, startDisconnectCountdown, stopPlayoutQueue]);
 
   const startGecxConsultation = async () => {
     if (isConnecting || isConnected) return;
@@ -945,22 +1123,16 @@ export default function VoiceSupportView() {
         microphoneConstraints(selectedAudioInputId)
       );
       micStreamRef.current = micStream;
-
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-      audioContextRef.current = audioCtx;
+      try {
+        const voiceContext = await getCreditCardVoiceContext();
+        setFraudContext(voiceContext || null);
+      } catch (contextError) {
+        console.error('Failed to load CES fraud session context:', contextError);
+      }
+      pendingGecxAudioRef.current = [];
+      gecxInputSampleRateRef.current = null;
+      gecxOutputSampleRateRef.current = null;
       nextPlayoutTimeRef.current = 0;
-
-      if (audioCtx.state === 'suspended') {
-        await audioCtx.resume();
-      }
-
-      if (typeof audioCtx.setSinkId === 'function' && selectedAudioOutputId) {
-        try {
-          await audioCtx.setSinkId(selectedAudioOutputId);
-        } catch (e) {
-          console.warn('[GECX] Failed to set initial sink ID:', e);
-        }
-      }
 
       let fbToken = "";
       if (window.firebaseAuth && typeof window.firebaseAuth.getCurrentUser === 'function') {
@@ -974,6 +1146,12 @@ export default function VoiceSupportView() {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
       ws.binaryType = 'arraybuffer';
+      let resolveAudioConfig;
+      let rejectAudioConfig;
+      const audioConfigPromise = new Promise((resolve, reject) => {
+        resolveAudioConfig = resolve;
+        rejectAudioConfig = reject;
+      });
 
       ws.onopen = () => {
         console.log("GECX WebSocket opened. Transmitting Auth frame...");
@@ -981,6 +1159,16 @@ export default function VoiceSupportView() {
         ws.send(JSON.stringify({
           type: "AUTH",
           token: fbToken
+        }));
+        const micSettings = micStream.getAudioTracks()[0]?.getSettings?.() || {};
+        ws.send(JSON.stringify({
+          type: 'AUDIO_DIAGNOSTICS',
+          sample_rate_hz: micSettings.sampleRate,
+          channel_count: micSettings.channelCount,
+          echo_cancellation: micSettings.echoCancellation,
+          noise_suppression: micSettings.noiseSuppression,
+          auto_gain_control: micSettings.autoGainControl,
+          latency_seconds: micSettings.latency,
         }));
 
         // Start latency diagnostics ping loop
@@ -996,33 +1184,92 @@ export default function VoiceSupportView() {
 
       ws.onmessage = async (event) => {
         if (typeof event.data === 'string') {
-          handleGecxControlMessage(JSON.parse(event.data));
+          const payload = JSON.parse(event.data);
+          handleGecxControlMessage(payload);
+          if (payload.type === 'AUDIO_CONFIG') {
+            resolveAudioConfig(payload);
+          }
         } else {
-          handleGecxAudioChunk(event.data);
+          if (audioContextRef.current && gecxOutputSampleRateRef.current) {
+            handleGecxAudioChunk(event.data);
+          } else {
+            pendingGecxAudioRef.current.push(event.data);
+          }
         }
       };
 
       ws.onclose = (e) => {
         console.log(`GECX WebSocket closed: ${e.code} | ${e.reason}`);
-        cleanupGecxSession();
+        rejectAudioConfig?.(new Error(`GECX WebSocket closed before audio setup: ${e.code}`));
         if (e.code === 4001) {
+          cleanupGecxSession();
           setErrorMessage("Access Denied: Session authentication failed.");
         } else {
-          setTranscripts(prev => [...prev, { author: 'system', text: 'Session ended.' }]);
+          cleanupGecxSession({
+            drainPlayout: true,
+            onDrained: () => {
+              setWarningMessage('');
+              setTranscripts(prev => [...prev, { author: 'system', text: 'Session ended.' }]);
+            },
+          });
         }
       };
 
       ws.onerror = (err) => {
         console.error("GECX WebSocket error:", err);
+        rejectAudioConfig?.(new Error('GECX WebSocket failed during audio setup.'));
         setErrorMessage("Failed to establish voice session connection.");
       };
+
+      const audioConfig = await Promise.race([
+        audioConfigPromise,
+        new Promise((_, reject) => setTimeout(
+          () => reject(new Error('Timed out waiting for the CES audio configuration.')),
+          10000,
+        )),
+      ]);
+      const inputSampleRate = Number(audioConfig.input_sample_rate_hz);
+      const outputSampleRate = Number(audioConfig.output_sample_rate_hz);
+      if (
+        !Number.isInteger(inputSampleRate)
+        || !Number.isInteger(outputSampleRate)
+        || inputSampleRate < 8000
+        || inputSampleRate > 48000
+        || outputSampleRate < 8000
+        || outputSampleRate > 48000
+      ) {
+        throw new Error('CES returned an invalid audio configuration.');
+      }
+
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+        sampleRate: inputSampleRate,
+      });
+      audioContextRef.current = audioCtx;
+      if (audioCtx.sampleRate !== inputSampleRate) {
+        throw new Error(
+          `Browser audio rate ${audioCtx.sampleRate} does not match CES input rate ${inputSampleRate}.`,
+        );
+      }
+
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+
+      if (typeof audioCtx.setSinkId === 'function' && selectedAudioOutputId) {
+        try {
+          await audioCtx.setSinkId(selectedAudioOutputId);
+        } catch (e) {
+          console.warn('[GECX] Failed to set initial sink ID:', e);
+        }
+      }
 
       // Inline AudioWorklet Processor Blob to prevent asset loaders compiling issues in Vite
       const workletCode = `
         class PCMProcessor extends AudioWorkletProcessor {
-          constructor() {
+          constructor(options) {
             super();
             this.buffer = new Float32Array(0);
+            this.sendChunkSize = options.processorOptions.sendChunkSize;
           }
           process(inputs, outputs, parameters) {
             const input = inputs[0];
@@ -1034,10 +1281,9 @@ export default function VoiceSupportView() {
             combined.set(samples, this.buffer.length);
             this.buffer = combined;
 
-            const sendChunkSize = 2048; // packet size of ~128ms
-            while (this.buffer.length >= sendChunkSize) {
-              const chunk = this.buffer.slice(0, sendChunkSize);
-              this.buffer = this.buffer.slice(sendChunkSize);
+            while (this.buffer.length >= this.sendChunkSize) {
+              const chunk = this.buffer.slice(0, this.sendChunkSize);
+              this.buffer = this.buffer.slice(this.sendChunkSize);
 
               const int16Buffer = new Int16Array(chunk.length);
               for (let i = 0; i < chunk.length; i++) {
@@ -1060,17 +1306,33 @@ export default function VoiceSupportView() {
 
       const sourceNode = audioCtx.createMediaStreamSource(micStream);
       sourceNodeRef.current = sourceNode;
-      const workletNode = new AudioWorkletNode(audioCtx, 'pcm-processor');
+      const workletNode = new AudioWorkletNode(audioCtx, 'pcm-processor', {
+        processorOptions: {
+          sendChunkSize: Math.max(1, Math.round(inputSampleRate * GECX_INPUT_CHUNK_DURATION_SECONDS)),
+        },
+      });
       workletNodeRef.current = workletNode;
+
+      // AudioWorklet processing is driven by the rendered graph. Keep capture
+      // connected to a zero-gain sink so Chrome emits PCM continuously without
+      // playing the microphone back through the speakers.
+      captureSinkNodeRef.current = connectSilentPcmSink(audioCtx, workletNode);
 
       workletNode.port.onmessage = (e) => {
         const rawBuffer = e.data;
-        if (micEnabledRef.current && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.send(rawBuffer);
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          // CES requires continuous audio, including silence. Muting therefore
+          // substitutes a zero-valued frame instead of pausing the stream.
+          wsRef.current.send(
+            pcmFrameForMicrophoneState(rawBuffer, micEnabledRef.current)
+          );
         }
       };
 
       sourceNode.connect(workletNode);
+      const pendingAudio = pendingGecxAudioRef.current;
+      pendingGecxAudioRef.current = [];
+      pendingAudio.forEach(handleGecxAudioChunk);
       setIsConnected(true);
       setTranscripts([]);
     } catch (err) {
@@ -1083,12 +1345,17 @@ export default function VoiceSupportView() {
   };
 
   const startConsultation = async () => {
+    if (isTestingMic) {
+      setIsTestingMic(false);
+      // Let React unmount MicTester and release its MediaStream before the
+      // consultation acquires the same device with call-specific processing.
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
     if (engine === 'gecx') {
       return startGecxConsultation();
     }
     if (isConnecting || isConnected) return;
     setIsConnecting(true);
-    setIsTestingMic(false);
     setErrorMessage('');
     setTranscripts([{ author: 'system', text: 'Connecting to voice room...' }]);
 
@@ -1160,6 +1427,8 @@ export default function VoiceSupportView() {
           const event = JSON.parse(decoder.decode(payload));
           console.log('Received data channel event:', event);
 
+          if (handleOperationalVoiceEvent(event)) return;
+
           const typedDelivery = resolveTypedDelivery(
             event,
             pendingTypedMessageIdRef.current,
@@ -1201,103 +1470,6 @@ export default function VoiceSupportView() {
             ]);
           } else if (event.type === DataChannelEvent.GUIDANCE_SNAPSHOT) {
             setGuidanceSnapshot(event);
-          } else if (event.type === DataChannelEvent.FRAUD_ALERT_INSPECTED) {
-            setFraudContext(prev => prev ? {
-              ...prev,
-              has_active_fraud_alert: true,
-              fraud_alert: prev.fraud_alert ? {
-                ...prev.fraud_alert,
-                inspected: true,
-                status: event.status || prev.fraud_alert.status,
-              } : prev.fraud_alert,
-            } : prev);
-            setTranscripts(prev => [
-              ...prev,
-              {
-                author: 'system',
-                text: `CASE UPDATE: Fraud alert reviewed. ${event.suspicious_transactions_count || 0} suspicious charge${event.suspicious_transactions_count === 1 ? '' : 's'} ready for confirmation.`,
-              },
-            ]);
-          } else if (event.type === DataChannelEvent.CARD_STATUS_LOCK) {
-            setCardStatus(event.status);
-            setTranscripts(prev => [...prev, { author: 'system', text: `SECURITY ALERT: Card status updated to ${event.status}.` }]);
-          } else if (event.type === DataChannelEvent.CARD_REPLACED) {
-            setCardStatus(event.status || 'ACTIVE');
-            setAccount(prev => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                cards: applyReplacementCardEvent(prev.cards, event),
-              };
-            });
-            setTranscripts(prev => [
-              ...prev,
-              {
-                author: 'system',
-                text: `ACCOUNT UPDATE: Replacement ${event.is_virtual ? 'virtual ' : ''}card ending in ${event.new_last_four} is ready.`,
-              },
-            ]);
-          } else if (event.type === DataChannelEvent.WALLET_PROVISIONING_QUEUED) {
-            setFraudTriage(prev => ({ ...prev, walletQueued: true }));
-            setAccount(prev => prev ? {
-              ...prev,
-              cards: applyWalletProvisioningEvent(prev.cards, event),
-            } : prev);
-            setTranscripts(prev => [
-              ...prev,
-              {
-                author: 'system',
-                text: `ACCOUNT UPDATE: Virtual card provisioning to ${event.wallet_provider || 'Google Wallet'} is queued.`,
-              },
-            ]);
-          } else if (event.type === DataChannelEvent.FRAUD_ALERT_RESOLVED || event.type === DataChannelEvent.FRAUD_CASE_TRIAGED) {
-            const isRecognized = event.resolution === 'CUSTOMER_RECOGNIZED' || event.outcome === 'CUSTOMER_RECOGNIZED';
-            const replacement = event.replacement_card || null;
-            setFraudTriage(prev => ({
-              ...prev,
-              outcome: event.outcome || event.resolution || prev.outcome,
-              voided_authorizations: event.voided_authorizations || prev.voided_authorizations,
-              provisional_credits: event.provisional_credits || prev.provisional_credits,
-              replacement_card: replacement || prev.replacement_card,
-              secure_message: event.secure_message || prev.secure_message,
-              escalated: event.escalated ?? prev.escalated,
-            }));
-            if (replacement) {
-              setAccount(prev => prev ? {
-                ...prev,
-                cards: applyReplacementCardEvent(prev.cards, replacement),
-              } : prev);
-            }
-            if (event.secure_message) {
-              window.dispatchEvent(new CustomEvent('secure-message-created', {
-                detail: {
-                  thread_id: event.secure_message.thread_id,
-                  message_id: event.secure_message.message_id,
-                },
-              }));
-              window.dispatchEvent(new CustomEvent('refresh-unread-count'));
-            }
-            refreshCreditCardData().catch(err => {
-              console.error('Failed to refresh credit card data after fraud triage:', err);
-            });
-            setFraudContext(prev => prev ? {
-              ...prev,
-              has_active_fraud_alert: false,
-              fraud_alert: prev.fraud_alert ? {
-                ...prev.fraud_alert,
-                status: event.status || prev.fraud_alert.status,
-                resolution: event.resolution || prev.fraud_alert.resolution,
-              } : prev.fraud_alert,
-            } : prev);
-            setTranscripts(prev => [
-              ...prev,
-              {
-                author: 'system',
-                text: isRecognized
-                  ? 'CASE UPDATE: Fraud alert reviewed as recognized activity.'
-                  : `CASE UPDATE: Fraud case triaged. ${(event.voided_authorizations || []).length} pending hold${(event.voided_authorizations || []).length === 1 ? '' : 's'} released, ${(event.provisional_credits || []).length} provisional credit${(event.provisional_credits || []).length === 1 ? '' : 's'} applied.`,
-              },
-            ]);
           } else if (event.type === DataChannelEvent.LIMIT_UPDATED) {
             setCreditLimit(event.credit_limit_cents / 100);
             setAvailableCredit(event.available_credit_cents / 100);
@@ -1324,9 +1496,10 @@ export default function VoiceSupportView() {
           } else if (event.type === DataChannelEvent.SESSION_END) {
             startDisconnectCountdown();
           } else if (event.type === DataChannelEvent.TRANSCRIPT) {
-            setTranscripts(prev => [...prev, { author: event.author, text: event.text }]);
-            if (event.author === 'agent') {
-              const text = event.text.toLowerCase();
+            setTranscripts(prev => mergeGecxTranscript(prev, event));
+            const transcriptText = typeof event.text === 'string' ? event.text.trim() : '';
+            if (event.author === 'agent' && transcriptText) {
+              const text = transcriptText.toLowerCase();
               if (text.includes("goodbye") || text.includes("bye") || (text.includes("have a") && text.includes("day") && text.includes("good"))) {
                 console.log("Agent farewell detected in transcript. Auto-initiating disconnect countdown...");
                 startDisconnectCountdown();

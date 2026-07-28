@@ -1,5 +1,6 @@
 import hashlib
 import datetime
+import json
 import uuid
 from typing import Iterable
 
@@ -286,6 +287,116 @@ class FraudAlertService:
             "message": "Open fraud alert retrieved successfully.",
             "fraud_alert": context["fraud_alert"],
             "support_guidance": context.get("support_guidance"),
+        }
+
+    def review_open_alert_selection(
+        self,
+        *,
+        auth_provider_uid: str,
+        fraud_alert_id: str,
+        selection_status: str,
+        disputed_authorization_ids: list[str] | None = None,
+        disputed_transaction_ids: list[str] | None = None,
+        recognized_authorization_ids: list[str] | None = None,
+        recognized_transaction_ids: list[str] | None = None,
+    ) -> dict:
+        """Validate a non-consequential customer review of one open alert."""
+        alert = self.repo.get_latest_open_alert_for_customer(
+            auth_provider_uid=auth_provider_uid
+        )
+        if not alert or str(alert.id) != str(fraud_alert_id or "").strip():
+            return {
+                "success": False,
+                "error": "ACTIVE_FRAUD_ALERT_REQUIRED",
+                "message": "The selected fraud alert is not open for this customer.",
+            }
+
+        status = str(selection_status or "").strip().upper()
+        if status not in {"UNCERTAIN", "PARTIAL", "COMPLETE"}:
+            return {
+                "success": False,
+                "error": "INVALID_SELECTION_STATUS",
+                "message": "Selection status must be UNCERTAIN, PARTIAL, or COMPLETE.",
+            }
+
+        def normalized(values):
+            return sorted(
+                {str(value).strip() for value in (values or []) if str(value).strip()}
+            )
+
+        disputed_authorizations = normalized(disputed_authorization_ids)
+        disputed_transactions = normalized(disputed_transaction_ids)
+        recognized_authorizations = normalized(recognized_authorization_ids)
+        recognized_transactions = normalized(recognized_transaction_ids)
+        allowed_authorizations = {
+            str(value) for value in (alert.suspicious_authorization_ids or [])
+        }
+        allowed_transactions = {
+            str(item.get("transaction_id"))
+            for item in (alert.suspicious_transactions or [])
+            if isinstance(item, dict) and item.get("transaction_id")
+        }
+
+        selected_authorizations = set(disputed_authorizations) | set(
+            recognized_authorizations
+        )
+        selected_transactions = set(disputed_transactions) | set(
+            recognized_transactions
+        )
+        if set(disputed_authorizations) & set(recognized_authorizations) or set(
+            disputed_transactions
+        ) & set(recognized_transactions):
+            return {
+                "success": False,
+                "error": "CONFLICTING_FRAUD_SELECTION",
+                "message": "The same activity cannot be both recognized and disputed.",
+            }
+        if (
+            selected_authorizations - allowed_authorizations
+            or selected_transactions - allowed_transactions
+        ):
+            return {
+                "success": False,
+                "error": "FRAUD_SELECTION_OUT_OF_SCOPE",
+                "message": "The selection contains activity outside the open fraud alert.",
+            }
+
+        coverage_complete = (
+            selected_authorizations == allowed_authorizations
+            and selected_transactions == allowed_transactions
+        )
+        if status == "COMPLETE" and not coverage_complete:
+            return {
+                "success": False,
+                "error": "FRAUD_SELECTION_INCOMPLETE",
+                "message": "Every flagged item must be recognized or disputed before proposing an action.",
+            }
+        if status != "COMPLETE" and coverage_complete:
+            status = "COMPLETE"
+
+        canonical = {
+            "fraud_alert_id": str(alert.id),
+            "selection_status": status,
+            "disputed_authorization_ids": disputed_authorizations,
+            "disputed_transaction_ids": disputed_transactions,
+            "recognized_authorization_ids": recognized_authorizations,
+            "recognized_transaction_ids": recognized_transactions,
+        }
+        encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+        return {
+            "success": True,
+            **canonical,
+            "selection_fingerprint": hashlib.sha256(encoded.encode()).hexdigest(),
+            "stage": (
+                "READY_TO_PROPOSE"
+                if status == "COMPLETE"
+                else "CLARIFYING_SELECTION"
+            ),
+            "ready_to_propose": status == "COMPLETE",
+            "remaining_item_count": (
+                len(allowed_authorizations - selected_authorizations)
+                + len(allowed_transactions - selected_transactions)
+            ),
         }
 
     def triage_customer_reported_fraud(
@@ -607,6 +718,34 @@ class FraudAlertService:
         The method deliberately centralizes business sequencing so the live agent
         can confirm customer intent once and invoke a single workflow operation.
         """
+        try:
+            result = self._triage_fraud_case_in_transaction(
+                auth_provider_uid=auth_provider_uid,
+                fraud_alert_id=fraud_alert_id,
+                disputed_authorization_ids=disputed_authorization_ids,
+                disputed_transaction_ids=disputed_transaction_ids,
+                issue_replacement=issue_replacement,
+                escalate=escalate,
+                idempotency_key=idempotency_key,
+            )
+            self.db.commit()
+            return result
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def _triage_fraud_case_in_transaction(
+        self,
+        *,
+        auth_provider_uid: str,
+        fraud_alert_id: str,
+        disputed_authorization_ids: list[str] | None = None,
+        disputed_transaction_ids: list[str] | None = None,
+        issue_replacement: bool = True,
+        escalate: bool = False,
+        idempotency_key: str | None = None,
+    ) -> dict:
+        """Execute fraud triage without committing the caller-owned transaction."""
         disputed_authorization_ids = disputed_authorization_ids or []
         disputed_transaction_ids = disputed_transaction_ids or []
         alert = self.repo.get_alert_for_customer(
@@ -684,6 +823,7 @@ class FraudAlertService:
                 auth_provider_uid=auth_provider_uid,
                 alert=resolved,
                 message_body=self._build_recognized_triage_message(resolved),
+                commit_transaction=False,
             )
             self.repo.mark_triaged(
                 fraud_alert_id=resolved.id,
@@ -736,6 +876,12 @@ class FraudAlertService:
             result = {
                 "success": True,
                 "message": "Fraud alert marked as recognized activity.",
+                "customer_safe_result_summary": (
+                    "The fraud alert has been resolved because you recognized all "
+                    "reviewed activity. Your card remains active, no dispute was "
+                    "opened, and no replacement was issued. A secure message with "
+                    "the details was sent."
+                ),
                 "fraud_alert": self._alert_result(resolved),
                 "outcome": "CUSTOMER_RECOGNIZED",
                 "voided_authorizations": [],
@@ -750,7 +896,6 @@ class FraudAlertService:
             self.repo.complete_case_action(
                 action_id=workflow_action.id, status="SUCCEEDED", result_payload=result
             )
-            self.db.commit()
             return result
 
         from services.credit_card import (
@@ -765,6 +910,7 @@ class FraudAlertService:
                 account_id=str(alert.credit_account_id),
                 authorization_id=authorization_id,
                 fraud_alert_id=str(alert.id),
+                commit_transaction=False,
             )
             for authorization_id in disputed_authorization_ids
         ]
@@ -774,6 +920,7 @@ class FraudAlertService:
                 account_id=str(alert.credit_account_id),
                 transaction_id=transaction_id,
                 fraud_alert_id=str(alert.id),
+                commit_transaction=False,
             )
             for transaction_id in disputed_transaction_ids
         ]
@@ -785,6 +932,7 @@ class FraudAlertService:
                 reason="CUSTOMER_FRAUD_REISSUE",
                 fraud_alert_id=str(alert.id),
                 compromised_card_id=str(alert.card_id),
+                commit_transaction=False,
             )
 
         provisional_credit_total = sum(
@@ -803,6 +951,7 @@ class FraudAlertService:
                 disputed_authorization_ids=disputed_authorization_ids,
                 disputed_transaction_ids=disputed_transaction_ids,
             ),
+            commit_transaction=False,
         )
         triaged = self.repo.mark_triaged(
             fraud_alert_id=alert.id,
@@ -855,6 +1004,12 @@ class FraudAlertService:
         result = {
             "success": True,
             "message": "Fraud case triaged and pending specialist review.",
+            "customer_safe_result_summary": self._customer_safe_triage_result_summary(
+                voided_authorizations=voided_authorizations,
+                provisional_credits=provisional_credits,
+                replacement_result=replacement_result,
+                escalated=escalate,
+            ),
             "fraud_alert": self._alert_result(triaged),
             "outcome": triaged.remediation_status,
             "voided_authorizations": voided_authorizations,
@@ -869,8 +1024,41 @@ class FraudAlertService:
         self.repo.complete_case_action(
             action_id=workflow_action.id, status="SUCCEEDED", result_payload=result
         )
-        self.db.commit()
         return result
+
+    @staticmethod
+    def _customer_safe_triage_result_summary(
+        *,
+        voided_authorizations: list[dict],
+        provisional_credits: list[dict],
+        replacement_result: dict | None,
+        escalated: bool,
+    ) -> str:
+        parts = [
+            (
+                "Your fraud report was submitted for specialist review."
+                if not escalated
+                else "Your fraud report was escalated to a specialist."
+            )
+        ]
+        if voided_authorizations:
+            count = len(voided_authorizations)
+            parts.append(
+                f"{count} pending {'charge was' if count == 1 else 'charges were'} released."
+            )
+        if provisional_credits:
+            count = len(provisional_credits)
+            parts.append(
+                f"{count} provisional {'credit was' if count == 1 else 'credits were'} applied."
+            )
+        if replacement_result:
+            last_four = str(replacement_result.get("new_last_four") or "")
+            suffix = f" ending in {last_four}" if last_four else ""
+            parts.append(
+                f"Your compromised card was blocked, and a replacement virtual card{suffix} is active."
+            )
+        parts.append("A secure message with the case details was sent.")
+        return " ".join(parts)
 
     def execute_scenario_customer_action(
         self,
@@ -1091,7 +1279,12 @@ class FraudAlertService:
         return "\n".join(lines)
 
     def _send_triage_secure_message(
-        self, *, auth_provider_uid: str, alert, message_body: str
+        self,
+        *,
+        auth_provider_uid: str,
+        alert,
+        message_body: str,
+        commit_transaction: bool = True,
     ):
         message_request = SecureMessageCreateRequest(
             category="Fraud Alert",
@@ -1105,6 +1298,7 @@ class FraudAlertService:
             ValidatedToken(
                 claims={"sub": auth_provider_uid, "email": auth_provider_uid}
             ),
+            commit_transaction=commit_transaction,
         )
 
     @staticmethod
@@ -1224,10 +1418,14 @@ class FraudAlertService:
     ) -> str:
         if not suspicious_transactions:
             return f"Customer has an active fraud alert on card ending in {card_last_four}."
-        top_merchants = ", ".join(
-            txn["merchant_name"] for txn in suspicious_transactions[:3]
+        transaction_descriptions = ", ".join(
+            (
+                f"{FraudAlertService._format_cents(int(txn.get('amount_cents') or 0))} "
+                f"at {txn.get('merchant_name') or 'Unknown merchant'}"
+            )
+            for txn in suspicious_transactions
         )
         return (
             f"Customer has an active fraud alert on card ending in {card_last_four}. "
-            f"Recent suspicious transactions include {top_merchants}."
+            f"Flagged transactions are {transaction_descriptions}."
         )

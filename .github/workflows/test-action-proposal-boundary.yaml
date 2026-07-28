@@ -1,0 +1,159 @@
+name: Test Action Proposal Boundary
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/test-action-proposal-boundary.yaml"
+      - "adk-agent/credit-support-agent/**"
+      - "banking-service/**"
+      - "banking-ui/**"
+      - "deployment/terraform/**"
+      - "gecx/Credit_Support_Voice_Agent/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/test-action-proposal-boundary.yaml"
+      - "adk-agent/credit-support-agent/**"
+      - "banking-service/**"
+      - "banking-ui/**"
+      - "deployment/terraform/**"
+      - "gecx/Credit_Support_Voice_Agent/**"
+
+jobs:
+  banking-contract:
+    name: Banking proposal and voice contracts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: banking-service/uv.lock
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install banking dependencies
+        run: uv sync --frozen --default-index https://pypi.org/simple
+        working-directory: banking-service
+
+      - name: Run proposal and voice boundary tests
+        run: |
+          uv run pytest -q \
+            tests/test_action_proposals.py \
+            tests/test_action_proposal_context.py \
+            tests/test_ces_session_capability.py \
+            tests/test_ces_session_bootstrap.py \
+            tests/test_ces_callback_bundle.py \
+            tests/test_voice_bidi.py \
+            tests/test_voice_deployment_contract.py \
+            tests/test_database_schema_contract.py
+        working-directory: banking-service
+
+  adk-contract:
+    name: ADK authorization contracts
+    runs-on: ubuntu-latest
+    env:
+      GOOGLE_CLOUD_PROJECT: action-proposal-contract-test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: adk-agent/credit-support-agent/uv.lock
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install ADK dependencies
+        run: uv sync --frozen --default-index https://pypi.org/simple
+        working-directory: adk-agent/credit-support-agent
+
+      - name: Run ADK proposal authorization tests
+        run: |
+          uv run pytest -q \
+            tests/test_action_proposal_adapter.py \
+            tests/test_workflow_plugin.py \
+            tests/test_live_authorization_reconciliation.py
+        working-directory: adk-agent/credit-support-agent
+
+  banking-ui-contract:
+    name: Banking UI voice contracts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          cache: npm
+          cache-dependency-path: banking-ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: banking-ui
+
+      - name: Run UI tests
+        run: npm test
+        working-directory: banking-ui
+
+  migration-contract:
+    name: PostgreSQL migration round trip
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: banking
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d banking"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: banking-service/uv.lock
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install banking dependencies
+        run: uv sync --frozen --default-index https://pypi.org/simple
+        working-directory: banking-service
+
+      - name: Validate migration upgrade and downgrade
+        env:
+          DATABASE_URL: postgresql://postgres:secret@127.0.0.1:5432/banking
+          SKIP_IAM_GRANTS: "true"
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+        working-directory: banking-service

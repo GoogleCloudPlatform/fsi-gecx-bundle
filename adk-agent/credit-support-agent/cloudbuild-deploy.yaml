@@ -13,6 +13,20 @@
 # limitations under the License.
 
 steps:
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "prepare-linguist-repository"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        if [ ! -d /workspace/.git ]; then
+          git init -q /workspace
+          git -C /workspace add -A
+          git -C /workspace \
+            -c user.name=cloud-build -c user.email=cloud-build@localhost \
+            commit -qm archive-build
+        fi
+
   - name: "ghcr.io/github-linguist/linguist:latest"
     id: "run-linguist"
     entrypoint: "sh"
@@ -131,7 +145,7 @@ steps:
             --min-instances "${_VOICE_AGENT_MIN_INSTANCES}" \
             --max-instances "${_VOICE_AGENT_MAX_INSTANCES}" \
             --concurrency "${_VOICE_AGENT_MAX_INSTANCE_REQUEST_CONCURRENCY}" \
-            --update-env-vars "VOICE_AGENT_MAX_CONCURRENT_SESSIONS=${_VOICE_AGENT_MAX_CONCURRENT_SESSIONS},VOICE_AGENT_AUDIO_SESSION_CAPACITY_UNITS=${_VOICE_AGENT_AUDIO_SESSION_CAPACITY_UNITS},VOICE_AGENT_VIDEO_SESSION_CAPACITY_UNITS=${_VOICE_AGENT_VIDEO_SESSION_CAPACITY_UNITS}" \
+            --update-env-vars "VOICE_AGENT_MAX_CONCURRENT_SESSIONS=${_VOICE_AGENT_MAX_CONCURRENT_SESSIONS},VOICE_AGENT_AUDIO_SESSION_CAPACITY_UNITS=${_VOICE_AGENT_AUDIO_SESSION_CAPACITY_UNITS},VOICE_AGENT_VIDEO_SESSION_CAPACITY_UNITS=${_VOICE_AGENT_VIDEO_SESSION_CAPACITY_UNITS},VOICE_AGENT_USE_ACTION_PROPOSALS=${_VOICE_AGENT_USE_ACTION_PROPOSALS}" \
             --no-cpu-throttling
         else
           echo "Skipping deployment because _TRIGGER_DEPLOY is not true"
@@ -157,3 +171,4 @@ substitutions:
   _VOICE_AGENT_MAX_CONCURRENT_SESSIONS: "4"
   _VOICE_AGENT_AUDIO_SESSION_CAPACITY_UNITS: "1"
   _VOICE_AGENT_VIDEO_SESSION_CAPACITY_UNITS: "4"
+  _VOICE_AGENT_USE_ACTION_PROPOSALS: "true"

@@ -7,6 +7,7 @@ from agent import agent
 from agent.workflow_authorization import (
     PUSH_CARD_TO_GOOGLE_WALLET,
     TRIAGE_FRAUD_CASE,
+    apply_customer_authorization_response,
     create_workflow_authorization,
     mark_authorization_prompted,
 )
@@ -36,7 +37,16 @@ def pending_playbook(*, issued_at: float = 1000.0) -> dict:
     return {"workflow_authorization": authorization}
 
 
-def test_latest_typed_or_voice_turn_closes_live_event_ordering_gap() -> None:
+def confirmed_decision(*, event_id: str = "typed-message-1") -> dict:
+    return apply_customer_authorization_response(
+        pending_playbook()["workflow_authorization"],
+        transcript="That's correct.",
+        customer_event_id=event_id,
+        now_epoch_s=1002.0,
+    )
+
+
+def test_plugin_decision_closes_live_event_ordering_gap() -> None:
     tokens = agent.bind_session_context("customer-1", lambda event: event)
     try:
         agent.record_customer_turn(
@@ -44,7 +54,8 @@ def test_latest_typed_or_voice_turn_closes_live_event_ordering_gap() -> None:
             event_id="typed-message-1",
             observed_at_epoch_s=1002.0,
         )
-        reconciled, changed = agent.apply_latest_customer_turn_to_authorization(
+        agent.record_customer_authorization_decision(confirmed_decision())
+        reconciled, changed = agent.apply_recorded_authorization_decision(
             pending_playbook()
         )
     finally:
@@ -57,16 +68,16 @@ def test_latest_typed_or_voice_turn_closes_live_event_ordering_gap() -> None:
     )
 
 
-def test_confirmation_before_payload_preparation_is_not_reused() -> None:
+def test_raw_customer_turn_is_not_independently_classified() -> None:
     tokens = agent.bind_session_context("customer-1", lambda event: event)
     try:
         agent.record_customer_turn(
-            "Correct",
-            event_id="customer-before-prepare",
-            observed_at_epoch_s=999.0,
+            "That's correct.",
+            event_id="customer-turn-1",
+            observed_at_epoch_s=1002.0,
         )
-        reconciled, changed = agent.apply_latest_customer_turn_to_authorization(
-            pending_playbook(issued_at=1000.0)
+        reconciled, changed = agent.apply_recorded_authorization_decision(
+            pending_playbook()
         )
     finally:
         agent.reset_session_context(tokens)
@@ -76,18 +87,21 @@ def test_confirmation_before_payload_preparation_is_not_reused() -> None:
 
 
 @pytest.mark.asyncio
-async def test_customer_turn_recorded_by_child_listener_is_shared() -> None:
+async def test_plugin_decision_recorded_by_child_listener_is_shared() -> None:
     tokens = agent.bind_session_context("customer-1", lambda event: event)
     try:
+        agent.record_customer_turn(
+            "Yes",
+            event_id="child-listener-turn",
+            observed_at_epoch_s=1002.0,
+        )
         await asyncio.create_task(
             asyncio.to_thread(
-                agent.record_customer_turn,
-                "Yes",
-                event_id="child-listener-turn",
-                observed_at_epoch_s=1002.0,
+                agent.record_customer_authorization_decision,
+                confirmed_decision(event_id="child-listener-turn"),
             )
         )
-        reconciled, changed = agent.apply_latest_customer_turn_to_authorization(
+        reconciled, changed = agent.apply_recorded_authorization_decision(
             pending_playbook()
         )
     finally:
@@ -95,6 +109,76 @@ async def test_customer_turn_recorded_by_child_listener_is_shared() -> None:
 
     assert changed is True
     assert reconciled["workflow_authorization"]["status"] == "CONFIRMED"
+
+
+def test_decision_for_different_authorization_is_not_reused() -> None:
+    tokens = agent.bind_session_context("customer-1", lambda event: event)
+    try:
+        agent.record_customer_turn(
+            "That's correct.",
+            event_id="typed-message-1",
+            observed_at_epoch_s=1002.0,
+        )
+        decision = confirmed_decision()
+        decision["issued_at_epoch_s"] = 999.0
+        agent.record_customer_authorization_decision(decision)
+        reconciled, changed = agent.apply_recorded_authorization_decision(
+            pending_playbook()
+        )
+    finally:
+        agent.reset_session_context(tokens)
+
+    assert changed is False
+    assert reconciled["workflow_authorization"]["status"] == "PENDING"
+
+
+def test_new_customer_turn_clears_buffered_decision() -> None:
+    tokens = agent.bind_session_context("customer-1", lambda event: event)
+    try:
+        agent.record_customer_turn(
+            "That's correct.",
+            event_id="customer-turn-1",
+            observed_at_epoch_s=1002.0,
+        )
+        agent.record_customer_authorization_decision(
+            confirmed_decision(event_id="customer-turn-1")
+        )
+        agent.record_customer_turn(
+            "Wait a moment.",
+            event_id="customer-turn-2",
+            observed_at_epoch_s=1003.0,
+        )
+        reconciled, changed = agent.apply_recorded_authorization_decision(
+            pending_playbook()
+        )
+    finally:
+        agent.reset_session_context(tokens)
+
+    assert changed is False
+    assert reconciled["workflow_authorization"]["status"] == "PENDING"
+
+
+def test_typed_ingress_id_becomes_canonical_adk_turn_id() -> None:
+    tokens = agent.bind_session_context("customer-1", lambda event: event)
+    try:
+        agent.record_customer_turn(
+            "Yes, that's right.",
+            event_id="typed-message-1",
+            observed_at_epoch_s=1002.0,
+            pending_ingress=True,
+        )
+        turn = agent.record_customer_turn(
+            "  yes,   that's right. ",
+            event_id="adk-event-9",
+            observed_at_epoch_s=1002.1,
+            consume_pending=True,
+        )
+    finally:
+        agent.reset_session_context(tokens)
+
+    assert turn["event_id"] == "typed-message-1"
+    assert turn["runtime_event_id"] == "adk-event-9"
+    assert turn["pending_ingress"] is False
 
 
 @pytest.mark.asyncio

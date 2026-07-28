@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from google.adk.plugins import BasePlugin
 
 from agent.closeout import apply_closeout_transcript_event
@@ -15,18 +17,48 @@ from agent.workflow_authorization import (
     TRIAGE_CUSTOMER_REPORTED_FRAUD,
     TRIAGE_FRAUD_CASE,
     apply_customer_authorization_response,
-    assistant_requested_confirmation,
     create_workflow_authorization,
     invalidate_workflow_authorization,
     mark_authorization_prompted,
+    proposal_presentation_matches,
 )
+from agent.telemetry import record_action_proposal_event
+
+
+def _record_proposal_transition(
+    state: dict, authorization: dict, outcome: str, reason: str | None = None
+) -> None:
+    proposal_id = authorization.get("proposal_id")
+    if not proposal_id:
+        return
+    guidance = state.get("support_guidance") or {}
+    record_action_proposal_event(
+        runtime="ADK_GEMINI_LIVE",
+        support_session_id=str(state.get("session_id") or ""),
+        proposal_id=str(proposal_id),
+        contract_version=str(
+            authorization.get("contract_version") or "fraud-triage.v1"
+        ),
+        catalog_snapshot_id=guidance.get("snapshot_id"),
+        tool="fraud_workflow_state",
+        outcome=outcome,
+        latency_ms=0,
+        invalidation_reason=reason,
+    )
 
 
 class FraudWorkflowStatePlugin(BasePlugin):
     """Persist completed Live transcript transitions into ADK session state."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        customer_turn_observer: Callable[..., dict | None] | None = None,
+        authorization_observer: Callable[[dict], None] | None = None,
+    ) -> None:
         super().__init__(name="fraud_workflow_state")
+        self._customer_turn_observer = customer_turn_observer
+        self._authorization_observer = authorization_observer
 
     async def on_event_callback(self, *, invocation_context, event):
         playbook = invocation_context.session.state.get("fraud_playbook") or {}
@@ -46,6 +78,12 @@ class FraudWorkflowStatePlugin(BasePlugin):
                     reason="MODEL_RESPONSE_INTERRUPTED",
                     event_id=event_id,
                 )
+                _record_proposal_transition(
+                    invocation_context.session.state,
+                    updated["workflow_authorization"],
+                    "INVALIDATED",
+                    "MODEL_RESPONSE_INTERRUPTED",
+                )
 
         input_transcription = getattr(event, "input_transcription", None)
         customer_text = None
@@ -56,6 +94,15 @@ class FraudWorkflowStatePlugin(BasePlugin):
             text_parts = [part.text for part in parts if getattr(part, "text", None)]
             customer_text = "\n".join(text_parts).strip() or None
         if customer_text is not None:
+            if self._customer_turn_observer:
+                turn = self._customer_turn_observer(
+                    customer_text,
+                    event_id=event_id,
+                    observed_at_epoch_s=event.timestamp,
+                    consume_pending=True,
+                )
+                if turn and turn.get("event_id"):
+                    event_id = str(turn["event_id"])
             checkpoint = invocation_context.session.state.get("closeout_checkpoint")
             updated_checkpoint = apply_closeout_transcript_event(
                 checkpoint,
@@ -67,19 +114,34 @@ class FraudWorkflowStatePlugin(BasePlugin):
                 event.actions.state_delta["closeout_checkpoint"] = updated_checkpoint
             authorization = updated.get("workflow_authorization") or {}
             if authorization.get("status") in {"PENDING", "CONFIRMED", "UNCLEAR"}:
+                prior_status = authorization.get("status")
                 authorization = apply_customer_authorization_response(
                     authorization,
                     transcript=customer_text,
                     customer_event_id=event_id,
                 )
                 updated["workflow_authorization"] = authorization
+                if authorization != (playbook.get("workflow_authorization") or {}):
+                    if self._authorization_observer:
+                        self._authorization_observer(authorization)
+                if authorization.get("status") != prior_status:
+                    _record_proposal_transition(
+                        invocation_context.session.state,
+                        authorization,
+                        str(authorization.get("status") or "UNKNOWN"),
+                        authorization.get("invalidation_reason"),
+                    )
                 if authorization.get("action") == PUSH_CARD_TO_GOOGLE_WALLET:
                     updated["wallet_response_status"] = authorization.get("status")
                     updated["wallet_customer_confirmed"] = (
                         authorization.get("status") == "CONFIRMED"
                     )
                     updated["wallet_response_event_id"] = event_id
-                    if authorization.get("status") in {"DECLINED", "INVALIDATED", "EXPIRED"}:
+                    if authorization.get("status") in {
+                        "DECLINED",
+                        "INVALIDATED",
+                        "EXPIRED",
+                    }:
                         updated["wallet_push_offered"] = False
             else:
                 updated = apply_wallet_transcript_event(
@@ -113,7 +175,9 @@ class FraudWorkflowStatePlugin(BasePlugin):
                             "card_token": updated.get("replacement_card_token"),
                             "wallet_provider": "GOOGLE_WALLET",
                         },
-                        session_id=str(invocation_context.session.state.get("session_id") or ""),
+                        session_id=str(
+                            invocation_context.session.state.get("session_id") or ""
+                        ),
                     )
                     authorization = mark_authorization_prompted(
                         authorization,
@@ -130,11 +194,19 @@ class FraudWorkflowStatePlugin(BasePlugin):
                 authorization.get("action")
                 in {TRIAGE_FRAUD_CASE, TRIAGE_CUSTOMER_REPORTED_FRAUD}
                 and authorization.get("status") == "PREPARED"
-                and assistant_requested_confirmation(transcript)
+                and proposal_presentation_matches(
+                    authorization.get("customer_safe_summary"),
+                    transcript,
+                )
             ):
                 updated["workflow_authorization"] = mark_authorization_prompted(
                     authorization,
                     assistant_event_id=event_id,
+                )
+                _record_proposal_transition(
+                    invocation_context.session.state,
+                    updated["workflow_authorization"],
+                    "PRESENTED",
                 )
 
         if updated != playbook:

@@ -206,6 +206,13 @@ async def test_reset_my_demo_success(async_client, db_session):
     assert response.status_code == status.HTTP_201_CREATED
     summary = response.json()["summary"]
     user_id = summary["user_id"]
+    prior_credit_account = db_session.query(CreditAccount).filter(
+        CreditAccount.customer_id == user_id,
+        CreditAccount.status == "ACTIVE",
+    ).one()
+    prior_posted_count = db_session.query(PostedTransaction).filter(
+        PostedTransaction.account_id == prior_credit_account.id
+    ).count()
     
     # Reset
     response2 = await async_client.post("/api/v1/simulation/reset-my-demo")
@@ -213,7 +220,15 @@ async def test_reset_my_demo_success(async_client, db_session):
     assert response2.json()["status"] == "SUCCESS"
     
     # Verify balances reset to harmonized suite defaults with active transactions
-    cred_acc = db_session.query(CreditAccount).filter(CreditAccount.customer_id == user_id).first()
+    cred_acc = db_session.query(CreditAccount).filter(
+        CreditAccount.customer_id == user_id,
+        CreditAccount.status == "ACTIVE",
+    ).one()
+    assert cred_acc.id != prior_credit_account.id
+    assert prior_credit_account.status == "CLOSED"
+    assert db_session.query(PostedTransaction).filter(
+        PostedTransaction.account_id == prior_credit_account.id
+    ).count() == prior_posted_count
     assert cred_acc.cleared_balance_cents > 0
     from models.credit_card import TransactionAuthorization
     holds = db_session.query(TransactionAuthorization).filter(
@@ -235,7 +250,15 @@ async def test_reset_my_demo_success(async_client, db_session):
             assert acc.cleared_balance_cents == expected_baseline["checking"]
         elif acc.account_type == "SAVINGS":
             assert acc.cleared_balance_cents == expected_baseline["savings"]
-    assert db_session.query(Account).filter(Account.user_id == user_id, Account.status == "CLOSED").count() == 2
+    closed_accounts = db_session.query(Account).filter(
+        Account.user_id == user_id,
+        Account.status == "CLOSED",
+    ).all()
+    assert {account.account_type for account in closed_accounts} == {
+        "CHECKING",
+        "SAVINGS",
+        "CREDIT_CARD",
+    }
 
 
 @pytest.mark.asyncio
@@ -366,7 +389,10 @@ async def test_reset_my_demo_clears_fraud_state_and_restores_card_baseline(async
     user_id = provision_response.json()["summary"]["user_id"]
 
     user = db_session.query(User).filter(User.id == user_id).first()
-    cred_acc = db_session.query(CreditAccount).filter(CreditAccount.customer_id == user_id).first()
+    cred_acc = db_session.query(CreditAccount).filter(
+        CreditAccount.customer_id == user_id,
+        CreditAccount.status == "ACTIVE",
+    ).one()
     original_card = db_session.query(IssuedCard).filter(IssuedCard.account_id == cred_acc.id).first()
     original_card_id = original_card.id
     original_card_token = original_card.card_token
@@ -435,13 +461,36 @@ async def test_reset_my_demo_clears_fraud_state_and_restores_card_baseline(async
         )
     )
     db_session.commit()
+    prior_posted_count = db_session.query(PostedTransaction).filter(
+        PostedTransaction.account_id == cred_acc.id
+    ).count()
+    prior_authorization_count = db_session.query(TransactionAuthorization).filter(
+        TransactionAuthorization.account_id == cred_acc.id
+    ).count()
 
     reset_response = await async_client.post("/api/v1/simulation/reset-my-demo")
 
     assert reset_response.status_code == status.HTTP_200_OK
-    cards = db_session.query(IssuedCard).filter(IssuedCard.account_id == cred_acc.id).all()
-    assert len(cards) == 1
-    reset_card = cards[0]
+    reset_account = db_session.query(CreditAccount).filter(
+        CreditAccount.customer_id == user_id,
+        CreditAccount.status == "ACTIVE",
+    ).one()
+    assert reset_account.id != cred_acc.id
+    assert cred_acc.status == "CLOSED"
+    prior_cards = db_session.query(IssuedCard).filter(
+        IssuedCard.account_id == cred_acc.id
+    ).all()
+    assert len(prior_cards) == 2
+    assert all(card.status == "CLOSED" and card.is_active is False for card in prior_cards)
+    assert db_session.query(PostedTransaction).filter(
+        PostedTransaction.account_id == cred_acc.id
+    ).count() == prior_posted_count
+    assert db_session.query(TransactionAuthorization).filter(
+        TransactionAuthorization.account_id == cred_acc.id
+    ).count() == prior_authorization_count
+    reset_card = db_session.query(IssuedCard).filter(
+        IssuedCard.account_id == reset_account.id
+    ).one()
     assert reset_card.id != original_card_id
     assert reset_card.id != replacement_card_id
     assert reset_card.card_token != original_card_token
@@ -453,7 +502,9 @@ async def test_reset_my_demo_clears_fraud_state_and_restores_card_baseline(async
     assert db_session.query(FraudCaseAction).count() == 0
     assert db_session.query(UserSecureMessage).filter(UserSecureMessage.thread_id == "thread-reset-fraud").count() == 0
     assert db_session.query(UserSecureMessage).filter(UserSecureMessage.thread_id == "thread-reset-support").count() == 0
-    reset_auths = db_session.query(TransactionAuthorization).filter(TransactionAuthorization.account_id == cred_acc.id).all()
+    reset_auths = db_session.query(TransactionAuthorization).filter(
+        TransactionAuthorization.account_id == reset_account.id
+    ).all()
     assert len(reset_auths) >= 2
     assert {auth.card_id for auth in reset_auths} == {reset_card.id}
 

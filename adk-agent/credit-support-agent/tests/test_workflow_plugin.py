@@ -207,7 +207,7 @@ async def test_plugin_confirms_prepared_triage_only_after_separate_turns() -> No
             "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
         }
     )
-    playbook["workflow_authorization"] = create_workflow_authorization(
+    authorization = create_workflow_authorization(
         action=TRIAGE_FRAUD_CASE,
         payload={
             "fraud_alert_id": "fraud-123",
@@ -217,13 +217,24 @@ async def test_plugin_confirms_prepared_triage_only_after_separate_turns() -> No
         },
         session_id="session-1",
     )
-    session = SimpleNamespace(state={"session_id": "session-1", "fraud_playbook": playbook})
+    authorization["customer_safe_summary"] = (
+        "Confirm that you want to dispute $100.00 at Corner Market on card ending "
+        "4242, and block the current card and issue a replacement."
+    )
+    playbook["workflow_authorization"] = authorization
+    session = SimpleNamespace(
+        state={"session_id": "session-1", "fraud_playbook": playbook}
+    )
     context = SimpleNamespace(session=session)
     plugin = FraudWorkflowStatePlugin()
 
     prompt_event = transcript_event(
         author="agent",
-        text="To confirm, you are disputing the charge linked to auth-1. Is that correct?",
+        text=(
+            "You want to dispute the one hundred dollar charge at Corner Market "
+            "on the card ending in four two four two, block that card, and receive "
+            "a replacement. Is that correct?"
+        ),
         input_event=False,
     )
     await plugin.on_event_callback(invocation_context=context, event=prompt_event)
@@ -242,6 +253,68 @@ async def test_plugin_confirms_prepared_triage_only_after_separate_turns() -> No
     assert prompted["workflow_authorization"]["assistant_event_id"] == "agent-event"
     assert confirmed["workflow_authorization"]["status"] == "CONFIRMED"
     assert confirmed["workflow_authorization"]["customer_event_id"] == "user-event"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "assistant_text",
+    (
+        "Does that sound right?",
+        (
+            "You want to dispute ten dollars at Corner Market on card ending 4242, "
+            "block it, and receive a replacement. Is that correct?"
+        ),
+        (
+            "You want to dispute one hundred dollars on card ending 4242, block it, "
+            "and receive a replacement. Is that correct?"
+        ),
+        (
+            "You want to dispute one hundred dollars at Corner Market on card ending "
+            "4242. Is that correct?"
+        ),
+    ),
+)
+async def test_plugin_rejects_generic_altered_or_incomplete_proposal_presentations(
+    assistant_text: str,
+) -> None:
+    authorization = create_workflow_authorization(
+        action=TRIAGE_FRAUD_CASE,
+        payload={
+            "fraud_alert_id": "fraud-123",
+            "disputed_authorization_ids": ["auth-1"],
+            "disputed_transaction_ids": [],
+            "issue_replacement": True,
+        },
+        session_id="session-1",
+    )
+    authorization["customer_safe_summary"] = (
+        "Confirm that you want to dispute $100.00 at Corner Market on card ending "
+        "4242, and block the current card and issue a replacement."
+    )
+    playbook = {"workflow_authorization": authorization}
+    session = SimpleNamespace(
+        state={"session_id": "session-1", "fraud_playbook": playbook}
+    )
+    context = SimpleNamespace(session=session)
+    plugin = FraudWorkflowStatePlugin()
+
+    prompt_event = transcript_event(
+        author="agent",
+        text=assistant_text,
+        input_event=False,
+    )
+    await plugin.on_event_callback(invocation_context=context, event=prompt_event)
+
+    assert "fraud_playbook" not in prompt_event.actions.state_delta
+
+    customer_event = transcript_event(
+        author="user",
+        text="Yes, that's right.",
+        input_event=True,
+    )
+    await plugin.on_event_callback(invocation_context=context, event=customer_event)
+
+    assert "fraud_playbook" not in customer_event.actions.state_delta
 
 
 @pytest.mark.asyncio
@@ -286,3 +359,61 @@ async def test_plugin_accepts_typed_customer_confirmation() -> None:
     assert updated["workflow_authorization"]["customer_event_id"] == (
         "typed-user-event"
     )
+
+
+@pytest.mark.asyncio
+async def test_plugin_reuses_ingress_id_and_publishes_one_classified_decision() -> None:
+    playbook = build_fraud_playbook(
+        {
+            "has_active_fraud_alert": True,
+            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
+        }
+    )
+    authorization = create_workflow_authorization(
+        action=TRIAGE_FRAUD_CASE,
+        payload={
+            "fraud_alert_id": "fraud-123",
+            "disputed_authorization_ids": ["auth-1"],
+            "disputed_transaction_ids": [],
+            "issue_replacement": True,
+        },
+        session_id="session-1",
+    )
+    authorization["status"] = "PENDING"
+    authorization["assistant_event_id"] = "agent-prompt"
+    playbook["workflow_authorization"] = authorization
+    session = SimpleNamespace(
+        state={"session_id": "session-1", "fraud_playbook": playbook}
+    )
+    context = SimpleNamespace(session=session)
+    observed_turns = []
+    decisions = []
+
+    def observe_turn(text, **kwargs):
+        observed_turns.append((text, kwargs))
+        return {"event_id": "typed-message-123"}
+
+    plugin = FraudWorkflowStatePlugin(
+        customer_turn_observer=observe_turn,
+        authorization_observer=decisions.append,
+    )
+    event = Event(
+        id="adk-user-event",
+        author="user",
+        actions={},
+        content=types.Content(
+            role="user", parts=[types.Part(text="Yes, that is correct.")]
+        ),
+    )
+
+    await plugin.on_event_callback(invocation_context=context, event=event)
+
+    updated = event.actions.state_delta["fraud_playbook"]
+    assert observed_turns[0][1]["event_id"] == "adk-user-event"
+    assert observed_turns[0][1]["consume_pending"] is True
+    assert updated["workflow_authorization"]["customer_event_id"] == (
+        "typed-message-123"
+    )
+    assert len(decisions) == 1
+    assert decisions[0]["status"] == "CONFIRMED"
+    assert decisions[0]["customer_event_id"] == "typed-message-123"

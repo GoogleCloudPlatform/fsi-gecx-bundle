@@ -36,7 +36,7 @@ from utils.audit import record_audit_event
 from utils.database import SessionLocal, enable_session_rbac_override
 from utils.internal_auth import get_internal_switch_token
 from utils.internal_execution import InternalServiceContext, apply_internal_db_access
-from utils.redis_client import get_redis_client
+from utils.redis_client import execute_redis_command, get_redis_client, reset_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -668,8 +668,7 @@ class SimulationService:
             injected_auths.append(auth)
             if risk > 0:
                 try:
-                    redis_client = get_redis_client()
-                    if redis_client:
+                    def publish(redis_client):
                         event_time = auth.created_at
                         payload = json.dumps({
                             "id": f"AUTH_{str(auth.id)[:8]}",
@@ -686,6 +685,9 @@ class SimulationService:
                         redis_client.lpush("recent_transactions", payload)
                         redis_client.ltrim("recent_transactions", 0, 99)
                         redis_client.publish("channel:transactions:live", payload)
+                        return True
+
+                    if execute_redis_command(publish):
                         flagged_stream_events += 1
                 except Exception as exc:
                     logger.warning("Failed to publish fraud anomaly event to Redis stream: %s", exc)
@@ -881,8 +883,6 @@ class SimulationService:
     async def stream_payload(token: ValidatedToken):
         del token
 
-        from utils.redis_client import get_redis_client
-
         redis_client = get_redis_client()
         pubsub = redis_client.pubsub() if redis_client else None
         last_heartbeat = 0.0
@@ -915,11 +915,19 @@ class SimulationService:
                 try:
                     message = None
                     if pubsub:
-                        message = await asyncio.to_thread(
-                            pubsub.get_message,
-                            ignore_subscribe_messages=True,
-                            timeout=5.0,
-                        )
+                        try:
+                            message = await asyncio.to_thread(
+                                pubsub.get_message,
+                                ignore_subscribe_messages=True,
+                                timeout=5.0,
+                            )
+                        except Exception:
+                            reset_redis_client()
+                            redis_client = get_redis_client()
+                            pubsub = redis_client.pubsub() if redis_client else None
+                            if pubsub:
+                                pubsub.subscribe("channel:transactions:live")
+                            raise
 
                     now = asyncio.get_running_loop().time()
                     if message and message.get("data"):

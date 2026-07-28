@@ -37,6 +37,7 @@ import models.merchant  # noqa: E402, F401
 import models.fraud  # noqa: E402, F401
 import models.synthetic_schedule  # noqa: E402, F401
 import models.voice_session  # noqa: E402, F401
+import models.action_proposal  # noqa: E402, F401
 
 # Set target metadata for alembic schema scanning
 target_metadata = Base.metadata

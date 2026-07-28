@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0",
+  "reference_id": "fraud-conversational-reference-v1",
+  "display_name": "CES fraud conversational reference v1",
+  "description": "Hand-curated customer-experience reference. This is distinct from the generated contract replay.",
+  "run_count": 3,
+  "turns": [
+    {
+      "id": "alert-readout",
+      "event": "sys.welcome",
+      "expected_tool": "get_open_fraud_alert",
+      "expected_agent": "Hi, I'm Nova, Nova Horizon Bank's credit card support voice assistant. I see an alert for suspicious activity on your card ending in 0001. It includes $4.99 at GAME*TEST TOKEN ONLINE, $1,499.00 at APPLE.COM*ONLINE, $2,150.00 at BEST BUY*MKTPLACE, $1,250.00 at RAZER GOLD GIFT CARD, and $950.00 at TARGET.COM GIFT CARDS. Do you recognize any of these transactions?"
+    },
+    {
+      "id": "proposal",
+      "user": "No, I don't recognize any of them.",
+      "expected_tool": "propose_fraud_triage",
+      "expected_agent": "To confirm, you want to dispute $4.99 at GAME*TEST TOKEN ONLINE, $1,499.00 at APPLE.COM*ONLINE, $2,150.00 at BEST BUY*MKTPLACE, $1,250.00 at RAZER GOLD GIFT CARD, and $950.00 at TARGET.COM GIFT CARDS on your card ending in 0001, block the current card, and issue a replacement. Is that correct?"
+    },
+    {
+      "id": "commit",
+      "user": "That's correct.",
+      "expected_tool": "commit_fraud_triage",
+      "expected_agent": "Your fraud report was submitted for specialist review. Five pending charges were released, your compromised card was blocked, and a replacement virtual card ending in 0002 is active. A secure message with the case details was sent. Is there anything else I can help you with?"
+    },
+    {
+      "id": "recovery-question",
+      "user": "I have an important client dinner tonight. How am I going to pay for it now?",
+      "expected_agent": "Your replacement is a virtual card, so I can queue it for your Google Wallet if you'd like. Would you like me to do that?"
+    },
+    {
+      "id": "wallet-provisioning",
+      "user": "Yes, that would be great.",
+      "expected_tool": "push_card_to_google_wallet",
+      "expected_agent": "I've queued the replacement virtual card for your Google Wallet. Is there anything else I can help you with?"
+    },
+    {
+      "id": "close",
+      "user": "No, that's all. Thank you.",
+      "expected_tool": "end_session",
+      "expected_agent": "You're welcome. Have a great day."
+    }
+  ],
+  "quality_rules": {
+    "required_brand": "Nova Horizon Bank",
+    "initial_required_phrases": [
+      [
+        "card ending in 0001",
+        "card ending 0001"
+      ]
+    ],
+    "forbidden_phrases": [
+      "Nova Risen",
+      "I'm calling",
+      "I am calling",
+      "thank you for calling",
+      "thanks for calling",
+      "hang up",
+      "on the phone"
+    ],
+    "transaction_inventory": [
+      {
+        "merchant": "GAME*TEST TOKEN ONLINE",
+        "canonical_amount": "$4.99",
+        "spoken_amounts": [
+          "four dollars and ninety-nine cents"
+        ]
+      },
+      {
+        "merchant": "APPLE.COM*ONLINE",
+        "canonical_amount": "$1,499.00",
+        "spoken_amounts": [
+          "one thousand four hundred ninety-nine dollars",
+          "one thousand four hundred and ninety-nine dollars"
+        ]
+      },
+      {
+        "merchant": "BEST BUY*MKTPLACE",
+        "canonical_amount": "$2,150.00",
+        "spoken_amounts": [
+          "two thousand one hundred fifty dollars",
+          "two thousand one hundred and fifty dollars"
+        ]
+      },
+      {
+        "merchant": "RAZER GOLD GIFT CARD",
+        "canonical_amount": "$1,250.00",
+        "spoken_amounts": [
+          "one thousand two hundred fifty dollars",
+          "one thousand two hundred and fifty dollars"
+        ]
+      },
+      {
+        "merchant": "TARGET.COM GIFT CARDS",
+        "canonical_amount": "$950.00",
+        "spoken_amounts": [
+          "nine hundred fifty dollars",
+          "nine hundred and fifty dollars"
+        ]
+      }
+    ],
+    "proposal_turn_index": 1,
+    "commit_turn_index": 2,
+    "commit_required_phrases": [
+      [
+        "submitted for specialist review"
+      ],
+      [
+        "five pending charges were released",
+        "5 pending charges were released"
+      ],
+      [
+        "card was blocked",
+        "card is blocked"
+      ],
+      [
+        "replacement virtual card ending in 0002 is active",
+        "replacement virtual card ending 0002 is active"
+      ],
+      [
+        "secure message"
+      ]
+    ],
+    "proposal_confirmation_turns": 1,
+    "semantic_similarity_success_threshold": 3
+  }
+}
