@@ -33,6 +33,57 @@ _CONFIRMATION_PROMPT_PATTERN = re.compile(
     r"are you disputing|you (?:do not|don't) recognize)\b",
     re.IGNORECASE,
 )
+_SUMMARY_TRANSACTION_PATTERN = re.compile(
+    r"\$([\d,]+)\.(\d{2})\s+at\s+(.+?)(?=,\s+\$| on card ending)",
+    re.IGNORECASE,
+)
+_CARD_SUFFIX_PATTERN = re.compile(r"card ending\s+(\d{4})", re.IGNORECASE)
+_DIGIT_WORDS = {
+    "0": "zero",
+    "1": "one",
+    "2": "two",
+    "3": "three",
+    "4": "four",
+    "5": "five",
+    "6": "six",
+    "7": "seven",
+    "8": "eight",
+    "9": "nine",
+}
+_SMALL_NUMBER_WORDS = (
+    "zero",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+    "thirteen",
+    "fourteen",
+    "fifteen",
+    "sixteen",
+    "seventeen",
+    "eighteen",
+    "nineteen",
+)
+_TENS_WORDS = (
+    "",
+    "",
+    "twenty",
+    "thirty",
+    "forty",
+    "fifty",
+    "sixty",
+    "seventy",
+    "eighty",
+    "ninety",
+)
 
 
 def _string_list(value: Any) -> list[str]:
@@ -104,6 +155,132 @@ def create_workflow_authorization(
 
 def assistant_requested_confirmation(transcript: str | None) -> bool:
     return bool(_CONFIRMATION_PROMPT_PATTERN.search(transcript or ""))
+
+
+def _normalized_spoken_text(value: str | None) -> str:
+    return " ".join(re.sub(r"[^a-z0-9$.,]+", " ", (value or "").lower()).split())
+
+
+def _integer_words(value: int) -> str:
+    if value < 20:
+        return _SMALL_NUMBER_WORDS[value]
+    if value < 100:
+        tens, remainder = divmod(value, 10)
+        return " ".join(
+            part
+            for part in (
+                _TENS_WORDS[tens],
+                _integer_words(remainder) if remainder else "",
+            )
+            if part
+        )
+    if value < 1000:
+        hundreds, remainder = divmod(value, 100)
+        return " ".join(
+            part
+            for part in (
+                f"{_SMALL_NUMBER_WORDS[hundreds]} hundred",
+                _integer_words(remainder) if remainder else "",
+            )
+            if part
+        )
+    if value < 1_000_000:
+        thousands, remainder = divmod(value, 1000)
+        return " ".join(
+            part
+            for part in (
+                f"{_integer_words(thousands)} thousand",
+                _integer_words(remainder) if remainder else "",
+            )
+            if part
+        )
+    return str(value)
+
+
+def _amount_is_present(transcript: str, dollars: int, cents: int) -> bool:
+    numeric = re.compile(
+        rf"(?:\$\s*{dollars:,}(?:\.{cents:02d})?"
+        rf"|\b{dollars:,}(?:\.{cents:02d})?\s+(?:us\s+)?dollars?\b)",
+        re.IGNORECASE,
+    )
+    if numeric.search(transcript):
+        return True
+    spoken = f"{_integer_words(dollars)} dollar"
+    spoken_variants = (spoken, f"{spoken}s")
+    if cents:
+        spoken_variants = tuple(
+            f"{variant} and {_integer_words(cents)} cents"
+            for variant in spoken_variants
+        )
+    normalized = _normalized_spoken_text(transcript)
+    return any(variant in normalized for variant in spoken_variants)
+
+
+def proposal_presentation_matches(
+    customer_safe_summary: str | None,
+    transcript: str | None,
+) -> bool:
+    """Verify that a confirmation prompt contains all banking-owned material facts."""
+    summary = customer_safe_summary or ""
+    output = transcript or ""
+    if not summary.strip() or not assistant_requested_confirmation(output):
+        return False
+
+    normalized_summary = _normalized_spoken_text(summary)
+    normalized_output = _normalized_spoken_text(output)
+    transactions = _SUMMARY_TRANSACTION_PATTERN.findall(summary)
+    has_material_facts = bool(transactions)
+    for dollars_text, cents_text, merchant in transactions:
+        dollars = int(dollars_text.replace(",", ""))
+        cents = int(cents_text)
+        if not _amount_is_present(output, dollars, cents):
+            return False
+        if _normalized_spoken_text(merchant) not in normalized_output:
+            return False
+
+    suffix_match = _CARD_SUFFIX_PATTERN.search(summary)
+    if suffix_match:
+        has_material_facts = True
+        suffix = suffix_match.group(1)
+        spoken_suffix = " ".join(_DIGIT_WORDS[digit] for digit in suffix)
+        if suffix not in normalized_output and spoken_suffix not in normalized_output:
+            return False
+
+    if "want to dispute" in normalized_summary and "disput" not in normalized_output:
+        return False
+    if "block the current card" in normalized_summary:
+        has_material_facts = True
+        if not any(
+            word in normalized_output for word in ("block", "cancel", "deactivate")
+        ):
+            return False
+    if "issue a replacement" in normalized_summary:
+        has_material_facts = True
+        if (
+            "replacement" not in normalized_output
+            and "new card" not in normalized_output
+        ):
+            return False
+    if "request specialist review" in normalized_summary:
+        has_material_facts = True
+        if "specialist" not in normalized_output:
+            return False
+    if "recognize all reviewed activity" in normalized_summary:
+        has_material_facts = True
+        if "recognize" not in normalized_output or "all" not in normalized_output:
+            return False
+        if not (
+            (
+                "no fraud dispute" in normalized_output
+                or "not dispute" in normalized_output
+            )
+            and (
+                "no replacement" in normalized_output
+                or "not replace" in normalized_output
+            )
+        ):
+            return False
+    return has_material_facts
 
 
 def classify_confirmation_response(transcript: str | None) -> str:
@@ -207,12 +384,18 @@ def validate_workflow_authorization(
         return f"Customer authorization for {action} is not confirmed."
     if authorization.get("session_id") != session_id:
         return "Customer authorization belongs to a different support session."
-    if not authorization.get("assistant_event_id") or not authorization.get("customer_event_id"):
+    if not authorization.get("assistant_event_id") or not authorization.get(
+        "customer_event_id"
+    ):
         return "Customer authorization is missing its confirmation turn evidence."
     now = time.time() if now_epoch_s is None else now_epoch_s
     if now >= float(authorization.get("expires_at_epoch_s") or 0):
-        return "Customer authorization has expired. Prepare and confirm the action again."
-    if authorization.get("payload_fingerprint") != action_payload_fingerprint(action, payload):
+        return (
+            "Customer authorization has expired. Prepare and confirm the action again."
+        )
+    if authorization.get("payload_fingerprint") != action_payload_fingerprint(
+        action, payload
+    ):
         return "The requested action differs from the exact payload the customer confirmed."
     return None
 
@@ -237,5 +420,7 @@ def mark_authorization_completed(
     if updated.get("status") != "EXECUTING":
         return updated
     updated["status"] = "COMPLETED"
-    updated["completed_at_epoch_s"] = time.time() if now_epoch_s is None else now_epoch_s
+    updated["completed_at_epoch_s"] = (
+        time.time() if now_epoch_s is None else now_epoch_s
+    )
     return updated

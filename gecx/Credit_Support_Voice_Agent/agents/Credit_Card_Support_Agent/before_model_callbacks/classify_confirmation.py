@@ -14,6 +14,7 @@ AFFIRMATIVE_PHRASES = {
     "i can firm",
     "i can confirm",
     "i confirm",
+    "i confirm all the proposed actions",
     "lets do it",
     "please do",
     "proceed",
@@ -29,6 +30,7 @@ AFFIRMATIVE_PHRASES = {
     "yes i can confirm",
     "yes i confirm",
     "yes please",
+    "yes thats what i want",
 }
 
 DECLINED_PHRASES = {
@@ -48,13 +50,15 @@ DECLINE_PATTERN = re.compile(
 
 AFFIRMATIVE_PATTERN = re.compile(
     r"(?:"
-    r"^(?:yes|correct|confirmed|absolutely|certainly|sure)\b"
-    r"|\b(?:i|we)\s+(?:can\s+|do\s+)?confirm\b"
-    r"|\b(?:i|we)\s+(?:approve|agree|consent)\b"
-    r"|\b(?:that|it)\s+(?:is|sounds)\s+(?:correct|good|right)\b"
-    r"|\b(?:that|it)(?:s|\s+is)\s+what\s+i\s+want\b"
-    r"|\b(?:go ahead|please do|proceed|do it|lets do it)\b"
-    r")"
+    r"(?:yes|correct|confirmed|absolutely|certainly|sure)"
+    r"(?:\s+(?:please|i\s+(?:can\s+)?confirm|that(?:s|\s+is)\s+correct|"
+    r"that\s+would\s+be\s+great|go\s+ahead|proceed|do\s+it))?"
+    r"|(?:i|we)\s+(?:can\s+|do\s+)?confirm"
+    r"|(?:i|we)\s+(?:approve|agree|consent)"
+    r"|(?:that|it)\s+(?:is|sounds)\s+(?:correct|good|right)"
+    r"|(?:that|it)(?:s|\s+is)\s+what\s+i\s+want"
+    r"|(?:go\s+ahead|please\s+do|proceed|do\s+it|lets\s+do\s+it)"
+    r")$"
 )
 
 
@@ -76,7 +80,10 @@ def _classification(text: str) -> str:
     # the immutable proposal.
     if text in DECLINED_PHRASES or DECLINE_PATTERN.search(text):
         return "DECLINED"
-    if text in AFFIRMATIVE_PHRASES or AFFIRMATIVE_PATTERN.search(text):
+    # Confirmation must consume the complete customer utterance. A leading
+    # affirmative embedded in unrelated speech (for example, "yes, the
+    # weather is nice") is not consent to the protected action.
+    if text in AFFIRMATIVE_PHRASES or AFFIRMATIVE_PATTERN.fullmatch(text):
         return "CONFIRMED"
 
     # Customers may confirm by restating the complete protected fraud action

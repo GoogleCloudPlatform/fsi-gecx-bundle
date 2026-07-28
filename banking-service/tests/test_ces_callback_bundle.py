@@ -161,7 +161,11 @@ def test_proposal_capture_and_non_generative_presentation_recording():
             "output": {
                 "success": True,
                 "proposal_id": "proposal-1",
-                "customer_safe_summary": "Confirm the selected charge.",
+                "customer_safe_summary": (
+                    "Confirm that you want to dispute $100.00 at Corner Market "
+                    "on card ending 4242, and block the current card and issue "
+                    "a replacement."
+                ),
             }
         },
     )
@@ -170,7 +174,13 @@ def test_proposal_capture_and_non_generative_presentation_recording():
     response = SimpleNamespace(
         partial=False,
         content=SimpleNamespace(
-            parts=[Part("Confirm the selected charge. Please answer yes or no.")]
+            parts=[
+                Part(
+                    "You want to dispute the one hundred dollar charge at Corner "
+                    "Market on the card ending in four two four two, block that "
+                    "card, and receive a replacement. Does that sound right?"
+                )
+            ]
         ),
     )
     replacement = presentation.after_model_callback(context, response)
@@ -178,7 +188,7 @@ def test_proposal_capture_and_non_generative_presentation_recording():
     assert variables["proposal_presentation_turn_id"] == "turn-1"
 
 
-def test_proposal_presentation_never_replaces_native_audio():
+def test_proposal_presentation_does_not_record_generic_confirmation_prompt():
     presentation = _load("after_model_callbacks/record_presentation.py")
     variables = {
         "proposal_id": "proposal-1",
@@ -193,7 +203,45 @@ def test_proposal_presentation_never_replaces_native_audio():
     replacement = presentation.after_model_callback(context, response)
 
     assert replacement is None
-    assert variables["proposal_presentation_turn_id"] == "turn-1"
+    assert "proposal_presentation_turn_id" not in variables
+
+
+def test_proposal_presentation_rejects_altered_or_incomplete_material_facts():
+    presentation = _load("after_model_callbacks/record_presentation.py")
+    summary = (
+        "Confirm that you want to dispute $100.00 at Corner Market on card ending "
+        "4242, and block the current card and issue a replacement."
+    )
+    invalid_presentations = (
+        (
+            "You want to dispute ten dollars at Corner Market on card ending 4242, "
+            "block it, and receive a replacement. Is that correct?"
+        ),
+        (
+            "You want to dispute one hundred dollars on card ending 4242, block it, "
+            "and receive a replacement. Is that correct?"
+        ),
+        (
+            "You want to dispute one hundred dollars at Corner Market on card ending "
+            "4242. Is that correct?"
+        ),
+    )
+
+    for index, text in enumerate(invalid_presentations):
+        variables = {
+            "proposal_id": "proposal-1",
+            "proposal_customer_safe_summary": summary,
+        }
+        context = Context(
+            invocation_id=f"turn-{index}", variables=variables, user_text=None
+        )
+        response = SimpleNamespace(
+            partial=False,
+            content=SimpleNamespace(parts=[Part(text)]),
+        )
+
+        assert presentation.after_model_callback(context, response) is None
+        assert "proposal_presentation_turn_id" not in variables
 
 
 def test_proposal_capture_supports_ces_mcp_text_output_shape():
@@ -253,7 +301,10 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     assert "You own the natural spoken wording" in instruction
     assert "Do not add a preliminary selection confirmation" in instruction
     assert "ask once for confirmation" in instruction
-    assert "Completing a banking action never means the consultation is finished" in instruction
+    assert (
+        "Completing a banking action never means the consultation is finished"
+        in instruction
+    )
     assert "{fraud_support_guidance_summary}" in instruction
     for tool_name in (
         "get_open_fraud_alert",

@@ -40,6 +40,22 @@ commit_callback = importlib.util.module_from_spec(COMMIT_CALLBACK_SPEC)
 assert COMMIT_CALLBACK_SPEC.loader
 COMMIT_CALLBACK_SPEC.loader.exec_module(commit_callback)
 
+CONFIRMATION_CALLBACK = (
+    ROOT
+    / "gecx"
+    / "Credit_Support_Voice_Agent"
+    / "agents"
+    / "Credit_Card_Support_Agent"
+    / "before_model_callbacks"
+    / "classify_confirmation.py"
+)
+CONFIRMATION_CALLBACK_SPEC = importlib.util.spec_from_file_location(
+    "classify_confirmation", CONFIRMATION_CALLBACK
+)
+confirmation_callback = importlib.util.module_from_spec(CONFIRMATION_CALLBACK_SPEC)
+assert CONFIRMATION_CALLBACK_SPEC.loader
+CONFIRMATION_CALLBACK_SPEC.loader.exec_module(confirmation_callback)
+
 
 def test_curated_contract_fixture_removes_live_credentials_and_ephemeral_state() -> None:
     golden = {
@@ -308,6 +324,27 @@ def test_ces_commit_callback_rejects_conflicting_model_proposal_id() -> None:
 
     assert result["error"] == "PROTECTED_CONFIRMATION_REQUIRED"
     assert tool_input == {"proposal_id": "proposal-other"}
+
+
+def test_ces_confirmation_rejects_affirmative_embedded_in_unrelated_speech() -> None:
+    assert (
+        confirmation_callback._classification(
+            "yes i really like the weather today"
+        )
+        == "UNCLEAR"
+    )
+
+
+def test_ces_confirmation_accepts_bounded_explicit_affirmatives() -> None:
+    for transcript in (
+        "yes",
+        "yes please",
+        "yes i can confirm",
+        "thats correct",
+        "that sounds good",
+        "go ahead",
+    ):
+        assert confirmation_callback._classification(transcript) == "CONFIRMED"
 
 
 def test_latest_conversation_selects_completed_live_across_pages() -> None:

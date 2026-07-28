@@ -17,10 +17,10 @@ from agent.workflow_authorization import (
     TRIAGE_CUSTOMER_REPORTED_FRAUD,
     TRIAGE_FRAUD_CASE,
     apply_customer_authorization_response,
-    assistant_requested_confirmation,
     create_workflow_authorization,
     invalidate_workflow_authorization,
     mark_authorization_prompted,
+    proposal_presentation_matches,
 )
 from agent.telemetry import record_action_proposal_event
 
@@ -36,7 +36,9 @@ def _record_proposal_transition(
         runtime="ADK_GEMINI_LIVE",
         support_session_id=str(state.get("session_id") or ""),
         proposal_id=str(proposal_id),
-        contract_version=str(authorization.get("contract_version") or "fraud-triage.v1"),
+        contract_version=str(
+            authorization.get("contract_version") or "fraud-triage.v1"
+        ),
         catalog_snapshot_id=guidance.get("snapshot_id"),
         tool="fraud_workflow_state",
         outcome=outcome,
@@ -135,7 +137,11 @@ class FraudWorkflowStatePlugin(BasePlugin):
                         authorization.get("status") == "CONFIRMED"
                     )
                     updated["wallet_response_event_id"] = event_id
-                    if authorization.get("status") in {"DECLINED", "INVALIDATED", "EXPIRED"}:
+                    if authorization.get("status") in {
+                        "DECLINED",
+                        "INVALIDATED",
+                        "EXPIRED",
+                    }:
                         updated["wallet_push_offered"] = False
             else:
                 updated = apply_wallet_transcript_event(
@@ -169,7 +175,9 @@ class FraudWorkflowStatePlugin(BasePlugin):
                             "card_token": updated.get("replacement_card_token"),
                             "wallet_provider": "GOOGLE_WALLET",
                         },
-                        session_id=str(invocation_context.session.state.get("session_id") or ""),
+                        session_id=str(
+                            invocation_context.session.state.get("session_id") or ""
+                        ),
                     )
                     authorization = mark_authorization_prompted(
                         authorization,
@@ -186,7 +194,10 @@ class FraudWorkflowStatePlugin(BasePlugin):
                 authorization.get("action")
                 in {TRIAGE_FRAUD_CASE, TRIAGE_CUSTOMER_REPORTED_FRAUD}
                 and authorization.get("status") == "PREPARED"
-                and assistant_requested_confirmation(transcript)
+                and proposal_presentation_matches(
+                    authorization.get("customer_safe_summary"),
+                    transcript,
+                )
             ):
                 updated["workflow_authorization"] = mark_authorization_prompted(
                     authorization,
