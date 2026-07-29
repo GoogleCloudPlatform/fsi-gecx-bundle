@@ -99,3 +99,14 @@ def test_release_requires_exact_commit_images_and_ui_persists_its_tag() -> None:
     assert "printf '%s' \"$$COMMIT_SHA\" > /workspace/image_tag.txt" in ui_build
     assert ui_build.count("IMAGE_TAG=$$(cat /workspace/image_tag.txt)") == 2
     assert "banking-ui:$${COMMIT_SHA:-local}" not in ui_build
+
+
+def test_serverless_neg_backends_do_not_set_unsupported_timeouts() -> None:
+    root = Path(__file__).resolve().parents[2]
+    load_balancer = (root / "deployment/terraform/load_balancer.tf").read_text()
+    serverless_section = load_balancer.split("# Backend Services", 1)[1].split(
+        "# START DESTROY", 1
+    )[0]
+
+    assert 'network_endpoint_type = "SERVERLESS"' not in serverless_section
+    assert "timeout_sec" not in serverless_section
