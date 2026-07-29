@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+_PROPOSAL_ACTIONS = {
+    "propose_fraud_triage": "TRIAGE_FRAUD_CASE",
+    "propose_card_reissue": "REISSUE_CARD",
+    "propose_wallet_provisioning": "PROVISION_GOOGLE_WALLET",
+}
+
 
 def _payload(tool_response):
     if not isinstance(tool_response, dict):
@@ -72,28 +78,31 @@ def after_tool_callback(tool, input, callback_context, tool_response):
             callback_context.variables["fraud_review_stage"] = "COMMITTED"
         return None
 
-    if not any(
-        tool_name.endswith(suffix)
-        for suffix in (
-            "propose_fraud_triage",
-            "propose_card_reissue",
-            "propose_wallet_provisioning",
-        )
-    ):
+    proposal_action = next(
+        (
+            action
+            for suffix, action in _PROPOSAL_ACTIONS.items()
+            if tool_name.endswith(suffix)
+        ),
+        None,
+    )
+    if proposal_action is None:
         return None
 
     proposal_id = str(payload.get("proposal_id") or "")
     summary = str(payload.get("customer_safe_summary") or "")
     if payload.get("success") is True and proposal_id and summary:
+        invocation_id = str(callback_context.invocation_id or "")
+        callback_context.variables["customer_turn_id"] = invocation_id
+        callback_context.variables["proposal_originating_turn_id"] = invocation_id
+        callback_context.variables["proposal_action_type"] = proposal_action
         callback_context.variables["proposal_id"] = proposal_id
         callback_context.variables["proposal_customer_safe_summary"] = summary
         # CES persists after-tool state reliably across invocations. Record the
         # protected proposal-producing invocation here; a commit must still
         # arrive from a different, later customer invocation. Presentation
         # quality is evaluated externally and generated text is never reparsed.
-        callback_context.variables["proposal_presentation_turn_id"] = str(
-            callback_context.variables.get("proposal_originating_turn_id") or ""
-        )
+        callback_context.variables["proposal_presentation_turn_id"] = invocation_id
         if tool_name.endswith("propose_fraud_triage"):
             callback_context.variables["fraud_review_stage"] = (
                 "AWAITING_ACTION_CONFIRMATION"

@@ -148,7 +148,6 @@ def test_proposal_capture_and_non_generative_presentation_recording():
     capture = _load("after_tool_callbacks/capture_proposal.py")
     variables = {}
     context = Context(invocation_id="turn-1", variables=variables, user_text=None)
-    variables["proposal_originating_turn_id"] = "turn-1"
 
     capture.after_tool_callback(
         SimpleNamespace(name="banking_service_mcp_toolset.propose_fraud_triage"),
@@ -167,6 +166,8 @@ def test_proposal_capture_and_non_generative_presentation_recording():
         },
     )
     assert variables["proposal_id"] == "proposal-1"
+    assert variables["proposal_action_type"] == "TRIAGE_FRAUD_CASE"
+    assert variables["proposal_originating_turn_id"] == "turn-1"
     assert variables["proposal_presentation_turn_id"] == "turn-1"
 
 
