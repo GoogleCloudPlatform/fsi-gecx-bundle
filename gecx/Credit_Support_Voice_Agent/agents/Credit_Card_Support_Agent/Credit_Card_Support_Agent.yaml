@@ -11,9 +11,6 @@ beforeToolCallbacks:
 afterToolCallbacks:
 - pythonCode: agents/Credit_Card_Support_Agent/after_tool_callbacks/capture_proposal.py
   description: Capture active-alert identifiers plus the opaque proposal and banking-authored summary.
-afterModelCallbacks:
-- pythonCode: agents/Credit_Card_Support_Agent/after_model_callbacks/record_presentation.py
-  description: Record a completed proposal-associated model turn without inspecting generated text.
 toolsets:
 - toolset: banking_service_mcp_toolset
   toolIds:

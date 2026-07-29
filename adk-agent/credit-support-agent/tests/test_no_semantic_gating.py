@@ -36,8 +36,8 @@ GATING_PATHS = (
     / "Credit_Support_Voice_Agent"
     / "agents"
     / "Credit_Card_Support_Agent"
-    / "after_model_callbacks"
-    / "record_presentation.py",
+    / "after_tool_callbacks"
+    / "capture_proposal.py",
 )
 
 

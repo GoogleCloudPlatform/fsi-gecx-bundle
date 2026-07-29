@@ -87,6 +87,13 @@ def after_tool_callback(tool, input, callback_context, tool_response):
     if payload.get("success") is True and proposal_id and summary:
         callback_context.variables["proposal_id"] = proposal_id
         callback_context.variables["proposal_customer_safe_summary"] = summary
+        # CES persists after-tool state reliably across invocations. Record the
+        # protected proposal-producing invocation here; a commit must still
+        # arrive from a different, later customer invocation. Presentation
+        # quality is evaluated externally and generated text is never reparsed.
+        callback_context.variables["proposal_presentation_turn_id"] = str(
+            callback_context.variables.get("proposal_originating_turn_id") or ""
+        )
         if tool_name.endswith("propose_fraud_triage"):
             callback_context.variables["fraud_review_stage"] = (
                 "AWAITING_ACTION_CONFIRMATION"
