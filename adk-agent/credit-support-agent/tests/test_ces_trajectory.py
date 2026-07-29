@@ -95,7 +95,7 @@ def _conversation(*, include_end: bool = True) -> dict[str, object]:
         _chunk(
             "Credit Card Support Agent",
             "2026-07-27T03:39:09Z",
-            updatedVariables={"proposal_confirmation_classification": "CONFIRMED"},
+            updatedVariables={"proposal_confirmation_source": "MODEL_TOOL_INTENT"},
         ),
         _chunk(
             "Credit Card Support Agent",
@@ -127,7 +127,6 @@ def _conversation(*, include_end: bool = True) -> dict[str, object]:
             "2026-07-27T03:39:12Z",
             updatedVariables={
                 "fraud_review_stage": "COMMITTED",
-                "proposal_confirmation_classification": "UNCLEAR",
             },
         ),
     ]

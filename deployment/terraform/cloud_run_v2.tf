@@ -725,10 +725,6 @@ resource "google_cloud_run_v2_service" "credit_support_agent" {
         value = tostring(var.voice_agent_video_session_capacity_units)
       }
 
-      env {
-        name  = "VOICE_AGENT_USE_ACTION_PROPOSALS"
-        value = "true"
-      }
     }
   }
 

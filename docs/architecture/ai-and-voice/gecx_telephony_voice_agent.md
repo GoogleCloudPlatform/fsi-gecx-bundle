@@ -45,8 +45,8 @@ sequenceDiagram
     MCP-->>GECX: Opaque proposal id + banking-authored summary
     GECX->>GECX: Record presentation only if all material facts match
     GECX-->>User: Present merchants, amounts, card suffix, and actions
-    User->>Proxy: Later explicit confirmation
-    GECX->>GECX: Classify complete customer utterance
+    User->>Proxy: Later customer turn
+    GECX->>GECX: Model chooses typed commit intent
     GECX->>MCP: POST /mcp/ (commit_fraud_triage)
     MCP->>MCP: Validate presentation and confirmation turn evidence
     MCP->>DB: Claim and execute immutable proposal exactly once
@@ -69,16 +69,16 @@ Because GECX operates as a Google-managed cloud agent orchestrator, it must secu
 
 1. **Google OIDC ID Token Verification**: The FastMCP router ensures that invocations come exclusively from Google Cloud Customer Experience Suite services by verifying the Google service account OIDC token in the `Authorization: Bearer <JWT>` header.
 2. **Banking-Issued Session Capability (`x-banking-session-capability`)**: The Firebase token terminates at the banking WebSocket gateway and is never sent to CES. After resolving the exact customer and reset generation, banking mints an encrypted 15-minute capability bound to the support session, CES runtime session, reset generation, app, and deployment. CES forwards the opaque capability with those protected headers. The MCP boundary accepts it only from an authorized CES service caller, verifies every binding, and checks the current reset generation before resolving the customer identity.
-3. **Transport-Owned Consent Evidence**: CES callbacks, rather than model-authored tool arguments, own the proposal id, presentation turn, confirmation turn, method, and classification headers. Banking-service accepts a commit only when those values describe a later explicit confirmation for the active proposal.
+3. **Transport-Owned Consent Evidence**: CES callbacks, rather than model-authored tool arguments, own the proposal id, presentation turn, confirmation turn, method, and decision-source headers. Banking-service accepts a commit only when the model chooses the typed commit operation on a later customer invocation for the active proposal.
 
 ### Protected action callback chain
 
 The `Credit_Card_Support_Agent` callback chain keeps consent state outside the prompt:
 
 1. `capture_proposal.py` records the opaque proposal id and banking-authored summary after `propose_fraud_triage`.
-2. `record_presentation.py` records `proposal_presentation_turn_id` only when a completed assistant response asks for confirmation and contains every material fact from the summary. Equivalent written and spoken amounts are accepted; missing or altered merchants, amounts, card suffixes, or actions are rejected.
-3. `classify_confirmation.py` classifies only a later customer turn. A bounded whole-utterance affirmative is `CONFIRMED`; negative or qualified language is `DECLINED`; partial or unrelated speech is `UNCLEAR`.
-4. `enforce_proposal_context.py` binds an omitted proposal id from callback-owned state and blocks `commit_fraud_triage` unless the presentation turn, later confirmation turn, invocation id, explicit-verbal method, and `CONFIRMED` classification all agree.
+2. `record_presentation.py` records the completed assistant invocation associated with the active proposal without parsing generated text. Exact-fact presentation remains a conversation-quality evaluation and UI-rendering concern, not a production authorization parser.
+3. The Gemini Live model interprets the later customer response once. Its choice to call `commit_fraud_triage` is the typed semantic decision; there is no second phrase or regex classifier.
+4. `enforce_proposal_context.py` binds an omitted proposal id from callback-owned state and blocks `commit_fraud_triage` unless it occurs on a real customer invocation later than both proposal creation and presentation. It emits `MODEL_TOOL_INTENT` as protected decision-source evidence.
 
 The model can attempt a blocked tool call, but the callback returns `PROTECTED_CONFIRMATION_REQUIRED` before the banking or evaluation fake tool executes.
 

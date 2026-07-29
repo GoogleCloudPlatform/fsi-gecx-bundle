@@ -6,6 +6,27 @@ from datetime import datetime
 import json
 from typing import Any, Iterable
 
+PROPOSAL_TOOLS = {
+    "propose_fraud_triage",
+    "propose_card_reissue",
+    "propose_wallet_provisioning",
+}
+COMMIT_TOOLS = {
+    "commit_fraud_triage",
+    "commit_card_reissue",
+    "commit_wallet_provisioning",
+}
+ACTION_BY_PROPOSAL_TOOL = {
+    "propose_fraud_triage": "TRIAGE_FRAUD_CASE",
+    "propose_card_reissue": "REISSUE_CARD",
+    "propose_wallet_provisioning": "PROVISION_GOOGLE_WALLET",
+}
+ACTION_BY_COMMIT_TOOL = {
+    "commit_fraud_triage": "TRIAGE_FRAUD_CASE",
+    "commit_card_reissue": "REISSUE_CARD",
+    "commit_wallet_provisioning": "PROVISION_GOOGLE_WALLET",
+}
+
 
 def _timestamp(value: str | None) -> datetime | None:
     if not value:
@@ -58,8 +79,8 @@ def normalize_ces_conversation(
     session_started = False
     guidance_recorded = False
     presented_turn_id: str | None = None
-    confirmation_state: str | None = None
-    proposal_committed = False
+    confirmation_state: tuple[str, str, str] | None = None
+    active_action_type: str | None = None
     saw_end_session = False
 
     for message in _messages(conversation):
@@ -97,41 +118,44 @@ def normalize_ces_conversation(
                     )
 
                 current_presented = updated.get("proposal_presentation_turn_id")
+                active_action_type = (
+                    str(updated.get("proposal_action_type") or "")
+                    or active_action_type
+                )
                 if current_presented and current_presented != presented_turn_id:
                     events.append(
                         {
                             "type": "ACTION_PROPOSAL",
                             "outcome": "PRESENTED",
+                            "action_type": active_action_type,
                             "elapsed_ms": elapsed_ms,
                         }
                     )
                     presented_turn_id = str(current_presented)
 
                 current_confirmation = str(
-                    updated.get("proposal_confirmation_classification") or ""
+                    updated.get("proposal_confirmation_source") or ""
                 ).upper()
+                confirmation_key = (
+                    active_action_type or "",
+                    current_confirmation,
+                    str(updated.get("proposal_confirmation_turn_id") or ""),
+                )
                 if (
                     current_confirmation
                     and current_confirmation != "UNCLASSIFIED"
-                    and current_confirmation != confirmation_state
-                    and not proposal_committed
+                    and confirmation_key != confirmation_state
                 ):
-                    outcome = {
-                        "EXPLICIT_CONFIRMATION": "CONFIRMED",
-                        "CONFIRMED": "CONFIRMED",
-                        "EXPLICIT_DECLINE": "DECLINED",
-                        "DECLINED": "DECLINED",
-                        "AMBIGUOUS": "UNCLEAR",
-                        "UNCLEAR": "UNCLEAR",
-                    }.get(current_confirmation, current_confirmation)
                     events.append(
                         {
                             "type": "ACTION_PROPOSAL",
-                            "outcome": outcome,
+                            "outcome": "CONFIRMED",
+                            "action_type": active_action_type,
+                            "source": current_confirmation,
                             "elapsed_ms": elapsed_ms,
                         }
                     )
-                    confirmation_state = current_confirmation
+                    confirmation_state = confirmation_key
 
             transcript = chunk.get("transcript")
             if isinstance(transcript, str) and transcript.strip():
@@ -190,27 +214,32 @@ def normalize_ces_conversation(
 
             status = str(output.get("status") or "").upper()
             contract_version = output.get("contract_version")
-            if tool == "propose_fraud_triage" and success:
+            if tool in PROPOSAL_TOOLS and success:
+                active_action_type = str(
+                    output.get("action_type") or ACTION_BY_PROPOSAL_TOOL[tool]
+                )
                 events.append(
                     {
                         "type": "ACTION_PROPOSAL",
                         "outcome": status or "PROPOSED",
+                        "action_type": active_action_type,
                         "contract_version": contract_version,
                         "elapsed_ms": elapsed_ms,
                     }
                 )
-            elif tool == "commit_fraud_triage":
+            elif tool in COMMIT_TOOLS:
                 if success:
                     events.append(
                         {
                             "type": "ACTION_PROPOSAL",
                             "outcome": status or "COMMITTED",
+                            "action_type": output.get("action_type")
+                            or ACTION_BY_COMMIT_TOOL[tool],
                             "contract_version": contract_version,
                             "banking_outcome": output.get("outcome"),
                             "elapsed_ms": elapsed_ms,
                         }
                     )
-                    proposal_committed = True
                 else:
                     error_outcome = {
                         "EXPIRED": "EXPIRED",
@@ -220,6 +249,8 @@ def normalize_ces_conversation(
                         {
                             "type": "ACTION_PROPOSAL",
                             "outcome": error_outcome,
+                            "action_type": output.get("action_type")
+                            or ACTION_BY_COMMIT_TOOL[tool],
                             "contract_version": contract_version,
                             "elapsed_ms": elapsed_ms,
                         }

@@ -101,7 +101,7 @@ def test_failed_mutation_remains_a_tool_failure() -> None:
 
 def test_direct_local_tool_success_is_recognized() -> None:
     assert tool_response_succeeded(
-        "prepare_fraud_triage_confirmation",
+        "prepare_customer_reported_fraud_confirmation",
         {"success": True, "confirmation_required": True},
     )
 

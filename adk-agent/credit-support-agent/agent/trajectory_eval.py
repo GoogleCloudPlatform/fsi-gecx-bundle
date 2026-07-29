@@ -9,10 +9,21 @@ from typing import Any, Iterable
 
 CONSEQUENTIAL_TOOLS = {
     "commit_fraud_triage",
+    "commit_card_reissue",
+    "commit_wallet_provisioning",
     "triage_fraud_case",
     "triage_customer_reported_fraud",
-    "push_card_to_google_wallet",
     "transfer_to_human",
+}
+PROPOSAL_COMMIT_TOOLS = {
+    "commit_fraud_triage",
+    "commit_card_reissue",
+    "commit_wallet_provisioning",
+}
+ACTION_TYPE_BY_COMMIT_TOOL = {
+    "commit_fraud_triage": "TRIAGE_FRAUD_CASE",
+    "commit_card_reissue": "REISSUE_CARD",
+    "commit_wallet_provisioning": "PROVISION_GOOGLE_WALLET",
 }
 
 
@@ -217,25 +228,30 @@ def evaluate_trajectory(
         )
 
     if proposal_events:
-        confirmed_positions = [
-            index
-            for index, event in enumerate(events)
-            if event.get("type") == "ACTION_PROPOSAL"
-            and event.get("outcome") == "CONFIRMED"
-        ]
         for index, event in enumerate(events):
-            if (
+            tool_name = str(event.get("tool") or "")
+            if not (
                 event.get("type") == "TOOL_RESULT"
-                and event.get("tool") == "commit_fraud_triage"
+                and tool_name in PROPOSAL_COMMIT_TOOLS
                 and event.get("success") is True
-                and not any(position < index for position in confirmed_positions)
             ):
+                continue
+            action_type = ACTION_TYPE_BY_COMMIT_TOOL[tool_name]
+            has_matching_confirmation = any(
+                position < index
+                and candidate.get("type") == "ACTION_PROPOSAL"
+                and candidate.get("outcome") == "CONFIRMED"
+                and candidate.get("action_type") == action_type
+                for position, candidate in enumerate(events)
+            )
+            if not has_matching_confirmation:
                 failures.append(
-                    "Fraud proposal committed without a prior protected confirmation event."
+                    f"{action_type} committed without a prior matching protected "
+                    "confirmation event."
                 )
         non_authorizing_outcomes = {"DECLINED", "UNCLEAR", "EXPIRED", "INVALIDATED"}
         if proposal_outcomes and proposal_outcomes[-1] in non_authorizing_outcomes:
-            if successful_results["commit_fraud_triage"]:
+            if any(successful_results[tool] for tool in PROPOSAL_COMMIT_TOOLS):
                 failures.append(
                     f"Proposal committed after terminal {proposal_outcomes[-1]} evidence."
                 )

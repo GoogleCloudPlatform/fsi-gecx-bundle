@@ -186,11 +186,11 @@ def proposal_confirmation_events(classification: str) -> list[dict]:
         {"type": "FRAUD_REVIEW", "stage": "READY_TO_PROPOSE", "ready_to_propose": True, "elapsed_ms": 72},
         {"type": "TOOL_CALL", "tool": "propose_fraud_triage", "elapsed_ms": 75},
         {"type": "TOOL_RESULT", "tool": "propose_fraud_triage", "success": True, "elapsed_ms": 78},
-        {"type": "ACTION_PROPOSAL", "outcome": "PROPOSED", "proposal_ref": "proposal_1", "elapsed_ms": 80},
+        {"type": "ACTION_PROPOSAL", "action_type": "TRIAGE_FRAUD_CASE", "outcome": "PROPOSED", "proposal_ref": "proposal_1", "elapsed_ms": 80},
         {"type": "TRANSCRIPT", "author": "agent", "text": "Please confirm the exact summary", "elapsed_ms": 90},
-        {"type": "ACTION_PROPOSAL", "outcome": "PRESENTED", "proposal_ref": "proposal_1", "elapsed_ms": 100},
+        {"type": "ACTION_PROPOSAL", "action_type": "TRIAGE_FRAUD_CASE", "outcome": "PRESENTED", "proposal_ref": "proposal_1", "elapsed_ms": 100},
         {"type": "TRANSCRIPT", "author": "customer", "text": classification.lower(), "elapsed_ms": 110},
-        {"type": "ACTION_PROPOSAL", "outcome": classification, "proposal_ref": "proposal_1", "elapsed_ms": 120},
+        {"type": "ACTION_PROPOSAL", "action_type": "TRIAGE_FRAUD_CASE", "outcome": classification, "proposal_ref": "proposal_1", "elapsed_ms": 120},
     ]
 
 
@@ -248,6 +248,7 @@ def proposal_trajectory(
         events.append(
             {
                 "type": "ACTION_PROPOSAL",
+                "action_type": "TRIAGE_FRAUD_CASE",
                 "outcome": terminal_proposal_outcome,
                 "banking_outcome": (
                     "CONFIRMED_FRAUD_REMEDIATED"
@@ -477,3 +478,93 @@ def test_direct_and_proposal_banking_outcomes_compare_equal() -> None:
     comparison = compare_trajectory_outcomes(direct, proposal)
     assert comparison.matched is True
     assert comparison.mismatches == ()
+
+
+@pytest.mark.parametrize(
+    ("action_type", "propose_tool", "commit_tool", "ui_event"),
+    (
+        (
+            "REISSUE_CARD",
+            "propose_card_reissue",
+            "commit_card_reissue",
+            "CARD_REPLACED",
+        ),
+        (
+            "PROVISION_GOOGLE_WALLET",
+            "propose_wallet_provisioning",
+            "commit_wallet_provisioning",
+            "WALLET_PROVISIONING_QUEUED",
+        ),
+    ),
+)
+def test_generic_proposal_trajectory_covers_follow_on_actions(
+    action_type, propose_tool, commit_tool, ui_event
+) -> None:
+    events = golden_events()[:4] + [
+        {"type": "TOOL_CALL", "tool": propose_tool, "elapsed_ms": 70},
+        {
+            "type": "TOOL_RESULT",
+            "tool": propose_tool,
+            "success": True,
+            "elapsed_ms": 80,
+        },
+        {
+            "type": "ACTION_PROPOSAL",
+            "action_type": action_type,
+            "outcome": "PROPOSED",
+            "elapsed_ms": 81,
+        },
+        {
+            "type": "ACTION_PROPOSAL",
+            "action_type": action_type,
+            "outcome": "PRESENTED",
+            "elapsed_ms": 90,
+        },
+        {
+            "type": "TRANSCRIPT",
+            "author": "customer",
+            "text": "A later turn interpreted by the model.",
+            "elapsed_ms": 100,
+        },
+        {
+            "type": "ACTION_PROPOSAL",
+            "action_type": action_type,
+            "outcome": "CONFIRMED",
+            "elapsed_ms": 101,
+        },
+        {"type": "TOOL_CALL", "tool": commit_tool, "elapsed_ms": 110},
+        {
+            "type": "TOOL_RESULT",
+            "tool": commit_tool,
+            "success": True,
+            "elapsed_ms": 130,
+        },
+        {
+            "type": "ACTION_PROPOSAL",
+            "action_type": action_type,
+            "outcome": "COMMITTED",
+            "elapsed_ms": 131,
+        },
+        {"type": "UI_EVENT", "event": ui_event, "elapsed_ms": 140},
+        {
+            "type": "SESSION_ENDED",
+            "outcome": "NORMAL_DISCONNECT",
+            "elapsed_ms": 150,
+        },
+    ]
+
+    result = evaluate_trajectory(
+        events,
+        TrajectoryExpectation(
+            required_tools={propose_tool: 1, commit_tool: 1},
+            required_ui_events=(ui_event,),
+            required_proposal_outcomes=(
+                "PROPOSED",
+                "PRESENTED",
+                "CONFIRMED",
+                "COMMITTED",
+            ),
+        ),
+    )
+
+    assert result.passed is True

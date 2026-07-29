@@ -79,6 +79,7 @@ def queue_wallet_provisioning(
     wallet_provider: str = "GOOGLE_WALLET",
     initiated_by: str = "CUSTOMER_VOICE_SUPPORT",
     fraud_alert_id: str | None = None,
+    commit_transaction: bool = True,
 ) -> dict:
     """
     Records a mocked wallet-provisioning request for an issued card.
@@ -117,7 +118,10 @@ def queue_wallet_provisioning(
                 "correlation_id": fraud_alert_id or card.card_token,
             },
         )
-        db.commit()
+        if commit_transaction:
+            db.commit()
+        else:
+            db.flush()
         return {
             "account_id": str(account.id),
             "card_token": card.card_token,
@@ -127,9 +131,10 @@ def queue_wallet_provisioning(
             "message": "Digital wallet provisioning queued successfully.",
         }
     except Exception as e:
-        db.rollback()
+        if commit_transaction:
+            db.rollback()
         logger.error(f"Error queueing wallet provisioning: {e}")
-        raise e
+        raise
 
 def freeze_card(db: Session, card_token: str, reason: str) -> dict:
     """

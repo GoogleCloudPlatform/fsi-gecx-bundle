@@ -40,23 +40,6 @@ commit_callback = importlib.util.module_from_spec(COMMIT_CALLBACK_SPEC)
 assert COMMIT_CALLBACK_SPEC.loader
 COMMIT_CALLBACK_SPEC.loader.exec_module(commit_callback)
 
-CONFIRMATION_CALLBACK = (
-    ROOT
-    / "gecx"
-    / "Credit_Support_Voice_Agent"
-    / "agents"
-    / "Credit_Card_Support_Agent"
-    / "before_model_callbacks"
-    / "classify_confirmation.py"
-)
-CONFIRMATION_CALLBACK_SPEC = importlib.util.spec_from_file_location(
-    "classify_confirmation", CONFIRMATION_CALLBACK
-)
-confirmation_callback = importlib.util.module_from_spec(CONFIRMATION_CALLBACK_SPEC)
-assert CONFIRMATION_CALLBACK_SPEC.loader
-CONFIRMATION_CALLBACK_SPEC.loader.exec_module(confirmation_callback)
-
-
 def test_curated_contract_fixture_removes_live_credentials_and_ephemeral_state() -> None:
     golden = {
         "turns": [
@@ -133,7 +116,7 @@ def test_evaluation_fake_tools_are_synthetic_and_tool_specific() -> None:
         None, {}, None
     )["customer_safe_summary"]
     assert (
-        fake_tools.fake_push_card_to_google_wallet(None, {}, None)[
+        fake_tools.fake_commit_wallet_provisioning(None, {}, None)[
             "wallet_provider"
         ]
         == "GOOGLE_WALLET"
@@ -264,7 +247,8 @@ def test_conversational_golden_includes_wallet_recovery_and_close() -> None:
     )
     rendered = repr(golden)
 
-    assert "push_card_to_google_wallet" in rendered
+    assert "propose_wallet_provisioning" in rendered
+    assert "commit_wallet_provisioning" in rendered
     assert "end_session" in rendered
     commit_steps = golden["turns"][2]["steps"]
     commit_call = next(
@@ -283,11 +267,13 @@ def test_ces_commit_callback_binds_opaque_proposal_id_when_model_omits_it() -> N
         invocation_id="confirmation-turn",
         variables={
             "proposal_id": "proposal-1",
+            "proposal_action_type": "TRIAGE_FRAUD_CASE",
+            "proposal_originating_turn_id": "proposal-turn",
             "proposal_presentation_turn_id": "proposal-turn",
-            "proposal_confirmation_turn_id": "confirmation-turn",
-            "proposal_confirmation_classification": "CONFIRMED",
-            "proposal_confirmation_method": "EXPLICIT_VERBAL",
         },
+        get_last_user_input=lambda: [
+            SimpleNamespace(text_or_transcript=lambda: "customer input")
+        ],
     )
     tool_input = {}
 
@@ -299,6 +285,7 @@ def test_ces_commit_callback_binds_opaque_proposal_id_when_model_omits_it() -> N
 
     assert result is None
     assert tool_input == {"proposal_id": "proposal-1"}
+    assert context.variables["proposal_confirmation_source"] == "MODEL_TOOL_INTENT"
 
 
 def test_ces_commit_callback_rejects_conflicting_model_proposal_id() -> None:
@@ -308,11 +295,13 @@ def test_ces_commit_callback_rejects_conflicting_model_proposal_id() -> None:
         invocation_id="confirmation-turn",
         variables={
             "proposal_id": "proposal-1",
+            "proposal_action_type": "TRIAGE_FRAUD_CASE",
+            "proposal_originating_turn_id": "proposal-turn",
             "proposal_presentation_turn_id": "proposal-turn",
-            "proposal_confirmation_turn_id": "confirmation-turn",
-            "proposal_confirmation_classification": "CONFIRMED",
-            "proposal_confirmation_method": "EXPLICIT_VERBAL",
         },
+        get_last_user_input=lambda: [
+            SimpleNamespace(text_or_transcript=lambda: "customer input")
+        ],
     )
     tool_input = {"proposal_id": "proposal-other"}
 
@@ -326,25 +315,28 @@ def test_ces_commit_callback_rejects_conflicting_model_proposal_id() -> None:
     assert tool_input == {"proposal_id": "proposal-other"}
 
 
-def test_ces_confirmation_rejects_affirmative_embedded_in_unrelated_speech() -> None:
-    assert (
-        confirmation_callback._classification(
-            "yes i really like the weather today"
-        )
-        == "UNCLEAR"
+def test_ces_commit_callback_requires_a_real_later_customer_invocation() -> None:
+    from types import SimpleNamespace
+
+    context = SimpleNamespace(
+        invocation_id="proposal-turn",
+        variables={
+            "proposal_id": "proposal-1",
+            "proposal_action_type": "TRIAGE_FRAUD_CASE",
+            "proposal_originating_turn_id": "proposal-turn",
+            "proposal_presentation_turn_id": "proposal-turn",
+        },
+        get_last_user_input=lambda: [],
     )
 
+    result = commit_callback.before_tool_callback(
+        SimpleNamespace(name="commit_fraud_triage"),
+        {},
+        context,
+    )
 
-def test_ces_confirmation_accepts_bounded_explicit_affirmatives() -> None:
-    for transcript in (
-        "yes",
-        "yes please",
-        "yes i can confirm",
-        "thats correct",
-        "that sounds good",
-        "go ahead",
-    ):
-        assert confirmation_callback._classification(transcript) == "CONFIRMED"
+    assert result["error"] == "PROTECTED_CONFIRMATION_REQUIRED"
+    assert not context.variables.get("proposal_confirmation_source")
 
 
 def test_latest_conversation_selects_completed_live_across_pages() -> None:

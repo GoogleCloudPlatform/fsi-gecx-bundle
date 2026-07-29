@@ -1,6 +1,7 @@
 import datetime
 import threading
 import uuid
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine, event
@@ -15,6 +16,8 @@ from services.action_proposals import (
     ProposalConflictError,
     ProposalScopeError,
     ProposalTransitionError,
+    PROVISION_GOOGLE_WALLET,
+    REISSUE_CARD,
     TRIAGE_FRAUD_CASE,
 )
 
@@ -422,7 +425,7 @@ def test_authenticated_commit_adapter_records_protected_later_turn_evidence(
         presentation_turn_id="assistant-turn-10",
         confirmation_turn_id="customer-turn-11",
         confirmation_method="EXPLICIT_VERBAL",
-        confirmation_classification="CONFIRMED",
+        confirmation_source="MODEL_TOOL_INTENT",
     )
     monkeypatch.setattr(
         service,
@@ -441,3 +444,141 @@ def test_authenticated_commit_adapter_records_protected_later_turn_evidence(
     assert proposal.presented_assistant_turn_id == "assistant-turn-10"
     assert proposal.confirmation_customer_turn_id == "customer-turn-11"
     assert proposal.confirmation_evidence["method"] == "EXPLICIT_VERBAL"
+
+
+def _runtime_context(*, customer_turn_id="customer-turn-10", confirming=False):
+    values = {
+        "support_session_id": "support-session-1",
+        "runtime_name": "ADK_GEMINI_LIVE",
+        "runtime_session_id": "adk-session-1",
+        "customer_turn_id": customer_turn_id,
+        "reset_generation": "3:9",
+        "catalog_snapshot_id": "support-guidance-v8",
+    }
+    if confirming:
+        values.update(
+            {
+                "presentation_turn_id": "assistant-turn-10",
+                "confirmation_turn_id": customer_turn_id,
+                "confirmation_method": "EXPLICIT_VERBAL",
+                "confirmation_source": "MODEL_TOOL_INTENT",
+            }
+        )
+    return ProposalRuntimeContext(**values)
+
+
+def _mock_card_repository(monkeypatch, fraud_alert):
+    account = SimpleNamespace(id=fraud_alert.credit_account_id)
+    card = SimpleNamespace(
+        id=fraud_alert.card_id,
+        account_id=account.id,
+        status="ACTIVE",
+        is_active=True,
+        is_virtual=True,
+        last_four="4242",
+        card_token="replacement-token",
+    )
+    repository = SimpleNamespace(
+        get_account_by_customer=lambda _customer_id: account,
+        list_cards_by_account=lambda _account_id: [card],
+    )
+    monkeypatch.setattr(
+        "services.action_proposals.CreditCardRepository",
+        lambda _db: repository,
+    )
+    return account, card
+
+
+def test_card_reissue_uses_generic_proposal_commit_protocol(
+    db_session, fraud_alert, monkeypatch
+):
+    _, card = _mock_card_repository(monkeypatch, fraud_alert)
+    monkeypatch.setattr(
+        "services.action_proposals.record_audit_event",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "services.action_proposals.issue_replacement_card",
+        lambda *_args, **_kwargs: {
+            "success": True,
+            "message": "Replacement virtual card issued.",
+            "old_card_id": str(card.id),
+            "new_card_id": str(uuid.uuid4()),
+            "new_card_token": "new-token",
+            "new_last_four": "9876",
+            "replacement_status": "ISSUED",
+            "status": "ACTIVE",
+            "is_virtual": True,
+        },
+    )
+    service = ActionProposalService(db_session)
+    proposed = service.propose_card_reissue_for_identity(
+        customer_identity="proposal-customer",
+        runtime_context=_runtime_context(),
+        reason="stolen",
+        idempotency_key="card-reissue-turn-10",
+    )
+
+    assert proposed["action_type"] == REISSUE_CARD
+    assert proposed["display_selection"] == {
+        "reason": "STOLEN",
+        "issue_virtual_card": True,
+    }
+    assert "ending 4242" in proposed["customer_safe_summary"]
+
+    committed = service.commit_card_reissue_for_identity(
+        proposed["proposal_id"],
+        customer_identity="proposal-customer",
+        runtime_context=_runtime_context(
+            customer_turn_id="customer-turn-11", confirming=True
+        ),
+    )
+    proposal = db_session.get(ActionProposal, uuid.UUID(proposed["proposal_id"]))
+    assert committed["status"] == "COMMITTED"
+    assert committed["replacement_card"]["new_last_four"] == "9876"
+    assert proposal.confirmation_evidence["source"] == "MODEL_TOOL_INTENT"
+
+
+def test_wallet_provisioning_uses_generic_proposal_commit_protocol(
+    db_session, fraud_alert, monkeypatch
+):
+    _mock_card_repository(monkeypatch, fraud_alert)
+    monkeypatch.setattr(
+        "services.action_proposals.record_audit_event",
+        lambda *_args, **_kwargs: None,
+    )
+    observed = {}
+
+    def fake_queue(*_args, **kwargs):
+        observed.update(kwargs)
+        return {
+            "message": "Digital wallet provisioning queued successfully.",
+            "card_token": "replacement-token",
+            "wallet_provider": "GOOGLE_WALLET",
+            "wallet_provisioning_status": "QUEUED",
+        }
+
+    monkeypatch.setattr(
+        "services.action_proposals.queue_wallet_provisioning", fake_queue
+    )
+    service = ActionProposalService(db_session)
+    proposed = service.propose_wallet_provisioning_for_identity(
+        customer_identity="proposal-customer",
+        runtime_context=_runtime_context(),
+        idempotency_key="wallet-turn-10",
+    )
+
+    assert proposed["action_type"] == PROVISION_GOOGLE_WALLET
+    assert proposed["display_selection"] == {"wallet_provider": "GOOGLE_WALLET"}
+    assert "ending 4242" in proposed["customer_safe_summary"]
+
+    committed = service.commit_wallet_provisioning_for_identity(
+        proposed["proposal_id"],
+        customer_identity="proposal-customer",
+        runtime_context=_runtime_context(
+            customer_turn_id="customer-turn-11", confirming=True
+        ),
+    )
+    assert committed["status"] == "COMMITTED"
+    assert committed["wallet_provisioning_status"] == "QUEUED"
+    assert observed["commit_transaction"] is False

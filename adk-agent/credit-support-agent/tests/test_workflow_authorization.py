@@ -2,31 +2,13 @@ from agent.workflow_authorization import (
     TRIAGE_CUSTOMER_REPORTED_FRAUD,
     TRIAGE_FRAUD_CASE,
     action_payload_fingerprint,
-    apply_customer_authorization_response,
-    classify_confirmation_response,
+    authorize_from_model_tool_intent,
     create_workflow_authorization,
     mark_authorization_completed,
     mark_authorization_executing,
-    mark_authorization_prompted,
+    mark_authorization_presented,
     validate_workflow_authorization,
 )
-
-
-def test_common_explicit_confirmation_phrases_are_recognized() -> None:
-    for transcript in (
-        "Correct",
-        "That's correct.",
-        "That’s correct.",
-        "That is correct",
-        "Exactly",
-        "Affirmative",
-        "Yes, that's correct",
-        "Yeah, that'd be great, thanks",
-        "That’d be perfect.",
-        "I'd appreciate that.",
-        "Let's do it.",
-    ):
-        assert classify_confirmation_response(transcript) == "CONFIRMED"
 
 
 def triage_payload(*, disputed_ids=None) -> dict:
@@ -38,24 +20,32 @@ def triage_payload(*, disputed_ids=None) -> dict:
     }
 
 
-def confirmed_authorization(*, now=1000.0, payload=None) -> dict:
+def pending_authorization(*, now=1000.0, payload=None, action=TRIAGE_FRAUD_CASE):
     payload = payload or triage_payload()
     authorization = create_workflow_authorization(
-        action=TRIAGE_FRAUD_CASE,
+        action=action,
         payload=payload,
         session_id="session-1",
+        originating_customer_event_id="customer-origin",
         now_epoch_s=now,
         ttl_seconds=60,
     )
-    authorization = mark_authorization_prompted(
+    return mark_authorization_presented(
         authorization,
-        assistant_event_id="assistant-1",
+        assistant_event_id="assistant-presentation",
         now_epoch_s=now + 1,
     )
-    return apply_customer_authorization_response(
-        authorization,
-        transcript="Yes, that's right.",
-        customer_event_id="customer-1",
+
+
+def confirmed_authorization(*, now=1000.0, payload=None) -> dict:
+    payload = payload or triage_payload()
+    return authorize_from_model_tool_intent(
+        pending_authorization(now=now, payload=payload),
+        action=TRIAGE_FRAUD_CASE,
+        payload=payload,
+        session_id="session-1",
+        customer_event_id="customer-confirmation",
+        customer_observed_at_epoch_s=now + 2,
         now_epoch_s=now + 2,
     )
 
@@ -64,9 +54,106 @@ def test_payload_fingerprint_is_stable_for_reordered_selection() -> None:
     first = triage_payload(disputed_ids=["auth-2", "auth-1"])
     second = triage_payload(disputed_ids=["auth-1", "auth-2", "auth-1"])
 
-    assert action_payload_fingerprint(TRIAGE_FRAUD_CASE, first) == action_payload_fingerprint(
-        TRIAGE_FRAUD_CASE, second
+    assert action_payload_fingerprint(
+        TRIAGE_FRAUD_CASE, first
+    ) == action_payload_fingerprint(TRIAGE_FRAUD_CASE, second)
+
+
+def test_model_tool_intent_confirms_exact_presented_proposal_on_later_turn() -> None:
+    authorization = confirmed_authorization()
+
+    assert authorization["status"] == "CONFIRMED"
+    assert authorization["confirmation_source"] == "MODEL_TOOL_INTENT"
+    assert authorization["customer_event_id"] == "customer-confirmation"
+    assert (
+        validate_workflow_authorization(
+            authorization,
+            action=TRIAGE_FRAUD_CASE,
+            payload=triage_payload(disputed_ids=["auth-1", "auth-2"]),
+            session_id="session-1",
+            now_epoch_s=1003.0,
+        )
+        is None
     )
+
+
+def test_raw_transcript_is_not_an_authorization_input() -> None:
+    authorization = pending_authorization()
+
+    assert "transcript" not in authorize_from_model_tool_intent.__annotations__
+    assert authorization["status"] == "PENDING"
+
+
+def test_originating_or_pre_presentation_turn_cannot_confirm() -> None:
+    pending = pending_authorization()
+    same_turn = authorize_from_model_tool_intent(
+        pending,
+        action=TRIAGE_FRAUD_CASE,
+        payload=triage_payload(),
+        session_id="session-1",
+        customer_event_id="customer-origin",
+        customer_observed_at_epoch_s=1002.0,
+        now_epoch_s=1002.0,
+    )
+    earlier_turn = authorize_from_model_tool_intent(
+        pending,
+        action=TRIAGE_FRAUD_CASE,
+        payload=triage_payload(),
+        session_id="session-1",
+        customer_event_id="customer-earlier",
+        customer_observed_at_epoch_s=1000.5,
+        now_epoch_s=1002.0,
+    )
+
+    assert same_turn["status"] == "PENDING"
+    assert earlier_turn["status"] == "PENDING"
+
+
+def test_unpresented_authorization_cannot_confirm() -> None:
+    authorization = create_workflow_authorization(
+        action=TRIAGE_FRAUD_CASE,
+        payload=triage_payload(),
+        session_id="session-1",
+        originating_customer_event_id="customer-origin",
+        now_epoch_s=1000.0,
+    )
+
+    updated = authorize_from_model_tool_intent(
+        authorization,
+        action=TRIAGE_FRAUD_CASE,
+        payload=triage_payload(),
+        session_id="session-1",
+        customer_event_id="customer-confirmation",
+        customer_observed_at_epoch_s=1002.0,
+        now_epoch_s=1002.0,
+    )
+
+    assert updated["status"] == "PREPARED"
+
+
+def test_changed_payload_or_session_cannot_confirm() -> None:
+    pending = pending_authorization()
+    changed_payload = authorize_from_model_tool_intent(
+        pending,
+        action=TRIAGE_FRAUD_CASE,
+        payload=triage_payload(disputed_ids=["auth-1"]),
+        session_id="session-1",
+        customer_event_id="customer-confirmation",
+        customer_observed_at_epoch_s=1002.0,
+        now_epoch_s=1002.0,
+    )
+    changed_session = authorize_from_model_tool_intent(
+        pending,
+        action=TRIAGE_FRAUD_CASE,
+        payload=triage_payload(),
+        session_id="session-2",
+        customer_event_id="customer-confirmation",
+        customer_observed_at_epoch_s=1002.0,
+        now_epoch_s=1002.0,
+    )
+
+    assert changed_payload["status"] == "PENDING"
+    assert changed_session["status"] == "PENDING"
 
 
 def test_customer_reported_authorization_is_exact_selection_bound() -> None:
@@ -76,31 +163,30 @@ def test_customer_reported_authorization_is_exact_selection_bound() -> None:
         "issue_replacement": True,
         "escalate": False,
     }
-    authorization = create_workflow_authorization(
+    pending = pending_authorization(
+        payload=payload,
+        action=TRIAGE_CUSTOMER_REPORTED_FRAUD,
+    )
+    authorization = authorize_from_model_tool_intent(
+        pending,
         action=TRIAGE_CUSTOMER_REPORTED_FRAUD,
         payload=payload,
         session_id="session-1",
-        now_epoch_s=1000.0,
-    )
-    authorization = mark_authorization_prompted(
-        authorization,
-        assistant_event_id="assistant-1",
-        now_epoch_s=1001.0,
-    )
-    authorization = apply_customer_authorization_response(
-        authorization,
-        transcript="Yes, those are the charges.",
-        customer_event_id="customer-1",
+        customer_event_id="customer-confirmation",
+        customer_observed_at_epoch_s=1002.0,
         now_epoch_s=1002.0,
     )
 
-    assert validate_workflow_authorization(
-        authorization,
-        action=TRIAGE_CUSTOMER_REPORTED_FRAUD,
-        payload={**payload, "disputed_authorization_ids": ["auth-1", "auth-2"]},
-        session_id="session-1",
-        now_epoch_s=1003.0,
-    ) is None
+    assert (
+        validate_workflow_authorization(
+            authorization,
+            action=TRIAGE_CUSTOMER_REPORTED_FRAUD,
+            payload={**payload, "disputed_authorization_ids": ["auth-1", "auth-2"]},
+            session_id="session-1",
+            now_epoch_s=1003.0,
+        )
+        is None
+    )
     assert "differs from the exact payload" in validate_workflow_authorization(
         authorization,
         action=TRIAGE_CUSTOMER_REPORTED_FRAUD,
@@ -110,108 +196,25 @@ def test_customer_reported_authorization_is_exact_selection_bound() -> None:
     )
 
 
-def test_authorization_requires_separate_assistant_and_customer_turns() -> None:
-    authorization = create_workflow_authorization(
+def test_expired_authorization_cannot_confirm_or_execute() -> None:
+    expired = authorize_from_model_tool_intent(
+        pending_authorization(),
         action=TRIAGE_FRAUD_CASE,
         payload=triage_payload(),
         session_id="session-1",
-        now_epoch_s=1000.0,
+        customer_event_id="customer-confirmation",
+        customer_observed_at_epoch_s=1061.0,
+        now_epoch_s=1061.0,
     )
 
-    error = validate_workflow_authorization(
-        authorization,
-        action=TRIAGE_FRAUD_CASE,
-        payload=triage_payload(),
-        session_id="session-1",
-        now_epoch_s=1001.0,
-    )
-
-    assert error == "Customer authorization for TRIAGE_FRAUD_CASE is not confirmed."
-
-
-def test_confirmed_authorization_is_payload_and_session_bound() -> None:
-    authorization = confirmed_authorization()
-
-    assert validate_workflow_authorization(
-        authorization,
-        action=TRIAGE_FRAUD_CASE,
-        payload=triage_payload(disputed_ids=["auth-1", "auth-2"]),
-        session_id="session-1",
-        now_epoch_s=1003.0,
-    ) is None
-    assert "different support session" in validate_workflow_authorization(
-        authorization,
-        action=TRIAGE_FRAUD_CASE,
-        payload=triage_payload(),
-        session_id="session-2",
-        now_epoch_s=1003.0,
-    )
-
-
-def test_changed_selection_cannot_reuse_confirmation() -> None:
-    authorization = confirmed_authorization()
-    changed = triage_payload(disputed_ids=["auth-1"])
-
-    error = validate_workflow_authorization(
-        authorization,
-        action=TRIAGE_FRAUD_CASE,
-        payload=changed,
-        session_id="session-1",
-        now_epoch_s=1003.0,
-    )
-
-    assert error == "The requested action differs from the exact payload the customer confirmed."
-
-
-def test_expired_or_declined_authorization_cannot_execute() -> None:
-    authorization = confirmed_authorization()
-    expired_error = validate_workflow_authorization(
-        authorization,
+    assert expired["status"] == "EXPIRED"
+    assert "not confirmed" in validate_workflow_authorization(
+        expired,
         action=TRIAGE_FRAUD_CASE,
         payload=triage_payload(),
         session_id="session-1",
         now_epoch_s=1061.0,
     )
-    declined = apply_customer_authorization_response(
-        authorization,
-        transcript="Actually no, that selection is wrong.",
-        customer_event_id="customer-2",
-        now_epoch_s=1004.0,
-    )
-
-    assert expired_error == "Customer authorization has expired. Prepare and confirm the action again."
-    assert declined["status"] == "DECLINED"
-    assert declined["invalidation_reason"] == "CUSTOMER_DECLINED"
-
-
-def test_ambiguous_response_requires_later_explicit_confirmation() -> None:
-    authorization = create_workflow_authorization(
-        action=TRIAGE_FRAUD_CASE,
-        payload=triage_payload(),
-        session_id="session-1",
-        now_epoch_s=1000.0,
-    )
-    prompted = mark_authorization_prompted(
-        authorization,
-        assistant_event_id="assistant-1",
-        now_epoch_s=1001.0,
-    )
-    unclear = apply_customer_authorization_response(
-        prompted,
-        transcript="What happens after that?",
-        customer_event_id="customer-1",
-        now_epoch_s=1002.0,
-    )
-    confirmed = apply_customer_authorization_response(
-        unclear,
-        transcript="Okay, yes, that is correct.",
-        customer_event_id="customer-2",
-        now_epoch_s=1003.0,
-    )
-
-    assert unclear["status"] == "UNCLEAR"
-    assert confirmed["status"] == "CONFIRMED"
-    assert confirmed["customer_event_id"] == "customer-2"
 
 
 def test_authorization_is_consumed_and_completed_once() -> None:
@@ -221,10 +224,13 @@ def test_authorization_is_consumed_and_completed_once() -> None:
 
     assert executing["status"] == "EXECUTING"
     assert completed["status"] == "COMPLETED"
-    assert validate_workflow_authorization(
-        completed,
-        action=TRIAGE_FRAUD_CASE,
-        payload=triage_payload(),
-        session_id="session-1",
-        now_epoch_s=1005.0,
-    ) == "Customer authorization for TRIAGE_FRAUD_CASE is not confirmed."
+    assert (
+        validate_workflow_authorization(
+            completed,
+            action=TRIAGE_FRAUD_CASE,
+            payload=triage_payload(),
+            session_id="session-1",
+            now_epoch_s=1005.0,
+        )
+        == "Customer authorization for TRIAGE_FRAUD_CASE is not confirmed."
+    )

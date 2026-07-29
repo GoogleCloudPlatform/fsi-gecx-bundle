@@ -40,19 +40,13 @@ SCENARIOS = {
         required_proposal_outcomes=("PROPOSED", "PRESENTED", "CONFIRMED", "COMMITTED"),
         required_ui_events=("FRAUD_ALERT_RESOLVED",),
     ),
-    "fraud-direct": TrajectoryExpectation(
-        required_tools={"get_open_fraud_alert": 1, "triage_fraud_case": 1},
-        forbidden_tools=("commit_fraud_triage",),
-        required_proposal_outcomes=("DIRECT_COMPLETED",),
-        required_ui_events=("FRAUD_ALERT_RESOLVED",),
-    ),
     "fraud-wallet": TrajectoryExpectation(
         required_tools={
             "get_open_fraud_alert": 1,
             "commit_fraud_triage": 1,
-            "push_card_to_google_wallet": 1,
+            "commit_wallet_provisioning": 1,
         },
-        forbidden_tools=("triage_fraud_case",),
+        forbidden_tools=("triage_fraud_case", "push_card_to_google_wallet"),
         required_proposal_outcomes=("PROPOSED", "PRESENTED", "CONFIRMED", "COMMITTED"),
         required_ui_events=("FRAUD_ALERT_RESOLVED", "WALLET_PROVISIONING_QUEUED"),
     ),
@@ -105,6 +99,11 @@ SCENARIOS = {
         required_ui_events=("FRAUD_ALERT_RESOLVED",),
     ),
 }
+
+BASELINE_FRAUD_EXPECTATION = TrajectoryExpectation(
+    required_tools={"get_open_fraud_alert": 1},
+    required_ui_events=("FRAUD_ALERT_RESOLVED",),
+)
 
 
 def _message(entry: dict[str, Any]) -> str:
@@ -234,8 +233,7 @@ def extract_trajectory(
                 expected_checkpoint = (
                     tool_name
                     in {
-                        "prepare_fraud_triage_confirmation",
-                        "prepare_customer_reported_fraud_confirmation",
+                            "prepare_customer_reported_fraud_confirmation",
                     }
                     and any(
                         marker in message
@@ -369,7 +367,9 @@ def main() -> int:
                 deployed_logs,
                 session_selector=args.baseline_session_id,
             )
-            baseline = evaluate_trajectory(baseline_events, SCENARIOS["fraud-direct"])
+            baseline = evaluate_trajectory(
+                baseline_events, BASELINE_FRAUD_EXPECTATION
+            )
             comparison = compare_trajectory_outcomes(baseline, result)
             output["parity"] = {
                 "baseline_session_ref": baseline_ref,

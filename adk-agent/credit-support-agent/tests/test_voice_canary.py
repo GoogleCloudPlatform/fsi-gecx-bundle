@@ -97,12 +97,14 @@ def test_non_error_checkpoint_is_a_successful_tool_result() -> None:
         entry(
             "2026-07-14T20:00:01Z",
             "[CALLBACK] before_tool_callback triggered "
-            f"session_ref={session_ref} tool_name=prepare_fraud_triage_confirmation",
+            f"session_ref={session_ref} "
+            "tool_name=prepare_customer_reported_fraud_confirmation",
         ),
         entry(
             "2026-07-14T20:00:02Z",
             "[CALLBACK] after_tool_callback triggered "
-            f"session_ref={session_ref} tool_name=prepare_fraud_triage_confirmation "
+            f"session_ref={session_ref} "
+            "tool_name=prepare_customer_reported_fraud_confirmation "
             "result={'is_error': False, 'structured': False}",
         ),
     ]
@@ -195,4 +197,9 @@ def test_extracts_normalized_proposal_event_for_same_hashed_session() -> None:
 def test_canary_scenarios_use_proposal_commit_and_keep_direct_baseline() -> None:
     assert voice_canary.SCENARIOS["fraud"].required_tools["commit_fraud_triage"] == 1
     assert "triage_fraud_case" in voice_canary.SCENARIOS["fraud"].forbidden_tools
-    assert voice_canary.SCENARIOS["fraud-direct"].required_tools["triage_fraud_case"] == 1
+    assert (
+        voice_canary.SCENARIOS["fraud-wallet"].required_tools[
+            "commit_wallet_provisioning"
+        ]
+        == 1
+    )

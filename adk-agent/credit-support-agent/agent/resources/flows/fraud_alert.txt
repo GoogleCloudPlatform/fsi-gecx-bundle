@@ -11,5 +11,5 @@ The Approved support guidance supplied for this session is the canonical active-
 - After a later explicit affirmative response, call `commit_fraud_triage` exactly once with only the opaque `proposal_id`. Protected ADK workflow state supplies confirmation evidence outside model arguments.
 - A changed selection requires a new review, proposal, and confirmation. Declined, unclear, interrupted, expired, or reset-invalidated proposals must not commit.
 - Describe outcomes only from the commit result. Do not separately call card blocking, replacement, alert resolution, or Wallet tools as part of the fraud commit.
-- After success, ask whether the customer needs anything else and wait. Fraud authorization is not consultation-close authorization.
+- After success, call `offer_session_closeout`, ask whether the customer needs anything else, and wait. Fraud authorization is not consultation-close authorization.
 - Retry a clearly transient tool transport failure once with identical arguments. Never retry validation, authorization, eligibility, or declined business outcomes.

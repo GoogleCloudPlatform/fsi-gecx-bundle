@@ -90,6 +90,10 @@ variableDeclarations:
   description: Opaque active proposal identifier captured from the banking tool response.
   schema:
     type: STRING
+- name: proposal_action_type
+  description: Typed action bound to the active banking proposal.
+  schema:
+    type: STRING
 - name: proposal_customer_safe_summary
   description: Banking-authored summary that must be presented before confirmation.
   schema:
@@ -110,12 +114,12 @@ variableDeclarations:
   description: CES callback-owned normalized confirmation method.
   schema:
     type: STRING
-- name: proposal_confirmation_classification
-  description: CES callback-owned CONFIRMED, DECLINED, or UNCLEAR classification.
+- name: proposal_confirmation_source
+  description: CES callback-owned source of the typed confirmation transition.
   schema:
     type: STRING
-- name: proposal_last_classified_turn_id
-  description: CES callback-owned guard against reclassifying one invocation.
+- name: closeout_originating_turn_id
+  description: CES callback-owned customer turn after which final assistance was offered.
   schema:
     type: STRING
 - name: active_fraud_alert_id
@@ -130,14 +134,6 @@ variableDeclarations:
   description: Comma-delimited posted transaction ids captured from the active alert.
   schema:
     type: STRING
-- name: fraud_selection_prompt_turn_id
-  description: CES callback-owned turn that asked the customer to classify the flagged activity.
-  schema:
-    type: STRING
-- name: fraud_selection_pending
-  description: Whether the next customer turn is answering the flagged-activity recognition question.
-  schema:
-    type: BOOLEAN
 - name: fraud_review_stage
   description: Callback-owned fraud review stage.
   schema:

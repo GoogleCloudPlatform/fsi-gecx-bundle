@@ -59,9 +59,10 @@ gcloud config set project "$SOURCE_PROJECT"
 make run-triggers BRANCH="$BRANCH"
 ```
 
-Confirm that the `banking-service`, `credit-support-agent`, and `data-generator`
-repositories each contain an image tagged with the full `$COMMIT`. Qualification
-records their immutable digests; it never promotes `latest`.
+Confirm that the `banking-service`, `banking-ui`, `credit-support-agent`, and
+`data-generator` repositories each contain an image tagged with the full
+`$COMMIT`. Qualification records their immutable digests; it never promotes
+`latest`.
 
 ### 2. Qualify in the source environment
 
@@ -76,9 +77,11 @@ gcloud builds triggers run release-qualify \
 ```
 
 Qualification applies Terraform, reconciles database grants and schema,
-deploys the recorded service digests, resets and seeds the demo, rebuilds CDC
-destinations, reconciles federation and curated analytics, updates the Iceberg
-pipeline, and runs automated health checks. Success writes:
+deploys the recorded service digests, resets and seeds the demo, synchronizes
+the Knowledge Catalog, deploys the checked-out CES bundle to the configured
+voice channel, rebuilds CDC destinations, reconciles federation and curated
+analytics, updates the Iceberg pipeline, and runs automated health checks.
+Success writes:
 
 ```text
 gs://SOURCE_PROJECT-fsi-release-manifests/alloydb/COMMIT/qualify.json
@@ -111,23 +114,32 @@ gcloud builds triggers run release-promote \
 ```
 
 Approve the pending build in Cloud Build. Promotion reads the source manifest,
-verifies the commit and image digests, and runs the same ordered deployment and
-validation controller in the target. It does not rebuild the backend images.
+verifies the commit, image digests, CES source digest and model, catalog
+snapshot, and Alembic head, then runs the same ordered deployment and validation
+controller in the target. It does not rebuild the container images.
 
 ## What the release manifest covers
 
-The current manifest pins and promotes these runtime images:
+The manifest pins and promotes these runtime images:
 
 - `banking-service`
+- `banking-ui`
 - `credit-support-agent`
 - `data-generator`
 
-`banking-ui`, IAP login UI, site crawling, and narrowly scoped data/catalog
-jobs remain independent component triggers. Test those changes in a developer
-environment with their component trigger. After merge, run the corresponding
-`fsi-demo-1841` trigger from the approved commit when that environment's normal
-main-branch trigger is disabled; these components are not silently included in
-the backend release manifest.
+It also records and verifies:
+
+- the content-addressed CES source bundle and native-live model
+- the environment-local CES app, immutable version, and configured deployment
+- the Knowledge Catalog seed snapshot
+- the Alembic schema head
+
+CES versions are project-local, so promotion imports the exact source-addressed
+bundle and creates a target-local version rather than attempting to reuse the
+source project's CES resource name. The configured deployment is the only CES
+channel moved by the release controller.
+
+IAP login UI and site crawling remain independent component triggers.
 
 For AlloyDB recovery, CDC troubleshooting, reset behavior, and the one-time
 Cloud SQL cutover procedure, see [AlloyDB demo operations](alloydb_demo_runbook.md).

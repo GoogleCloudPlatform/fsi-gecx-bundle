@@ -99,4 +99,6 @@ def test_current_schema_head_is_reconciled_before_banking_deploy() -> None:
     assert "gcloud run jobs update banking-db-reconcile" in cloudbuild
     assert "gcloud run jobs execute banking-db-reconcile" in cloudbuild
     assert f'value = "{expected_head}"' in terraform_job
-    assert f'EXPECTED_ALEMBIC_REVISION="{expected_head}"' in release_script
+    assert "voice_release_metadata.py inspect" in release_script
+    assert "EXPECTED_ALEMBIC_REVISION=\"$(" in release_script
+    assert ".database.alembic_heads" in release_script

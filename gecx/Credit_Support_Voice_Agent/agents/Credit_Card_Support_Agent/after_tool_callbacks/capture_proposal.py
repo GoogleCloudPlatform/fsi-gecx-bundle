@@ -72,7 +72,14 @@ def after_tool_callback(tool, input, callback_context, tool_response):
             callback_context.variables["fraud_review_stage"] = "COMMITTED"
         return None
 
-    if not tool_name.endswith("propose_fraud_triage"):
+    if not any(
+        tool_name.endswith(suffix)
+        for suffix in (
+            "propose_fraud_triage",
+            "propose_card_reissue",
+            "propose_wallet_provisioning",
+        )
+    ):
         return None
 
     proposal_id = str(payload.get("proposal_id") or "")
@@ -80,8 +87,10 @@ def after_tool_callback(tool, input, callback_context, tool_response):
     if payload.get("success") is True and proposal_id and summary:
         callback_context.variables["proposal_id"] = proposal_id
         callback_context.variables["proposal_customer_safe_summary"] = summary
-        callback_context.variables["fraud_selection_pending"] = False
-        callback_context.variables["fraud_review_stage"] = "AWAITING_ACTION_CONFIRMATION"
-        callback_context.variables["fraud_review_status"] = "COMPLETE"
-        callback_context.variables["fraud_review_ready"] = True
+        if tool_name.endswith("propose_fraud_triage"):
+            callback_context.variables["fraud_review_stage"] = (
+                "AWAITING_ACTION_CONFIRMATION"
+            )
+            callback_context.variables["fraud_review_status"] = "COMPLETE"
+            callback_context.variables["fraud_review_ready"] = True
     return None

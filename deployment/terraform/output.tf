@@ -65,6 +65,16 @@ output "banking_ui_uri" {
   value = var.deploy_cloud_run_services == true ? google_cloud_run_v2_service.banking_ui[0].urls[0] : null
 }
 
+output "cx_agent_studio_voice_agent_deployment_name" {
+  description = "Configured CES voice-agent deployment promoted with the application release."
+  value       = var.cx_agent_studio_voice_agent_deployment_name
+}
+
+output "gecx_location" {
+  description = "CES location for the configured voice-agent deployment."
+  value       = var.gecx_location
+}
+
 output "real_time_analytics_agent_name" {
   description = "Stable Gemini Data Analytics agent resource name deployed by the manual Cloud Build trigger."
   value       = "projects/${var.project_id}/locations/us/dataAgents/real-time-analytics"

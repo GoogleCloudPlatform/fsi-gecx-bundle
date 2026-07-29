@@ -7,6 +7,13 @@ from google.adk.tools.base_tool import BaseTool
 from google.adk.tools.mcp_tool import McpToolset
 from google.genai import types
 
+LEGACY_DIRECT_ACTION_TOOLS = {
+    "report_lost_stolen_card",
+    "issue_replacement_card_tool",
+    "push_card_to_google_wallet",
+    "triage_fraud_case",
+}
+
 
 class LiveMcpToolset(McpToolset):
     """Apply one explicit Live response policy to dynamically loaded MCP tools."""
@@ -15,7 +22,11 @@ class LiveMcpToolset(McpToolset):
         self,
         readonly_context: ReadonlyContext | None = None,
     ) -> list[BaseTool]:
-        tools = await super().get_tools(readonly_context)
+        tools = [
+            tool
+            for tool in await super().get_tools(readonly_context)
+            if tool.name not in LEGACY_DIRECT_ACTION_TOOLS
+        ]
         mode = (readonly_context.state.get("mode") if readonly_context else None)
         scheduling = (
             types.FunctionResponseScheduling.INTERRUPT

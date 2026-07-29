@@ -5,7 +5,7 @@ import pytest
 from agent import agent as agent_module
 from agent.agent import after_tool_callback, prepare_customer_reported_fraud_confirmation
 from agent.workflow_authorization import (
-    PUSH_CARD_TO_GOOGLE_WALLET,
+    PROVISION_GOOGLE_WALLET,
     TRIAGE_CUSTOMER_REPORTED_FRAUD,
     create_workflow_authorization,
     mark_authorization_executing,
@@ -155,13 +155,10 @@ async def test_transaction_history_result_builds_trusted_selection_index(
 
 
 @pytest.mark.asyncio
-async def test_wallet_mcp_error_result_releases_consumed_authorization() -> None:
+async def test_wallet_commit_error_releases_consumed_authorization() -> None:
     authorization = create_workflow_authorization(
-        action=PUSH_CARD_TO_GOOGLE_WALLET,
-        payload={
-            "card_token": "trusted-replacement-token",
-            "wallet_provider": "GOOGLE_WALLET",
-        },
+        action=PROVISION_GOOGLE_WALLET,
+        payload={"wallet_provider": "GOOGLE_WALLET"},
         session_id="voice-session-1",
     )
     authorization.update(
@@ -178,11 +175,8 @@ async def test_wallet_mcp_error_result_releases_consumed_authorization() -> None
     }
 
     await after_tool_callback(
-        SimpleNamespace(name="push_card_to_google_wallet"),
-        {
-            "card_token": "trusted-replacement-token",
-            "wallet_provider": "GOOGLE_WALLET",
-        },
+        SimpleNamespace(name="commit_wallet_provisioning"),
+        {"proposal_id": "wallet-proposal"},
         SimpleNamespace(state=state),
         {
             "isError": True,
@@ -198,5 +192,5 @@ async def test_wallet_mcp_error_result_releases_consumed_authorization() -> None
     recovered = state["fraud_playbook"]["workflow_authorization"]
     assert recovered["status"] == "INVALIDATED"
     assert recovered["invalidation_reason"] == (
-        "TOOL_RESULT_NOT_SUCCESSFUL:push_card_to_google_wallet"
+        "TOOL_RESULT_NOT_SUCCESSFUL:commit_wallet_provisioning"
     )

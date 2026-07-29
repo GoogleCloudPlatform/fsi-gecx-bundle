@@ -74,11 +74,15 @@ sequenceDiagram
 ### C. Banking-Owned Action Proposal and Deterministic Fraud Commit
 * **Context**: Gemini Live is good at conversational slot-filling, but it must not construct or mutate a consequential banking payload from free-form conversation. Fraud remediation also needs immutable consent scope, idempotency, audit events, provisional-credit semantics, secure messaging, and card targeting based on the active fraud alert.
 * **Decision**: The agent uses a two-phase banking-owned action proposal:
-  1. `prepare_fraud_triage_confirmation` validates the completed selection and calls banking-service `propose_fraud_triage`.
+  1. The model calls the typed `propose_fraud_triage` tool with the completed selection.
   2. Banking-service normalizes the immutable action payload and returns an opaque proposal id plus a customer-safe summary.
-  3. The agent presents the complete summary and stops. The presentation validator requires the same merchants, amounts, card suffix, and consequential actions, while accepting equivalent spoken-number formatting such as “one hundred dollars” for `$100.00`.
-  4. A later customer turn is classified as confirmed, declined, or unclear. Negatives and qualifications win over affirmative tokens; an affirmative embedded in unrelated speech is not authorization.
-  5. Only a valid later confirmation permits `commit_fraud_triage`, whose model-visible input is the opaque proposal id. Banking-service revalidates the transport-owned evidence before claiming and executing the proposal exactly once.
+  3. The agent presents the complete summary and stops. The runtime records only that the proposal-producing assistant turn completed; complete and accurate readout is enforced by trajectory evaluation, not a production transcript parser.
+  4. On a later customer turn, the model interprets the response once. Choosing the typed `commit_fraud_triage` tool is the semantic decision; declining, changing, or questioning the proposal does not call the commit tool.
+  5. The deterministic adapter checks only proposal identity, action type, session binding, presentation, later-turn ordering, expiry, and reset generation. Banking-service revalidates that protected evidence before claiming and executing the proposal exactly once.
+
+There is no secondary phrase list, regular expression, or transcript
+classification callback. Media/VAD boundaries identify completed turns but
+never authorize a banking action.
 
 Banking-service then owns the deterministic business workflow:
   1. Validate the alert belongs to the customer and target `FraudAlert.card_id`.

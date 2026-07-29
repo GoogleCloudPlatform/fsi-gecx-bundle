@@ -34,7 +34,7 @@ class ProposalRuntimeContext:
     presentation_turn_id: str | None = None
     confirmation_turn_id: str | None = None
     confirmation_method: str | None = None
-    confirmation_classification: str | None = None
+    confirmation_source: str | None = None
 
     @classmethod
     def from_headers(cls, headers: Mapping[str, str]) -> "ProposalRuntimeContext":
@@ -58,8 +58,8 @@ class ProposalRuntimeContext:
             confirmation_method=(
                 normalized.get("x-proposal-confirmation-method", "").strip() or None
             ),
-            confirmation_classification=(
-                normalized.get("x-proposal-confirmation-classification", "").strip()
+            confirmation_source=(
+                normalized.get("x-proposal-confirmation-source", "").strip()
                 or None
             ),
         )
@@ -87,5 +87,7 @@ class ProposalRuntimeContext:
             )
         if self.confirmation_method != "EXPLICIT_VERBAL":
             raise RuntimeContextError("Explicit verbal confirmation is required.")
-        if self.confirmation_classification != "CONFIRMED":
-            raise RuntimeContextError("The protected confirmation is not affirmative.")
+        if self.confirmation_source != "MODEL_TOOL_INTENT":
+            raise RuntimeContextError(
+                "Confirmation must be bound to the model's typed commit decision."
+            )

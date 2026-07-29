@@ -254,13 +254,35 @@ def _managed_fake_output(tool: str) -> dict[str, Any]:
                 "message with the case details was sent."
             ),
         }
-    if tool == "push_card_to_google_wallet":
+    if tool == "propose_wallet_provisioning":
         return {
             "success": True,
+            "status": "PROPOSED",
+            "action_type": "PROVISION_GOOGLE_WALLET",
+            "contract_version": "wallet-provisioning.v1",
+            "proposal_id": "eval-wallet-proposal-1",
+            "customer_safe_summary": (
+                "Confirm that you want to queue the virtual card ending 0002 "
+                "for Google Wallet."
+            ),
+        }
+    if tool == "commit_wallet_provisioning":
+        return {
+            "success": True,
+            "status": "COMMITTED",
+            "action_type": "PROVISION_GOOGLE_WALLET",
+            "contract_version": "wallet-provisioning.v1",
+            "proposal_id": "eval-wallet-proposal-1",
             "message": "Virtual card provisioning is queued for Google Wallet.",
             "card_token": "eval-replacement-token",
             "wallet_provider": "GOOGLE_WALLET",
             "wallet_provisioning_status": "QUEUED",
+        }
+    if tool == "offer_session_closeout":
+        return {
+            "success": True,
+            "status": "CLOSEOUT_OFFERED",
+            "customer_prompt": "Is there anything else I can help you with?",
         }
     return {}
 
@@ -687,8 +709,7 @@ def _conversational_golden(
                                 "proposal_presentation_turn_id": "",
                                 "proposal_confirmation_turn_id": "",
                                 "proposal_confirmation_method": "",
-                                "proposal_confirmation_classification": "",
-                                "proposal_last_classified_turn_id": "",
+                                "proposal_confirmation_source": "",
                                 "fraud_selection_pending": False,
                                 "fraud_review_stage": "AWAITING_ACTION_CONFIRMATION",
                                 "fraud_review_status": "COMPLETE",
@@ -720,10 +741,7 @@ def _conversational_golden(
                                     "eval-turn-confirmation"
                                 ),
                                 "proposal_confirmation_method": "EXPLICIT_VERBAL",
-                                "proposal_confirmation_classification": "CONFIRMED",
-                                "proposal_last_classified_turn_id": (
-                                    "eval-turn-confirmation"
-                                ),
+                                "proposal_confirmation_source": "MODEL_TOOL_INTENT",
                             }
                         }
                     },
@@ -742,12 +760,28 @@ def _conversational_golden(
                     _tool_response_expectation(
                         app, "commit_fraud_triage", "eval-commit"
                     ),
+                    _tool_expectation(
+                        app, "offer_session_closeout", "eval-closeout-offer-1"
+                    ),
+                    _tool_response_expectation(
+                        app, "offer_session_closeout", "eval-closeout-offer-1"
+                    ),
                     _agent_response_expectation(str(commit["expected_agent"])),
                 ]
             },
             {
                 "steps": [
                     {"userInput": {"text": str(recovery["user"])}},
+                    _tool_expectation(
+                        app,
+                        "propose_wallet_provisioning",
+                        "eval-wallet-proposal",
+                    ),
+                    _tool_response_expectation(
+                        app,
+                        "propose_wallet_provisioning",
+                        "eval-wallet-proposal",
+                    ),
                     _agent_response_expectation(str(recovery["expected_agent"])),
                 ]
             },
@@ -756,13 +790,19 @@ def _conversational_golden(
                     {"userInput": {"text": str(wallet["user"])}},
                     _tool_expectation(
                         app,
-                        "push_card_to_google_wallet",
+                        "commit_wallet_provisioning",
                         "eval-wallet-provisioning",
                     ),
                     _tool_response_expectation(
                         app,
-                        "push_card_to_google_wallet",
+                        "commit_wallet_provisioning",
                         "eval-wallet-provisioning",
+                    ),
+                    _tool_expectation(
+                        app, "offer_session_closeout", "eval-closeout-offer-2"
+                    ),
+                    _tool_response_expectation(
+                        app, "offer_session_closeout", "eval-closeout-offer-2"
                     ),
                     _agent_response_expectation(str(wallet["expected_agent"])),
                 ]

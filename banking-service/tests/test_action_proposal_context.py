@@ -5,7 +5,9 @@ import pytest
 
 from models.authentication import ValidatedToken
 from routers.mcp.credit_card import (
+    commit_card_reissue,
     commit_fraud_triage,
+    commit_wallet_provisioning,
     propose_fraud_triage,
     review_fraud_selection,
 )
@@ -30,11 +32,20 @@ def _headers(**overrides) -> dict[str, str]:
 
 
 def test_model_visible_commit_has_only_opaque_proposal_input() -> None:
-    commit_parameters = set(inspect.signature(commit_fraud_triage).parameters)
+    commit_signatures = (
+        inspect.signature(commit_fraud_triage),
+        inspect.signature(commit_card_reissue),
+        inspect.signature(commit_wallet_provisioning),
+    )
+    commit_parameters = set(commit_signatures[0].parameters)
     propose_parameters = set(inspect.signature(propose_fraud_triage).parameters)
     review_parameters = set(inspect.signature(review_fraud_selection).parameters)
 
     assert commit_parameters == {"proposal_id", "ctx"}
+    assert all(
+        set(signature.parameters) == {"proposal_id", "ctx"}
+        for signature in commit_signatures
+    )
     forbidden_scope = {
         "customer_id",
         "support_session_id",
@@ -198,10 +209,10 @@ def test_confirmation_evidence_is_transport_owned_and_explicit() -> None:
         _headers(
             **{
                 "x-customer-turn-id": "customer-turn-11",
-                "x-proposal-presentation-turn-id": "assistant-turn-10",
-                "x-proposal-confirmation-turn-id": "customer-turn-11",
-                "x-proposal-confirmation-method": "EXPLICIT_VERBAL",
-                "x-proposal-confirmation-classification": "CONFIRMED",
+                    "x-proposal-presentation-turn-id": "assistant-turn-10",
+                    "x-proposal-confirmation-turn-id": "customer-turn-11",
+                    "x-proposal-confirmation-method": "EXPLICIT_VERBAL",
+                    "x-proposal-confirmation-source": "MODEL_TOOL_INTENT",
             }
         )
     )
@@ -209,6 +220,7 @@ def test_confirmation_evidence_is_transport_owned_and_explicit() -> None:
     context.require_confirmation()
     assert context.presentation_turn_id == "assistant-turn-10"
     assert context.confirmation_turn_id == "customer-turn-11"
+    assert context.confirmation_source == "MODEL_TOOL_INTENT"
 
 
 @pytest.mark.asyncio
@@ -273,7 +285,7 @@ async def test_commit_projection_returns_authoritative_result_when_ui_event_fail
                 "x-proposal-presentation-turn-id": "assistant-turn-10",
                 "x-proposal-confirmation-turn-id": "customer-turn-11",
                 "x-proposal-confirmation-method": "EXPLICIT_VERBAL",
-                "x-proposal-confirmation-classification": "CONFIRMED",
+                "x-proposal-confirmation-source": "MODEL_TOOL_INTENT",
             }
         )
     )
@@ -319,7 +331,7 @@ async def test_commit_projection_returns_scoped_terminal_disposition(
                 "x-proposal-presentation-turn-id": "assistant-turn-10",
                 "x-proposal-confirmation-turn-id": "customer-turn-11",
                 "x-proposal-confirmation-method": "EXPLICIT_VERBAL",
-                "x-proposal-confirmation-classification": "CONFIRMED",
+                "x-proposal-confirmation-source": "MODEL_TOOL_INTENT",
             }
         )
     )
