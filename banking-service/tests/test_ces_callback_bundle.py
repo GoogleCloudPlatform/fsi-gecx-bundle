@@ -185,7 +185,7 @@ def test_proposal_capture_and_non_generative_presentation_recording():
     assert variables["proposal_presentation_turn_id"] == "turn-1"
 
 
-def test_proposal_presentation_records_completed_turn_without_text_parsing():
+def test_proposal_presentation_records_streaming_output_without_text_parsing():
     presentation = _load("after_model_callbacks/record_presentation.py")
     variables = {
         "proposal_id": "proposal-1",
@@ -193,7 +193,7 @@ def test_proposal_presentation_records_completed_turn_without_text_parsing():
     }
     context = Context(invocation_id="turn-1", variables=variables, user_text=None)
     response = SimpleNamespace(
-        partial=False,
+        partial=True,
         content=SimpleNamespace(parts=[Part("Does that sound right?")]),
     )
 

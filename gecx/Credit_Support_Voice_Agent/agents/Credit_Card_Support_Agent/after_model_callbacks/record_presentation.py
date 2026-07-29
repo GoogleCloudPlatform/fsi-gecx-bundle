@@ -5,12 +5,11 @@ def after_model_callback(callback_context, llm_response):
     """Record the completed assistant turn associated with an active proposal.
 
     The callback intentionally does not inspect generated text. Conversation
-    quality is evaluated outside the production authorization path. The
-    workflow gate needs only protected evidence that the proposal-producing
-    invocation completed an assistant turn before a later customer invocation.
+    quality is evaluated outside the production authorization path. Gemini
+    Live may expose all spoken output through partial responses, so the workflow
+    gate records the protected proposal-associated invocation as soon as it
+    emits output. A commit still requires a different, later CES invocation.
     """
-    if llm_response.partial is True:
-        return None
     if not callback_context.variables.get("proposal_id"):
         return None
     if callback_context.variables.get("proposal_presentation_turn_id"):
