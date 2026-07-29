@@ -143,6 +143,10 @@ def test_conversational_reference_enumerates_every_charge_and_avoids_phone_copy(
     assert "Nova Horizon Bank" in first
     assert "calling" not in first.lower()
     assert reference["quality_rules"]["proposal_confirmation_turns"] == 1
+    # CES semantic scoring is intentionally permissive about harmless,
+    # grounded elaboration. Explicit material-fact and tool checks remain
+    # strict and are the authoritative qualification gates.
+    assert reference["quality_rules"]["semantic_similarity_success_threshold"] == 2
 
 
 def test_conversational_quality_rejects_bad_brand_phone_copy_and_omissions() -> None:

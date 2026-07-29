@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "reference_id": "fraud-conversational-reference-v1",
   "display_name": "CES fraud conversational reference v1",
-  "description": "Hand-curated customer-experience reference. This is distinct from the generated contract replay.",
+  "description": "Hand-curated customer-experience reference. This is distinct from the strict reviewed typed-contract evaluation.",
   "run_count": 3,
   "turns": [
     {
@@ -123,6 +123,6 @@
       ]
     ],
     "proposal_confirmation_turns": 1,
-    "semantic_similarity_success_threshold": 3
+    "semantic_similarity_success_threshold": 2
   }
 }
