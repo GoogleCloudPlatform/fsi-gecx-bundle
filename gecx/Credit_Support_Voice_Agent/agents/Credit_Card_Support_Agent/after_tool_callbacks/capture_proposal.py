@@ -39,6 +39,25 @@ def _clear_current_proposal(callback_context) -> None:
     callback_context.variables["proposal_decision_type"] = ""
 
 
+def _record_completed_proposal_evidence(callback_context) -> None:
+    """Retain non-authorizing audit evidence before clearing live gate state."""
+    callback_context.variables["completed_proposal_action_type"] = str(
+        callback_context.variables.get("proposal_action_type") or ""
+    )
+    callback_context.variables["completed_proposal_confirmation_turn_id"] = str(
+        callback_context.variables.get("proposal_confirmation_turn_id") or ""
+    )
+    callback_context.variables["completed_proposal_confirmation_method"] = str(
+        callback_context.variables.get("proposal_confirmation_method") or ""
+    )
+    callback_context.variables["completed_proposal_confirmation_source"] = str(
+        callback_context.variables.get("proposal_confirmation_source") or ""
+    )
+    callback_context.variables["completed_proposal_decision_type"] = str(
+        callback_context.variables.get("proposal_decision_type") or ""
+    )
+
+
 def after_tool_callback(tool, input, callback_context, tool_response):
     """Capture banking-owned alert state and successful proposal responses."""
     tool_name = str(tool.name or "")
@@ -97,6 +116,7 @@ def after_tool_callback(tool, input, callback_context, tool_response):
     )
     if commit_tool is not None:
         if payload.get("success") is True:
+            _record_completed_proposal_evidence(callback_context)
             _clear_current_proposal(callback_context)
             if commit_tool == "commit_fraud_triage":
                 callback_context.variables["fraud_review_stage"] = "COMMITTED"

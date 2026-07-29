@@ -95,7 +95,12 @@ def _conversation(*, include_end: bool = True) -> dict[str, object]:
         _chunk(
             "Credit Card Support Agent",
             "2026-07-27T03:39:09Z",
-            updatedVariables={"proposal_confirmation_source": "MODEL_TOOL_INTENT"},
+            updatedVariables={
+                "completed_proposal_action_type": "TRIAGE_FRAUD_CASE",
+                "completed_proposal_confirmation_source": "MODEL_TOOL_INTENT",
+                "completed_proposal_confirmation_turn_id": "turn-secret",
+                "completed_proposal_decision_type": "COMMIT",
+            },
         ),
         _chunk(
             "Credit Card Support Agent",
@@ -131,15 +136,27 @@ def _conversation(*, include_end: bool = True) -> dict[str, object]:
         ),
     ]
     if include_end:
-        messages.append(
-            _chunk(
+        messages.extend(
+            [
+                _chunk(
                 "Credit Card Support Agent",
                 "2026-07-27T03:39:13Z",
                 toolCall={
                     "tool": "projects/example/locations/us/apps/app/tools/end_session",
                     "args": {},
                 },
-            )
+                ),
+                _chunk(
+                    "Credit Card Support Agent",
+                    "2026-07-27T03:39:13Z",
+                    toolResponse={
+                        "tool": (
+                            "projects/example/locations/us/apps/app/tools/end_session"
+                        ),
+                        "response": {"text_output": []},
+                    },
+                ),
+            ]
         )
     return {
         "name": "projects/example/locations/us/apps/app/conversations/conversation-1",
@@ -256,7 +273,7 @@ def test_typed_decline_normalizes_without_false_confirmation() -> None:
                 },
             },
         ),
-        messages[-1],
+            *messages[-2:],
     ]
 
     events = normalize_ces_conversation(conversation)

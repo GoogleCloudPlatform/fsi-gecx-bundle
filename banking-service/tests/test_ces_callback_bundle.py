@@ -232,6 +232,17 @@ def test_ces_successful_commit_clears_current_proposal(
     assert variables["proposal_confirmation_method"] == ""
     assert variables["proposal_confirmation_source"] == ""
     assert variables["proposal_decision_type"] == ""
+    assert variables["completed_proposal_action_type"] == action_type
+    assert variables["completed_proposal_confirmation_turn_id"] == "turn-2"
+    assert (
+        variables["completed_proposal_confirmation_method"]
+        == "EXPLICIT_VERBAL"
+    )
+    assert (
+        variables["completed_proposal_confirmation_source"]
+        == "MODEL_TOOL_INTENT"
+    )
+    assert variables["completed_proposal_decision_type"] == "COMMIT"
     if commit_tool == "commit_fraud_triage":
         assert variables["fraud_review_stage"] == "COMMITTED"
 
@@ -419,6 +430,8 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     assert "active_fraud_alert_id" in declared_variables
     assert "fraud_selection_pending" not in declared_variables
     assert "fraud_review_stage" in declared_variables
+    assert "completed_proposal_action_type" in declared_variables
+    assert "completed_proposal_confirmation_source" in declared_variables
     custom_headers = toolset["mcpToolset"]["customHeaders"]
     assert custom_headers["x-banking-session-capability"] == (
         "$context.variables.session_capability"

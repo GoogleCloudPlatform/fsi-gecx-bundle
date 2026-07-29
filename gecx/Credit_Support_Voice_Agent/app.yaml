@@ -122,6 +122,26 @@ variableDeclarations:
   description: Model-selected typed decision for the active proposal.
   schema:
     type: STRING
+- name: completed_proposal_action_type
+  description: Audit-only action type recorded when a proposal commit succeeds.
+  schema:
+    type: STRING
+- name: completed_proposal_confirmation_turn_id
+  description: Audit-only customer turn recorded when a proposal commit succeeds.
+  schema:
+    type: STRING
+- name: completed_proposal_confirmation_method
+  description: Audit-only confirmation method recorded when a proposal commit succeeds.
+  schema:
+    type: STRING
+- name: completed_proposal_confirmation_source
+  description: Audit-only confirmation source recorded when a proposal commit succeeds.
+  schema:
+    type: STRING
+- name: completed_proposal_decision_type
+  description: Audit-only typed decision recorded when a proposal commit succeeds.
+  schema:
+    type: STRING
 - name: closeout_originating_turn_id
   description: CES callback-owned customer turn after which final assistance was offered.
   schema:

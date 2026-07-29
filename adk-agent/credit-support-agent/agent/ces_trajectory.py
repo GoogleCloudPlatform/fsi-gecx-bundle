@@ -137,13 +137,27 @@ def normalize_ces_conversation(
                 current_confirmation = str(
                     updated.get("proposal_confirmation_source") or ""
                 ).upper()
+                completed_confirmation = str(
+                    updated.get("completed_proposal_confirmation_source") or ""
+                ).upper()
+                if completed_confirmation:
+                    active_action_type = str(
+                        updated.get("completed_proposal_action_type") or ""
+                    ) or active_action_type
+                    current_confirmation = completed_confirmation
                 current_decision = str(
-                    updated.get("proposal_decision_type") or ""
+                    updated.get("completed_proposal_decision_type")
+                    or updated.get("proposal_decision_type")
+                    or ""
                 ).upper()
                 confirmation_key = (
                     active_action_type or "",
                     current_confirmation,
-                    str(updated.get("proposal_confirmation_turn_id") or ""),
+                    str(
+                        updated.get("completed_proposal_confirmation_turn_id")
+                        or updated.get("proposal_confirmation_turn_id")
+                        or ""
+                    ),
                 )
                 if (
                     current_confirmation
@@ -193,7 +207,13 @@ def normalize_ces_conversation(
             tool = _tool_name(tool_response)
             outputs = _tool_outputs(tool_response)
             output = outputs[-1] if outputs else {}
-            success = output.get("success") is True
+            # CES' native end_session tool returns an empty response when it
+            # succeeds. A rejected before-tool callback returns a structured
+            # failure payload, so an empty response is authoritative success
+            # only for this native tool.
+            success = output.get("success") is True or (
+                tool == "end_session" and not outputs
+            )
             events.append(
                 {
                     "type": "TOOL_RESULT",
