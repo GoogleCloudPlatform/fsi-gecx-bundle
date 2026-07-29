@@ -5,6 +5,11 @@ _PROPOSAL_ACTIONS = {
     "propose_card_reissue": "REISSUE_CARD",
     "propose_wallet_provisioning": "PROVISION_GOOGLE_WALLET",
 }
+_COMMIT_TOOLS = {
+    "commit_fraud_triage",
+    "commit_card_reissue",
+    "commit_wallet_provisioning",
+}
 
 
 def _payload(tool_response):
@@ -19,6 +24,19 @@ def _payload(tool_response):
         if isinstance(first, dict):
             return first
     return tool_response
+
+
+def _clear_current_proposal(callback_context) -> None:
+    """Clear CES' projection only after banking resolves the proposal."""
+    callback_context.variables["proposal_id"] = ""
+    callback_context.variables["proposal_customer_safe_summary"] = ""
+    callback_context.variables["proposal_action_type"] = ""
+    callback_context.variables["proposal_originating_turn_id"] = ""
+    callback_context.variables["proposal_presentation_turn_id"] = ""
+    callback_context.variables["proposal_confirmation_turn_id"] = ""
+    callback_context.variables["proposal_confirmation_method"] = ""
+    callback_context.variables["proposal_confirmation_source"] = ""
+    callback_context.variables["proposal_decision_type"] = ""
 
 
 def after_tool_callback(tool, input, callback_context, tool_response):
@@ -73,22 +91,20 @@ def after_tool_callback(tool, input, callback_context, tool_response):
                 callback_context.variables["proposal_customer_safe_summary"] = ""
         return None
 
-    if tool_name.endswith("commit_fraud_triage"):
+    commit_tool = next(
+        (suffix for suffix in _COMMIT_TOOLS if tool_name.endswith(suffix)),
+        None,
+    )
+    if commit_tool is not None:
         if payload.get("success") is True:
-            callback_context.variables["fraud_review_stage"] = "COMMITTED"
+            _clear_current_proposal(callback_context)
+            if commit_tool == "commit_fraud_triage":
+                callback_context.variables["fraud_review_stage"] = "COMMITTED"
         return None
 
     if tool_name.endswith("decide_action_proposal"):
         if payload.get("success") is True:
-            callback_context.variables["proposal_id"] = ""
-            callback_context.variables["proposal_customer_safe_summary"] = ""
-            callback_context.variables["proposal_action_type"] = ""
-            callback_context.variables["proposal_originating_turn_id"] = ""
-            callback_context.variables["proposal_presentation_turn_id"] = ""
-            callback_context.variables["proposal_confirmation_turn_id"] = ""
-            callback_context.variables["proposal_confirmation_method"] = ""
-            callback_context.variables["proposal_confirmation_source"] = ""
-            callback_context.variables["proposal_decision_type"] = ""
+            _clear_current_proposal(callback_context)
             if str(payload.get("action_type") or "") == "TRIAGE_FRAUD_CASE":
                 callback_context.variables["fraud_review_stage"] = str(
                     payload.get("status") or ""

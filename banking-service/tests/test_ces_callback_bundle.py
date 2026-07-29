@@ -182,6 +182,102 @@ def test_ces_successful_non_commit_decision_clears_current_proposal():
     assert variables["fraud_review_stage"] == "INVALIDATED"
 
 
+@pytest.mark.parametrize(
+    ("commit_tool", "action_type"),
+    (
+        ("commit_fraud_triage", "TRIAGE_FRAUD_CASE"),
+        ("commit_card_reissue", "REISSUE_CARD"),
+        ("commit_wallet_provisioning", "PROVISION_GOOGLE_WALLET"),
+    ),
+)
+def test_ces_successful_commit_clears_current_proposal(
+    commit_tool, action_type
+):
+    capture = _load("after_tool_callbacks/capture_proposal.py")
+    callback = _load("before_tool_callbacks/enforce_proposal_context.py")
+    variables = {
+        "proposal_id": "proposal-1",
+        "proposal_customer_safe_summary": "Confirm the action.",
+        "proposal_action_type": action_type,
+        "proposal_originating_turn_id": "turn-1",
+        "proposal_presentation_turn_id": "turn-1",
+        "proposal_confirmation_turn_id": "turn-2",
+        "proposal_confirmation_method": "EXPLICIT_VERBAL",
+        "proposal_confirmation_source": "MODEL_TOOL_INTENT",
+        "proposal_decision_type": "COMMIT",
+    }
+
+    capture.after_tool_callback(
+        SimpleNamespace(name=f"banking_service_mcp_toolset.{commit_tool}"),
+        {"proposal_id": "proposal-1"},
+        Context(invocation_id="turn-2", variables=variables),
+        {
+            "text_output": [
+                {
+                    "success": True,
+                    "status": "COMMITTED",
+                    "action_type": action_type,
+                    "proposal_id": "proposal-1",
+                }
+            ]
+        },
+    )
+
+    assert variables["proposal_id"] == ""
+    assert variables["proposal_customer_safe_summary"] == ""
+    assert variables["proposal_action_type"] == ""
+    assert variables["proposal_originating_turn_id"] == ""
+    assert variables["proposal_presentation_turn_id"] == ""
+    assert variables["proposal_confirmation_turn_id"] == ""
+    assert variables["proposal_confirmation_method"] == ""
+    assert variables["proposal_confirmation_source"] == ""
+    assert variables["proposal_decision_type"] == ""
+    if commit_tool == "commit_fraud_triage":
+        assert variables["fraud_review_stage"] == "COMMITTED"
+
+    assert (
+        callback.before_tool_callback(
+            SimpleNamespace(
+                name="banking_service_mcp_toolset.propose_wallet_provisioning"
+            ),
+            {},
+            Context(invocation_id="turn-3", variables=variables),
+        )
+        is None
+    )
+
+
+def test_ces_failed_commit_preserves_current_proposal_for_retry():
+    capture = _load("after_tool_callbacks/capture_proposal.py")
+    variables = {
+        "proposal_id": "proposal-1",
+        "proposal_action_type": "TRIAGE_FRAUD_CASE",
+        "proposal_originating_turn_id": "turn-1",
+        "proposal_presentation_turn_id": "turn-1",
+        "proposal_confirmation_turn_id": "turn-2",
+    }
+
+    capture.after_tool_callback(
+        SimpleNamespace(
+            name="banking_service_mcp_toolset.commit_fraud_triage"
+        ),
+        {"proposal_id": "proposal-1"},
+        Context(invocation_id="turn-2", variables=variables),
+        {
+            "text_output": [
+                {
+                    "success": False,
+                    "error": "TRANSIENT_FAILURE",
+                }
+            ]
+        },
+    )
+
+    assert variables["proposal_id"] == "proposal-1"
+    assert variables["proposal_action_type"] == "TRIAGE_FRAUD_CASE"
+    assert variables["proposal_presentation_turn_id"] == "turn-1"
+
+
 def test_ces_questions_preserve_proposal_and_revision_is_explicit():
     callback = _load("before_tool_callbacks/enforce_proposal_context.py")
     variables = {

@@ -197,6 +197,12 @@ def evaluate_trajectory(
                 f"Expected {expected_failed_count} failed {tool_name} result(s), "
                 f"observed {failed_results[tool_name]}."
             )
+    for tool_name, actual_failed_count in failed_results.items():
+        if tool_name in expected_tool_names:
+            continue
+        failures.append(
+            f"Observed {actual_failed_count} unexpected failed {tool_name} result(s)."
+        )
     for tool_name in expectation.forbidden_tools:
         if calls_by_name[tool_name]:
             failures.append(f"Forbidden tool {tool_name} was called.")

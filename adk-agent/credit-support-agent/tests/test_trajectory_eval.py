@@ -179,6 +179,40 @@ def test_failures_name_dependency_tool_ui_and_terminal_layers() -> None:
     assert result.metrics["tool_failures"] == 1
 
 
+def test_unexpected_failed_tool_result_fails_qualification() -> None:
+    events = golden_events()
+    events[-1:-1] = [
+        {
+            "type": "TOOL_CALL",
+            "tool": "offer_session_closeout",
+            "elapsed_ms": 400,
+        },
+        {
+            "type": "TOOL_RESULT",
+            "tool": "offer_session_closeout",
+            "success": False,
+            "elapsed_ms": 410,
+        },
+    ]
+
+    result = evaluate_trajectory(
+        events,
+        TrajectoryExpectation(
+            required_tools={
+                "get_open_fraud_alert": 1,
+                "triage_fraud_case": 1,
+            },
+            required_ui_events=("FRAUD_ALERT_RESOLVED",),
+        ),
+    )
+
+    assert result.passed is False
+    assert any(
+        "unexpected failed offer_session_closeout" in failure
+        for failure in result.failures
+    )
+
+
 def proposal_confirmation_events(classification: str) -> list[dict]:
     return [
         {"type": "TRANSCRIPT", "author": "agent", "text": "Do you recognize these transactions?", "elapsed_ms": 65},

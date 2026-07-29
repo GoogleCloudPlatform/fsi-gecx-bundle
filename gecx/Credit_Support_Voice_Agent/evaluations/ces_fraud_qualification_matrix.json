@@ -38,6 +38,44 @@
       }
     },
     {
+      "id": "fraud-wallet-closeout",
+      "description": "Fraud remediation, optional Wallet recovery, and closeout each resolve through one typed proposal lifecycle.",
+      "expectation": {
+        "required_tools": {
+          "get_open_fraud_alert": 1,
+          "propose_fraud_triage": 1,
+          "commit_fraud_triage": 1,
+          "offer_session_closeout": 2,
+          "propose_wallet_provisioning": 1,
+          "commit_wallet_provisioning": 1
+        },
+        "forbidden_tools": [
+          "triage_fraud_case",
+          "push_card_to_google_wallet"
+        ],
+        "required_proposal_outcomes": [
+          "PROPOSED",
+          "PRESENTED",
+          "CONFIRMED",
+          "COMMITTED"
+        ],
+        "expected_banking_outcome": "PENDING_SPECIALIST_REVIEW",
+        "require_direct_selection_to_proposal": true,
+        "required_review_stages": [
+          "AWAITING_ACTION_CONFIRMATION",
+          "COMMITTED"
+        ],
+        "require_ready_review_before_proposal": true,
+        "expected_runtime_name": "CES_GEMINI_LIVE",
+        "require_runtime_version": true,
+        "require_catalog_identity": true,
+        "required_contract_version": "fraud-triage.v1",
+        "allowed_terminal_outcomes": [
+          "NORMAL_DISCONNECT"
+        ]
+      }
+    },
+    {
       "id": "fraud-decline",
       "description": "A later customer decline terminates the proposal without a fraud commit.",
       "expectation": {
