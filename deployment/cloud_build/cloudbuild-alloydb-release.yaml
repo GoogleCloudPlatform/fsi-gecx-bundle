@@ -16,7 +16,7 @@ steps:
     args:
       - "-c"
       - |
-        apt-get update -qq && apt-get install -y -qq jq
+        apt-get update -qq && apt-get install -y -qq jq zip
         export PATH="/workspace:$${PATH}"
         /workspace/deployment/scripts/run_alloydb_release.sh
     env:
