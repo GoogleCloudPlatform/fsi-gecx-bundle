@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 from pathlib import Path
 
 
@@ -257,7 +258,36 @@ def test_conversational_golden_includes_wallet_recovery_and_close() -> None:
         if (step.get("expectation") or {}).get("toolCall")
     )
     assert commit_call["args"] == {}
+    proposal_state = next(
+        step["expectation"]["updatedVariables"]
+        for step in golden["turns"][1]["steps"]
+        if "proposal_id"
+        in ((step.get("expectation") or {}).get("updatedVariables") or {})
+    )
+    assert proposal_state["proposal_action_type"] == "TRIAGE_FRAUD_CASE"
+    wallet_state = next(
+        step["expectation"]["updatedVariables"]
+        for step in golden["turns"][3]["steps"]
+        if "proposal_id"
+        in ((step.get("expectation") or {}).get("updatedVariables") or {})
+    )
+    assert wallet_state["proposal_action_type"] == "PROVISION_GOOGLE_WALLET"
+    assert wallet_state["proposal_id"] == "eval-wallet-proposal-1"
+    assert (
+        wallet_state["proposal_presentation_turn_id"]
+        == "eval-turn-wallet-proposal"
+    )
     assert len(golden["turns"]) == 6
+
+
+def test_managed_contract_uses_reviewed_reference_not_a_live_generated_golden() -> None:
+    signature = inspect.signature(qualification._managed_contract_evaluation)
+    source = inspect.getsource(qualification._managed_contract_evaluation)
+
+    assert "reference" in signature.parameters
+    assert "conversation_name" not in signature.parameters
+    assert "generateEvaluation" not in source
+    assert "_conversational_golden(app, reference)" in source
 
 
 def test_ces_commit_callback_binds_opaque_proposal_id_when_model_omits_it() -> None:

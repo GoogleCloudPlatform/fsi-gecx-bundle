@@ -379,41 +379,25 @@ def _managed_contract_evaluation(
     *,
     app: str,
     app_version: str,
-    conversation_name: str,
+    reference: dict[str, Any],
     dataset_id: str,
     display_name: str,
 ) -> dict[str, Any]:
-    generated_operation = api.wait_operation(
-        api.request(
-            "POST",
-            f"{conversation_name}:generateEvaluation",
-            {"source": "LIVE", "evaluationType": "GOLDEN"},
-        )
-    )
-    generated = {
-        key: value
-        for key, value in (generated_operation.get("response") or {}).items()
-        if key != "@type"
-    }
-    if not generated.get("golden"):
-        raise RuntimeError(
-            "CES generated a response without a golden evaluation."
-        )
-    evaluation_id = f"{dataset_id}-replay"
+    evaluation_id = f"{dataset_id}-reviewed"
     evaluation_path = f"{app}/evaluations/{evaluation_id}"
     evaluation_body = {
-        "displayName": f"{display_name} contract replay",
+        "displayName": f"{display_name} reviewed contract",
         "description": (
-            "Generated from a locally qualified live CES trace. This gates tool "
-            "and workflow invariants only; it is not approved conversational copy."
+            "Reviewed synthetic trajectory for typed tool and workflow invariants. "
+            "Live traces are canary evidence and never become golden implicitly."
         ),
         "tags": [
             "bounded-qualification",
-            "contract-replay",
+            "reviewed-contract",
             "fraud",
             "work-item-1",
         ],
-        "golden": _curate_generated_golden(generated["golden"]),
+        "golden": _conversational_golden(app, reference),
         "evaluationMetricsThresholdOverride": {
             "goldenHallucinationMetricBehavior": "DISABLED",
             "goldenEvaluationMetricsThresholds": {
@@ -482,7 +466,7 @@ def _managed_contract_evaluation(
             {
                 "evaluationDataset": dataset["name"],
                 "displayName": (
-                    f"{display_name} contract replay "
+                    f"{display_name} reviewed contract "
                     f"{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
                 ),
                 "appVersion": app_version,
@@ -704,6 +688,7 @@ def _conversational_golden(
                             "updatedVariables": {
                                 "customer_turn_id": "eval-turn-proposal",
                                 "proposal_originating_turn_id": "eval-turn-proposal",
+                                "proposal_action_type": "TRIAGE_FRAUD_CASE",
                                 "proposal_id": "eval-proposal-1",
                                 "proposal_customer_safe_summary": proposal_summary,
                                 "proposal_presentation_turn_id": "",
@@ -782,6 +767,32 @@ def _conversational_golden(
                         "propose_wallet_provisioning",
                         "eval-wallet-proposal",
                     ),
+                    {
+                        "expectation": {
+                            "updatedVariables": {
+                                "customer_turn_id": "eval-turn-wallet-proposal",
+                                "proposal_originating_turn_id": (
+                                    "eval-turn-wallet-proposal"
+                                ),
+                                "proposal_action_type": (
+                                    "PROVISION_GOOGLE_WALLET"
+                                ),
+                                "proposal_id": "eval-wallet-proposal-1",
+                                "proposal_customer_safe_summary": (
+                                    _managed_fake_output(
+                                        "propose_wallet_provisioning"
+                                    )["customer_safe_summary"]
+                                ),
+                                "proposal_presentation_turn_id": (
+                                    "eval-turn-wallet-proposal"
+                                ),
+                                "proposal_confirmation_turn_id": "",
+                                "proposal_confirmation_method": "",
+                                "proposal_confirmation_source": "",
+                                "closeout_originating_turn_id": "",
+                            }
+                        }
+                    },
                     _agent_response_expectation(str(recovery["expected_agent"])),
                 ]
             },
@@ -804,6 +815,15 @@ def _conversational_golden(
                     _tool_response_expectation(
                         app, "offer_session_closeout", "eval-closeout-offer-2"
                     ),
+                    {
+                        "expectation": {
+                            "updatedVariables": {
+                                "closeout_originating_turn_id": (
+                                    "eval-closeout-offer-2"
+                                )
+                            }
+                        }
+                    },
                     _agent_response_expectation(str(wallet["expected_agent"])),
                 ]
             },
@@ -1162,16 +1182,16 @@ def main() -> int:
         app_version = args.app_version or conversation.get("appVersion")
         if not app_version:
             raise ValueError("--app-version is required when the conversation omits it.")
+        conversational_reference = json.loads(
+            args.conversational_reference.read_text()
+        )
         report["managed_evaluation"] = _managed_contract_evaluation(
             api,
             app=args.app,
             app_version=app_version,
-            conversation_name=conversation_name,
+            reference=conversational_reference,
             dataset_id=args.dataset_id,
             display_name="Bounded CES fraud qualification work item 1",
-        )
-        conversational_reference = json.loads(
-            args.conversational_reference.read_text()
         )
         report["conversational_evaluation"] = (
             _managed_conversational_evaluation(
