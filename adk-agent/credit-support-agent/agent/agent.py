@@ -75,6 +75,10 @@ PROPOSAL_DECISION_TOOLS = {
     *COMMIT_ACTION_BY_TOOL,
     "decide_action_proposal",
 }
+AUTHORIZATION_EXECUTION_TOOLS = {
+    *COMMIT_ACTION_BY_TOOL,
+    "triage_customer_reported_fraud",
+}
 
 LOCATION = os.getenv("LOCATION", "us-central1")
 project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
@@ -660,6 +664,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
         "PREPARED",
         "PENDING",
         "CONFIRMED",
+        "EXECUTING",
         "RECOVERY_REQUIRED",
     }:
         if tool_name in PROPOSAL_ACTION_BY_TOOL:
@@ -917,7 +922,10 @@ async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> N
     )
     playbook = dict(tool_context.state.get("fraud_playbook") or {})
     authorization = playbook.get("workflow_authorization") or {}
-    if authorization.get("status") == "EXECUTING":
+    if (
+        tool_name in AUTHORIZATION_EXECUTION_TOOLS
+        and authorization.get("status") == "EXECUTING"
+    ):
         playbook["workflow_authorization"] = mark_authorization_recovery_required(
             authorization,
             reason=f"TOOL_ERROR:{tool_name}",
@@ -1272,7 +1280,10 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
     else:
         playbook = dict(tool_context.state.get("fraud_playbook") or {})
         authorization = playbook.get("workflow_authorization") or {}
-        if authorization.get("status") == "EXECUTING":
+        if (
+            tool_name in AUTHORIZATION_EXECUTION_TOOLS
+            and authorization.get("status") == "EXECUTING"
+        ):
             playbook["workflow_authorization"] = mark_authorization_recovery_required(
                 authorization,
                 reason=f"TOOL_RESULT_NOT_SUCCESSFUL:{tool_name}",

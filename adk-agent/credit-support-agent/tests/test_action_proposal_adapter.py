@@ -336,6 +336,14 @@ async def test_questions_preserve_pending_proposal_and_revision_is_explicit() ->
     )
     assert closeout["status"] == "PROPOSAL_DECISION_REQUIRED"
 
+    context.state["fraud_playbook"]["workflow_authorization"]["status"] = "EXECUTING"
+    replacement = await agent.before_tool_callback(
+        SimpleNamespace(name="propose_fraud_triage"),
+        {},
+        context,
+    )
+    assert replacement["status"] == "PROPOSAL_DECISION_REQUIRED"
+
     context.state["fraud_playbook"]["workflow_authorization"]["status"] = (
         "RECOVERY_REQUIRED"
     )
@@ -348,3 +356,43 @@ async def test_questions_preserve_pending_proposal_and_revision_is_explicit() ->
         context,
     )
     assert decision["status"] == "COMMIT_RECOVERY_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_unrelated_tool_failure_cannot_change_executing_proposal(
+    monkeypatch,
+) -> None:
+    async def account_details():
+        return {}
+
+    monkeypatch.setattr(agent, "fetch_updated_account_details", account_details)
+    authorization = create_workflow_authorization(
+        action=TRIAGE_FRAUD_CASE,
+        payload={
+            "fraud_alert_id": "fraud-123",
+            "disputed_authorization_ids": ["auth-1"],
+            "disputed_transaction_ids": [],
+            "issue_replacement": True,
+            "escalate": False,
+        },
+        session_id="session-1",
+    )
+    authorization["status"] = "EXECUTING"
+    context = SimpleNamespace(
+        state={
+            "fraud_playbook": {"workflow_authorization": authorization},
+            "_voice_tool_started_at": {},
+        }
+    )
+
+    await agent.after_tool_callback(
+        SimpleNamespace(name="get_transaction_history"),
+        {},
+        context,
+        {"isError": True, "content": [{"type": "text", "text": "Read failed."}]},
+    )
+
+    assert (
+        context.state["fraud_playbook"]["workflow_authorization"]["status"]
+        == "EXECUTING"
+    )

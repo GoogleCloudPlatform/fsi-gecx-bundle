@@ -104,7 +104,7 @@ uv run python scripts/voice_canary.py --project evo-genai-workspace \
   --scenario fraud-expired --session-id <session-id> --skip-readiness
 uv run python scripts/voice_canary.py --project evo-genai-workspace \
   --scenario fraud-tool-failure --session-id <session-id> --skip-readiness
-python scripts/voice_canary.py --project "$PROJECT_ID" --region "$REGION" \
+uv run python scripts/voice_canary.py --project evo-genai-workspace \
   --scenario fraud-tool-retry --session-id <session-id> --skip-readiness
 ```
 

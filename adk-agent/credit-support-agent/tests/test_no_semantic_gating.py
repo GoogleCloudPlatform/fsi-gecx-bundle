@@ -8,6 +8,11 @@ GATING_PATHS = (
     / "adk-agent"
     / "credit-support-agent"
     / "agent"
+    / "agent.py",
+    REPO_ROOT
+    / "adk-agent"
+    / "credit-support-agent"
+    / "agent"
     / "workflow_authorization.py",
     REPO_ROOT
     / "adk-agent"
@@ -38,6 +43,14 @@ GATING_PATHS = (
     / "Credit_Card_Support_Agent"
     / "after_tool_callbacks"
     / "capture_proposal.py",
+    REPO_ROOT
+    / "banking-service"
+    / "services"
+    / "action_proposal_context.py",
+    REPO_ROOT
+    / "banking-service"
+    / "services"
+    / "action_proposals.py",
 )
 
 
