@@ -12,6 +12,8 @@
     <beam.version>2.74.0</beam.version>
     <hadoop.version>3.3.6</hadoop.version>
     <jackson.version>2.21.5</jackson.version>
+    <!-- Since Jackson 2.20, annotations uses major.minor versions without a patch suffix. -->
+    <jackson.annotations.version>2.21</jackson.annotations.version>
     <junit.version>5.12.2</junit.version>
   </properties>
   <dependencies>
@@ -70,7 +72,7 @@
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-annotations</artifactId>
-      <version>${jackson.version}</version>
+      <version>${jackson.annotations.version}</version>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
