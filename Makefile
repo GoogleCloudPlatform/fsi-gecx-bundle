@@ -205,6 +205,13 @@ run-backend-pg: ## Run the FastAPI banking service locally using the persistent 
 	@echo "Starting banking-service with local PostgreSQL and Redis..."
 	cd banking-service && FULL_RESET_ENABLED=true DATABASE_IAM_SUPPORT_USERS=$(GCP_ACCOUNT) FULL_RESET_OPERATOR_EMAILS=$(GCP_ACCOUNT) DATABASE_URL="postgresql+psycopg2://$(LOCAL_DB_USER):$(LOCAL_DB_PASSWORD)@localhost:$(LOCAL_DB_PORT)/$(LOCAL_DB_NAME)" REDIS_HOST=localhost REDIS_PORT=$(LOCAL_REDIS_PORT) uv run uvicorn main:app --host "0.0.0.0" --port 8080 --reload
 
+.PHONY: run-backend-pg-fresh
+run-backend-pg-fresh: local-db-down ## Wipe local PG volume, re-seed, and run backend
+	@echo "Wiping persistent local PostgreSQL volume..."
+	@$(DOCKER) volume rm fsi-gecx-local-db-data >/dev/null 2>&1 || true
+	@$(MAKE) local-db-seed
+	@$(MAKE) run-backend-pg
+
 .PHONY: run-backend-iam
 run-backend-iam: ## Run the FastAPI banking service locally
 	@echo "Starting banking-service..."
