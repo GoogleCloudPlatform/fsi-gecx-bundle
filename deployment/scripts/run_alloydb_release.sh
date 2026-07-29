@@ -23,9 +23,8 @@ resolve_image() {
     printf '%s@%s' "${repository}" "${digest}"
     return
   fi
-  current="$(gcloud run services describe "${component}" --project "${PROJECT_ID}" --region "${REGION}" --format='value(spec.template.spec.containers[0].image)' 2>/dev/null || true)"
-  [[ "${current}" =~ @sha256:[a-f0-9]{64}$ ]] || { echo "No immutable image available for ${component}" >&2; exit 1; }
-  printf '%s' "${current}"
+  echo "No image tagged with exact release commit for ${component}: ${RELEASE_COMMIT}" >&2
+  exit 1
 }
 
 if [[ "${RELEASE_MODE}" == "promote" ]]; then

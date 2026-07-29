@@ -85,3 +85,17 @@ def test_validate_manifest_requires_every_runtime_and_matching_source(
     errors = metadata.validate_manifest(manifest, expected, "abc123")
     assert "missing immutable image for banking-ui" in errors
     assert any(error.startswith("CES config SHA mismatch") for error in errors)
+
+
+def test_release_requires_exact_commit_images_and_ui_persists_its_tag() -> None:
+    root = Path(__file__).resolve().parents[2]
+    release = (root / "deployment/scripts/run_alloydb_release.sh").read_text()
+    ui_build = (root / "banking-ui/cloudbuild-publish-deploy.yaml").read_text()
+
+    assert "No image tagged with exact release commit" in release
+    assert "gcloud run services describe" not in release.split(
+        "if [[ \"${RELEASE_MODE}\"", 1
+    )[0]
+    assert "printf '%s' \"$$COMMIT_SHA\" > /workspace/image_tag.txt" in ui_build
+    assert ui_build.count("IMAGE_TAG=$$(cat /workspace/image_tag.txt)") == 2
+    assert "banking-ui:$${COMMIT_SHA:-local}" not in ui_build
