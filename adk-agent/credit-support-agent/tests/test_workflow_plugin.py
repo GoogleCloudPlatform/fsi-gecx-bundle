@@ -132,9 +132,10 @@ async def test_customer_transcript_records_turn_identity_but_not_authorization()
 
 
 @pytest.mark.asyncio
-async def test_interruption_invalidates_uncommitted_proposal() -> None:
+async def test_interruption_does_not_change_uncommitted_proposal() -> None:
+    playbook = prepared_playbook()
     session = SimpleNamespace(
-        state={"session_id": "session-1", "fraud_playbook": prepared_playbook()}
+        state={"session_id": "session-1", "fraud_playbook": playbook}
     )
     context = SimpleNamespace(session=session)
     plugin = FraudWorkflowStatePlugin()
@@ -147,11 +148,9 @@ async def test_interruption_invalidates_uncommitted_proposal() -> None:
 
     await plugin.on_event_callback(invocation_context=context, event=event)
 
-    authorization = event.actions.state_delta["fraud_playbook"][
-        "workflow_authorization"
-    ]
-    assert authorization["status"] == "INVALIDATED"
-    assert authorization["invalidation_reason"] == "MODEL_RESPONSE_INTERRUPTED"
+    assert "fraud_playbook" not in event.actions.state_delta
+    assert playbook["workflow_authorization"]["status"] == "PREPARED"
+    assert playbook["workflow_authorization"]["invalidation_reason"] is None
 
 
 @pytest.mark.asyncio

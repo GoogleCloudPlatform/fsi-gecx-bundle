@@ -134,6 +134,38 @@
           "NORMAL_DISCONNECT"
         ]
       }
+    },
+    {
+      "id": "fraud-tool-retry",
+      "description": "A transient commit failure preserves the immutable proposal for one idempotent retry and one authoritative success.",
+      "expectation": {
+        "required_tools": {
+          "get_open_fraud_alert": 1,
+          "propose_fraud_triage": 1,
+          "commit_fraud_triage": 1
+        },
+        "required_failed_tools": {
+          "commit_fraud_triage": 1
+        },
+        "forbidden_tools": [
+          "triage_fraud_case"
+        ],
+        "required_proposal_outcomes": [
+          "PROPOSED",
+          "PRESENTED",
+          "CONFIRMED",
+          "TOOL_ERROR",
+          "COMMITTED"
+        ],
+        "expected_banking_outcome": "PENDING_SPECIALIST_REVIEW",
+        "expected_runtime_name": "CES_GEMINI_LIVE",
+        "require_runtime_version": true,
+        "require_catalog_identity": true,
+        "required_contract_version": "fraud-triage.v1",
+        "allowed_terminal_outcomes": [
+          "NORMAL_DISCONNECT"
+        ]
+      }
     }
   ]
 }

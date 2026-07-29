@@ -175,7 +175,7 @@ Bidirectional asynchronous loop libraries (like `asyncio` and `livekit-rtc`) can
 
 ### Runtime-neutral trajectory evaluation
 
-The agent emits bounded proposal, tool, UI, interruption, and terminal telemetry keyed by stable hashed references. `scripts/voice_canary.py` converts those deployed logs into the shared trajectory event vocabulary and applies machine-checkable scenarios for success, decline, ambiguity, interruption, reset invalidation, expiry, and tool failure.
+The agent emits bounded proposal, tool, UI, interruption, and terminal telemetry keyed by stable hashed references. `scripts/voice_canary.py` converts those deployed logs into the shared trajectory event vocabulary and applies machine-checkable scenarios for success, decline, questions and uncertainty, observation-only interruption, reset invalidation, expiry, terminal tool failure, and idempotent commit recovery.
 
 Release qualification checks ordered outcomes rather than only individual tool success. A normal proposal path must contain `PROPOSED → PRESENTED → CONFIRMED → COMMITTED`, must not call the direct compatibility tool, and must not claim spoken success before the structured commit result. A direct-path baseline can be compared with the proposal path for equivalent banking and terminal outcomes.
 

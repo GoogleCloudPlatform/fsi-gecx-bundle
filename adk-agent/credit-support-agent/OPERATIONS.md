@@ -95,7 +95,7 @@ the matching scenario:
 uv run python scripts/voice_canary.py --project evo-genai-workspace \
   --scenario fraud-decline --session-id <session-id> --skip-readiness
 uv run python scripts/voice_canary.py --project evo-genai-workspace \
-  --scenario fraud-ambiguous --session-id <session-id> --skip-readiness
+  --scenario fraud-question --session-id <session-id> --skip-readiness
 uv run python scripts/voice_canary.py --project evo-genai-workspace \
   --scenario fraud-interrupted --session-id <session-id> --skip-readiness
 uv run python scripts/voice_canary.py --project evo-genai-workspace \
@@ -104,6 +104,8 @@ uv run python scripts/voice_canary.py --project evo-genai-workspace \
   --scenario fraud-expired --session-id <session-id> --skip-readiness
 uv run python scripts/voice_canary.py --project evo-genai-workspace \
   --scenario fraud-tool-failure --session-id <session-id> --skip-readiness
+python scripts/voice_canary.py --project "$PROJECT_ID" --region "$REGION" \
+  --scenario fraud-tool-retry --session-id <session-id> --skip-readiness
 ```
 
 The normalized proposal event records runtime and build version, hashed support

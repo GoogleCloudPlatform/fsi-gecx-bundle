@@ -155,7 +155,7 @@ async def test_transaction_history_result_builds_trusted_selection_index(
 
 
 @pytest.mark.asyncio
-async def test_wallet_commit_error_releases_consumed_authorization() -> None:
+async def test_wallet_commit_error_preserves_idempotent_retry_authorization() -> None:
     authorization = create_workflow_authorization(
         action=PROVISION_GOOGLE_WALLET,
         payload={"wallet_provider": "GOOGLE_WALLET"},
@@ -190,7 +190,7 @@ async def test_wallet_commit_error_releases_consumed_authorization() -> None:
     )
 
     recovered = state["fraud_playbook"]["workflow_authorization"]
-    assert recovered["status"] == "INVALIDATED"
-    assert recovered["invalidation_reason"] == (
+    assert recovered["status"] == "RECOVERY_REQUIRED"
+    assert recovered["recovery_reason"] == (
         "TOOL_RESULT_NOT_SUCCESSFUL:commit_wallet_provisioning"
     )

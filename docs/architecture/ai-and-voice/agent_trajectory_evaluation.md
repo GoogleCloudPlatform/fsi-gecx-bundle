@@ -33,7 +33,7 @@ The normalizers deliberately exclude customer identifiers, tool arguments, raw t
 | `GUIDANCE_SNAPSHOT` | The session recorded the Knowledge Catalog source, topic set, snapshot, and content version used for guidance. |
 | `FRAUD_REVIEW` | The transaction-selection state advanced, including whether the review was complete enough to propose. |
 | `TOOL_CALL` / `TOOL_RESULT` | A named tool was attempted and produced a successful or failed structured result. |
-| `ACTION_PROPOSAL` | The protected action advanced through `PROPOSED`, `PRESENTED`, `CONFIRMED`, `DECLINED`, `UNCLEAR`, `EXPIRED`, `INVALIDATED`, `COMMITTED`, or `TOOL_ERROR`. |
+| `ACTION_PROPOSAL` | The protected action advanced through `PROPOSED`, `PRESENTED`, `CONFIRMED`, `DECLINED`, `EXPIRED`, `INVALIDATED`, `COMMITTED`, or `TOOL_ERROR`. Questions and uncertainty deliberately emit no decision outcome and leave the proposal pending. |
 | `SUCCESS_CLAIM` | The agent claimed a consequential action succeeded; it must follow the corresponding successful tool result. |
 | `UI_EVENT` | A structured data-channel event was emitted for the banking UI. |
 | `INTERRUPTION` | The customer interrupted an agent turn. |
@@ -52,7 +52,8 @@ The ADK scenarios cover:
 - proposal and compatibility-path success
 - Google Wallet acceptance, decline, and ambiguity
 - proposal decline and ambiguity
-- interruption, reset invalidation, and expiry
+- observation-only interruption, reset invalidation, and expiry
+- transient tool failure followed by an idempotent retry of the same proposal
 - tool failure
 - customer-reported fraud
 

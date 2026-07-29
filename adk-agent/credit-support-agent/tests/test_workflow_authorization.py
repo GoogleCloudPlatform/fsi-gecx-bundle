@@ -7,6 +7,7 @@ from agent.workflow_authorization import (
     mark_authorization_completed,
     mark_authorization_executing,
     mark_authorization_presented,
+    mark_authorization_recovery_required,
     validate_workflow_authorization,
 )
 
@@ -234,3 +235,30 @@ def test_authorization_is_consumed_and_completed_once() -> None:
         )
         == "Customer authorization for TRIAGE_FRAUD_CASE is not confirmed."
     )
+
+
+def test_transient_execution_failure_preserves_idempotent_retry_authority() -> None:
+    authorization = confirmed_authorization()
+    executing = mark_authorization_executing(authorization, now_epoch_s=1003.0)
+    recovery = mark_authorization_recovery_required(
+        executing,
+        reason="TOOL_ERROR:commit_fraud_triage",
+    )
+
+    assert recovery["status"] == "RECOVERY_REQUIRED"
+    assert recovery["recovery_reason"] == "TOOL_ERROR:commit_fraud_triage"
+    assert (
+        validate_workflow_authorization(
+            recovery,
+            action=TRIAGE_FRAUD_CASE,
+            payload=triage_payload(),
+            session_id="session-1",
+            now_epoch_s=1004.0,
+        )
+        is None
+    )
+
+    retry = mark_authorization_executing(recovery, now_epoch_s=1004.0)
+    assert retry["status"] == "EXECUTING"
+    assert retry["recovery_attempt_count"] == 1
+    assert retry["recovery_reason"] is None

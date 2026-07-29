@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from google.adk.plugins import BasePlugin
 
-from agent.workflow_authorization import (
-    invalidate_workflow_authorization,
-    mark_authorization_presented,
-)
+from agent.workflow_authorization import mark_authorization_presented
 from agent.telemetry import record_action_proposal_event
 
 
@@ -49,21 +46,6 @@ class FraudWorkflowStatePlugin(BasePlugin):
         updated = dict(playbook)
 
         event_id = event.id or f"event-at-{event.timestamp}"
-        if getattr(event, "interrupted", False):
-            authorization = updated.get("workflow_authorization")
-            if authorization:
-                updated["workflow_authorization"] = invalidate_workflow_authorization(
-                    authorization,
-                    reason="MODEL_RESPONSE_INTERRUPTED",
-                    event_id=event_id,
-                )
-                _record_proposal_transition(
-                    invocation_context.session.state,
-                    updated["workflow_authorization"],
-                    "INVALIDATED",
-                    "MODEL_RESPONSE_INTERRUPTED",
-                )
-
         input_transcription = getattr(event, "input_transcription", None)
         customer_text = None
         if input_transcription and input_transcription.finished:

@@ -4,7 +4,7 @@ The architectural model shared with the ADK runtime is documented in
 [Agent Trajectory Evaluation Architecture](../../../docs/architecture/ai-and-voice/agent_trajectory_evaluation.md).
 
 `ces_fraud_qualification_matrix.json` defines the bounded CES fraud contract,
-question, decline, and revise trajectories. The runner:
+question, decline, revise, and idempotent-retry trajectories. The runner:
 
 1. reads a named CES live conversation through the CES API
 2. normalizes it into the shared ADK/CES trajectory vocabulary

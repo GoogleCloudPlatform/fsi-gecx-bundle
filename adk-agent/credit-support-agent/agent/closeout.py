@@ -45,6 +45,7 @@ def closeout_block_reason(
         "PENDING",
         "CONFIRMED",
         "EXECUTING",
+        "RECOVERY_REQUIRED",
     }:
         return f"WORKFLOW_AUTHORIZATION_{authorization_status}"
 

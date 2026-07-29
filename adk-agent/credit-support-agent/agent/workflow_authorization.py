@@ -84,6 +84,8 @@ def create_workflow_authorization(
         "expires_at_epoch_s": now + max(1, ttl_seconds),
         "consumed_at_epoch_s": None,
         "completed_at_epoch_s": None,
+        "recovery_reason": None,
+        "recovery_attempt_count": 0,
         "invalidation_reason": None,
         "invalidation_event_id": None,
     }
@@ -192,7 +194,7 @@ def validate_workflow_authorization(
     authorization = authorization or {}
     if authorization.get("action") != action:
         return f"Prepare and confirm authorization for {action} before executing it."
-    if authorization.get("status") != "CONFIRMED":
+    if authorization.get("status") not in {"CONFIRMED", "RECOVERY_REQUIRED"}:
         return f"Customer authorization for {action} is not confirmed."
     if authorization.get("session_id") != session_id:
         return "Customer authorization belongs to a different support session."
@@ -218,8 +220,29 @@ def mark_authorization_executing(
     now_epoch_s: float | None = None,
 ) -> dict:
     updated = dict(authorization)
+    if updated.get("status") not in {"CONFIRMED", "RECOVERY_REQUIRED"}:
+        return updated
+    if updated.get("status") == "RECOVERY_REQUIRED":
+        updated["recovery_attempt_count"] = (
+            int(updated.get("recovery_attempt_count") or 0) + 1
+        )
     updated["status"] = "EXECUTING"
     updated["consumed_at_epoch_s"] = time.time() if now_epoch_s is None else now_epoch_s
+    updated["recovery_reason"] = None
+    return updated
+
+
+def mark_authorization_recovery_required(
+    authorization: dict | None,
+    *,
+    reason: str,
+) -> dict:
+    """Retain immutable confirmation for an idempotent commit retry."""
+    updated = dict(authorization or {})
+    if updated.get("status") != "EXECUTING":
+        return updated
+    updated["status"] = "RECOVERY_REQUIRED"
+    updated["recovery_reason"] = reason
     return updated
 
 

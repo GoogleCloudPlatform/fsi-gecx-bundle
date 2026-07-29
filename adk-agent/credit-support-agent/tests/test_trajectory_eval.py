@@ -339,35 +339,67 @@ def test_redundant_selection_confirmation_fails_one_gate_trajectory() -> None:
     assert any("intervening conversational turn" in failure for failure in result.failures)
 
 
-@pytest.mark.parametrize("classification", ["DECLINED", "UNCLEAR"])
-def test_non_authorizing_transcript_never_commits(classification: str) -> None:
+def test_typed_decline_never_commits() -> None:
     result = evaluate_trajectory(
         proposal_trajectory(
-            classification,
+            "DECLINED",
             commit_success=None,
             terminal_proposal_outcome=None,
         ),
         TrajectoryExpectation(
             required_tools={"get_open_fraud_alert": 1},
             forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
-            required_proposal_outcomes=("PROPOSED", "PRESENTED", classification),
+            required_proposal_outcomes=("PROPOSED", "PRESENTED", "DECLINED"),
         ),
     )
 
     assert result.passed is True
 
 
-def test_interruption_invalidates_without_commit() -> None:
-    events = proposal_trajectory(
-        "INVALIDATED", commit_success=None, terminal_proposal_outcome=None
+def pending_proposal_trajectory() -> list[dict]:
+    events = golden_events()[:4] + proposal_confirmation_events("CONFIRMED")[:-2]
+    events.extend(
+        [
+            {
+                "type": "TRANSCRIPT",
+                "author": "customer",
+                "text": "A question about the proposal.",
+                "elapsed_ms": 110,
+            },
+            {
+                "type": "SESSION_ENDED",
+                "outcome": "NORMAL_DISCONNECT",
+                "elapsed_ms": 200,
+            },
+        ]
     )
+    return events
+
+
+def test_question_leaves_proposal_pending_without_commit() -> None:
+    result = evaluate_trajectory(
+        pending_proposal_trajectory(),
+        TrajectoryExpectation(
+            required_tools={"get_open_fraud_alert": 1},
+            forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
+            required_proposal_outcomes=("PROPOSED", "PRESENTED"),
+            forbidden_proposal_outcomes=("CONFIRMED", "COMMITTED", "INVALIDATED"),
+        ),
+    )
+
+    assert result.passed is True
+
+
+def test_interruption_is_observed_without_business_invalidation() -> None:
+    events = pending_proposal_trajectory()
     events.insert(-1, {"type": "INTERRUPTION", "elapsed_ms": 125})
     result = evaluate_trajectory(
         events,
         TrajectoryExpectation(
             required_tools={"get_open_fraud_alert": 1},
             forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
-            required_proposal_outcomes=("PROPOSED", "INVALIDATED"),
+            required_proposal_outcomes=("PROPOSED", "PRESENTED"),
+            forbidden_proposal_outcomes=("CONFIRMED", "COMMITTED", "INVALIDATED"),
         ),
     )
 
@@ -446,6 +478,68 @@ def test_tool_failure_is_a_bounded_expected_trajectory() -> None:
     )
 
     assert result.passed is True
+    assert result.metrics["tool_failures"] == 1
+
+
+def test_failed_commit_can_be_retried_idempotently_once() -> None:
+    events = proposal_trajectory(
+        commit_success=False,
+        terminal_proposal_outcome="TOOL_ERROR",
+    )[:-1]
+    events.extend(
+        [
+            {
+                "type": "TOOL_CALL",
+                "tool": "commit_fraud_triage",
+                "elapsed_ms": 180,
+            },
+            {
+                "type": "TOOL_RESULT",
+                "tool": "commit_fraud_triage",
+                "success": True,
+                "elapsed_ms": 190,
+            },
+            {
+                "type": "ACTION_PROPOSAL",
+                "action_type": "TRIAGE_FRAUD_CASE",
+                "outcome": "COMMITTED",
+                "banking_outcome": "CONFIRMED_FRAUD_REMEDIATED",
+                "proposal_ref": "proposal_1",
+                "elapsed_ms": 195,
+            },
+            {
+                "type": "UI_EVENT",
+                "event": "FRAUD_ALERT_RESOLVED",
+                "elapsed_ms": 197,
+            },
+            {
+                "type": "SESSION_ENDED",
+                "outcome": "NORMAL_DISCONNECT",
+                "elapsed_ms": 200,
+            },
+        ]
+    )
+    result = evaluate_trajectory(
+        events,
+        TrajectoryExpectation(
+            required_tools={
+                "get_open_fraud_alert": 1,
+                "commit_fraud_triage": 1,
+            },
+            required_failed_tools={"commit_fraud_triage": 1},
+            required_proposal_outcomes=(
+                "PROPOSED",
+                "PRESENTED",
+                "CONFIRMED",
+                "TOOL_ERROR",
+                "COMMITTED",
+            ),
+            required_ui_events=("FRAUD_ALERT_RESOLVED",),
+        ),
+    )
+
+    assert result.passed is True
+    assert result.metrics["tool_calls"]["commit_fraud_triage"] == 2
     assert result.metrics["tool_failures"] == 1
 
 

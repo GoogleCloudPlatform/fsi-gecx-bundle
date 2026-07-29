@@ -335,3 +335,16 @@ async def test_questions_preserve_pending_proposal_and_revision_is_explicit() ->
         context,
     )
     assert closeout["status"] == "PROPOSAL_DECISION_REQUIRED"
+
+    context.state["fraud_playbook"]["workflow_authorization"]["status"] = (
+        "RECOVERY_REQUIRED"
+    )
+    decision = await agent.before_tool_callback(
+        SimpleNamespace(name="decide_action_proposal"),
+        {
+            "proposal_id": "11111111-1111-4111-8111-111111111111",
+            "decision": "CANCEL",
+        },
+        context,
+    )
+    assert decision["status"] == "COMMIT_RECOVERY_REQUIRED"

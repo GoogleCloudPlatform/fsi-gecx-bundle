@@ -57,6 +57,7 @@ from agent.workflow_authorization import (
     invalidate_workflow_authorization,
     mark_authorization_completed,
     mark_authorization_executing,
+    mark_authorization_recovery_required,
     validate_workflow_authorization,
 )
 
@@ -552,7 +553,13 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
     if (
         tool_name == "offer_session_closeout"
         and (fraud_playbook.get("workflow_authorization") or {}).get("status")
-        in {"PREPARED", "PENDING", "CONFIRMED", "EXECUTING"}
+        in {
+            "PREPARED",
+            "PENDING",
+            "CONFIRMED",
+            "EXECUTING",
+            "RECOVERY_REQUIRED",
+        }
     ):
         return {
             "success": False,
@@ -649,7 +656,12 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
                 "model_instruction": "Do not claim success or retry this tool in the current session.",
             }
     active_authorization = fraud_playbook.get("workflow_authorization") or {}
-    if active_authorization.get("status") in {"PREPARED", "PENDING", "CONFIRMED"}:
+    if active_authorization.get("status") in {
+        "PREPARED",
+        "PENDING",
+        "CONFIRMED",
+        "RECOVERY_REQUIRED",
+    }:
         if tool_name in PROPOSAL_ACTION_BY_TOOL:
             return {
                 "success": False,
@@ -680,6 +692,20 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
     authorization_to_execute = None
     if authorization_action:
         authorization = fraud_playbook.get("workflow_authorization") or {}
+        if (
+            tool_name == "decide_action_proposal"
+            and authorization.get("status") == "RECOVERY_REQUIRED"
+        ):
+            return {
+                "success": False,
+                "isError": False,
+                "status": "COMMIT_RECOVERY_REQUIRED",
+                "action_completed": False,
+                "message": (
+                    "The prior commit result is unresolved. Retry the same commit "
+                    "or transfer to a specialist before another proposal decision."
+                ),
+            }
         validation_payload = (
             authorization.get("payload")
             if tool_name in PROPOSAL_DECISION_TOOLS
@@ -892,7 +918,7 @@ async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> N
     playbook = dict(tool_context.state.get("fraud_playbook") or {})
     authorization = playbook.get("workflow_authorization") or {}
     if authorization.get("status") == "EXECUTING":
-        playbook["workflow_authorization"] = invalidate_workflow_authorization(
+        playbook["workflow_authorization"] = mark_authorization_recovery_required(
             authorization,
             reason=f"TOOL_ERROR:{tool_name}",
         )
@@ -1247,7 +1273,7 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
         playbook = dict(tool_context.state.get("fraud_playbook") or {})
         authorization = playbook.get("workflow_authorization") or {}
         if authorization.get("status") == "EXECUTING":
-            playbook["workflow_authorization"] = invalidate_workflow_authorization(
+            playbook["workflow_authorization"] = mark_authorization_recovery_required(
                 authorization,
                 reason=f"TOOL_RESULT_NOT_SUCCESSFUL:{tool_name}",
             )

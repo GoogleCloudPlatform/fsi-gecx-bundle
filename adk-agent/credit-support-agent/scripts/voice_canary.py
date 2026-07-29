@@ -64,15 +64,17 @@ SCENARIOS = {
         forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
         required_proposal_outcomes=("PROPOSED", "PRESENTED", "DECLINED"),
     ),
-    "fraud-ambiguous": TrajectoryExpectation(
+    "fraud-question": TrajectoryExpectation(
         required_tools={"get_open_fraud_alert": 1},
         forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
-        required_proposal_outcomes=("PROPOSED", "PRESENTED", "UNCLEAR"),
+        required_proposal_outcomes=("PROPOSED", "PRESENTED"),
+        forbidden_proposal_outcomes=("CONFIRMED", "COMMITTED", "INVALIDATED"),
     ),
     "fraud-interrupted": TrajectoryExpectation(
         required_tools={"get_open_fraud_alert": 1},
         forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
-        required_proposal_outcomes=("PROPOSED", "INVALIDATED"),
+        required_proposal_outcomes=("PROPOSED",),
+        forbidden_proposal_outcomes=("CONFIRMED", "COMMITTED", "INVALIDATED"),
     ),
     "fraud-reset": TrajectoryExpectation(
         required_tools={"get_open_fraud_alert": 1},
@@ -92,6 +94,22 @@ SCENARIOS = {
         forbidden_tools=("triage_fraud_case",),
         required_proposal_outcomes=("PROPOSED", "PRESENTED", "CONFIRMED", "TOOL_ERROR"),
         allowed_terminal_outcomes=("TOOL_FAILURE", "NORMAL_DISCONNECT"),
+    ),
+    "fraud-tool-retry": TrajectoryExpectation(
+        required_tools={
+            "get_open_fraud_alert": 1,
+            "commit_fraud_triage": 1,
+        },
+        required_failed_tools={"commit_fraud_triage": 1},
+        forbidden_tools=("triage_fraud_case",),
+        required_proposal_outcomes=(
+            "PROPOSED",
+            "PRESENTED",
+            "CONFIRMED",
+            "TOOL_ERROR",
+            "COMMITTED",
+        ),
+        required_ui_events=("FRAUD_ALERT_RESOLVED",),
     ),
     "customer-reported": TrajectoryExpectation(
         required_tools={

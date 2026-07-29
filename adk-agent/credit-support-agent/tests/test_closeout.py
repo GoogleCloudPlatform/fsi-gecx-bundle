@@ -85,6 +85,23 @@ def test_unresolved_authorization_blocks_closeout() -> None:
     )
 
 
+def test_commit_recovery_blocks_closeout() -> None:
+    assert (
+        closeout_block_reason(
+            closeout_checkpoint=open_closeout_checkpoint(
+                originating_customer_event_id="customer-action-turn",
+                now_epoch_s=10,
+            ),
+            workflow_authorization={"status": "RECOVERY_REQUIRED"},
+            latest_customer_turn={
+                "event_id": "customer-closeout-turn",
+                "observed_at_epoch_s": 11,
+            },
+        )
+        == "WORKFLOW_AUTHORIZATION_RECOVERY_REQUIRED"
+    )
+
+
 @pytest.mark.asyncio
 async def test_end_tool_uses_typed_offer_and_event_ordering() -> None:
     tokens = agent.bind_session_context("customer-1", lambda event: event)
