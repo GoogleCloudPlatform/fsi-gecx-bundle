@@ -277,6 +277,12 @@ def test_conversational_golden_includes_wallet_recovery_and_close() -> None:
         wallet_state["proposal_presentation_turn_id"]
         == "eval-turn-wallet-proposal"
     )
+    terminal_steps = golden["turns"][5]["steps"]
+    assert len(terminal_steps) == 2
+    assert (
+        terminal_steps[1]["expectation"]["toolCall"]["tool"].rsplit("/", 1)[-1]
+        == "end_session"
+    )
     assert len(golden["turns"]) == 6
 
 

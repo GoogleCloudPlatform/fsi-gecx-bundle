@@ -830,7 +830,10 @@ def _conversational_golden(
             {
                 "steps": [
                     {"userInput": {"text": str(close["user"])}},
-                    _agent_response_expectation(str(close["expected_agent"])),
+                    # CES terminates the streaming turn as soon as the system
+                    # tool executes, so post-tool farewell audio is not a
+                    # stable managed-replay surface. The terminal tool is the
+                    # deterministic assertion; live canaries cover playout.
                     _tool_expectation(app, "end_session", "eval-end-session"),
                 ]
             },
