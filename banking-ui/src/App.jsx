@@ -1168,7 +1168,7 @@ function AppContent() {
                             <Link 
                               key={acc.account_id}
                               to={`/accounts?id=${acc.account_id}&type=checking`} 
-                              className="w-full text-left px-3 py-2 rounded-xl text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold block truncate"
+                              className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium block truncate"
                             >
                               {acc.product_name}
                             </Link>
@@ -1183,7 +1183,7 @@ function AppContent() {
                             <Link 
                               key={acc.account_id}
                               to={`/accounts?id=${acc.account_id}&type=savings`} 
-                              className="w-full text-left px-3 py-2 rounded-xl text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold block truncate"
+                              className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium block truncate"
                             >
                               {acc.product_name}
                             </Link>
@@ -1198,7 +1198,7 @@ function AppContent() {
                             <Link 
                               key={acc.account_id}
                               to={`/accounts?id=${acc.account_id}&type=credit`} 
-                              className="w-full text-left px-3 py-2 rounded-xl text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold block truncate"
+                              className="w-full text-left px-3 py-2 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium block truncate"
                             >
                               {acc.product_name || "Nova Everyday Visa"}
                             </Link>
