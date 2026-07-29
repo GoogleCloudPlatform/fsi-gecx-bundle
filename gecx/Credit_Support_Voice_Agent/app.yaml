@@ -118,6 +118,10 @@ variableDeclarations:
   description: CES callback-owned source of the typed confirmation transition.
   schema:
     type: STRING
+- name: proposal_decision_type
+  description: Model-selected typed decision for the active proposal.
+  schema:
+    type: STRING
 - name: closeout_originating_turn_id
   description: CES callback-owned customer turn after which final assistance was offered.
   schema:

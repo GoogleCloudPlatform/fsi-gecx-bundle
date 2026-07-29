@@ -1,4 +1,5 @@
 import inspect
+from typing import get_args
 from unittest.mock import MagicMock
 
 import pytest
@@ -8,6 +9,7 @@ from routers.mcp.credit_card import (
     commit_card_reissue,
     commit_fraud_triage,
     commit_wallet_provisioning,
+    decide_action_proposal,
     propose_fraud_triage,
     review_fraud_selection,
 )
@@ -38,10 +40,19 @@ def test_model_visible_commit_has_only_opaque_proposal_input() -> None:
         inspect.signature(commit_wallet_provisioning),
     )
     commit_parameters = set(commit_signatures[0].parameters)
+    decision_parameters = set(inspect.signature(decide_action_proposal).parameters)
     propose_parameters = set(inspect.signature(propose_fraud_triage).parameters)
     review_parameters = set(inspect.signature(review_fraud_selection).parameters)
 
     assert commit_parameters == {"proposal_id", "ctx"}
+    assert decision_parameters == {"proposal_id", "decision", "ctx"}
+    assert set(
+        get_args(
+            inspect.signature(decide_action_proposal)
+            .parameters["decision"]
+            .annotation
+        )
+    ) == {"DECLINE", "REVISE", "CANCEL"}
     assert all(
         set(signature.parameters) == {"proposal_id", "ctx"}
         for signature in commit_signatures
@@ -57,6 +68,7 @@ def test_model_visible_commit_has_only_opaque_proposal_input() -> None:
     assert propose_parameters.isdisjoint(forbidden_scope)
     assert review_parameters.isdisjoint(forbidden_scope)
     assert commit_parameters.isdisjoint(forbidden_scope)
+    assert decision_parameters.isdisjoint(forbidden_scope)
 
 
 def test_runtime_context_requires_real_customer_turn() -> None:

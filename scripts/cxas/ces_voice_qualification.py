@@ -278,6 +278,16 @@ def _managed_fake_output(tool: str) -> dict[str, Any]:
             "wallet_provider": "GOOGLE_WALLET",
             "wallet_provisioning_status": "QUEUED",
         }
+    if tool == "decide_action_proposal":
+        return {
+            "success": True,
+            "status": "DECLINED",
+            "action_type": "TRIAGE_FRAUD_CASE",
+            "contract_version": "fraud-triage.v1",
+            "proposal_id": "eval-proposal-1",
+            "decision": "DECLINE",
+            "invalidation_reason": "CUSTOMER_DECLINED",
+        }
     if tool == "offer_session_closeout":
         return {
             "success": True,

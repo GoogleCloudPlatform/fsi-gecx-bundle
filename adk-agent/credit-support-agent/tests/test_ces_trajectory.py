@@ -215,6 +215,77 @@ def test_missing_end_session_is_an_unexpected_disconnect() -> None:
     assert "Unexpected terminal outcome UNEXPECTED_DISCONNECT." in result.failures
 
 
+def test_typed_decline_normalizes_without_false_confirmation() -> None:
+    conversation = _conversation()
+    messages = conversation["turns"][0]["messages"]
+    conversation["turns"][0]["messages"] = [
+        *messages[:9],
+        _chunk("user", "2026-07-27T03:39:08Z", transcript="Do not proceed."),
+        _chunk(
+            "Credit Card Support Agent",
+            "2026-07-27T03:39:09Z",
+            updatedVariables={
+                "proposal_confirmation_source": "MODEL_TOOL_INTENT",
+                "proposal_decision_type": "DECLINE",
+            },
+        ),
+        _chunk(
+            "Credit Card Support Agent",
+            "2026-07-27T03:39:10Z",
+            toolCall={
+                "toolsetTool": {"toolId": "decide_action_proposal"},
+                "args": {"decision": "DECLINE"},
+            },
+        ),
+        _chunk(
+            "Credit Card Support Agent",
+            "2026-07-27T03:39:11Z",
+            toolResponse={
+                "toolsetTool": {"toolId": "decide_action_proposal"},
+                "response": {
+                    "text_output": [
+                        {
+                            "success": True,
+                            "status": "DECLINED",
+                            "action_type": "TRIAGE_FRAUD_CASE",
+                            "contract_version": "fraud-triage.v1",
+                            "decision": "DECLINE",
+                            "invalidation_reason": "CUSTOMER_DECLINED",
+                        }
+                    ]
+                },
+            },
+        ),
+        messages[-1],
+    ]
+
+    events = normalize_ces_conversation(conversation)
+    result = evaluate_trajectory(
+        events,
+        TrajectoryExpectation(
+            required_tools={
+                "get_open_fraud_alert": 1,
+                "propose_fraud_triage": 1,
+                "decide_action_proposal": 1,
+            },
+            forbidden_tools=("commit_fraud_triage",),
+            required_proposal_outcomes=("PROPOSED", "PRESENTED", "DECLINED"),
+            forbidden_proposal_outcomes=("CONFIRMED", "COMMITTED"),
+            expected_runtime_name="CES_GEMINI_LIVE",
+            require_runtime_version=True,
+            require_catalog_identity=True,
+            required_contract_version="fraud-triage.v1",
+        ),
+    )
+
+    assert result.passed is True
+    assert result.metrics["proposal_outcomes"] == [
+        "PROPOSED",
+        "PRESENTED",
+        "DECLINED",
+    ]
+
+
 def test_safe_identity_contains_only_resource_provenance() -> None:
     conversation = _conversation()
     conversation["session_capability"] = "secret"

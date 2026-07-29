@@ -21,6 +21,7 @@ def fake_tool_call(tool, input, callback_context):
         "commit_card_reissue",
         "propose_wallet_provisioning",
         "commit_wallet_provisioning",
+        "decide_action_proposal",
         "offer_session_closeout",
     )
     tool_id = next(
@@ -165,6 +166,21 @@ def fake_tool_call(tool, input, callback_context):
             "wallet_provider": "GOOGLE_WALLET",
             "wallet_provisioning_status": "QUEUED",
         }
+    elif tool_id == "decide_action_proposal":
+        decision = str((input or {}).get("decision") or "").strip().upper()
+        output = {
+            "success": decision in {"DECLINE", "REVISE", "CANCEL"},
+            "status": "DECLINED" if decision == "DECLINE" else "INVALIDATED",
+            "action_type": "TRIAGE_FRAUD_CASE",
+            "contract_version": "fraud-triage.v1",
+            "proposal_id": "eval-proposal-1",
+            "decision": decision,
+            "invalidation_reason": {
+                "DECLINE": "CUSTOMER_DECLINED",
+                "REVISE": "CUSTOMER_REVISED",
+                "CANCEL": "CUSTOMER_CANCELLED",
+            }.get(decision),
+        }
     elif tool_id == "offer_session_closeout":
         output = {
             "success": True,
@@ -210,3 +226,7 @@ def fake_commit_wallet_provisioning(tool, input, callback_context):
 
 def fake_offer_session_closeout(tool, input, callback_context):
     return fake_tool_call({"id": "offer_session_closeout"}, input, callback_context)
+
+
+def fake_decide_action_proposal(tool, input, callback_context):
+    return fake_tool_call({"id": "decide_action_proposal"}, input, callback_context)

@@ -127,6 +127,7 @@ PROPOSAL_CONTEXT_TOOL_NAMES = frozenset(
         "commit_card_reissue",
         "propose_wallet_provisioning",
         "commit_wallet_provisioning",
+        "decide_action_proposal",
         "offer_session_closeout",
     }
 )

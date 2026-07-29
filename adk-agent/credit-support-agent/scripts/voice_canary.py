@@ -57,7 +57,10 @@ SCENARIOS = {
         required_ui_events=("FRAUD_ALERT_RESOLVED",),
     ),
     "fraud-decline": TrajectoryExpectation(
-        required_tools={"get_open_fraud_alert": 1},
+        required_tools={
+            "get_open_fraud_alert": 1,
+            "decide_action_proposal": 1,
+        },
         forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
         required_proposal_outcomes=("PROPOSED", "PRESENTED", "DECLINED"),
     ),

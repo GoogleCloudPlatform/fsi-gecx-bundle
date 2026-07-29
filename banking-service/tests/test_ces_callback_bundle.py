@@ -116,6 +116,106 @@ def test_ces_uses_one_typed_gate_for_all_action_proposals(
     assert variables["proposal_confirmation_source"] == "MODEL_TOOL_INTENT"
 
 
+@pytest.mark.parametrize("decision", ("DECLINE", "REVISE", "CANCEL"))
+def test_ces_non_commit_decisions_use_the_same_typed_later_turn_gate(decision):
+    callback = _load("before_tool_callbacks/enforce_proposal_context.py")
+    variables = {
+        "proposal_id": "proposal-1",
+        "proposal_action_type": "TRIAGE_FRAUD_CASE",
+        "proposal_originating_turn_id": "turn-1",
+        "proposal_presentation_turn_id": "turn-1",
+    }
+    tool = SimpleNamespace(
+        name="banking_service_mcp_toolset.decide_action_proposal"
+    )
+
+    assert (
+        callback.before_tool_callback(
+            tool,
+            {"decision": decision},
+            Context(invocation_id="turn-2", variables=variables),
+        )
+        is None
+    )
+    assert variables["proposal_confirmation_source"] == "MODEL_TOOL_INTENT"
+    assert variables["proposal_confirmation_turn_id"] == "turn-2"
+
+    blocked = callback.before_tool_callback(
+        tool,
+        {"decision": decision},
+        Context(invocation_id="turn-1", variables=variables),
+    )
+    assert blocked["error"] == "PROTECTED_DECISION_REQUIRED"
+
+
+def test_ces_successful_non_commit_decision_clears_current_proposal():
+    capture = _load("after_tool_callbacks/capture_proposal.py")
+    variables = {
+        "proposal_id": "proposal-1",
+        "proposal_action_type": "TRIAGE_FRAUD_CASE",
+        "proposal_originating_turn_id": "turn-1",
+        "proposal_presentation_turn_id": "turn-1",
+        "proposal_confirmation_turn_id": "turn-2",
+        "proposal_confirmation_method": "EXPLICIT_VERBAL",
+        "proposal_confirmation_source": "MODEL_TOOL_INTENT",
+    }
+
+    capture.after_tool_callback(
+        SimpleNamespace(
+            name="banking_service_mcp_toolset.decide_action_proposal"
+        ),
+        {"decision": "REVISE"},
+        Context(invocation_id="turn-2", variables=variables),
+        {
+            "output": {
+                "success": True,
+                "status": "INVALIDATED",
+                "action_type": "TRIAGE_FRAUD_CASE",
+                "decision": "REVISE",
+            }
+        },
+    )
+
+    assert variables["proposal_id"] == ""
+    assert variables["proposal_action_type"] == ""
+    assert variables["proposal_presentation_turn_id"] == ""
+    assert variables["fraud_review_stage"] == "INVALIDATED"
+
+
+def test_ces_questions_preserve_proposal_and_revision_is_explicit():
+    callback = _load("before_tool_callbacks/enforce_proposal_context.py")
+    variables = {
+        "proposal_id": "proposal-1",
+        "proposal_action_type": "TRIAGE_FRAUD_CASE",
+        "proposal_originating_turn_id": "turn-1",
+        "proposal_presentation_turn_id": "turn-1",
+    }
+
+    assert (
+        callback.before_tool_callback(
+            SimpleNamespace(name="banking_service_mcp_toolset.get_transaction_history"),
+            {},
+            Context(invocation_id="turn-2", variables=variables),
+        )
+        is None
+    )
+    assert variables["proposal_id"] == "proposal-1"
+
+    blocked = callback.before_tool_callback(
+        SimpleNamespace(name="banking_service_mcp_toolset.review_fraud_selection"),
+        {},
+        Context(invocation_id="turn-2", variables=variables),
+    )
+    assert blocked["error"] == "PROPOSAL_REVISION_REQUIRED"
+    assert variables["proposal_id"] == "proposal-1"
+    closeout = callback.before_tool_callback(
+        SimpleNamespace(name="banking_service_mcp_toolset.offer_session_closeout"),
+        {},
+        Context(invocation_id="turn-2", variables=variables),
+    )
+    assert closeout["error"] == "PROPOSAL_DECISION_REQUIRED"
+
+
 def test_ces_closeout_uses_typed_offer_and_later_turn_ordering():
     callback = _load("before_tool_callbacks/enforce_proposal_context.py")
     variables = {}
@@ -246,6 +346,7 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
         "commit_card_reissue",
         "propose_wallet_provisioning",
         "commit_wallet_provisioning",
+        "decide_action_proposal",
         "reverse_overdraft_fee",
         "request_credit_limit_increase",
     ):

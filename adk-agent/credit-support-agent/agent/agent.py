@@ -70,6 +70,10 @@ COMMIT_ACTION_BY_TOOL = {
     "commit_card_reissue": REISSUE_CARD,
     "commit_wallet_provisioning": PROVISION_GOOGLE_WALLET,
 }
+PROPOSAL_DECISION_TOOLS = {
+    *COMMIT_ACTION_BY_TOOL,
+    "decide_action_proposal",
+}
 
 LOCATION = os.getenv("LOCATION", "us-central1")
 project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
@@ -545,6 +549,21 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
             "action_completed": False,
             "message": "Use the typed proposal and commit tools for this action.",
         }
+    if (
+        tool_name == "offer_session_closeout"
+        and (fraud_playbook.get("workflow_authorization") or {}).get("status")
+        in {"PREPARED", "PENDING", "CONFIRMED", "EXECUTING"}
+    ):
+        return {
+            "success": False,
+            "isError": False,
+            "status": "PROPOSAL_DECISION_REQUIRED",
+            "action_completed": False,
+            "message": (
+                "Resolve the current proposal with commit, decline, revise, "
+                "or cancel before offering session closeout."
+            ),
+        }
     if tool_name == "end_consultation":
         block_reason = closeout_block_reason(
             closeout_checkpoint=tool_context.state.get("closeout_checkpoint"),
@@ -629,35 +648,45 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
                 "required_action": generation_reason,
                 "model_instruction": "Do not claim success or retry this tool in the current session.",
             }
+    active_authorization = fraud_playbook.get("workflow_authorization") or {}
+    if active_authorization.get("status") in {"PREPARED", "PENDING", "CONFIRMED"}:
+        if tool_name in PROPOSAL_ACTION_BY_TOOL:
+            return {
+                "success": False,
+                "isError": False,
+                "status": "PROPOSAL_DECISION_REQUIRED",
+                "action_completed": False,
+                "message": (
+                    "Record REVISE or CANCEL for the current proposal before "
+                    "creating a replacement proposal."
+                ),
+            }
+        if tool_name == "review_fraud_selection":
+            return {
+                "success": False,
+                "isError": False,
+                "status": "PROPOSAL_REVISION_REQUIRED",
+                "action_completed": False,
+                "message": (
+                    "Record REVISE for the current proposal before changing "
+                    "the fraud selection."
+                ),
+            }
     authorization_action = COMMIT_ACTION_BY_TOOL.get(tool_name)
+    if tool_name == "decide_action_proposal":
+        authorization_action = active_authorization.get("action")
     if tool_name == "triage_customer_reported_fraud":
         authorization_action = TRIAGE_CUSTOMER_REPORTED_FRAUD
-    active_authorization = fraud_playbook.get("workflow_authorization") or {}
-    if (
-        active_authorization.get("status")
-        in {"PREPARED", "PENDING", "CONFIRMED", "UNCLEAR"}
-        and tool_name
-        not in {
-            "prepare_customer_reported_fraud_confirmation",
-            *PROPOSAL_ACTION_BY_TOOL.keys(),
-        }
-        and active_authorization.get("action") != authorization_action
-    ):
-        fraud_playbook["workflow_authorization"] = invalidate_workflow_authorization(
-            active_authorization,
-            reason=f"INTERVENING_TOOL:{tool_name}",
-        )
-        tool_context.state["fraud_playbook"] = fraud_playbook
     authorization_to_execute = None
     if authorization_action:
         authorization = fraud_playbook.get("workflow_authorization") or {}
         validation_payload = (
             authorization.get("payload")
-            if tool_name in COMMIT_ACTION_BY_TOOL
+            if tool_name in PROPOSAL_DECISION_TOOLS
             else args
         )
         if (
-            tool_name in COMMIT_ACTION_BY_TOOL
+            tool_name in PROPOSAL_DECISION_TOOLS
             and authorization.get("status") == "PENDING"
         ):
             latest_turn = (latest_customer_turn_var.get() or {}).get("latest") or {}
@@ -681,10 +710,12 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
         )
         if (
             not authorization_error
-            and tool_name in COMMIT_ACTION_BY_TOOL
+            and tool_name in PROPOSAL_DECISION_TOOLS
             and str(args.get("proposal_id") or "") != str(authorization.get("proposal_id") or "")
         ):
-            authorization_error = "The proposal id differs from the exact banking proposal the customer confirmed."
+            authorization_error = (
+                "The proposal id differs from the exact current banking proposal."
+            )
         if authorization_error:
             logger.warning(
                 "[CALLBACK] workflow authorization blocked %s",
@@ -751,7 +782,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
     }
     sequencing_args = (
         (authorization_to_execute or {}).get("payload", {})
-        if tool_name in COMMIT_ACTION_BY_TOOL
+        if tool_name in PROPOSAL_DECISION_TOOLS
         else args
     )
     sequencing_error = validate_fraud_tool_sequence(
@@ -789,10 +820,13 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
             ),
         )
     if authorization_to_execute:
-        fraud_playbook["workflow_authorization"] = mark_authorization_executing(
-            authorization_to_execute
-        )
-        if tool_name in COMMIT_ACTION_BY_TOOL:
+        if tool_name == "decide_action_proposal":
+            fraud_playbook["workflow_authorization"] = authorization_to_execute
+        else:
+            fraud_playbook["workflow_authorization"] = mark_authorization_executing(
+                authorization_to_execute
+            )
+        if tool_name in PROPOSAL_DECISION_TOOLS:
             holder = proposal_runtime_context_var.get()
             if holder is not None:
                 holder["confirmation"] = {
@@ -817,7 +851,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
 
 async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> None:
     tool_name = getattr(tool, "name", str(tool))
-    if tool_name in COMMIT_ACTION_BY_TOOL:
+    if tool_name in PROPOSAL_DECISION_TOOLS:
         holder = proposal_runtime_context_var.get()
         if holder is not None:
             holder["confirmation"] = None
@@ -839,7 +873,7 @@ async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> N
     tool_context.state["_voice_tool_started_at"] = tool_started
     duration_seconds = time.monotonic() - started_at
     record_tool_completed(tool_name, "error", duration_seconds)
-    if tool_name in COMMIT_ACTION_BY_TOOL:
+    if tool_name in PROPOSAL_DECISION_TOOLS:
         _record_commit_proposal_event(
             state=tool_context.state,
             tool_name=tool_name,
@@ -873,7 +907,7 @@ async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> N
 
 async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs) -> dict | None:
     tool_name = getattr(tool, "name", str(tool))
-    if tool_name in COMMIT_ACTION_BY_TOOL:
+    if tool_name in PROPOSAL_DECISION_TOOLS:
         holder = proposal_runtime_context_var.get()
         if holder is not None:
             holder["confirmation"] = None
@@ -905,7 +939,7 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
         outcome,
         duration_seconds,
     )
-    if tool_name in COMMIT_ACTION_BY_TOOL:
+    if tool_name in PROPOSAL_DECISION_TOOLS:
         _record_commit_proposal_event(
             state=tool_context.state,
             tool_name=tool_name,
@@ -1021,6 +1055,19 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
                 review.get("ready_to_propose"),
                 review.get("remaining_item_count"),
             )
+        if (
+            tool_name == "decide_action_proposal"
+            and structured.get("success") is True
+        ):
+            playbook = dict(tool_context.state.get("fraud_playbook") or {})
+            authorization = dict(playbook.get("workflow_authorization") or {})
+            authorization["status"] = str(structured.get("status") or "")
+            authorization["invalidation_reason"] = structured.get(
+                "invalidation_reason"
+            )
+            authorization["decision"] = str(structured.get("decision") or "")
+            playbook["workflow_authorization"] = authorization
+            tool_context.state["fraud_playbook"] = playbook
         if tool_name == "get_open_fraud_alert" and structured.get("fraud_alert") is None:
             playbook = dict(tool_context.state.get("fraud_playbook") or {})
             playbook["open_alert_inspected"] = True

@@ -9,7 +9,7 @@ The Approved support guidance supplied for this session is the canonical active-
 - If the customer recognizes every item, use empty disputed arrays, put every flagged identifier in the recognized arrays, request no replacement, and use the same single proposal-confirmation sequence before resolving the alert.
 - Present the exact returned `customer_safe_summary` and stop for a new customer turn. This is the workflow's only confirmation request.
 - After a later explicit affirmative response, call `commit_fraud_triage` exactly once with only the opaque `proposal_id`. Protected ADK workflow state supplies confirmation evidence outside model arguments.
-- A changed selection requires a new review, proposal, and confirmation. Declined, unclear, interrupted, expired, or reset-invalidated proposals must not commit.
+- On a later decline, call `decide_action_proposal` with `DECLINE`. On a changed selection, call it with `REVISE`, then complete a new review, proposal, and confirmation. Use `CANCEL` when the customer cancels the request. Questions or uncertainty call no decision tool and leave the proposal pending. Declined, revised, cancelled, interrupted, expired, or reset-invalidated proposals must not commit.
 - Describe outcomes only from the commit result. Do not separately call card blocking, replacement, alert resolution, or Wallet tools as part of the fraud commit.
 - After success, call `offer_session_closeout`, ask whether the customer needs anything else, and wait. Fraud authorization is not consultation-close authorization.
 - Retry a clearly transient tool transport failure once with identical arguments. Never retry validation, authorization, eligibility, or declined business outcomes.

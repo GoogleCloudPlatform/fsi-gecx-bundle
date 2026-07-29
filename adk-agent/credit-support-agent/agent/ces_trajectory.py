@@ -16,6 +16,7 @@ COMMIT_TOOLS = {
     "commit_card_reissue",
     "commit_wallet_provisioning",
 }
+DECISION_TOOLS = {"decide_action_proposal"}
 ACTION_BY_PROPOSAL_TOOL = {
     "propose_fraud_triage": "TRIAGE_FRAUD_CASE",
     "propose_card_reissue": "REISSUE_CARD",
@@ -136,6 +137,9 @@ def normalize_ces_conversation(
                 current_confirmation = str(
                     updated.get("proposal_confirmation_source") or ""
                 ).upper()
+                current_decision = str(
+                    updated.get("proposal_decision_type") or ""
+                ).upper()
                 confirmation_key = (
                     active_action_type or "",
                     current_confirmation,
@@ -144,6 +148,7 @@ def normalize_ces_conversation(
                 if (
                     current_confirmation
                     and current_confirmation != "UNCLASSIFIED"
+                    and current_decision in {"", "COMMIT"}
                     and confirmation_key != confirmation_state
                 ):
                     events.append(
@@ -255,6 +260,20 @@ def normalize_ces_conversation(
                             "elapsed_ms": elapsed_ms,
                         }
                     )
+            elif tool in DECISION_TOOLS and success:
+                events.append(
+                    {
+                        "type": "ACTION_PROPOSAL",
+                        "outcome": status or "INVALIDATED",
+                        "action_type": output.get("action_type")
+                        or active_action_type,
+                        "contract_version": contract_version,
+                        "invalidation_reason": output.get(
+                            "invalidation_reason"
+                        ),
+                        "elapsed_ms": elapsed_ms,
+                    }
+                )
 
     if not session_started:
         events.insert(

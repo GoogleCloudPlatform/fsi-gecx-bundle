@@ -8,6 +8,7 @@ from typing import Any, Iterable
 
 
 CONSEQUENTIAL_TOOLS = {
+    "decide_action_proposal",
     "commit_fraud_triage",
     "commit_card_reissue",
     "commit_wallet_provisioning",

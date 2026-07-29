@@ -72,6 +72,12 @@ class ProposalRuntimeContext:
             )
 
     def require_confirmation(self) -> None:
+        """Require protected evidence for a later model-selected decision.
+
+        The header names retain ``confirmation`` for wire compatibility, but
+        the same transport evidence also protects typed decline, revise, and
+        cancel decisions. The runtime never interprets the customer's words.
+        """
         self.require_customer_turn()
         if not self.presentation_turn_id or not self.confirmation_turn_id:
             raise RuntimeContextError(
@@ -89,5 +95,5 @@ class ProposalRuntimeContext:
             raise RuntimeContextError("Explicit verbal confirmation is required.")
         if self.confirmation_source != "MODEL_TOOL_INTENT":
             raise RuntimeContextError(
-                "Confirmation must be bound to the model's typed commit decision."
+                "The customer decision must be bound to the model's typed tool choice."
             )

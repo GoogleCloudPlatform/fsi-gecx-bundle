@@ -20,6 +20,7 @@ Your core capabilities and guidelines are:
    - When that later turn confirms the proposed action, call `commit_card_reissue` with only the returned proposal ID. Do not call any direct block or replacement tool.
    - After a replacement exists, when the customer needs immediate card access, call `propose_wallet_provisioning` and use its exact customer-safe summary to offer Google Wallet provisioning. Wait for a later customer turn.
    - When that later turn confirms the Wallet proposal, call `commit_wallet_provisioning` with only the returned proposal ID.
+   - For any current fraud, card-reissue, or Wallet proposal, a later customer decline, requested change, or cancellation must call `decide_action_proposal` with the current proposal ID and `DECLINE`, `REVISE`, or `CANCEL`. A question or uncertain response calls no decision tool and leaves the proposal pending. After `REVISE`, gather the changed scope and create a new immutable proposal.
 
 2. CREDIT LIMIT INCREASE (CLI):
    - When a customer requests to raise their credit limit, ask for their desired limit.

@@ -36,6 +36,104 @@
           "NORMAL_DISCONNECT"
         ]
       }
+    },
+    {
+      "id": "fraud-decline",
+      "description": "A later customer decline terminates the proposal without a fraud commit.",
+      "expectation": {
+        "required_tools": {
+          "get_open_fraud_alert": 1,
+          "propose_fraud_triage": 1,
+          "decide_action_proposal": 1
+        },
+        "forbidden_tools": [
+          "commit_fraud_triage",
+          "triage_fraud_case"
+        ],
+        "required_proposal_outcomes": [
+          "PROPOSED",
+          "PRESENTED",
+          "DECLINED"
+        ],
+        "forbidden_proposal_outcomes": [
+          "CONFIRMED",
+          "COMMITTED"
+        ],
+        "expected_runtime_name": "CES_GEMINI_LIVE",
+        "require_runtime_version": true,
+        "require_catalog_identity": true,
+        "required_contract_version": "fraud-triage.v1",
+        "allowed_terminal_outcomes": [
+          "NORMAL_DISCONNECT"
+        ]
+      }
+    },
+    {
+      "id": "fraud-question-then-commit",
+      "description": "An informational or uncertain turn stays read-only before the customer completes selection and later confirms one proposal.",
+      "expectation": {
+        "required_tools": {
+          "get_open_fraud_alert": 1,
+          "review_fraud_selection": 1,
+          "propose_fraud_triage": 1,
+          "commit_fraud_triage": 1
+        },
+        "forbidden_tools": [
+          "decide_action_proposal",
+          "triage_fraud_case"
+        ],
+        "required_proposal_outcomes": [
+          "PROPOSED",
+          "PRESENTED",
+          "CONFIRMED",
+          "COMMITTED"
+        ],
+        "expected_banking_outcome": "PENDING_SPECIALIST_REVIEW",
+        "required_review_stages": [
+          "AWAITING_CUSTOMER_SELECTION",
+          "AWAITING_ACTION_CONFIRMATION",
+          "COMMITTED"
+        ],
+        "require_ready_review_before_proposal": true,
+        "expected_runtime_name": "CES_GEMINI_LIVE",
+        "require_runtime_version": true,
+        "require_catalog_identity": true,
+        "required_contract_version": "fraud-triage.v1",
+        "allowed_terminal_outcomes": [
+          "NORMAL_DISCONNECT"
+        ]
+      }
+    },
+    {
+      "id": "fraud-revise-and-commit",
+      "description": "A changed selection explicitly invalidates the old proposal before a new immutable proposal is confirmed and committed.",
+      "expectation": {
+        "required_tools": {
+          "get_open_fraud_alert": 1,
+          "propose_fraud_triage": 2,
+          "decide_action_proposal": 1,
+          "review_fraud_selection": 1,
+          "commit_fraud_triage": 1
+        },
+        "forbidden_tools": [
+          "triage_fraud_case"
+        ],
+        "required_proposal_outcomes": [
+          "PROPOSED",
+          "PRESENTED",
+          "INVALIDATED",
+          "CONFIRMED",
+          "COMMITTED"
+        ],
+        "expected_banking_outcome": "PENDING_SPECIALIST_REVIEW",
+        "expected_runtime_name": "CES_GEMINI_LIVE",
+        "require_runtime_version": true,
+        "require_catalog_identity": true,
+        "required_contract_version": "fraud-triage.v1",
+        "allowed_terminal_outcomes": [
+          "NORMAL_DISCONNECT"
+        ]
+      }
     }
   ]
 }

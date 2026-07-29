@@ -78,6 +78,24 @@ def after_tool_callback(tool, input, callback_context, tool_response):
             callback_context.variables["fraud_review_stage"] = "COMMITTED"
         return None
 
+    if tool_name.endswith("decide_action_proposal"):
+        if payload.get("success") is True:
+            callback_context.variables["proposal_id"] = ""
+            callback_context.variables["proposal_customer_safe_summary"] = ""
+            callback_context.variables["proposal_action_type"] = ""
+            callback_context.variables["proposal_originating_turn_id"] = ""
+            callback_context.variables["proposal_presentation_turn_id"] = ""
+            callback_context.variables["proposal_confirmation_turn_id"] = ""
+            callback_context.variables["proposal_confirmation_method"] = ""
+            callback_context.variables["proposal_confirmation_source"] = ""
+            callback_context.variables["proposal_decision_type"] = ""
+            if str(payload.get("action_type") or "") == "TRIAGE_FRAUD_CASE":
+                callback_context.variables["fraud_review_stage"] = str(
+                    payload.get("status") or ""
+                )
+                callback_context.variables["fraud_review_ready"] = False
+        return None
+
     proposal_action = next(
         (
             action

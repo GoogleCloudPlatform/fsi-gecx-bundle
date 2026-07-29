@@ -133,6 +133,11 @@ Managed CES qualification has two separate resources:
 - a generated, sanitized contract replay with strict tool correctness and no conversational-copy claim
 - a hand-authored conversational reference that checks branding, complete transaction readout, exactly one protected confirmation, post-remediation wallet guidance, and closeout
 
-Consent-related releases additionally exercise exact confirmation, an affirmative embedded in unrelated speech, and an altered or incomplete proposal presentation. Negative samples pass only when the callback blocks every commit attempt and no fake or real banking commit executes.
+Decision-related releases additionally exercise clear acceptance, questions
+and uncertainty, qualified or unrelated responses, decline, and changed scope.
+The model's typed operation is the only semantic decision. Negative samples
+pass only when no real or fake banking commit executes; callbacks may reject
+missing or stale protected ordering and scope, but never inspect transcript
+wording.
 
 See [Agent Trajectory Evaluation Architecture](./agent_trajectory_evaluation.md) for the shared evaluator and evidence model, and [CES Voice Qualification](../../../gecx/Credit_Support_Voice_Agent/evaluations/README.md) for commands and fixture boundaries.

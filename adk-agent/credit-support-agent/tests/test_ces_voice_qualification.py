@@ -122,6 +122,14 @@ def test_evaluation_fake_tools_are_synthetic_and_tool_specific() -> None:
         ]
         == "GOOGLE_WALLET"
     )
+    assert (
+        fake_tools.fake_decide_action_proposal(
+            None,
+            {"decision": "REVISE"},
+            None,
+        )["invalidation_reason"]
+        == "CUSTOMER_REVISED"
+    )
     prefixed = fake_tools.fake_tool_call(
         {"name": "banking_service_mcp_toolset_get_open_fraud_alert"},
         {},

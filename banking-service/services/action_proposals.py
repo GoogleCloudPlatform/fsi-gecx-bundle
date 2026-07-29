@@ -33,6 +33,7 @@ REISSUE_CARD = "REISSUE_CARD"
 CARD_REISSUE_CONTRACT_VERSION = "card-reissue.v1"
 PROVISION_GOOGLE_WALLET = "PROVISION_GOOGLE_WALLET"
 WALLET_PROVISIONING_CONTRACT_VERSION = "wallet-provisioning.v1"
+NON_COMMIT_DECISIONS = {"DECLINE", "REVISE", "CANCEL"}
 DEFAULT_PROPOSAL_TTL_SECONDS = 180
 
 TERMINAL_STATUSES = {"COMMITTED", "DECLINED", "INVALIDATED", "EXPIRED"}
@@ -415,6 +416,96 @@ class ActionProposalService:
         except Exception:
             self.db.rollback()
             raise
+
+    def decide_for_identity(
+        self,
+        proposal_id,
+        *,
+        decision: str,
+        customer_identity: str,
+        runtime_context: ProposalRuntimeContext,
+    ) -> dict[str, Any]:
+        """Apply a typed non-commit customer decision to one current proposal."""
+        normalized_decision = str(decision or "").strip().upper()
+        if normalized_decision not in NON_COMMIT_DECISIONS:
+            raise ProposalError(
+                "Proposal decision must be DECLINE, REVISE, or CANCEL."
+            )
+        runtime_context.require_confirmation()
+        customer_id = self._resolve_customer_id(customer_identity)
+        proposal = self._get_locked(proposal_id)
+        self._validate_scope(
+            proposal,
+            customer_id=customer_id,
+            support_session_id=runtime_context.support_session_id,
+            runtime_name=runtime_context.runtime_name,
+            runtime_session_id=runtime_context.runtime_session_id,
+            expected_action_type=proposal.action_type,
+        )
+        if proposal.reset_generation != runtime_context.reset_generation:
+            if proposal.status not in TERMINAL_STATUSES:
+                self.invalidate(proposal.id, reason="RESET_GENERATION_CHANGED")
+                self._record_disposition_event(proposal)
+                self.db.commit()
+            raise ProposalScopeError("Proposal was invalidated by a session reset.")
+        if proposal.status == "PROPOSED":
+            self.mark_presented(
+                proposal.id,
+                assistant_turn_id=str(runtime_context.presentation_turn_id),
+            )
+        if proposal.presented_assistant_turn_id != str(
+            runtime_context.presentation_turn_id
+        ):
+            raise ProposalScopeError(
+                "Proposal presentation does not belong to the protected turn."
+            )
+        customer_turn_id = str(runtime_context.confirmation_turn_id)
+        if customer_turn_id == proposal.originating_customer_turn_id:
+            raise ProposalTransitionError(
+                "A proposal decision must come from a later customer turn."
+            )
+
+        if proposal.status in {"DECLINED", "INVALIDATED"}:
+            expected_reason = {
+                "DECLINE": "CUSTOMER_DECLINED",
+                "REVISE": "CUSTOMER_REVISED",
+                "CANCEL": "CUSTOMER_CANCELLED",
+            }[normalized_decision]
+            if (
+                proposal.status == ("DECLINED" if normalized_decision == "DECLINE" else "INVALIDATED")
+                and proposal.invalidation_reason == expected_reason
+            ):
+                return {
+                    **self.proposal_view(proposal),
+                    "decision": normalized_decision,
+                    "idempotent_replay": True,
+                }
+            raise ProposalTransitionError(
+                f"Proposal is already terminal in {proposal.status} state."
+            )
+
+        if normalized_decision == "DECLINE":
+            self.decline(
+                proposal.id,
+                customer_turn_id=customer_turn_id,
+            )
+        else:
+            self.invalidate(
+                proposal.id,
+                reason=(
+                    "CUSTOMER_REVISED"
+                    if normalized_decision == "REVISE"
+                    else "CUSTOMER_CANCELLED"
+                ),
+            )
+            proposal.confirmation_customer_turn_id = customer_turn_id
+        self._record_disposition_event(proposal)
+        self.db.commit()
+        return {
+            **self.proposal_view(proposal),
+            "decision": normalized_decision,
+            "idempotent_replay": False,
+        }
 
     def mark_presented(
         self,

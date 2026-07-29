@@ -582,3 +582,104 @@ def test_wallet_provisioning_uses_generic_proposal_commit_protocol(
     assert committed["status"] == "COMMITTED"
     assert committed["wallet_provisioning_status"] == "QUEUED"
     assert observed["commit_transaction"] is False
+
+
+@pytest.mark.parametrize(
+    ("decision", "expected_status", "expected_reason"),
+    (
+        ("DECLINE", "DECLINED", "CUSTOMER_DECLINED"),
+        ("REVISE", "INVALIDATED", "CUSTOMER_REVISED"),
+        ("CANCEL", "INVALIDATED", "CUSTOMER_CANCELLED"),
+    ),
+)
+def test_non_commit_decisions_use_the_same_protected_proposal_protocol(
+    db_session,
+    fraud_alert,
+    monkeypatch,
+    decision,
+    expected_status,
+    expected_reason,
+):
+    monkeypatch.setattr(
+        "services.action_proposals.record_audit_event",
+        lambda *_args, **_kwargs: None,
+    )
+    service = ActionProposalService(db_session)
+    proposal = _propose(service, fraud_alert)
+    context = _runtime_context(
+        customer_turn_id="customer-turn-11",
+        confirming=True,
+    )
+
+    result = service.decide_for_identity(
+        proposal.id,
+        decision=decision,
+        customer_identity="proposal-customer",
+        runtime_context=context,
+    )
+
+    assert result["decision"] == decision
+    assert result["status"] == expected_status
+    assert proposal.invalidation_reason == expected_reason
+    assert proposal.confirmation_customer_turn_id == "customer-turn-11"
+    replay = service.decide_for_identity(
+        proposal.id,
+        decision=decision,
+        customer_identity="proposal-customer",
+        runtime_context=context,
+    )
+    assert replay["idempotent_replay"] is True
+    with pytest.raises(ProposalTransitionError):
+        service.claim_commit(
+            proposal.id,
+            customer_id=fraud_alert.customer_id,
+            support_session_id="support-session-1",
+            runtime_name="ADK_GEMINI_LIVE",
+            runtime_session_id="adk-session-1",
+            reset_generation="3:9",
+            expected_action_type=TRIAGE_FRAUD_CASE,
+        )
+
+
+def test_non_commit_decision_requires_current_scope_and_later_turn(
+    db_session,
+    fraud_alert,
+):
+    service = ActionProposalService(db_session)
+    proposal = _propose(service, fraud_alert)
+
+    with pytest.raises(ProposalScopeError):
+        service.decide_for_identity(
+            proposal.id,
+            decision="DECLINE",
+            customer_identity="proposal-customer",
+            runtime_context=ProposalRuntimeContext(
+                support_session_id="wrong-session",
+                runtime_name="ADK_GEMINI_LIVE",
+                runtime_session_id="adk-session-1",
+                customer_turn_id="customer-turn-11",
+                reset_generation="3:9",
+                presentation_turn_id="assistant-turn-10",
+                confirmation_turn_id="customer-turn-11",
+                confirmation_method="EXPLICIT_VERBAL",
+                confirmation_source="MODEL_TOOL_INTENT",
+            ),
+        )
+
+    with pytest.raises(ProposalTransitionError, match="later customer turn"):
+        service.decide_for_identity(
+            proposal.id,
+            decision="REVISE",
+            customer_identity="proposal-customer",
+            runtime_context=ProposalRuntimeContext(
+                support_session_id="support-session-1",
+                runtime_name="ADK_GEMINI_LIVE",
+                runtime_session_id="adk-session-1",
+                customer_turn_id="customer-turn-10",
+                reset_generation="3:9",
+                presentation_turn_id="assistant-turn-10",
+                confirmation_turn_id="customer-turn-10",
+                confirmation_method="EXPLICIT_VERBAL",
+                confirmation_source="MODEL_TOOL_INTENT",
+            ),
+        )

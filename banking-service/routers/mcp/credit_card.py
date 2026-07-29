@@ -19,6 +19,8 @@ import json
 import logging
 import re
 import uuid
+from typing import Literal
+
 from fastmcp import Context
 
 from . import mcp  # Import shared FastMCP server instance
@@ -570,6 +572,63 @@ async def offer_session_closeout(ctx: Context = None) -> dict:
         "status": "CLOSEOUT_OFFERED",
         "customer_prompt": "Is there anything else I can help you with?",
     }
+
+
+@mcp.tool()
+@requires_user_assertion
+async def decide_action_proposal(
+    proposal_id: str,
+    decision: Literal["DECLINE", "REVISE", "CANCEL"],
+    ctx: Context = None,
+) -> dict:
+    """Resolve the current immutable proposal without committing it.
+
+    Use DECLINE when the customer rejects the proposed action, REVISE before
+    gathering changed scope and creating a replacement proposal, or CANCEL
+    when the customer ends the request.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    runtime_context = proposal_runtime_context_var.get()
+    if runtime_context is None:
+        return {
+            "success": False,
+            "error": "TRUSTED_RUNTIME_CONTEXT_REQUIRED",
+            "message": "Trusted runtime session context is required.",
+        }
+    if not _is_proposal_id(proposal_id):
+        return {
+            "success": False,
+            "error": "INVALID_PROPOSAL_ID",
+            "message": "Invalid action proposal id.",
+        }
+    db = SessionLocal()
+    try:
+        return ActionProposalService(db).decide_for_identity(
+            proposal_id,
+            decision=decision,
+            customer_identity=verified_customer_id,
+            runtime_context=runtime_context,
+        )
+    except (ProposalError, RuntimeContextError) as exc:
+        db.rollback()
+        return {
+            "success": False,
+            "error": "DECISION_REJECTED",
+            "message": str(exc),
+        }
+    except Exception as exc:
+        db.rollback()
+        logger.error(
+            "Error in FastMCP decide_action_proposal error_type=%s",
+            type(exc).__name__,
+        )
+        return {
+            "success": False,
+            "error": "DECISION_FAILED",
+            "message": "Internal error recording the proposal decision.",
+        }
+    finally:
+        db.close()
 
 
 @mcp.tool()
