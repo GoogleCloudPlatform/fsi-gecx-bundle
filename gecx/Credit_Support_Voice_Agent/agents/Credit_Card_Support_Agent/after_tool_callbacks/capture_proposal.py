@@ -1,4 +1,29 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
+
+_PROPOSAL_ACTIONS = {
+    "propose_fraud_triage": "TRIAGE_FRAUD_CASE",
+    "propose_card_reissue": "REISSUE_CARD",
+    "propose_wallet_provisioning": "PROVISION_GOOGLE_WALLET",
+}
+_COMMIT_TOOLS = {
+    "commit_fraud_triage",
+    "commit_card_reissue",
+    "commit_wallet_provisioning",
+}
 
 
 def _payload(tool_response):
@@ -13,6 +38,38 @@ def _payload(tool_response):
         if isinstance(first, dict):
             return first
     return tool_response
+
+
+def _clear_current_proposal(callback_context) -> None:
+    """Clear CES' projection only after banking resolves the proposal."""
+    callback_context.variables["proposal_id"] = ""
+    callback_context.variables["proposal_customer_safe_summary"] = ""
+    callback_context.variables["proposal_action_type"] = ""
+    callback_context.variables["proposal_originating_turn_id"] = ""
+    callback_context.variables["proposal_presentation_turn_id"] = ""
+    callback_context.variables["proposal_confirmation_turn_id"] = ""
+    callback_context.variables["proposal_confirmation_method"] = ""
+    callback_context.variables["proposal_confirmation_source"] = ""
+    callback_context.variables["proposal_decision_type"] = ""
+
+
+def _record_completed_proposal_evidence(callback_context) -> None:
+    """Retain non-authorizing audit evidence before clearing live gate state."""
+    callback_context.variables["completed_proposal_action_type"] = str(
+        callback_context.variables.get("proposal_action_type") or ""
+    )
+    callback_context.variables["completed_proposal_confirmation_turn_id"] = str(
+        callback_context.variables.get("proposal_confirmation_turn_id") or ""
+    )
+    callback_context.variables["completed_proposal_confirmation_method"] = str(
+        callback_context.variables.get("proposal_confirmation_method") or ""
+    )
+    callback_context.variables["completed_proposal_confirmation_source"] = str(
+        callback_context.variables.get("proposal_confirmation_source") or ""
+    )
+    callback_context.variables["completed_proposal_decision_type"] = str(
+        callback_context.variables.get("proposal_decision_type") or ""
+    )
 
 
 def after_tool_callback(tool, input, callback_context, tool_response):
@@ -67,21 +124,57 @@ def after_tool_callback(tool, input, callback_context, tool_response):
                 callback_context.variables["proposal_customer_safe_summary"] = ""
         return None
 
-    if tool_name.endswith("commit_fraud_triage"):
+    commit_tool = next(
+        (suffix for suffix in _COMMIT_TOOLS if tool_name.endswith(suffix)),
+        None,
+    )
+    if commit_tool is not None:
         if payload.get("success") is True:
-            callback_context.variables["fraud_review_stage"] = "COMMITTED"
+            _record_completed_proposal_evidence(callback_context)
+            _clear_current_proposal(callback_context)
+            if commit_tool == "commit_fraud_triage":
+                callback_context.variables["fraud_review_stage"] = "COMMITTED"
         return None
 
-    if not tool_name.endswith("propose_fraud_triage"):
+    if tool_name.endswith("decide_action_proposal"):
+        if payload.get("success") is True:
+            _clear_current_proposal(callback_context)
+            if str(payload.get("action_type") or "") == "TRIAGE_FRAUD_CASE":
+                callback_context.variables["fraud_review_stage"] = str(
+                    payload.get("status") or ""
+                )
+                callback_context.variables["fraud_review_ready"] = False
+        return None
+
+    proposal_action = next(
+        (
+            action
+            for suffix, action in _PROPOSAL_ACTIONS.items()
+            if tool_name.endswith(suffix)
+        ),
+        None,
+    )
+    if proposal_action is None:
         return None
 
     proposal_id = str(payload.get("proposal_id") or "")
     summary = str(payload.get("customer_safe_summary") or "")
     if payload.get("success") is True and proposal_id and summary:
+        invocation_id = str(callback_context.invocation_id or "")
+        callback_context.variables["customer_turn_id"] = invocation_id
+        callback_context.variables["proposal_originating_turn_id"] = invocation_id
+        callback_context.variables["proposal_action_type"] = proposal_action
         callback_context.variables["proposal_id"] = proposal_id
         callback_context.variables["proposal_customer_safe_summary"] = summary
-        callback_context.variables["fraud_selection_pending"] = False
-        callback_context.variables["fraud_review_stage"] = "AWAITING_ACTION_CONFIRMATION"
-        callback_context.variables["fraud_review_status"] = "COMPLETE"
-        callback_context.variables["fraud_review_ready"] = True
+        # CES persists after-tool state reliably across invocations. Record the
+        # protected proposal-producing invocation here; a commit must still
+        # arrive from a different, later customer invocation. Presentation
+        # quality is evaluated externally and generated text is never reparsed.
+        callback_context.variables["proposal_presentation_turn_id"] = invocation_id
+        if tool_name.endswith("propose_fraud_triage"):
+            callback_context.variables["fraud_review_stage"] = (
+                "AWAITING_ACTION_CONFIRMATION"
+            )
+            callback_context.variables["fraud_review_status"] = "COMPLETE"
+            callback_context.variables["fraud_review_ready"] = True
     return None

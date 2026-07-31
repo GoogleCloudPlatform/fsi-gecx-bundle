@@ -74,10 +74,11 @@ steps:
       - "-c"
       - |
         VERSION=$$(cat build_version.txt)
-        COMMIT_SHA="$SHORT_SHA"
+        COMMIT_SHA="$COMMIT_SHA"
         if [ -z "$$COMMIT_SHA" ]; then
           COMMIT_SHA="local"
         fi
+        printf '%s' "$$COMMIT_SHA" > /workspace/image_tag.txt
         BUILD_TIME_MS=$$(date +%s000)
         echo "Updating config files with version: $$VERSION and commit: $$COMMIT_SHA and time: $$BUILD_TIME_MS"
 
@@ -110,7 +111,8 @@ steps:
     args:
       - "-c"
       - |
-        TAGS="-t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-ui:$${COMMIT_SHA:-local} -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-ui:latest"
+        IMAGE_TAG=$$(cat /workspace/image_tag.txt)
+        TAGS="-t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-ui:$${IMAGE_TAG} -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-ui:latest"
         if [ -n "$TAG_NAME" ]; then
           TAGS="$$TAGS -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-ui:$TAG_NAME"
         fi
@@ -132,8 +134,9 @@ steps:
       - "-c"
       - |
         if [ "${_TRIGGER_DEPLOY}" = "true" ]; then
+          IMAGE_TAG=$$(cat /workspace/image_tag.txt)
           gcloud run deploy banking-ui \
-            --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-ui:$${COMMIT_SHA:-local}" \
+            --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-ui:$${IMAGE_TAG}" \
             --region "${_REGION}"
         else
           echo "Skipping deployment because _TRIGGER_DEPLOY is not true"

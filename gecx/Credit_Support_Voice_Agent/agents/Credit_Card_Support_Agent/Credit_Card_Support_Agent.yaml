@@ -1,3 +1,17 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 name: 80f02b21-5b77-4907-94a3-bd67534bff66
 displayName: Credit Card Support Agent
 modelSettings:
@@ -5,20 +19,12 @@ modelSettings:
 instruction: agents/Credit_Card_Support_Agent/instruction.txt
 tools:
 - end_session
-beforeModelCallbacks:
-- pythonCode: agents/Credit_Card_Support_Agent/before_model_callbacks/classify_confirmation.py
-  description: Classify only a later completed customer turn against the active proposal.
 beforeToolCallbacks:
 - pythonCode: agents/Credit_Card_Support_Agent/before_tool_callbacks/enforce_proposal_context.py
-  description: Bind proposal calls to callback-owned turn evidence and block unsafe commits.
+  description: Bind typed proposal tool choices to callback-owned ordered turn evidence.
 afterToolCallbacks:
 - pythonCode: agents/Credit_Card_Support_Agent/after_tool_callbacks/capture_proposal.py
   description: Capture active-alert identifiers plus the opaque proposal and banking-authored summary.
-afterModelCallbacks:
-- pythonCode: agents/Credit_Card_Support_Agent/after_model_callbacks/track_fraud_selection_prompt.py
-  description: Mark the exact turn in which CES asks the customer to classify flagged activity.
-- pythonCode: agents/Credit_Card_Support_Agent/after_model_callbacks/record_presentation.py
-  description: Record a completed model turn after the banking proposal without replacing native audio.
 toolsets:
 - toolset: banking_service_mcp_toolset
   toolIds:
@@ -26,7 +32,11 @@ toolsets:
   - review_fraud_selection
   - propose_fraud_triage
   - commit_fraud_triage
-  - push_card_to_google_wallet
-  - report_lost_stolen_card
+  - propose_card_reissue
+  - commit_card_reissue
+  - propose_wallet_provisioning
+  - commit_wallet_provisioning
+  - decide_action_proposal
+  - offer_session_closeout
   - request_credit_limit_increase
   - reverse_overdraft_fee

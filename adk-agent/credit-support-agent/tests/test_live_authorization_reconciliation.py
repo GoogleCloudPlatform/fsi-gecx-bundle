@@ -1,15 +1,27 @@
-import asyncio
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from types import SimpleNamespace
+import time
 
 import pytest
 
 from agent import agent
 from agent.workflow_authorization import (
-    PUSH_CARD_TO_GOOGLE_WALLET,
     TRIAGE_FRAUD_CASE,
-    apply_customer_authorization_response,
     create_workflow_authorization,
-    mark_authorization_prompted,
+    mark_authorization_presented,
 )
 
 
@@ -22,153 +34,175 @@ def triage_payload() -> dict:
     }
 
 
-def pending_playbook(*, issued_at: float = 1000.0) -> dict:
+def pending_playbook(*, issued_at: float | None = None) -> dict:
+    issued_at = time.time() if issued_at is None else issued_at
     authorization = create_workflow_authorization(
         action=TRIAGE_FRAUD_CASE,
         payload=triage_payload(),
         session_id="session-1",
+        originating_customer_event_id="customer-origin",
         now_epoch_s=issued_at,
     )
-    authorization = mark_authorization_prompted(
+    authorization["proposal_id"] = "proposal-123"
+    authorization = mark_authorization_presented(
         authorization,
-        assistant_event_id="assistant-prompt",
+        assistant_event_id="assistant-presentation",
         now_epoch_s=issued_at + 1,
     )
-    return {"workflow_authorization": authorization}
+    return {
+        "entry_mode": "FRAUD_ALERT",
+        "fraud_alert_id": "fraud-123",
+        "open_alert_inspected": True,
+        "triage_submitted": False,
+        "resolution_completed": False,
+        "workflow_authorization": authorization,
+    }
 
 
-def confirmed_decision(*, event_id: str = "typed-message-1") -> dict:
-    return apply_customer_authorization_response(
-        pending_playbook()["workflow_authorization"],
-        transcript="That's correct.",
-        customer_event_id=event_id,
-        now_epoch_s=1002.0,
+def context_for(playbook: dict) -> SimpleNamespace:
+    return SimpleNamespace(
+        state={
+            "session_id": "session-1",
+            "reset_generation_token": "0:1",
+            "fraud_playbook": playbook,
+            "fraud_context": {"fraud_alert_id": "fraud-123"},
+        }
     )
 
 
-def test_plugin_decision_closes_live_event_ordering_gap() -> None:
+@pytest.fixture
+def valid_reset(monkeypatch):
+    async def generation_is_valid(**kwargs):
+        return True, None
+
+    monkeypatch.setattr(agent, "validate_reset_generation", generation_is_valid)
+    monkeypatch.setattr(agent, "get_auth_headers", lambda: {})
+
+
+def test_raw_customer_turn_does_not_change_authorization() -> None:
     tokens = agent.bind_session_context("customer-1", lambda event: event)
+    playbook = pending_playbook()
     try:
         agent.record_customer_turn(
-            "That's correct.",
-            event_id="typed-message-1",
+            "Any natural-language content",
+            event_id="customer-confirmation",
             observed_at_epoch_s=1002.0,
-        )
-        agent.record_customer_authorization_decision(confirmed_decision())
-        reconciled, changed = agent.apply_recorded_authorization_decision(
-            pending_playbook()
         )
     finally:
         agent.reset_session_context(tokens)
 
-    assert changed is True
-    assert reconciled["workflow_authorization"]["status"] == "CONFIRMED"
-    assert reconciled["workflow_authorization"]["customer_event_id"] == (
-        "typed-message-1"
-    )
-
-
-def test_raw_customer_turn_is_not_independently_classified() -> None:
-    tokens = agent.bind_session_context("customer-1", lambda event: event)
-    try:
-        agent.record_customer_turn(
-            "That's correct.",
-            event_id="customer-turn-1",
-            observed_at_epoch_s=1002.0,
-        )
-        reconciled, changed = agent.apply_recorded_authorization_decision(
-            pending_playbook()
-        )
-    finally:
-        agent.reset_session_context(tokens)
-
-    assert changed is False
-    assert reconciled["workflow_authorization"]["status"] == "PENDING"
+    assert playbook["workflow_authorization"]["status"] == "PENDING"
 
 
 @pytest.mark.asyncio
-async def test_plugin_decision_recorded_by_child_listener_is_shared() -> None:
-    tokens = agent.bind_session_context("customer-1", lambda event: event)
+async def test_commit_tool_choice_binds_to_later_protected_customer_turn(
+    valid_reset,
+) -> None:
+    tokens = agent.bind_session_context(
+        "customer-1",
+        lambda event: event,
+        support_session_id="session-1",
+    )
+    context = context_for(pending_playbook())
     try:
+        presented_at = context.state["fraud_playbook"]["workflow_authorization"][
+            "presented_at_epoch_s"
+        ]
         agent.record_customer_turn(
-            "Yes",
-            event_id="child-listener-turn",
-            observed_at_epoch_s=1002.0,
+            "The runtime records this only as turn evidence.",
+            event_id="customer-confirmation",
+            observed_at_epoch_s=presented_at + 1,
         )
-        await asyncio.create_task(
-            asyncio.to_thread(
-                agent.record_customer_authorization_decision,
-                confirmed_decision(event_id="child-listener-turn"),
-            )
+        result = await agent.before_tool_callback(
+            SimpleNamespace(name="commit_fraud_triage"),
+            {"proposal_id": "proposal-123"},
+            context,
         )
-        reconciled, changed = agent.apply_recorded_authorization_decision(
-            pending_playbook()
+    finally:
+        agent.set_tool_processing(False)
+        agent.reset_session_context(tokens)
+
+    assert result is None
+    authorization = context.state["fraud_playbook"]["workflow_authorization"]
+    assert authorization["status"] == "EXECUTING"
+    assert authorization["customer_event_id"] == "customer-confirmation"
+    assert authorization["confirmation_source"] == "MODEL_TOOL_INTENT"
+
+
+@pytest.mark.asyncio
+async def test_commit_tool_choice_on_originating_turn_is_blocked(valid_reset) -> None:
+    tokens = agent.bind_session_context(
+        "customer-1",
+        lambda event: event,
+        support_session_id="session-1",
+    )
+    context = context_for(pending_playbook())
+    try:
+        presented_at = context.state["fraud_playbook"]["workflow_authorization"][
+            "presented_at_epoch_s"
+        ]
+        agent.record_customer_turn(
+            "The proposal-originating customer turn.",
+            event_id="customer-origin",
+            observed_at_epoch_s=presented_at + 1,
+        )
+        result = await agent.before_tool_callback(
+            SimpleNamespace(name="commit_fraud_triage"),
+            {"proposal_id": "proposal-123"},
+            context,
         )
     finally:
         agent.reset_session_context(tokens)
 
-    assert changed is True
-    assert reconciled["workflow_authorization"]["status"] == "CONFIRMED"
+    assert result["status"] == "AUTHORIZATION_REQUIRED"
+    assert context.state["fraud_playbook"]["workflow_authorization"]["status"] == (
+        "PENDING"
+    )
 
 
-def test_decision_for_different_authorization_is_not_reused() -> None:
-    tokens = agent.bind_session_context("customer-1", lambda event: event)
+@pytest.mark.asyncio
+async def test_commit_tool_choice_before_presentation_is_blocked(valid_reset) -> None:
+    playbook = pending_playbook()
+    authorization = dict(playbook["workflow_authorization"])
+    authorization["status"] = "PREPARED"
+    authorization["assistant_event_id"] = None
+    authorization["presented_at_epoch_s"] = None
+    playbook["workflow_authorization"] = authorization
+    context = context_for(playbook)
+    tokens = agent.bind_session_context(
+        "customer-1",
+        lambda event: event,
+        support_session_id="session-1",
+    )
     try:
+        presented_at = time.time()
         agent.record_customer_turn(
-            "That's correct.",
-            event_id="typed-message-1",
-            observed_at_epoch_s=1002.0,
+            "A later turn cannot bypass missing presentation.",
+            event_id="customer-confirmation",
+            observed_at_epoch_s=presented_at,
         )
-        decision = confirmed_decision()
-        decision["issued_at_epoch_s"] = 999.0
-        agent.record_customer_authorization_decision(decision)
-        reconciled, changed = agent.apply_recorded_authorization_decision(
-            pending_playbook()
+        result = await agent.before_tool_callback(
+            SimpleNamespace(name="commit_fraud_triage"),
+            {"proposal_id": "proposal-123"},
+            context,
         )
     finally:
         agent.reset_session_context(tokens)
 
-    assert changed is False
-    assert reconciled["workflow_authorization"]["status"] == "PENDING"
-
-
-def test_new_customer_turn_clears_buffered_decision() -> None:
-    tokens = agent.bind_session_context("customer-1", lambda event: event)
-    try:
-        agent.record_customer_turn(
-            "That's correct.",
-            event_id="customer-turn-1",
-            observed_at_epoch_s=1002.0,
-        )
-        agent.record_customer_authorization_decision(
-            confirmed_decision(event_id="customer-turn-1")
-        )
-        agent.record_customer_turn(
-            "Wait a moment.",
-            event_id="customer-turn-2",
-            observed_at_epoch_s=1003.0,
-        )
-        reconciled, changed = agent.apply_recorded_authorization_decision(
-            pending_playbook()
-        )
-    finally:
-        agent.reset_session_context(tokens)
-
-    assert changed is False
-    assert reconciled["workflow_authorization"]["status"] == "PENDING"
+    assert result["status"] == "AUTHORIZATION_REQUIRED"
 
 
 def test_typed_ingress_id_becomes_canonical_adk_turn_id() -> None:
     tokens = agent.bind_session_context("customer-1", lambda event: event)
     try:
         agent.record_customer_turn(
-            "Yes, that's right.",
+            "Customer input.",
             event_id="typed-message-1",
             observed_at_epoch_s=1002.0,
             pending_ingress=True,
         )
         turn = agent.record_customer_turn(
-            "  yes,   that's right. ",
+            " customer   input. ",
             event_id="adk-event-9",
             observed_at_epoch_s=1002.1,
             consume_pending=True,
@@ -179,74 +213,3 @@ def test_typed_ingress_id_becomes_canonical_adk_turn_id() -> None:
     assert turn["event_id"] == "typed-message-1"
     assert turn["runtime_event_id"] == "adk-event-9"
     assert turn["pending_ingress"] is False
-
-
-@pytest.mark.asyncio
-async def test_early_tool_attempt_returns_recoverable_authorization_checkpoint(
-    monkeypatch,
-) -> None:
-    async def generation_is_valid(**kwargs):
-        return True, None
-
-    monkeypatch.setattr(agent, "validate_reset_generation", generation_is_valid)
-    monkeypatch.setattr(agent, "get_auth_headers", lambda: {})
-    playbook = pending_playbook()
-    context = SimpleNamespace(
-        state={
-            "session_id": "session-1",
-            "reset_generation_token": "0:1",
-            "fraud_playbook": playbook,
-            "fraud_context": {"fraud_alert_id": "fraud-123"},
-        }
-    )
-
-    result = await agent.before_tool_callback(
-        SimpleNamespace(name="triage_fraud_case"),
-        triage_payload(),
-        context,
-    )
-
-    assert result["status"] == "AUTHORIZATION_REQUIRED"
-    assert result["isError"] is False
-    assert result["authorization_blocked"] is True
-    assert "not a technical failure" in result["model_instruction"]
-
-
-@pytest.mark.asyncio
-async def test_blocked_wallet_call_reports_not_queued_and_forbids_false_success(
-    monkeypatch,
-) -> None:
-    async def generation_is_valid(**kwargs):
-        return True, None
-
-    monkeypatch.setattr(agent, "validate_reset_generation", generation_is_valid)
-    monkeypatch.setattr(agent, "get_auth_headers", lambda: {})
-    authorization = create_workflow_authorization(
-        action=PUSH_CARD_TO_GOOGLE_WALLET,
-        payload={"card_token": "replacement-token"},
-        session_id="session-1",
-        now_epoch_s=1000.0,
-    )
-    context = SimpleNamespace(
-        state={
-            "session_id": "session-1",
-            "reset_generation_token": "0:1",
-            "fraud_playbook": {
-                "replacement_card_token": "replacement-token",
-                "workflow_authorization": authorization,
-            },
-            "fraud_context": {},
-        }
-    )
-
-    result = await agent.before_tool_callback(
-        SimpleNamespace(name="push_card_to_google_wallet"),
-        {"card_token": "invented-token"},
-        context,
-    )
-
-    assert result["status"] == "AUTHORIZATION_REQUIRED"
-    assert result["action_completed"] is False
-    assert result["wallet_provisioning_status"] == "NOT_QUEUED"
-    assert "DID NOT RUN" in result["model_instruction"]
-    assert "not queued" in result["customer_response"]

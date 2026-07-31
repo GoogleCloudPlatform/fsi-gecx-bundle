@@ -1,3 +1,17 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import pytest
 
 from agent.trajectory_eval import (
@@ -179,6 +193,40 @@ def test_failures_name_dependency_tool_ui_and_terminal_layers() -> None:
     assert result.metrics["tool_failures"] == 1
 
 
+def test_unexpected_failed_tool_result_fails_qualification() -> None:
+    events = golden_events()
+    events[-1:-1] = [
+        {
+            "type": "TOOL_CALL",
+            "tool": "offer_session_closeout",
+            "elapsed_ms": 400,
+        },
+        {
+            "type": "TOOL_RESULT",
+            "tool": "offer_session_closeout",
+            "success": False,
+            "elapsed_ms": 410,
+        },
+    ]
+
+    result = evaluate_trajectory(
+        events,
+        TrajectoryExpectation(
+            required_tools={
+                "get_open_fraud_alert": 1,
+                "triage_fraud_case": 1,
+            },
+            required_ui_events=("FRAUD_ALERT_RESOLVED",),
+        ),
+    )
+
+    assert result.passed is False
+    assert any(
+        "unexpected failed offer_session_closeout" in failure
+        for failure in result.failures
+    )
+
+
 def proposal_confirmation_events(classification: str) -> list[dict]:
     return [
         {"type": "TRANSCRIPT", "author": "agent", "text": "Do you recognize these transactions?", "elapsed_ms": 65},
@@ -186,11 +234,11 @@ def proposal_confirmation_events(classification: str) -> list[dict]:
         {"type": "FRAUD_REVIEW", "stage": "READY_TO_PROPOSE", "ready_to_propose": True, "elapsed_ms": 72},
         {"type": "TOOL_CALL", "tool": "propose_fraud_triage", "elapsed_ms": 75},
         {"type": "TOOL_RESULT", "tool": "propose_fraud_triage", "success": True, "elapsed_ms": 78},
-        {"type": "ACTION_PROPOSAL", "outcome": "PROPOSED", "proposal_ref": "proposal_1", "elapsed_ms": 80},
+        {"type": "ACTION_PROPOSAL", "action_type": "TRIAGE_FRAUD_CASE", "outcome": "PROPOSED", "proposal_ref": "proposal_1", "elapsed_ms": 80},
         {"type": "TRANSCRIPT", "author": "agent", "text": "Please confirm the exact summary", "elapsed_ms": 90},
-        {"type": "ACTION_PROPOSAL", "outcome": "PRESENTED", "proposal_ref": "proposal_1", "elapsed_ms": 100},
+        {"type": "ACTION_PROPOSAL", "action_type": "TRIAGE_FRAUD_CASE", "outcome": "PRESENTED", "proposal_ref": "proposal_1", "elapsed_ms": 100},
         {"type": "TRANSCRIPT", "author": "customer", "text": classification.lower(), "elapsed_ms": 110},
-        {"type": "ACTION_PROPOSAL", "outcome": classification, "proposal_ref": "proposal_1", "elapsed_ms": 120},
+        {"type": "ACTION_PROPOSAL", "action_type": "TRIAGE_FRAUD_CASE", "outcome": classification, "proposal_ref": "proposal_1", "elapsed_ms": 120},
     ]
 
 
@@ -248,6 +296,7 @@ def proposal_trajectory(
         events.append(
             {
                 "type": "ACTION_PROPOSAL",
+                "action_type": "TRIAGE_FRAUD_CASE",
                 "outcome": terminal_proposal_outcome,
                 "banking_outcome": (
                     "CONFIRMED_FRAUD_REMEDIATED"
@@ -338,35 +387,67 @@ def test_redundant_selection_confirmation_fails_one_gate_trajectory() -> None:
     assert any("intervening conversational turn" in failure for failure in result.failures)
 
 
-@pytest.mark.parametrize("classification", ["DECLINED", "UNCLEAR"])
-def test_non_authorizing_transcript_never_commits(classification: str) -> None:
+def test_typed_decline_never_commits() -> None:
     result = evaluate_trajectory(
         proposal_trajectory(
-            classification,
+            "DECLINED",
             commit_success=None,
             terminal_proposal_outcome=None,
         ),
         TrajectoryExpectation(
             required_tools={"get_open_fraud_alert": 1},
             forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
-            required_proposal_outcomes=("PROPOSED", "PRESENTED", classification),
+            required_proposal_outcomes=("PROPOSED", "PRESENTED", "DECLINED"),
         ),
     )
 
     assert result.passed is True
 
 
-def test_interruption_invalidates_without_commit() -> None:
-    events = proposal_trajectory(
-        "INVALIDATED", commit_success=None, terminal_proposal_outcome=None
+def pending_proposal_trajectory() -> list[dict]:
+    events = golden_events()[:4] + proposal_confirmation_events("CONFIRMED")[:-2]
+    events.extend(
+        [
+            {
+                "type": "TRANSCRIPT",
+                "author": "customer",
+                "text": "A question about the proposal.",
+                "elapsed_ms": 110,
+            },
+            {
+                "type": "SESSION_ENDED",
+                "outcome": "NORMAL_DISCONNECT",
+                "elapsed_ms": 200,
+            },
+        ]
     )
+    return events
+
+
+def test_question_leaves_proposal_pending_without_commit() -> None:
+    result = evaluate_trajectory(
+        pending_proposal_trajectory(),
+        TrajectoryExpectation(
+            required_tools={"get_open_fraud_alert": 1},
+            forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
+            required_proposal_outcomes=("PROPOSED", "PRESENTED"),
+            forbidden_proposal_outcomes=("CONFIRMED", "COMMITTED", "INVALIDATED"),
+        ),
+    )
+
+    assert result.passed is True
+
+
+def test_interruption_is_observed_without_business_invalidation() -> None:
+    events = pending_proposal_trajectory()
     events.insert(-1, {"type": "INTERRUPTION", "elapsed_ms": 125})
     result = evaluate_trajectory(
         events,
         TrajectoryExpectation(
             required_tools={"get_open_fraud_alert": 1},
             forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
-            required_proposal_outcomes=("PROPOSED", "INVALIDATED"),
+            required_proposal_outcomes=("PROPOSED", "PRESENTED"),
+            forbidden_proposal_outcomes=("CONFIRMED", "COMMITTED", "INVALIDATED"),
         ),
     )
 
@@ -448,6 +529,68 @@ def test_tool_failure_is_a_bounded_expected_trajectory() -> None:
     assert result.metrics["tool_failures"] == 1
 
 
+def test_failed_commit_can_be_retried_idempotently_once() -> None:
+    events = proposal_trajectory(
+        commit_success=False,
+        terminal_proposal_outcome="TOOL_ERROR",
+    )[:-1]
+    events.extend(
+        [
+            {
+                "type": "TOOL_CALL",
+                "tool": "commit_fraud_triage",
+                "elapsed_ms": 180,
+            },
+            {
+                "type": "TOOL_RESULT",
+                "tool": "commit_fraud_triage",
+                "success": True,
+                "elapsed_ms": 190,
+            },
+            {
+                "type": "ACTION_PROPOSAL",
+                "action_type": "TRIAGE_FRAUD_CASE",
+                "outcome": "COMMITTED",
+                "banking_outcome": "CONFIRMED_FRAUD_REMEDIATED",
+                "proposal_ref": "proposal_1",
+                "elapsed_ms": 195,
+            },
+            {
+                "type": "UI_EVENT",
+                "event": "FRAUD_ALERT_RESOLVED",
+                "elapsed_ms": 197,
+            },
+            {
+                "type": "SESSION_ENDED",
+                "outcome": "NORMAL_DISCONNECT",
+                "elapsed_ms": 200,
+            },
+        ]
+    )
+    result = evaluate_trajectory(
+        events,
+        TrajectoryExpectation(
+            required_tools={
+                "get_open_fraud_alert": 1,
+                "commit_fraud_triage": 1,
+            },
+            required_failed_tools={"commit_fraud_triage": 1},
+            required_proposal_outcomes=(
+                "PROPOSED",
+                "PRESENTED",
+                "CONFIRMED",
+                "TOOL_ERROR",
+                "COMMITTED",
+            ),
+            required_ui_events=("FRAUD_ALERT_RESOLVED",),
+        ),
+    )
+
+    assert result.passed is True
+    assert result.metrics["tool_calls"]["commit_fraud_triage"] == 2
+    assert result.metrics["tool_failures"] == 1
+
+
 def test_direct_and_proposal_banking_outcomes_compare_equal() -> None:
     proposal = evaluate_trajectory(
         proposal_trajectory(),
@@ -477,3 +620,93 @@ def test_direct_and_proposal_banking_outcomes_compare_equal() -> None:
     comparison = compare_trajectory_outcomes(direct, proposal)
     assert comparison.matched is True
     assert comparison.mismatches == ()
+
+
+@pytest.mark.parametrize(
+    ("action_type", "propose_tool", "commit_tool", "ui_event"),
+    (
+        (
+            "REISSUE_CARD",
+            "propose_card_reissue",
+            "commit_card_reissue",
+            "CARD_REPLACED",
+        ),
+        (
+            "PROVISION_GOOGLE_WALLET",
+            "propose_wallet_provisioning",
+            "commit_wallet_provisioning",
+            "WALLET_PROVISIONING_QUEUED",
+        ),
+    ),
+)
+def test_generic_proposal_trajectory_covers_follow_on_actions(
+    action_type, propose_tool, commit_tool, ui_event
+) -> None:
+    events = golden_events()[:4] + [
+        {"type": "TOOL_CALL", "tool": propose_tool, "elapsed_ms": 70},
+        {
+            "type": "TOOL_RESULT",
+            "tool": propose_tool,
+            "success": True,
+            "elapsed_ms": 80,
+        },
+        {
+            "type": "ACTION_PROPOSAL",
+            "action_type": action_type,
+            "outcome": "PROPOSED",
+            "elapsed_ms": 81,
+        },
+        {
+            "type": "ACTION_PROPOSAL",
+            "action_type": action_type,
+            "outcome": "PRESENTED",
+            "elapsed_ms": 90,
+        },
+        {
+            "type": "TRANSCRIPT",
+            "author": "customer",
+            "text": "A later turn interpreted by the model.",
+            "elapsed_ms": 100,
+        },
+        {
+            "type": "ACTION_PROPOSAL",
+            "action_type": action_type,
+            "outcome": "CONFIRMED",
+            "elapsed_ms": 101,
+        },
+        {"type": "TOOL_CALL", "tool": commit_tool, "elapsed_ms": 110},
+        {
+            "type": "TOOL_RESULT",
+            "tool": commit_tool,
+            "success": True,
+            "elapsed_ms": 130,
+        },
+        {
+            "type": "ACTION_PROPOSAL",
+            "action_type": action_type,
+            "outcome": "COMMITTED",
+            "elapsed_ms": 131,
+        },
+        {"type": "UI_EVENT", "event": ui_event, "elapsed_ms": 140},
+        {
+            "type": "SESSION_ENDED",
+            "outcome": "NORMAL_DISCONNECT",
+            "elapsed_ms": 150,
+        },
+    ]
+
+    result = evaluate_trajectory(
+        events,
+        TrajectoryExpectation(
+            required_tools={propose_tool: 1, commit_tool: 1},
+            required_ui_events=(ui_event,),
+            required_proposal_outcomes=(
+                "PROPOSED",
+                "PRESENTED",
+                "CONFIRMED",
+                "COMMITTED",
+            ),
+        ),
+    )
+
+    assert result.passed is True

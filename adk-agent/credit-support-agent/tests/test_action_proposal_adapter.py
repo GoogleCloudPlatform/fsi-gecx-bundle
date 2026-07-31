@@ -1,3 +1,17 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from types import SimpleNamespace
 
 import httpx
@@ -8,98 +22,6 @@ from agent.workflow_authorization import (
     TRIAGE_FRAUD_CASE,
     create_workflow_authorization,
 )
-
-
-class _ProposalResponse:
-    def raise_for_status(self) -> None:
-        return None
-
-    def json(self) -> dict:
-        return {
-            "success": True,
-            "proposal_id": "11111111-1111-4111-8111-111111111111",
-            "action_type": TRIAGE_FRAUD_CASE,
-            "contract_version": "fraud-triage.v1",
-            "status": "PROPOSED",
-            "confirmation_policy": "EXPLICIT_VERBAL",
-            "customer_safe_summary": "Confirm the selected charge and replacement card.",
-            "display_selection": {"fraud_alert_id": "fraud-123"},
-            "expires_at": "2026-07-21T12:00:00+00:00",
-        }
-
-
-class _ProposalClient:
-    last_request = None
-
-    def __init__(self, **kwargs):
-        pass
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        return None
-
-    def post(self, url, *, headers, json):
-        type(self).last_request = (url, headers, json)
-        return _ProposalResponse()
-
-
-def _active_state() -> dict:
-    return {
-        "session_id": "session-1",
-        "fraud_context": {
-            "suspicious_transactions": [
-                {"authorization_id": "auth-1", "merchant_name": "Cafe"}
-            ]
-        },
-        "fraud_playbook": {
-            "entry_mode": "FRAUD_ALERT",
-            "open_alert_inspected": True,
-            "fraud_alert_id": "fraud-123",
-            "workflow_authorization": None,
-        },
-    }
-
-
-def test_prepare_confirmation_creates_banking_proposal(monkeypatch) -> None:
-    monkeypatch.setattr(agent.httpx, "Client", _ProposalClient)
-    monkeypatch.setattr(
-        agent, "get_auth_headers", lambda: {"Authorization": "Bearer test"}
-    )
-    tokens = agent.bind_session_context(
-        "customer-1",
-        lambda event: event,
-        support_session_id="support-1",
-        runtime_session_id="session-1",
-    )
-    try:
-        agent.configure_proposal_runtime_context(
-            reset_generation="3:9", catalog_snapshot_id="catalog-7"
-        )
-        agent.record_customer_turn("I do not recognize it", event_id="customer-turn-10")
-        context = SimpleNamespace(state=_active_state())
-
-        result = agent.prepare_fraud_triage_confirmation(
-            fraud_alert_id="fraud-123",
-            disputed_authorization_ids=["auth-1"],
-            disputed_transaction_ids=[],
-            issue_replacement=True,
-            tool_context=context,
-        )
-
-        authorization = context.state["fraud_playbook"]["workflow_authorization"]
-        assert result["proposal_id"] == "11111111-1111-4111-8111-111111111111"
-        assert result["customer_safe_summary"].startswith("Confirm")
-        assert authorization["proposal_id"] == result["proposal_id"]
-        _, headers, request = _ProposalClient.last_request
-        assert headers["x-support-session-id"] == "support-1"
-        assert headers["x-customer-turn-id"] == "customer-turn-10"
-        assert headers["x-reset-generation"] == "3:9"
-        assert headers["x-catalog-snapshot-id"] == "catalog-7"
-        assert request["fraud_alert_id"] == "fraud-123"
-    finally:
-        agent.reset_session_context(tokens)
 
 
 @pytest.mark.asyncio
@@ -173,7 +95,8 @@ async def test_commit_uses_only_proposal_id_and_protected_transport_evidence(
         assert headers["x-proposal-confirmation-turn-id"] == "customer-turn-11"
         assert headers["x-customer-turn-id"] == "customer-turn-11"
         assert headers["x-proposal-confirmation-method"] == "EXPLICIT_VERBAL"
-        assert headers["x-proposal-confirmation-classification"] == "CONFIRMED"
+        assert headers["x-proposal-confirmation-source"] == "MODEL_TOOL_INTENT"
+        assert "x-proposal-confirmation-classification" not in headers
     finally:
         agent.reset_session_context(tokens)
 
@@ -258,3 +181,232 @@ async def test_commit_without_captured_proposal_fails_closed_instead_of_crashing
 
     assert result["status"] == "AUTHORIZATION_REQUIRED"
     assert result["authorization_blocked"] is True
+
+
+@pytest.mark.asyncio
+async def test_typed_non_commit_decision_uses_protected_transport_and_terminates_state(
+    monkeypatch,
+) -> None:
+    async def account_details():
+        return {}
+
+    monkeypatch.setattr(agent, "fetch_updated_account_details", account_details)
+    proposal_id = "11111111-1111-4111-8111-111111111111"
+    payload = {
+        "fraud_alert_id": "fraud-123",
+        "disputed_authorization_ids": ["auth-1"],
+        "disputed_transaction_ids": [],
+        "issue_replacement": True,
+        "escalate": False,
+    }
+    authorization = create_workflow_authorization(
+        action=TRIAGE_FRAUD_CASE,
+        payload=payload,
+        session_id="session-1",
+        originating_customer_event_id="customer-turn-10",
+        now_epoch_s=1,
+    )
+    authorization.update(
+        {
+            "proposal_id": proposal_id,
+            "contract_version": "fraud-triage.v1",
+            "status": "PENDING",
+            "assistant_event_id": "assistant-turn-10",
+            "presented_at_epoch_s": 2,
+            "expires_at_epoch_s": 1_000_000_000_000,
+        }
+    )
+    context = SimpleNamespace(
+        state={
+            "session_id": "session-1",
+            "fraud_context": {"fraud_alert_id": "fraud-123"},
+            "fraud_playbook": {
+                "entry_mode": "FRAUD_ALERT",
+                "open_alert_inspected": True,
+                "fraud_alert_id": "fraud-123",
+                "workflow_authorization": authorization,
+            },
+            "_voice_tool_started_at": {},
+        }
+    )
+    tokens = agent.bind_session_context(
+        "customer-1",
+        lambda event: event,
+        support_session_id="support-1",
+        runtime_session_id="session-1",
+    )
+    try:
+        agent.configure_proposal_runtime_context(
+            reset_generation="3:9",
+            catalog_snapshot_id="catalog-7",
+        )
+        agent.record_customer_turn(
+            "Text is transport evidence only.",
+            event_id="customer-turn-11",
+            observed_at_epoch_s=3,
+        )
+        result = await agent.before_tool_callback(
+            SimpleNamespace(name="decide_action_proposal"),
+            {"proposal_id": proposal_id, "decision": "REVISE"},
+            context,
+        )
+        assert result is None
+        current = context.state["fraud_playbook"]["workflow_authorization"]
+        assert current["status"] == "CONFIRMED"
+
+        request = httpx.Request("POST", "https://banking.example/mcp/")
+        async for authorized_request in agent.DynamicGoogleAuth().async_auth_flow(
+            request
+        ):
+            headers = authorized_request.headers
+        assert headers["x-proposal-presentation-turn-id"] == "assistant-turn-10"
+        assert headers["x-proposal-confirmation-turn-id"] == "customer-turn-11"
+
+        await agent.after_tool_callback(
+            SimpleNamespace(name="decide_action_proposal"),
+            {"proposal_id": proposal_id, "decision": "REVISE"},
+            context,
+            {
+                "structuredContent": {
+                    "success": True,
+                    "proposal_id": proposal_id,
+                    "action_type": TRIAGE_FRAUD_CASE,
+                    "contract_version": "fraud-triage.v1",
+                    "status": "INVALIDATED",
+                    "decision": "REVISE",
+                    "invalidation_reason": "CUSTOMER_REVISED",
+                }
+            },
+        )
+        terminal = context.state["fraud_playbook"]["workflow_authorization"]
+        assert terminal["status"] == "INVALIDATED"
+        assert terminal["decision"] == "REVISE"
+        assert terminal["invalidation_reason"] == "CUSTOMER_REVISED"
+    finally:
+        agent.reset_session_context(tokens)
+
+
+@pytest.mark.asyncio
+async def test_questions_preserve_pending_proposal_and_revision_is_explicit() -> None:
+    authorization = create_workflow_authorization(
+        action=TRIAGE_FRAUD_CASE,
+        payload={
+            "fraud_alert_id": "fraud-123",
+            "disputed_authorization_ids": ["auth-1"],
+            "disputed_transaction_ids": [],
+            "issue_replacement": True,
+            "escalate": False,
+        },
+        session_id="session-1",
+        now_epoch_s=1,
+    )
+    authorization.update(
+        {
+            "proposal_id": "11111111-1111-4111-8111-111111111111",
+            "status": "PENDING",
+            "assistant_event_id": "assistant-turn-10",
+            "presented_at_epoch_s": 2,
+            "expires_at_epoch_s": 1_000_000_000_000,
+        }
+    )
+    context = SimpleNamespace(
+        state={
+            "session_id": "session-1",
+            "fraud_context": {"fraud_alert_id": "fraud-123"},
+            "fraud_playbook": {
+                "entry_mode": "FRAUD_ALERT",
+                "open_alert_inspected": True,
+                "fraud_alert_id": "fraud-123",
+                "workflow_authorization": authorization,
+            },
+        }
+    )
+
+    assert (
+        await agent.before_tool_callback(
+            SimpleNamespace(name="get_transaction_history"),
+            {},
+            context,
+        )
+        is None
+    )
+    assert context.state["fraud_playbook"]["workflow_authorization"]["status"] == (
+        "PENDING"
+    )
+
+    blocked = await agent.before_tool_callback(
+        SimpleNamespace(name="propose_fraud_triage"),
+        {},
+        context,
+    )
+    assert blocked["status"] == "PROPOSAL_DECISION_REQUIRED"
+    assert context.state["fraud_playbook"]["workflow_authorization"]["status"] == (
+        "PENDING"
+    )
+    closeout = await agent.before_tool_callback(
+        SimpleNamespace(name="offer_session_closeout"),
+        {},
+        context,
+    )
+    assert closeout["status"] == "PROPOSAL_DECISION_REQUIRED"
+
+    context.state["fraud_playbook"]["workflow_authorization"]["status"] = "EXECUTING"
+    replacement = await agent.before_tool_callback(
+        SimpleNamespace(name="propose_fraud_triage"),
+        {},
+        context,
+    )
+    assert replacement["status"] == "PROPOSAL_DECISION_REQUIRED"
+
+    context.state["fraud_playbook"]["workflow_authorization"]["status"] = (
+        "RECOVERY_REQUIRED"
+    )
+    decision = await agent.before_tool_callback(
+        SimpleNamespace(name="decide_action_proposal"),
+        {
+            "proposal_id": "11111111-1111-4111-8111-111111111111",
+            "decision": "CANCEL",
+        },
+        context,
+    )
+    assert decision["status"] == "COMMIT_RECOVERY_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_unrelated_tool_failure_cannot_change_executing_proposal(
+    monkeypatch,
+) -> None:
+    async def account_details():
+        return {}
+
+    monkeypatch.setattr(agent, "fetch_updated_account_details", account_details)
+    authorization = create_workflow_authorization(
+        action=TRIAGE_FRAUD_CASE,
+        payload={
+            "fraud_alert_id": "fraud-123",
+            "disputed_authorization_ids": ["auth-1"],
+            "disputed_transaction_ids": [],
+            "issue_replacement": True,
+            "escalate": False,
+        },
+        session_id="session-1",
+    )
+    authorization["status"] = "EXECUTING"
+    context = SimpleNamespace(
+        state={
+            "fraud_playbook": {"workflow_authorization": authorization},
+            "_voice_tool_started_at": {},
+        }
+    )
+
+    await agent.after_tool_callback(
+        SimpleNamespace(name="get_transaction_history"),
+        {},
+        context,
+        {"isError": True, "content": [{"type": "text", "text": "Read failed."}]},
+    )
+
+    assert (
+        context.state["fraud_playbook"]["workflow_authorization"]["status"]
+        == "EXECUTING"
+    )

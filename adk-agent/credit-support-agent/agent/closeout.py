@@ -1,79 +1,43 @@
-"""Deterministic voice-session closeout validation."""
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Transport-attested voice-session closeout checkpoints."""
 
 from __future__ import annotations
 
-import re
+import time
 
 
-_EXPLICIT_CLOSEOUT_PATTERN = re.compile(
-    r"(?:"
-    r"^\s*(?:no|nope|nah)\s*[,.;!?-]*\s*(?:thank\s+you|thanks)?\s*$|"
-    r"\b(?:no|nothing)\s+(?:else|more)\b|"
-    r"\b(?:that(?:'|’)s|that\s+is)\s+(?:all|everything)\b|"
-    r"\b(?:that(?:'|’)s|that\s+is)\s+(?:about\s+)?it\b|"
-    r"\b(?:that(?:'|’)ll|that\s+will)\s+be\s+all\b|"
-    r"\bi(?:'|’)m\s+(?:all\s+)?(?:set|done|good)\b|"
-    r"\bi\s+am\s+(?:all\s+)?(?:set|done|good)\b|"
-    r"\b(?:we(?:'|’)re|we\s+are)\s+(?:all\s+)?(?:set|done|good)\b|"
-    r"\b(?:goodbye|good-bye|bye)\b|"
-    r"^\s*(?:all\s+set|i(?:'|’)m\s+finished|done)\s*[,.;!?]*\s*$"
-    r")",
-    re.IGNORECASE,
-)
-
-_CLOSEOUT_PROMPT_PATTERN = re.compile(
-    r"(?:"
-    r"\b(?:is there|do you (?:have|need)|would you like)\b.{0,80}"
-    r"\b(?:anything|something)\s+(?:else|more)\b|"
-    r"\b(?:can|may)\s+i\b.{0,50}\bhelp\b.{0,40}"
-    r"\b(?:anything|something)\s+(?:else|more)\b|"
-    r"\b(?:anything|something)\s+(?:else|more)\b.{0,50}\b(?:help|assist)\b"
-    r")",
-    re.IGNORECASE,
-)
-
-_OPEN_CLOSEOUT_STATUSES = {"PENDING", "CONFIRMED"}
+_OPEN_CLOSEOUT_STATUSES = {"OFFERED"}
 
 
-def customer_explicitly_closed(transcript: str | None) -> bool:
-    """Return whether the customer explicitly said no further help is needed."""
-    return bool(_EXPLICIT_CLOSEOUT_PATTERN.search(transcript or ""))
-
-
-def assistant_requested_closeout(transcript: str | None) -> bool:
-    """Return whether the agent explicitly opened the final closeout checkpoint."""
-    return bool(_CLOSEOUT_PROMPT_PATTERN.search(transcript or ""))
-
-
-def apply_closeout_transcript_event(
-    checkpoint: dict | None,
+def open_closeout_checkpoint(
     *,
-    author: str,
-    transcript: str | None,
-    event_id: str,
+    originating_customer_event_id: str,
+    now_epoch_s: float | None = None,
 ) -> dict:
-    """Advance closeout consent using ordered, finalized ADK transcript events."""
-    current = dict(checkpoint or {})
-    if author == "agent":
-        if not assistant_requested_closeout(transcript):
-            return current
-        return {
-            "status": "PENDING",
-            "assistant_event_id": event_id,
-            "customer_event_id": None,
-        }
-
-    if author != "user" or current.get("status") not in _OPEN_CLOSEOUT_STATUSES:
-        return current
-    current["customer_event_id"] = event_id
-    current["status"] = (
-        "CONFIRMED" if customer_explicitly_closed(transcript) else "CONTINUE"
-    )
-    return current
+    """Record the model's typed choice to offer final assistance."""
+    return {
+        "status": "OFFERED",
+        "originating_customer_event_id": originating_customer_event_id,
+        "offered_at_epoch_s": time.time() if now_epoch_s is None else now_epoch_s,
+        "customer_event_id": None,
+    }
 
 
 def invalidate_closeout_checkpoint(checkpoint: dict | None, *, reason: str) -> dict:
-    """Invalidate stale closeout consent when another tool action intervenes."""
+    """Invalidate an open checkpoint when another action intervenes."""
     current = dict(checkpoint or {})
     if current.get("status") not in _OPEN_CLOSEOUT_STATUSES:
         return current
@@ -86,22 +50,30 @@ def closeout_block_reason(
     *,
     closeout_checkpoint: dict | None,
     workflow_authorization: dict | None,
+    latest_customer_turn: dict | None,
 ) -> str | None:
-    """Return a stable reason when the model tries to end too early."""
+    """Validate only action state and later-turn provenance, never transcript text."""
     authorization_status = (workflow_authorization or {}).get("status")
     if authorization_status in {
         "PREPARED",
         "PENDING",
         "CONFIRMED",
-        "UNCLEAR",
         "EXECUTING",
+        "RECOVERY_REQUIRED",
     }:
         return f"WORKFLOW_AUTHORIZATION_{authorization_status}"
+
     checkpoint = closeout_checkpoint or {}
-    if checkpoint.get("status") != "CONFIRMED":
-        return "EXPLICIT_CUSTOMER_CLOSEOUT_REQUIRED"
-    if not checkpoint.get("assistant_event_id") or not checkpoint.get(
-        "customer_event_id"
+    if checkpoint.get("status") != "OFFERED":
+        return "CLOSEOUT_OFFER_REQUIRED"
+    latest = latest_customer_turn or {}
+    latest_event_id = str(latest.get("event_id") or "")
+    if not latest_event_id:
+        return "CLOSEOUT_CUSTOMER_TURN_REQUIRED"
+    if latest_event_id == str(checkpoint.get("originating_customer_event_id") or ""):
+        return "LATER_CLOSEOUT_CUSTOMER_TURN_REQUIRED"
+    if float(latest.get("observed_at_epoch_s") or 0) <= float(
+        checkpoint.get("offered_at_epoch_s") or 0
     ):
-        return "CLOSEOUT_TURN_EVIDENCE_REQUIRED"
+        return "LATER_CLOSEOUT_CUSTOMER_TURN_REQUIRED"
     return None

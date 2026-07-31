@@ -1,3 +1,17 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 name: Test Action Proposal Boundary
 
 permissions:
@@ -14,8 +28,13 @@ on:
       - "adk-agent/credit-support-agent/**"
       - "banking-service/**"
       - "banking-ui/**"
+      - "deployment/scripts/run_alloydb_release.sh"
+      - "deployment/scripts/voice_release_metadata.py"
+      - "deployment/scripts/test_voice_release_metadata.py"
       - "deployment/terraform/**"
       - "gecx/Credit_Support_Voice_Agent/**"
+      - "scripts/cxas/overwrite_cxas_agent.sh"
+      - "scripts/cxas/ces_voice_qualification.py"
   pull_request:
     branches: [main]
     paths:
@@ -23,8 +42,13 @@ on:
       - "adk-agent/credit-support-agent/**"
       - "banking-service/**"
       - "banking-ui/**"
+      - "deployment/scripts/run_alloydb_release.sh"
+      - "deployment/scripts/voice_release_metadata.py"
+      - "deployment/scripts/test_voice_release_metadata.py"
       - "deployment/terraform/**"
       - "gecx/Credit_Support_Voice_Agent/**"
+      - "scripts/cxas/overwrite_cxas_agent.sh"
+      - "scripts/cxas/ces_voice_qualification.py"
 
 jobs:
   banking-contract:
@@ -61,6 +85,13 @@ jobs:
             tests/test_database_schema_contract.py
         working-directory: banking-service
 
+      - name: Validate coherent release metadata
+        run: |
+          uv run pytest -q ../deployment/scripts/test_voice_release_metadata.py
+          bash -n ../deployment/scripts/run_alloydb_release.sh
+          bash -n ../scripts/cxas/overwrite_cxas_agent.sh
+        working-directory: banking-service
+
   adk-contract:
     name: ADK authorization contracts
     runs-on: ubuntu-latest
@@ -88,8 +119,14 @@ jobs:
         run: |
           uv run pytest -q \
             tests/test_action_proposal_adapter.py \
+            tests/test_workflow_authorization.py \
             tests/test_workflow_plugin.py \
-            tests/test_live_authorization_reconciliation.py
+            tests/test_live_authorization_reconciliation.py \
+            tests/test_closeout.py \
+            tests/test_no_semantic_gating.py \
+            tests/test_trajectory_eval.py \
+            tests/test_ces_trajectory.py \
+            tests/test_ces_voice_qualification.py
         working-directory: adk-agent/credit-support-agent
 
   banking-ui-contract:

@@ -3,8 +3,8 @@
 The architectural model shared with the ADK runtime is documented in
 [Agent Trajectory Evaluation Architecture](../../../docs/architecture/ai-and-voice/agent_trajectory_evaluation.md).
 
-`ces_fraud_qualification_matrix.json` defines the first bounded CES
-qualification case. The runner:
+`ces_fraud_qualification_matrix.json` defines the bounded CES fraud contract,
+question, decline, revise, and idempotent-retry trajectories. The runner:
 
 1. reads a named CES live conversation through the CES API
 2. normalizes it into the shared ADK/CES trajectory vocabulary
@@ -51,7 +51,7 @@ tool calls. Its semantic threshold is intentionally zero because the replay
 exists only to pin the workflow shape. It must never be used as evidence that
 the wording or customer experience passed.
 
-The conversational reference uses a semantic threshold of 3 and additional
+The conversational reference uses a semantic threshold of 2 and additional
 deterministic checks over observed agent responses. It rejects:
 
 - incorrect or missing Nova Horizon Bank branding
@@ -80,30 +80,31 @@ The fake toolset configuration is active only when an evaluation run explicitly
 selects fake tool behavior. Live sessions continue to call the authenticated
 banking MCP service.
 
-## Protected-consent sample set
+## Typed-decision sample set
 
-Changes to proposal capture, presentation validation, confirmation
-classification, or commit enforcement require three managed samples against the
-saved app version:
+Changes to proposal capture, customer-decision handling, or commit enforcement
+require varied managed samples against the saved app version:
 
 | Sample | Expected result |
 | :--- | :--- |
-| Exact confirmation | Complete proposal presentation, later explicit confirmation, and exactly one successful fake commit. |
-| Unrelated affirmative | Classification remains `UNCLEAR`; every commit attempt returns `PROTECTED_CONFIRMATION_REQUIRED`; no `FakeTool` commit span is present. |
-| Altered or incomplete presentation | Presentation authority remains unset; a later affirmative is blocked before fake tool execution. |
+| Clear acceptance | A later customer turn causes the model to choose typed commit and exactly one fake commit succeeds. |
+| Question or uncertainty | The model answers or clarifies without choosing a decision tool; no fake commit span is present. |
+| Qualified or unrelated response | The model does not choose commit. A structurally invalid attempt is rejected before fake execution. |
+| Decline or changed scope | The model chooses typed `DECLINE`, `REVISE`, or `CANCEL`; the old proposal becomes terminal and revision requires a new immutable proposal. |
 
-The model may retry a blocked commit. An observed tool call is therefore not by
-itself a failed security boundary. Inspect the evaluation conversation:
+The model's typed tool choice is the one semantic decision. Callbacks validate
+opaque proposal state, action type, and protected turn ordering without reading
+transcript words. Inspect the evaluation conversation:
 
-- the callback tool response must have `success=false` and
-  `error=PROTECTED_CONFIRMATION_REQUIRED`
-- no `FakeTool: banking_service_mcp_toolset_commit_fraud_triage` span may exist
-- no successful commit response or `COMMITTED` state may exist
+- a negative sample has no successful commit response or `COMMITTED` state
+- no `FakeTool: banking_service_mcp_toolset_commit_fraud_triage` span exists
+  unless the expected typed decision is commit
+- questions preserve the pending proposal without manufacturing another gate
 
-Stable replay injects prior golden agent responses and variable updates into
-later turns. Do not copy `proposal_presentation_turn_id` into the altered or
-incomplete sample, because that would pre-authorize the action under test.
+Stable replay injects prior golden responses and variable updates into later
+turns. Curate protected identifiers and reusable credentials out of fixtures;
+do not use saved transcript wording as authorization state.
 
 An app overwrite can remove app-level evaluations and datasets. After importing
 a new bundle, rerun the managed qualification to recreate the contract replay
-and conversational reference before running these protected-consent samples.
+and conversational reference before running these typed-decision samples.

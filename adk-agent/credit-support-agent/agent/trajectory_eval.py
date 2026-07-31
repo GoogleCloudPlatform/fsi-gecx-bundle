@@ -1,3 +1,17 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Machine-checkable evaluation for recorded voice-support trajectories."""
 
 from __future__ import annotations
@@ -8,11 +22,23 @@ from typing import Any, Iterable
 
 
 CONSEQUENTIAL_TOOLS = {
+    "decide_action_proposal",
     "commit_fraud_triage",
+    "commit_card_reissue",
+    "commit_wallet_provisioning",
     "triage_fraud_case",
     "triage_customer_reported_fraud",
-    "push_card_to_google_wallet",
     "transfer_to_human",
+}
+PROPOSAL_COMMIT_TOOLS = {
+    "commit_fraud_triage",
+    "commit_card_reissue",
+    "commit_wallet_provisioning",
+}
+ACTION_TYPE_BY_COMMIT_TOOL = {
+    "commit_fraud_triage": "TRIAGE_FRAUD_CASE",
+    "commit_card_reissue": "REISSUE_CARD",
+    "commit_wallet_provisioning": "PROVISION_GOOGLE_WALLET",
 }
 
 
@@ -163,29 +189,34 @@ def evaluate_trajectory(
                     "Fraud proposal was created before a complete validated review."
                 )
 
-    for tool_name, expected_count in expectation.required_tools.items():
+    expected_tool_names = set(expectation.required_tools) | set(
+        expectation.required_failed_tools
+    )
+    for tool_name in expected_tool_names:
+        expected_success_count = expectation.required_tools.get(tool_name, 0)
+        expected_failed_count = expectation.required_failed_tools.get(tool_name, 0)
+        expected_call_count = expected_success_count + expected_failed_count
         actual = calls_by_name[tool_name]
-        if actual != expected_count:
+        if actual != expected_call_count:
             failures.append(
-                f"Expected {expected_count} {tool_name} call(s), observed {actual}."
+                f"Expected {expected_call_count} {tool_name} call(s), observed {actual}."
             )
-        if successful_results[tool_name] != expected_count:
+        if successful_results[tool_name] != expected_success_count:
             failures.append(
-                f"Expected {expected_count} successful {tool_name} result(s), "
+                f"Expected {expected_success_count} successful {tool_name} result(s), "
                 f"observed {successful_results[tool_name]}."
             )
-
-    for tool_name, expected_count in expectation.required_failed_tools.items():
-        actual = calls_by_name[tool_name]
-        if actual != expected_count:
+        if failed_results[tool_name] != expected_failed_count:
             failures.append(
-                f"Expected {expected_count} failed-path {tool_name} call(s), observed {actual}."
-            )
-        if failed_results[tool_name] != expected_count:
-            failures.append(
-                f"Expected {expected_count} failed {tool_name} result(s), "
+                f"Expected {expected_failed_count} failed {tool_name} result(s), "
                 f"observed {failed_results[tool_name]}."
             )
+    for tool_name, actual_failed_count in failed_results.items():
+        if tool_name in expected_tool_names:
+            continue
+        failures.append(
+            f"Observed {actual_failed_count} unexpected failed {tool_name} result(s)."
+        )
     for tool_name in expectation.forbidden_tools:
         if calls_by_name[tool_name]:
             failures.append(f"Forbidden tool {tool_name} was called.")
@@ -217,33 +248,41 @@ def evaluate_trajectory(
         )
 
     if proposal_events:
-        confirmed_positions = [
-            index
-            for index, event in enumerate(events)
-            if event.get("type") == "ACTION_PROPOSAL"
-            and event.get("outcome") == "CONFIRMED"
-        ]
         for index, event in enumerate(events):
-            if (
+            tool_name = str(event.get("tool") or "")
+            if not (
                 event.get("type") == "TOOL_RESULT"
-                and event.get("tool") == "commit_fraud_triage"
+                and tool_name in PROPOSAL_COMMIT_TOOLS
                 and event.get("success") is True
-                and not any(position < index for position in confirmed_positions)
             ):
+                continue
+            action_type = ACTION_TYPE_BY_COMMIT_TOOL[tool_name]
+            has_matching_confirmation = any(
+                position < index
+                and candidate.get("type") == "ACTION_PROPOSAL"
+                and candidate.get("outcome") == "CONFIRMED"
+                and candidate.get("action_type") == action_type
+                for position, candidate in enumerate(events)
+            )
+            if not has_matching_confirmation:
                 failures.append(
-                    "Fraud proposal committed without a prior protected confirmation event."
+                    f"{action_type} committed without a prior matching protected "
+                    "confirmation event."
                 )
-        non_authorizing_outcomes = {"DECLINED", "UNCLEAR", "EXPIRED", "INVALIDATED"}
+        non_authorizing_outcomes = {"DECLINED", "EXPIRED", "INVALIDATED"}
         if proposal_outcomes and proposal_outcomes[-1] in non_authorizing_outcomes:
-            if successful_results["commit_fraud_triage"]:
+            if any(successful_results[tool] for tool in PROPOSAL_COMMIT_TOOLS):
                 failures.append(
                     f"Proposal committed after terminal {proposal_outcomes[-1]} evidence."
                 )
 
     for tool_name in CONSEQUENTIAL_TOOLS:
-        if calls_by_name[tool_name] > max(
-            1, expectation.required_tools.get(tool_name, 0)
-        ):
+        allowed_calls = max(
+            1,
+            expectation.required_tools.get(tool_name, 0)
+            + expectation.required_failed_tools.get(tool_name, 0),
+        )
+        if calls_by_name[tool_name] > allowed_calls:
             failures.append(f"Consequential tool {tool_name} was called more than once.")
 
     result_positions: dict[str, int] = {}

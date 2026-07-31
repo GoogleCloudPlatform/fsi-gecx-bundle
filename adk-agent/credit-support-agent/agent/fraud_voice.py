@@ -1,117 +1,16 @@
-import re
-
-
-_WALLET_OFFER_PATTERN = re.compile(
-    r"(?:\b(?:would you like|shall i|can i|want me to|i can)\b.{0,120}\bgoogle\s+wallet\b"
-    r"|\b(?:do you (?:want|need|would like)|please confirm)\b.{0,140}\bgoogle\s+wallet\b"
-    r"|\bgoogle\s+wallet\b.{0,140}\b(?:would you like|shall i|can i|want me to|do you (?:want|need|would like)|please confirm)\b)",
-    re.IGNORECASE,
-)
-_WALLET_AFFIRMATIVE_PATTERN = re.compile(
-    r"(?:^\s*(?:yes|yeah|yep|sure|absolutely|please do|do it|go ahead|that works|sounds good|okay|ok)\b"
-    r"|\b(?:could|can|would)\s+you\s+(?:please\s+)?(?:do that|push|add|go ahead)\b"
-    r"|\bthat(?: would|'d|’d) be (?:great|perfect|helpful)\b"
-    r"|\bi(?:'d|’d| would) (?:like|appreciate) that\b|\bi want that\b|\blet(?:'|’)s do it\b)",
-    re.IGNORECASE,
-)
-_WALLET_DECLINE_PATTERN = re.compile(
-    r"\b(?:no|nope|don't|do not|not now|never|skip it|decline|rather not|stop)\b",
-    re.IGNORECASE,
-)
-_WALLET_RETRY_PATTERN = re.compile(
-    r"\b(?:(?:can|could|would)\s+you\s+(?:please\s+)?try(?:\s+it)?\s+(?:again|one\s+more\s+time)"
-    r"|try(?:\s+it)?\s+again|one\s+more\s+time)\b",
-    re.IGNORECASE,
-)
-_WALLET_RETRY_NEGATION_PATTERN = re.compile(
-    r"\b(?:don't|do not|stop|never)\b.{0,40}\b(?:try|retry)\b",
-    re.IGNORECASE,
-)
-
-
-def agent_offered_google_wallet(transcript: str | None) -> bool:
-    """Return whether a completed agent turn explicitly mentioned Google Wallet."""
-    return bool(_WALLET_OFFER_PATTERN.search(transcript or ""))
-
-
-def customer_confirmed_google_wallet(transcript: str | None) -> bool:
-    """Recognize an affirmative request while rejecting contradictory language."""
-    text = transcript or ""
-    return not _WALLET_DECLINE_PATTERN.search(text) and bool(_WALLET_AFFIRMATIVE_PATTERN.search(text))
-
-
-def classify_google_wallet_response(transcript: str | None) -> str:
-    """Classify the customer turn associated with a pending Wallet offer."""
-    text = transcript or ""
-    if _WALLET_RETRY_PATTERN.search(text) and not _WALLET_RETRY_NEGATION_PATTERN.search(text):
-        return "CONFIRMED"
-    if _WALLET_DECLINE_PATTERN.search(text):
-        return "DECLINED"
-    if customer_confirmed_google_wallet(text):
-        return "CONFIRMED"
-    return "UNCLEAR"
-
-
-def apply_wallet_transcript_event(
-    fraud_playbook: dict | None,
-    *,
-    author: str,
-    transcript: str | None,
-    event_id: str | None,
-) -> dict:
-    """Return the ADK session playbook transition for a completed transcript."""
-    playbook = dict(fraud_playbook or {})
-    if playbook.get("entry_mode") not in {"FRAUD_ALERT", "CUSTOMER_REPORTED_FRAUD"}:
-        return playbook
-
-    if author == "agent" and agent_offered_google_wallet(transcript):
-        # A preview model may repeat or elaborate on the offer before it emits
-        # the delayed function call. Do not erase authorization that the
-        # customer has already granted for this same action.
-        if playbook.get("wallet_response_status") == "CONFIRMED":
-            return playbook
-        playbook["wallet_push_offered"] = True
-        playbook["wallet_customer_confirmed"] = False
-        playbook["wallet_response_status"] = "PENDING"
-        playbook["wallet_offer_event_id"] = event_id
-        playbook["wallet_response_event_id"] = None
-        return playbook
-
-    if author == "user" and playbook.get("wallet_push_offered"):
-        status = classify_google_wallet_response(transcript)
-        if status == "UNCLEAR" and playbook.get("wallet_response_status") == "CONFIRMED":
-            # Follow-ups such as "Are you doing it?" are not a revocation.
-            # Preserve the originating confirmation until the action is
-            # consumed or explicitly invalidated.
-            playbook["wallet_followup_event_id"] = event_id
-            return playbook
-        playbook["wallet_response_status"] = status
-        playbook["wallet_customer_confirmed"] = status == "CONFIRMED"
-        playbook["wallet_response_event_id"] = event_id
-        if status == "DECLINED":
-            playbook["wallet_push_offered"] = False
-        return playbook
-
-    return playbook
-
-
-def invalidate_wallet_authorization(
-    fraud_playbook: dict | None,
-    *,
-    reason: str,
-    event_id: str | None = None,
-) -> dict:
-    """Invalidate an outstanding Wallet authorization with an audit reason."""
-    playbook = dict(fraud_playbook or {})
-    if playbook.get("wallet_response_status") not in {"PENDING", "CONFIRMED", "UNCLEAR"}:
-        return playbook
-    playbook["wallet_push_offered"] = False
-    playbook["wallet_customer_confirmed"] = False
-    playbook["wallet_response_status"] = "INVALIDATED"
-    playbook["wallet_invalidation_reason"] = reason
-    playbook["wallet_invalidation_event_id"] = event_id
-    return playbook
-
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 def build_triage_model_result(tool_response: dict | None) -> dict:
     """Return a compact, factual triage result for the model to summarize."""
@@ -138,18 +37,6 @@ def build_triage_model_result(tool_response: dict | None) -> dict:
     }
 
 
-def prepare_wallet_tool_args(fraud_playbook: dict | None, args: dict | None) -> dict:
-    """Bind Wallet provisioning to trusted replacement-card state."""
-    replacement_card_token = (fraud_playbook or {}).get("replacement_card_token")
-    # Reconstruct the request instead of filtering the model's request in place.
-    # This prevents invented identifiers (for example a support-message thread or
-    # the blocked physical card) from crossing the MCP tool boundary.
-    return {
-        "card_token": replacement_card_token,
-        "wallet_provider": "GOOGLE_WALLET",
-    }
-
-
 def build_fraud_playbook(voice_context: dict | None) -> dict:
     """Derive a compact fraud-session playbook from trusted voice context."""
     fraud_alert = (voice_context or {}).get("fraud_alert") or {}
@@ -169,14 +56,6 @@ def build_fraud_playbook(voice_context: dict | None) -> dict:
             "card_blocked": False,
             "replacement_issued": False,
             "replacement_card_token": None,
-            "wallet_push_offered": False,
-            "wallet_customer_confirmed": False,
-            "wallet_response_status": "NONE",
-            "wallet_offer_event_id": None,
-            "wallet_response_event_id": None,
-            "wallet_followup_event_id": None,
-            "wallet_invalidation_reason": None,
-            "wallet_invalidation_event_id": None,
             "wallet_push_queued": False,
             "workflow_authorization": None,
             "escalation_status": "NONE",
@@ -201,14 +80,6 @@ def build_fraud_playbook(voice_context: dict | None) -> dict:
         "card_blocked": False,
         "replacement_issued": False,
         "replacement_card_token": None,
-        "wallet_push_offered": False,
-        "wallet_customer_confirmed": False,
-        "wallet_response_status": "NONE",
-        "wallet_offer_event_id": None,
-        "wallet_response_event_id": None,
-        "wallet_followup_event_id": None,
-        "wallet_invalidation_reason": None,
-        "wallet_invalidation_event_id": None,
         "wallet_push_queued": False,
         "workflow_authorization": None,
         "escalation_status": "NONE",
@@ -217,7 +88,7 @@ def build_fraud_playbook(voice_context: dict | None) -> dict:
         "triage_submitted": False,
         "required_sequence": [
             "get_open_fraud_alert",
-            "triage_fraud_case",
+            "commit_fraud_triage",
         ],
     }
 
@@ -227,7 +98,8 @@ def build_initial_greeting(fraud_playbook: dict | None) -> str:
         card_last_four = (fraud_playbook or {}).get("card_last_four", "their card")
         suspicious_count = (fraud_playbook or {}).get("suspicious_transactions_count") or "the"
         return (
-            "Please introduce yourself briefly, acknowledge that you can see a suspicious activity alert "
+            "Use one fraud-specific opening. Do not use the generic support greeting or ask how you can help. "
+            "Introduce yourself briefly, acknowledge that you can see a suspicious activity alert "
             f"on the customer's card ending in {card_last_four}, explain that you are reviewing {suspicious_count} flagged charges now, "
             "inspect the open fraud alert before recommending next steps, and ask whether the customer recognizes the flagged transactions."
         )
@@ -256,25 +128,27 @@ def validate_fraud_tool_sequence(fraud_playbook: dict | None, tool_name: str, ar
     legacy_fraud_mitigation_tools = {
         "report_lost_stolen_card",
         "issue_replacement_card_tool",
+        "push_card_to_google_wallet",
         "resolve_fraud_alert",
     }
     if tool_name in legacy_fraud_mitigation_tools:
-        return "Use triage_fraud_case for active fraud alert mitigation instead of sequencing low-level fraud tools."
+        return (
+            "Use the typed proposal and commit workflow for active fraud alert "
+            "mitigation instead of sequencing low-level fraud tools."
+        )
 
-    if tool_name == "push_card_to_google_wallet" and not playbook.get("replacement_issued"):
-        return "Complete fraud triage and replacement before queueing Google Wallet provisioning."
-    if tool_name == "push_card_to_google_wallet" and playbook.get("wallet_push_queued"):
-        return "Google Wallet provisioning has already been queued. Do not submit it again."
-    if (
-        tool_name == "push_card_to_google_wallet"
-        and playbook.get("replacement_issued")
-        and not playbook.get("wallet_customer_confirmed")
+    if tool_name == "commit_wallet_provisioning" and not playbook.get(
+        "replacement_issued"
     ):
-        return "Ask the customer to explicitly confirm Google Wallet provisioning before queueing it."
-    if tool_name == "push_card_to_google_wallet" and not playbook.get("replacement_card_token"):
-        return "The trusted replacement virtual-card token is unavailable. Do not provision another card."
+        return "Complete fraud triage and replacement before queueing Google Wallet provisioning."
+    if tool_name == "commit_wallet_provisioning" and playbook.get(
+        "wallet_push_queued"
+    ):
+        return "Google Wallet provisioning has already been queued. Do not submit it again."
 
-    if tool_name == "triage_fraud_case" and not playbook.get("open_alert_inspected"):
+    if tool_name == "commit_fraud_triage" and not playbook.get(
+        "open_alert_inspected"
+    ):
         return "Inspect the open fraud alert before taking mitigation actions."
     if tool_name == "triage_customer_reported_fraud" and (
         playbook.get("entry_mode") != "CUSTOMER_REPORTED_FRAUD"
@@ -286,7 +160,7 @@ def validate_fraud_tool_sequence(fraud_playbook: dict | None, tool_name: str, ar
             "reviewing recent transactions, and preparing the exact selection."
         )
 
-    if tool_name in {"triage_fraud_case", "triage_customer_reported_fraud"}:
+    if tool_name in {"commit_fraud_triage", "triage_customer_reported_fraud"}:
         fraud_alert_id = str((args or {}).get("fraud_alert_id") or "").strip()
         expected_alert_id = str(playbook.get("fraud_alert_id") or "").strip()
         if expected_alert_id and not fraud_alert_id:
@@ -312,24 +186,19 @@ def mark_fraud_tool_completed(
         playbook["open_alert_inspected"] = True
         return playbook
 
-    if tool_name == "report_lost_stolen_card":
+    if tool_name == "commit_card_reissue":
         playbook["card_blocked"] = True
         playbook["confirmed_fraud"] = True
-        return playbook
-
-    if tool_name == "issue_replacement_card_tool":
         playbook["replacement_issued"] = True
-        playbook["replacement_card_token"] = (tool_response or {}).get("new_card_token")
+        replacement = (tool_response or {}).get("replacement_card") or {}
+        playbook["replacement_card_token"] = replacement.get("new_card_token")
         return playbook
 
-    if tool_name == "push_card_to_google_wallet":
-        playbook["wallet_push_offered"] = False
-        playbook["wallet_customer_confirmed"] = False
-        playbook["wallet_response_status"] = "COMPLETED"
+    if tool_name == "commit_wallet_provisioning":
         playbook["wallet_push_queued"] = True
         return playbook
 
-    if tool_name in {"triage_fraud_case", "triage_customer_reported_fraud"}:
+    if tool_name in {"commit_fraud_triage", "triage_customer_reported_fraud"}:
         outcome = str((tool_response or {}).get("outcome") or "").strip().upper()
         replacement_card = (tool_response or {}).get("replacement_card") or {}
         playbook["triage_submitted"] = True

@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Evaluate a CES conversation and optionally run contract and quality replays."""
 
 from __future__ import annotations
@@ -254,13 +268,45 @@ def _managed_fake_output(tool: str) -> dict[str, Any]:
                 "message with the case details was sent."
             ),
         }
-    if tool == "push_card_to_google_wallet":
+    if tool == "propose_wallet_provisioning":
         return {
             "success": True,
+            "status": "PROPOSED",
+            "action_type": "PROVISION_GOOGLE_WALLET",
+            "contract_version": "wallet-provisioning.v1",
+            "proposal_id": "eval-wallet-proposal-1",
+            "customer_safe_summary": (
+                "Confirm that you want to queue the virtual card ending 0002 "
+                "for Google Wallet."
+            ),
+        }
+    if tool == "commit_wallet_provisioning":
+        return {
+            "success": True,
+            "status": "COMMITTED",
+            "action_type": "PROVISION_GOOGLE_WALLET",
+            "contract_version": "wallet-provisioning.v1",
+            "proposal_id": "eval-wallet-proposal-1",
             "message": "Virtual card provisioning is queued for Google Wallet.",
             "card_token": "eval-replacement-token",
             "wallet_provider": "GOOGLE_WALLET",
             "wallet_provisioning_status": "QUEUED",
+        }
+    if tool == "decide_action_proposal":
+        return {
+            "success": True,
+            "status": "DECLINED",
+            "action_type": "TRIAGE_FRAUD_CASE",
+            "contract_version": "fraud-triage.v1",
+            "proposal_id": "eval-proposal-1",
+            "decision": "DECLINE",
+            "invalidation_reason": "CUSTOMER_DECLINED",
+        }
+    if tool == "offer_session_closeout":
+        return {
+            "success": True,
+            "status": "CLOSEOUT_OFFERED",
+            "customer_prompt": "Is there anything else I can help you with?",
         }
     return {}
 
@@ -357,41 +403,25 @@ def _managed_contract_evaluation(
     *,
     app: str,
     app_version: str,
-    conversation_name: str,
+    reference: dict[str, Any],
     dataset_id: str,
     display_name: str,
 ) -> dict[str, Any]:
-    generated_operation = api.wait_operation(
-        api.request(
-            "POST",
-            f"{conversation_name}:generateEvaluation",
-            {"source": "LIVE", "evaluationType": "GOLDEN"},
-        )
-    )
-    generated = {
-        key: value
-        for key, value in (generated_operation.get("response") or {}).items()
-        if key != "@type"
-    }
-    if not generated.get("golden"):
-        raise RuntimeError(
-            "CES generated a response without a golden evaluation."
-        )
-    evaluation_id = f"{dataset_id}-replay"
+    evaluation_id = f"{dataset_id}-reviewed"
     evaluation_path = f"{app}/evaluations/{evaluation_id}"
     evaluation_body = {
-        "displayName": f"{display_name} contract replay",
+        "displayName": f"{display_name} reviewed contract",
         "description": (
-            "Generated from a locally qualified live CES trace. This gates tool "
-            "and workflow invariants only; it is not approved conversational copy."
+            "Reviewed synthetic trajectory for typed tool and workflow invariants. "
+            "Live traces are canary evidence and never become golden implicitly."
         ),
         "tags": [
             "bounded-qualification",
-            "contract-replay",
+            "reviewed-contract",
             "fraud",
             "work-item-1",
         ],
-        "golden": _curate_generated_golden(generated["golden"]),
+        "golden": _conversational_golden(app, reference),
         "evaluationMetricsThresholdOverride": {
             "goldenHallucinationMetricBehavior": "DISABLED",
             "goldenEvaluationMetricsThresholds": {
@@ -460,7 +490,7 @@ def _managed_contract_evaluation(
             {
                 "evaluationDataset": dataset["name"],
                 "displayName": (
-                    f"{display_name} contract replay "
+                    f"{display_name} reviewed contract "
                     f"{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
                 ),
                 "appVersion": app_version,
@@ -682,13 +712,13 @@ def _conversational_golden(
                             "updatedVariables": {
                                 "customer_turn_id": "eval-turn-proposal",
                                 "proposal_originating_turn_id": "eval-turn-proposal",
+                                "proposal_action_type": "TRIAGE_FRAUD_CASE",
                                 "proposal_id": "eval-proposal-1",
                                 "proposal_customer_safe_summary": proposal_summary,
                                 "proposal_presentation_turn_id": "",
                                 "proposal_confirmation_turn_id": "",
                                 "proposal_confirmation_method": "",
-                                "proposal_confirmation_classification": "",
-                                "proposal_last_classified_turn_id": "",
+                                "proposal_confirmation_source": "",
                                 "fraud_selection_pending": False,
                                 "fraud_review_stage": "AWAITING_ACTION_CONFIRMATION",
                                 "fraud_review_status": "COMPLETE",
@@ -720,10 +750,7 @@ def _conversational_golden(
                                     "eval-turn-confirmation"
                                 ),
                                 "proposal_confirmation_method": "EXPLICIT_VERBAL",
-                                "proposal_confirmation_classification": "CONFIRMED",
-                                "proposal_last_classified_turn_id": (
-                                    "eval-turn-confirmation"
-                                ),
+                                "proposal_confirmation_source": "MODEL_TOOL_INTENT",
                             }
                         }
                     },
@@ -742,12 +769,54 @@ def _conversational_golden(
                     _tool_response_expectation(
                         app, "commit_fraud_triage", "eval-commit"
                     ),
+                    _tool_expectation(
+                        app, "offer_session_closeout", "eval-closeout-offer-1"
+                    ),
+                    _tool_response_expectation(
+                        app, "offer_session_closeout", "eval-closeout-offer-1"
+                    ),
                     _agent_response_expectation(str(commit["expected_agent"])),
                 ]
             },
             {
                 "steps": [
                     {"userInput": {"text": str(recovery["user"])}},
+                    _tool_expectation(
+                        app,
+                        "propose_wallet_provisioning",
+                        "eval-wallet-proposal",
+                    ),
+                    _tool_response_expectation(
+                        app,
+                        "propose_wallet_provisioning",
+                        "eval-wallet-proposal",
+                    ),
+                    {
+                        "expectation": {
+                            "updatedVariables": {
+                                "customer_turn_id": "eval-turn-wallet-proposal",
+                                "proposal_originating_turn_id": (
+                                    "eval-turn-wallet-proposal"
+                                ),
+                                "proposal_action_type": (
+                                    "PROVISION_GOOGLE_WALLET"
+                                ),
+                                "proposal_id": "eval-wallet-proposal-1",
+                                "proposal_customer_safe_summary": (
+                                    _managed_fake_output(
+                                        "propose_wallet_provisioning"
+                                    )["customer_safe_summary"]
+                                ),
+                                "proposal_presentation_turn_id": (
+                                    "eval-turn-wallet-proposal"
+                                ),
+                                "proposal_confirmation_turn_id": "",
+                                "proposal_confirmation_method": "",
+                                "proposal_confirmation_source": "",
+                                "closeout_originating_turn_id": "",
+                            }
+                        }
+                    },
                     _agent_response_expectation(str(recovery["expected_agent"])),
                 ]
             },
@@ -756,21 +825,39 @@ def _conversational_golden(
                     {"userInput": {"text": str(wallet["user"])}},
                     _tool_expectation(
                         app,
-                        "push_card_to_google_wallet",
+                        "commit_wallet_provisioning",
                         "eval-wallet-provisioning",
                     ),
                     _tool_response_expectation(
                         app,
-                        "push_card_to_google_wallet",
+                        "commit_wallet_provisioning",
                         "eval-wallet-provisioning",
                     ),
+                    _tool_expectation(
+                        app, "offer_session_closeout", "eval-closeout-offer-2"
+                    ),
+                    _tool_response_expectation(
+                        app, "offer_session_closeout", "eval-closeout-offer-2"
+                    ),
+                    {
+                        "expectation": {
+                            "updatedVariables": {
+                                "closeout_originating_turn_id": (
+                                    "eval-closeout-offer-2"
+                                )
+                            }
+                        }
+                    },
                     _agent_response_expectation(str(wallet["expected_agent"])),
                 ]
             },
             {
                 "steps": [
                     {"userInput": {"text": str(close["user"])}},
-                    _agent_response_expectation(str(close["expected_agent"])),
+                    # CES terminates the streaming turn as soon as the system
+                    # tool executes, so post-tool farewell audio is not a
+                    # stable managed-replay surface. The terminal tool is the
+                    # deterministic assertion; live canaries cover playout.
                     _tool_expectation(app, "end_session", "eval-end-session"),
                 ]
             },
@@ -1122,16 +1209,16 @@ def main() -> int:
         app_version = args.app_version or conversation.get("appVersion")
         if not app_version:
             raise ValueError("--app-version is required when the conversation omits it.")
+        conversational_reference = json.loads(
+            args.conversational_reference.read_text()
+        )
         report["managed_evaluation"] = _managed_contract_evaluation(
             api,
             app=args.app,
             app_version=app_version,
-            conversation_name=conversation_name,
+            reference=conversational_reference,
             dataset_id=args.dataset_id,
             display_name="Bounded CES fraud qualification work item 1",
-        )
-        conversational_reference = json.loads(
-            args.conversational_reference.read_text()
         )
         report["conversational_evaluation"] = (
             _managed_conversational_evaluation(

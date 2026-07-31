@@ -1,125 +1,156 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from types import SimpleNamespace
 
 import pytest
 from google.adk.events import Event
 from google.genai import types
 
-from agent.fraud_voice import build_fraud_playbook
-from agent.workflow_plugin import FraudWorkflowStatePlugin
 from agent.workflow_authorization import (
-    PUSH_CARD_TO_GOOGLE_WALLET,
     TRIAGE_FRAUD_CASE,
     create_workflow_authorization,
-    invalidate_workflow_authorization,
 )
+from agent.workflow_plugin import FraudWorkflowStatePlugin
 
 
-def transcript_event(*, author: str, text: str, input_event: bool) -> Event:
+def transcript_event(
+    *,
+    author: str,
+    text: str,
+    input_event: bool,
+    finished: bool = True,
+) -> Event:
     kwargs = {
         "id": f"{author}-event",
         "author": author,
         "actions": {},
         "content": types.Content(role=author, parts=[types.Part(text=text)]),
     }
+    transcription = types.Transcription(text=text, finished=finished)
     if input_event:
-        kwargs["input_transcription"] = types.Transcription(text=text, finished=True)
+        kwargs["input_transcription"] = transcription
     else:
-        kwargs["output_transcription"] = types.Transcription(text=text, finished=True)
+        kwargs["output_transcription"] = transcription
     return Event(**kwargs)
 
 
-@pytest.mark.asyncio
-async def test_plugin_writes_wallet_transitions_to_adk_state_delta() -> None:
-    playbook = build_fraud_playbook(
-        {
-            "has_active_fraud_alert": True,
-            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
-        }
+def prepared_playbook() -> dict:
+    authorization = create_workflow_authorization(
+        action=TRIAGE_FRAUD_CASE,
+        payload={
+            "fraud_alert_id": "fraud-123",
+            "disputed_authorization_ids": ["auth-1"],
+            "disputed_transaction_ids": [],
+            "issue_replacement": True,
+        },
+        session_id="session-1",
+        originating_customer_event_id="customer-origin",
     )
-    playbook["replacement_issued"] = True
-    session = SimpleNamespace(state={"fraud_playbook": playbook})
+    authorization["proposal_id"] = "proposal-123"
+    authorization["customer_safe_summary"] = "Banking-owned structured summary."
+    return {"workflow_authorization": authorization}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "assistant_text",
+    (
+        "A natural proposal presentation.",
+        "A differently worded proposal presentation.",
+        "Does that sound right?",
+    ),
+)
+async def test_completed_proposal_assistant_turn_is_recorded_without_text_parsing(
+    assistant_text: str,
+) -> None:
+    session = SimpleNamespace(
+        state={"session_id": "session-1", "fraud_playbook": prepared_playbook()}
+    )
     context = SimpleNamespace(session=session)
     plugin = FraudWorkflowStatePlugin()
-
-    offer_event = transcript_event(
+    event = transcript_event(
         author="agent",
-        text="I can push the virtual card to Google Wallet. Should I do that?",
+        text=assistant_text,
         input_event=False,
     )
-    await plugin.on_event_callback(invocation_context=context, event=offer_event)
-    offered = offer_event.actions.state_delta["fraud_playbook"]
-    session.state["fraud_playbook"] = offered
 
-    user_event = transcript_event(
-        author="user",
-        text="Could you please, that would be great.",
-        input_event=True,
-    )
-    await plugin.on_event_callback(invocation_context=context, event=user_event)
-    confirmed = user_event.actions.state_delta["fraud_playbook"]
+    await plugin.on_event_callback(invocation_context=context, event=event)
 
-    assert offered["wallet_response_status"] == "PENDING"
-    assert confirmed["wallet_response_status"] == "CONFIRMED"
-    assert confirmed["wallet_customer_confirmed"] is True
+    authorization = event.actions.state_delta["fraud_playbook"][
+        "workflow_authorization"
+    ]
+    assert authorization["status"] == "PENDING"
+    assert authorization["assistant_event_id"] == "agent-event"
+    assert authorization["presented_at_epoch_s"] == event.timestamp
 
 
 @pytest.mark.asyncio
-async def test_plugin_persists_ordered_closeout_checkpoint() -> None:
-    session = SimpleNamespace(state={"fraud_playbook": {}})
+async def test_incomplete_assistant_stream_does_not_mark_proposal_presented() -> None:
+    session = SimpleNamespace(
+        state={"session_id": "session-1", "fraud_playbook": prepared_playbook()}
+    )
     context = SimpleNamespace(session=session)
     plugin = FraudWorkflowStatePlugin()
-
-    prompt_event = transcript_event(
+    event = transcript_event(
         author="agent",
-        text="Is there anything else I can help you with?",
+        text="Partial output",
         input_event=False,
+        finished=False,
     )
-    await plugin.on_event_callback(invocation_context=context, event=prompt_event)
-    checkpoint = prompt_event.actions.state_delta["closeout_checkpoint"]
-    session.state["closeout_checkpoint"] = checkpoint
 
-    customer_event = transcript_event(
-        author="user",
-        text="No, that's all.",
-        input_event=True,
-    )
-    await plugin.on_event_callback(invocation_context=context, event=customer_event)
+    await plugin.on_event_callback(invocation_context=context, event=event)
 
-    assert customer_event.actions.state_delta["closeout_checkpoint"] == {
-        "status": "CONFIRMED",
-        "assistant_event_id": "agent-event",
-        "customer_event_id": "user-event",
-    }
+    assert "fraud_playbook" not in event.actions.state_delta
 
 
 @pytest.mark.asyncio
-async def test_plugin_does_not_treat_fraud_answer_as_closeout() -> None:
-    session = SimpleNamespace(state={"fraud_playbook": {}})
+async def test_customer_transcript_records_turn_identity_but_not_authorization() -> None:
+    playbook = prepared_playbook()
+    playbook["workflow_authorization"]["status"] = "PENDING"
+    playbook["workflow_authorization"]["assistant_event_id"] = "agent-event"
+    playbook["workflow_authorization"]["presented_at_epoch_s"] = 1000.0
+    session = SimpleNamespace(
+        state={"session_id": "session-1", "fraud_playbook": playbook}
+    )
     context = SimpleNamespace(session=session)
-    plugin = FraudWorkflowStatePlugin()
-    customer_event = transcript_event(
+    observed = []
+
+    def observe_turn(text, **kwargs):
+        observed.append((text, kwargs))
+        return {"event_id": "protected-customer-turn"}
+
+    plugin = FraudWorkflowStatePlugin(customer_turn_observer=observe_turn)
+    event = transcript_event(
         author="user",
-        text="No, I don't recognize those charges.",
+        text="Any natural-language response.",
         input_event=True,
     )
 
-    await plugin.on_event_callback(invocation_context=context, event=customer_event)
+    await plugin.on_event_callback(invocation_context=context, event=event)
 
-    assert "closeout_checkpoint" not in customer_event.actions.state_delta
+    assert observed[0][1]["event_id"] == "user-event"
+    assert "fraud_playbook" not in event.actions.state_delta
+    assert playbook["workflow_authorization"]["status"] == "PENDING"
 
 
 @pytest.mark.asyncio
-async def test_plugin_invalidates_wallet_authorization_on_interruption() -> None:
-    playbook = build_fraud_playbook(
-        {
-            "has_active_fraud_alert": True,
-            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
-        }
+async def test_interruption_does_not_change_uncommitted_proposal() -> None:
+    playbook = prepared_playbook()
+    session = SimpleNamespace(
+        state={"session_id": "session-1", "fraud_playbook": playbook}
     )
-    playbook["wallet_push_offered"] = True
-    playbook["wallet_customer_confirmed"] = True
-    playbook["wallet_response_status"] = "CONFIRMED"
-    session = SimpleNamespace(state={"fraud_playbook": playbook})
     context = SimpleNamespace(session=session)
     plugin = FraudWorkflowStatePlugin()
     event = Event(
@@ -131,289 +162,22 @@ async def test_plugin_invalidates_wallet_authorization_on_interruption() -> None
 
     await plugin.on_event_callback(invocation_context=context, event=event)
 
-    invalidated = event.actions.state_delta["fraud_playbook"]
-    assert invalidated["wallet_response_status"] == "INVALIDATED"
-    assert invalidated["wallet_invalidation_reason"] == "MODEL_RESPONSE_INTERRUPTED"
+    assert "fraud_playbook" not in event.actions.state_delta
+    assert playbook["workflow_authorization"]["status"] == "PREPARED"
+    assert playbook["workflow_authorization"]["invalidation_reason"] is None
 
 
 @pytest.mark.asyncio
-async def test_plugin_creates_fresh_wallet_authorization_after_failed_attempt() -> None:
-    playbook = build_fraud_playbook(
-        {
-            "has_active_fraud_alert": True,
-            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
-        }
-    )
-    playbook.update(
-        {
-            "replacement_issued": True,
-            "replacement_card_token": "trusted-replacement-token",
-            "wallet_push_offered": True,
-            "wallet_customer_confirmed": True,
-            "wallet_response_status": "CONFIRMED",
-        }
-    )
-    failed_authorization = create_workflow_authorization(
-        action=PUSH_CARD_TO_GOOGLE_WALLET,
-        payload={
-            "card_token": "trusted-replacement-token",
-            "wallet_provider": "GOOGLE_WALLET",
-        },
-        session_id="session-1",
-    )
-    failed_authorization["status"] = "EXECUTING"
-    playbook["workflow_authorization"] = invalidate_workflow_authorization(
-        failed_authorization,
-        reason="TOOL_RESULT_NOT_SUCCESSFUL:push_card_to_google_wallet",
-    )
-    session = SimpleNamespace(
-        state={"session_id": "session-1", "fraud_playbook": playbook}
-    )
+async def test_unrelated_assistant_turn_without_proposal_does_not_create_gate() -> None:
+    session = SimpleNamespace(state={"session_id": "session-1", "fraud_playbook": {}})
     context = SimpleNamespace(session=session)
     plugin = FraudWorkflowStatePlugin()
-
-    retry_offer = transcript_event(
+    event = transcript_event(
         author="agent",
-        text="I couldn't queue it. Would you like me to try Google Wallet again?",
+        text="General support response.",
         input_event=False,
-    )
-    await plugin.on_event_callback(invocation_context=context, event=retry_offer)
-    prompted = retry_offer.actions.state_delta["fraud_playbook"]
-    session.state["fraud_playbook"] = prompted
-
-    retry_confirmation = transcript_event(
-        author="user",
-        text="Yes, please try again.",
-        input_event=True,
-    )
-    await plugin.on_event_callback(
-        invocation_context=context,
-        event=retry_confirmation,
-    )
-    confirmed = retry_confirmation.actions.state_delta["fraud_playbook"]
-
-    assert prompted["workflow_authorization"]["status"] == "PENDING"
-    assert prompted["workflow_authorization"]["payload"]["card_token"] == (
-        "trusted-replacement-token"
-    )
-    assert confirmed["workflow_authorization"]["status"] == "CONFIRMED"
-
-
-@pytest.mark.asyncio
-async def test_plugin_confirms_prepared_triage_only_after_separate_turns() -> None:
-    playbook = build_fraud_playbook(
-        {
-            "has_active_fraud_alert": True,
-            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
-        }
-    )
-    authorization = create_workflow_authorization(
-        action=TRIAGE_FRAUD_CASE,
-        payload={
-            "fraud_alert_id": "fraud-123",
-            "disputed_authorization_ids": ["auth-1"],
-            "disputed_transaction_ids": [],
-            "issue_replacement": True,
-        },
-        session_id="session-1",
-    )
-    authorization["customer_safe_summary"] = (
-        "Confirm that you want to dispute $100.00 at Corner Market on card ending "
-        "4242, and block the current card and issue a replacement."
-    )
-    playbook["workflow_authorization"] = authorization
-    session = SimpleNamespace(
-        state={"session_id": "session-1", "fraud_playbook": playbook}
-    )
-    context = SimpleNamespace(session=session)
-    plugin = FraudWorkflowStatePlugin()
-
-    prompt_event = transcript_event(
-        author="agent",
-        text=(
-            "You want to dispute the one hundred dollar charge at Corner Market "
-            "on the card ending in four two four two, block that card, and receive "
-            "a replacement. Is that correct?"
-        ),
-        input_event=False,
-    )
-    await plugin.on_event_callback(invocation_context=context, event=prompt_event)
-    prompted = prompt_event.actions.state_delta["fraud_playbook"]
-    session.state["fraud_playbook"] = prompted
-
-    customer_event = transcript_event(
-        author="user",
-        text="Yes, that's right.",
-        input_event=True,
-    )
-    await plugin.on_event_callback(invocation_context=context, event=customer_event)
-    confirmed = customer_event.actions.state_delta["fraud_playbook"]
-
-    assert prompted["workflow_authorization"]["status"] == "PENDING"
-    assert prompted["workflow_authorization"]["assistant_event_id"] == "agent-event"
-    assert confirmed["workflow_authorization"]["status"] == "CONFIRMED"
-    assert confirmed["workflow_authorization"]["customer_event_id"] == "user-event"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "assistant_text",
-    (
-        "Does that sound right?",
-        (
-            "You want to dispute ten dollars at Corner Market on card ending 4242, "
-            "block it, and receive a replacement. Is that correct?"
-        ),
-        (
-            "You want to dispute one hundred dollars on card ending 4242, block it, "
-            "and receive a replacement. Is that correct?"
-        ),
-        (
-            "You want to dispute one hundred dollars at Corner Market on card ending "
-            "4242. Is that correct?"
-        ),
-    ),
-)
-async def test_plugin_rejects_generic_altered_or_incomplete_proposal_presentations(
-    assistant_text: str,
-) -> None:
-    authorization = create_workflow_authorization(
-        action=TRIAGE_FRAUD_CASE,
-        payload={
-            "fraud_alert_id": "fraud-123",
-            "disputed_authorization_ids": ["auth-1"],
-            "disputed_transaction_ids": [],
-            "issue_replacement": True,
-        },
-        session_id="session-1",
-    )
-    authorization["customer_safe_summary"] = (
-        "Confirm that you want to dispute $100.00 at Corner Market on card ending "
-        "4242, and block the current card and issue a replacement."
-    )
-    playbook = {"workflow_authorization": authorization}
-    session = SimpleNamespace(
-        state={"session_id": "session-1", "fraud_playbook": playbook}
-    )
-    context = SimpleNamespace(session=session)
-    plugin = FraudWorkflowStatePlugin()
-
-    prompt_event = transcript_event(
-        author="agent",
-        text=assistant_text,
-        input_event=False,
-    )
-    await plugin.on_event_callback(invocation_context=context, event=prompt_event)
-
-    assert "fraud_playbook" not in prompt_event.actions.state_delta
-
-    customer_event = transcript_event(
-        author="user",
-        text="Yes, that's right.",
-        input_event=True,
-    )
-    await plugin.on_event_callback(invocation_context=context, event=customer_event)
-
-    assert "fraud_playbook" not in customer_event.actions.state_delta
-
-
-@pytest.mark.asyncio
-async def test_plugin_accepts_typed_customer_confirmation() -> None:
-    playbook = build_fraud_playbook(
-        {
-            "has_active_fraud_alert": True,
-            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
-        }
-    )
-    authorization = create_workflow_authorization(
-        action=TRIAGE_FRAUD_CASE,
-        payload={
-            "fraud_alert_id": "fraud-123",
-            "disputed_authorization_ids": ["auth-1"],
-            "disputed_transaction_ids": [],
-            "issue_replacement": True,
-        },
-        session_id="session-1",
-    )
-    authorization["status"] = "PENDING"
-    authorization["assistant_event_id"] = "agent-prompt"
-    playbook["workflow_authorization"] = authorization
-    session = SimpleNamespace(
-        state={"session_id": "session-1", "fraud_playbook": playbook}
-    )
-    context = SimpleNamespace(session=session)
-    plugin = FraudWorkflowStatePlugin()
-    event = Event(
-        id="typed-user-event",
-        author="user",
-        actions={},
-        content=types.Content(
-            role="user", parts=[types.Part(text="Yes, that is correct.")]
-        ),
     )
 
     await plugin.on_event_callback(invocation_context=context, event=event)
 
-    updated = event.actions.state_delta["fraud_playbook"]
-    assert updated["workflow_authorization"]["status"] == "CONFIRMED"
-    assert updated["workflow_authorization"]["customer_event_id"] == (
-        "typed-user-event"
-    )
-
-
-@pytest.mark.asyncio
-async def test_plugin_reuses_ingress_id_and_publishes_one_classified_decision() -> None:
-    playbook = build_fraud_playbook(
-        {
-            "has_active_fraud_alert": True,
-            "fraud_alert": {"fraud_alert_id": "fraud-123", "card_last_four": "4242"},
-        }
-    )
-    authorization = create_workflow_authorization(
-        action=TRIAGE_FRAUD_CASE,
-        payload={
-            "fraud_alert_id": "fraud-123",
-            "disputed_authorization_ids": ["auth-1"],
-            "disputed_transaction_ids": [],
-            "issue_replacement": True,
-        },
-        session_id="session-1",
-    )
-    authorization["status"] = "PENDING"
-    authorization["assistant_event_id"] = "agent-prompt"
-    playbook["workflow_authorization"] = authorization
-    session = SimpleNamespace(
-        state={"session_id": "session-1", "fraud_playbook": playbook}
-    )
-    context = SimpleNamespace(session=session)
-    observed_turns = []
-    decisions = []
-
-    def observe_turn(text, **kwargs):
-        observed_turns.append((text, kwargs))
-        return {"event_id": "typed-message-123"}
-
-    plugin = FraudWorkflowStatePlugin(
-        customer_turn_observer=observe_turn,
-        authorization_observer=decisions.append,
-    )
-    event = Event(
-        id="adk-user-event",
-        author="user",
-        actions={},
-        content=types.Content(
-            role="user", parts=[types.Part(text="Yes, that is correct.")]
-        ),
-    )
-
-    await plugin.on_event_callback(invocation_context=context, event=event)
-
-    updated = event.actions.state_delta["fraud_playbook"]
-    assert observed_turns[0][1]["event_id"] == "adk-user-event"
-    assert observed_turns[0][1]["consume_pending"] is True
-    assert updated["workflow_authorization"]["customer_event_id"] == (
-        "typed-message-123"
-    )
-    assert len(decisions) == 1
-    assert decisions[0]["status"] == "CONFIRMED"
-    assert decisions[0]["customer_event_id"] == "typed-message-123"
+    assert "fraud_playbook" not in event.actions.state_delta

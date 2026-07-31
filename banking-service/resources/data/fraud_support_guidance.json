@@ -110,7 +110,7 @@
         "Explain that any replacement card availability is part of fraud case remediation, not a separate promise made before the workflow succeeds."
       ],
       "must_not_do": [
-        "Do not call report_lost_stolen_card or issue_replacement_card_tool separately during active fraud alert triage.",
+        "Do not sequence separate low-level card-blocking or replacement operations during active fraud alert triage.",
         "Do not imply that digital wallet provisioning has already happened when only the replacement card has been issued."
       ],
       "tool_dependencies": [
@@ -138,7 +138,8 @@
         "Do not say the card is already in the wallet unless the wallet queue tool has succeeded."
       ],
       "tool_dependencies": [
-        "push_card_to_google_wallet"
+        "propose_wallet_provisioning",
+        "commit_wallet_provisioning"
       ],
       "customer_safe_summary": "After a replacement card is issued, offer to queue it for Google Wallet only if the customer wants immediate card access, and describe the queue as pending until the tool succeeds.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",

@@ -1,3 +1,17 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Synthetic banking responses used only when a CES evaluation selects fake mode."""
 
 
@@ -17,7 +31,12 @@ def fake_tool_call(tool, input, callback_context):
         "get_open_fraud_alert",
         "propose_fraud_triage",
         "commit_fraud_triage",
-        "push_card_to_google_wallet",
+        "propose_card_reissue",
+        "commit_card_reissue",
+        "propose_wallet_provisioning",
+        "commit_wallet_provisioning",
+        "decide_action_proposal",
+        "offer_session_closeout",
     )
     tool_id = next(
         (
@@ -112,13 +131,75 @@ def fake_tool_call(tool, input, callback_context):
                 "message with the case details was sent."
             ),
         }
-    elif tool_id == "push_card_to_google_wallet":
+    elif tool_id == "propose_card_reissue":
         output = {
             "success": True,
+            "status": "PROPOSED",
+            "action_type": "REISSUE_CARD",
+            "contract_version": "card-reissue.v1",
+            "proposal_id": "eval-reissue-proposal-1",
+            "customer_safe_summary": (
+                "Confirm that you want to block the card ending 0001 and issue "
+                "a replacement virtual card."
+            ),
+        }
+    elif tool_id == "commit_card_reissue":
+        output = {
+            "success": True,
+            "status": "COMMITTED",
+            "action_type": "REISSUE_CARD",
+            "contract_version": "card-reissue.v1",
+            "proposal_id": "eval-reissue-proposal-1",
+            "replacement_card": {
+                "new_last_four": "0002",
+                "is_virtual": True,
+                "status": "ACTIVE",
+            },
+        }
+    elif tool_id == "propose_wallet_provisioning":
+        output = {
+            "success": True,
+            "status": "PROPOSED",
+            "action_type": "PROVISION_GOOGLE_WALLET",
+            "contract_version": "wallet-provisioning.v1",
+            "proposal_id": "eval-wallet-proposal-1",
+            "customer_safe_summary": (
+                "Confirm that you want to queue the virtual card ending 0002 "
+                "for Google Wallet."
+            ),
+        }
+    elif tool_id == "commit_wallet_provisioning":
+        output = {
+            "success": True,
+            "status": "COMMITTED",
+            "action_type": "PROVISION_GOOGLE_WALLET",
+            "contract_version": "wallet-provisioning.v1",
+            "proposal_id": "eval-wallet-proposal-1",
             "message": "Virtual card provisioning is queued for Google Wallet.",
             "card_token": "eval-replacement-token",
             "wallet_provider": "GOOGLE_WALLET",
             "wallet_provisioning_status": "QUEUED",
+        }
+    elif tool_id == "decide_action_proposal":
+        decision = str((input or {}).get("decision") or "").strip().upper()
+        output = {
+            "success": decision in {"DECLINE", "REVISE", "CANCEL"},
+            "status": "DECLINED" if decision == "DECLINE" else "INVALIDATED",
+            "action_type": "TRIAGE_FRAUD_CASE",
+            "contract_version": "fraud-triage.v1",
+            "proposal_id": "eval-proposal-1",
+            "decision": decision,
+            "invalidation_reason": {
+                "DECLINE": "CUSTOMER_DECLINED",
+                "REVISE": "CUSTOMER_REVISED",
+                "CANCEL": "CUSTOMER_CANCELLED",
+            }.get(decision),
+        }
+    elif tool_id == "offer_session_closeout":
+        output = {
+            "success": True,
+            "status": "CLOSEOUT_OFFERED",
+            "customer_prompt": "Is there anything else I can help you with?",
         }
     else:
         return None
@@ -141,5 +222,25 @@ def fake_commit_fraud_triage(tool, input, callback_context):
     return fake_tool_call({"id": "commit_fraud_triage"}, input, callback_context)
 
 
-def fake_push_card_to_google_wallet(tool, input, callback_context):
-    return fake_tool_call({"id": "push_card_to_google_wallet"}, input, callback_context)
+def fake_propose_card_reissue(tool, input, callback_context):
+    return fake_tool_call({"id": "propose_card_reissue"}, input, callback_context)
+
+
+def fake_commit_card_reissue(tool, input, callback_context):
+    return fake_tool_call({"id": "commit_card_reissue"}, input, callback_context)
+
+
+def fake_propose_wallet_provisioning(tool, input, callback_context):
+    return fake_tool_call({"id": "propose_wallet_provisioning"}, input, callback_context)
+
+
+def fake_commit_wallet_provisioning(tool, input, callback_context):
+    return fake_tool_call({"id": "commit_wallet_provisioning"}, input, callback_context)
+
+
+def fake_offer_session_closeout(tool, input, callback_context):
+    return fake_tool_call({"id": "offer_session_closeout"}, input, callback_context)
+
+
+def fake_decide_action_proposal(tool, input, callback_context):
+    return fake_tool_call({"id": "decide_action_proposal"}, input, callback_context)

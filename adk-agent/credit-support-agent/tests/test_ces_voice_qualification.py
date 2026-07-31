@@ -1,6 +1,21 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import importlib.util
+import inspect
 from pathlib import Path
 
 
@@ -39,23 +54,6 @@ COMMIT_CALLBACK_SPEC = importlib.util.spec_from_file_location(
 commit_callback = importlib.util.module_from_spec(COMMIT_CALLBACK_SPEC)
 assert COMMIT_CALLBACK_SPEC.loader
 COMMIT_CALLBACK_SPEC.loader.exec_module(commit_callback)
-
-CONFIRMATION_CALLBACK = (
-    ROOT
-    / "gecx"
-    / "Credit_Support_Voice_Agent"
-    / "agents"
-    / "Credit_Card_Support_Agent"
-    / "before_model_callbacks"
-    / "classify_confirmation.py"
-)
-CONFIRMATION_CALLBACK_SPEC = importlib.util.spec_from_file_location(
-    "classify_confirmation", CONFIRMATION_CALLBACK
-)
-confirmation_callback = importlib.util.module_from_spec(CONFIRMATION_CALLBACK_SPEC)
-assert CONFIRMATION_CALLBACK_SPEC.loader
-CONFIRMATION_CALLBACK_SPEC.loader.exec_module(confirmation_callback)
-
 
 def test_curated_contract_fixture_removes_live_credentials_and_ephemeral_state() -> None:
     golden = {
@@ -133,10 +131,18 @@ def test_evaluation_fake_tools_are_synthetic_and_tool_specific() -> None:
         None, {}, None
     )["customer_safe_summary"]
     assert (
-        fake_tools.fake_push_card_to_google_wallet(None, {}, None)[
+        fake_tools.fake_commit_wallet_provisioning(None, {}, None)[
             "wallet_provider"
         ]
         == "GOOGLE_WALLET"
+    )
+    assert (
+        fake_tools.fake_decide_action_proposal(
+            None,
+            {"decision": "REVISE"},
+            None,
+        )["invalidation_reason"]
+        == "CUSTOMER_REVISED"
     )
     prefixed = fake_tools.fake_tool_call(
         {"name": "banking_service_mcp_toolset_get_open_fraud_alert"},
@@ -159,6 +165,10 @@ def test_conversational_reference_enumerates_every_charge_and_avoids_phone_copy(
     assert "Nova Horizon Bank" in first
     assert "calling" not in first.lower()
     assert reference["quality_rules"]["proposal_confirmation_turns"] == 1
+    # CES semantic scoring is intentionally permissive about harmless,
+    # grounded elaboration. Explicit material-fact and tool checks remain
+    # strict and are the authoritative qualification gates.
+    assert reference["quality_rules"]["semantic_similarity_success_threshold"] == 2
 
 
 def test_conversational_quality_rejects_bad_brand_phone_copy_and_omissions() -> None:
@@ -264,7 +274,8 @@ def test_conversational_golden_includes_wallet_recovery_and_close() -> None:
     )
     rendered = repr(golden)
 
-    assert "push_card_to_google_wallet" in rendered
+    assert "propose_wallet_provisioning" in rendered
+    assert "commit_wallet_provisioning" in rendered
     assert "end_session" in rendered
     commit_steps = golden["turns"][2]["steps"]
     commit_call = next(
@@ -273,7 +284,42 @@ def test_conversational_golden_includes_wallet_recovery_and_close() -> None:
         if (step.get("expectation") or {}).get("toolCall")
     )
     assert commit_call["args"] == {}
+    proposal_state = next(
+        step["expectation"]["updatedVariables"]
+        for step in golden["turns"][1]["steps"]
+        if "proposal_id"
+        in ((step.get("expectation") or {}).get("updatedVariables") or {})
+    )
+    assert proposal_state["proposal_action_type"] == "TRIAGE_FRAUD_CASE"
+    wallet_state = next(
+        step["expectation"]["updatedVariables"]
+        for step in golden["turns"][3]["steps"]
+        if "proposal_id"
+        in ((step.get("expectation") or {}).get("updatedVariables") or {})
+    )
+    assert wallet_state["proposal_action_type"] == "PROVISION_GOOGLE_WALLET"
+    assert wallet_state["proposal_id"] == "eval-wallet-proposal-1"
+    assert (
+        wallet_state["proposal_presentation_turn_id"]
+        == "eval-turn-wallet-proposal"
+    )
+    terminal_steps = golden["turns"][5]["steps"]
+    assert len(terminal_steps) == 2
+    assert (
+        terminal_steps[1]["expectation"]["toolCall"]["tool"].rsplit("/", 1)[-1]
+        == "end_session"
+    )
     assert len(golden["turns"]) == 6
+
+
+def test_managed_contract_uses_reviewed_reference_not_a_live_generated_golden() -> None:
+    signature = inspect.signature(qualification._managed_contract_evaluation)
+    source = inspect.getsource(qualification._managed_contract_evaluation)
+
+    assert "reference" in signature.parameters
+    assert "conversation_name" not in signature.parameters
+    assert "generateEvaluation" not in source
+    assert "_conversational_golden(app, reference)" in source
 
 
 def test_ces_commit_callback_binds_opaque_proposal_id_when_model_omits_it() -> None:
@@ -283,11 +329,13 @@ def test_ces_commit_callback_binds_opaque_proposal_id_when_model_omits_it() -> N
         invocation_id="confirmation-turn",
         variables={
             "proposal_id": "proposal-1",
+            "proposal_action_type": "TRIAGE_FRAUD_CASE",
+            "proposal_originating_turn_id": "proposal-turn",
             "proposal_presentation_turn_id": "proposal-turn",
-            "proposal_confirmation_turn_id": "confirmation-turn",
-            "proposal_confirmation_classification": "CONFIRMED",
-            "proposal_confirmation_method": "EXPLICIT_VERBAL",
         },
+        get_last_user_input=lambda: [
+            SimpleNamespace(text_or_transcript=lambda: "customer input")
+        ],
     )
     tool_input = {}
 
@@ -299,6 +347,7 @@ def test_ces_commit_callback_binds_opaque_proposal_id_when_model_omits_it() -> N
 
     assert result is None
     assert tool_input == {"proposal_id": "proposal-1"}
+    assert context.variables["proposal_confirmation_source"] == "MODEL_TOOL_INTENT"
 
 
 def test_ces_commit_callback_rejects_conflicting_model_proposal_id() -> None:
@@ -308,11 +357,13 @@ def test_ces_commit_callback_rejects_conflicting_model_proposal_id() -> None:
         invocation_id="confirmation-turn",
         variables={
             "proposal_id": "proposal-1",
+            "proposal_action_type": "TRIAGE_FRAUD_CASE",
+            "proposal_originating_turn_id": "proposal-turn",
             "proposal_presentation_turn_id": "proposal-turn",
-            "proposal_confirmation_turn_id": "confirmation-turn",
-            "proposal_confirmation_classification": "CONFIRMED",
-            "proposal_confirmation_method": "EXPLICIT_VERBAL",
         },
+        get_last_user_input=lambda: [
+            SimpleNamespace(text_or_transcript=lambda: "customer input")
+        ],
     )
     tool_input = {"proposal_id": "proposal-other"}
 
@@ -326,25 +377,28 @@ def test_ces_commit_callback_rejects_conflicting_model_proposal_id() -> None:
     assert tool_input == {"proposal_id": "proposal-other"}
 
 
-def test_ces_confirmation_rejects_affirmative_embedded_in_unrelated_speech() -> None:
-    assert (
-        confirmation_callback._classification(
-            "yes i really like the weather today"
-        )
-        == "UNCLEAR"
+def test_ces_commit_callback_requires_a_real_later_customer_invocation() -> None:
+    from types import SimpleNamespace
+
+    context = SimpleNamespace(
+        invocation_id="proposal-turn",
+        variables={
+            "proposal_id": "proposal-1",
+            "proposal_action_type": "TRIAGE_FRAUD_CASE",
+            "proposal_originating_turn_id": "proposal-turn",
+            "proposal_presentation_turn_id": "proposal-turn",
+        },
+        get_last_user_input=lambda: [],
     )
 
+    result = commit_callback.before_tool_callback(
+        SimpleNamespace(name="commit_fraud_triage"),
+        {},
+        context,
+    )
 
-def test_ces_confirmation_accepts_bounded_explicit_affirmatives() -> None:
-    for transcript in (
-        "yes",
-        "yes please",
-        "yes i can confirm",
-        "thats correct",
-        "that sounds good",
-        "go ahead",
-    ):
-        assert confirmation_callback._classification(transcript) == "CONFIRMED"
+    assert result["error"] == "PROTECTED_CONFIRMATION_REQUIRED"
+    assert not context.variables.get("proposal_confirmation_source")
 
 
 def test_latest_conversation_selects_completed_live_across_pages() -> None:

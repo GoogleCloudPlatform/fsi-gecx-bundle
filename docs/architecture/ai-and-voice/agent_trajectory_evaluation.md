@@ -33,7 +33,7 @@ The normalizers deliberately exclude customer identifiers, tool arguments, raw t
 | `GUIDANCE_SNAPSHOT` | The session recorded the Knowledge Catalog source, topic set, snapshot, and content version used for guidance. |
 | `FRAUD_REVIEW` | The transaction-selection state advanced, including whether the review was complete enough to propose. |
 | `TOOL_CALL` / `TOOL_RESULT` | A named tool was attempted and produced a successful or failed structured result. |
-| `ACTION_PROPOSAL` | The protected action advanced through `PROPOSED`, `PRESENTED`, `CONFIRMED`, `DECLINED`, `UNCLEAR`, `EXPIRED`, `INVALIDATED`, `COMMITTED`, or `TOOL_ERROR`. |
+| `ACTION_PROPOSAL` | The protected action advanced through `PROPOSED`, `PRESENTED`, `CONFIRMED`, `DECLINED`, `EXPIRED`, `INVALIDATED`, `COMMITTED`, or `TOOL_ERROR`. Questions and uncertainty deliberately emit no decision outcome and leave the proposal pending. |
 | `SUCCESS_CLAIM` | The agent claimed a consequential action succeeded; it must follow the corresponding successful tool result. |
 | `UI_EVENT` | A structured data-channel event was emitted for the banking UI. |
 | `INTERRUPTION` | The customer interrupted an agent turn. |
@@ -52,7 +52,8 @@ The ADK scenarios cover:
 - proposal and compatibility-path success
 - Google Wallet acceptance, decline, and ambiguity
 - proposal decline and ambiguity
-- interruption, reset invalidation, and expiry
+- observation-only interruption, reset invalidation, and expiry
+- transient tool failure followed by an idempotent retry of the same proposal
 - tool failure
 - customer-reported fraud
 
@@ -83,24 +84,34 @@ The evidence layers answer different questions and are not interchangeable.
 | Readiness probe | Is the deployed runtime configured, durable session store reachable, and authenticated banking MCP endpoint available? | Conversation behavior or mutation safety. |
 | Recorded live trajectory | Did a real deployed consultation satisfy the ordered workflow, security, provenance, and banking-outcome contract? | Repeatability across model samples. |
 | CES managed contract replay | Does a saved CES version preserve the expected tool and workflow shape with deterministic fake tool responses? | Approved wording or real banking mutation. |
-| Conversational reference | Does the agent preserve required branding, transaction inventory, protected confirmation count, recovery guidance, and closeout behavior? | Live customer identity, transport, or banking state. |
-| Focused callback and service tests | Do malformed presentations, unrelated affirmatives, stale state, and idempotency races fail closed deterministically? | Deployed model behavior. |
+| Conversational reference | Does the agent preserve required branding, transaction inventory, one clear proposal question, recovery guidance, and closeout behavior? | Live customer identity, transport, or banking state. |
+| Focused callback and service tests | Do wrong action types, missing or stale turn evidence, reset/expiry, changed proposal scope, and idempotency races fail closed deterministically? | Deployed model behavior. |
 
 A captured live trace is a source for a workflow replay, not approved conversational copy. The hand-authored conversational reference is the only copy reference, and it is evaluated separately.
 
-## Protected-consent qualification
+## Typed-decision qualification
 
-Every release that changes proposal, presentation, confirmation, or commit behavior must include these three CES samples against the saved app version:
+Every release that changes proposal, presentation, customer-decision, or commit
+behavior must exercise varied responses against the saved app version:
 
 | Sample | Required evidence |
 | :--- | :--- |
-| Exact confirmation | The complete banking-authored proposal is presented; a later bounded affirmative produces one successful commit. |
-| Unrelated affirmative | An affirmative embedded in unrelated speech is classified `UNCLEAR`; any model commit attempt is blocked with `PROTECTED_CONFIRMATION_REQUIRED`, and no banking or fake banking commit executes. |
-| Altered or incomplete presentation | A presentation missing or changing a merchant, amount, card suffix, or consequential action does not establish presentation authority; a later affirmative cannot execute the commit. |
+| Clear acceptance | The model chooses typed commit on a later customer turn and exactly one authoritative banking commit succeeds. |
+| Question or uncertainty | The model answers or clarifies without choosing a decision tool; the same proposal remains pending and no mutation occurs. |
+| Qualified or unrelated response | The model does not choose commit. A structurally invalid attempt is rejected by typed scope and ordering checks before banking execution. |
+| Decline or changed scope | The model chooses typed `DECLINE`, `REVISE`, or `CANCEL`; the old proposal becomes terminal and revision requires a new immutable proposal. |
 
-The security boundary is the callback and banking result, not whether the model attempted to call the tool. A model may retry a blocked tool. Qualification passes only when every attempt receives the protected-confirmation error and no real or fake banking tool execution occurs.
+The model's typed tool choice is the one semantic decision. Runtime callbacks
+validate only opaque proposal identity, action type, session, and protected turn
+ordering; they do not classify transcript words or parse the assistant's
+presentation. Banking owns lifecycle and exactly-once execution. Transcript
+checks may score clarity and factual completeness in evaluation, but never
+grant production authority.
 
-For CES stable replay, previous golden agent responses and variable updates become context for later turns. Do not inherit `proposal_presentation_turn_id` into an altered-presentation sample: doing so grants the authority the sample is meant to withhold. Inspect the resulting evaluation conversation and callback spans to distinguish a blocked tool call from a `FakeTool` execution.
+For CES stable replay, prior golden responses and variable updates become
+context for later turns. Curate protected identifiers and runtime credentials
+out of saved fixtures. Inspect callback and fake-tool spans to distinguish a
+blocked typed transition from banking execution.
 
 ## Commands and artifacts
 

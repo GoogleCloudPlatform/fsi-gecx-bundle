@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "reference_id": "fraud-conversational-reference-v1",
   "display_name": "CES fraud conversational reference v1",
-  "description": "Hand-curated customer-experience reference. This is distinct from the generated contract replay.",
+  "description": "Hand-curated customer-experience reference. This is distinct from the strict reviewed typed-contract evaluation.",
   "run_count": 3,
   "turns": [
     {
@@ -26,12 +26,13 @@
     {
       "id": "recovery-question",
       "user": "I have an important client dinner tonight. How am I going to pay for it now?",
-      "expected_agent": "Your replacement is a virtual card, so I can queue it for your Google Wallet if you'd like. Would you like me to do that?"
+      "expected_tool": "propose_wallet_provisioning",
+      "expected_agent": "Your replacement is a virtual card. Confirm that you want to queue the virtual card ending in 0002 for Google Wallet."
     },
     {
       "id": "wallet-provisioning",
       "user": "Yes, that would be great.",
-      "expected_tool": "push_card_to_google_wallet",
+      "expected_tool": "commit_wallet_provisioning",
       "expected_agent": "I've queued the replacement virtual card for your Google Wallet. Is there anything else I can help you with?"
     },
     {
@@ -122,6 +123,6 @@
       ]
     ],
     "proposal_confirmation_turns": 1,
-    "semantic_similarity_success_threshold": 3
+    "semantic_similarity_success_threshold": 2
   }
 }

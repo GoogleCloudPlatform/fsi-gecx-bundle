@@ -74,11 +74,15 @@ sequenceDiagram
 ### C. Banking-Owned Action Proposal and Deterministic Fraud Commit
 * **Context**: Gemini Live is good at conversational slot-filling, but it must not construct or mutate a consequential banking payload from free-form conversation. Fraud remediation also needs immutable consent scope, idempotency, audit events, provisional-credit semantics, secure messaging, and card targeting based on the active fraud alert.
 * **Decision**: The agent uses a two-phase banking-owned action proposal:
-  1. `prepare_fraud_triage_confirmation` validates the completed selection and calls banking-service `propose_fraud_triage`.
+  1. The model calls the typed `propose_fraud_triage` tool with the completed selection.
   2. Banking-service normalizes the immutable action payload and returns an opaque proposal id plus a customer-safe summary.
-  3. The agent presents the complete summary and stops. The presentation validator requires the same merchants, amounts, card suffix, and consequential actions, while accepting equivalent spoken-number formatting such as “one hundred dollars” for `$100.00`.
-  4. A later customer turn is classified as confirmed, declined, or unclear. Negatives and qualifications win over affirmative tokens; an affirmative embedded in unrelated speech is not authorization.
-  5. Only a valid later confirmation permits `commit_fraud_triage`, whose model-visible input is the opaque proposal id. Banking-service revalidates the transport-owned evidence before claiming and executing the proposal exactly once.
+  3. The agent presents the complete summary and stops. The runtime records only that the proposal-producing assistant turn completed; complete and accurate readout is enforced by trajectory evaluation, not a production transcript parser.
+  4. On a later customer turn, the model interprets the response once. Choosing the typed `commit_fraud_triage` tool is the semantic decision; declining, changing, or questioning the proposal does not call the commit tool.
+  5. The deterministic adapter checks only proposal identity, action type, session binding, presentation, later-turn ordering, expiry, and reset generation. Banking-service revalidates that protected evidence before claiming and executing the proposal exactly once.
+
+There is no secondary phrase list, regular expression, or transcript
+classification callback. Media/VAD boundaries identify completed turns but
+never authorize a banking action.
 
 Banking-service then owns the deterministic business workflow:
   1. Validate the alert belongs to the customer and target `FraudAlert.card_id`.
@@ -89,7 +93,7 @@ Banking-service then owns the deterministic business workflow:
 
 The proposal row also provides the idempotency and concurrency boundary. Concurrent creation using the same idempotency key resolves to the same immutable proposal or rejects payload drift; commit claims prevent duplicate execution and reconcile a durable domain result if the first response is interrupted.
 
-The agent can still use existing support capabilities such as late fee reversal, credit limit increase, human escalation, card replacement, and wallet provisioning. During an active fraud alert, however, it must prefer the proposal/commit workflow rather than the compatibility-only direct `triage_fraud_case` path or burst-calling low-level fraud tools.
+The agent can still use existing support capabilities such as late fee reversal, credit limit increase, human escalation, card replacement, and wallet provisioning. Protected card replacement, Wallet provisioning, and fraud remediation use only the proposal/commit workflow; their former direct-action MCP tools are retired.
 
 ### D. Session-Specific Prompt Composition
 * **Context**: The base voice instruction should remain reusable for future specialized flows such as overdraft remediation. Baking every workflow into a monolithic prompt would make the reference architecture hard to extend.
@@ -171,7 +175,7 @@ Bidirectional asynchronous loop libraries (like `asyncio` and `livekit-rtc`) can
 
 ### Runtime-neutral trajectory evaluation
 
-The agent emits bounded proposal, tool, UI, interruption, and terminal telemetry keyed by stable hashed references. `scripts/voice_canary.py` converts those deployed logs into the shared trajectory event vocabulary and applies machine-checkable scenarios for success, decline, ambiguity, interruption, reset invalidation, expiry, and tool failure.
+The agent emits bounded proposal, tool, UI, interruption, and terminal telemetry keyed by stable hashed references. `scripts/voice_canary.py` converts those deployed logs into the shared trajectory event vocabulary and applies machine-checkable scenarios for success, decline, questions and uncertainty, observation-only interruption, reset invalidation, expiry, terminal tool failure, and idempotent commit recovery.
 
 Release qualification checks ordered outcomes rather than only individual tool success. A normal proposal path must contain `PROPOSED → PRESENTED → CONFIRMED → COMMITTED`, must not call the direct compatibility tool, and must not claim spoken success before the structured commit result. A direct-path baseline can be compared with the proposal path for equivalent banking and terminal outcomes.
 

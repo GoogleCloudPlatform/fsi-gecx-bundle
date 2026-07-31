@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Run non-mutating readiness and evaluate a deployed voice trajectory."""
 
 from __future__ import annotations
@@ -40,19 +54,13 @@ SCENARIOS = {
         required_proposal_outcomes=("PROPOSED", "PRESENTED", "CONFIRMED", "COMMITTED"),
         required_ui_events=("FRAUD_ALERT_RESOLVED",),
     ),
-    "fraud-direct": TrajectoryExpectation(
-        required_tools={"get_open_fraud_alert": 1, "triage_fraud_case": 1},
-        forbidden_tools=("commit_fraud_triage",),
-        required_proposal_outcomes=("DIRECT_COMPLETED",),
-        required_ui_events=("FRAUD_ALERT_RESOLVED",),
-    ),
     "fraud-wallet": TrajectoryExpectation(
         required_tools={
             "get_open_fraud_alert": 1,
             "commit_fraud_triage": 1,
-            "push_card_to_google_wallet": 1,
+            "commit_wallet_provisioning": 1,
         },
-        forbidden_tools=("triage_fraud_case",),
+        forbidden_tools=("triage_fraud_case", "push_card_to_google_wallet"),
         required_proposal_outcomes=("PROPOSED", "PRESENTED", "CONFIRMED", "COMMITTED"),
         required_ui_events=("FRAUD_ALERT_RESOLVED", "WALLET_PROVISIONING_QUEUED"),
     ),
@@ -63,19 +71,24 @@ SCENARIOS = {
         required_ui_events=("FRAUD_ALERT_RESOLVED",),
     ),
     "fraud-decline": TrajectoryExpectation(
-        required_tools={"get_open_fraud_alert": 1},
+        required_tools={
+            "get_open_fraud_alert": 1,
+            "decide_action_proposal": 1,
+        },
         forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
         required_proposal_outcomes=("PROPOSED", "PRESENTED", "DECLINED"),
     ),
-    "fraud-ambiguous": TrajectoryExpectation(
+    "fraud-question": TrajectoryExpectation(
         required_tools={"get_open_fraud_alert": 1},
         forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
-        required_proposal_outcomes=("PROPOSED", "PRESENTED", "UNCLEAR"),
+        required_proposal_outcomes=("PROPOSED", "PRESENTED"),
+        forbidden_proposal_outcomes=("CONFIRMED", "COMMITTED", "INVALIDATED"),
     ),
     "fraud-interrupted": TrajectoryExpectation(
         required_tools={"get_open_fraud_alert": 1},
         forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
-        required_proposal_outcomes=("PROPOSED", "INVALIDATED"),
+        required_proposal_outcomes=("PROPOSED",),
+        forbidden_proposal_outcomes=("CONFIRMED", "COMMITTED", "INVALIDATED"),
     ),
     "fraud-reset": TrajectoryExpectation(
         required_tools={"get_open_fraud_alert": 1},
@@ -96,6 +109,22 @@ SCENARIOS = {
         required_proposal_outcomes=("PROPOSED", "PRESENTED", "CONFIRMED", "TOOL_ERROR"),
         allowed_terminal_outcomes=("TOOL_FAILURE", "NORMAL_DISCONNECT"),
     ),
+    "fraud-tool-retry": TrajectoryExpectation(
+        required_tools={
+            "get_open_fraud_alert": 1,
+            "commit_fraud_triage": 1,
+        },
+        required_failed_tools={"commit_fraud_triage": 1},
+        forbidden_tools=("triage_fraud_case",),
+        required_proposal_outcomes=(
+            "PROPOSED",
+            "PRESENTED",
+            "CONFIRMED",
+            "TOOL_ERROR",
+            "COMMITTED",
+        ),
+        required_ui_events=("FRAUD_ALERT_RESOLVED",),
+    ),
     "customer-reported": TrajectoryExpectation(
         required_tools={
             "get_open_fraud_alert": 1,
@@ -105,6 +134,11 @@ SCENARIOS = {
         required_ui_events=("FRAUD_ALERT_RESOLVED",),
     ),
 }
+
+BASELINE_FRAUD_EXPECTATION = TrajectoryExpectation(
+    required_tools={"get_open_fraud_alert": 1},
+    required_ui_events=("FRAUD_ALERT_RESOLVED",),
+)
 
 
 def _message(entry: dict[str, Any]) -> str:
@@ -234,8 +268,7 @@ def extract_trajectory(
                 expected_checkpoint = (
                     tool_name
                     in {
-                        "prepare_fraud_triage_confirmation",
-                        "prepare_customer_reported_fraud_confirmation",
+                            "prepare_customer_reported_fraud_confirmation",
                     }
                     and any(
                         marker in message
@@ -369,7 +402,9 @@ def main() -> int:
                 deployed_logs,
                 session_selector=args.baseline_session_id,
             )
-            baseline = evaluate_trajectory(baseline_events, SCENARIOS["fraud-direct"])
+            baseline = evaluate_trajectory(
+                baseline_events, BASELINE_FRAUD_EXPECTATION
+            )
             comparison = compare_trajectory_outcomes(baseline, result)
             output["parity"] = {
                 "baseline_session_ref": baseline_ref,

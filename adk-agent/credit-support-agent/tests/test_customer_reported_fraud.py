@@ -1,3 +1,17 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from types import SimpleNamespace
 
 import pytest
@@ -5,7 +19,7 @@ import pytest
 from agent import agent as agent_module
 from agent.agent import after_tool_callback, prepare_customer_reported_fraud_confirmation
 from agent.workflow_authorization import (
-    PUSH_CARD_TO_GOOGLE_WALLET,
+    PROVISION_GOOGLE_WALLET,
     TRIAGE_CUSTOMER_REPORTED_FRAUD,
     create_workflow_authorization,
     mark_authorization_executing,
@@ -155,13 +169,10 @@ async def test_transaction_history_result_builds_trusted_selection_index(
 
 
 @pytest.mark.asyncio
-async def test_wallet_mcp_error_result_releases_consumed_authorization() -> None:
+async def test_wallet_commit_error_preserves_idempotent_retry_authorization() -> None:
     authorization = create_workflow_authorization(
-        action=PUSH_CARD_TO_GOOGLE_WALLET,
-        payload={
-            "card_token": "trusted-replacement-token",
-            "wallet_provider": "GOOGLE_WALLET",
-        },
+        action=PROVISION_GOOGLE_WALLET,
+        payload={"wallet_provider": "GOOGLE_WALLET"},
         session_id="voice-session-1",
     )
     authorization.update(
@@ -178,11 +189,8 @@ async def test_wallet_mcp_error_result_releases_consumed_authorization() -> None
     }
 
     await after_tool_callback(
-        SimpleNamespace(name="push_card_to_google_wallet"),
-        {
-            "card_token": "trusted-replacement-token",
-            "wallet_provider": "GOOGLE_WALLET",
-        },
+        SimpleNamespace(name="commit_wallet_provisioning"),
+        {"proposal_id": "wallet-proposal"},
         SimpleNamespace(state=state),
         {
             "isError": True,
@@ -196,7 +204,7 @@ async def test_wallet_mcp_error_result_releases_consumed_authorization() -> None
     )
 
     recovered = state["fraud_playbook"]["workflow_authorization"]
-    assert recovered["status"] == "INVALIDATED"
-    assert recovered["invalidation_reason"] == (
-        "TOOL_RESULT_NOT_SUCCESSFUL:push_card_to_google_wallet"
+    assert recovered["status"] == "RECOVERY_REQUIRED"
+    assert recovered["recovery_reason"] == (
+        "TOOL_RESULT_NOT_SUCCESSFUL:commit_wallet_provisioning"
     )

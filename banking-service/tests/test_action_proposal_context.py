@@ -1,11 +1,29 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import inspect
+from typing import get_args
 from unittest.mock import MagicMock
 
 import pytest
 
 from models.authentication import ValidatedToken
 from routers.mcp.credit_card import (
+    commit_card_reissue,
     commit_fraud_triage,
+    commit_wallet_provisioning,
+    decide_action_proposal,
     propose_fraud_triage,
     review_fraud_selection,
 )
@@ -30,11 +48,29 @@ def _headers(**overrides) -> dict[str, str]:
 
 
 def test_model_visible_commit_has_only_opaque_proposal_input() -> None:
-    commit_parameters = set(inspect.signature(commit_fraud_triage).parameters)
+    commit_signatures = (
+        inspect.signature(commit_fraud_triage),
+        inspect.signature(commit_card_reissue),
+        inspect.signature(commit_wallet_provisioning),
+    )
+    commit_parameters = set(commit_signatures[0].parameters)
+    decision_parameters = set(inspect.signature(decide_action_proposal).parameters)
     propose_parameters = set(inspect.signature(propose_fraud_triage).parameters)
     review_parameters = set(inspect.signature(review_fraud_selection).parameters)
 
     assert commit_parameters == {"proposal_id", "ctx"}
+    assert decision_parameters == {"proposal_id", "decision", "ctx"}
+    assert set(
+        get_args(
+            inspect.signature(decide_action_proposal)
+            .parameters["decision"]
+            .annotation
+        )
+    ) == {"DECLINE", "REVISE", "CANCEL"}
+    assert all(
+        set(signature.parameters) == {"proposal_id", "ctx"}
+        for signature in commit_signatures
+    )
     forbidden_scope = {
         "customer_id",
         "support_session_id",
@@ -46,6 +82,7 @@ def test_model_visible_commit_has_only_opaque_proposal_input() -> None:
     assert propose_parameters.isdisjoint(forbidden_scope)
     assert review_parameters.isdisjoint(forbidden_scope)
     assert commit_parameters.isdisjoint(forbidden_scope)
+    assert decision_parameters.isdisjoint(forbidden_scope)
 
 
 def test_runtime_context_requires_real_customer_turn() -> None:
@@ -198,10 +235,10 @@ def test_confirmation_evidence_is_transport_owned_and_explicit() -> None:
         _headers(
             **{
                 "x-customer-turn-id": "customer-turn-11",
-                "x-proposal-presentation-turn-id": "assistant-turn-10",
-                "x-proposal-confirmation-turn-id": "customer-turn-11",
-                "x-proposal-confirmation-method": "EXPLICIT_VERBAL",
-                "x-proposal-confirmation-classification": "CONFIRMED",
+                    "x-proposal-presentation-turn-id": "assistant-turn-10",
+                    "x-proposal-confirmation-turn-id": "customer-turn-11",
+                    "x-proposal-confirmation-method": "EXPLICIT_VERBAL",
+                    "x-proposal-confirmation-source": "MODEL_TOOL_INTENT",
             }
         )
     )
@@ -209,6 +246,7 @@ def test_confirmation_evidence_is_transport_owned_and_explicit() -> None:
     context.require_confirmation()
     assert context.presentation_turn_id == "assistant-turn-10"
     assert context.confirmation_turn_id == "customer-turn-11"
+    assert context.confirmation_source == "MODEL_TOOL_INTENT"
 
 
 @pytest.mark.asyncio
@@ -273,7 +311,7 @@ async def test_commit_projection_returns_authoritative_result_when_ui_event_fail
                 "x-proposal-presentation-turn-id": "assistant-turn-10",
                 "x-proposal-confirmation-turn-id": "customer-turn-11",
                 "x-proposal-confirmation-method": "EXPLICIT_VERBAL",
-                "x-proposal-confirmation-classification": "CONFIRMED",
+                "x-proposal-confirmation-source": "MODEL_TOOL_INTENT",
             }
         )
     )
@@ -319,7 +357,7 @@ async def test_commit_projection_returns_scoped_terminal_disposition(
                 "x-proposal-presentation-turn-id": "assistant-turn-10",
                 "x-proposal-confirmation-turn-id": "customer-turn-11",
                 "x-proposal-confirmation-method": "EXPLICIT_VERBAL",
-                "x-proposal-confirmation-classification": "CONFIRMED",
+                "x-proposal-confirmation-source": "MODEL_TOOL_INTENT",
             }
         )
     )

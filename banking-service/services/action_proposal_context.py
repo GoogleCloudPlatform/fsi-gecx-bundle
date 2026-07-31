@@ -1,3 +1,17 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Trusted runtime context for action-proposal adapters.
 
 These values come from authenticated transport headers established by a runtime
@@ -34,7 +48,7 @@ class ProposalRuntimeContext:
     presentation_turn_id: str | None = None
     confirmation_turn_id: str | None = None
     confirmation_method: str | None = None
-    confirmation_classification: str | None = None
+    confirmation_source: str | None = None
 
     @classmethod
     def from_headers(cls, headers: Mapping[str, str]) -> "ProposalRuntimeContext":
@@ -58,8 +72,8 @@ class ProposalRuntimeContext:
             confirmation_method=(
                 normalized.get("x-proposal-confirmation-method", "").strip() or None
             ),
-            confirmation_classification=(
-                normalized.get("x-proposal-confirmation-classification", "").strip()
+            confirmation_source=(
+                normalized.get("x-proposal-confirmation-source", "").strip()
                 or None
             ),
         )
@@ -72,6 +86,12 @@ class ProposalRuntimeContext:
             )
 
     def require_confirmation(self) -> None:
+        """Require protected evidence for a later model-selected decision.
+
+        The header names retain ``confirmation`` for wire compatibility, but
+        the same transport evidence also protects typed decline, revise, and
+        cancel decisions. The runtime never interprets the customer's words.
+        """
         self.require_customer_turn()
         if not self.presentation_turn_id or not self.confirmation_turn_id:
             raise RuntimeContextError(
@@ -87,5 +107,7 @@ class ProposalRuntimeContext:
             )
         if self.confirmation_method != "EXPLICIT_VERBAL":
             raise RuntimeContextError("Explicit verbal confirmation is required.")
-        if self.confirmation_classification != "CONFIRMED":
-            raise RuntimeContextError("The protected confirmation is not affirmative.")
+        if self.confirmation_source != "MODEL_TOOL_INTENT":
+            raise RuntimeContextError(
+                "The customer decision must be bound to the model's typed tool choice."
+            )

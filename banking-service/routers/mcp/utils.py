@@ -119,7 +119,17 @@ proposal_runtime_context_var: ContextVar[ProposalRuntimeContext | None] = Contex
     "proposal_runtime_context", default=None
 )
 PROPOSAL_CONTEXT_TOOL_NAMES = frozenset(
-    {"review_fraud_selection", "propose_fraud_triage", "commit_fraud_triage"}
+    {
+        "review_fraud_selection",
+        "propose_fraud_triage",
+        "commit_fraud_triage",
+        "propose_card_reissue",
+        "commit_card_reissue",
+        "propose_wallet_provisioning",
+        "commit_wallet_provisioning",
+        "decide_action_proposal",
+        "offer_session_closeout",
+    }
 )
 
 

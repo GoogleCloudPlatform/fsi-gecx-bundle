@@ -3,7 +3,9 @@
 ## Runtime contract
 
 - ADK is locked to `2.4.0` in `pyproject.toml`, `requirements.txt`, and `uv.lock`.
-- Live response scheduling is applied in `agent/tooling.py`.
+- Live response scheduling and the reviewed banking MCP allowlist are applied
+  in `agent/tooling.py`. Runtime-control tools such as closeout and disconnect
+  remain local to ADK and must not overlap the banking MCP projection.
 - `VOICE_AGENT_SESSION_RESUMPTION_ENABLED` controls Gemini Live connection
   resumption independently from durable ADK session storage.
 - `VOICE_SESSION_PERSISTENCE_ENABLED` controls ADK `DatabaseSessionService`;
@@ -13,9 +15,10 @@
   hydrated and expire after `VOICE_SESSION_TTL_SECONDS` (default 12 hours).
 - The agent fails closed before a consequential tool when the banking reset
   generation cannot be verified or has changed.
-- `VOICE_AGENT_USE_ACTION_PROPOSALS` defaults to `true`. It makes active-alert
-  fraud triage commit the banking-owned proposal id; `false` temporarily restores
-  the direct `triage_fraud_case` compatibility path.
+- Protected actions use the banking-owned proposal/commit protocol. Retired
+  direct fraud, card-reissue, and Wallet mutations are not published by MCP or
+  exposed to the model; rollback means restoring a previously qualified release
+  manifest, not enabling a second in-process authorization path.
 
 ## Pre-deployment checks
 
@@ -68,11 +71,10 @@ The runtime-neutral event contract, CES adapter, and evidence-layer boundaries
 are documented in
 [Agent Trajectory Evaluation Architecture](../../docs/architecture/ai-and-voice/agent_trajectory_evaluation.md).
 
-Proposal rollout is an explicit operator gate. This repository does not change
-Cloud Run traffic or deploy revisions as part of the canary. First record a
-completed direct-path baseline with `VOICE_AGENT_USE_ACTION_PROPOSALS=false`,
-then record the equivalent proposal-path session with the default enabled. Keep
-both support session ids and compare their normalized banking outcomes:
+The canary does not change Cloud Run traffic or deploy revisions. Record the
+proposal-path session and, when comparing a recovery candidate to a prior
+release, keep both support session ids and compare their normalized banking
+outcomes:
 
 ```bash
 uv run python scripts/voice_canary.py \
@@ -84,9 +86,9 @@ uv run python scripts/voice_canary.py \
   --baseline-session-id <direct-support-session-id>
 ```
 
-Promotion requires `trajectory.passed=true` and `parity.matched=true`. The
-comparison intentionally permits different tool names while requiring the same
-banking and terminal outcomes and no tool failures in either trajectory.
+Promotion requires `trajectory.passed=true`. When a baseline is supplied,
+`parity.matched=true` is also required. The comparison requires the same banking
+and terminal outcomes and no tool failures in either trajectory.
 
 Exercise each protected edge as its own completed session and evaluate it with
 the matching scenario:
@@ -95,7 +97,7 @@ the matching scenario:
 uv run python scripts/voice_canary.py --project evo-genai-workspace \
   --scenario fraud-decline --session-id <session-id> --skip-readiness
 uv run python scripts/voice_canary.py --project evo-genai-workspace \
-  --scenario fraud-ambiguous --session-id <session-id> --skip-readiness
+  --scenario fraud-question --session-id <session-id> --skip-readiness
 uv run python scripts/voice_canary.py --project evo-genai-workspace \
   --scenario fraud-interrupted --session-id <session-id> --skip-readiness
 uv run python scripts/voice_canary.py --project evo-genai-workspace \
@@ -104,6 +106,8 @@ uv run python scripts/voice_canary.py --project evo-genai-workspace \
   --scenario fraud-expired --session-id <session-id> --skip-readiness
 uv run python scripts/voice_canary.py --project evo-genai-workspace \
   --scenario fraud-tool-failure --session-id <session-id> --skip-readiness
+uv run python scripts/voice_canary.py --project evo-genai-workspace \
+  --scenario fraud-tool-retry --session-id <session-id> --skip-readiness
 ```
 
 The normalized proposal event records runtime and build version, hashed support
@@ -250,13 +254,11 @@ loopback. Never expose it or deploy it as an application service.
 
 ## Rollback
 
-First route traffic to the prior Cloud Run revision. The database additions are
-backward compatible and can remain in place. For a proposal-only rollback, set
-`VOICE_AGENT_USE_ACTION_PROPOSALS=false` on the ADK service and leave the banking
-proposal tables and tools deployed; prepared but uncommitted proposals expire
-without mutating banking state. Rehearse one recognized and one disputed case
-through the direct path before returning traffic. If a source rollback is required,
-restore `google-adk==2.3.0` and its lock file, disable
+Restore the previously qualified release manifest as a unit; do not switch to
+an alternate direct-action authorization path. The database additions are
+backward compatible and can remain in place, and prepared but uncommitted
+proposals expire without mutating banking state. If a source rollback is
+required, restore `google-adk==2.3.0` and its lock file, disable
 `VOICE_AGENT_SESSION_RESUMPTION_ENABLED`, and deploy the prior agent image. No
 banking or UI rollback is required because MCP and data-channel payloads remain
 compatible.

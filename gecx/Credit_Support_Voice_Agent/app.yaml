@@ -1,3 +1,17 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 name: de51bcc7-fb3b-4a40-9b97-f52bcb0a0622
 displayName: Credit_Support_Voice_Agent
 rootAgent: Credit Card Support Agent
@@ -90,6 +104,10 @@ variableDeclarations:
   description: Opaque active proposal identifier captured from the banking tool response.
   schema:
     type: STRING
+- name: proposal_action_type
+  description: Typed action bound to the active banking proposal.
+  schema:
+    type: STRING
 - name: proposal_customer_safe_summary
   description: Banking-authored summary that must be presented before confirmation.
   schema:
@@ -110,12 +128,36 @@ variableDeclarations:
   description: CES callback-owned normalized confirmation method.
   schema:
     type: STRING
-- name: proposal_confirmation_classification
-  description: CES callback-owned CONFIRMED, DECLINED, or UNCLEAR classification.
+- name: proposal_confirmation_source
+  description: CES callback-owned source of the typed confirmation transition.
   schema:
     type: STRING
-- name: proposal_last_classified_turn_id
-  description: CES callback-owned guard against reclassifying one invocation.
+- name: proposal_decision_type
+  description: Model-selected typed decision for the active proposal.
+  schema:
+    type: STRING
+- name: completed_proposal_action_type
+  description: Audit-only action type recorded when a proposal commit succeeds.
+  schema:
+    type: STRING
+- name: completed_proposal_confirmation_turn_id
+  description: Audit-only customer turn recorded when a proposal commit succeeds.
+  schema:
+    type: STRING
+- name: completed_proposal_confirmation_method
+  description: Audit-only confirmation method recorded when a proposal commit succeeds.
+  schema:
+    type: STRING
+- name: completed_proposal_confirmation_source
+  description: Audit-only confirmation source recorded when a proposal commit succeeds.
+  schema:
+    type: STRING
+- name: completed_proposal_decision_type
+  description: Audit-only typed decision recorded when a proposal commit succeeds.
+  schema:
+    type: STRING
+- name: closeout_originating_turn_id
+  description: CES callback-owned customer turn after which final assistance was offered.
   schema:
     type: STRING
 - name: active_fraud_alert_id
@@ -130,14 +172,6 @@ variableDeclarations:
   description: Comma-delimited posted transaction ids captured from the active alert.
   schema:
     type: STRING
-- name: fraud_selection_prompt_turn_id
-  description: CES callback-owned turn that asked the customer to classify the flagged activity.
-  schema:
-    type: STRING
-- name: fraud_selection_pending
-  description: Whether the next customer turn is answering the flagged-activity recognition question.
-  schema:
-    type: BOOLEAN
 - name: fraud_review_stage
   description: Callback-owned fraud review stage.
   schema:

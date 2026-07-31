@@ -1,3 +1,17 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Lifecycle primitives for banking-owned consequential-action proposals.
 
 This module is intentionally not exposed as a generic MCP surface. Domain
@@ -20,13 +34,20 @@ from sqlalchemy.exc import IntegrityError
 from models.action_proposal import ActionProposal
 from models.fraud import FraudAlert
 from models.identity import User
+from repositories.credit_card import CreditCardRepository
 from repositories.fraud import FraudAlertRepository
 from services.action_proposal_context import ProposalRuntimeContext
+from services.credit_card import issue_replacement_card, queue_wallet_provisioning
 from utils.audit import record_audit_event
 
 
 TRIAGE_FRAUD_CASE = "TRIAGE_FRAUD_CASE"
 FRAUD_TRIAGE_CONTRACT_VERSION = "fraud-triage.v1"
+REISSUE_CARD = "REISSUE_CARD"
+CARD_REISSUE_CONTRACT_VERSION = "card-reissue.v1"
+PROVISION_GOOGLE_WALLET = "PROVISION_GOOGLE_WALLET"
+WALLET_PROVISIONING_CONTRACT_VERSION = "wallet-provisioning.v1"
+NON_COMMIT_DECISIONS = {"DECLINE", "REVISE", "CANCEL"}
 DEFAULT_PROPOSAL_TTL_SECONDS = 180
 
 TERMINAL_STATUSES = {"COMMITTED", "DECLINED", "INVALIDATED", "EXPIRED"}
@@ -213,6 +234,292 @@ class ActionProposalService:
         )
         self.db.commit()
         return self.proposal_view(proposal)
+
+    def propose_card_reissue_for_identity(
+        self,
+        *,
+        customer_identity: str,
+        runtime_context: ProposalRuntimeContext,
+        reason: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Create a card-reissue proposal without exposing mutable card details."""
+        runtime_context.require_customer_turn()
+        customer_id = self._resolve_customer_id(customer_identity)
+        account = CreditCardRepository(self.db).get_account_by_customer(
+            str(customer_id)
+        )
+        if not account:
+            raise ProposalScopeError("Active credit-card account was not found.")
+        cards = CreditCardRepository(self.db).list_cards_by_account(account.id)
+        card = next(
+            (
+                item
+                for item in cards
+                if item.is_active and item.status == "ACTIVE"
+            ),
+            None,
+        )
+        if not card:
+            raise ProposalError("No active card is eligible for reissue.")
+        normalized_reason = str(reason or "").strip().upper()
+        if normalized_reason not in {"LOST", "STOLEN", "DAMAGED"}:
+            raise ProposalError("Card reissue reason must be LOST, STOLEN, or DAMAGED.")
+
+        proposal = self._create(
+            contract_version=CARD_REISSUE_CONTRACT_VERSION,
+            action_type=REISSUE_CARD,
+            customer_id=customer_id,
+            account_id=account.id,
+            support_session_id=runtime_context.support_session_id,
+            runtime_name=runtime_context.runtime_name,
+            runtime_session_id=runtime_context.runtime_session_id,
+            originating_customer_turn_id=runtime_context.customer_turn_id,
+            reset_generation=runtime_context.reset_generation,
+            confirmation_policy="EXPLICIT_VERBAL",
+            action_payload={
+                "account_id": str(account.id),
+                "compromised_card_id": str(card.id),
+                "reason": normalized_reason,
+                "issue_virtual_card": True,
+            },
+            customer_safe_summary=(
+                f"Confirm that you want to block the card ending {card.last_four} "
+                "and issue a replacement virtual card."
+            ),
+            catalog_snapshot_id=runtime_context.catalog_snapshot_id,
+            idempotency_key=idempotency_key,
+        )
+        self.db.commit()
+        return self.proposal_view(proposal)
+
+    def propose_wallet_provisioning_for_identity(
+        self,
+        *,
+        customer_identity: str,
+        runtime_context: ProposalRuntimeContext,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Create a Wallet proposal bound to the customer's active virtual card."""
+        runtime_context.require_customer_turn()
+        customer_id = self._resolve_customer_id(customer_identity)
+        repo = CreditCardRepository(self.db)
+        account = repo.get_account_by_customer(str(customer_id))
+        if not account:
+            raise ProposalScopeError("Active credit-card account was not found.")
+        cards = repo.list_cards_by_account(account.id)
+        card = next(
+            (
+                item
+                for item in cards
+                if item.is_active and item.status == "ACTIVE" and item.is_virtual
+            ),
+            None,
+        )
+        if not card:
+            raise ProposalError(
+                "No active virtual card is eligible for Wallet provisioning."
+            )
+
+        proposal = self._create(
+            contract_version=WALLET_PROVISIONING_CONTRACT_VERSION,
+            action_type=PROVISION_GOOGLE_WALLET,
+            customer_id=customer_id,
+            account_id=account.id,
+            support_session_id=runtime_context.support_session_id,
+            runtime_name=runtime_context.runtime_name,
+            runtime_session_id=runtime_context.runtime_session_id,
+            originating_customer_turn_id=runtime_context.customer_turn_id,
+            reset_generation=runtime_context.reset_generation,
+            confirmation_policy="EXPLICIT_VERBAL",
+            action_payload={
+                "account_id": str(account.id),
+                "card_id": str(card.id),
+                "card_token": card.card_token,
+                "wallet_provider": "GOOGLE_WALLET",
+            },
+            customer_safe_summary=(
+                f"Confirm that you want to queue the virtual card ending "
+                f"{card.last_four} for Google Wallet."
+            ),
+            catalog_snapshot_id=runtime_context.catalog_snapshot_id,
+            idempotency_key=idempotency_key,
+        )
+        self.db.commit()
+        return self.proposal_view(proposal)
+
+    def commit_card_reissue_for_identity(
+        self,
+        proposal_id,
+        *,
+        customer_identity: str,
+        runtime_context: ProposalRuntimeContext,
+    ) -> dict[str, Any]:
+        claim = self._attest_and_claim(
+            proposal_id,
+            customer_identity=customer_identity,
+            runtime_context=runtime_context,
+            expected_action_type=REISSUE_CARD,
+        )
+        if not claim.should_execute:
+            return self._proposal_result(claim.proposal, idempotent_replay=True)
+        payload = dict(claim.proposal.action_payload or {})
+        try:
+            replacement = issue_replacement_card(
+                self.db,
+                account_id=str(claim.proposal.account_id),
+                reason=f"CUSTOMER_REPORTED_{payload.get('reason')}",
+                issue_virtual_card=bool(payload.get("issue_virtual_card", True)),
+                compromised_card_id=str(payload.get("compromised_card_id") or ""),
+                commit_transaction=False,
+            )
+            result = {
+                "success": True,
+                "message": replacement.get("message"),
+                "replacement_card": replacement,
+                "card_status": "BLOCKED",
+            }
+            committed = self.mark_committed(
+                claim.proposal.id,
+                result_payload=result,
+            )
+            self._record_domain_commit_event(committed, result)
+            self.db.commit()
+            return self._proposal_result(committed, idempotent_replay=False)
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def commit_wallet_provisioning_for_identity(
+        self,
+        proposal_id,
+        *,
+        customer_identity: str,
+        runtime_context: ProposalRuntimeContext,
+    ) -> dict[str, Any]:
+        claim = self._attest_and_claim(
+            proposal_id,
+            customer_identity=customer_identity,
+            runtime_context=runtime_context,
+            expected_action_type=PROVISION_GOOGLE_WALLET,
+        )
+        if not claim.should_execute:
+            return self._proposal_result(claim.proposal, idempotent_replay=True)
+        payload = dict(claim.proposal.action_payload or {})
+        try:
+            wallet = queue_wallet_provisioning(
+                self.db,
+                account_id=str(claim.proposal.account_id),
+                card_token=str(payload.get("card_token") or ""),
+                wallet_provider="GOOGLE_WALLET",
+                initiated_by="CUSTOMER_VOICE_SUPPORT",
+                commit_transaction=False,
+            )
+            result = {
+                "success": True,
+                "message": wallet.get("message"),
+                **wallet,
+            }
+            committed = self.mark_committed(
+                claim.proposal.id,
+                result_payload=result,
+            )
+            self._record_domain_commit_event(committed, result)
+            self.db.commit()
+            return self._proposal_result(committed, idempotent_replay=False)
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def decide_for_identity(
+        self,
+        proposal_id,
+        *,
+        decision: str,
+        customer_identity: str,
+        runtime_context: ProposalRuntimeContext,
+    ) -> dict[str, Any]:
+        """Apply a typed non-commit customer decision to one current proposal."""
+        normalized_decision = str(decision or "").strip().upper()
+        if normalized_decision not in NON_COMMIT_DECISIONS:
+            raise ProposalError(
+                "Proposal decision must be DECLINE, REVISE, or CANCEL."
+            )
+        runtime_context.require_confirmation()
+        customer_id = self._resolve_customer_id(customer_identity)
+        proposal = self._get_locked(proposal_id)
+        self._validate_scope(
+            proposal,
+            customer_id=customer_id,
+            support_session_id=runtime_context.support_session_id,
+            runtime_name=runtime_context.runtime_name,
+            runtime_session_id=runtime_context.runtime_session_id,
+            expected_action_type=proposal.action_type,
+        )
+        if proposal.reset_generation != runtime_context.reset_generation:
+            if proposal.status not in TERMINAL_STATUSES:
+                self.invalidate(proposal.id, reason="RESET_GENERATION_CHANGED")
+                self._record_disposition_event(proposal)
+                self.db.commit()
+            raise ProposalScopeError("Proposal was invalidated by a session reset.")
+        if proposal.status == "PROPOSED":
+            self.mark_presented(
+                proposal.id,
+                assistant_turn_id=str(runtime_context.presentation_turn_id),
+            )
+        if proposal.presented_assistant_turn_id != str(
+            runtime_context.presentation_turn_id
+        ):
+            raise ProposalScopeError(
+                "Proposal presentation does not belong to the protected turn."
+            )
+        customer_turn_id = str(runtime_context.confirmation_turn_id)
+        if customer_turn_id == proposal.originating_customer_turn_id:
+            raise ProposalTransitionError(
+                "A proposal decision must come from a later customer turn."
+            )
+
+        if proposal.status in {"DECLINED", "INVALIDATED"}:
+            expected_reason = {
+                "DECLINE": "CUSTOMER_DECLINED",
+                "REVISE": "CUSTOMER_REVISED",
+                "CANCEL": "CUSTOMER_CANCELLED",
+            }[normalized_decision]
+            if (
+                proposal.status == ("DECLINED" if normalized_decision == "DECLINE" else "INVALIDATED")
+                and proposal.invalidation_reason == expected_reason
+            ):
+                return {
+                    **self.proposal_view(proposal),
+                    "decision": normalized_decision,
+                    "idempotent_replay": True,
+                }
+            raise ProposalTransitionError(
+                f"Proposal is already terminal in {proposal.status} state."
+            )
+
+        if normalized_decision == "DECLINE":
+            self.decline(
+                proposal.id,
+                customer_turn_id=customer_turn_id,
+            )
+        else:
+            self.invalidate(
+                proposal.id,
+                reason=(
+                    "CUSTOMER_REVISED"
+                    if normalized_decision == "REVISE"
+                    else "CUSTOMER_CANCELLED"
+                ),
+            )
+            proposal.confirmation_customer_turn_id = customer_turn_id
+        self._record_disposition_event(proposal)
+        self.db.commit()
+        return {
+            **self.proposal_view(proposal),
+            "decision": normalized_decision,
+            "idempotent_replay": False,
+        }
 
     def mark_presented(
         self,
@@ -545,7 +852,7 @@ class ActionProposalService:
                 customer_turn_id=str(runtime_context.confirmation_turn_id),
                 protected_evidence={
                     "method": runtime_context.confirmation_method,
-                    "classification": runtime_context.confirmation_classification,
+                    "source": runtime_context.confirmation_source,
                     "runtime_name": runtime_context.runtime_name,
                     "runtime_session_id": runtime_context.runtime_session_id,
                     "presentation_turn_id": runtime_context.presentation_turn_id,
@@ -564,6 +871,28 @@ class ActionProposalService:
     @staticmethod
     def proposal_view(proposal: ActionProposal) -> dict[str, Any]:
         payload = dict(proposal.action_payload or {})
+        display_selection: dict[str, Any]
+        if proposal.action_type == TRIAGE_FRAUD_CASE:
+            display_selection = {
+                "fraud_alert_id": payload.get("fraud_alert_id"),
+                "disputed_authorization_ids": payload.get(
+                    "disputed_authorization_ids", []
+                ),
+                "disputed_transaction_ids": payload.get(
+                    "disputed_transaction_ids", []
+                ),
+                "issue_replacement": bool(payload.get("issue_replacement")),
+                "escalate": bool(payload.get("escalate")),
+            }
+        elif proposal.action_type == REISSUE_CARD:
+            display_selection = {
+                "reason": payload.get("reason"),
+                "issue_virtual_card": bool(payload.get("issue_virtual_card")),
+            }
+        elif proposal.action_type == PROVISION_GOOGLE_WALLET:
+            display_selection = {"wallet_provider": payload.get("wallet_provider")}
+        else:
+            display_selection = {}
         return {
             "success": True,
             "proposal_id": str(proposal.id),
@@ -572,15 +901,7 @@ class ActionProposalService:
             "status": proposal.status,
             "confirmation_policy": proposal.confirmation_policy,
             "customer_safe_summary": proposal.customer_safe_summary,
-            "display_selection": {
-                "fraud_alert_id": payload.get("fraud_alert_id"),
-                "disputed_authorization_ids": payload.get(
-                    "disputed_authorization_ids", []
-                ),
-                "disputed_transaction_ids": payload.get("disputed_transaction_ids", []),
-                "issue_replacement": bool(payload.get("issue_replacement")),
-                "escalate": bool(payload.get("escalate")),
-            },
+            "display_selection": display_selection,
             "expires_at": _as_utc(proposal.expires_at).isoformat(),
         }
 
@@ -609,6 +930,75 @@ class ActionProposalService:
             "status": proposal.status,
             "invalidation_reason": proposal.invalidation_reason,
         }
+
+    def _attest_and_claim(
+        self,
+        proposal_id,
+        *,
+        customer_identity: str,
+        runtime_context: ProposalRuntimeContext,
+        expected_action_type: str,
+    ) -> CommitClaim:
+        """Advance protected presentation/confirmation and claim one execution."""
+        runtime_context.require_confirmation()
+        customer_id = self._resolve_customer_id(customer_identity)
+        proposal = self._get_locked(proposal_id)
+        self._validate_scope(
+            proposal,
+            customer_id=customer_id,
+            support_session_id=runtime_context.support_session_id,
+            runtime_name=runtime_context.runtime_name,
+            runtime_session_id=runtime_context.runtime_session_id,
+            expected_action_type=expected_action_type,
+        )
+        if proposal.status == "PROPOSED":
+            self.mark_presented(
+                proposal.id,
+                assistant_turn_id=str(runtime_context.presentation_turn_id),
+            )
+        if proposal.status == "PRESENTED":
+            self.confirm(
+                proposal.id,
+                customer_turn_id=str(runtime_context.confirmation_turn_id),
+                protected_evidence={
+                    "method": runtime_context.confirmation_method,
+                    "source": runtime_context.confirmation_source,
+                    "runtime_name": runtime_context.runtime_name,
+                    "runtime_session_id": runtime_context.runtime_session_id,
+                    "presentation_turn_id": runtime_context.presentation_turn_id,
+                    "confirmation_turn_id": runtime_context.confirmation_turn_id,
+                },
+            )
+        return self.claim_commit(
+            proposal.id,
+            customer_id=customer_id,
+            support_session_id=runtime_context.support_session_id,
+            runtime_name=runtime_context.runtime_name,
+            runtime_session_id=runtime_context.runtime_session_id,
+            reset_generation=runtime_context.reset_generation,
+            expected_action_type=expected_action_type,
+        )
+
+    def _record_domain_commit_event(
+        self,
+        proposal: ActionProposal,
+        result: dict[str, Any],
+    ) -> None:
+        record_audit_event(
+            self.db,
+            "ACTION_PROPOSAL_COMMITTED",
+            {
+                "proposal_id": str(proposal.id),
+                "correlation_id": str(proposal.id),
+                "action_type": proposal.action_type,
+                "contract_version": proposal.contract_version,
+                "customer_id": str(proposal.customer_id),
+                "account_id": str(proposal.account_id or "") or None,
+                "support_session_id": proposal.support_session_id,
+                "runtime_name": proposal.runtime_name,
+                "result_status": result.get("status"),
+            },
+        )
 
     def _create(self, **values) -> ActionProposal:
         required_strings = (

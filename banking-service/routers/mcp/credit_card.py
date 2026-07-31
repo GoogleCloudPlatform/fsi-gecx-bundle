@@ -18,6 +18,9 @@ import hashlib
 import json
 import logging
 import re
+import uuid
+from typing import Literal
+
 from fastmcp import Context
 
 from . import mcp  # Import shared FastMCP server instance
@@ -44,7 +47,6 @@ from services.voice_bidi import send_session_event
 
 logger = logging.getLogger(__name__)
 
-@mcp.tool()
 @requires_user_assertion
 async def report_lost_stolen_card(
     account_id: str = None,
@@ -206,7 +208,6 @@ async def unfreeze_card(
         db.close()
 
 
-@mcp.tool()
 @requires_user_assertion
 async def issue_replacement_card_tool(
     account_id: str = None,
@@ -296,7 +297,6 @@ async def issue_replacement_card_tool(
         db.close()
 
 
-@mcp.tool()
 @requires_user_assertion
 async def push_card_to_google_wallet(
     account_id: str = None,
@@ -479,7 +479,6 @@ async def review_fraud_selection(
         db.close()
 
 
-@mcp.tool()
 @requires_user_assertion
 async def resolve_fraud_alert(
     resolution: str,
@@ -535,6 +534,310 @@ def _proposal_idempotency_key(runtime_context, payload: dict) -> str:
         f"{runtime_context.runtime_name}:{runtime_context.runtime_session_id}:"
         f"{runtime_context.customer_turn_id}:{fingerprint}"
     )[:128]
+
+
+def _is_proposal_id(value: str) -> bool:
+    try:
+        uuid.UUID(str(value))
+    except (TypeError, ValueError, AttributeError):
+        return False
+    return True
+
+
+@mcp.tool()
+@requires_user_assertion
+async def offer_session_closeout(ctx: Context = None) -> dict:
+    """Open a runtime-attested final-assistance checkpoint."""
+    runtime_context = proposal_runtime_context_var.get()
+    if runtime_context is None:
+        return {
+            "success": False,
+            "error": "TRUSTED_RUNTIME_CONTEXT_REQUIRED",
+            "message": "Trusted runtime session context is required.",
+        }
+    try:
+        runtime_context.require_customer_turn()
+    except RuntimeContextError as exc:
+        return {
+            "success": False,
+            "error": "CLOSEOUT_CHECKPOINT_REJECTED",
+            "message": str(exc),
+        }
+    return {
+        "success": True,
+        "status": "CLOSEOUT_OFFERED",
+        "customer_prompt": "Is there anything else I can help you with?",
+    }
+
+
+@mcp.tool()
+@requires_user_assertion
+async def decide_action_proposal(
+    proposal_id: str,
+    decision: Literal["DECLINE", "REVISE", "CANCEL"],
+    ctx: Context = None,
+) -> dict:
+    """Resolve the current immutable proposal without committing it.
+
+    Use DECLINE when the customer rejects the proposed action, REVISE before
+    gathering changed scope and creating a replacement proposal, or CANCEL
+    when the customer ends the request.
+    """
+    verified_customer_id = verified_customer_id_var.get()
+    runtime_context = proposal_runtime_context_var.get()
+    if runtime_context is None:
+        return {
+            "success": False,
+            "error": "TRUSTED_RUNTIME_CONTEXT_REQUIRED",
+            "message": "Trusted runtime session context is required.",
+        }
+    if not _is_proposal_id(proposal_id):
+        return {
+            "success": False,
+            "error": "INVALID_PROPOSAL_ID",
+            "message": "Invalid action proposal id.",
+        }
+    db = SessionLocal()
+    try:
+        return ActionProposalService(db).decide_for_identity(
+            proposal_id,
+            decision=decision,
+            customer_identity=verified_customer_id,
+            runtime_context=runtime_context,
+        )
+    except (ProposalError, RuntimeContextError) as exc:
+        db.rollback()
+        return {
+            "success": False,
+            "error": "DECISION_REJECTED",
+            "message": str(exc),
+        }
+    except Exception as exc:
+        db.rollback()
+        logger.error(
+            "Error in FastMCP decide_action_proposal error_type=%s",
+            type(exc).__name__,
+        )
+        return {
+            "success": False,
+            "error": "DECISION_FAILED",
+            "message": "Internal error recording the proposal decision.",
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def propose_card_reissue(
+    reason: str,
+    ctx: Context = None,
+) -> dict:
+    """Prepare a card-reissue proposal for explicit later-turn confirmation."""
+    verified_customer_id = verified_customer_id_var.get()
+    runtime_context = proposal_runtime_context_var.get()
+    if runtime_context is None:
+        return {
+            "success": False,
+            "error": "TRUSTED_RUNTIME_CONTEXT_REQUIRED",
+            "message": "Trusted runtime session context is required.",
+        }
+    payload = {"reason": str(reason or "").strip().upper()}
+    db = SessionLocal()
+    try:
+        return ActionProposalService(db).propose_card_reissue_for_identity(
+            customer_identity=verified_customer_id,
+            runtime_context=runtime_context,
+            idempotency_key=_proposal_idempotency_key(runtime_context, payload),
+            **payload,
+        )
+    except (ProposalError, RuntimeContextError) as exc:
+        db.rollback()
+        return {"success": False, "error": "PROPOSAL_REJECTED", "message": str(exc)}
+    except Exception as exc:
+        db.rollback()
+        logger.error(
+            "Error in FastMCP propose_card_reissue error_type=%s",
+            type(exc).__name__,
+        )
+        return {
+            "success": False,
+            "error": "PROPOSAL_FAILED",
+            "message": "Internal error preparing card reissue.",
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def commit_card_reissue(
+    proposal_id: str,
+    ctx: Context = None,
+) -> dict:
+    """Commit one confirmed card-reissue proposal by opaque proposal id."""
+    verified_customer_id = verified_customer_id_var.get()
+    runtime_context = proposal_runtime_context_var.get()
+    if runtime_context is None:
+        return {
+            "success": False,
+            "error": "TRUSTED_RUNTIME_CONTEXT_REQUIRED",
+            "message": "Trusted runtime session context is required.",
+        }
+    if not _is_proposal_id(proposal_id):
+        return {
+            "success": False,
+            "error": "INVALID_PROPOSAL_ID",
+            "message": "Invalid action proposal id.",
+        }
+    db = SessionLocal()
+    try:
+        result = ActionProposalService(db).commit_card_reissue_for_identity(
+            proposal_id,
+            customer_identity=verified_customer_id,
+            runtime_context=runtime_context,
+        )
+        replacement = result.get("replacement_card") or {}
+        if result.get("success"):
+            try:
+                await send_session_event(
+                    f"session-{verified_customer_id}",
+                    {
+                        "type": "CARD_REPLACED",
+                        "proposal_id": str(proposal_id),
+                        "old_card_id": replacement.get("old_card_id"),
+                        "new_card_id": replacement.get("new_card_id"),
+                        "new_last_four": replacement.get("new_last_four"),
+                        "replacement_status": replacement.get("replacement_status"),
+                        "is_virtual": replacement.get("is_virtual"),
+                    },
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Committed card-reissue UI event failed error_type=%s",
+                    type(exc).__name__,
+                )
+        return result
+    except (ProposalError, RuntimeContextError) as exc:
+        db.rollback()
+        return {"success": False, "error": "COMMIT_REJECTED", "message": str(exc)}
+    except Exception as exc:
+        db.rollback()
+        logger.error(
+            "Error in FastMCP commit_card_reissue error_type=%s",
+            type(exc).__name__,
+        )
+        return {
+            "success": False,
+            "error": "COMMIT_FAILED",
+            "message": "Internal error committing card reissue.",
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def propose_wallet_provisioning(ctx: Context = None) -> dict:
+    """Prepare Google Wallet provisioning for explicit later-turn confirmation."""
+    verified_customer_id = verified_customer_id_var.get()
+    runtime_context = proposal_runtime_context_var.get()
+    if runtime_context is None:
+        return {
+            "success": False,
+            "error": "TRUSTED_RUNTIME_CONTEXT_REQUIRED",
+            "message": "Trusted runtime session context is required.",
+        }
+    payload = {"wallet_provider": "GOOGLE_WALLET"}
+    db = SessionLocal()
+    try:
+        return ActionProposalService(db).propose_wallet_provisioning_for_identity(
+            customer_identity=verified_customer_id,
+            runtime_context=runtime_context,
+            idempotency_key=_proposal_idempotency_key(runtime_context, payload),
+        )
+    except (ProposalError, RuntimeContextError) as exc:
+        db.rollback()
+        return {"success": False, "error": "PROPOSAL_REJECTED", "message": str(exc)}
+    except Exception as exc:
+        db.rollback()
+        logger.error(
+            "Error in FastMCP propose_wallet_provisioning error_type=%s",
+            type(exc).__name__,
+        )
+        return {
+            "success": False,
+            "error": "PROPOSAL_FAILED",
+            "message": "Internal error preparing Wallet provisioning.",
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@requires_user_assertion
+async def commit_wallet_provisioning(
+    proposal_id: str,
+    ctx: Context = None,
+) -> dict:
+    """Commit one confirmed Google Wallet proposal by opaque proposal id."""
+    verified_customer_id = verified_customer_id_var.get()
+    runtime_context = proposal_runtime_context_var.get()
+    if runtime_context is None:
+        return {
+            "success": False,
+            "error": "TRUSTED_RUNTIME_CONTEXT_REQUIRED",
+            "message": "Trusted runtime session context is required.",
+        }
+    if not _is_proposal_id(proposal_id):
+        return {
+            "success": False,
+            "error": "INVALID_PROPOSAL_ID",
+            "message": "Invalid action proposal id.",
+        }
+    db = SessionLocal()
+    try:
+        result = ActionProposalService(db).commit_wallet_provisioning_for_identity(
+            proposal_id,
+            customer_identity=verified_customer_id,
+            runtime_context=runtime_context,
+        )
+        if result.get("success"):
+            try:
+                await send_session_event(
+                    f"session-{verified_customer_id}",
+                    {
+                        "type": "WALLET_PROVISIONING_QUEUED",
+                        "proposal_id": str(proposal_id),
+                        "card_token": result.get("card_token"),
+                        "wallet_provider": result.get("wallet_provider"),
+                        "wallet_provisioning_status": result.get(
+                            "wallet_provisioning_status"
+                        ),
+                    },
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Committed Wallet UI event failed error_type=%s",
+                    type(exc).__name__,
+                )
+        return result
+    except (ProposalError, RuntimeContextError) as exc:
+        db.rollback()
+        return {"success": False, "error": "COMMIT_REJECTED", "message": str(exc)}
+    except Exception as exc:
+        db.rollback()
+        logger.error(
+            "Error in FastMCP commit_wallet_provisioning error_type=%s",
+            type(exc).__name__,
+        )
+        return {
+            "success": False,
+            "error": "COMMIT_FAILED",
+            "message": "Internal error committing Wallet provisioning.",
+        }
+    finally:
+        db.close()
 
 
 @mcp.tool()
@@ -624,7 +927,7 @@ async def commit_fraud_triage(
             "error": "TRUSTED_RUNTIME_CONTEXT_REQUIRED",
             "message": "Trusted runtime session context is required.",
         }
-    if not re.match(r"^[a-fA-F0-9-]{32,36}$", str(proposal_id or "")):
+    if not _is_proposal_id(proposal_id):
         return {
             "success": False,
             "error": "INVALID_PROPOSAL_ID",
@@ -692,7 +995,6 @@ async def commit_fraud_triage(
         db.close()
 
 
-@mcp.tool()
 @requires_user_assertion
 async def triage_fraud_case(
     fraud_alert_id: str,

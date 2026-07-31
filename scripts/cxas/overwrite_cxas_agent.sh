@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
 # Copyright 2026 Google LLC
 #
@@ -15,15 +16,17 @@
 # limitations under the License.
 
 # Configuration
-BASE_URL="https://ces.clients6.google.com/v1beta"
-PROJECT_ID="${PROJECT_ID}"
-APP_ID="${APP_ID}"
-LOCATION="us"
+BASE_URL="${BASE_URL:-https://ces.clients6.google.com/v1beta}"
+PROJECT_ID="${PROJECT_ID:-}"
+APP_ID="${APP_ID:-}"
+LOCATION="${LOCATION:-us}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENT_DIR="${SCRIPT_DIR}/../../gecx" # Directory containing your agent configs
 AGENT_FOLDER="${AGENT_FOLDER:-Nova_Horizon_Bot_v2}"
 ZIP_OUT="/tmp/agent_export.zip"
 EXPECTED_MODEL="${EXPECTED_MODEL:-}"
+TARGET_DEPLOYMENT_NAME="${TARGET_DEPLOYMENT_NAME:-}"
+RESULT_FILE="${RESULT_FILE:-}"
 
 if [ -z "$EXPECTED_MODEL" ]; then
   EXPECTED_MODEL=$(awk '
@@ -49,7 +52,8 @@ trap 'rm -f "$ZIP_OUT"' EXIT
 
 # 1. Compress the directory structure
 # We change directory (cd) first so that the root of the ZIP is the actual agent files, not the parent folder.
-(cd "$AGENT_DIR" && zip -rq "$ZIP_OUT" "$AGENT_FOLDER" -x "*.DS_Store" "*.tftpl" ".gitignore")
+(cd "$AGENT_DIR" && zip -rq "$ZIP_OUT" "$AGENT_FOLDER" \
+  -x "*.DS_Store" "*.tftpl" ".gitignore" "*/__pycache__/*" "*.pyc" "*.pyo")
 
 # 2. Convert the ZIP file to a Base64-encoded string
 BASE64_CONTENT=$(cat "$ZIP_OUT" | base64 | tr -d '\n')
@@ -76,7 +80,7 @@ RESPONSE=$(curl -s -X POST \
   -H "Content-Type: application/json; charset=utf-8" \
   -H "x-goog-user-project: $PROJECT_ID" \
   -d "$PAYLOAD" \
-  "${BASE_URL}/projects/${PROJECT_ID}/locations/us/apps:importApp")
+  "${BASE_URL}/projects/${PROJECT_ID}/locations/${LOCATION}/apps:importApp")
 
 # Extract operation name
 OPERATION_NAME=$(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('name', ''))")
@@ -193,15 +197,40 @@ except Exception:
   echo "Verified imported app and root-agent model: $ACTUAL_MODEL"
 fi
 
-# 8. Get the list of existing deployments
-echo "Retrieving existing deployments..."
-DEPLOYMENTS_RESPONSE=$(curl -s \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  -H "x-goog-user-project: $PROJECT_ID" \
-  "${BASE_URL}/projects/${PROJECT_ID}/locations/${LOCATION}/apps/${APP_ID}/deployments")
-
-# Extract deployment names
-DEPLOYMENT_NAMES=$(echo "$DEPLOYMENTS_RESPONSE" | python3 -c "
+# 8. Resolve the deployment that this release is allowed to move.
+if [ -n "$TARGET_DEPLOYMENT_NAME" ]; then
+  EXPECTED_DEPLOYMENT_PREFIX="projects/${PROJECT_ID}/locations/${LOCATION}/apps/${APP_ID}/deployments/"
+  case "$TARGET_DEPLOYMENT_NAME" in
+    "$EXPECTED_DEPLOYMENT_PREFIX"*) ;;
+    *)
+      echo "Error: TARGET_DEPLOYMENT_NAME is outside app $APP_ID: $TARGET_DEPLOYMENT_NAME"
+      exit 1
+      ;;
+  esac
+  DEPLOYMENTS_RESPONSE=$(curl -s \
+    -H "Authorization: Bearer $ACCESS_TOKEN" \
+    -H "x-goog-user-project: $PROJECT_ID" \
+    "${BASE_URL}/${TARGET_DEPLOYMENT_NAME}")
+  DEPLOYMENT_NAMES=$(echo "$DEPLOYMENTS_RESPONSE" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    print(data.get('name', ''))
+except Exception as e:
+    sys.stderr.write(f'Error parsing deployment: {e}\n')
+")
+  if [ "$DEPLOYMENT_NAMES" != "$TARGET_DEPLOYMENT_NAME" ]; then
+    echo "Error: Target CES deployment does not exist: $TARGET_DEPLOYMENT_NAME"
+    echo "Response: $DEPLOYMENTS_RESPONSE"
+    exit 1
+  fi
+else
+  echo "Retrieving existing deployments..."
+  DEPLOYMENTS_RESPONSE=$(curl -s \
+    -H "Authorization: Bearer $ACCESS_TOKEN" \
+    -H "x-goog-user-project: $PROJECT_ID" \
+    "${BASE_URL}/projects/${PROJECT_ID}/locations/${LOCATION}/apps/${APP_ID}/deployments")
+  DEPLOYMENT_NAMES=$(echo "$DEPLOYMENTS_RESPONSE" | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -213,6 +242,7 @@ try:
 except Exception as e:
     sys.stderr.write(f'Error parsing deployments: {e}\n')
 ")
+fi
 
 if [ -z "$DEPLOYMENT_NAMES" ]; then
   echo "No existing deployments found for App ID $APP_ID."
@@ -242,8 +272,10 @@ fi
 echo "New Version Resource Name: $VERSION_RESOURCE_NAME"
 
 # 10. Update the existing deployments to use the new version
+UPDATED_DEPLOYMENTS_FILE=$(mktemp)
+trap 'rm -f "$ZIP_OUT" "$UPDATED_DEPLOYMENTS_FILE"' EXIT
 if [ -n "$DEPLOYMENT_NAMES" ]; then
-  echo "$DEPLOYMENT_NAMES" | while read -r DEPLOYMENT_NAME; do
+  while read -r DEPLOYMENT_NAME; do
     if [ -n "$DEPLOYMENT_NAME" ]; then
       echo "Updating deployment $DEPLOYMENT_NAME to use version $VERSION_RESOURCE_NAME..."
       PATCH_RESPONSE=$(curl -s -X PATCH \
@@ -263,12 +295,37 @@ except Exception:
 ")
       if [ "$UPDATED_VERSION" = "$VERSION_RESOURCE_NAME" ]; then
         echo "Successfully updated deployment $(basename "$DEPLOYMENT_NAME")."
+        echo "$DEPLOYMENT_NAME" >> "$UPDATED_DEPLOYMENTS_FILE"
       else
         echo "Error: Failed to update deployment $(basename "$DEPLOYMENT_NAME")."
         echo "Response: $PATCH_RESPONSE"
+        exit 1
       fi
     fi
-  done
+  done <<< "$DEPLOYMENT_NAMES"
 else
-  echo "Warning: No existing deployments were updated because none were found."
+  echo "Error: No existing deployments were found; the new CES version was not released."
+  exit 1
+fi
+
+if [ -n "$RESULT_FILE" ]; then
+  python3 - "$RESULT_FILE" "$PROJECT_ID" "$LOCATION" "$APP_ID" \
+    "$VERSION_RESOURCE_NAME" "$EXPECTED_MODEL" "$UPDATED_DEPLOYMENTS_FILE" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+result_file, project, location, app_id, version, model, deployments_file = sys.argv[1:]
+deployments = [
+    line for line in Path(deployments_file).read_text().splitlines() if line
+]
+payload = {
+    "app": f"projects/{project}/locations/{location}/apps/{app_id}",
+    "version": version,
+    "deployments": deployments,
+    "model": model,
+}
+Path(result_file).write_text(json.dumps(payload, sort_keys=True) + "\n")
+PY
+  echo "CES release result: $RESULT_FILE"
 fi

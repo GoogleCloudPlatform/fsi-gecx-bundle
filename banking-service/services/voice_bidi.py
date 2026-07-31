@@ -212,6 +212,9 @@ class VoiceBidiSession:
             "max_output_gap_ms": 0,
             "last_output_at": None,
             "recognition_results": 0,
+            "recognition_lag_over_5s": 0,
+            "max_recognition_lag_ms": 0,
+            "pending_speech_started_at": None,
             "interruption_signals": 0,
             "completed_turns": 0,
             "provider_end_signal": "none",
@@ -367,6 +370,13 @@ class VoiceBidiSession:
                             if not speech_active:
                                 speech_active = True
                                 transport_stats["input_speech_bursts"] += 1
+                                if (
+                                    transport_stats["pending_speech_started_at"]
+                                    is None
+                                ):
+                                    transport_stats["pending_speech_started_at"] = (
+                                        time.monotonic()
+                                    )
                         elif speech_active:
                             quiet_frames += 1
                             if quiet_frames >= 4:
@@ -441,6 +451,36 @@ class VoiceBidiSession:
                             transport_stats["recognition_results"] += 1
                             user_transcript = recognition_result.get("transcript", "")
                             if user_transcript:
+                                pending_speech_started_at = transport_stats[
+                                    "pending_speech_started_at"
+                                ]
+                                if pending_speech_started_at is not None:
+                                    recognition_lag_ms = round(
+                                        (
+                                            time.monotonic()
+                                            - pending_speech_started_at
+                                        )
+                                        * 1000
+                                    )
+                                    transport_stats["max_recognition_lag_ms"] = max(
+                                        transport_stats[
+                                            "max_recognition_lag_ms"
+                                        ],
+                                        recognition_lag_ms,
+                                    )
+                                    if recognition_lag_ms > 5_000:
+                                        transport_stats[
+                                            "recognition_lag_over_5s"
+                                        ] += 1
+                                        logger.warning(
+                                            "CES recognition lag exceeded threshold "
+                                            "customer_ref=%s lag_ms=%d",
+                                            self.bootstrap.customer_ref,
+                                            recognition_lag_ms,
+                                        )
+                                    transport_stats[
+                                        "pending_speech_started_at"
+                                    ] = None
                                 await self.gecx_to_client_queue.put(
                                     {
                                         "type": "TRANSCRIPT",
@@ -494,6 +534,7 @@ class VoiceBidiSession:
                         "output_frames=%d output_bytes=%d input_rate_hz=%d "
                         "output_rate_hz=%d output_gap_over_250ms=%d "
                         "max_output_gap_ms=%d recognition_results=%d "
+                        "recognition_lag_over_5s=%d max_recognition_lag_ms=%d "
                         "interruption_signals=%d completed_turns=%d "
                         "provider_end_signal=%s",
                         transport_stats["input_frames"],
@@ -520,6 +561,8 @@ class VoiceBidiSession:
                         transport_stats["output_gap_over_250ms"],
                         transport_stats["max_output_gap_ms"],
                         transport_stats["recognition_results"],
+                        transport_stats["recognition_lag_over_5s"],
+                        transport_stats["max_recognition_lag_ms"],
                         transport_stats["interruption_signals"],
                         transport_stats["completed_turns"],
                         transport_stats["provider_end_signal"],
