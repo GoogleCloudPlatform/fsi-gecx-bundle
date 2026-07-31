@@ -98,7 +98,8 @@ def build_initial_greeting(fraud_playbook: dict | None) -> str:
         card_last_four = (fraud_playbook or {}).get("card_last_four", "their card")
         suspicious_count = (fraud_playbook or {}).get("suspicious_transactions_count") or "the"
         return (
-            "Please introduce yourself briefly, acknowledge that you can see a suspicious activity alert "
+            "Use one fraud-specific opening. Do not use the generic support greeting or ask how you can help. "
+            "Introduce yourself briefly, acknowledge that you can see a suspicious activity alert "
             f"on the customer's card ending in {card_last_four}, explain that you are reviewing {suspicious_count} flagged charges now, "
             "inspect the open fraud alert before recommending next steps, and ask whether the customer recognizes the flagged transactions."
         )

@@ -63,9 +63,23 @@ def test_build_fraud_playbook_uses_alert_context() -> None:
 def test_build_initial_greeting_acknowledges_fraud_context() -> None:
     greeting = build_initial_greeting(_active_playbook())
 
+    assert "one fraud-specific opening" in greeting
+    assert "Do not use the generic support greeting" in greeting
+    assert "ask how you can help" in greeting
     assert "suspicious activity alert" in greeting
     assert "4242" in greeting
     assert "inspect the open fraud alert" in greeting
+
+
+def test_base_instruction_selects_one_opening_from_session_context() -> None:
+    instruction = compose_session_instruction(
+        avatar_name="Nova",
+        active_flows=["fraud_alert"],
+        session_context="Trusted session context.",
+    )
+
+    assert "When no trusted active workflow is supplied" in instruction
+    assert "use its opening instead of the generic greeting" in instruction
 
 
 def test_validate_fraud_tool_sequence_requires_alert_inspection_first() -> None:
