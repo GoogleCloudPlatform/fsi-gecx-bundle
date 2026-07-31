@@ -16,6 +16,22 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[3]
+MCP_RUNTIME_VERSION = "1.28.1"
+
+
+def test_container_runtime_pins_adk_compatible_mcp_api() -> None:
+    package = (ROOT / "adk-agent/credit-support-agent/pyproject.toml").read_text()
+    requirements = (
+        ROOT / "adk-agent/credit-support-agent/requirements.txt"
+    ).read_text()
+
+    expected = f"mcp=={MCP_RUNTIME_VERSION}"
+    assert f'"{expected}"' in package
+    assert expected in requirements.splitlines()
+
+    from mcp.client.streamable_http import McpHttpClientFactory
+
+    assert McpHttpClientFactory is not None
 
 
 def test_agent_build_and_terraform_share_capacity_contract() -> None:
@@ -61,3 +77,13 @@ def test_agent_archive_build_prepares_repository_for_linguist() -> None:
 
     assert prepare_index < linguist_index
     assert "git init -q /workspace" in cloudbuild
+
+
+def test_agent_image_validates_runtime_imports_before_push() -> None:
+    cloudbuild = (ROOT / "adk-agent/credit-support-agent/cloudbuild-deploy.yaml").read_text()
+
+    validation_index = cloudbuild.index('id: "validate-runtime-imports"')
+    push_index = cloudbuild.index('id: "push-image"')
+
+    assert validation_index < push_index
+    assert "create_mcp_http_client" in cloudbuild[validation_index:push_index]

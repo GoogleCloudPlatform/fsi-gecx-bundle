@@ -121,6 +121,17 @@ steps:
           .
 
   - name: "gcr.io/cloud-builders/docker"
+    id: "validate-runtime-imports"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        IMAGE_TAG=$$(cat /workspace/image_tag.txt)
+        docker run --rm --entrypoint python \
+          "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/credit-support-agent:$${IMAGE_TAG}" \
+          -c "from google.adk.tools.mcp_tool.mcp_session_manager import create_mcp_http_client"
+
+  - name: "gcr.io/cloud-builders/docker"
     id: "push-image"
     args:
       [

@@ -27,4 +27,4 @@ onnxruntime==1.26.0
 opencv-python-headless>=4.10.0
 google-cloud-speech>=2.30.0
 httpx>=0.28.0
-mcp
+mcp==1.28.1
