@@ -93,7 +93,7 @@ Banking-service then owns the deterministic business workflow:
 
 The proposal row also provides the idempotency and concurrency boundary. Concurrent creation using the same idempotency key resolves to the same immutable proposal or rejects payload drift; commit claims prevent duplicate execution and reconcile a durable domain result if the first response is interrupted.
 
-The agent can still use existing support capabilities such as late fee reversal, credit limit increase, human escalation, card replacement, and wallet provisioning. During an active fraud alert, however, it must prefer the proposal/commit workflow rather than the compatibility-only direct `triage_fraud_case` path or burst-calling low-level fraud tools.
+The agent can still use existing support capabilities such as late fee reversal, credit limit increase, human escalation, card replacement, and wallet provisioning. Protected card replacement, Wallet provisioning, and fraud remediation use only the proposal/commit workflow; their former direct-action MCP tools are retired.
 
 ### D. Session-Specific Prompt Composition
 * **Context**: The base voice instruction should remain reusable for future specialized flows such as overdraft remediation. Baking every workflow into a monolithic prompt would make the reference architecture hard to extend.

@@ -7,12 +7,53 @@ from google.adk.tools.base_tool import BaseTool
 from google.adk.tools.mcp_tool import McpToolset
 from google.genai import types
 
-LEGACY_DIRECT_ACTION_TOOLS = {
-    "report_lost_stolen_card",
-    "issue_replacement_card_tool",
-    "push_card_to_google_wallet",
-    "triage_fraud_case",
-}
+RETIRED_MCP_TOOLS = frozenset(
+    {
+        "report_lost_stolen_card",
+        "issue_replacement_card_tool",
+        "push_card_to_google_wallet",
+        "resolve_fraud_alert",
+        "triage_fraud_case",
+    }
+)
+
+ADK_BANKING_MCP_TOOL_ALLOWLIST = frozenset(
+    {
+        "unfreeze_card",
+        "get_open_fraud_alert",
+        "review_fraud_selection",
+        "decide_action_proposal",
+        "propose_card_reissue",
+        "commit_card_reissue",
+        "propose_wallet_provisioning",
+        "commit_wallet_provisioning",
+        "propose_fraud_triage",
+        "commit_fraud_triage",
+        "triage_customer_reported_fraud",
+        "reverse_overdraft_fee",
+        "request_credit_limit_increase",
+        "get_transaction_history",
+    }
+)
+
+ADK_RUNTIME_TOOL_NAMES = frozenset(
+    {
+        "prepare_customer_reported_fraud_confirmation",
+        "offer_session_closeout",
+        "end_consultation",
+        "transfer_to_human",
+    }
+)
+
+if not ADK_BANKING_MCP_TOOL_ALLOWLIST.isdisjoint(ADK_RUNTIME_TOOL_NAMES):
+    raise RuntimeError("ADK banking MCP and runtime-local tool names must be unique.")
+
+
+def project_adk_banking_tools(tools: list[BaseTool]) -> list[BaseTool]:
+    """Return only the reviewed banking capabilities exposed to ADK."""
+    return [
+        tool for tool in tools if tool.name in ADK_BANKING_MCP_TOOL_ALLOWLIST
+    ]
 
 
 class LiveMcpToolset(McpToolset):
@@ -22,11 +63,9 @@ class LiveMcpToolset(McpToolset):
         self,
         readonly_context: ReadonlyContext | None = None,
     ) -> list[BaseTool]:
-        tools = [
-            tool
-            for tool in await super().get_tools(readonly_context)
-            if tool.name not in LEGACY_DIRECT_ACTION_TOOLS
-        ]
+        tools = project_adk_banking_tools(
+            await super().get_tools(readonly_context)
+        )
         mode = (readonly_context.state.get("mode") if readonly_context else None)
         scheduling = (
             types.FunctionResponseScheduling.INTERRUPT

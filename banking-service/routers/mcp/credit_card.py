@@ -47,7 +47,6 @@ from services.voice_bidi import send_session_event
 
 logger = logging.getLogger(__name__)
 
-@mcp.tool()
 @requires_user_assertion
 async def report_lost_stolen_card(
     account_id: str = None,
@@ -209,7 +208,6 @@ async def unfreeze_card(
         db.close()
 
 
-@mcp.tool()
 @requires_user_assertion
 async def issue_replacement_card_tool(
     account_id: str = None,
@@ -299,7 +297,6 @@ async def issue_replacement_card_tool(
         db.close()
 
 
-@mcp.tool()
 @requires_user_assertion
 async def push_card_to_google_wallet(
     account_id: str = None,
@@ -482,7 +479,6 @@ async def review_fraud_selection(
         db.close()
 
 
-@mcp.tool()
 @requires_user_assertion
 async def resolve_fraud_alert(
     resolution: str,
@@ -999,7 +995,6 @@ async def commit_fraud_triage(
         db.close()
 
 
-@mcp.tool()
 @requires_user_assertion
 async def triage_fraud_case(
     fraud_alert_id: str,

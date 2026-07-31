@@ -45,7 +45,7 @@ from agent.fraud_voice import (
 )
 from agent.instructions import INSTRUCTION_TEXT
 from agent.reset_guard import validate_reset_generation
-from agent.tooling import LEGACY_DIRECT_ACTION_TOOLS, LiveMcpToolset
+from agent.tooling import RETIRED_MCP_TOOLS, LiveMcpToolset
 from agent.workflow_authorization import (
     PROVISION_GOOGLE_WALLET,
     REISSUE_CARD,
@@ -546,7 +546,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
     logger = logging.getLogger("voice_agent")
     fraud_context = tool_context.state.get("fraud_context", {}) if hasattr(tool_context, "state") else {}
     fraud_playbook = tool_context.state.get("fraud_playbook", {}) if hasattr(tool_context, "state") else {}
-    if tool_name in LEGACY_DIRECT_ACTION_TOOLS:
+    if tool_name in RETIRED_MCP_TOOLS:
         return {
             "success": False,
             "isError": False,

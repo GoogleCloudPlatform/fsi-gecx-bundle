@@ -464,6 +464,29 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     agent = yaml.safe_load((AGENT_DIR / "Credit_Card_Support_Agent.yaml").read_text())
     assert agent["modelSettings"]["model"] == "gemini-3.1-flash-live"
     assert "beforeModelCallbacks" not in agent
+    assert set(agent["toolsets"][0]["toolIds"]) == {
+        "get_open_fraud_alert",
+        "review_fraud_selection",
+        "propose_fraud_triage",
+        "commit_fraud_triage",
+        "propose_card_reissue",
+        "commit_card_reissue",
+        "propose_wallet_provisioning",
+        "commit_wallet_provisioning",
+        "decide_action_proposal",
+        "offer_session_closeout",
+        "request_credit_limit_increase",
+        "reverse_overdraft_fee",
+    }
+    assert set(agent["toolsets"][0]["toolIds"]).isdisjoint(
+        {
+            "report_lost_stolen_card",
+            "issue_replacement_card_tool",
+            "push_card_to_google_wallet",
+            "resolve_fraud_alert",
+            "triage_fraud_case",
+        }
+    )
     callback_paths = {
         callback["pythonCode"]
         for callback_group in (

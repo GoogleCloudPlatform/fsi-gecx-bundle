@@ -3,7 +3,9 @@
 ## Runtime contract
 
 - ADK is locked to `2.4.0` in `pyproject.toml`, `requirements.txt`, and `uv.lock`.
-- Live response scheduling is applied in `agent/tooling.py`.
+- Live response scheduling and the reviewed banking MCP allowlist are applied
+  in `agent/tooling.py`. Runtime-control tools such as closeout and disconnect
+  remain local to ADK and must not overlap the banking MCP projection.
 - `VOICE_AGENT_SESSION_RESUMPTION_ENABLED` controls Gemini Live connection
   resumption independently from durable ADK session storage.
 - `VOICE_SESSION_PERSISTENCE_ENABLED` controls ADK `DatabaseSessionService`;
@@ -13,10 +15,10 @@
   hydrated and expire after `VOICE_SESSION_TTL_SECONDS` (default 12 hours).
 - The agent fails closed before a consequential tool when the banking reset
   generation cannot be verified or has changed.
-- Protected actions use the banking-owned proposal/commit protocol. The direct
-  `triage_fraud_case`, card-reissue, and Wallet mutation tools are not exposed to
-  the model; rollback means restoring a previously qualified release manifest,
-  not enabling a second in-process authorization path.
+- Protected actions use the banking-owned proposal/commit protocol. Retired
+  direct fraud, card-reissue, and Wallet mutations are not published by MCP or
+  exposed to the model; rollback means restoring a previously qualified release
+  manifest, not enabling a second in-process authorization path.
 
 ## Pre-deployment checks
 
