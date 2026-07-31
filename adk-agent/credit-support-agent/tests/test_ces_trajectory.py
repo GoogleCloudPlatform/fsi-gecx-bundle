@@ -213,6 +213,60 @@ def test_normalized_ces_golden_trajectory_passes_shared_evaluator() -> None:
     ]
 
 
+def test_completed_confirmation_evidence_survives_ces_delta_updates() -> None:
+    conversation = _conversation()
+    messages = conversation["turns"][0]["messages"]
+    messages.extend(
+        [
+            _chunk(
+                "Credit Card Support Agent",
+                "2026-07-27T03:39:12Z",
+                updatedVariables={
+                    "completed_proposal_action_type": "PROVISION_GOOGLE_WALLET",
+                    "completed_proposal_confirmation_turn_id": "wallet-turn",
+                },
+            ),
+            _chunk(
+                "Credit Card Support Agent",
+                "2026-07-27T03:39:12Z",
+                toolCall={
+                    "toolsetTool": {"toolId": "commit_wallet_provisioning"},
+                    "args": {},
+                },
+            ),
+            _chunk(
+                "Credit Card Support Agent",
+                "2026-07-27T03:39:12Z",
+                toolResponse={
+                    "toolsetTool": {"toolId": "commit_wallet_provisioning"},
+                    "response": {
+                        "text_output": [
+                            {
+                                "success": True,
+                                "status": "COMMITTED",
+                                "action_type": "PROVISION_GOOGLE_WALLET",
+                            }
+                        ]
+                    },
+                },
+            ),
+        ]
+    )
+
+    events = normalize_ces_conversation(conversation)
+
+    confirmations = [
+        event
+        for event in events
+        if event.get("type") == "ACTION_PROPOSAL"
+        and event.get("outcome") == "CONFIRMED"
+    ]
+    assert [event["action_type"] for event in confirmations] == [
+        "TRIAGE_FRAUD_CASE",
+        "PROVISION_GOOGLE_WALLET",
+    ]
+
+
 def test_normalizer_does_not_retain_tool_arguments_or_protected_ids() -> None:
     events = normalize_ces_conversation(_conversation())
 

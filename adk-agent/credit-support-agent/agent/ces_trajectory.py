@@ -82,6 +82,8 @@ def normalize_ces_conversation(
     presented_turn_id: str | None = None
     confirmation_state: tuple[str, str, str] | None = None
     active_action_type: str | None = None
+    completed_confirmation_source = ""
+    completed_decision_type = ""
     saw_end_session = False
 
     for message in _messages(conversation):
@@ -134,30 +136,41 @@ def normalize_ces_conversation(
                     )
                     presented_turn_id = str(current_presented)
 
-                current_confirmation = str(
-                    updated.get("proposal_confirmation_source") or ""
-                ).upper()
-                completed_confirmation = str(
-                    updated.get("completed_proposal_confirmation_source") or ""
-                ).upper()
-                if completed_confirmation:
+                if "completed_proposal_confirmation_source" in updated:
+                    completed_confirmation_source = str(
+                        updated.get("completed_proposal_confirmation_source") or ""
+                    ).upper()
+                if "completed_proposal_decision_type" in updated:
+                    completed_decision_type = str(
+                        updated.get("completed_proposal_decision_type") or ""
+                    ).upper()
+                completed_action = str(
+                    updated.get("completed_proposal_action_type") or ""
+                )
+                completed_turn = str(
+                    updated.get("completed_proposal_confirmation_turn_id") or ""
+                )
+                if completed_action or completed_turn:
                     active_action_type = str(
                         updated.get("completed_proposal_action_type") or ""
                     ) or active_action_type
-                    current_confirmation = completed_confirmation
-                current_decision = str(
-                    updated.get("completed_proposal_decision_type")
-                    or updated.get("proposal_decision_type")
-                    or ""
-                ).upper()
+                    current_confirmation = completed_confirmation_source
+                    current_decision = completed_decision_type
+                    confirmation_turn = completed_turn
+                else:
+                    current_confirmation = str(
+                        updated.get("proposal_confirmation_source") or ""
+                    ).upper()
+                    current_decision = str(
+                        updated.get("proposal_decision_type") or ""
+                    ).upper()
+                    confirmation_turn = str(
+                        updated.get("proposal_confirmation_turn_id") or ""
+                    )
                 confirmation_key = (
                     active_action_type or "",
                     current_confirmation,
-                    str(
-                        updated.get("completed_proposal_confirmation_turn_id")
-                        or updated.get("proposal_confirmation_turn_id")
-                        or ""
-                    ),
+                    confirmation_turn,
                 )
                 if (
                     current_confirmation
