@@ -15,6 +15,8 @@
 import os
 import contextvars
 import time
+from dataclasses import dataclass
+
 import google
 import httpx
 from google.adk.agents import Agent
@@ -190,7 +192,6 @@ def bind_session_context(
             "runtime_session_id": runtime_session_id or support_session_id or "",
             "reset_generation": "",
             "catalog_snapshot_id": None,
-            "confirmation": None,
         }),
     }
 
@@ -217,30 +218,102 @@ def configure_proposal_runtime_context(
     holder["catalog_snapshot_id"] = catalog_snapshot_id
 
 
-def _proposal_transport_headers(*, customer_turn_id: str) -> dict[str, str]:
-    holder = proposal_runtime_context_var.get() or {}
-    confirmation = holder.get("confirmation") or {}
-    protected_confirmation_turn_id = str(
-        confirmation.get("confirmation_turn_id") or ""
-    )
-    headers = {
-        "x-support-session-id": str(holder.get("support_session_id") or ""),
-        "x-runtime-name": str(holder.get("runtime_name") or ""),
-        "x-runtime-session-id": str(holder.get("runtime_session_id") or ""),
-        "x-customer-turn-id": protected_confirmation_turn_id
-        or str(customer_turn_id or ""),
-        "x-reset-generation": str(holder.get("reset_generation") or ""),
+@dataclass(frozen=True)
+class McpRequestEvidence:
+    """Trusted runtime evidence captured for one MCP tool invocation."""
+
+    target_customer_id: str
+    support_session_id: str
+    runtime_name: str
+    runtime_session_id: str
+    customer_turn_id: str
+    reset_generation: str
+    catalog_snapshot_id: str | None = None
+    presentation_turn_id: str | None = None
+    confirmation_turn_id: str | None = None
+
+    def to_headers(self) -> dict[str, str]:
+        headers = {
+            "x-target-customer-id": self.target_customer_id,
+            "x-support-session-id": self.support_session_id,
+            "x-runtime-name": self.runtime_name,
+            "x-runtime-session-id": self.runtime_session_id,
+            "x-customer-turn-id": self.customer_turn_id,
+            "x-reset-generation": self.reset_generation,
+        }
+        if self.catalog_snapshot_id:
+            headers["x-catalog-snapshot-id"] = self.catalog_snapshot_id
+        if self.presentation_turn_id and self.confirmation_turn_id:
+            headers.update({
+                "x-proposal-presentation-turn-id": self.presentation_turn_id,
+                "x-proposal-confirmation-turn-id": self.confirmation_turn_id,
+                "x-proposal-confirmation-method": "EXPLICIT_VERBAL",
+                "x-proposal-confirmation-source": "MODEL_TOOL_INTENT",
+            })
+        return headers
+
+
+def _capture_mcp_request_evidence(state) -> McpRequestEvidence:
+    """Snapshot trusted headers before MCP schedules transport work."""
+    runtime_context = proposal_runtime_context_var.get() or {}
+    playbook = dict(state.get("fraud_playbook") or {})
+    authorization = dict(playbook.get("workflow_authorization") or {})
+    protected_confirmation = str(authorization.get("status") or "") in {
+        "CONFIRMED",
+        "EXECUTING",
     }
-    if holder.get("catalog_snapshot_id"):
-        headers["x-catalog-snapshot-id"] = str(holder["catalog_snapshot_id"])
-    if confirmation:
-        headers.update({
-            "x-proposal-presentation-turn-id": str(confirmation.get("presentation_turn_id") or ""),
-            "x-proposal-confirmation-turn-id": str(confirmation.get("confirmation_turn_id") or ""),
-            "x-proposal-confirmation-method": "EXPLICIT_VERBAL",
-            "x-proposal-confirmation-source": "MODEL_TOOL_INTENT",
-        })
-    return headers
+    presentation_turn_id = None
+    confirmation_turn_id = None
+    if protected_confirmation:
+        presentation_turn_id = str(
+            authorization.get("assistant_event_id") or ""
+        ) or None
+        confirmation_turn_id = str(
+            authorization.get("customer_event_id") or ""
+        ) or None
+    latest_turn = (latest_customer_turn_var.get() or {}).get("latest") or {}
+    customer_turn_id = confirmation_turn_id or str(
+        latest_turn.get("event_id") or "unknown-turn"
+    )
+    support_guidance = dict(state.get("support_guidance") or {})
+    session_id = str(state.get("session_id") or "")
+    reset_generation = str(
+        state.get("reset_generation_token")
+        or (state.get("reset_generation") or {}).get("token")
+        or runtime_context.get("reset_generation")
+        or ""
+    )
+    return McpRequestEvidence(
+        target_customer_id=str(
+            state.get("customer_id") or active_customer_id_var.get()
+        ),
+        support_session_id=str(
+            runtime_context.get("support_session_id") or session_id
+        ),
+        runtime_name=str(
+            runtime_context.get("runtime_name") or "ADK_GEMINI_LIVE"
+        ),
+        runtime_session_id=str(
+            runtime_context.get("runtime_session_id") or session_id
+        ),
+        customer_turn_id=customer_turn_id,
+        reset_generation=reset_generation,
+        catalog_snapshot_id=(
+            str(
+                runtime_context.get("catalog_snapshot_id")
+                or support_guidance.get("snapshot_id")
+                or ""
+            )
+            or None
+        ),
+        presentation_turn_id=presentation_turn_id,
+        confirmation_turn_id=confirmation_turn_id,
+    )
+
+
+def proposal_request_header_provider(readonly_context) -> dict[str, str]:
+    """Return request-local trusted headers without changing MCP tool args."""
+    return _capture_mcp_request_evidence(readonly_context.state).to_headers()
 
 
 def _record_commit_proposal_event(
@@ -354,11 +427,6 @@ class DynamicGoogleAuth(httpx.Auth):
     async def async_auth_flow(self, request: httpx.Request):
         token = get_auth_token_for_audience(BANKING_SERVICE_URL)
         request.headers["Authorization"] = f"Bearer {token}"
-        request.headers["x-target-customer-id"] = active_customer_id_var.get()
-        latest_turn = (latest_customer_turn_var.get() or {}).get("latest") or {}
-        request.headers.update(_proposal_transport_headers(
-            customer_turn_id=str(latest_turn.get("event_id") or "unknown-turn")
-        ))
         yield request
 
 def get_auth_token_for_audience(audience: str) -> str:
@@ -382,7 +450,8 @@ def create_mcp_toolset() -> LiveMcpToolset:
         connection_params=StreamableHTTPConnectionParams(
             url=get_banking_service_mcp_url(),
             httpx_client_factory=custom_client_factory,
-        )
+        ),
+        header_provider=proposal_request_header_provider,
     )
 
 def end_consultation() -> dict:
@@ -857,13 +926,6 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
             fraud_playbook["workflow_authorization"] = mark_authorization_executing(
                 authorization_to_execute
             )
-        if tool_name in PROPOSAL_DECISION_TOOLS:
-            holder = proposal_runtime_context_var.get()
-            if holder is not None:
-                holder["confirmation"] = {
-                    "presentation_turn_id": authorization_to_execute.get("assistant_event_id"),
-                    "confirmation_turn_id": authorization_to_execute.get("customer_event_id"),
-                }
         if tool_name == "triage_customer_reported_fraud":
             action = (
                 TRIAGE_CUSTOMER_REPORTED_FRAUD
@@ -882,10 +944,6 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
 
 async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> None:
     tool_name = getattr(tool, "name", str(tool))
-    if tool_name in PROPOSAL_DECISION_TOOLS:
-        holder = proposal_runtime_context_var.get()
-        if holder is not None:
-            holder["confirmation"] = None
     import logging
     logger = logging.getLogger("voice_agent")
     logger.error(
@@ -941,10 +999,6 @@ async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> N
 
 async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs) -> dict | None:
     tool_name = getattr(tool, "name", str(tool))
-    if tool_name in PROPOSAL_DECISION_TOOLS:
-        holder = proposal_runtime_context_var.get()
-        if holder is not None:
-            holder["confirmation"] = None
     import logging
     logger = logging.getLogger("voice_agent")
     logger.info(
@@ -1289,6 +1343,36 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
                 reason=f"TOOL_RESULT_NOT_SUCCESSFUL:{tool_name}",
             )
             tool_context.state["fraud_playbook"] = playbook
+            if tool_name in COMMIT_ACTION_BY_TOOL:
+                recovery = playbook["workflow_authorization"]
+                recovery_attempt_count = int(
+                    recovery.get("recovery_attempt_count") or 0
+                )
+                retry_allowed = recovery_attempt_count < 1
+                recovery_result = dict(structured or {})
+                recovery_result.update({
+                    "success": False,
+                    "status": "COMMIT_RECOVERY_REQUIRED",
+                    "action_completed": False,
+                    "retry_allowed": retry_allowed,
+                    "model_instruction": (
+                        "The customer already confirmed and the action did not "
+                        "complete. Retry this exact commit tool once now with the "
+                        "same proposal_id. Do not ask the customer to confirm again, "
+                        "do not claim success, and do not offer consultation closeout."
+                        if retry_allowed
+                        else
+                        "The confirmed action still did not complete after one retry. "
+                        "Do not retry again, do not claim success, and do not offer "
+                        "consultation closeout. Explain that the action remains "
+                        "incomplete and offer a human handoff."
+                    ),
+                })
+                if isinstance(tool_response, dict):
+                    recovery_response = dict(tool_response)
+                    recovery_response["structuredContent"] = recovery_result
+                    return recovery_response
+                return {"structuredContent": recovery_result}
     return None
 
 NAME = "credit_card_support_voice_assistant"

@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import asyncio
-import httpx
+from types import SimpleNamespace
+
 import pytest
 
 from agent import agent
@@ -26,9 +27,14 @@ async def observe_context(customer_id: str):
     tokens = agent.bind_session_context(customer_id, callback)
     try:
         await asyncio.sleep(0)
-        request = httpx.Request("GET", "https://banking.example/mcp/")
-        async for authorized in agent.DynamicGoogleAuth().async_auth_flow(request):
-            customer_header = authorized.headers["x-target-customer-id"]
+        headers = agent.proposal_request_header_provider(
+            SimpleNamespace(state={
+                "customer_id": customer_id,
+                "session_id": f"session-{customer_id}",
+                "reset_generation_token": "0:0",
+            })
+        )
+        customer_header = headers["x-target-customer-id"]
         return (
             agent.active_customer_id_var.get(),
             agent.session_event_callback_var.get(),
@@ -38,7 +44,7 @@ async def observe_context(customer_id: str):
         agent.reset_session_context(tokens)
 
 
-def test_parallel_session_context_and_mcp_auth_isolation(monkeypatch) -> None:
+def test_parallel_session_context_and_mcp_request_isolation(monkeypatch) -> None:
     monkeypatch.setenv("ALLOW_DEV_AUTH_BYPASS", "true")
 
     async def run():
