@@ -86,17 +86,23 @@ async def test_commit_uses_only_proposal_id_and_protected_transport_evidence(
             "EXECUTING"
         )
 
-        request = httpx.Request("POST", "https://banking.example/mcp/")
-        async for authorized_request in agent.DynamicGoogleAuth().async_auth_flow(
-            request
-        ):
-            headers = authorized_request.headers
+        headers = agent.proposal_request_header_provider(
+            SimpleNamespace(state=context.state)
+        )
         assert headers["x-proposal-presentation-turn-id"] == "assistant-turn-10"
         assert headers["x-proposal-confirmation-turn-id"] == "customer-turn-11"
         assert headers["x-customer-turn-id"] == "customer-turn-11"
         assert headers["x-proposal-confirmation-method"] == "EXPLICIT_VERBAL"
         assert headers["x-proposal-confirmation-source"] == "MODEL_TOOL_INTENT"
         assert "x-proposal-confirmation-classification" not in headers
+
+        request = httpx.Request("POST", "https://banking.example/mcp/")
+        async for authorized_request in agent.DynamicGoogleAuth().async_auth_flow(
+            request
+        ):
+            auth_headers = authorized_request.headers
+        assert auth_headers["authorization"]
+        assert "x-proposal-confirmation-turn-id" not in auth_headers
     finally:
         agent.reset_session_context(tokens)
 
@@ -184,6 +190,106 @@ async def test_commit_without_captured_proposal_fails_closed_instead_of_crashing
 
 
 @pytest.mark.asyncio
+async def test_failed_commit_retries_once_with_same_request_evidence(
+    monkeypatch,
+) -> None:
+    async def generation_is_valid(**kwargs):
+        return True, None
+
+    monkeypatch.setattr(agent, "validate_reset_generation", generation_is_valid)
+    monkeypatch.setattr(agent, "get_auth_headers", lambda: {})
+    proposal_id = "11111111-1111-4111-8111-111111111111"
+    payload = {
+        "fraud_alert_id": "fraud-123",
+        "disputed_authorization_ids": ["auth-1"],
+        "disputed_transaction_ids": [],
+        "issue_replacement": True,
+        "escalate": False,
+    }
+    authorization = create_workflow_authorization(
+        action=TRIAGE_FRAUD_CASE,
+        payload=payload,
+        session_id="session-1",
+    )
+    authorization.update({
+        "proposal_id": proposal_id,
+        "status": "EXECUTING",
+        "assistant_event_id": "assistant-turn-10",
+        "customer_event_id": "customer-turn-11",
+    })
+    context = SimpleNamespace(state={
+        "customer_id": "customer-1",
+        "session_id": "session-1",
+        "reset_generation_token": "3:9",
+        "fraud_context": {"fraud_alert_id": "fraud-123"},
+        "fraud_playbook": {
+            "entry_mode": "FRAUD_ALERT",
+            "open_alert_inspected": True,
+            "fraud_alert_id": "fraud-123",
+            "workflow_authorization": authorization,
+        },
+        "_voice_tool_started_at": {},
+    })
+    failed_response = {"structuredContent": {
+        "success": False,
+        "error": "COMMIT_REJECTED",
+        "status": "PROPOSED",
+    }}
+    tokens = agent.bind_session_context(
+        "customer-1",
+        lambda event: event,
+        support_session_id="session-1",
+        runtime_session_id="session-1",
+    )
+    try:
+        first_failure = await agent.after_tool_callback(
+            SimpleNamespace(name="commit_fraud_triage"),
+            {"proposal_id": proposal_id},
+            context,
+            failed_response,
+        )
+        recovery = context.state["fraud_playbook"]["workflow_authorization"]
+        assert recovery["status"] == "RECOVERY_REQUIRED"
+        assert first_failure["structuredContent"]["retry_allowed"] is True
+        assert "Retry this exact commit tool once" in (
+            first_failure["structuredContent"]["model_instruction"]
+        )
+
+        assert await agent.before_tool_callback(
+            SimpleNamespace(name="commit_fraud_triage"),
+            {"proposal_id": proposal_id},
+            context,
+        ) is None
+        retry_authorization = context.state["fraud_playbook"][
+            "workflow_authorization"
+        ]
+        assert retry_authorization["status"] == "EXECUTING"
+        assert retry_authorization["recovery_attempt_count"] == 1
+        retry_headers = agent.proposal_request_header_provider(
+            SimpleNamespace(state=context.state)
+        )
+        assert retry_headers["x-proposal-presentation-turn-id"] == (
+            "assistant-turn-10"
+        )
+        assert retry_headers["x-proposal-confirmation-turn-id"] == (
+            "customer-turn-11"
+        )
+
+        second_failure = await agent.after_tool_callback(
+            SimpleNamespace(name="commit_fraud_triage"),
+            {"proposal_id": proposal_id},
+            context,
+            failed_response,
+        )
+        assert second_failure["structuredContent"]["retry_allowed"] is False
+        assert "offer a human handoff" in (
+            second_failure["structuredContent"]["model_instruction"]
+        )
+    finally:
+        agent.reset_session_context(tokens)
+
+
+@pytest.mark.asyncio
 async def test_typed_non_commit_decision_uses_protected_transport_and_terminates_state(
     monkeypatch,
 ) -> None:
@@ -254,11 +360,9 @@ async def test_typed_non_commit_decision_uses_protected_transport_and_terminates
         current = context.state["fraud_playbook"]["workflow_authorization"]
         assert current["status"] == "CONFIRMED"
 
-        request = httpx.Request("POST", "https://banking.example/mcp/")
-        async for authorized_request in agent.DynamicGoogleAuth().async_auth_flow(
-            request
-        ):
-            headers = authorized_request.headers
+        headers = agent.proposal_request_header_provider(
+            SimpleNamespace(state=context.state)
+        )
         assert headers["x-proposal-presentation-turn-id"] == "assistant-turn-10"
         assert headers["x-proposal-confirmation-turn-id"] == "customer-turn-11"
 
