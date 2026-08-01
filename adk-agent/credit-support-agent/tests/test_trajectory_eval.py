@@ -198,12 +198,12 @@ def test_unexpected_failed_tool_result_fails_qualification() -> None:
     events[-1:-1] = [
         {
             "type": "TOOL_CALL",
-            "tool": "offer_session_closeout",
+            "tool": "transfer_to_human",
             "elapsed_ms": 400,
         },
         {
             "type": "TOOL_RESULT",
-            "tool": "offer_session_closeout",
+            "tool": "transfer_to_human",
             "success": False,
             "elapsed_ms": 410,
         },
@@ -222,7 +222,7 @@ def test_unexpected_failed_tool_result_fails_qualification() -> None:
 
     assert result.passed is False
     assert any(
-        "unexpected failed offer_session_closeout" in failure
+        "unexpected failed transfer_to_human" in failure
         for failure in result.failures
     )
 

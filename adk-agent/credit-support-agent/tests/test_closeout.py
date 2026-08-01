@@ -17,22 +17,25 @@ from types import SimpleNamespace
 import pytest
 
 from agent import agent
-from agent.closeout import closeout_block_reason, open_closeout_checkpoint
+from agent.closeout import (
+    closeout_block_reason,
+    mark_action_completed_for_closeout,
+)
 from agent.workflow_authorization import (
     PROVISION_GOOGLE_WALLET,
     create_workflow_authorization,
 )
 
 
-def test_closeout_requires_typed_offer_and_later_customer_turn() -> None:
-    checkpoint = open_closeout_checkpoint(
+def test_closeout_requires_a_later_turn_after_completed_action() -> None:
+    boundary = mark_action_completed_for_closeout(
         originating_customer_event_id="customer-action-turn",
         now_epoch_s=10,
     )
 
     assert (
         closeout_block_reason(
-            closeout_checkpoint=checkpoint,
+            closeout_boundary=boundary,
             workflow_authorization={"status": "COMPLETED"},
             latest_customer_turn={
                 "event_id": "customer-action-turn",
@@ -43,7 +46,7 @@ def test_closeout_requires_typed_offer_and_later_customer_turn() -> None:
     )
     assert (
         closeout_block_reason(
-            closeout_checkpoint=checkpoint,
+            closeout_boundary=boundary,
             workflow_authorization={"status": "COMPLETED"},
             latest_customer_turn={
                 "event_id": "customer-closeout-turn",
@@ -55,7 +58,7 @@ def test_closeout_requires_typed_offer_and_later_customer_turn() -> None:
 
 
 def test_closeout_never_interprets_customer_transcript() -> None:
-    checkpoint = open_closeout_checkpoint(
+    boundary = mark_action_completed_for_closeout(
         originating_customer_event_id="customer-action-turn",
         now_epoch_s=10,
     )
@@ -68,7 +71,7 @@ def test_closeout_never_interprets_customer_transcript() -> None:
     }
     assert (
         closeout_block_reason(
-            closeout_checkpoint=checkpoint,
+            closeout_boundary=boundary,
             workflow_authorization={"status": "COMPLETED"},
             latest_customer_turn=latest_turn,
         )
@@ -85,7 +88,7 @@ def test_unresolved_authorization_blocks_closeout() -> None:
 
     assert (
         closeout_block_reason(
-            closeout_checkpoint=open_closeout_checkpoint(
+            closeout_boundary=mark_action_completed_for_closeout(
                 originating_customer_event_id="customer-action-turn",
                 now_epoch_s=10,
             ),
@@ -102,7 +105,7 @@ def test_unresolved_authorization_blocks_closeout() -> None:
 def test_commit_recovery_blocks_closeout() -> None:
     assert (
         closeout_block_reason(
-            closeout_checkpoint=open_closeout_checkpoint(
+            closeout_boundary=mark_action_completed_for_closeout(
                 originating_customer_event_id="customer-action-turn",
                 now_epoch_s=10,
             ),
@@ -117,21 +120,56 @@ def test_commit_recovery_blocks_closeout() -> None:
 
 
 @pytest.mark.asyncio
-async def test_end_tool_uses_typed_offer_and_event_ordering() -> None:
+async def test_successful_action_establishes_closeout_boundary(
+    monkeypatch,
+) -> None:
+    async def account_details():
+        return {}
+
+    monkeypatch.setattr(agent, "fetch_updated_account_details", account_details)
     tokens = agent.bind_session_context("customer-1", lambda event: event)
     context = SimpleNamespace(
         state={
             "session_id": "session-1",
+            "_voice_tool_started_at": {},
             "fraud_playbook": {
                 "completion_status": "ACTIVE",
-                "workflow_authorization": {"status": "COMPLETED"},
             },
         }
     )
     try:
         agent.record_customer_turn("The action is complete.")
-        offered = agent.offer_session_closeout(context)
-        assert offered["status"] == "CLOSEOUT_OFFERED"
+        action_turn = (agent.latest_customer_turn_var.get() or {}).get("latest") or {}
+        authorization = create_workflow_authorization(
+            action=PROVISION_GOOGLE_WALLET,
+            payload={},
+            session_id="session-1",
+        )
+        authorization.update(
+            {
+                "status": "EXECUTING",
+                "customer_event_id": action_turn.get("event_id"),
+            }
+        )
+        context.state["fraud_playbook"]["workflow_authorization"] = authorization
+
+        await agent.after_tool_callback(
+            SimpleNamespace(name="commit_wallet_provisioning"),
+            {"proposal_id": "11111111-1111-4111-8111-111111111111"},
+            context,
+            {
+                "structuredContent": {
+                    "success": True,
+                    "wallet_provisioning_status": "QUEUED",
+                }
+            },
+        )
+
+        boundary = context.state["closeout_boundary"]
+        assert boundary["originating_customer_event_id"] == action_turn["event_id"]
+        assert context.state["fraud_playbook"]["workflow_authorization"][
+            "status"
+        ] == "COMPLETED"
 
         blocked = await agent.before_tool_callback(
             SimpleNamespace(name="end_consultation"), {}, context
@@ -147,5 +185,24 @@ async def test_end_tool_uses_typed_offer_and_event_ordering() -> None:
         result = agent.end_consultation()
         assert result["status"] == "SUCCESS"
         assert agent.is_session_end_requested() is True
+    finally:
+        agent.reset_session_context(tokens)
+
+
+@pytest.mark.asyncio
+async def test_end_tool_uses_model_intent_for_session_without_completed_action() -> None:
+    tokens = agent.bind_session_context("customer-1", lambda event: event)
+    context = SimpleNamespace(
+        state={
+            "session_id": "session-1",
+            "fraud_playbook": {"completion_status": "ACTIVE"},
+        }
+    )
+    try:
+        agent.record_customer_turn("A customer turn interpreted by the model.")
+        allowed = await agent.before_tool_callback(
+            SimpleNamespace(name="end_consultation"), {}, context
+        )
+        assert allowed is None
     finally:
         agent.reset_session_context(tokens)
