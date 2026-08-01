@@ -15,7 +15,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Room, RoomEvent } from 'livekit-client';
+import { Room, RoomEvent, Track } from 'livekit-client';
 import { useLocation } from 'react-router-dom';
 import {
   Phone,
@@ -1560,8 +1560,24 @@ export default function VoiceSupportView() {
       // 5. Publish microphone track
       await room.localParticipant.setMicrophoneEnabled(
         true,
-        selectedAudioInputId ? { deviceId: { exact: selectedAudioInputId } } : undefined
+        microphoneConstraints(selectedAudioInputId).audio
       );
+      const microphonePublication = room.localParticipant.getTrackPublication(
+        Track.Source.Microphone
+      );
+      const microphoneSettings =
+        microphonePublication?.track?.mediaStreamTrack?.getSettings?.() || {};
+      console.info('[Microphone] LiveKit published track settings', {
+        selectionMode: selectedAudioInputId ? 'explicit' : 'system-default',
+        selectedDeviceMatched:
+          !selectedAudioInputId || microphoneSettings.deviceId === selectedAudioInputId,
+        echoCancellation: microphoneSettings.echoCancellation,
+        noiseSuppression: microphoneSettings.noiseSuppression,
+        autoGainControl: microphoneSettings.autoGainControl,
+        channelCount: microphoneSettings.channelCount,
+        sampleRate: microphoneSettings.sampleRate,
+        latency: microphoneSettings.latency,
+      });
 
       setIsConnected(true);
       setTranscripts([]);

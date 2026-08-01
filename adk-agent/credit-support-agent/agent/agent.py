@@ -14,6 +14,7 @@
 
 import os
 import contextvars
+import logging
 import time
 from dataclasses import dataclass
 
@@ -91,6 +92,7 @@ os.environ.setdefault("GOOGLE_CLOUD_LOCATION", LOCATION)
 os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")
 
 BANKING_SERVICE_URL = os.getenv("BANKING_SERVICE_URL", "http://localhost:8080").rstrip("/")
+logger = logging.getLogger("voice_agent")
 active_customer_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("active_customer_id", default="jane.doe@example.com")
 session_event_callback_var: contextvars.ContextVar = contextvars.ContextVar("session_event_callback", default=None)
 session_should_end_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
@@ -313,7 +315,42 @@ def _capture_mcp_request_evidence(state) -> McpRequestEvidence:
 
 def proposal_request_header_provider(readonly_context) -> dict[str, str]:
     """Return request-local trusted headers without changing MCP tool args."""
-    return _capture_mcp_request_evidence(readonly_context.state).to_headers()
+    evidence = _capture_mcp_request_evidence(readonly_context.state)
+    logger.info(
+        "[MCP_BOUNDARY] request evidence captured %s",
+        format_log_context(
+            state=readonly_context.state,
+            support_session_ref=stable_log_reference(
+                evidence.support_session_id, prefix="support_session"
+            ),
+            runtime_session_ref=stable_log_reference(
+                evidence.runtime_session_id, prefix="runtime_session"
+            ),
+            customer_turn_ref=stable_log_reference(
+                evidence.customer_turn_id, prefix="customer_turn"
+            ),
+            presentation_turn_ref=stable_log_reference(
+                evidence.presentation_turn_id, prefix="presentation_turn"
+            ),
+            confirmation_turn_ref=stable_log_reference(
+                evidence.confirmation_turn_id, prefix="confirmation_turn"
+            ),
+            reset_generation_ref=stable_log_reference(
+                evidence.reset_generation, prefix="reset_generation"
+            ),
+            presentation_present=bool(evidence.presentation_turn_id),
+            confirmation_present=bool(evidence.confirmation_turn_id),
+            customer_matches_confirmation=(
+                bool(evidence.confirmation_turn_id)
+                and evidence.customer_turn_id == evidence.confirmation_turn_id
+            ),
+            presentation_differs_from_confirmation=(
+                bool(evidence.presentation_turn_id and evidence.confirmation_turn_id)
+                and evidence.presentation_turn_id != evidence.confirmation_turn_id
+            ),
+        ),
+    )
+    return evidence.to_headers()
 
 
 def _record_commit_proposal_event(
