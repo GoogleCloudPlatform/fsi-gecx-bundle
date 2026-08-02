@@ -95,6 +95,10 @@ The proposal row also provides the idempotency and concurrency boundary. Concurr
 
 The agent can still use existing support capabilities such as late fee reversal, credit limit increase, human escalation, card replacement, and wallet provisioning. Protected card replacement, Wallet provisioning, and fraud remediation use only the proposal/commit workflow; their former direct-action MCP tools are retired.
 
+The complete cross-runtime contract, trusted evidence boundary, lifecycle, and
+implementation map are documented in
+[Runtime-Neutral Banking Action Proposal/Commit Protocol](./runtime_neutral_action_proposal_protocol.md).
+
 ### D. Session-Specific Prompt Composition
 * **Context**: The base voice instruction should remain reusable for future specialized flows such as overdraft remediation. Baking every workflow into a monolithic prompt would make the reference architecture hard to extend.
 * **Decision**: The agent composes instructions per LiveKit session:

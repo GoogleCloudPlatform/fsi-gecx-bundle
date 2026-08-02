@@ -24,6 +24,7 @@ from __future__ import annotations
 import datetime
 import hashlib
 import json
+import logging
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -36,9 +37,10 @@ from models.fraud import FraudAlert
 from models.identity import User
 from repositories.credit_card import CreditCardRepository
 from repositories.fraud import FraudAlertRepository
-from services.action_proposal_context import ProposalRuntimeContext
+from services.action_proposal_context import ProposalRuntimeContext, RuntimeContextError
 from services.credit_card import issue_replacement_card, queue_wallet_provisioning
 from utils.audit import record_audit_event
+from utils.log_safety import stable_log_reference
 
 
 TRIAGE_FRAUD_CASE = "TRIAGE_FRAUD_CASE"
@@ -49,6 +51,8 @@ PROVISION_GOOGLE_WALLET = "PROVISION_GOOGLE_WALLET"
 WALLET_PROVISIONING_CONTRACT_VERSION = "wallet-provisioning.v1"
 NON_COMMIT_DECISIONS = {"DECLINE", "REVISE", "CANCEL"}
 DEFAULT_PROPOSAL_TTL_SECONDS = 180
+
+logger = logging.getLogger(__name__)
 
 TERMINAL_STATUSES = {"COMMITTED", "DECLINED", "INVALIDATED", "EXPIRED"}
 
@@ -830,43 +834,61 @@ class ActionProposalService:
         runtime_context: ProposalRuntimeContext,
     ) -> dict[str, Any]:
         """Attest protected later-turn evidence and commit an opaque proposal id."""
-        runtime_context.require_confirmation()
-        customer_id = self._resolve_customer_id(customer_identity)
-        proposal = self._get_locked(proposal_id)
-        self._validate_scope(
-            proposal,
-            customer_id=customer_id,
-            support_session_id=runtime_context.support_session_id,
-            runtime_name=runtime_context.runtime_name,
-            runtime_session_id=runtime_context.runtime_session_id,
-            expected_action_type=TRIAGE_FRAUD_CASE,
-        )
-        if proposal.status == "PROPOSED":
-            self.mark_presented(
-                proposal.id,
-                assistant_turn_id=str(runtime_context.presentation_turn_id),
+        stage = "require_confirmation"
+        try:
+            runtime_context.require_confirmation()
+            stage = "resolve_customer"
+            customer_id = self._resolve_customer_id(customer_identity)
+            stage = "load_proposal"
+            proposal = self._get_locked(proposal_id)
+            stage = "validate_scope"
+            self._validate_scope(
+                proposal,
+                customer_id=customer_id,
+                support_session_id=runtime_context.support_session_id,
+                runtime_name=runtime_context.runtime_name,
+                runtime_session_id=runtime_context.runtime_session_id,
+                expected_action_type=TRIAGE_FRAUD_CASE,
             )
-        if proposal.status == "PRESENTED":
-            self.confirm(
+            if proposal.status == "PROPOSED":
+                stage = "mark_presented"
+                self.mark_presented(
+                    proposal.id,
+                    assistant_turn_id=str(runtime_context.presentation_turn_id),
+                )
+            if proposal.status == "PRESENTED":
+                stage = "confirm"
+                self.confirm(
+                    proposal.id,
+                    customer_turn_id=str(runtime_context.confirmation_turn_id),
+                    protected_evidence={
+                        "method": runtime_context.confirmation_method,
+                        "source": runtime_context.confirmation_source,
+                        "runtime_name": runtime_context.runtime_name,
+                        "runtime_session_id": runtime_context.runtime_session_id,
+                        "presentation_turn_id": runtime_context.presentation_turn_id,
+                        "confirmation_turn_id": runtime_context.confirmation_turn_id,
+                    },
+                )
+            stage = "execute_commit"
+            return self.commit_fraud_triage(
                 proposal.id,
-                customer_turn_id=str(runtime_context.confirmation_turn_id),
-                protected_evidence={
-                    "method": runtime_context.confirmation_method,
-                    "source": runtime_context.confirmation_source,
-                    "runtime_name": runtime_context.runtime_name,
-                    "runtime_session_id": runtime_context.runtime_session_id,
-                    "presentation_turn_id": runtime_context.presentation_turn_id,
-                    "confirmation_turn_id": runtime_context.confirmation_turn_id,
-                },
+                customer_id=customer_id,
+                support_session_id=runtime_context.support_session_id,
+                runtime_name=runtime_context.runtime_name,
+                runtime_session_id=runtime_context.runtime_session_id,
+                reset_generation=runtime_context.reset_generation,
             )
-        return self.commit_fraud_triage(
-            proposal.id,
-            customer_id=customer_id,
-            support_session_id=runtime_context.support_session_id,
-            runtime_name=runtime_context.runtime_name,
-            runtime_session_id=runtime_context.runtime_session_id,
-            reset_generation=runtime_context.reset_generation,
-        )
+        except (ProposalError, RuntimeContextError) as exc:
+            logger.warning(
+                "Fraud proposal identity commit rejected proposal_ref=%s "
+                "stage=%s error_type=%s reason_ref=%s",
+                stable_log_reference(proposal_id, "proposal"),
+                stage,
+                type(exc).__name__,
+                stable_log_reference(str(exc), "reason"),
+            )
+            raise
 
     @staticmethod
     def proposal_view(proposal: ActionProposal) -> dict[str, Any]:

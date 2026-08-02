@@ -448,11 +448,11 @@ async def test_questions_preserve_pending_proposal_and_revision_is_explicit() ->
         "PENDING"
     )
     closeout = await agent.before_tool_callback(
-        SimpleNamespace(name="offer_session_closeout"),
+        SimpleNamespace(name="end_consultation"),
         {},
         context,
     )
-    assert closeout["status"] == "PROPOSAL_DECISION_REQUIRED"
+    assert closeout["status"] == "SESSION_CLOSE_CONFIRMATION_REQUIRED"
 
     context.state["fraud_playbook"]["workflow_authorization"]["status"] = "EXECUTING"
     replacement = await agent.before_tool_callback(

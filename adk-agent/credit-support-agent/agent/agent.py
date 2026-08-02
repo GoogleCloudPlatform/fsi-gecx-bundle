@@ -14,6 +14,7 @@
 
 import os
 import contextvars
+import logging
 import time
 from dataclasses import dataclass
 
@@ -28,8 +29,7 @@ from google.adk.tools import ToolContext
 from agent.events import DataChannelEvent, INTERNAL_TOOL_RUNTIME_STATUS
 from agent.closeout import (
     closeout_block_reason,
-    invalidate_closeout_checkpoint,
-    open_closeout_checkpoint,
+    mark_action_completed_for_closeout,
 )
 from agent.guidance_snapshot import guidance_observability_payload
 from agent.log_safety import (
@@ -81,6 +81,15 @@ AUTHORIZATION_EXECUTION_TOOLS = {
     *COMMIT_ACTION_BY_TOOL,
     "triage_customer_reported_fraud",
 }
+ACTION_COMPLETION_TOOLS = {
+    *AUTHORIZATION_EXECUTION_TOOLS,
+    "commit_card_reissue",
+    "commit_wallet_provisioning",
+    "decide_action_proposal",
+    "request_credit_limit_increase",
+    "reverse_overdraft_fee",
+    "unfreeze_card",
+}
 
 LOCATION = os.getenv("LOCATION", "us-central1")
 project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
@@ -91,6 +100,7 @@ os.environ.setdefault("GOOGLE_CLOUD_LOCATION", LOCATION)
 os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")
 
 BANKING_SERVICE_URL = os.getenv("BANKING_SERVICE_URL", "http://localhost:8080").rstrip("/")
+logger = logging.getLogger("voice_agent")
 active_customer_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("active_customer_id", default="jane.doe@example.com")
 session_event_callback_var: contextvars.ContextVar = contextvars.ContextVar("session_event_callback", default=None)
 session_should_end_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
@@ -313,7 +323,42 @@ def _capture_mcp_request_evidence(state) -> McpRequestEvidence:
 
 def proposal_request_header_provider(readonly_context) -> dict[str, str]:
     """Return request-local trusted headers without changing MCP tool args."""
-    return _capture_mcp_request_evidence(readonly_context.state).to_headers()
+    evidence = _capture_mcp_request_evidence(readonly_context.state)
+    logger.info(
+        "[MCP_BOUNDARY] request evidence captured %s",
+        format_log_context(
+            state=readonly_context.state,
+            support_session_ref=stable_log_reference(
+                evidence.support_session_id, prefix="support_session"
+            ),
+            runtime_session_ref=stable_log_reference(
+                evidence.runtime_session_id, prefix="runtime_session"
+            ),
+            customer_turn_ref=stable_log_reference(
+                evidence.customer_turn_id, prefix="customer_turn"
+            ),
+            presentation_turn_ref=stable_log_reference(
+                evidence.presentation_turn_id, prefix="presentation_turn"
+            ),
+            confirmation_turn_ref=stable_log_reference(
+                evidence.confirmation_turn_id, prefix="confirmation_turn"
+            ),
+            reset_generation_ref=stable_log_reference(
+                evidence.reset_generation, prefix="reset_generation"
+            ),
+            presentation_present=bool(evidence.presentation_turn_id),
+            confirmation_present=bool(evidence.confirmation_turn_id),
+            customer_matches_confirmation=(
+                bool(evidence.confirmation_turn_id)
+                and evidence.customer_turn_id == evidence.confirmation_turn_id
+            ),
+            presentation_differs_from_confirmation=(
+                bool(evidence.presentation_turn_id and evidence.confirmation_turn_id)
+                and evidence.presentation_turn_id != evidence.confirmation_turn_id
+            ),
+        ),
+    )
+    return evidence.to_headers()
 
 
 def _record_commit_proposal_event(
@@ -461,23 +506,6 @@ def end_consultation() -> dict:
     return {"status": "SUCCESS", "message": "Session end signal sent."}
 
 
-def offer_session_closeout(tool_context: ToolContext) -> dict:
-    """Open the final-assistance checkpoint before asking whether help is complete."""
-    latest_turn = (latest_customer_turn_var.get() or {}).get("latest") or {}
-    tool_context.state["closeout_checkpoint"] = open_closeout_checkpoint(
-        originating_customer_event_id=str(latest_turn.get("event_id") or ""),
-    )
-    return {
-        "success": True,
-        "status": "CLOSEOUT_OFFERED",
-        "customer_prompt": "Is there anything else I can help you with?",
-        "model_instruction": (
-            "Ask whether the customer needs anything else, then stop and wait for "
-            "their next turn. Do not call end_consultation in this turn."
-        ),
-    }
-
-
 def transfer_to_human(reason: str) -> dict:
     """Escalates the support session to a live human bank supervisor. Call this when the customer demands a human representative, disputes a fraud item that requires supervisor override, or when you are unable to resolve their request.
     
@@ -623,30 +651,9 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
             "action_completed": False,
             "message": "Use the typed proposal and commit tools for this action.",
         }
-    if (
-        tool_name == "offer_session_closeout"
-        and (fraud_playbook.get("workflow_authorization") or {}).get("status")
-        in {
-            "PREPARED",
-            "PENDING",
-            "CONFIRMED",
-            "EXECUTING",
-            "RECOVERY_REQUIRED",
-        }
-    ):
-        return {
-            "success": False,
-            "isError": False,
-            "status": "PROPOSAL_DECISION_REQUIRED",
-            "action_completed": False,
-            "message": (
-                "Resolve the current proposal with commit, decline, revise, "
-                "or cancel before offering session closeout."
-            ),
-        }
     if tool_name == "end_consultation":
         block_reason = closeout_block_reason(
-            closeout_checkpoint=tool_context.state.get("closeout_checkpoint"),
+            closeout_boundary=tool_context.state.get("closeout_boundary"),
             workflow_authorization=fraud_playbook.get("workflow_authorization"),
             latest_customer_turn=(
                 (latest_customer_turn_var.get() or {}).get("latest") or {}
@@ -673,19 +680,10 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
                 "message": "The voice support session is still active.",
                 "customer_response": "Is there anything else I can help you with?",
                 "model_instruction": (
-                    "Do not say goodbye or claim the session ended. Call "
-                    "offer_session_closeout, ask whether the customer needs anything "
-                    "else, and wait for their next turn."
+                    "Do not say goodbye or claim the session ended. Ask whether the "
+                    "customer needs anything else and wait for their next turn."
                 ),
             }
-    elif tool_name != "offer_session_closeout":
-        checkpoint = tool_context.state.get("closeout_checkpoint")
-        invalidated_checkpoint = invalidate_closeout_checkpoint(
-            checkpoint,
-            reason=f"INTERVENING_TOOL:{tool_name}",
-        )
-        if invalidated_checkpoint != (checkpoint or {}):
-            tool_context.state["closeout_checkpoint"] = invalidated_checkpoint
     consequential_tools = {
         "unfreeze_card",
         "reverse_overdraft_fee",
@@ -1201,6 +1199,15 @@ async def after_tool_callback(tool, args, tool_context, tool_response, **kwargs)
                 authorization
             )
             tool_context.state["fraud_playbook"] = completed_playbook
+        if tool_name in ACTION_COMPLETION_TOOLS:
+            latest_turn = (latest_customer_turn_var.get() or {}).get("latest") or {}
+            tool_context.state["closeout_boundary"] = (
+                mark_action_completed_for_closeout(
+                    originating_customer_event_id=str(
+                        latest_turn.get("event_id") or ""
+                    ),
+                )
+            )
         updated_playbook = mark_fraud_tool_completed(
             tool_context.state.get("fraud_playbook", {}),
             tool_name,
@@ -1388,7 +1395,6 @@ def create_voice_agent(*, model=None, instruction: str = INSTRUCTION_TEXT) -> Ag
         tools=[
             create_mcp_toolset(),
             prepare_customer_reported_fraud_confirmation,
-            offer_session_closeout,
             end_consultation,
             transfer_to_human,
         ],

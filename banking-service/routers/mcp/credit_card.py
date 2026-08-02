@@ -935,6 +935,51 @@ async def commit_fraud_triage(
         }
     db = SessionLocal()
     service = ActionProposalService(db)
+    evidence_fields = {
+        "proposal_ref": stable_log_reference(proposal_id, "proposal"),
+        "customer_ref": stable_log_reference(verified_customer_id, "customer"),
+        "support_session_ref": stable_log_reference(
+            runtime_context.support_session_id, "support-session"
+        ),
+        "runtime_session_ref": stable_log_reference(
+            runtime_context.runtime_session_id, "runtime-session"
+        ),
+        "customer_turn_ref": stable_log_reference(
+            runtime_context.customer_turn_id, "customer-turn"
+        ),
+        "presentation_turn_ref": stable_log_reference(
+            runtime_context.presentation_turn_id, "presentation-turn"
+        ),
+        "confirmation_turn_ref": stable_log_reference(
+            runtime_context.confirmation_turn_id, "confirmation-turn"
+        ),
+        "reset_generation_ref": stable_log_reference(
+            runtime_context.reset_generation, "reset-generation"
+        ),
+        "presentation_present": bool(runtime_context.presentation_turn_id),
+        "confirmation_present": bool(runtime_context.confirmation_turn_id),
+        "customer_matches_confirmation": bool(
+            runtime_context.confirmation_turn_id
+            and runtime_context.customer_turn_id
+            == runtime_context.confirmation_turn_id
+        ),
+        "presentation_differs_from_confirmation": bool(
+            runtime_context.presentation_turn_id
+            and runtime_context.confirmation_turn_id
+            and runtime_context.presentation_turn_id
+            != runtime_context.confirmation_turn_id
+        ),
+        "confirmation_method_valid": (
+            runtime_context.confirmation_method == "EXPLICIT_VERBAL"
+        ),
+        "confirmation_source_valid": (
+            runtime_context.confirmation_source == "MODEL_TOOL_INTENT"
+        ),
+    }
+    logger.info(
+        "FastMCP commit_fraud_triage boundary received %s",
+        " ".join(f"{key}={value}" for key, value in evidence_fields.items()),
+    )
     try:
         result = service.commit_fraud_triage_for_identity(
             proposal_id,
@@ -942,6 +987,13 @@ async def commit_fraud_triage(
             runtime_context=runtime_context,
         )
         if result.get("success"):
+            logger.info(
+                "FastMCP commit_fraud_triage boundary committed proposal_ref=%s "
+                "status=%s idempotent_replay=%s",
+                evidence_fields["proposal_ref"],
+                result.get("status"),
+                result.get("idempotent_replay"),
+            )
             try:
                 await send_session_event(
                     f"session-{verified_customer_id}",
@@ -965,6 +1017,13 @@ async def commit_fraud_triage(
         return result
     except (ProposalError, RuntimeContextError) as exc:
         db.rollback()
+        logger.warning(
+            "FastMCP commit_fraud_triage boundary rejected proposal_ref=%s "
+            "error_type=%s reason_ref=%s",
+            evidence_fields["proposal_ref"],
+            type(exc).__name__,
+            stable_log_reference(str(exc), "reason"),
+        )
         disposition = {}
         try:
             disposition = service.proposal_disposition_for_identity(

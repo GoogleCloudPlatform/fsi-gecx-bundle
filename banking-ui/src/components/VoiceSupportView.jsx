@@ -15,7 +15,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Room, RoomEvent } from 'livekit-client';
+import { Room, RoomEvent, Track } from 'livekit-client';
 import { useLocation } from 'react-router-dom';
 import {
   Phone,
@@ -1084,12 +1084,6 @@ export default function VoiceSupportView() {
     if (handleOperationalVoiceEvent(payload)) return;
     if (payload.type === 'TRANSCRIPT') {
       setTranscripts(prev => mergeGecxTranscript(prev, payload));
-      if (payload.author === 'agent') {
-        const text = payload.text.toLowerCase();
-        if (text.includes("goodbye") || text.includes("bye") || (text.includes("have a") && text.includes("good") && text.includes("day"))) {
-          startDisconnectCountdown();
-        }
-      }
     } else if (payload.type === 'PONG') {
       const rtt = Date.now() - payload.timestamp;
       setLatency(rtt);
@@ -1513,14 +1507,6 @@ export default function VoiceSupportView() {
             startDisconnectCountdown();
           } else if (event.type === DataChannelEvent.TRANSCRIPT) {
             setTranscripts(prev => mergeGecxTranscript(prev, event));
-            const transcriptText = typeof event.text === 'string' ? event.text.trim() : '';
-            if (event.author === 'agent' && transcriptText) {
-              const text = transcriptText.toLowerCase();
-              if (text.includes("goodbye") || text.includes("bye") || (text.includes("have a") && text.includes("day") && text.includes("good"))) {
-                console.log("Agent farewell detected in transcript. Auto-initiating disconnect countdown...");
-                startDisconnectCountdown();
-              }
-            }
           } else if (event.type === 'AVATAR_CONFIG') {
             console.log('Received active avatar configuration:', event.avatar_name);
             setAvatarName(event.avatar_name);
@@ -1560,8 +1546,24 @@ export default function VoiceSupportView() {
       // 5. Publish microphone track
       await room.localParticipant.setMicrophoneEnabled(
         true,
-        selectedAudioInputId ? { deviceId: { exact: selectedAudioInputId } } : undefined
+        microphoneConstraints(selectedAudioInputId).audio
       );
+      const microphonePublication = room.localParticipant.getTrackPublication(
+        Track.Source.Microphone
+      );
+      const microphoneSettings =
+        microphonePublication?.track?.mediaStreamTrack?.getSettings?.() || {};
+      console.info('[Microphone] LiveKit published track settings', {
+        selectionMode: selectedAudioInputId ? 'explicit' : 'system-default',
+        selectedDeviceMatched:
+          !selectedAudioInputId || microphoneSettings.deviceId === selectedAudioInputId,
+        echoCancellation: microphoneSettings.echoCancellation,
+        noiseSuppression: microphoneSettings.noiseSuppression,
+        autoGainControl: microphoneSettings.autoGainControl,
+        channelCount: microphoneSettings.channelCount,
+        sampleRate: microphoneSettings.sampleRate,
+        latency: microphoneSettings.latency,
+      });
 
       setIsConnected(true);
       setTranscripts([]);
