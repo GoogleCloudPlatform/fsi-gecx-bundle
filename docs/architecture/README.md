@@ -28,6 +28,7 @@ Specifications detailing our Google Cloud AI integrations, conversational teleph
 | :--- | :--- |
 | **[Gemini Multimodal Live Voice Agent](./ai-and-voice/gemini_live_voice_agent.md)** | Bidirectional WebSocket voice streaming, PyTorch CPU optimization, and real-time tool orchestration with Gemini Live. |
 | **[GECX Telephony Voice Agent](./ai-and-voice/gecx_telephony_voice_agent.md)** | Customer Experience Suite Bidi audio proxy, session capability, callback-owned consent, and managed conversational workflows. |
+| **[Runtime-Neutral Banking Action Proposal/Commit Protocol](./ai-and-voice/runtime_neutral_action_proposal_protocol.md)** | Shared ADK/CES authorization boundary, trusted runtime evidence, immutable proposals, and exactly-once consequential commits. |
 | **[Agent Trajectory Evaluation](./ai-and-voice/agent_trajectory_evaluation.md)** | Shared ADK/CES event vocabulary, release evidence layers, typed-decision qualification, and runtime parity evaluation. |
 | **[Document AI Processing Pipeline](./ai-and-voice/doc_ai_processing_pipeline.md)** | Asynchronous optical character recognition (OCR) and structured entity extraction for W-2 tax forms, paystubs, and bank statements. |
 | **[Enterprise Search & Generative Answers](./ai-and-voice/enterprise_search_and_answers.md)** | Vertex AI Discovery Engine ranked search and grounded conversational answers over the bank's published content. |
