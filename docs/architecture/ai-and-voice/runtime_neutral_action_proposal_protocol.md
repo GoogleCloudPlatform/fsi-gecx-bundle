@@ -126,12 +126,43 @@ The following decisions constrain the kernel extraction:
   proposal between them.
 - The lifecycle engine owns the database transaction. Typed domain handlers may
   participate in and flush that transaction but must not commit it.
-- Model-visible failures will converge on a stable code, recovery class,
-  proposal disposition, and customer-safe message. Existing broad error codes
-  and prose are characterized compatibility behavior until that contract lands.
+- Model-visible proposal failures use a stable code, recovery class, proposal
+  disposition, and customer-safe message; correlated operator logs retain the
+  detailed rejection reason.
 - Internal lifecycle stages may remain more detailed than the compact
   disposition returned to runtimes. Extraction must not make implementation
   stages part of the public MCP contract accidentally.
+
+### Active Proposal And Recovery Enforcement
+
+Banking now enforces one unresolved proposal for an authenticated customer and
+support session across action types. Creation locks the durable customer scope,
+expires stale pre-commit proposals in the same transaction, and rejects a
+competing proposal with `ACTIVE_PROPOSAL_EXISTS`. A partial unique database
+index over `PROPOSED`, `PRESENTED`, `CONFIRMED`, and `COMMITTING` is the final
+cross-process concurrency backstop.
+
+Decline, revise, cancel, expiry, or successful commit releases the active
+scope. Lifecycle callers can terminalize the current proposal and create its
+replacement within one database transaction. The current runtime-facing revise
+flow deliberately remains two explicit operations because it gathers revised
+facts between disposition and replacement; it cannot bypass the banking-owned
+active-scope check.
+
+Protocol failures use a stable model-safe envelope containing `error`,
+`recovery_class`, `message`, and, when safely scoped, the opaque proposal id,
+action type, and current status. Operator logs retain the detailed exception
+stage and correlated references.
+
+| Error | Recovery class | Model action |
+| --- | --- | --- |
+| `ACTIVE_PROPOSAL_EXISTS` | `RESOLVE_ACTIVE_PROPOSAL` | Commit, decline, revise, or cancel the returned current proposal. |
+| `PROPOSAL_EXPIRED` | `CREATE_NEW_PROPOSAL` | Refresh current facts and create a new proposal. |
+| `PROPOSAL_SCOPE_MISMATCH` | `REFRESH_SESSION` | Stop using the stale opaque id and refresh trusted session state. |
+| `RESET_GENERATION_CHANGED` | `CREATE_NEW_PROPOSAL` | Re-read current facts after reset and create a new proposal. |
+| `PRESENTATION_EVIDENCE_REQUIRED` | `REPRESENT_AND_RECONFIRM` | Present the same proposal and obtain a later explicit decision. |
+| `COMMIT_RESULT_PENDING` | `RETRY_SAME_PROPOSAL` | Retry only the same opaque proposal id. |
+| `ACTION_PRECONDITION_CHANGED` | `CREATE_NEW_PROPOSAL` | Review authoritative domain state before proposing again. |
 
 ### Authorization-Policy Baseline
 

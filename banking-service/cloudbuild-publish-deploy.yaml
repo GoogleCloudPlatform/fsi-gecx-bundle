@@ -236,6 +236,6 @@ options:
 substitutions:
   _REGION: "us-central1"
   _TRIGGER_DEPLOY: "false"
-  _EXPECTED_ALEMBIC_REVISION: "91d7b4a6c2ef"
+  _EXPECTED_ALEMBIC_REVISION: "c3a91f2b7d44"
   _IAM_DBA_USERS: ""
   _IAM_DB_VIEWER_USERS: ""

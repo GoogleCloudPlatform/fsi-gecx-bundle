@@ -37,6 +37,7 @@ from services.action_proposal_context import ProposalRuntimeContext, RuntimeCont
 from services.credit_card import issue_replacement_card, queue_wallet_provisioning
 from services.proposal_lifecycle import (
     ActionPreconditionError,
+    ActiveProposalExistsError as ActiveProposalExistsError,
     ProposalConflictError as ProposalConflictError,
     ProposalError,
     ProposalLifecycleEngine,
@@ -48,6 +49,7 @@ from services.proposal_protocol import (
     ActionRegistry,
     ActionSpecification,
     GENERAL_ACKNOWLEDGMENT_POLICY,
+    RecoveryClass,
 )
 from utils.audit import record_audit_event
 from utils.log_safety import stable_log_reference
@@ -644,17 +646,25 @@ class ActionProposalService(ProposalLifecycleEngine):
             runtime_session_id=runtime_context.runtime_session_id,
             expected_action_type=proposal.action_type,
         )
-        specification = self.registry.require(proposal.action_type)
-        evidence = self.evidence_validator.validate_decision(
-            runtime_context,
-            specification.authorization_policy,
+        evidence = self.validate_decision_evidence(
+            proposal,
+            runtime_context=runtime_context,
         )
         if proposal.reset_generation != runtime_context.reset_generation:
             if proposal.status not in TERMINAL_STATUSES:
                 self.invalidate(proposal.id, reason="RESET_GENERATION_CHANGED")
                 self._record_disposition_event(proposal)
                 self.db.commit()
-            raise ProposalScopeError("Proposal was invalidated by a session reset.")
+            raise ProposalScopeError(
+                "Proposal was invalidated by a session reset.",
+                code="RESET_GENERATION_CHANGED",
+                recovery_class=RecoveryClass.CREATE_NEW_PROPOSAL,
+                customer_message=(
+                    "The support session was reset. Review current information before "
+                    "creating a new proposal."
+                ),
+                proposal=proposal,
+            )
         if proposal.status == "PROPOSED":
             self.mark_presented(
                 proposal.id,
@@ -662,12 +672,26 @@ class ActionProposalService(ProposalLifecycleEngine):
             )
         if proposal.presented_assistant_turn_id != evidence.presentation_turn_id:
             raise ProposalScopeError(
-                "Proposal presentation does not belong to the protected turn."
+                "Proposal presentation does not belong to the protected turn.",
+                code="PRESENTATION_EVIDENCE_REQUIRED",
+                recovery_class=RecoveryClass.REPRESENT_AND_RECONFIRM,
+                customer_message=(
+                    "Present the current proposal again and obtain a later explicit "
+                    "customer decision."
+                ),
+                proposal=proposal,
             )
         customer_turn_id = evidence.decision_turn_id
         if customer_turn_id == proposal.originating_customer_turn_id:
             raise ProposalTransitionError(
-                "A proposal decision must come from a later customer turn."
+                "A proposal decision must come from a later customer turn.",
+                code="PRESENTATION_EVIDENCE_REQUIRED",
+                recovery_class=RecoveryClass.REPRESENT_AND_RECONFIRM,
+                customer_message=(
+                    "Present the current proposal and obtain a later explicit customer "
+                    "decision."
+                ),
+                proposal=proposal,
             )
 
         if proposal.status in {"DECLINED", "INVALIDATED"}:

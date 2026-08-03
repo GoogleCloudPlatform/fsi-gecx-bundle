@@ -16,9 +16,11 @@ from typing import Any, Callable
 from sqlalchemy.exc import IntegrityError
 
 from models.action_proposal import ActionProposal
-from services.action_proposal_context import ProposalRuntimeContext
+from models.identity import User
+from services.action_proposal_context import ProposalRuntimeContext, RuntimeContextError
 from services.proposal_protocol import (
     ActionRegistry,
+    RecoveryClass,
     RuntimeEvidenceValidator,
     ValidatedRuntimeEvidence,
 )
@@ -26,30 +28,95 @@ from utils.audit import record_audit_event
 
 
 DEFAULT_PROPOSAL_TTL_SECONDS = 180
+ACTIVE_PROPOSAL_STATUSES = ("PROPOSED", "PRESENTED", "CONFIRMED", "COMMITTING")
 TERMINAL_STATUSES = {"COMMITTED", "DECLINED", "INVALIDATED", "EXPIRED"}
 
 
 class ProposalError(ValueError):
     """Base error for proposal contract violations."""
 
+    default_code = "PROPOSAL_REJECTED"
+    default_recovery_class = RecoveryClass.CORRECT_REQUEST
+    default_customer_message = "The action proposal request was rejected."
+
+    def __init__(
+        self,
+        operator_message: str,
+        *,
+        code: str | None = None,
+        recovery_class: RecoveryClass | None = None,
+        customer_message: str | None = None,
+        proposal: ActionProposal | None = None,
+    ):
+        super().__init__(operator_message)
+        self.code = code or self.default_code
+        self.recovery_class = recovery_class or self.default_recovery_class
+        self.customer_message = customer_message or self.default_customer_message
+        self.proposal = proposal
+
+    def safe_result(self) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "success": False,
+            "error": self.code,
+            "recovery_class": self.recovery_class.value,
+            "message": self.customer_message,
+        }
+        if self.proposal is not None:
+            result.update(
+                {
+                    "proposal_id": str(self.proposal.id),
+                    "action_type": self.proposal.action_type,
+                    "status": self.proposal.status,
+                }
+            )
+        return result
+
 
 class ProposalConflictError(ProposalError):
     """The same idempotency key was reused for a different proposal."""
+
+    default_code = "PROPOSAL_CONFLICT"
 
 
 class ProposalTransitionError(ProposalError):
     """A requested lifecycle transition is not legal."""
 
+    default_code = "PROPOSAL_STATE_INVALID"
+
 
 class ProposalScopeError(ProposalError):
     """A proposal does not belong to the supplied trusted execution scope."""
+
+    default_code = "PROPOSAL_SCOPE_MISMATCH"
+    default_recovery_class = RecoveryClass.REFRESH_SESSION
+    default_customer_message = (
+        "The action proposal is not available in this customer support session."
+    )
+
+
+class ActiveProposalExistsError(ProposalConflictError):
+    """The support session already has an unresolved proposal."""
+
+    default_code = "ACTIVE_PROPOSAL_EXISTS"
+    default_recovery_class = RecoveryClass.RESOLVE_ACTIVE_PROPOSAL
+    default_customer_message = (
+        "Resolve the current action proposal before proposing another action."
+    )
 
 
 class ActionPreconditionError(ProposalTransitionError):
     """The domain state bound to a proposal is no longer executable."""
 
     def __init__(self, message: str, *, reason: str):
-        super().__init__(message)
+        super().__init__(
+            message,
+            code="ACTION_PRECONDITION_CHANGED",
+            recovery_class=RecoveryClass.CREATE_NEW_PROPOSAL,
+            customer_message=(
+                "The underlying account state changed. Review current information "
+                "before creating a new proposal."
+            ),
+        )
         self.reason = reason
 
 
@@ -142,6 +209,16 @@ class ProposalLifecycleEngine:
             )
 
         now = utcnow()
+        active = self._lock_and_find_active_proposal(
+            customer_id=values["customer_id"],
+            support_session_id=values["support_session_id"],
+            now=now,
+        )
+        if active is not None:
+            raise ActiveProposalExistsError(
+                f"Active proposal {active.id} blocks replacement in this session.",
+                proposal=active,
+            )
         expires_at = values.pop("expires_at", None) or (
             now + datetime.timedelta(seconds=DEFAULT_PROPOSAL_TTL_SECONDS)
         )
@@ -161,13 +238,22 @@ class ProposalLifecycleEngine:
                 self.db.flush()
         except IntegrityError:
             existing = self._find_idempotent_proposal(values)
-            if existing is None:
-                raise
-            return self._validate_idempotent_replay(
-                existing,
-                values=values,
-                fingerprint=fingerprint,
+            if existing is not None:
+                return self._validate_idempotent_replay(
+                    existing,
+                    values=values,
+                    fingerprint=fingerprint,
+                )
+            active = self._find_active_proposal(
+                customer_id=values["customer_id"],
+                support_session_id=values["support_session_id"],
             )
+            if active is not None:
+                raise ActiveProposalExistsError(
+                    f"Concurrent active proposal {active.id} won this session scope.",
+                    proposal=active,
+                )
+            raise
         return proposal
 
     # Temporary compatibility seam for callers characterized in packet one.
@@ -180,10 +266,9 @@ class ProposalLifecycleEngine:
         *,
         runtime_context: ProposalRuntimeContext,
     ) -> ValidatedRuntimeEvidence:
-        specification = self.registry.require(proposal.action_type)
-        evidence = self.evidence_validator.validate_decision(
-            runtime_context,
-            specification.authorization_policy,
+        evidence = self.validate_decision_evidence(
+            proposal,
+            runtime_context=runtime_context,
         )
         if proposal.status == "PROPOSED":
             self.mark_presented(
@@ -197,6 +282,30 @@ class ProposalLifecycleEngine:
                 protected_evidence=evidence.protected_evidence,
             )
         return evidence
+
+    def validate_decision_evidence(
+        self,
+        proposal: ActionProposal,
+        *,
+        runtime_context: ProposalRuntimeContext,
+    ) -> ValidatedRuntimeEvidence:
+        specification = self.registry.require(proposal.action_type)
+        try:
+            return self.evidence_validator.validate_decision(
+                runtime_context,
+                specification.authorization_policy,
+            )
+        except RuntimeContextError as exc:
+            raise ProposalTransitionError(
+                str(exc),
+                code="PRESENTATION_EVIDENCE_REQUIRED",
+                recovery_class=RecoveryClass.REPRESENT_AND_RECONFIRM,
+                customer_message=(
+                    "Present the current proposal again and obtain a later explicit "
+                    "customer decision."
+                ),
+                proposal=proposal,
+            ) from exc
 
     def execute_registered_commit(
         self,
@@ -253,6 +362,8 @@ class ProposalLifecycleEngine:
                 raise
             return {
                 "success": False,
+                "error": "COMMIT_RESULT_PENDING",
+                "recovery_class": RecoveryClass.RETRY_SAME_PROPOSAL.value,
                 "proposal_id": str(proposal.id),
                 "action_type": proposal.action_type,
                 "status": "COMMITTING",
@@ -272,6 +383,7 @@ class ProposalLifecycleEngine:
             except Exception:
                 self.db.rollback()
                 raise
+            exc.proposal = proposal
             raise
 
         try:
@@ -303,7 +415,14 @@ class ProposalLifecycleEngine:
         if proposal.status == "PRESENTED":
             if proposal.presented_assistant_turn_id != assistant_turn_id:
                 raise ProposalConflictError(
-                    "Proposal was already presented on a different assistant turn."
+                    "Proposal was already presented on a different assistant turn.",
+                    code="PRESENTATION_EVIDENCE_REQUIRED",
+                    recovery_class=RecoveryClass.REPRESENT_AND_RECONFIRM,
+                    customer_message=(
+                        "Present the current proposal again and obtain a later explicit "
+                        "customer decision."
+                    ),
+                    proposal=proposal,
                 )
             return proposal
         self._require_status(proposal, "PROPOSED", transition="present")
@@ -327,17 +446,40 @@ class ProposalLifecycleEngine:
         if proposal.status == "CONFIRMED":
             if proposal.confirmation_customer_turn_id != customer_turn_id:
                 raise ProposalConflictError(
-                    "Proposal was already confirmed on a different customer turn."
+                    "Proposal was already confirmed on a different customer turn.",
+                    code="PRESENTATION_EVIDENCE_REQUIRED",
+                    recovery_class=RecoveryClass.REPRESENT_AND_RECONFIRM,
+                    customer_message=(
+                        "Present the current proposal again and obtain a later explicit "
+                        "customer decision."
+                    ),
+                    proposal=proposal,
                 )
             return proposal
         self._require_status(proposal, "PRESENTED", transition="confirm")
         if not customer_turn_id or customer_turn_id == proposal.originating_customer_turn_id:
             raise ProposalTransitionError(
-                "Confirmation must come from a later real customer turn."
+                "Confirmation must come from a later real customer turn.",
+                code="PRESENTATION_EVIDENCE_REQUIRED",
+                recovery_class=RecoveryClass.REPRESENT_AND_RECONFIRM,
+                customer_message=(
+                    "Present the current proposal and obtain a later explicit customer "
+                    "decision."
+                ),
+                proposal=proposal,
             )
         evidence, _ = canonical_payload(protected_evidence)
         if not evidence:
-            raise ProposalError("Protected confirmation evidence is required.")
+            raise ProposalError(
+                "Protected confirmation evidence is required.",
+                code="PRESENTATION_EVIDENCE_REQUIRED",
+                recovery_class=RecoveryClass.REPRESENT_AND_RECONFIRM,
+                customer_message=(
+                    "Present the current proposal and obtain a later explicit customer "
+                    "decision."
+                ),
+                proposal=proposal,
+            )
         proposal.status = "CONFIRMED"
         proposal.confirmation_customer_turn_id = customer_turn_id
         proposal.confirmation_evidence = evidence
@@ -416,7 +558,16 @@ class ProposalLifecycleEngine:
                 proposal.invalidation_reason = "RESET_GENERATION_CHANGED"
                 proposal.completed_at = now
                 self.db.flush()
-            raise ProposalScopeError("Proposal was invalidated by a session reset.")
+            raise ProposalScopeError(
+                "Proposal was invalidated by a session reset.",
+                code="RESET_GENERATION_CHANGED",
+                recovery_class=RecoveryClass.CREATE_NEW_PROPOSAL,
+                customer_message=(
+                    "The support session was reset. Review current information before "
+                    "creating a new proposal."
+                ),
+                proposal=proposal,
+            )
         self._require_status(proposal, "CONFIRMED", transition="commit")
         proposal.status = "COMMITTING"
         proposal.commit_started_at = now
@@ -490,6 +641,60 @@ class ProposalLifecycleEngine:
             .first()
         )
 
+    def _lock_and_find_active_proposal(
+        self,
+        *,
+        customer_id,
+        support_session_id: str,
+        now: datetime.datetime,
+    ) -> ActionProposal | None:
+        # Lock the durable customer row so concurrent inserts cannot both pass
+        # the active-scope check. The partial unique index remains the final
+        # cross-process backstop.
+        (
+            self.db.query(User.id)
+            .filter(User.id == customer_id)
+            .with_for_update()
+            .first()
+        )
+        proposals = (
+            self.db.query(ActionProposal)
+            .filter(
+                ActionProposal.customer_id == customer_id,
+                ActionProposal.support_session_id == support_session_id,
+                ActionProposal.status.in_(ACTIVE_PROPOSAL_STATUSES),
+            )
+            .order_by(ActionProposal.created_at, ActionProposal.id)
+            .with_for_update()
+            .all()
+        )
+        active: ActionProposal | None = None
+        for proposal in proposals:
+            if proposal.status != "COMMITTING" and as_utc(proposal.expires_at) <= now:
+                proposal.status = "EXPIRED"
+                proposal.invalidation_reason = "PROPOSAL_EXPIRED"
+                proposal.completed_at = now
+                self._record_disposition_event(proposal)
+                continue
+            if active is None:
+                active = proposal
+        self.db.flush()
+        return active
+
+    def _find_active_proposal(
+        self, *, customer_id, support_session_id: str
+    ) -> ActionProposal | None:
+        return (
+            self.db.query(ActionProposal)
+            .filter(
+                ActionProposal.customer_id == customer_id,
+                ActionProposal.support_session_id == support_session_id,
+                ActionProposal.status.in_(ACTIVE_PROPOSAL_STATUSES),
+            )
+            .order_by(ActionProposal.created_at, ActionProposal.id)
+            .first()
+        )
+
     @staticmethod
     def _validate_idempotent_replay(
         existing: ActionProposal,
@@ -541,7 +746,15 @@ class ProposalLifecycleEngine:
             .first()
         )
         if not proposal:
-            raise ProposalError("Action proposal was not found.")
+            raise ProposalScopeError(
+                "Action proposal was not found.",
+                code="PROPOSAL_SCOPE_MISMATCH",
+                recovery_class=RecoveryClass.REFRESH_SESSION,
+                customer_message=(
+                    "The action proposal is not available in this customer support "
+                    "session."
+                ),
+            )
         return proposal
 
     def _expire_if_needed(
@@ -552,7 +765,16 @@ class ProposalLifecycleEngine:
             proposal.invalidation_reason = "PROPOSAL_EXPIRED"
             proposal.completed_at = now
             self.db.flush()
-            raise ProposalTransitionError("Action proposal has expired.")
+            raise ProposalTransitionError(
+                "Action proposal has expired.",
+                code="PROPOSAL_EXPIRED",
+                recovery_class=RecoveryClass.CREATE_NEW_PROPOSAL,
+                customer_message=(
+                    "The action proposal expired. Review current information before "
+                    "creating a new proposal."
+                ),
+                proposal=proposal,
+            )
 
     @staticmethod
     def _require_status(
@@ -561,7 +783,8 @@ class ProposalLifecycleEngine:
         if proposal.status != required:
             raise ProposalTransitionError(
                 f"Cannot {transition} proposal in {proposal.status} status; "
-                f"expected {required}."
+                f"expected {required}.",
+                proposal=proposal,
             )
 
     @staticmethod
@@ -590,5 +813,12 @@ class ProposalLifecycleEngine:
         )
         if actual != expected:
             raise ProposalScopeError(
-                "Action proposal does not belong to this customer and runtime session."
+                "Action proposal does not belong to this customer and runtime session.",
+                code="PROPOSAL_SCOPE_MISMATCH",
+                recovery_class=RecoveryClass.REFRESH_SESSION,
+                customer_message=(
+                    "The action proposal is not available in this customer support "
+                    "session."
+                ),
+                proposal=proposal,
             )

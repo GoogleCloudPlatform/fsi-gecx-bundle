@@ -45,6 +45,18 @@ class RecoveryPolicy(StrEnum):
     ESCALATE = "ESCALATE"
 
 
+class RecoveryClass(StrEnum):
+    """Stable model-safe recovery actions returned by the protocol boundary."""
+
+    CORRECT_REQUEST = "CORRECT_REQUEST"
+    RETRY_SAME_PROPOSAL = "RETRY_SAME_PROPOSAL"
+    RESOLVE_ACTIVE_PROPOSAL = "RESOLVE_ACTIVE_PROPOSAL"
+    REPRESENT_AND_RECONFIRM = "REPRESENT_AND_RECONFIRM"
+    CREATE_NEW_PROPOSAL = "CREATE_NEW_PROPOSAL"
+    REFRESH_SESSION = "REFRESH_SESSION"
+    ESCALATE = "ESCALATE"
+
+
 @dataclass(frozen=True)
 class EvidencePolicy:
     accepted_sources: frozenset[str]

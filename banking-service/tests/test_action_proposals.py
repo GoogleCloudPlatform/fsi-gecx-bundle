@@ -19,6 +19,7 @@ from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine, event
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from models.action_proposal import (
@@ -30,6 +31,7 @@ from models.fraud import FraudAlert
 from models.identity import User
 from services.action_proposal_context import ProposalRuntimeContext
 from services.action_proposals import (
+    ActiveProposalExistsError,
     ActionProposalService,
     CARD_REISSUE_CONTRACT_VERSION,
     FRAUD_TRIAGE_CONTRACT_VERSION,
@@ -188,6 +190,7 @@ def _create_contract_proposal(
     action_type: str,
     contract_version: str,
     suffix: str,
+    support_session_id: str = "support-session-contract",
     expires_at: datetime.datetime | None = None,
 ) -> ActionProposal:
     """Create one neutral fixture through the current durable envelope seam."""
@@ -196,7 +199,7 @@ def _create_contract_proposal(
         action_type=action_type,
         customer_id=alert.customer_id,
         account_id=alert.credit_account_id,
-        support_session_id="support-session-contract",
+        support_session_id=support_session_id,
         runtime_name="ADK_GEMINI_LIVE",
         runtime_session_id="runtime-session-contract",
         originating_customer_turn_id=f"customer-origin-{suffix}",
@@ -324,7 +327,7 @@ def test_current_actions_share_expiry_and_reset_invalidation(
         suffix=f"{action_type.lower()}-expired",
         expires_at=expires_at,
     )
-    with pytest.raises(ProposalTransitionError, match="expired"):
+    with pytest.raises(ProposalTransitionError, match="expired") as expired_error:
         service.mark_presented(
             expired.id,
             assistant_turn_id="assistant-too-late",
@@ -332,6 +335,10 @@ def test_current_actions_share_expiry_and_reset_invalidation(
         )
     assert expired.status == "EXPIRED"
     assert expired.invalidation_reason == "PROPOSAL_EXPIRED"
+    assert expired_error.value.safe_result()["error"] == "PROPOSAL_EXPIRED"
+    assert expired_error.value.safe_result()["recovery_class"] == (
+        "CREATE_NEW_PROPOSAL"
+    )
 
     reset = _create_contract_proposal(
         service,
@@ -346,7 +353,7 @@ def test_current_actions_share_expiry_and_reset_invalidation(
         customer_turn_id="customer-decision",
         protected_evidence={"source": "MODEL_TOOL_INTENT"},
     )
-    with pytest.raises(ProposalScopeError, match="session reset"):
+    with pytest.raises(ProposalScopeError, match="session reset") as reset_error:
         service.claim_commit(
             reset.id,
             customer_id=fraud_alert.customer_id,
@@ -358,6 +365,10 @@ def test_current_actions_share_expiry_and_reset_invalidation(
         )
     assert reset.status == "INVALIDATED"
     assert reset.invalidation_reason == "RESET_GENERATION_CHANGED"
+    assert reset_error.value.safe_result()["error"] == "RESET_GENERATION_CHANGED"
+    assert reset_error.value.safe_result()["recovery_class"] == (
+        "CREATE_NEW_PROPOSAL"
+    )
 
 
 def test_fraud_triage_proposal_normalizes_and_binds_immutable_payload(
@@ -404,6 +415,147 @@ def test_proposal_creation_retries_idempotently_and_rejects_payload_drift(
             fraud_alert,
             disputed_authorization_ids=["auth-1"],
         )
+
+
+def test_second_unresolved_proposal_is_rejected_across_action_types(
+    db_session, fraud_alert
+):
+    service = ActionProposalService(db_session)
+    active = _create_contract_proposal(
+        service,
+        fraud_alert,
+        action_type=TRIAGE_FRAUD_CASE,
+        contract_version=FRAUD_TRIAGE_CONTRACT_VERSION,
+        suffix="active-fraud",
+    )
+
+    with pytest.raises(ActiveProposalExistsError) as captured:
+        _create_contract_proposal(
+            service,
+            fraud_alert,
+            action_type=REISSUE_CARD,
+            contract_version=CARD_REISSUE_CONTRACT_VERSION,
+            suffix="blocked-card",
+        )
+
+    assert captured.value.safe_result() == {
+        "success": False,
+        "error": "ACTIVE_PROPOSAL_EXISTS",
+        "recovery_class": "RESOLVE_ACTIVE_PROPOSAL",
+        "message": (
+            "Resolve the current action proposal before proposing another action."
+        ),
+        "proposal_id": str(active.id),
+        "action_type": TRIAGE_FRAUD_CASE,
+        "status": "PROPOSED",
+    }
+    other_session = _create_contract_proposal(
+        service,
+        fraud_alert,
+        action_type=REISSUE_CARD,
+        contract_version=CARD_REISSUE_CONTRACT_VERSION,
+        suffix="other-session-card",
+        support_session_id="support-session-other",
+    )
+    assert other_session.status == "PROPOSED"
+    assert db_session.query(ActionProposal).count() == 2
+
+
+def test_database_index_rejects_active_scope_bypass(db_session, fraud_alert):
+    service = ActionProposalService(db_session)
+    active = _create_contract_proposal(
+        service,
+        fraud_alert,
+        action_type=TRIAGE_FRAUD_CASE,
+        contract_version=FRAUD_TRIAGE_CONTRACT_VERSION,
+        suffix="index-active",
+    )
+    db_session.add(
+        ActionProposal(
+            contract_version=CARD_REISSUE_CONTRACT_VERSION,
+            action_type=REISSUE_CARD,
+            status="PROPOSED",
+            customer_id=active.customer_id,
+            account_id=active.account_id,
+            support_session_id=active.support_session_id,
+            runtime_name=active.runtime_name,
+            runtime_session_id=active.runtime_session_id,
+            originating_customer_turn_id="customer-index-bypass",
+            reset_generation=active.reset_generation,
+            confirmation_policy="EXPLICIT_VERBAL",
+            action_payload=CONTRACT_PAYLOADS[REISSUE_CARD],
+            payload_fingerprint="f" * 64,
+            customer_safe_summary="Index bypass fixture.",
+            idempotency_key="index-bypass",
+            expires_at=datetime.datetime.now(datetime.timezone.utc)
+            + datetime.timedelta(seconds=60),
+        )
+    )
+
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+
+
+@pytest.mark.parametrize(
+    "terminal_disposition",
+    ("DECLINE", "REVISE", "CANCEL", "EXPIRE", "COMMIT"),
+)
+def test_terminal_disposition_allows_atomic_replacement_creation(
+    db_session,
+    fraud_alert,
+    terminal_disposition,
+):
+    service = ActionProposalService(db_session)
+    current = _create_contract_proposal(
+        service,
+        fraud_alert,
+        action_type=TRIAGE_FRAUD_CASE,
+        contract_version=FRAUD_TRIAGE_CONTRACT_VERSION,
+        suffix=f"replace-{terminal_disposition.lower()}",
+    )
+
+    if terminal_disposition == "DECLINE":
+        service.mark_presented(current.id, assistant_turn_id="assistant-presented")
+        service.decline(current.id, customer_turn_id="customer-declined")
+    elif terminal_disposition in {"REVISE", "CANCEL"}:
+        service.invalidate(current.id, reason=f"CUSTOMER_{terminal_disposition}D")
+    elif terminal_disposition == "EXPIRE":
+        service.audit_recorder = lambda *_args, **_kwargs: None
+        current.expires_at = datetime.datetime.now(
+            datetime.timezone.utc
+        ) - datetime.timedelta(seconds=1)
+        db_session.flush()
+    else:
+        service.mark_presented(current.id, assistant_turn_id="assistant-presented")
+        service.confirm(
+            current.id,
+            customer_turn_id="customer-confirmed",
+            protected_evidence={"source": "MODEL_TOOL_INTENT"},
+        )
+        service.claim_commit(
+            current.id,
+            customer_id=fraud_alert.customer_id,
+            support_session_id="support-session-contract",
+            runtime_name="ADK_GEMINI_LIVE",
+            runtime_session_id="runtime-session-contract",
+            reset_generation="3:9",
+            expected_action_type=TRIAGE_FRAUD_CASE,
+        )
+        service.mark_committed(current.id, result_payload={"success": True})
+
+    replacement = _create_contract_proposal(
+        service,
+        fraud_alert,
+        action_type=REISSUE_CARD,
+        contract_version=CARD_REISSUE_CONTRACT_VERSION,
+        suffix=f"replacement-{terminal_disposition.lower()}",
+    )
+
+    assert replacement.status == "PROPOSED"
+    if terminal_disposition == "EXPIRE":
+        assert current.status == "EXPIRED"
+        assert current.invalidation_reason == "PROPOSAL_EXPIRED"
+    assert db_session.query(ActionProposal).count() == 2
 
 
 def test_concurrent_proposal_creation_returns_the_same_idempotent_row(tmp_path):
@@ -705,6 +857,82 @@ def test_authenticated_commit_adapter_records_protected_later_turn_evidence(
     assert proposal.presented_assistant_turn_id == "assistant-turn-10"
     assert proposal.confirmation_customer_turn_id == "customer-turn-11"
     assert proposal.confirmation_evidence["method"] == "EXPLICIT_VERBAL"
+
+
+def test_missing_presentation_evidence_returns_typed_recovery(
+    db_session, fraud_alert
+):
+    service = ActionProposalService(db_session)
+    proposal = _propose(service, fraud_alert)
+    context = ProposalRuntimeContext(
+        support_session_id="support-session-1",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="adk-session-1",
+        customer_turn_id="customer-turn-11",
+        reset_generation="3:9",
+    )
+
+    with pytest.raises(ProposalTransitionError) as captured:
+        service.commit_fraud_triage_for_identity(
+            proposal.id,
+            customer_identity="proposal-customer",
+            runtime_context=context,
+        )
+
+    assert captured.value.safe_result() == {
+        "success": False,
+        "error": "PRESENTATION_EVIDENCE_REQUIRED",
+        "recovery_class": "REPRESENT_AND_RECONFIRM",
+        "message": (
+            "Present the current proposal again and obtain a later explicit "
+            "customer decision."
+        ),
+        "proposal_id": str(proposal.id),
+        "action_type": TRIAGE_FRAUD_CASE,
+        "status": "PROPOSED",
+    }
+
+
+def test_committing_without_durable_result_returns_typed_retry_disposition(
+    db_session, fraud_alert
+):
+    service = ActionProposalService(db_session)
+    proposal = _create_contract_proposal(
+        service,
+        fraud_alert,
+        action_type=REISSUE_CARD,
+        contract_version=CARD_REISSUE_CONTRACT_VERSION,
+        suffix="commit-pending",
+    )
+    service.mark_presented(proposal.id, assistant_turn_id="assistant-presented")
+    service.confirm(
+        proposal.id,
+        customer_turn_id="customer-confirmed",
+        protected_evidence={"source": "MODEL_TOOL_INTENT"},
+    )
+    service.claim_commit(
+        proposal.id,
+        customer_id=fraud_alert.customer_id,
+        support_session_id="support-session-contract",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="runtime-session-contract",
+        reset_generation="3:9",
+        expected_action_type=REISSUE_CARD,
+    )
+
+    result = service.execute_registered_commit(
+        proposal.id,
+        customer_id=fraud_alert.customer_id,
+        support_session_id="support-session-contract",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="runtime-session-contract",
+        reset_generation="3:9",
+        expected_action_type=REISSUE_CARD,
+    )
+
+    assert result["error"] == "COMMIT_RESULT_PENDING"
+    assert result["recovery_class"] == "RETRY_SAME_PROPOSAL"
+    assert result["status"] == "COMMITTING"
 
 
 def _runtime_context(*, customer_turn_id="customer-turn-10", confirming=False):

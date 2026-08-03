@@ -23,6 +23,7 @@ from sqlalchemy import (
     Index,
     JSON,
     String,
+    text,
     UniqueConstraint,
 )
 
@@ -90,6 +91,18 @@ class ActionProposal(Base):
             "status",
         ),
         Index("idx_action_proposals_expires_at", "expires_at"),
+        Index(
+            "uq_action_proposals_active_session",
+            "customer_id",
+            "support_session_id",
+            unique=True,
+            postgresql_where=text(
+                "status IN ('PROPOSED', 'PRESENTED', 'CONFIRMED', 'COMMITTING')"
+            ),
+            sqlite_where=text(
+                "status IN ('PROPOSED', 'PRESENTED', 'CONFIRMED', 'COMMITTING')"
+            ),
+        ),
         {"schema": "operations"},
     )
 

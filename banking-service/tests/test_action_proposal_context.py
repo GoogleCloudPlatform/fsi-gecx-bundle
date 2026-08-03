@@ -20,6 +20,7 @@ import pytest
 
 from models.authentication import ValidatedToken
 from routers.mcp.credit_card import (
+    _safe_protocol_failure,
     commit_card_reissue,
     commit_fraud_triage,
     commit_wallet_provisioning,
@@ -32,7 +33,10 @@ from services.action_proposal_context import (
     ProposalRuntimeContext,
     RuntimeContextError,
 )
-from services.action_proposals import ProposalTransitionError
+from services.action_proposals import (
+    ActiveProposalExistsError,
+    ProposalTransitionError,
+)
 
 
 def _headers(**overrides) -> dict[str, str]:
@@ -90,6 +94,25 @@ def test_runtime_context_requires_real_customer_turn() -> None:
         ProposalRuntimeContext.from_headers(
             _headers(**{"x-customer-turn-id": "unknown-turn"})
         ).require_customer_turn()
+
+
+def test_model_safe_failure_projection_hides_operator_detail() -> None:
+    active = MagicMock(
+        id="11111111-1111-4111-8111-111111111111",
+        action_type="TRIAGE_FRAUD_CASE",
+        status="PRESENTED",
+    )
+    error = ActiveProposalExistsError(
+        "database row and internal correlation detail",
+        proposal=active,
+    )
+
+    result = _safe_protocol_failure(error, fallback_error="PROPOSAL_REJECTED")
+
+    assert result["error"] == "ACTIVE_PROPOSAL_EXISTS"
+    assert result["recovery_class"] == "RESOLVE_ACTIVE_PROPOSAL"
+    assert result["proposal_id"] == str(active.id)
+    assert "database" not in result["message"]
 
 
 def test_read_only_mcp_tool_ignores_partial_proposal_headers() -> None:

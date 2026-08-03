@@ -544,6 +544,21 @@ def _is_proposal_id(value: str) -> bool:
     return True
 
 
+def _safe_protocol_failure(
+    exc: ProposalError | RuntimeContextError,
+    *,
+    fallback_error: str,
+) -> dict:
+    if isinstance(exc, ProposalError):
+        return exc.safe_result()
+    return {
+        "success": False,
+        "error": fallback_error,
+        "recovery_class": "REFRESH_SESSION",
+        "message": "Trusted runtime evidence is missing or invalid.",
+    }
+
+
 @mcp.tool()
 @requires_user_assertion
 async def offer_session_closeout(ctx: Context = None) -> dict:
@@ -607,11 +622,7 @@ async def decide_action_proposal(
         )
     except (ProposalError, RuntimeContextError) as exc:
         db.rollback()
-        return {
-            "success": False,
-            "error": "DECISION_REJECTED",
-            "message": str(exc),
-        }
+        return _safe_protocol_failure(exc, fallback_error="DECISION_REJECTED")
     except Exception as exc:
         db.rollback()
         logger.error(
@@ -653,7 +664,7 @@ async def propose_card_reissue(
         )
     except (ProposalError, RuntimeContextError) as exc:
         db.rollback()
-        return {"success": False, "error": "PROPOSAL_REJECTED", "message": str(exc)}
+        return _safe_protocol_failure(exc, fallback_error="PROPOSAL_REJECTED")
     except Exception as exc:
         db.rollback()
         logger.error(
@@ -720,7 +731,7 @@ async def commit_card_reissue(
         return result
     except (ProposalError, RuntimeContextError) as exc:
         db.rollback()
-        return {"success": False, "error": "COMMIT_REJECTED", "message": str(exc)}
+        return _safe_protocol_failure(exc, fallback_error="COMMIT_REJECTED")
     except Exception as exc:
         db.rollback()
         logger.error(
@@ -758,7 +769,7 @@ async def propose_wallet_provisioning(ctx: Context = None) -> dict:
         )
     except (ProposalError, RuntimeContextError) as exc:
         db.rollback()
-        return {"success": False, "error": "PROPOSAL_REJECTED", "message": str(exc)}
+        return _safe_protocol_failure(exc, fallback_error="PROPOSAL_REJECTED")
     except Exception as exc:
         db.rollback()
         logger.error(
@@ -824,7 +835,7 @@ async def commit_wallet_provisioning(
         return result
     except (ProposalError, RuntimeContextError) as exc:
         db.rollback()
-        return {"success": False, "error": "COMMIT_REJECTED", "message": str(exc)}
+        return _safe_protocol_failure(exc, fallback_error="COMMIT_REJECTED")
     except Exception as exc:
         db.rollback()
         logger.error(
@@ -896,7 +907,7 @@ async def propose_fraud_triage(
         )
     except (ProposalError, RuntimeContextError) as exc:
         db.rollback()
-        return {"success": False, "error": "PROPOSAL_REJECTED", "message": str(exc)}
+        return _safe_protocol_failure(exc, fallback_error="PROPOSAL_REJECTED")
     except Exception as exc:
         db.rollback()
         logger.error(
@@ -1033,12 +1044,7 @@ async def commit_fraud_triage(
             )
         except ProposalError:
             db.rollback()
-        return {
-            "success": False,
-            "error": "COMMIT_REJECTED",
-            "message": str(exc),
-            **disposition,
-        }
+        return {**_safe_protocol_failure(exc, fallback_error="COMMIT_REJECTED"), **disposition}
     except Exception as exc:
         db.rollback()
         logger.error(
