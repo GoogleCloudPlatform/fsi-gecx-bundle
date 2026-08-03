@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-GATING_PATHS = (
+EXPLICIT_GATING_PATHS = (
     REPO_ROOT
     / "adk-agent"
     / "credit-support-agent"
@@ -67,6 +67,45 @@ GATING_PATHS = (
     / "action_proposals.py",
 )
 
+DISCOVERED_GATING_PATHS = tuple(
+    sorted(
+        {
+            *(
+                REPO_ROOT / "banking-service" / "services"
+            ).glob("*proposal*.py"),
+            *(
+                REPO_ROOT
+                / "adk-agent"
+                / "credit-support-agent"
+                / "agent"
+            ).glob("*authorization*.py"),
+            *(
+                REPO_ROOT
+                / "adk-agent"
+                / "credit-support-agent"
+                / "agent"
+            ).glob("*proposal*.py"),
+            *(
+                REPO_ROOT
+                / "gecx"
+                / "Credit_Support_Voice_Agent"
+                / "agents"
+                / "Credit_Card_Support_Agent"
+            ).glob("**/*proposal*.py"),
+        }
+    )
+)
+GATING_PATHS = tuple(dict.fromkeys((*EXPLICIT_GATING_PATHS, *DISCOVERED_GATING_PATHS)))
+
+PROHIBITED_SEMANTIC_IDENTIFIER_FRAGMENTS = {
+    "affirmative_phrase",
+    "negative_phrase",
+    "confirmation_phrase",
+    "decline_phrase",
+    "transcript_pattern",
+    "spoken_number",
+}
+
 
 def test_production_gates_do_not_import_regex_engines() -> None:
     for path in GATING_PATHS:
@@ -101,4 +140,36 @@ def test_production_gates_do_not_define_transcript_classifiers() -> None:
         assert not (defined & prohibited_names), (
             f"transcript classifier reintroduced in {path}: "
             f"{sorted(defined & prohibited_names)}"
+        )
+
+
+def test_production_gates_do_not_define_semantic_phrase_parsers() -> None:
+    for path in GATING_PATHS:
+        tree = ast.parse(path.read_text(), filename=str(path))
+        identifiers = {
+            node.id.lower()
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Name)
+        }
+        identifiers.update(
+            node.name.lower()
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        )
+        identifiers.update(
+            argument.arg.lower()
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            for argument in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
+        )
+        violations = {
+            identifier
+            for identifier in identifiers
+            if any(
+                fragment in identifier
+                for fragment in PROHIBITED_SEMANTIC_IDENTIFIER_FRAGMENTS
+            )
+        }
+        assert not violations, (
+            f"semantic phrase parser reintroduced in {path}: {sorted(violations)}"
         )

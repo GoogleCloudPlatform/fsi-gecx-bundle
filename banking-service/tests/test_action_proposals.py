@@ -21,19 +21,65 @@ import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
-from models.action_proposal import ActionProposal
+from models.action_proposal import (
+    ActionProposal,
+    CONFIRMATION_POLICIES,
+    PROPOSAL_STATUSES,
+)
 from models.fraud import FraudAlert
 from models.identity import User
 from services.action_proposal_context import ProposalRuntimeContext
 from services.action_proposals import (
     ActionProposalService,
+    CARD_REISSUE_CONTRACT_VERSION,
+    FRAUD_TRIAGE_CONTRACT_VERSION,
     ProposalConflictError,
     ProposalScopeError,
     ProposalTransitionError,
     PROVISION_GOOGLE_WALLET,
     REISSUE_CARD,
     TRIAGE_FRAUD_CASE,
+    WALLET_PROVISIONING_CONTRACT_VERSION,
 )
+
+
+CURRENT_ACTION_CONTRACTS = (
+    (TRIAGE_FRAUD_CASE, FRAUD_TRIAGE_CONTRACT_VERSION),
+    (REISSUE_CARD, CARD_REISSUE_CONTRACT_VERSION),
+    (PROVISION_GOOGLE_WALLET, WALLET_PROVISIONING_CONTRACT_VERSION),
+)
+
+FROZEN_PROPOSAL_COLUMNS = {
+    "id",
+    "contract_version",
+    "action_type",
+    "status",
+    "customer_id",
+    "account_id",
+    "support_session_id",
+    "runtime_name",
+    "runtime_session_id",
+    "originating_customer_turn_id",
+    "reset_generation",
+    "confirmation_policy",
+    "action_payload",
+    "payload_fingerprint",
+    "customer_safe_summary",
+    "catalog_snapshot_id",
+    "idempotency_key",
+    "presented_assistant_turn_id",
+    "confirmation_customer_turn_id",
+    "confirmation_evidence",
+    "result_payload",
+    "invalidation_reason",
+    "expires_at",
+    "created_at",
+    "updated_at",
+    "presented_at",
+    "confirmed_at",
+    "commit_started_at",
+    "completed_at",
+}
 
 
 @pytest.fixture(name="db_session")
@@ -111,6 +157,185 @@ def _propose(service, alert, **overrides):
     }
     values.update(overrides)
     return service.propose_fraud_triage(**values)
+
+
+def _create_contract_proposal(
+    service: ActionProposalService,
+    alert: FraudAlert,
+    *,
+    action_type: str,
+    contract_version: str,
+    suffix: str,
+    expires_at: datetime.datetime | None = None,
+) -> ActionProposal:
+    """Create one neutral fixture through the current durable envelope seam."""
+    return service._create(
+        contract_version=contract_version,
+        action_type=action_type,
+        customer_id=alert.customer_id,
+        account_id=alert.credit_account_id,
+        support_session_id="support-session-contract",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="runtime-session-contract",
+        originating_customer_turn_id=f"customer-origin-{suffix}",
+        reset_generation="3:9",
+        confirmation_policy="EXPLICIT_VERBAL",
+        action_payload={"fixture": suffix},
+        customer_safe_summary=f"Confirm contract fixture {suffix}.",
+        catalog_snapshot_id="catalog-contract-v1",
+        idempotency_key=f"contract-{suffix}",
+        expires_at=expires_at,
+    )
+
+
+def test_durable_proposal_envelope_and_policy_values_are_frozen() -> None:
+    assert {column.name for column in ActionProposal.__table__.columns} == (
+        FROZEN_PROPOSAL_COLUMNS
+    )
+    assert PROPOSAL_STATUSES == (
+        "PROPOSED",
+        "PRESENTED",
+        "CONFIRMED",
+        "COMMITTING",
+        "COMMITTED",
+        "DECLINED",
+        "INVALIDATED",
+        "EXPIRED",
+    )
+    assert CONFIRMATION_POLICIES == (
+        "NONE",
+        "EXPLICIT_VERBAL",
+        "EXPLICIT_UI",
+        "STEP_UP",
+        "HUMAN_APPROVAL",
+    )
+
+
+@pytest.mark.parametrize(("action_type", "contract_version"), CURRENT_ACTION_CONTRACTS)
+def test_current_actions_share_the_frozen_exactly_once_lifecycle_contract(
+    db_session,
+    fraud_alert,
+    action_type,
+    contract_version,
+):
+    service = ActionProposalService(db_session)
+    proposal = _create_contract_proposal(
+        service,
+        fraud_alert,
+        action_type=action_type,
+        contract_version=contract_version,
+        suffix=action_type.lower(),
+    )
+
+    assert proposal.status == "PROPOSED"
+    assert proposal.action_type == action_type
+    assert proposal.contract_version == contract_version
+    assert proposal.confirmation_policy == "EXPLICIT_VERBAL"
+
+    service.mark_presented(proposal.id, assistant_turn_id="assistant-presentation")
+    service.confirm(
+        proposal.id,
+        customer_turn_id="customer-decision",
+        protected_evidence={
+            "method": "EXPLICIT_VERBAL",
+            "source": "MODEL_TOOL_INTENT",
+        },
+    )
+    claim = service.claim_commit(
+        proposal.id,
+        customer_id=fraud_alert.customer_id,
+        support_session_id="support-session-contract",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="runtime-session-contract",
+        reset_generation="3:9",
+        expected_action_type=action_type,
+    )
+    competing_claim = service.claim_commit(
+        proposal.id,
+        customer_id=fraud_alert.customer_id,
+        support_session_id="support-session-contract",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="runtime-session-contract",
+        reset_generation="3:9",
+        expected_action_type=action_type,
+    )
+
+    assert claim.should_execute is True
+    assert competing_claim.should_execute is False
+    committed = service.mark_committed(
+        proposal.id,
+        result_payload={"success": True, "fixture": action_type},
+    )
+    replay = service.claim_commit(
+        proposal.id,
+        customer_id=fraud_alert.customer_id,
+        support_session_id="support-session-contract",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="runtime-session-contract",
+        reset_generation="3:9",
+        expected_action_type=action_type,
+    )
+    assert committed.status == "COMMITTED"
+    assert replay.should_execute is False
+    assert replay.proposal.result_payload == {
+        "success": True,
+        "fixture": action_type,
+    }
+
+
+@pytest.mark.parametrize(("action_type", "contract_version"), CURRENT_ACTION_CONTRACTS)
+def test_current_actions_share_expiry_and_reset_invalidation(
+    db_session,
+    fraud_alert,
+    action_type,
+    contract_version,
+):
+    service = ActionProposalService(db_session)
+    expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+        seconds=30
+    )
+    expired = _create_contract_proposal(
+        service,
+        fraud_alert,
+        action_type=action_type,
+        contract_version=contract_version,
+        suffix=f"{action_type.lower()}-expired",
+        expires_at=expires_at,
+    )
+    with pytest.raises(ProposalTransitionError, match="expired"):
+        service.mark_presented(
+            expired.id,
+            assistant_turn_id="assistant-too-late",
+            now=expires_at + datetime.timedelta(seconds=1),
+        )
+    assert expired.status == "EXPIRED"
+    assert expired.invalidation_reason == "PROPOSAL_EXPIRED"
+
+    reset = _create_contract_proposal(
+        service,
+        fraud_alert,
+        action_type=action_type,
+        contract_version=contract_version,
+        suffix=f"{action_type.lower()}-reset",
+    )
+    service.mark_presented(reset.id, assistant_turn_id="assistant-presentation")
+    service.confirm(
+        reset.id,
+        customer_turn_id="customer-decision",
+        protected_evidence={"source": "MODEL_TOOL_INTENT"},
+    )
+    with pytest.raises(ProposalScopeError, match="session reset"):
+        service.claim_commit(
+            reset.id,
+            customer_id=fraud_alert.customer_id,
+            support_session_id="support-session-contract",
+            runtime_name="ADK_GEMINI_LIVE",
+            runtime_session_id="runtime-session-contract",
+            reset_generation="4:0",
+            expected_action_type=action_type,
+        )
+    assert reset.status == "INVALIDATED"
+    assert reset.invalidation_reason == "RESET_GENERATION_CHANGED"
 
 
 def test_fraud_triage_proposal_normalizes_and_binds_immutable_payload(

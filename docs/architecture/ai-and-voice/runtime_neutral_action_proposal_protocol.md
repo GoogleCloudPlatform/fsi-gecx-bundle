@@ -37,6 +37,115 @@ evidence, or make transport events authoritative.
 There is no confirmation phrase list, regular-expression gate, or transcript
 classification callback in the authorization path.
 
+## Characterized Protocol Baseline
+
+The protocol-refinement baseline is application commit `6c563f3`. The focused
+contract suite freezes current behavior before the internal kernel is
+extracted. Run it from the repository root with:
+
+```bash
+./scripts/test_action_proposal_boundary.sh
+```
+
+The command covers the banking lifecycle and transaction boundary, MCP schemas,
+CES callback and header binding, ADK evidence projection, negative trajectories,
+reset and expiry invalidation, commit retry, and the static prohibition on
+semantic transcript gates. The GitHub workflow runs the same script once per
+component so failures retain a clear banking or runtime owner.
+
+At this baseline, live ADK and CES golden fraud and Wallet trajectories have
+completed in Evo and 1841 with authoritative proposal commits. That deployed
+evidence freezes the successful path only. The broader ambiguity,
+interruption, recovery, and audio-quality matrix remains qualification work and
+must not be represented as a completed Packet 1 guarantee.
+
+### Frozen Current Action Contracts
+
+| Action | Contract | Propose tool | Commit tool | Authoritative UI event |
+| --- | --- | --- | --- | --- |
+| Fraud triage | `TRIAGE_FRAUD_CASE` / `fraud-triage.v1` | `propose_fraud_triage` | `commit_fraud_triage(proposal_id)` | `FRAUD_CASE_TRIAGED` |
+| Card reissue | `REISSUE_CARD` / `card-reissue.v1` | `propose_card_reissue` | `commit_card_reissue(proposal_id)` | `CARD_REPLACED` |
+| Google Wallet provisioning | `PROVISION_GOOGLE_WALLET` / `wallet-provisioning.v1` | `propose_wallet_provisioning` | `commit_wallet_provisioning(proposal_id)` | `WALLET_PROVISIONING_QUEUED` |
+
+`decide_action_proposal(proposal_id, decision)` is the shared non-commit
+surface. Its allowed decisions are `DECLINE`, `REVISE`, and `CANCEL`. Protected
+identity, session, turn, reset, and confirmation fields are prohibited from all
+model-visible proposal tool schemas.
+
+### Frozen Transport Evidence
+
+The authenticated MCP boundary currently accepts the following proposal
+evidence outside model-visible arguments:
+
+| Header | Owner | Purpose |
+| --- | --- | --- |
+| `x-banking-session-capability` | CES bootstrap | Bind a CES service call to one authenticated customer and reset generation. |
+| `x-support-session-id` | Runtime adapter | Bind the product support interaction. |
+| `x-runtime-name` | Runtime adapter | Identify ADK or CES evidence provenance. |
+| `x-runtime-session-id` | Runtime adapter | Prevent evidence reuse by another concrete runtime session. |
+| `x-customer-turn-id` | Runtime adapter | Identify the current real customer turn. |
+| `x-reset-generation` | Banking bootstrap/runtime adapter | Invalidate authority after a reset. |
+| `x-catalog-snapshot-id` | Banking bootstrap/runtime adapter | Correlate governed guidance used for the proposal. |
+| `x-proposal-presentation-turn-id` | Runtime adapter | Identify the protected presentation turn. |
+| `x-proposal-confirmation-turn-id` | Runtime adapter | Identify the later customer decision turn. |
+| `x-proposal-confirmation-method` | Runtime adapter | Select the currently supported evidence method, `EXPLICIT_VERBAL`. |
+| `x-proposal-confirmation-source` | Runtime adapter | Bind semantics to `MODEL_TOOL_INTENT`, not transcript parsing. |
+
+CES additionally supplies immutable application/deployment provenance headers.
+ADK and CES may acquire these values differently, but banking receives the same
+proposal evidence vocabulary.
+
+### Frozen Lifecycle Transitions
+
+| From | Operation | To | Replay or rejection behavior |
+| --- | --- | --- | --- |
+| `PROPOSED` | attest presentation | `PRESENTED` | Same presentation turn replays; a different turn conflicts. |
+| `PRESENTED` | typed later-turn commit intent | `CONFIRMED` | Same customer turn replays; missing evidence or another turn conflicts. |
+| `PRESENTED` | typed decline | `DECLINED` | Same decline replays as the terminal disposition. |
+| `PROPOSED` or `PRESENTED` | revise or cancel | `INVALIDATED` | A replacement requires a new immutable proposal. |
+| `CONFIRMED` | claim commit | `COMMITTING` | A concurrent claim does not execute. |
+| `COMMITTING` | store authoritative result | `COMMITTED` | A retry returns the durable result. |
+| Any unresolved state | expiry | `EXPIRED` | Execution is rejected without mutation. |
+| Any unresolved state | reset mismatch | `INVALIDATED` | Execution is rejected with `RESET_GENERATION_CHANGED`. |
+
+Fraud commit additionally reconciles an uncertain `COMMITTING` proposal from
+its durable domain idempotency record. Card and Wallet currently use the common
+attest-and-claim path but do not yet share that specialized reconciliation
+implementation; unifying it is refinement work, not baseline behavior.
+
+### Refinement Decisions
+
+The following decisions constrain the kernel extraction:
+
+- The authoritative active-proposal scope is one authenticated customer and
+  support session across action types. Runtime-local conflict checks remain
+  fail-closed adapters, not the durable concurrency authority.
+- Replacing a proposal requires an explicit terminal decision before a new
+  proposal is created. The external operations remain separate; banking must
+  serialize their durable session scope so a competing runtime cannot insert a
+  proposal between them.
+- The lifecycle engine owns the database transaction. Typed domain handlers may
+  participate in and flush that transaction but must not commit it.
+- Model-visible failures will converge on a stable code, recovery class,
+  proposal disposition, and customer-safe message. Existing broad error codes
+  and prose are characterized compatibility behavior until that contract lands.
+- Internal lifecycle stages may remain more detailed than the compact
+  disposition returned to runtimes. Extraction must not make implementation
+  stages part of the public MCP contract accidentally.
+
+### Authorization-Policy Baseline
+
+The three current actions use one Tier 1 general-acknowledgment policy:
+banking supplies the material facts, the model may express them naturally, and
+a later customer turn causes the model to choose a typed decision. Presentation
+quality is release evidence rather than a production transcript parser.
+
+The extracted kernel will distinguish lifecycle mechanics from authorization
+policy. A stricter required-restatement policy may require deterministic
+presentation acknowledgment before accepting the same typed decision, without
+forking the durable lifecycle. That stricter profile is a contract extension;
+it is not enabled for a production action in this baseline slice.
+
 ## Component Ownership
 
 | Component | Responsibility |

@@ -73,17 +73,7 @@ jobs:
         working-directory: banking-service
 
       - name: Run proposal and voice boundary tests
-        run: |
-          uv run pytest -q \
-            tests/test_action_proposals.py \
-            tests/test_action_proposal_context.py \
-            tests/test_ces_session_capability.py \
-            tests/test_ces_session_bootstrap.py \
-            tests/test_ces_callback_bundle.py \
-            tests/test_voice_bidi.py \
-            tests/test_voice_deployment_contract.py \
-            tests/test_database_schema_contract.py
-        working-directory: banking-service
+        run: ./scripts/test_action_proposal_boundary.sh banking
 
       - name: Validate coherent release metadata
         run: |
@@ -116,18 +106,7 @@ jobs:
         working-directory: adk-agent/credit-support-agent
 
       - name: Run ADK proposal authorization tests
-        run: |
-          uv run pytest -q \
-            tests/test_action_proposal_adapter.py \
-            tests/test_workflow_authorization.py \
-            tests/test_workflow_plugin.py \
-            tests/test_live_authorization_reconciliation.py \
-            tests/test_closeout.py \
-            tests/test_no_semantic_gating.py \
-            tests/test_trajectory_eval.py \
-            tests/test_ces_trajectory.py \
-            tests/test_ces_voice_qualification.py
-        working-directory: adk-agent/credit-support-agent
+        run: ./scripts/test_action_proposal_boundary.sh adk
 
   banking-ui-contract:
     name: Banking UI voice contracts
