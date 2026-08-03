@@ -140,11 +140,15 @@ banking supplies the material facts, the model may express them naturally, and
 a later customer turn causes the model to choose a typed decision. Presentation
 quality is release evidence rather than a production transcript parser.
 
-The extracted kernel will distinguish lifecycle mechanics from authorization
-policy. A stricter required-restatement policy may require deterministic
+The internal kernel now distinguishes lifecycle mechanics from authorization
+policy. `RuntimeEvidenceValidator` evaluates protected evidence against the
+registered `AuthorizationPolicy`; `ProposalLifecycleEngine` owns durable
+transitions and the common execute/reconcile transaction; and explicit
+`ActionSpecification` registrations bind the three current actions to typed
+handlers. A stricter required-restatement policy requires deterministic
 presentation acknowledgment before accepting the same typed decision, without
-forking the durable lifecycle. That stricter profile is a contract extension;
-it is not enabled for a production action in this baseline slice.
+forking the durable lifecycle. That stricter profile is contract-tested but is
+not enabled for a production action.
 
 ## Component Ownership
 
@@ -152,9 +156,11 @@ it is not enabled for a production action in this baseline slice.
 | --- | --- |
 | Conversational model | Understand the customer's request, gather needed facts, present the banking-owned summary, and choose a typed proposal decision. |
 | ADK or CES runtime adapter | Bind authenticated session identity and actual turn references to each MCP request. |
-| `ProposalRuntimeContext` | Parse and validate trusted transport evidence for the current request. |
-| `ActionProposalService` | Create immutable proposals; enforce lifecycle, scope, expiry, reset, concurrency, and idempotency; dispatch the typed domain commit. |
-| Banking domain services | Perform the actual fraud, card, or Wallet mutation within the claimed transaction. |
+| `ProposalRuntimeContext` | Parse trusted transport fields for the current request without interpreting customer or assistant prose. |
+| `RuntimeEvidenceValidator` | Enforce the action's typed decision and presentation-evidence policy. |
+| `ProposalLifecycleEngine` | Create immutable proposals and own lifecycle, scope, expiry, reset, claim, transaction, idempotency, and reconciliation mechanics. |
+| `ActionProposalService` | Preserve the existing application/MCP façade and register the three banking action specifications. |
+| Typed banking action handlers | Validate current domain preconditions and perform fraud, card, or Wallet mutation inside the lifecycle-owned transaction. |
 | Audit and UI event surfaces | Record and display authoritative proposal dispositions and domain outcomes. |
 | Knowledge Catalog | Supply governed policy and presentation guidance whose snapshot can be bound to a proposal. |
 

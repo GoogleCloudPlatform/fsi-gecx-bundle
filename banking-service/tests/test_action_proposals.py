@@ -49,6 +49,28 @@ CURRENT_ACTION_CONTRACTS = (
     (PROVISION_GOOGLE_WALLET, WALLET_PROVISIONING_CONTRACT_VERSION),
 )
 
+CONTRACT_PAYLOADS = {
+    TRIAGE_FRAUD_CASE: {
+        "fraud_alert_id": "fixture-alert",
+        "disputed_authorization_ids": [],
+        "disputed_transaction_ids": [],
+        "issue_replacement": False,
+        "escalate": False,
+    },
+    REISSUE_CARD: {
+        "account_id": "fixture-account",
+        "compromised_card_id": "fixture-card",
+        "reason": "LOST",
+        "issue_virtual_card": True,
+    },
+    PROVISION_GOOGLE_WALLET: {
+        "account_id": "fixture-account",
+        "card_id": "fixture-card",
+        "card_token": "fixture-token",
+        "wallet_provider": "GOOGLE_WALLET",
+    },
+}
+
 FROZEN_PROPOSAL_COLUMNS = {
     "id",
     "contract_version",
@@ -180,7 +202,7 @@ def _create_contract_proposal(
         originating_customer_turn_id=f"customer-origin-{suffix}",
         reset_generation="3:9",
         confirmation_policy="EXPLICIT_VERBAL",
-        action_payload={"fixture": suffix},
+        action_payload={**CONTRACT_PAYLOADS[action_type], "fixture": suffix},
         customer_safe_summary=f"Confirm contract fixture {suffix}.",
         catalog_snapshot_id="catalog-contract-v1",
         idempotency_key=f"contract-{suffix}",
