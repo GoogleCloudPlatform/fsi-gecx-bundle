@@ -312,6 +312,15 @@ def test_conversational_golden_includes_wallet_recovery_and_close() -> None:
     assert len(golden["turns"]) == 6
 
 
+def test_managed_evaluation_normalizes_numeric_project_version_parent() -> None:
+    app = "projects/demo-project/locations/us/apps/app-1"
+
+    assert qualification._app_version_for_app(
+        app,
+        "projects/123456/locations/us/apps/app-1/versions/version-1",
+    ) == f"{app}/versions/version-1"
+
+
 def test_managed_contract_uses_reviewed_reference_not_a_live_generated_golden() -> None:
     signature = inspect.signature(qualification._managed_contract_evaluation)
     source = inspect.getsource(qualification._managed_contract_evaluation)

@@ -322,6 +322,7 @@ resource "google_cloudbuild_trigger" "release_qualify" {
     _RELEASE_MODE            = "qualify"
     _RELEASE_COMMIT          = "REQUIRED"
     _MANIFEST_URI            = ""
+    _ROLLBACK_MANIFEST_URI   = "REQUIRED"
     _ALLOW_CLOUD_SQL_CUTOVER = "false"
   }
 }
@@ -345,6 +346,7 @@ resource "google_cloudbuild_trigger" "release_promote" {
     _RELEASE_MODE            = "promote"
     _RELEASE_COMMIT          = "REQUIRED"
     _MANIFEST_URI            = "REQUIRED"
+    _ROLLBACK_MANIFEST_URI   = "REQUIRED"
     _ALLOW_CLOUD_SQL_CUTOVER = "false"
   }
 }

@@ -174,6 +174,47 @@ async def test_commit_without_captured_proposal_fails_closed(monkeypatch) -> Non
 
 
 @pytest.mark.asyncio
+async def test_new_commit_attestation_emits_confirmed_observability(
+    monkeypatch,
+) -> None:
+    allow_reset(monkeypatch)
+    recorded = []
+    monkeypatch.setattr(
+        agent,
+        "record_action_proposal_event",
+        lambda **event: recorded.append(event),
+    )
+    context = tool_context(proposal_projection(evidence_state=AWAITING_DECISION))
+    tokens = agent.bind_session_context(
+        "customer-1",
+        lambda event: event,
+        support_session_id="support-1",
+        runtime_session_id="session-1",
+    )
+    try:
+        agent.record_customer_turn(
+            "Transport evidence only.",
+            event_id="customer-turn-11",
+            observed_at_epoch_s=3,
+        )
+
+        assert (
+            await agent.before_tool_callback(
+                SimpleNamespace(name="commit_fraud_triage"),
+                {"proposal_id": PROPOSAL_ID},
+                context,
+            )
+            is None
+        )
+
+        assert [event["outcome"] for event in recorded] == ["CONFIRMED"]
+        assert recorded[0]["proposal_id"] == PROPOSAL_ID
+        assert recorded[0]["tool"] == "commit_fraud_triage"
+    finally:
+        agent.reset_session_context(tokens)
+
+
+@pytest.mark.asyncio
 async def test_failed_commit_retries_once_with_same_request_evidence(
     monkeypatch,
 ) -> None:

@@ -16,6 +16,7 @@ import importlib.util
 from pathlib import Path
 
 from models.synthetic_schedule import SyntheticScheduledEventSchema
+from utils.database import _sqlite_attach_statements
 
 
 def _load_data_generator_schedule_model():
@@ -102,6 +103,11 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
     )
     assert "uq_action_proposals_active_session" in active_proposal_migration
     assert "HAVING COUNT(*) > 1" in active_proposal_migration
+    assert "FROM operations.action_proposals" in active_proposal_migration
+    assert any(
+        statement.endswith(" AS operations;")
+        for statement in _sqlite_attach_statements("/tmp/migration.db")
+    )
 
 
 def test_current_schema_head_is_reconciled_before_banking_deploy() -> None:

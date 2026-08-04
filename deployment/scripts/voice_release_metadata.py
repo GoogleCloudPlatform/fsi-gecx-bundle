@@ -27,6 +27,7 @@ import ast
 import hashlib
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 
@@ -42,6 +43,12 @@ GENERATED_CES_FILES = {
     "environment.json",
     "toolsets/banking_service_mcp_toolset/banking_service_mcp_toolset.yaml",
 }
+RELEASE_COMPONENTS = (
+    "banking-service",
+    "banking-ui",
+    "credit-support-agent",
+    "data-generator",
+)
 
 
 def _sha256_file(path: Path) -> str:
@@ -153,12 +160,7 @@ def validate_manifest(
         errors.append(
             f"commit mismatch: manifest={manifest.get('commit')!r}, source={commit!r}"
         )
-    for component in (
-        "banking-service",
-        "banking-ui",
-        "credit-support-agent",
-        "data-generator",
-    ):
+    for component in RELEASE_COMPONENTS:
         image = manifest.get("images", {}).get(component)
         if not isinstance(image, str) or "@sha256:" not in image:
             errors.append(f"missing immutable image for {component}")
@@ -193,7 +195,81 @@ def validate_manifest(
     for field in ("app", "version", "deployment"):
         if not isinstance(ces.get(field), str) or not ces[field]:
             errors.append(f"missing CES {field}")
+    rollback_target = manifest.get("rollback_target")
+    if not isinstance(rollback_target, dict):
+        errors.append("missing coherent rollback target")
+    else:
+        errors.extend(
+            _validate_release_identity(
+                rollback_target,
+                expected_environment=str(manifest.get("environment") or ""),
+                label="rollback target",
+            )
+        )
     return errors
+
+
+def _validate_release_identity(
+    release: dict[str, Any], *, expected_environment: str, label: str
+) -> list[str]:
+    errors: list[str] = []
+    commit = release.get("commit")
+    if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
+        errors.append(f"{label} has an invalid full commit")
+    if release.get("environment") != expected_environment:
+        errors.append(
+            f"{label} environment mismatch: "
+            f"manifest={release.get('environment')!r}, "
+            f"expected={expected_environment!r}"
+        )
+    for component in RELEASE_COMPONENTS:
+        image = release.get("images", {}).get(component)
+        if not isinstance(image, str) or not re.search(
+            r"@sha256:[0-9a-f]{64}$", image
+        ):
+            errors.append(f"{label} missing immutable image for {component}")
+    ces = release.get("ces", {})
+    for field in ("app", "version", "deployment", "config_sha256", "model"):
+        if not isinstance(ces.get(field), str) or not ces[field]:
+            errors.append(f"{label} missing CES {field}")
+    heads = release.get("database", {}).get("alembic_heads")
+    if not isinstance(heads, list) or len(heads) != 1 or not heads[0]:
+        errors.append(f"{label} must contain exactly one Alembic head")
+    catalog_sha = release.get("knowledge_catalog", {}).get("sha256")
+    if not isinstance(catalog_sha, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", catalog_sha
+    ):
+        errors.append(f"{label} has an invalid Knowledge Catalog SHA")
+    return errors
+
+
+def build_rollback_target(
+    manifest: dict[str, Any], *, environment: str, manifest_uri: str, sha256: str
+) -> tuple[dict[str, Any], list[str]]:
+    errors = _validate_release_identity(
+        manifest,
+        expected_environment=environment,
+        label="rollback manifest",
+    )
+    if manifest.get("status") not in {"qualified", "promoted"}:
+        errors.append("rollback manifest is not a successful release")
+    validation = manifest.get("validation")
+    if not isinstance(validation, dict) or not validation or not all(
+        value is True for value in validation.values()
+    ):
+        errors.append("rollback manifest does not contain successful validation")
+    target = {
+        "manifest_uri": manifest_uri,
+        "manifest_sha256": sha256,
+        "commit": manifest.get("commit"),
+        "environment": manifest.get("environment"),
+        "images": manifest.get("images"),
+        "ces": manifest.get("ces"),
+        "knowledge_catalog": manifest.get("knowledge_catalog"),
+        "database": manifest.get("database"),
+        "completed_at": manifest.get("completed_at"),
+    }
+    return target, errors
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -207,18 +283,39 @@ def _parser() -> argparse.ArgumentParser:
     validate_parser.add_argument("--root", type=Path, default=Path.cwd())
     validate_parser.add_argument("--manifest", type=Path, required=True)
     validate_parser.add_argument("--commit", required=True)
+
+    rollback_parser = subparsers.add_parser("rollback-target")
+    rollback_parser.add_argument("--manifest", type=Path, required=True)
+    rollback_parser.add_argument("--environment", required=True)
+    rollback_parser.add_argument("--manifest-uri", required=True)
     return parser
 
 
 def main() -> int:
     args = _parser().parse_args()
+    if args.command == "rollback-target":
+        manifest_bytes = args.manifest.read_bytes()
+        manifest = json.loads(manifest_bytes)
+        target, errors = build_rollback_target(
+            manifest,
+            environment=args.environment,
+            manifest_uri=args.manifest_uri,
+            sha256=hashlib.sha256(manifest_bytes).hexdigest(),
+        )
+        if errors:
+            for error in errors:
+                print(f"ERROR: {error}")
+            return 1
+        print(json.dumps(target, sort_keys=True))
+        return 0
+
     root = args.root.resolve()
     expected = inspect_source(root)
     if args.command == "inspect":
         print(json.dumps(expected, sort_keys=True))
         return 0
 
-    manifest = json.loads(args.manifest.read_text())
+    manifest = json.loads(args.manifest.read_bytes())
     errors = validate_manifest(manifest, expected, args.commit)
     if errors:
         for error in errors:

@@ -181,6 +181,14 @@ or clears stale local evidence. Runtime proposal creation and fraud-selection
 callbacks no longer reject competing state locally; banking's active-proposal
 invariant is authoritative.
 
+Turn ids are opaque provider identifiers and are never parsed or compared for
+numeric or lexical order. The trusted runtime adapter establishes chronology by
+moving from awaiting presentation to awaiting decision and, where the host
+exposes observation time, requiring the customer observation to follow the
+recorded presentation. Banking then verifies that the distinct presentation
+and decision ids belong to the protected current-turn projection. A runtime
+that cannot establish that ordered transition must not emit decision evidence.
+
 CES projects the same opaque identity and ordered turns through declared
 variables. Its checked-in MCP contract maps those variables exactly to the
 protected transport headers. A commit-retry checkpoint preserves the original
@@ -243,6 +251,25 @@ extension:
 These extension points are contract-tested but have no registered production
 actions. A plain boolean, model-authored tool argument, transcript match, or
 untyped evidence dictionary cannot satisfy them.
+
+### Qualification And Promotion
+
+Protocol and negative-path suites are deterministic release gates and must pass
+at 100%. The versioned ADK/CES trajectory matrix covers questions, ambiguity,
+interruption, decline, revision, later confirmation, tool failure, retry,
+Wallet, and closeout behavior. Managed CES contract and conversational replays
+bind their results to an immutable app version. Real-browser microphone,
+playout, and barge-in checks remain bounded live canaries; they provide release
+evidence and never create authorization evidence.
+
+A qualified or promoted release is one coherent unit. Manifest schema version 3
+pins all four service images, CES configuration and immutable version, Knowledge
+Catalog snapshot, Alembic head, and validation results. It also embeds the URI,
+digest, and complete runtime identity of one previously successful manifest in
+the same environment. The release controller rejects mutable or missing rollback
+images and cross-environment rollback targets. Database migration remains
+forward-only, so the selected application rollback must remain compatible with
+the current schema.
 
 ## Component Ownership
 

@@ -154,6 +154,18 @@ def _resource_id(name: str | None) -> str | None:
     return name.rsplit("/", 1)[-1] if name else None
 
 
+def _app_version_for_app(app: str, app_version: str | None) -> str | None:
+    """Bind CES's immutable version id to the caller-selected app parent.
+
+    Conversation resources may return the project-number spelling while the
+    evaluation endpoint receives the equivalent project-id spelling. CES
+    compares resource parents textually, so preserve the immutable version id
+    while normalizing its parent.
+    """
+    version_id = _resource_id(app_version)
+    return f"{app}/versions/{version_id}" if version_id else None
+
+
 def _latest_live_conversation(api: CesApi, app: str) -> str:
     """Return the newest completed LIVE conversation, following all list pages."""
     candidates: list[dict[str, Any]] = []
@@ -1206,7 +1218,10 @@ def main() -> int:
         },
     }
     if args.managed:
-        app_version = args.app_version or conversation.get("appVersion")
+        app_version = _app_version_for_app(
+            args.app,
+            args.app_version or conversation.get("appVersion"),
+        )
         if not app_version:
             raise ValueError("--app-version is required when the conversation omits it.")
         conversational_reference = json.loads(

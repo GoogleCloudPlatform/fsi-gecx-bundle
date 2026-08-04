@@ -98,4 +98,38 @@ def test_wrong_opaque_id_or_non_later_turn_fails_closed() -> None:
         unchanged,
         proposal_id="proposal-other",
         action_type="REISSUE_CARD",
+    ) == "The opaque proposal id does not match the current proposal."
+
+    stale = attest_model_decision(
+        proposal,
+        proposal_id="proposal-1",
+        action_type="REISSUE_CARD",
+        customer_turn_id="customer-3",
+        customer_observed_at_epoch_s=2,
     )
+    assert stale["evidence_state"] == AWAITING_DECISION
+
+
+def test_turn_order_uses_protected_observation_time_not_opaque_id_sorting() -> None:
+    proposal = create_pending_proposal(
+        proposal_id="proposal-opaque",
+        action_type="REISSUE_CARD",
+        contract_version="card-reissue.v1",
+        originating_customer_turn_id="origin-opaque",
+    )
+    proposal = mark_proposal_presented(
+        proposal,
+        assistant_turn_id="zzzz-presentation",
+        observed_at_epoch_s=20,
+    )
+
+    attested = attest_model_decision(
+        proposal,
+        proposal_id="proposal-opaque",
+        action_type="REISSUE_CARD",
+        customer_turn_id="aaaa-decision",
+        customer_observed_at_epoch_s=21,
+    )
+
+    assert attested["evidence_state"] == DECISION_ATTESTED
+    assert attested["confirmation_turn_id"] == "aaaa-decision"

@@ -54,6 +54,7 @@ from agent.tooling import RETIRED_MCP_TOOLS, LiveMcpToolset
 from agent.proposal_evidence import (
     AWAITING_DECISION,
     COMMIT_IN_FLIGHT,
+    DECISION_ATTESTED,
     attest_model_decision,
     create_pending_proposal,
     mark_commit_in_flight,
@@ -793,6 +794,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
     if tool_name in PROPOSAL_DECISION_TOOLS:
         proposal_id = str(args.get("proposal_id") or "")
         if pending_proposal.get("evidence_state") == AWAITING_DECISION:
+            prior_evidence_state = pending_proposal.get("evidence_state")
             latest_turn = (latest_customer_turn_var.get() or {}).get("latest") or {}
             pending_proposal = attest_model_decision(
                 pending_proposal,
@@ -805,6 +807,19 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
             )
             fraud_playbook["pending_proposal"] = pending_proposal
             tool_context.state["fraud_playbook"] = fraud_playbook
+            if (
+                prior_evidence_state == AWAITING_DECISION
+                and pending_proposal.get("evidence_state") == DECISION_ATTESTED
+                and tool_name != "decide_action_proposal"
+            ):
+                _record_commit_proposal_event(
+                    state=tool_context.state,
+                    tool_name=tool_name,
+                    args=args,
+                    result=None,
+                    outcome="CONFIRMED",
+                    latency_ms=0,
+                )
         authorization_error = proposal_evidence_error(
             pending_proposal,
             proposal_id=proposal_id,

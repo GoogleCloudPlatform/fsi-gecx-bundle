@@ -20,10 +20,13 @@ set -euo pipefail
 : "${RELEASE_COMMIT:?RELEASE_COMMIT is required}"
 RELEASE_MODE="${RELEASE_MODE:-qualify}"
 MANIFEST_URI="${MANIFEST_URI:-}"
+: "${ROLLBACK_MANIFEST_URI:?ROLLBACK_MANIFEST_URI is required}"
 ALLOW_CLOUD_SQL_CUTOVER="${ALLOW_CLOUD_SQL_CUTOVER:-false}"
 cloud_sql_backup_id="${CLOUD_SQL_BACKUP_ID:-}"
 source_metadata_path="/workspace/voice-release-source-metadata.json"
 ces_release_result_path="/workspace/ces-release-result.json"
+rollback_manifest_path="/workspace/rollback-release-manifest.json"
+rollback_target_path="/workspace/rollback-target.json"
 
 declare -A images
 components=(banking-service banking-ui credit-support-agent data-generator)
@@ -58,6 +61,16 @@ else
     images["${component}"]="$(resolve_image "${component}")"
   done
 fi
+
+gsutil cp "${ROLLBACK_MANIFEST_URI}" "${rollback_manifest_path}"
+python3 deployment/scripts/voice_release_metadata.py rollback-target \
+  --manifest "${rollback_manifest_path}" \
+  --environment "${PROJECT_ID}" \
+  --manifest-uri "${ROLLBACK_MANIFEST_URI}" \
+  > "${rollback_target_path}"
+while IFS= read -r rollback_image; do
+  gcloud artifacts docker images describe "${rollback_image}" >/dev/null
+done < <(jq -er '.images[]' "${rollback_target_path}")
 
 python3 deployment/scripts/voice_release_metadata.py inspect --root /workspace \
   > "${source_metadata_path}"
@@ -192,8 +205,9 @@ jq -n \
   --arg cloud_sql_backup_id "${cloud_sql_backup_id}" \
   --slurpfile source_metadata "${source_metadata_path}" \
   --slurpfile ces_result "${ces_release_result_path}" \
+  --slurpfile rollback_target "${rollback_target_path}" \
   '{
-    schema_version:2,
+    schema_version:3,
     status:(if $mode=="promote" then "promoted" else "qualified" end),
     mode:$mode,
     commit:$commit,
@@ -214,6 +228,7 @@ jq -n \
       model:$source_metadata[0].ces_config.model
     },
     knowledge_catalog:$source_metadata[0].knowledge_catalog,
+    rollback_target:$rollback_target[0],
     data_platform:{
       oltp_cdc_dataset:"oltp_cdc",
       curated_dataset:"analytics_curated",
