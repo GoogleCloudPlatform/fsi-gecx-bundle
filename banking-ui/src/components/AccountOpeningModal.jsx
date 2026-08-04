@@ -45,6 +45,7 @@ function AccountOpeningModal({ openingAccount, onClose, accountType = 'CHECKING'
       const result = await createDepositAccount(payload);
       setCreatedAccountInfo(result);
       setSubmissionSuccess(true);
+      window.dispatchEvent(new Event('refresh-accounts'));
       setTimeout(() => {
         onClose();
       }, 3500);

@@ -132,6 +132,7 @@ function HomeView({
     try {
       await provisionMyDemo();
       await fetchAccounts();
+      window.dispatchEvent(new Event('refresh-accounts'));
     } catch (err) {
       console.error("Failed to provision demo sandbox:", err);
       alert(err.response?.data?.detail || "Failed to provision demo sandbox.");

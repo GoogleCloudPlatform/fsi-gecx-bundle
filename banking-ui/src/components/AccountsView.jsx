@@ -477,6 +477,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                 try {
                   await provisionMyDemo();
                   await fetchSummaryAndTransactions();
+                  window.dispatchEvent(new Event('refresh-accounts'));
                 } catch (err) {
                   console.error(err);
                 } finally {

@@ -203,6 +203,7 @@ function AdminDashboardView() {
     setNotice({ type: '', text: '' });
     try {
       const res = await resetDatabase(purgeAuditLogs, purgeDataLake);
+      window.dispatchEvent(new Event('refresh-accounts'));
       const warningText = Array.isArray(res.warnings) && res.warnings.length > 0
         ? ` Warnings: ${res.warnings.join(' ')}`
         : '';
@@ -224,6 +225,7 @@ function AdminDashboardView() {
     try {
       const res = await provisionMyDemo();
       setHasSeededProfile(true);
+      window.dispatchEvent(new Event('refresh-accounts'));
       setNotice({ type: 'success', text: res.message || 'Demo profile provisioned successfully!' });
       setTimeout(() => setNotice({ type: '', text: '' }), 5000);
     } catch (err) {
@@ -241,6 +243,7 @@ function AdminDashboardView() {
     setNotice({ type: '', text: '' });
     try {
       const res = await resetMyDemo();
+      window.dispatchEvent(new Event('refresh-accounts'));
       setNotice({ type: 'success', text: res.message || 'Demo profile reset successfully!' });
       setTimeout(() => setNotice({ type: '', text: '' }), 5000);
     } catch (err) {
@@ -259,6 +262,7 @@ function AdminDashboardView() {
     try {
       const res = await deprovisionMyDemo();
       setHasSeededProfile(false);
+      window.dispatchEvent(new Event('refresh-accounts'));
       setNotice({ type: 'success', text: res.message || 'Demo accounts removed successfully!' });
       setTimeout(() => setNotice({ type: '', text: '' }), 5000);
     } catch (err) {
