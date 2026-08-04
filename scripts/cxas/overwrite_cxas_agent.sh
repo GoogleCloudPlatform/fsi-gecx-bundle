@@ -20,6 +20,8 @@ BASE_URL="${BASE_URL:-https://ces.clients6.google.com/v1beta}"
 PROJECT_ID="${PROJECT_ID:-}"
 APP_ID="${APP_ID:-}"
 LOCATION="${LOCATION:-us}"
+BANKING_SERVICE_REGION="${BANKING_SERVICE_REGION:-us-central1}"
+BANKING_SERVICE_URL="${BANKING_SERVICE_URL:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENT_DIR="${SCRIPT_DIR}/../../gecx" # Directory containing your agent configs
 AGENT_FOLDER="${AGENT_FOLDER:-Nova_Horizon_Bot_v2}"
@@ -45,6 +47,26 @@ fi
 if [ -z "$APP_ID" ]; then
   echo "Error: APP_ID environment variable is required."
   exit 1
+fi
+
+# CES imports consume rendered YAML, while environment-specific generated files
+# remain intentionally ignored by Git. Materialize the MCP toolset immediately
+# before packaging so a clean checkout is independently deployable.
+TOOLSET_TEMPLATE="$AGENT_DIR/$AGENT_FOLDER/toolsets/banking_service_mcp_toolset/banking_service_mcp_toolset.yaml.tftpl"
+if [ -f "$TOOLSET_TEMPLATE" ]; then
+  if [ -z "$BANKING_SERVICE_URL" ]; then
+    BANKING_SERVICE_URL=$(gcloud run services describe banking-service \
+      --project "$PROJECT_ID" \
+      --region "$BANKING_SERVICE_REGION" \
+      --format='value(status.url)')
+  fi
+  if [ -z "$BANKING_SERVICE_URL" ]; then
+    echo "Error: Could not resolve the banking-service URL for the CES toolset." >&2
+    exit 1
+  fi
+  python3 "$SCRIPT_DIR/materialize_agent_bundle.py" \
+    --agent-folder "$AGENT_DIR/$AGENT_FOLDER" \
+    --banking-service-url "$BANKING_SERVICE_URL"
 fi
 
 # Clean up the temporary zip file on exit

@@ -33,8 +33,7 @@ on:
       - "deployment/scripts/test_voice_release_metadata.py"
       - "deployment/terraform/**"
       - "gecx/Credit_Support_Voice_Agent/**"
-      - "scripts/cxas/overwrite_cxas_agent.sh"
-      - "scripts/cxas/ces_voice_qualification.py"
+      - "scripts/cxas/**"
   pull_request:
     branches: [main]
     paths:
@@ -47,8 +46,7 @@ on:
       - "deployment/scripts/test_voice_release_metadata.py"
       - "deployment/terraform/**"
       - "gecx/Credit_Support_Voice_Agent/**"
-      - "scripts/cxas/overwrite_cxas_agent.sh"
-      - "scripts/cxas/ces_voice_qualification.py"
+      - "scripts/cxas/**"
 
 jobs:
   banking-contract:
@@ -78,6 +76,7 @@ jobs:
       - name: Validate coherent release metadata
         run: |
           uv run pytest -q ../deployment/scripts/test_voice_release_metadata.py
+          python3 ../scripts/cxas/test_materialize_agent_bundle.py
           bash -n ../deployment/scripts/run_alloydb_release.sh
           bash -n ../scripts/cxas/overwrite_cxas_agent.sh
         working-directory: banking-service

@@ -423,7 +423,9 @@ def _record_commit_proposal_event(
         latency_ms=latency_ms,
         invalidation_reason=structured.get("invalidation_reason")
         or structured.get("error"),
-        banking_outcome=structured.get("outcome"),
+        banking_outcome=(
+            structured.get("outcome") or structured.get("wallet_provisioning_status")
+        ),
     )
 
 

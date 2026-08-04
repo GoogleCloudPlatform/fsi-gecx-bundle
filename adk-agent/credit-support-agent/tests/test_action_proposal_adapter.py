@@ -214,6 +214,33 @@ async def test_new_commit_attestation_emits_confirmed_observability(
         agent.reset_session_context(tokens)
 
 
+def test_wallet_commit_normalizes_provisioning_status_as_banking_outcome(
+    monkeypatch,
+) -> None:
+    recorded = []
+    monkeypatch.setattr(
+        agent,
+        "record_action_proposal_event",
+        lambda **event: recorded.append(event),
+    )
+    state = tool_context(proposal_projection(evidence_state=COMMIT_IN_FLIGHT)).state
+
+    agent._record_commit_proposal_event(
+        state=state,
+        tool_name="commit_wallet_provisioning",
+        args={"proposal_id": PROPOSAL_ID},
+        result={
+            "status": "COMMITTED",
+            "wallet_provisioning_status": "QUEUED",
+        },
+        outcome="COMMITTED",
+        latency_ms=12.5,
+    )
+
+    assert recorded[0]["outcome"] == "COMMITTED"
+    assert recorded[0]["banking_outcome"] == "QUEUED"
+
+
 @pytest.mark.asyncio
 async def test_failed_commit_retries_once_with_same_request_evidence(
     monkeypatch,
