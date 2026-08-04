@@ -51,6 +51,7 @@ def _clear_current_proposal(callback_context) -> None:
     callback_context.variables["proposal_confirmation_method"] = ""
     callback_context.variables["proposal_confirmation_source"] = ""
     callback_context.variables["proposal_decision_type"] = ""
+    callback_context.variables["proposal_commit_attempted"] = False
 
 
 def _record_completed_proposal_evidence(callback_context) -> None:
@@ -106,9 +107,6 @@ def after_tool_callback(tool, input, callback_context, tool_response):
     if tool_name.endswith("review_fraud_selection"):
         if payload.get("success") is True:
             fingerprint = str(payload.get("selection_fingerprint") or "")
-            previous = str(
-                callback_context.variables.get("fraud_review_fingerprint") or ""
-            )
             callback_context.variables["fraud_review_stage"] = str(
                 payload.get("stage") or ""
             )
@@ -119,9 +117,6 @@ def after_tool_callback(tool, input, callback_context, tool_response):
             callback_context.variables["fraud_review_ready"] = bool(
                 payload.get("ready_to_propose")
             )
-            if previous and fingerprint and previous != fingerprint:
-                callback_context.variables["proposal_id"] = ""
-                callback_context.variables["proposal_customer_safe_summary"] = ""
         return None
 
     commit_tool = next(
@@ -134,6 +129,17 @@ def after_tool_callback(tool, input, callback_context, tool_response):
             _clear_current_proposal(callback_context)
             if commit_tool == "commit_fraud_triage":
                 callback_context.variables["fraud_review_stage"] = "COMMITTED"
+        else:
+            recovery_class = str(payload.get("recovery_class") or "")
+            if recovery_class == "REPRESENT_AND_RECONFIRM":
+                callback_context.variables["proposal_presentation_turn_id"] = ""
+                callback_context.variables["proposal_confirmation_turn_id"] = ""
+                callback_context.variables["proposal_confirmation_method"] = ""
+                callback_context.variables["proposal_confirmation_source"] = ""
+                callback_context.variables["proposal_decision_type"] = ""
+                callback_context.variables["proposal_commit_attempted"] = False
+            elif recovery_class and recovery_class != "RETRY_SAME_PROPOSAL":
+                _clear_current_proposal(callback_context)
         return None
 
     if tool_name.endswith("decide_action_proposal"):
@@ -166,6 +172,7 @@ def after_tool_callback(tool, input, callback_context, tool_response):
         callback_context.variables["proposal_action_type"] = proposal_action
         callback_context.variables["proposal_id"] = proposal_id
         callback_context.variables["proposal_customer_safe_summary"] = summary
+        callback_context.variables["proposal_commit_attempted"] = False
         # CES persists after-tool state reliably across invocations. Record the
         # protected proposal-producing invocation here; a commit must still
         # arrive from a different, later customer invocation. Presentation

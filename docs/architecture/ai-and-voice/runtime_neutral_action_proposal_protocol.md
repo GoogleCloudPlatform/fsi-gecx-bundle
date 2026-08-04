@@ -164,6 +164,36 @@ stage and correlated references.
 | `COMMIT_RESULT_PENDING` | `RETRY_SAME_PROPOSAL` | Retry only the same opaque proposal id. |
 | `ACTION_PRECONDITION_CHANGED` | `CREATE_NEW_PROPOSAL` | Review authoritative domain state before proposing again. |
 
+### Thin Runtime Adapters
+
+ADK and CES now retain only a protected projection of the current banking
+proposal. The projection contains the opaque proposal id and action type,
+originating, presentation, and later customer turn ids, plus the local
+checkpoint required to retry the same opaque commit after an uncertain result.
+It does not copy the canonical action payload, payload fingerprint, proposal
+expiry, support-session scope, or banking lifecycle status.
+
+ADK represents its host mechanics as evidence checkpoints such as awaiting
+presentation, awaiting a later decision, commit in flight, and same-id retry.
+These checkpoints neither expire nor terminalize a banking proposal. Banking's
+typed result determines whether ADK retries the same id, re-presents that id,
+or clears stale local evidence. Runtime proposal creation and fraud-selection
+callbacks no longer reject competing state locally; banking's active-proposal
+invariant is authoritative.
+
+CES projects the same opaque identity and ordered turns through declared
+variables. Its checked-in MCP contract maps those variables exactly to the
+protected transport headers. A commit-retry checkpoint preserves the original
+presentation and confirmation turns and permits only the same opaque proposal
+id. CES closeout ordering is implemented by a separate callback, and banking
+parses closeout's base runtime context outside the proposal-tool registration.
+
+The ADK-only customer-reported fraud compatibility path is still a direct
+action and therefore retains its existing bounded local authorization payload.
+It is not one of the three registered banking proposal actions and is scheduled
+for the subsequent fraud-workflow boundary consolidation. This exception must
+not be used as a template for new proposal-backed actions.
+
 ### Authorization-Policy Baseline
 
 The three current actions use one Tier 1 general-acknowledgment policy:

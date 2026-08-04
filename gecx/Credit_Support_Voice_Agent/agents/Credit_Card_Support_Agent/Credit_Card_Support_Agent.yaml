@@ -20,6 +20,8 @@ instruction: agents/Credit_Card_Support_Agent/instruction.txt
 tools:
 - end_session
 beforeToolCallbacks:
+- pythonCode: agents/Credit_Card_Support_Agent/before_tool_callbacks/enforce_closeout.py
+  description: Keep consultation closeout checkpoints outside proposal authorization.
 - pythonCode: agents/Credit_Card_Support_Agent/before_tool_callbacks/enforce_proposal_context.py
   description: Bind typed proposal tool choices to callback-owned ordered turn evidence.
 afterToolCallbacks:

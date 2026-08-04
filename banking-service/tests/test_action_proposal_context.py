@@ -66,9 +66,7 @@ def test_model_visible_commit_has_only_opaque_proposal_input() -> None:
     assert decision_parameters == {"proposal_id", "decision", "ctx"}
     assert set(
         get_args(
-            inspect.signature(decide_action_proposal)
-            .parameters["decision"]
-            .annotation
+            inspect.signature(decide_action_proposal).parameters["decision"].annotation
         )
     ) == {"DECLINE", "REVISE", "CANCEL"}
     assert all(
@@ -129,6 +127,24 @@ def test_read_only_mcp_tool_ignores_partial_proposal_headers() -> None:
     )
     with pytest.raises(RuntimeContextError, match="x-customer-turn-id"):
         mcp_utils._proposal_context_for_tool("propose_fraud_triage", partial_headers)
+
+
+def test_closeout_uses_base_runtime_context_not_proposal_registration() -> None:
+    headers = {
+        "x-support-session-id": "support-session-1",
+        "x-runtime-name": "CES_GEMINI_LIVE",
+        "x-runtime-session-id": "runtime-session-1",
+        "x-customer-turn-id": "customer-turn-1",
+        "x-reset-generation": "generation-1",
+    }
+    assert "offer_session_closeout" not in mcp_utils.PROPOSAL_CONTEXT_TOOL_NAMES
+    assert (
+        mcp_utils._proposal_context_for_tool("offer_session_closeout", headers) is None
+    )
+    assert (
+        mcp_utils._runtime_context_for_tool("offer_session_closeout", headers)
+        is not None
+    )
 
 
 def test_ces_capability_identity_rejects_stale_reset_generation(monkeypatch) -> None:
@@ -258,10 +274,10 @@ def test_confirmation_evidence_is_transport_owned_and_explicit() -> None:
         _headers(
             **{
                 "x-customer-turn-id": "customer-turn-11",
-                    "x-proposal-presentation-turn-id": "assistant-turn-10",
-                    "x-proposal-confirmation-turn-id": "customer-turn-11",
-                    "x-proposal-confirmation-method": "EXPLICIT_VERBAL",
-                    "x-proposal-confirmation-source": "MODEL_TOOL_INTENT",
+                "x-proposal-presentation-turn-id": "assistant-turn-10",
+                "x-proposal-confirmation-turn-id": "customer-turn-11",
+                "x-proposal-confirmation-method": "EXPLICIT_VERBAL",
+                "x-proposal-confirmation-source": "MODEL_TOOL_INTENT",
             }
         )
     )

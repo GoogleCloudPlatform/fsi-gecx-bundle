@@ -114,6 +114,8 @@ def test_ces_uses_one_typed_gate_for_all_action_proposals(
     variables.update(
         {
             "proposal_id": "proposal-1",
+            "proposal_action_type": action_type,
+            "proposal_originating_turn_id": "turn-1",
             "proposal_presentation_turn_id": "turn-1",
         }
     )
@@ -139,9 +141,7 @@ def test_ces_non_commit_decisions_use_the_same_typed_later_turn_gate(decision):
         "proposal_originating_turn_id": "turn-1",
         "proposal_presentation_turn_id": "turn-1",
     }
-    tool = SimpleNamespace(
-        name="banking_service_mcp_toolset.decide_action_proposal"
-    )
+    tool = SimpleNamespace(name="banking_service_mcp_toolset.decide_action_proposal")
 
     assert (
         callback.before_tool_callback(
@@ -175,9 +175,7 @@ def test_ces_successful_non_commit_decision_clears_current_proposal():
     }
 
     capture.after_tool_callback(
-        SimpleNamespace(
-            name="banking_service_mcp_toolset.decide_action_proposal"
-        ),
+        SimpleNamespace(name="banking_service_mcp_toolset.decide_action_proposal"),
         {"decision": "REVISE"},
         Context(invocation_id="turn-2", variables=variables),
         {
@@ -204,9 +202,7 @@ def test_ces_successful_non_commit_decision_clears_current_proposal():
         ("commit_wallet_provisioning", "PROVISION_GOOGLE_WALLET"),
     ),
 )
-def test_ces_successful_commit_clears_current_proposal(
-    commit_tool, action_type
-):
+def test_ces_successful_commit_clears_current_proposal(commit_tool, action_type):
     capture = _load("after_tool_callbacks/capture_proposal.py")
     callback = _load("before_tool_callbacks/enforce_proposal_context.py")
     variables = {
@@ -248,14 +244,8 @@ def test_ces_successful_commit_clears_current_proposal(
     assert variables["proposal_decision_type"] == ""
     assert variables["completed_proposal_action_type"] == action_type
     assert variables["completed_proposal_confirmation_turn_id"] == "turn-2"
-    assert (
-        variables["completed_proposal_confirmation_method"]
-        == "EXPLICIT_VERBAL"
-    )
-    assert (
-        variables["completed_proposal_confirmation_source"]
-        == "MODEL_TOOL_INTENT"
-    )
+    assert variables["completed_proposal_confirmation_method"] == "EXPLICIT_VERBAL"
+    assert variables["completed_proposal_confirmation_source"] == "MODEL_TOOL_INTENT"
     assert variables["completed_proposal_decision_type"] == "COMMIT"
     if commit_tool == "commit_fraud_triage":
         assert variables["fraud_review_stage"] == "COMMITTED"
@@ -273,19 +263,28 @@ def test_ces_successful_commit_clears_current_proposal(
 
 
 def test_ces_failed_commit_preserves_current_proposal_for_retry():
+    gate = _load("before_tool_callbacks/enforce_proposal_context.py")
     capture = _load("after_tool_callbacks/capture_proposal.py")
     variables = {
         "proposal_id": "proposal-1",
         "proposal_action_type": "TRIAGE_FRAUD_CASE",
         "proposal_originating_turn_id": "turn-1",
         "proposal_presentation_turn_id": "turn-1",
-        "proposal_confirmation_turn_id": "turn-2",
     }
 
+    assert (
+        gate.before_tool_callback(
+            SimpleNamespace(name="banking_service_mcp_toolset.commit_fraud_triage"),
+            {"proposal_id": "proposal-1"},
+            Context(invocation_id="turn-2", variables=variables),
+        )
+        is None
+    )
+    assert variables["proposal_commit_attempted"] is True
+    original_confirmation_turn = variables["proposal_confirmation_turn_id"]
+
     capture.after_tool_callback(
-        SimpleNamespace(
-            name="banking_service_mcp_toolset.commit_fraud_triage"
-        ),
+        SimpleNamespace(name="banking_service_mcp_toolset.commit_fraud_triage"),
         {"proposal_id": "proposal-1"},
         Context(invocation_id="turn-2", variables=variables),
         {
@@ -301,6 +300,15 @@ def test_ces_failed_commit_preserves_current_proposal_for_retry():
     assert variables["proposal_id"] == "proposal-1"
     assert variables["proposal_action_type"] == "TRIAGE_FRAUD_CASE"
     assert variables["proposal_presentation_turn_id"] == "turn-1"
+    assert (
+        gate.before_tool_callback(
+            SimpleNamespace(name="banking_service_mcp_toolset.commit_fraud_triage"),
+            {"proposal_id": "proposal-1"},
+            Context(invocation_id="turn-3", variables=variables, user_text=None),
+        )
+        is None
+    )
+    assert variables["proposal_confirmation_turn_id"] == original_confirmation_turn
 
 
 def test_ces_questions_preserve_proposal_and_revision_is_explicit():
@@ -322,14 +330,15 @@ def test_ces_questions_preserve_proposal_and_revision_is_explicit():
     )
     assert variables["proposal_id"] == "proposal-1"
 
-    blocked = callback.before_tool_callback(
+    allowed = callback.before_tool_callback(
         SimpleNamespace(name="banking_service_mcp_toolset.review_fraud_selection"),
         {},
         Context(invocation_id="turn-2", variables=variables),
     )
-    assert blocked["error"] == "PROPOSAL_REVISION_REQUIRED"
+    assert allowed is None
     assert variables["proposal_id"] == "proposal-1"
-    closeout = callback.before_tool_callback(
+    closeout_callback = _load("before_tool_callbacks/enforce_closeout.py")
+    closeout = closeout_callback.before_tool_callback(
         SimpleNamespace(name="banking_service_mcp_toolset.offer_session_closeout"),
         {},
         Context(invocation_id="turn-2", variables=variables),
@@ -338,7 +347,7 @@ def test_ces_questions_preserve_proposal_and_revision_is_explicit():
 
 
 def test_ces_closeout_uses_typed_offer_and_later_turn_ordering():
-    callback = _load("before_tool_callbacks/enforce_proposal_context.py")
+    callback = _load("before_tool_callbacks/enforce_closeout.py")
     variables = {}
     callback.before_tool_callback(
         SimpleNamespace(name="banking_service_mcp_toolset.offer_session_closeout"),
@@ -447,9 +456,31 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     assert "completed_proposal_action_type" in declared_variables
     assert "completed_proposal_confirmation_source" in declared_variables
     custom_headers = toolset["mcpToolset"]["customHeaders"]
-    assert custom_headers["x-banking-session-capability"] == (
-        "$context.variables.session_capability"
-    )
+    assert custom_headers == {
+        "x-banking-session-capability": "$context.variables.session_capability",
+        "x-support-session-id": "$context.variables.support_session_id",
+        "x-runtime-name": "$context.variables.runtime_name",
+        "x-runtime-session-id": "$context.variables.runtime_session_id",
+        "x-customer-turn-id": "$context.variables.customer_turn_id",
+        "x-reset-generation": "$context.variables.reset_generation",
+        "x-catalog-snapshot-id": "$context.variables.catalog_snapshot_id",
+        "x-ces-app-id": "$context.variables.ces_app_id",
+        "x-ces-version-or-deployment-id": (
+            "$context.variables.ces_version_or_deployment_id"
+        ),
+        "x-proposal-presentation-turn-id": (
+            "$context.variables.proposal_presentation_turn_id"
+        ),
+        "x-proposal-confirmation-turn-id": (
+            "$context.variables.proposal_confirmation_turn_id"
+        ),
+        "x-proposal-confirmation-method": (
+            "$context.variables.proposal_confirmation_method"
+        ),
+        "x-proposal-confirmation-source": (
+            "$context.variables.proposal_confirmation_source"
+        ),
+    }
     assert "x-forwarded-user-context" not in custom_headers
     assert "user_token" not in instruction
     assert "You own the natural spoken wording" in instruction
@@ -510,6 +541,8 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
         )
         for callback in callback_group
     }
+    assert any("enforce_closeout.py" in path for path in callback_paths)
+    assert any("enforce_proposal_context.py" in path for path in callback_paths)
     assert not any("sanitize_voice_output.py" in path for path in callback_paths)
     assert not any("present_commit_result.py" in path for path in callback_paths)
     assert not any("start_fraud_review.py" in path for path in callback_paths)

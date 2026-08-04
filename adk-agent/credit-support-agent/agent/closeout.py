@@ -39,7 +39,17 @@ def closeout_block_reason(
     latest_customer_turn: dict | None,
 ) -> str | None:
     """Validate action state and turn provenance without interpreting words."""
-    authorization_status = (workflow_authorization or {}).get("status")
+    authorization = workflow_authorization or {}
+    authorization_status = authorization.get("status")
+    proposal_checkpoint = authorization.get("evidence_state")
+    if proposal_checkpoint in {
+        "AWAITING_PRESENTATION",
+        "AWAITING_DECISION",
+        "DECISION_ATTESTED",
+        "COMMIT_IN_FLIGHT",
+        "COMMIT_RETRY",
+    }:
+        return f"PENDING_PROPOSAL_{proposal_checkpoint}"
     if authorization_status in {
         "PREPARED",
         "PENDING",

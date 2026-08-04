@@ -136,6 +136,10 @@ variableDeclarations:
   description: Model-selected typed decision for the active proposal.
   schema:
     type: STRING
+- name: proposal_commit_attempted
+  description: Whether CES must retry only the same opaque proposal commit.
+  schema:
+    type: BOOLEAN
 - name: completed_proposal_action_type
   description: Audit-only action type recorded when a proposal commit succeeds.
   schema:

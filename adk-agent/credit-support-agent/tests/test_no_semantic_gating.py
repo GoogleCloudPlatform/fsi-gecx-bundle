@@ -18,31 +18,15 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EXPLICIT_GATING_PATHS = (
-    REPO_ROOT
-    / "adk-agent"
-    / "credit-support-agent"
-    / "agent"
-    / "agent.py",
+    REPO_ROOT / "adk-agent" / "credit-support-agent" / "agent" / "agent.py",
     REPO_ROOT
     / "adk-agent"
     / "credit-support-agent"
     / "agent"
     / "workflow_authorization.py",
-    REPO_ROOT
-    / "adk-agent"
-    / "credit-support-agent"
-    / "agent"
-    / "workflow_plugin.py",
-    REPO_ROOT
-    / "adk-agent"
-    / "credit-support-agent"
-    / "agent"
-    / "fraud_voice.py",
-    REPO_ROOT
-    / "adk-agent"
-    / "credit-support-agent"
-    / "agent"
-    / "closeout.py",
+    REPO_ROOT / "adk-agent" / "credit-support-agent" / "agent" / "workflow_plugin.py",
+    REPO_ROOT / "adk-agent" / "credit-support-agent" / "agent" / "fraud_voice.py",
+    REPO_ROOT / "adk-agent" / "credit-support-agent" / "agent" / "closeout.py",
     REPO_ROOT
     / "gecx"
     / "Credit_Support_Voice_Agent"
@@ -55,36 +39,29 @@ EXPLICIT_GATING_PATHS = (
     / "Credit_Support_Voice_Agent"
     / "agents"
     / "Credit_Card_Support_Agent"
+    / "before_tool_callbacks"
+    / "enforce_closeout.py",
+    REPO_ROOT
+    / "gecx"
+    / "Credit_Support_Voice_Agent"
+    / "agents"
+    / "Credit_Card_Support_Agent"
     / "after_tool_callbacks"
     / "capture_proposal.py",
-    REPO_ROOT
-    / "banking-service"
-    / "services"
-    / "action_proposal_context.py",
-    REPO_ROOT
-    / "banking-service"
-    / "services"
-    / "action_proposals.py",
+    REPO_ROOT / "banking-service" / "services" / "action_proposal_context.py",
+    REPO_ROOT / "banking-service" / "services" / "action_proposals.py",
 )
 
 DISCOVERED_GATING_PATHS = tuple(
     sorted(
         {
-            *(
-                REPO_ROOT / "banking-service" / "services"
-            ).glob("*proposal*.py"),
-            *(
-                REPO_ROOT
-                / "adk-agent"
-                / "credit-support-agent"
-                / "agent"
-            ).glob("*authorization*.py"),
-            *(
-                REPO_ROOT
-                / "adk-agent"
-                / "credit-support-agent"
-                / "agent"
-            ).glob("*proposal*.py"),
+            *(REPO_ROOT / "banking-service" / "services").glob("*proposal*.py"),
+            *(REPO_ROOT / "adk-agent" / "credit-support-agent" / "agent").glob(
+                "*authorization*.py"
+            ),
+            *(REPO_ROOT / "adk-agent" / "credit-support-agent" / "agent").glob(
+                "*proposal*.py"
+            ),
             *(
                 REPO_ROOT
                 / "gecx"
@@ -147,9 +124,7 @@ def test_production_gates_do_not_define_semantic_phrase_parsers() -> None:
     for path in GATING_PATHS:
         tree = ast.parse(path.read_text(), filename=str(path))
         identifiers = {
-            node.id.lower()
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Name)
+            node.id.lower() for node in ast.walk(tree) if isinstance(node, ast.Name)
         }
         identifiers.update(
             node.name.lower()
@@ -160,7 +135,11 @@ def test_production_gates_do_not_define_semantic_phrase_parsers() -> None:
             argument.arg.lower()
             for node in ast.walk(tree)
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            for argument in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
+            for argument in (
+                *node.args.posonlyargs,
+                *node.args.args,
+                *node.args.kwonlyargs,
+            )
         )
         violations = {
             identifier

@@ -18,36 +18,27 @@ import time
 import pytest
 
 from agent import agent
-from agent.workflow_authorization import (
-    TRIAGE_FRAUD_CASE,
-    create_workflow_authorization,
-    mark_authorization_presented,
+from agent.proposal_evidence import (
+    AWAITING_DECISION,
+    AWAITING_PRESENTATION,
+    COMMIT_IN_FLIGHT,
+    create_pending_proposal,
+    mark_proposal_presented,
 )
-
-
-def triage_payload() -> dict:
-    return {
-        "fraud_alert_id": "fraud-123",
-        "disputed_authorization_ids": ["auth-1"],
-        "disputed_transaction_ids": [],
-        "issue_replacement": True,
-    }
 
 
 def pending_playbook(*, issued_at: float | None = None) -> dict:
     issued_at = time.time() if issued_at is None else issued_at
-    authorization = create_workflow_authorization(
-        action=TRIAGE_FRAUD_CASE,
-        payload=triage_payload(),
-        session_id="session-1",
-        originating_customer_event_id="customer-origin",
-        now_epoch_s=issued_at,
+    proposal = create_pending_proposal(
+        proposal_id="proposal-123",
+        action_type="TRIAGE_FRAUD_CASE",
+        contract_version="fraud-triage.v1",
+        originating_customer_turn_id="customer-origin",
     )
-    authorization["proposal_id"] = "proposal-123"
-    authorization = mark_authorization_presented(
-        authorization,
-        assistant_event_id="assistant-presentation",
-        now_epoch_s=issued_at + 1,
+    proposal = mark_proposal_presented(
+        proposal,
+        assistant_turn_id="assistant-presentation",
+        observed_at_epoch_s=issued_at + 1,
     )
     return {
         "entry_mode": "FRAUD_ALERT",
@@ -55,7 +46,7 @@ def pending_playbook(*, issued_at: float | None = None) -> dict:
         "open_alert_inspected": True,
         "triage_submitted": False,
         "resolution_completed": False,
-        "workflow_authorization": authorization,
+        "pending_proposal": proposal,
     }
 
 
@@ -91,7 +82,7 @@ def test_raw_customer_turn_does_not_change_authorization() -> None:
     finally:
         agent.reset_session_context(tokens)
 
-    assert playbook["workflow_authorization"]["status"] == "PENDING"
+    assert playbook["pending_proposal"]["evidence_state"] == AWAITING_DECISION
 
 
 @pytest.mark.asyncio
@@ -105,8 +96,8 @@ async def test_commit_tool_choice_binds_to_later_protected_customer_turn(
     )
     context = context_for(pending_playbook())
     try:
-        presented_at = context.state["fraud_playbook"]["workflow_authorization"][
-            "presented_at_epoch_s"
+        presented_at = context.state["fraud_playbook"]["pending_proposal"][
+            "presentation_observed_at_epoch_s"
         ]
         agent.record_customer_turn(
             "The runtime records this only as turn evidence.",
@@ -123,10 +114,9 @@ async def test_commit_tool_choice_binds_to_later_protected_customer_turn(
         agent.reset_session_context(tokens)
 
     assert result is None
-    authorization = context.state["fraud_playbook"]["workflow_authorization"]
-    assert authorization["status"] == "EXECUTING"
-    assert authorization["customer_event_id"] == "customer-confirmation"
-    assert authorization["confirmation_source"] == "MODEL_TOOL_INTENT"
+    proposal = context.state["fraud_playbook"]["pending_proposal"]
+    assert proposal["evidence_state"] == COMMIT_IN_FLIGHT
+    assert proposal["confirmation_turn_id"] == "customer-confirmation"
 
 
 @pytest.mark.asyncio
@@ -138,8 +128,8 @@ async def test_commit_tool_choice_on_originating_turn_is_blocked(valid_reset) ->
     )
     context = context_for(pending_playbook())
     try:
-        presented_at = context.state["fraud_playbook"]["workflow_authorization"][
-            "presented_at_epoch_s"
+        presented_at = context.state["fraud_playbook"]["pending_proposal"][
+            "presentation_observed_at_epoch_s"
         ]
         agent.record_customer_turn(
             "The proposal-originating customer turn.",
@@ -155,19 +145,19 @@ async def test_commit_tool_choice_on_originating_turn_is_blocked(valid_reset) ->
         agent.reset_session_context(tokens)
 
     assert result["status"] == "AUTHORIZATION_REQUIRED"
-    assert context.state["fraud_playbook"]["workflow_authorization"]["status"] == (
-        "PENDING"
+    assert context.state["fraud_playbook"]["pending_proposal"]["evidence_state"] == (
+        AWAITING_DECISION
     )
 
 
 @pytest.mark.asyncio
 async def test_commit_tool_choice_before_presentation_is_blocked(valid_reset) -> None:
     playbook = pending_playbook()
-    authorization = dict(playbook["workflow_authorization"])
-    authorization["status"] = "PREPARED"
-    authorization["assistant_event_id"] = None
-    authorization["presented_at_epoch_s"] = None
-    playbook["workflow_authorization"] = authorization
+    proposal = dict(playbook["pending_proposal"])
+    proposal["evidence_state"] = AWAITING_PRESENTATION
+    proposal["presentation_turn_id"] = None
+    proposal["presentation_observed_at_epoch_s"] = None
+    playbook["pending_proposal"] = proposal
     context = context_for(playbook)
     tokens = agent.bind_session_context(
         "customer-1",
