@@ -372,6 +372,69 @@ def test_ces_closeout_uses_typed_offer_and_later_turn_ordering():
         ),
     )
     assert allowed is None
+    assert variables["closeout_checkpoint_state"] == "ENDING"
+
+
+def test_ces_native_end_session_accepts_later_input_without_invocation_id():
+    callback = _load("before_tool_callbacks/enforce_closeout.py")
+    variables = {}
+    assert (
+        callback.before_tool_callback(
+            SimpleNamespace(name="banking_service_mcp_toolset.offer_session_closeout"),
+            {},
+            Context(
+                invocation_id="offer-turn",
+                variables=variables,
+                user_text="The action is confirmed.",
+            ),
+        )
+        is None
+    )
+
+    same_turn = callback.before_tool_callback(
+        SimpleNamespace(name="end_session"),
+        {},
+        Context(
+            invocation_id="",
+            variables=variables,
+            user_text="The action is confirmed.",
+        ),
+    )
+    assert same_turn["error"] == "CLOSEOUT_CHECKPOINT_REQUIRED"
+
+    later_turn = callback.before_tool_callback(
+        SimpleNamespace(name="end_session"),
+        {},
+        Context(
+            invocation_id="",
+            variables=variables,
+            user_text="No further assistance is needed.",
+        ),
+    )
+    assert later_turn is None
+    assert variables["closeout_checkpoint_state"] == "ENDING"
+
+
+def test_ces_non_closeout_tool_consumes_open_closeout_checkpoint():
+    callback = _load("before_tool_callbacks/enforce_closeout.py")
+    variables = {}
+    callback.before_tool_callback(
+        SimpleNamespace(name="banking_service_mcp_toolset.offer_session_closeout"),
+        {},
+        Context(invocation_id="turn-1", variables=variables),
+    )
+
+    assert (
+        callback.before_tool_callback(
+            SimpleNamespace(name="banking_service_mcp_toolset.get_transaction_history"),
+            {},
+            Context(invocation_id="turn-2", variables=variables),
+        )
+        is None
+    )
+    assert variables["closeout_checkpoint_state"] == ""
+    assert variables["closeout_originating_turn_id"] == ""
+    assert variables["closeout_originating_input_fingerprint"] == ""
 
 
 def test_proposal_capture_and_non_generative_presentation_recording():

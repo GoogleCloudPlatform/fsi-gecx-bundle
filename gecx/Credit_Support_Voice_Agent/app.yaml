@@ -164,6 +164,14 @@ variableDeclarations:
   description: CES callback-owned customer turn after which final assistance was offered.
   schema:
     type: STRING
+- name: closeout_checkpoint_state
+  description: Typed CES closeout checkpoint state, either empty, OFFERED, or ENDING.
+  schema:
+    type: STRING
+- name: closeout_originating_input_fingerprint
+  description: Opaque callback-owned identity for the customer input that opened closeout.
+  schema:
+    type: STRING
 - name: active_fraud_alert_id
   description: Banking-owned active fraud alert captured from the read tool.
   schema:
