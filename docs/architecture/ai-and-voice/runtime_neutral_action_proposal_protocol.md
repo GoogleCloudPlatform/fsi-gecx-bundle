@@ -211,6 +211,39 @@ presentation acknowledgment before accepting the same typed decision, without
 forking the durable lifecycle. That stricter profile is contract-tested but is
 not enabled for a production action.
 
+Every consequential `ActionSpecification` must now declare a risk tier and an
+action-specific `PresentationRequirement`. Registration fails if required
+facts are absent, if flexible summaries prohibit natural phrasing, or if a
+deterministic policy lacks typed trusted acknowledgment. The current Tier 1
+requirements are:
+
+| Action | Required banking facts | Quality gate | Phrasing |
+| --- | --- | --- | --- |
+| Fraud triage | reviewed activity selection; card last four; proposed disposition; replacement and escalation consequences | release evaluation | natural phrasing allowed |
+| Card reissue | card last four; current-card blocking; replacement-card form | release evaluation | natural phrasing allowed |
+| Google Wallet | card last four; Wallet provider; action is queued rather than completed | release evaluation | natural phrasing allowed |
+
+For these actions, deterministic production authorization validates protected
+turn ordering and typed model intent. Presentation completeness and natural
+voice quality are evaluated through the versioned ADK/CES trajectory and
+conversational-reference sets. Transcript wording is not reparsed at runtime,
+and interruption, VAD, playout, or audio completion cannot authorize an action.
+
+Stricter policies use the same lifecycle but must select an explicit typed
+extension:
+
+| Extension | Required contract |
+| --- | --- |
+| Required fact restatement | deterministic acknowledgment naming every required fact and a trusted render artifact |
+| Verbatim disclosure | governed disclosure reference, no paraphrase, and trusted render acknowledgment |
+| Explicit UI | trusted UI intent bound to the proposal and deterministic UI presentation evidence |
+| Step-up | trusted step-up assertion bound to the proposal after deterministic presentation |
+| Human approval | Tier 3 policy with trusted human-approval evidence |
+
+These extension points are contract-tested but have no registered production
+actions. A plain boolean, model-authored tool argument, transcript match, or
+untyped evidence dictionary cannot satisfy them.
+
 ## Component Ownership
 
 | Component | Responsibility |

@@ -15,7 +15,7 @@ internal Banking Service contracts, not a cross-service SDK or MCP surface.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import IntEnum, StrEnum
 from typing import Any, Callable, Mapping, Protocol
 
 from models.action_proposal import ActionProposal
@@ -28,6 +28,20 @@ class PresentationPolicy(StrEnum):
     VERBATIM_DISCLOSURE = "VERBATIM_DISCLOSURE"
     DETERMINISTIC_UI = "DETERMINISTIC_UI"
     TRUSTED_RENDER_ACKNOWLEDGMENT = "TRUSTED_RENDER_ACKNOWLEDGMENT"
+
+
+class CapabilityRiskTier(IntEnum):
+    INFORMATIONAL = 0
+    BOUNDED_SERVICING = 1
+    ELEVATED_RISK = 2
+    HUMAN_OWNED = 3
+
+
+class PresentationQualityGate(StrEnum):
+    """Where presentation correctness is enforced for a policy."""
+
+    RELEASE_EVALUATION = "RELEASE_EVALUATION"
+    DETERMINISTIC_ACKNOWLEDGMENT = "DETERMINISTIC_ACKNOWLEDGMENT"
 
 
 class DecisionPolicy(StrEnum):
@@ -62,15 +76,102 @@ class EvidencePolicy:
     accepted_sources: frozenset[str]
     require_later_customer_turn: bool = True
     required_presentation_acknowledgment: str | None = None
+    accepted_presentation_acknowledgment_sources: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
+class PresentationRequirement:
+    """Action-specific facts and assurance selected at registration time."""
+
+    required_fact_keys: frozenset[str]
+    quality_gate: PresentationQualityGate
+    natural_language_allowed: bool
+    disclosure_reference: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.required_fact_keys:
+            raise ValueError("Consequential actions must declare presentation facts.")
+        if self.disclosure_reference and self.natural_language_allowed:
+            raise ValueError("Referenced disclosures cannot allow natural paraphrase.")
+
+
+@dataclass(frozen=True)
+class ProtectedPresentationAcknowledgment:
+    """Trusted deterministic evidence; never supplied by the model."""
+
+    acknowledgment_type: str
+    source: str
+    acknowledged_fact_keys: frozenset[str]
+    artifact_id: str
+
+    def as_evidence(self) -> dict[str, Any]:
+        return {
+            "presentation_acknowledgment": self.acknowledgment_type,
+            "presentation_acknowledgment_source": self.source,
+            "acknowledged_fact_keys": sorted(self.acknowledged_fact_keys),
+            "presentation_artifact_id": self.artifact_id,
+        }
 
 
 @dataclass(frozen=True)
 class AuthorizationPolicy:
     name: str
+    risk_tier: CapabilityRiskTier
     presentation_policy: PresentationPolicy
     decision_policy: DecisionPolicy
     evidence_policy: EvidencePolicy
     recovery_policy: RecoveryPolicy
+
+    def __post_init__(self) -> None:
+        deterministic_presentations = {
+            PresentationPolicy.REQUIRED_FACT_RESTATEMENT,
+            PresentationPolicy.VERBATIM_DISCLOSURE,
+            PresentationPolicy.DETERMINISTIC_UI,
+            PresentationPolicy.TRUSTED_RENDER_ACKNOWLEDGMENT,
+        }
+        required_ack = (
+            self.evidence_policy.required_presentation_acknowledgment
+        )
+        if (
+            self.presentation_policy in deterministic_presentations
+            and not required_ack
+        ):
+            raise ValueError(
+                "Deterministic presentation policies require typed acknowledgment."
+            )
+        if (
+            required_ack
+            and not self.evidence_policy.accepted_presentation_acknowledgment_sources
+        ):
+            raise ValueError(
+                "Deterministic presentation policies require a trusted renderer source."
+            )
+        if self.decision_policy is DecisionPolicy.NONE:
+            if self.risk_tier is not CapabilityRiskTier.INFORMATIONAL:
+                raise ValueError("Only informational policies may omit a decision.")
+        elif not self.evidence_policy.accepted_sources:
+            raise ValueError("Decision policies require an accepted evidence source.")
+        required_sources = {
+            DecisionPolicy.EXPLICIT_VERBAL: "MODEL_TOOL_INTENT",
+            DecisionPolicy.EXPLICIT_UI: "TRUSTED_UI_INTENT",
+            DecisionPolicy.STEP_UP: "TRUSTED_STEP_UP_ASSERTION",
+            DecisionPolicy.HUMAN_APPROVAL: "TRUSTED_HUMAN_APPROVAL",
+        }
+        required_source = required_sources.get(self.decision_policy)
+        if required_source and required_source not in self.evidence_policy.accepted_sources:
+            raise ValueError(
+                f"{self.decision_policy.value} requires {required_source} evidence."
+            )
+        if (
+            self.presentation_policy is PresentationPolicy.FLEXIBLE_SUMMARY
+            and self.risk_tier > CapabilityRiskTier.BOUNDED_SERVICING
+        ):
+            raise ValueError("Elevated-risk actions cannot use flexible summaries.")
+        if (
+            self.decision_policy is DecisionPolicy.HUMAN_APPROVAL
+            and self.risk_tier is not CapabilityRiskTier.HUMAN_OWNED
+        ):
+            raise ValueError("Human approval is a Tier 3 authorization policy.")
 
     @property
     def durable_confirmation_policy(self) -> str:
@@ -80,6 +181,7 @@ class AuthorizationPolicy:
 
 GENERAL_ACKNOWLEDGMENT_POLICY = AuthorizationPolicy(
     name="GENERAL_ACKNOWLEDGMENT",
+    risk_tier=CapabilityRiskTier.BOUNDED_SERVICING,
     presentation_policy=PresentationPolicy.FLEXIBLE_SUMMARY,
     decision_policy=DecisionPolicy.EXPLICIT_VERBAL,
     evidence_policy=EvidencePolicy(
@@ -91,11 +193,15 @@ GENERAL_ACKNOWLEDGMENT_POLICY = AuthorizationPolicy(
 
 REQUIRED_RESTATEMENT_POLICY = AuthorizationPolicy(
     name="REQUIRED_RESTATEMENT",
+    risk_tier=CapabilityRiskTier.ELEVATED_RISK,
     presentation_policy=PresentationPolicy.REQUIRED_FACT_RESTATEMENT,
     decision_policy=DecisionPolicy.EXPLICIT_VERBAL,
     evidence_policy=EvidencePolicy(
         accepted_sources=frozenset({"MODEL_TOOL_INTENT"}),
         required_presentation_acknowledgment="DETERMINISTIC_REQUIRED_FACTS_RENDERED",
+        accepted_presentation_acknowledgment_sources=frozenset(
+            {"TRUSTED_RENDERER"}
+        ),
     ),
     recovery_policy=RecoveryPolicy.REPRESENT_AND_RECONFIRM,
 )
@@ -121,7 +227,10 @@ class RuntimeEvidenceValidator:
         context: ProposalRuntimeContext,
         policy: AuthorizationPolicy,
         *,
-        additional_evidence: Mapping[str, Any] | None = None,
+        presentation_requirement: PresentationRequirement | None = None,
+        presentation_acknowledgment: (
+            ProtectedPresentationAcknowledgment | None
+        ) = None,
     ) -> ValidatedRuntimeEvidence:
         context.require_customer_turn()
         if not context.presentation_turn_id or not context.confirmation_turn_id:
@@ -151,20 +260,49 @@ class RuntimeEvidenceValidator:
                 "The customer decision is not bound to an accepted protected source."
             )
 
-        evidence = {
+        evidence: dict[str, Any] = {
             "method": context.confirmation_method,
             "source": context.confirmation_source,
             "runtime_name": context.runtime_name,
             "runtime_session_id": context.runtime_session_id,
             "presentation_turn_id": context.presentation_turn_id,
             "confirmation_turn_id": context.confirmation_turn_id,
-            **dict(additional_evidence or {}),
         }
+        if presentation_acknowledgment:
+            evidence.update(presentation_acknowledgment.as_evidence())
         required_ack = policy.evidence_policy.required_presentation_acknowledgment
-        if required_ack and evidence.get("presentation_acknowledgment") != required_ack:
-            raise RuntimeContextError(
-                "Deterministic presentation acknowledgment is required by policy."
+        if required_ack:
+            if (
+                presentation_requirement is None
+                or presentation_requirement.quality_gate
+                is not PresentationQualityGate.DETERMINISTIC_ACKNOWLEDGMENT
+            ):
+                raise RuntimeContextError(
+                    "A deterministic presentation contract is required by policy."
+                )
+            if (
+                presentation_acknowledgment is None
+                or presentation_acknowledgment.acknowledgment_type != required_ack
+                or not presentation_acknowledgment.artifact_id
+            ):
+                raise RuntimeContextError(
+                    "Deterministic presentation acknowledgment is required by policy."
+                )
+            if (
+                presentation_acknowledgment.source
+                not in policy.evidence_policy.accepted_presentation_acknowledgment_sources
+            ):
+                raise RuntimeContextError(
+                    "Presentation acknowledgment is not from an accepted trusted source."
+                )
+            missing_facts = (
+                presentation_requirement.required_fact_keys
+                - presentation_acknowledgment.acknowledged_fact_keys
             )
+            if missing_facts:
+                raise RuntimeContextError(
+                    "Presentation acknowledgment is missing required facts."
+                )
         return ValidatedRuntimeEvidence(
             customer_turn_id=context.customer_turn_id,
             presentation_turn_id=context.presentation_turn_id,
@@ -204,8 +342,42 @@ class ActionSpecification:
     payload_schema: Mapping[str, type | tuple[type, ...]]
     scope_resolver: Callable[[ActionProposal], tuple[str, str | None]]
     authorization_policy: AuthorizationPolicy
+    presentation_requirement: PresentationRequirement
     handler: TypedActionHandler
     result_schema: Mapping[str, type | tuple[type, ...]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        deterministic = (
+            self.authorization_policy.evidence_policy.required_presentation_acknowledgment
+            is not None
+        )
+        if deterministic != (
+            self.presentation_requirement.quality_gate
+            is PresentationQualityGate.DETERMINISTIC_ACKNOWLEDGMENT
+        ):
+            raise ValueError(
+                "Presentation assurance must match the authorization policy."
+            )
+        if (
+            self.authorization_policy.presentation_policy
+            is PresentationPolicy.FLEXIBLE_SUMMARY
+            and not self.presentation_requirement.natural_language_allowed
+        ):
+            raise ValueError("Flexible summaries must allow natural language.")
+        if (
+            self.authorization_policy.presentation_policy
+            is not PresentationPolicy.FLEXIBLE_SUMMARY
+            and self.presentation_requirement.natural_language_allowed
+        ):
+            raise ValueError(
+                "Deterministic presentation policies cannot allow paraphrase."
+            )
+        if (
+            self.authorization_policy.presentation_policy
+            is PresentationPolicy.VERBATIM_DISCLOSURE
+            and not self.presentation_requirement.disclosure_reference
+        ):
+            raise ValueError("Verbatim disclosure requires a governed reference.")
 
     def validate_payload(self, payload: Mapping[str, Any]) -> None:
         missing = set(self.payload_schema) - set(payload)

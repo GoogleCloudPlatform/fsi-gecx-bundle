@@ -204,6 +204,68 @@
           "NORMAL_DISCONNECT"
         ]
       }
+    },
+    {
+      "id": "fraud-ambiguous-proposal-response",
+      "description": "An ambiguous later turn leaves the proposal pending without selecting commit or another typed decision.",
+      "expectation": {
+        "required_tools": {
+          "get_open_fraud_alert": 1,
+          "propose_fraud_triage": 1
+        },
+        "forbidden_tools": [
+          "commit_fraud_triage",
+          "decide_action_proposal",
+          "triage_fraud_case"
+        ],
+        "required_proposal_outcomes": [
+          "PROPOSED",
+          "PRESENTED"
+        ],
+        "forbidden_proposal_outcomes": [
+          "CONFIRMED",
+          "COMMITTED",
+          "DECLINED",
+          "INVALIDATED"
+        ],
+        "expected_runtime_name": "CES_GEMINI_LIVE",
+        "require_runtime_version": true,
+        "require_catalog_identity": true,
+        "required_contract_version": "fraud-triage.v1",
+        "allowed_terminal_outcomes": [
+          "NORMAL_DISCONNECT"
+        ]
+      }
+    },
+    {
+      "id": "fraud-presentation-interruption",
+      "description": "An interruption during proposal presentation cannot create confirmation or authorize a commit.",
+      "expectation": {
+        "required_tools": {
+          "get_open_fraud_alert": 1,
+          "propose_fraud_triage": 1
+        },
+        "forbidden_tools": [
+          "commit_fraud_triage",
+          "decide_action_proposal",
+          "triage_fraud_case"
+        ],
+        "required_proposal_outcomes": [
+          "PROPOSED"
+        ],
+        "forbidden_proposal_outcomes": [
+          "CONFIRMED",
+          "COMMITTED"
+        ],
+        "minimum_interruptions": 1,
+        "expected_runtime_name": "CES_GEMINI_LIVE",
+        "require_runtime_version": true,
+        "require_catalog_identity": true,
+        "required_contract_version": "fraud-triage.v1",
+        "allowed_terminal_outcomes": [
+          "NORMAL_DISCONNECT"
+        ]
+      }
     }
   ]
 }

@@ -294,6 +294,7 @@ class ProposalLifecycleEngine:
             return self.evidence_validator.validate_decision(
                 runtime_context,
                 specification.authorization_policy,
+                presentation_requirement=specification.presentation_requirement,
             )
         except RuntimeContextError as exc:
             raise ProposalTransitionError(

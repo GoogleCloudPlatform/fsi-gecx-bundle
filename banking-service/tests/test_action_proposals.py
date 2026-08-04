@@ -393,6 +393,11 @@ def test_fraud_triage_proposal_normalizes_and_binds_immutable_payload(
     assert proposal.catalog_snapshot_id == "fraud-guidance-v7"
     assert "$12.99 at Corner Market" in proposal.customer_safe_summary
     assert "$45.00 at Transit Pass" in proposal.customer_safe_summary
+    assert f"card ending {fraud_alert.card_last_four}" in proposal.customer_safe_summary
+    assert "dispute" in proposal.customer_safe_summary
+    assert "block the current card and issue a replacement" in (
+        proposal.customer_safe_summary
+    )
 
 
 def test_proposal_creation_retries_idempotently_and_rejects_payload_drift(
@@ -1014,6 +1019,8 @@ def test_card_reissue_uses_generic_proposal_commit_protocol(
         "issue_virtual_card": True,
     }
     assert "ending 4242" in proposed["customer_safe_summary"]
+    assert "block the card" in proposed["customer_safe_summary"]
+    assert "replacement virtual card" in proposed["customer_safe_summary"]
 
     committed = service.commit_card_reissue_for_identity(
         proposed["proposal_id"],
@@ -1060,6 +1067,8 @@ def test_wallet_provisioning_uses_generic_proposal_commit_protocol(
     assert proposed["action_type"] == PROVISION_GOOGLE_WALLET
     assert proposed["display_selection"] == {"wallet_provider": "GOOGLE_WALLET"}
     assert "ending 4242" in proposed["customer_safe_summary"]
+    assert "queue" in proposed["customer_safe_summary"]
+    assert "Google Wallet" in proposed["customer_safe_summary"]
 
     committed = service.commit_wallet_provisioning_for_identity(
         proposed["proposal_id"],

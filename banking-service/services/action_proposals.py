@@ -49,6 +49,8 @@ from services.proposal_protocol import (
     ActionRegistry,
     ActionSpecification,
     GENERAL_ACKNOWLEDGMENT_POLICY,
+    PresentationQualityGate,
+    PresentationRequirement,
     RecoveryClass,
 )
 from utils.audit import record_audit_event
@@ -316,6 +318,18 @@ def _action_registry(db) -> ActionRegistry:
                 },
                 scope_resolver=_customer_account_scope,
                 authorization_policy=GENERAL_ACKNOWLEDGMENT_POLICY,
+                presentation_requirement=PresentationRequirement(
+                    required_fact_keys=frozenset(
+                        {
+                            "reviewed_activity_selection",
+                            "card_last_four",
+                            "proposed_disposition",
+                            "replacement_and_escalation_consequences",
+                        }
+                    ),
+                    quality_gate=PresentationQualityGate.RELEASE_EVALUATION,
+                    natural_language_allowed=True,
+                ),
                 handler=_FraudTriageHandler(db),
                 result_schema={"success": bool},
             ),
@@ -330,6 +344,17 @@ def _action_registry(db) -> ActionRegistry:
                 },
                 scope_resolver=_customer_account_scope,
                 authorization_policy=GENERAL_ACKNOWLEDGMENT_POLICY,
+                presentation_requirement=PresentationRequirement(
+                    required_fact_keys=frozenset(
+                        {
+                            "card_last_four",
+                            "current_card_blocking",
+                            "replacement_card_form",
+                        }
+                    ),
+                    quality_gate=PresentationQualityGate.RELEASE_EVALUATION,
+                    natural_language_allowed=True,
+                ),
                 handler=_CardReissueHandler(db),
                 result_schema={"success": bool},
             ),
@@ -344,6 +369,17 @@ def _action_registry(db) -> ActionRegistry:
                 },
                 scope_resolver=_customer_account_scope,
                 authorization_policy=GENERAL_ACKNOWLEDGMENT_POLICY,
+                presentation_requirement=PresentationRequirement(
+                    required_fact_keys=frozenset(
+                        {
+                            "card_last_four",
+                            "wallet_provider",
+                            "provisioning_is_queued",
+                        }
+                    ),
+                    quality_gate=PresentationQualityGate.RELEASE_EVALUATION,
+                    natural_language_allowed=True,
+                ),
                 handler=_WalletProvisioningHandler(db),
                 result_schema={"success": bool},
             ),

@@ -388,14 +388,38 @@ def test_redundant_selection_confirmation_fails_one_gate_trajectory() -> None:
 
 
 def test_typed_decline_never_commits() -> None:
+    events = proposal_trajectory(
+        "DECLINED",
+        commit_success=None,
+        terminal_proposal_outcome=None,
+    )
+    terminal_index = next(
+        index
+        for index, event in enumerate(events)
+        if event.get("type") == "ACTION_PROPOSAL"
+        and event.get("outcome") == "DECLINED"
+    )
+    events[terminal_index:terminal_index] = [
+        {
+            "type": "TOOL_CALL",
+            "tool": "decide_action_proposal",
+            "elapsed_ms": 115,
+        },
+        {
+            "type": "TOOL_RESULT",
+            "tool": "decide_action_proposal",
+            "success": True,
+            "elapsed_ms": 118,
+        },
+    ]
     result = evaluate_trajectory(
-        proposal_trajectory(
-            "DECLINED",
-            commit_success=None,
-            terminal_proposal_outcome=None,
-        ),
+        events,
         TrajectoryExpectation(
-            required_tools={"get_open_fraud_alert": 1},
+            required_tools={
+                "get_open_fraud_alert": 1,
+                "propose_fraud_triage": 1,
+                "decide_action_proposal": 1,
+            },
             forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
             required_proposal_outcomes=("PROPOSED", "PRESENTED", "DECLINED"),
         ),
@@ -404,14 +428,18 @@ def test_typed_decline_never_commits() -> None:
     assert result.passed is True
 
 
-def pending_proposal_trajectory() -> list[dict]:
+def pending_proposal_trajectory(
+    *, customer_response_label: str = "QUESTION_BEFORE_DECISION"
+) -> list[dict]:
     events = golden_events()[:4] + proposal_confirmation_events("CONFIRMED")[:-2]
     events.extend(
         [
             {
                 "type": "TRANSCRIPT",
                 "author": "customer",
-                "text": "A question about the proposal.",
+                # Fixture labels are evaluation metadata. Production
+                # authorization never parses this field.
+                "text": customer_response_label,
                 "elapsed_ms": 110,
             },
             {
@@ -424,9 +452,17 @@ def pending_proposal_trajectory() -> list[dict]:
     return events
 
 
-def test_question_leaves_proposal_pending_without_commit() -> None:
+@pytest.mark.parametrize(
+    "customer_response_label",
+    ("QUESTION_BEFORE_DECISION", "AMBIGUOUS_NON_DECISION"),
+)
+def test_non_decision_turn_leaves_proposal_pending_without_commit(
+    customer_response_label: str,
+) -> None:
     result = evaluate_trajectory(
-        pending_proposal_trajectory(),
+        pending_proposal_trajectory(
+            customer_response_label=customer_response_label
+        ),
         TrajectoryExpectation(
             required_tools={"get_open_fraud_alert": 1},
             forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
@@ -453,6 +489,101 @@ def test_interruption_is_observed_without_business_invalidation() -> None:
 
     assert result.passed is True
     assert result.metrics["interruptions"] == 1
+
+
+def test_interruption_during_presentation_cannot_create_decision_evidence() -> None:
+    events = golden_events()[:4] + proposal_confirmation_events("CONFIRMED")[:7]
+    events.extend(
+        [
+            {"type": "INTERRUPTION", "elapsed_ms": 95},
+            {
+                "type": "SESSION_ENDED",
+                "outcome": "NORMAL_DISCONNECT",
+                "elapsed_ms": 200,
+            },
+        ]
+    )
+    result = evaluate_trajectory(
+        events,
+        TrajectoryExpectation(
+            required_tools={
+                "get_open_fraud_alert": 1,
+                "propose_fraud_triage": 1,
+            },
+            forbidden_tools=(
+                "commit_fraud_triage",
+                "decide_action_proposal",
+                "triage_fraud_case",
+            ),
+            required_proposal_outcomes=("PROPOSED",),
+            forbidden_proposal_outcomes=(
+                "PRESENTED",
+                "CONFIRMED",
+                "COMMITTED",
+            ),
+            minimum_interruptions=1,
+        ),
+    )
+
+    assert result.passed is True
+    assert result.metrics["interruptions"] == 1
+
+
+def test_typed_revision_terminalizes_before_replacement_proposal() -> None:
+    events = golden_events()[:4] + proposal_confirmation_events("INVALIDATED")
+    terminal_index = next(
+        index
+        for index, event in enumerate(events)
+        if event.get("type") == "ACTION_PROPOSAL"
+        and event.get("outcome") == "INVALIDATED"
+    )
+    events[terminal_index:terminal_index] = [
+        {
+            "type": "TOOL_CALL",
+            "tool": "decide_action_proposal",
+            "elapsed_ms": 115,
+        },
+        {
+            "type": "TOOL_RESULT",
+            "tool": "decide_action_proposal",
+            "success": True,
+            "elapsed_ms": 118,
+        },
+    ]
+    events.extend(
+        [
+            {
+                "type": "ACTION_PROPOSAL",
+                "action_type": "TRIAGE_FRAUD_CASE",
+                "outcome": "PROPOSED",
+                "proposal_ref": "proposal_2",
+                "elapsed_ms": 130,
+            },
+            {
+                "type": "SESSION_ENDED",
+                "outcome": "NORMAL_DISCONNECT",
+                "elapsed_ms": 200,
+            },
+        ]
+    )
+    result = evaluate_trajectory(
+        events,
+        TrajectoryExpectation(
+            required_tools={
+                "get_open_fraud_alert": 1,
+                "propose_fraud_triage": 1,
+                "decide_action_proposal": 1,
+            },
+            forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
+            required_proposal_outcomes=(
+                "PRESENTED",
+                "INVALIDATED",
+                "PROPOSED",
+            ),
+        ),
+    )
+
+    assert result.passed is True
 
 
 @pytest.mark.parametrize("terminal_outcome", ["EXPIRED", "INVALIDATED"])
