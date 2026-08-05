@@ -362,6 +362,14 @@ function AppContent() {
   }, [fbUser, location.pathname, fetchAccountsSummary]);
 
   useEffect(() => {
+    const handleRefreshAccounts = () => {
+      fetchAccountsSummary();
+    };
+    window.addEventListener('refresh-accounts', handleRefreshAccounts);
+    return () => window.removeEventListener('refresh-accounts', handleRefreshAccounts);
+  }, [fetchAccountsSummary]);
+
+  useEffect(() => {
     const isSupportMessageForCurrentUser = (data = {}) => {
       const notificationUserId = data.user_id;
       const currentUserId = customerProfile?.user_id || fbUser?.uid;
