@@ -377,30 +377,32 @@ def test_ces_closeout_uses_typed_offer_and_later_turn_ordering():
 
 def test_ces_native_end_session_accepts_later_input_without_invocation_id():
     callback = _load("before_tool_callbacks/enforce_closeout.py")
-    variables = {}
+    variables = {"customer_turn_id": "action-confirmation-turn"}
     assert (
         callback.before_tool_callback(
             SimpleNamespace(name="banking_service_mcp_toolset.offer_session_closeout"),
             {},
             Context(
-                invocation_id="offer-turn",
+                invocation_id="",
                 variables=variables,
-                user_text="The action is confirmed.",
+                user_text=None,
             ),
         )
         is None
     )
 
-    same_turn = callback.before_tool_callback(
+    continuation_without_customer_input = callback.before_tool_callback(
         SimpleNamespace(name="end_session"),
         {},
         Context(
             invocation_id="",
             variables=variables,
-            user_text="The action is confirmed.",
+            user_text=None,
         ),
     )
-    assert same_turn["error"] == "CLOSEOUT_CHECKPOINT_REQUIRED"
+    assert continuation_without_customer_input["error"] == (
+        "CLOSEOUT_CHECKPOINT_REQUIRED"
+    )
 
     later_turn = callback.before_tool_callback(
         SimpleNamespace(name="end_session"),
@@ -413,6 +415,7 @@ def test_ces_native_end_session_accepts_later_input_without_invocation_id():
     )
     assert later_turn is None
     assert variables["closeout_checkpoint_state"] == "ENDING"
+    assert variables["closeout_originating_turn_id"] == "action-confirmation-turn"
 
 
 def test_ces_non_closeout_tool_consumes_open_closeout_checkpoint():

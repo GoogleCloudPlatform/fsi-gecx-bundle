@@ -40,15 +40,11 @@ def before_tool_callback(tool, input, callback_context):
                 "message": "Resolve the current proposal before offering closeout.",
             }
         input_fingerprint = _customer_input_fingerprint(callback_context)
-        if not input_fingerprint:
-            return {
-                "success": False,
-                "error": "CUSTOMER_TURN_REQUIRED",
-                "message": "A customer turn is required before offering closeout.",
-            }
-        callback_context.variables["customer_turn_id"] = invocation_id
+        originating_turn = str(
+            callback_context.variables.get("customer_turn_id") or invocation_id
+        )
         callback_context.variables["closeout_checkpoint_state"] = "OFFERED"
-        callback_context.variables["closeout_originating_turn_id"] = invocation_id
+        callback_context.variables["closeout_originating_turn_id"] = originating_turn
         callback_context.variables["closeout_originating_input_fingerprint"] = (
             input_fingerprint
         )
@@ -72,10 +68,15 @@ def before_tool_callback(tool, input, callback_context):
     distinct_customer_input = bool(
         current_input and originating_input and current_input != originating_input
     )
+    customer_input_arrived_after_offer = bool(current_input and not originating_input)
     if (
         checkpoint_state != "OFFERED"
         or not current_input
-        or not (distinct_callback_turn or distinct_customer_input)
+        or not (
+            distinct_callback_turn
+            or distinct_customer_input
+            or customer_input_arrived_after_offer
+        )
     ):
         return {
             "success": False,
