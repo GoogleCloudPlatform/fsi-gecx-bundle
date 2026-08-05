@@ -47,7 +47,7 @@ dependencies = [
     "google-cloud-discoveryengine>=0.13.12",
     "google-cloud-dataplex>=2.20.0",
     "google-cloud-kms>=3.2.0",
-    "cryptography>=48.0.1",
+    "cryptography>=50.0.0",
     "redis>=8.0.1",
     "google-cloud-monitoring>=2.31.0",
 ]
