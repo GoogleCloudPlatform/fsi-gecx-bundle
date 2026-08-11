@@ -35,7 +35,6 @@ logger = logging.getLogger(__name__)
 # Keyed by user_id
 active_sessions: Dict[str, asyncio.Queue] = {}
 
-CLOSEOUT_FAREWELL_READY = "CLOSEOUT_FAREWELL_READY"
 CLOSEOUT_FAREWELL_COMPLETE = "CLOSEOUT_FAREWELL_COMPLETE"
 CLOSEOUT_PLAYOUT_COMPLETE = "CLOSEOUT_PLAYOUT_COMPLETE"
 CLOSEOUT_PLAYOUT_EVENT = "sys.closeout_playout_complete"
@@ -72,6 +71,25 @@ def _pcm_peak(chunk: bytes) -> int:
     if not chunk or len(chunk) % 2:
         return 0
     return max((abs(sample) for sample in memoryview(chunk).cast("h")), default=0)
+
+
+def _diagnostic_has_agent(diagnostic_info: object, display_name: str) -> bool:
+    """Match callback-owned agent identity in CES structural diagnostics."""
+    if not isinstance(diagnostic_info, dict):
+        return False
+    root_span = diagnostic_info.get("rootSpan") or diagnostic_info.get("root_span")
+    if not isinstance(root_span, dict):
+        return False
+    spans = [root_span]
+    while spans:
+        span = spans.pop()
+        attributes = span.get("attributes")
+        if isinstance(attributes, dict) and attributes.get("agent") == display_name:
+            return True
+        children = span.get("childSpans") or span.get("child_spans") or []
+        if isinstance(children, list):
+            spans.extend(child for child in children if isinstance(child, dict))
+    return False
 
 
 async def send_session_event(session_key: str, event_payload: dict):
@@ -447,18 +465,19 @@ class VoiceBidiSession:
                 agent_transcript = ""
                 agent_transcript_id = None
                 agent_transcript_sequence = 0
-                closeout_ready_payload_seen = False
+                closeout_agent_turn_seen = False
                 try:
                     async for message in gecx_ws:
                         response = json.loads(message)
                         session_output = response.get("sessionOutput", {})
                         if session_output:
-                            payload = session_output.get("payload")
-                            if (
-                                isinstance(payload, dict)
-                                and payload.get("type") == CLOSEOUT_FAREWELL_READY
+                            diagnostic_info = session_output.get(
+                                "diagnosticInfo"
+                            ) or session_output.get("diagnostic_info")
+                            if _diagnostic_has_agent(
+                                diagnostic_info, "Session Closeout Agent"
                             ):
-                                closeout_ready_payload_seen = True
+                                closeout_agent_turn_seen = True
                             b64_audio = session_output.get("audio", "")
                             if b64_audio:
                                 received_at = time.monotonic()
@@ -509,8 +528,8 @@ class VoiceBidiSession:
                                 transport_stats["completed_turns"] += 1
                                 agent_transcript = ""
                                 agent_transcript_id = None
-                                if closeout_ready_payload_seen:
-                                    closeout_ready_payload_seen = False
+                                if closeout_agent_turn_seen:
+                                    closeout_agent_turn_seen = False
                                     closeout_farewell_complete.set()
                                     await self.gecx_to_client_queue.put(
                                         {"type": CLOSEOUT_FAREWELL_COMPLETE}

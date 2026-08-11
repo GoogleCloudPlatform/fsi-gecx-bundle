@@ -5,11 +5,6 @@
 
 """Mark a complete farewell turn without terminating its audio stream."""
 
-import json
-
-
-_READY_PAYLOAD = {"type": "CLOSEOUT_FAREWELL_READY"}
-
 
 def _is_end_session_call(part) -> bool:
     has_function_call = getattr(part, "has_function_call", None)
@@ -45,10 +40,8 @@ def after_model_callback(callback_context, llm_response):
     variables["closeout_checkpoint_state"] = "FAREWELL_READY"
     variables["closeout_farewell_ready"] = True
     variables["closeout_playout_acknowledged"] = False
-    retained_parts.append(  # noqa: F821
-        Part.from_json(data=json.dumps(_READY_PAYLOAD))  # noqa: F821
-    )
     # Mutate rather than replace the streamed response so CES does not replay
-    # native Gemini Live audio through a second TTS path.
+    # native Gemini Live audio through a second TTS path. The proxy identifies
+    # this turn from CES diagnostic agent metadata at turn completion.
     parts[:] = retained_parts
     return None

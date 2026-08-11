@@ -15,7 +15,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -797,8 +796,8 @@ def test_voice_bundle_isolates_native_session_end_in_closeout_agent():
                 "after_model_callbacks/mark_farewell_ready.py"
             ),
             "description": (
-                "Preserve farewell speech, suppress premature termination, "
-                "and emit a structured playout marker."
+                "Preserve farewell speech and suppress premature termination "
+                "before playout acknowledgment."
             ),
         }
     ]
@@ -933,16 +932,11 @@ def test_closeout_farewell_callback_suppresses_terminal_call_and_marks_ready():
     )
 
     class FakePart:
-        def __init__(self, *, text=None, function_name=None, payload=None):
+        def __init__(self, *, text=None, function_name=None):
             self.text = text
-            self.payload = payload
             self.function_call = (
                 SimpleNamespace(name=function_name) if function_name else None
             )
-
-        @classmethod
-        def from_json(cls, *, data):
-            return cls(payload=data)
 
         def has_function_call(self, name):
             return bool(self.function_call and self.function_call.name == name)
@@ -965,11 +959,8 @@ def test_closeout_farewell_callback_suppresses_terminal_call_and_marks_ready():
     assert callback.after_model_callback(
         SimpleNamespace(variables=variables), response
     ) is None
-    assert len(response.content.parts) == 2
+    assert len(response.content.parts) == 1
     assert response.content.parts[0].text == "You're very welcome. Goodbye."
-    assert json.loads(response.content.parts[1].payload) == {
-        "type": "CLOSEOUT_FAREWELL_READY"
-    }
     assert variables["closeout_checkpoint_state"] == "FAREWELL_READY"
     assert variables["closeout_farewell_ready"] is True
     assert variables["closeout_playout_acknowledged"] is False

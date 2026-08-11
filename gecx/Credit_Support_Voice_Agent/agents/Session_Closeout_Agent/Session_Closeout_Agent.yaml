@@ -19,4 +19,4 @@ beforeModelCallbacks:
   description: End an authorized session only after the client acknowledges farewell playout.
 afterModelCallbacks:
 - pythonCode: agents/Session_Closeout_Agent/after_model_callbacks/mark_farewell_ready.py
-  description: Preserve farewell speech, suppress premature termination, and emit a structured playout marker.
+  description: Preserve farewell speech and suppress premature termination before playout acknowledgment.

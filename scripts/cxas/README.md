@@ -80,8 +80,10 @@ For audio simulations, the harness enables SCRAPI's simulated-playback wait,
 sends `sys.closeout_playout_complete` as a separate event, and retrieves the
 completed CES conversation trace. This prevents `end_session` from competing
 with farewell generation and catches transcript-complete responses whose audio
-is implausibly short. SCRAPI proves provider-side generation and ordering; the
-banking UI tests cover the separate browser playout acknowledgment.
+is implausibly short. The voice proxy uses CES diagnostic agent identity—not
+transcript text—to recognize the completed closeout turn. SCRAPI proves
+provider-side generation and ordering; the banking UI tests cover the separate
+browser playout acknowledgment.
 
 Useful overrides:
 

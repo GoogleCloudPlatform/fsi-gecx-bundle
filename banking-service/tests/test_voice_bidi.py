@@ -24,6 +24,7 @@ from services.ces_session_bootstrap import CesSessionBootstrap
 from services.voice_bidi import (
     _configured_noise_suppression_level,
     _configured_session_timeout_seconds,
+    _diagnostic_has_agent,
     _pcm_peak,
 )
 
@@ -34,6 +35,23 @@ def test_pcm_peak_reports_signal_without_recording_audio():
     assert _pcm_peak(bytes(8)) == 0
     assert _pcm_peak((1024).to_bytes(2, "little", signed=True) + bytes(2)) == 1024
     assert _pcm_peak(b"odd") == 0
+
+
+def test_structural_diagnostics_identify_closeout_agent_without_transcript():
+    diagnostic = {
+        "rootSpan": {
+            "attributes": {},
+            "childSpans": [
+                {
+                    "attributes": {"agent": "Session Closeout Agent"},
+                    "childSpans": [],
+                }
+            ],
+        }
+    }
+
+    assert _diagnostic_has_agent(diagnostic, "Session Closeout Agent") is True
+    assert _diagnostic_has_agent(diagnostic, "Credit Card Support Agent") is False
 
 
 def test_ces_noise_suppression_level_is_validated(monkeypatch):
@@ -124,7 +142,17 @@ def test_gecx_voice_stream_success(
             {
                 "sessionOutput": {
                     "text": " Financial support.",
-                    "payload": {"type": "CLOSEOUT_FAREWELL_READY"},
+                    "diagnosticInfo": {
+                        "rootSpan": {
+                            "childSpans": [
+                                {
+                                    "attributes": {
+                                        "agent": "Session Closeout Agent"
+                                    }
+                                }
+                            ]
+                        }
+                    },
                     "turnCompleted": True,
                 }
             }
