@@ -159,8 +159,10 @@ and fake tools to exercise the current Agent Studio draft without a manual
 microphone session. Set `SCRAPI_DEPLOYMENT_ID` to evaluate an immutable deployed
 version instead, or set `SCRAPI_SCENARIO=credit-limit` to run the broader
 credit-limit workflow before closeout. Reports default to
-`/tmp/cxas-scrapi-closeout.json` and include transcripts, so they are local
-diagnostic artifacts rather than retainable qualification evidence.
+`scripts/cxas/.artifacts/closeout.json` and include transcripts. The artifact
+directory is explicitly ignored and can be removed with
+`make clean-cxas-scrapi`, so these reports remain local diagnostics rather than
+retainable qualification evidence.
 
 SCRAPI judges natural-language expectations and applies focused deterministic
 checks for a farewell before `end_session`, the terminal reason, no return to

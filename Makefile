@@ -38,9 +38,10 @@ GCP_ACCOUNT_ENCODED = $(subst @,%40,$(GCP_ACCOUNT))
 GECX_APP_ID ?= $(shell grep -E '^[[:space:]]*cx_agent_studio_voice_agent_deployment_name[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]' || echo "")
 GECX_LOCATION ?= $(shell gecx_loc=$$(grep -E '^[[:space:]]*gecx_location[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]'); echo $${gecx_loc:-us})
 SCRAPI_VENV ?= scripts/cxas/.venv
+SCRAPI_ARTIFACT_DIR := scripts/cxas/.artifacts
 SCRAPI_SCENARIO ?= checkpoint
 SCRAPI_MODALITY ?= audio
-SCRAPI_OUTPUT ?= /tmp/cxas-scrapi-closeout.json
+SCRAPI_OUTPUT ?= $(SCRAPI_ARTIFACT_DIR)/closeout.json
 SCRAPI_DEPLOYMENT_ID ?=
 VOICE_AGENT_AUDIO_MODEL ?= publishers/google/models/gemini-live-2.5-flash-native-audio
 VOICE_AGENT_VIDEO_MODEL ?= publishers/google/models/gemini-3.1-flash-live-preview-04-2026
@@ -393,6 +394,10 @@ setup-cxas-scrapi: ## Install the pinned SCRAPI evaluator in an isolated local e
 		uv venv --python 3.12 "$(SCRAPI_VENV)"; \
 	fi
 	uv pip install --python $(SCRAPI_VENV)/bin/python -r scripts/cxas/requirements-scrapi.txt
+
+.PHONY: clean-cxas-scrapi
+clean-cxas-scrapi: ## Remove ignored local SCRAPI reports, transcripts, and traces
+	python3 scripts/cxas/cleanup_scrapi_artifacts.py
 
 .PHONY: test-cxas-closeout
 test-cxas-closeout: ## Exercise the CES closeout contract through a real SCRAPI session (draft by default)

@@ -41,6 +41,17 @@ gcloud auth application-default set-quota-project PROJECT_ID
 Re-running the setup target is safe. Override `SCRAPI_VENV` if the default
 `scripts/cxas/.venv` path is unsuitable.
 
+Local reports are written beneath the explicitly ignored
+`scripts/cxas/.artifacts/` directory. Remove all reports, transcripts, and
+traces in that dedicated directory with:
+
+```bash
+make clean-cxas-scrapi
+```
+
+The cleanup command does not remove the SCRAPI virtual environment or files
+outside that fixed artifact directory.
+
 ## Closeout simulation
 
 The default command evaluates the current Agent Studio draft through a single
@@ -81,7 +92,7 @@ make test-cxas-closeout \
   PROJECT_ID=PROJECT_ID \
   GECX_APP_ID=APP_ID \
   SCRAPI_MODALITY=text \
-  SCRAPI_OUTPUT=/tmp/cxas-closeout.json
+  SCRAPI_OUTPUT=scripts/cxas/.artifacts/text-closeout.json
 ```
 
 Supported scenarios are `checkpoint` and `credit-limit`; supported modalities
@@ -92,9 +103,11 @@ terminal tool call.
 ## Reports and data handling
 
 SCRAPI reports are local diagnostics and include a transcript and detailed
-trace. The Make target writes `/tmp/cxas-scrapi-closeout.json` by default. Do
-not commit these reports or treat them as sanitized qualification artifacts.
-Use `ces_voice_qualification.py` when retainable, bounded evidence is required.
+trace. The Make target writes `scripts/cxas/.artifacts/closeout.json` by default,
+and `.gitignore` excludes the entire artifact directory. Keep custom output
+paths inside that directory, and do not treat the reports as sanitized
+qualification artifacts. Use `ces_voice_qualification.py` when retainable,
+bounded evidence is required.
 
 ## Linting boundary
 
