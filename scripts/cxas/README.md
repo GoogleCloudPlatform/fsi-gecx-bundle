@@ -68,9 +68,20 @@ make test-cxas-closeout \
 The focused contract requires:
 
 1. A short spoken farewell after the final customer turn.
-2. `end_session(reason="customer_query_ended")` after the farewell.
-3. No transfer back to the credit-card support agent.
-4. No speech after `end_session`.
+2. A distinct playout-complete event after the farewell turn.
+3. `end_session(reason="customer_query_ended")` only after that event.
+4. No transfer back to the credit-card support agent.
+5. No speech after `end_session`.
+6. CES telemetry shows enough generated closeout audio to plausibly contain the
+   full farewell. The conservative lower bound is 175 milliseconds per spoken
+   word, with a 500 millisecond floor.
+
+For audio simulations, the harness enables SCRAPI's simulated-playback wait,
+sends `sys.closeout_playout_complete` as a separate event, and retrieves the
+completed CES conversation trace. This prevents `end_session` from competing
+with farewell generation and catches transcript-complete responses whose audio
+is implausibly short. SCRAPI proves provider-side generation and ordering; the
+banking UI tests cover the separate browser playout acknowledgment.
 
 Useful overrides:
 
@@ -120,8 +131,9 @@ focused contract tests before changing production behavior.
 
 Do not respond to generic LLM-lint hardening suggestions by expanding a
 single-purpose agent's scope. For the session closeout agent, the relevant
-contract is deliberately narrow: speak one farewell, call `end_session`, and
-do nothing else.
+contract is deliberately narrow: speak one farewell, wait for the trusted
+playout-complete event, call `end_session` without more speech, and do nothing
+else.
 
 ## Related evaluation layers
 

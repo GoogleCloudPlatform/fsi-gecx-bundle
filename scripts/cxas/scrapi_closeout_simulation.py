@@ -5,11 +5,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import time
 import uuid
 from pathlib import Path
 from typing import Any
 
+from cxas_scrapi.core.conversation_history import ConversationHistory
 from cxas_scrapi.evals.simulation_evals import SimulationEvals
+from cxas_scrapi.utils.latency_parser import LatencyParser
+
+
+CLOSEOUT_AGENT_NAME = "Session Closeout Agent"
+MIN_AUDIO_MS_PER_WORD = 175
+MIN_AUDIO_FLOOR_MS = 500
+TELEMETRY_FETCH_ATTEMPTS = 5
+TELEMETRY_FETCH_DELAY_SECONDS = 1.0
 
 
 def _expectations() -> list[str]:
@@ -21,7 +32,7 @@ def _expectations() -> list[str]:
         ),
         (
             "The agent calls end_session with reason "
-            "customer_query_ended after the farewell."
+            "customer_query_ended only after the playout-complete event."
         ),
         (
             "The Session Closeout Agent does not transfer control back "
@@ -63,6 +74,14 @@ def _credit_limit_test_case() -> dict[str, Any]:
                 ),
                 "max_turns": 1,
             },
+            {
+                "goal": "Acknowledge that the farewell finished playing.",
+                "success_criteria": (
+                    "The session ends without additional agent speech."
+                ),
+                "static_utterance": "event: sys.closeout_playout_complete",
+                "max_turns": 1,
+            },
         ],
         "expectations": _expectations(),
     }
@@ -82,14 +101,22 @@ def _checkpoint_test_case() -> dict[str, Any]:
         },
         "steps": [
             {
-                "goal": "End an authorized consultation closeout.",
+                "goal": "Generate an authorized consultation farewell.",
                 "success_criteria": (
-                    "The closeout agent speaks one short farewell and then "
-                    "ends the session."
+                    "The closeout agent speaks one short farewell without "
+                    "ending the session in the same turn."
                 ),
                 "static_utterance": "No, that's all.",
                 "max_turns": 1,
-            }
+            },
+            {
+                "goal": "Acknowledge that the farewell finished playing.",
+                "success_criteria": (
+                    "The session ends without additional agent speech."
+                ),
+                "static_utterance": "event: sys.closeout_playout_complete",
+                "max_turns": 1,
+            },
         ],
         "expectations": _expectations(),
     }
@@ -128,6 +155,11 @@ def _strict_closeout_checks(trace_chunks: list[str]) -> dict[str, Any]:
         for index, line in enumerate(tail)
         if "Tool Call" in line and "end_session" in line
     ]
+    playout_event_indexes = [
+        index
+        for index, line in enumerate(tail)
+        if "sys.closeout_playout_complete" in line
+    ]
 
     farewell_before_end = bool(
         farewell_indexes
@@ -140,6 +172,11 @@ def _strict_closeout_checks(trace_chunks: list[str]) -> dict[str, Any]:
     correct_reason = any(
         "customer_query_ended" in tail[index] for index in end_indexes
     )
+    end_after_playout = bool(
+        playout_event_indexes
+        and end_indexes
+        and playout_event_indexes[0] < end_indexes[0]
+    )
     checks = {
         "final_customer_turn_observed": final_user_index >= 0,
         "closeout_transfer_observed": bool(closeout_transfer_indexes),
@@ -147,6 +184,8 @@ def _strict_closeout_checks(trace_chunks: list[str]) -> dict[str, Any]:
         "end_session_observed": bool(end_indexes),
         "farewell_before_end_session": farewell_before_end,
         "end_session_reason_correct": correct_reason,
+        "playout_event_observed": bool(playout_event_indexes),
+        "end_session_after_playout_event": end_after_playout,
         "no_return_to_support_agent": not support_return_indexes,
         "no_speech_after_end_session": no_speech_after_end,
     }
@@ -155,6 +194,90 @@ def _strict_closeout_checks(trace_chunks: list[str]) -> dict[str, Any]:
         "checks": checks,
         "terminal_trace": tail,
     }
+
+
+def _farewell_text(terminal_trace: list[str]) -> str:
+    for line in terminal_trace:
+        if line.startswith("Agent Text"):
+            _, separator, text = line.partition(":")
+            return (
+                text.strip()
+                if separator
+                else line.removeprefix("Agent Text").strip()
+            )
+    return ""
+
+
+def _audio_completeness(
+    *,
+    modality: str,
+    farewell_text: str,
+    llm_records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if modality != "audio":
+        return {
+            "passed": True,
+            "applicable": False,
+            "reason": "Audio completeness is not applicable to text transport.",
+        }
+
+    closeout_records = [
+        record
+        for record in llm_records
+        if record.get("agent") == CLOSEOUT_AGENT_NAME
+    ]
+    audio_durations = [
+        float(record.get("audio_duration_ms") or 0)
+        for record in closeout_records
+    ]
+    observed_audio_ms = max(audio_durations, default=0.0)
+    word_count = len(re.findall(r"\b[\w']+\b", farewell_text))
+    required_audio_ms = max(
+        MIN_AUDIO_FLOOR_MS,
+        word_count * MIN_AUDIO_MS_PER_WORD,
+    )
+    telemetry_observed = bool(closeout_records)
+    passed = bool(farewell_text) and telemetry_observed and (
+        observed_audio_ms >= required_audio_ms
+    )
+    return {
+        "passed": passed,
+        "applicable": True,
+        "agent": CLOSEOUT_AGENT_NAME,
+        "farewell_text": farewell_text,
+        "farewell_word_count": word_count,
+        "observed_audio_ms": observed_audio_ms,
+        "required_audio_ms": required_audio_ms,
+        "telemetry_observed": telemetry_observed,
+        "llm_spans": closeout_records,
+    }
+
+
+def _fetch_llm_records(*, app_name: str, session_id: str) -> list[dict[str, Any]]:
+    history = ConversationHistory(app_name=app_name)
+    last_error: Exception | None = None
+    for attempt in range(TELEMETRY_FETCH_ATTEMPTS):
+        try:
+            conversation = history.get_conversation(session_id)
+            metrics = LatencyParser.extract_trace_metrics(
+                {session_id: conversation}
+            )
+            records = _records(metrics["llm_details"])
+            if any(
+                record.get("agent") == CLOSEOUT_AGENT_NAME
+                for record in records
+            ):
+                return records
+        # CES conversation history becomes complete shortly after termination.
+        except Exception as error:
+            last_error = error
+        if attempt + 1 < TELEMETRY_FETCH_ATTEMPTS:
+            time.sleep(TELEMETRY_FETCH_DELAY_SECONDS)
+    if last_error is not None:
+        raise RuntimeError(
+            f"Unable to fetch CES telemetry for session {session_id}"
+        ) from last_error
+    return []
 
 
 def _records(dataframe: Any) -> list[dict[str, Any]]:
@@ -206,7 +329,7 @@ def main() -> int:
         modality=args.modality,
         use_tool_fakes=True,
         single_bidi_stream=args.modality == "audio",
-        skip_playback_wait=True,
+        skip_playback_wait=False,
         sim_user_model="gemini-3.1-flash-lite",
         eval_model="gemini-3.1-flash-lite",
         initial_utterance=(
@@ -217,6 +340,23 @@ def main() -> int:
     )
     report = conversation.generate_report()
     strict = _strict_closeout_checks(conversation.detailed_trace)
+    telemetry_error = None
+    llm_records = []
+    if args.modality == "audio":
+        try:
+            llm_records = _fetch_llm_records(
+                app_name=args.app,
+                session_id=session_id,
+            )
+        except RuntimeError as error:
+            telemetry_error = str(error)
+    audio_completeness = _audio_completeness(
+        modality=args.modality,
+        farewell_text=_farewell_text(strict["terminal_trace"]),
+        llm_records=llm_records,
+    )
+    if telemetry_error is not None:
+        audio_completeness["telemetry_error"] = telemetry_error
     expectations = _records(report.expectations_df)
     judged_pass = bool(expectations) and all(
         item.get("status") == "Met" for item in expectations
@@ -231,8 +371,13 @@ def main() -> int:
         "single_bidi_stream": args.modality == "audio",
         "tool_fakes": True,
         "session_id": session_id,
-        "passed": strict["passed"] and judged_pass,
+        "passed": (
+            strict["passed"]
+            and judged_pass
+            and audio_completeness["passed"]
+        ),
         "strict_closeout": strict,
+        "audio_completeness": audio_completeness,
         "goals": _records(report.goals_df),
         "expectations": expectations,
         "transcript": conversation.get_transcript().splitlines(),
@@ -244,6 +389,7 @@ def main() -> int:
         "output": str(args.output),
         "passed": result["passed"],
         "strict_closeout": strict,
+        "audio_completeness": audio_completeness,
         "expectations": expectations,
     }, indent=2))
     return 0 if result["passed"] else 1

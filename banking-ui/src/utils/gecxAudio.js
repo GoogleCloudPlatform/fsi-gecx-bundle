@@ -32,3 +32,16 @@ export function remainingPlayoutSeconds(currentTime, nextPlayoutTime, activeSour
   if (activeSourceCount <= 0) return 0;
   return Math.max(0, nextPlayoutTime - currentTime);
 }
+
+export function closeoutPlayoutAcknowledgementDelayMs(
+  currentTime,
+  nextPlayoutTime,
+  activeSourceCount,
+) {
+  const remainingSeconds = remainingPlayoutSeconds(
+    currentTime,
+    nextPlayoutTime,
+    activeSourceCount,
+  );
+  return Math.ceil((remainingSeconds + 0.1) * 1000);
+}

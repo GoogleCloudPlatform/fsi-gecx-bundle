@@ -165,12 +165,19 @@ directory is explicitly ignored and can be removed with
 retainable qualification evidence.
 
 SCRAPI judges natural-language expectations and applies focused deterministic
-checks for a farewell before `end_session`, the terminal reason, no return to
-the support agent, and no speech after termination. Its flattened detailed
-trace does not preserve enough role information to replace the repository's
-managed CES role/event checker. The existing managed qualification therefore
-remains authoritative for exact response-role and event-order assertions;
-SCRAPI adds repeatable full-agent and Gemini Live coverage.
+checks for a farewell, a later playout-complete event before `end_session`, the
+terminal reason, no return to the support agent, and no speech after
+termination. For audio runs it also
+reads the completed CES conversation telemetry and rejects closeouts whose
+generated-audio duration is too short to plausibly contain the farewell. This
+detects transcript-complete responses truncated by terminal-tool execution.
+SCRAPI simulates the acknowledgment after provider playback; browser tests
+separately verify the real AudioContext drain calculation. Its
+flattened detailed trace does not preserve enough role information to replace
+the repository's managed CES role/event checker. The existing managed
+qualification therefore remains authoritative for exact response-role and
+event-order assertions; SCRAPI adds repeatable full-agent and Gemini Live
+coverage.
 
 `cxas lint` and `cxas llm-lint` are advisory during this integration. The
 current exported YAML bundle produces compatibility false positives when read

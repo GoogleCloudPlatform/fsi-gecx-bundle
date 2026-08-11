@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import json
 import pytest
 from types import SimpleNamespace
@@ -107,21 +108,36 @@ def test_gecx_voice_stream_success(
 
     # 2. Setup GECX Mock server WebSocket connection instance
     mock_gecx_ws = AsyncMock()
-    # Mock the GECX response: Yield a single transcript json frame, then exit loop
-    mock_gecx_ws.__aiter__.return_value = [
-        json.dumps({"sessionOutput": {"text": "Welcome to Horizon"}}),
-        json.dumps(
+    closeout_event_received = asyncio.Event()
+
+    async def record_gecx_send(message):
+        payload = json.loads(message)
+        if (
+            payload.get("realtimeInput", {}).get("event", {}).get("event")
+            == "sys.closeout_playout_complete"
+        ):
+            closeout_event_received.set()
+
+    async def gecx_responses():
+        yield json.dumps({"sessionOutput": {"text": "Welcome to Horizon"}})
+        yield json.dumps(
             {
                 "sessionOutput": {
                     "text": " Financial support.",
+                    "payload": {"type": "CLOSEOUT_FAREWELL_READY"},
                     "turnCompleted": True,
                 }
             }
-        ),
-        json.dumps({"recognitionResult": {"transcript": "Hello are you there?"}}),
-        json.dumps({"interruptionSignal": {"bargeIn": True}}),
-        json.dumps({"endSession": {}}),
-    ]
+        )
+        await asyncio.wait_for(closeout_event_received.wait(), timeout=1)
+        yield json.dumps(
+            {"recognitionResult": {"transcript": "Hello are you there?"}}
+        )
+        yield json.dumps({"interruptionSignal": {"bargeIn": True}})
+        yield json.dumps({"endSession": {}})
+
+    mock_gecx_ws.send.side_effect = record_gecx_send
+    mock_gecx_ws.__aiter__.side_effect = gecx_responses
     mock_ws_connect.return_value.__aenter__.return_value = mock_gecx_ws
 
     # 3. Trigger WebSocket connection using FastAPI TestClient
@@ -158,6 +174,10 @@ def test_gecx_voice_stream_success(
             "transcript_id": response["transcript_id"],
             "replace_previous": True,
         }
+
+        closeout_response = websocket.receive_json()
+        assert closeout_response == {"type": "CLOSEOUT_FAREWELL_COMPLETE"}
+        websocket.send_text(json.dumps({"type": "CLOSEOUT_PLAYOUT_COMPLETE"}))
 
         recognition_response = websocket.receive_json()
         assert recognition_response == {
@@ -215,6 +235,16 @@ def test_gecx_voice_stream_success(
         assert welcome_msg is not None
         assert welcome_msg["realtimeInput"]["event"]["event"] == "sys.welcome"
         assert sent_messages.index(variables_msg) < sent_messages.index(welcome_msg)
+        closeout_event = next(
+            (
+                msg
+                for msg in sent_messages
+                if msg.get("realtimeInput", {}).get("event", {}).get("event")
+                == "sys.closeout_playout_complete"
+            ),
+            None,
+        )
+        assert closeout_event is not None
 
     runtime_session_id = mock_build_bootstrap.call_args.kwargs["runtime_session_id"]
     assert runtime_session_id.startswith("ces-")

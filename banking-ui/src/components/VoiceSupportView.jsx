@@ -50,6 +50,7 @@ import { DataChannelEvent } from '../utils/constants.js';
 import { encodeTypedCustomerTurn, resolveTypedDelivery } from '../utils/voiceTypedInput.js';
 import { formatVoiceLedgerAmount } from '../utils/voiceLedger.js';
 import {
+  closeoutPlayoutAcknowledgementDelayMs,
   connectSilentPcmSink,
   pcmFrameForMicrophoneState,
   remainingPlayoutSeconds,
@@ -464,6 +465,8 @@ export default function VoiceSupportView() {
   const gecxOutputSampleRateRef = useRef(null);
   const pendingGecxAudioRef = useRef([]);
   const playoutDrainTimerRef = useRef(null);
+  const closeoutPlayoutTimerRef = useRef(null);
+  const gecxCloseoutPendingRef = useRef(false);
   const volumeRef = useRef(0.8);
   const micEnabledRef = useRef(true);
   const pingIntervalRef = useRef(null);
@@ -571,6 +574,11 @@ export default function VoiceSupportView() {
       clearTimeout(playoutDrainTimerRef.current);
       playoutDrainTimerRef.current = null;
     }
+    if (closeoutPlayoutTimerRef.current) {
+      clearTimeout(closeoutPlayoutTimerRef.current);
+      closeoutPlayoutTimerRef.current = null;
+    }
+    gecxCloseoutPendingRef.current = false;
     if (pingIntervalRef.current) {
       clearInterval(pingIntervalRef.current);
       pingIntervalRef.current = null;
@@ -1080,6 +1088,28 @@ export default function VoiceSupportView() {
     nextPlayoutTimeRef.current = playTime + audioBuffer.duration;
   };
 
+  const acknowledgeCloseoutAfterPlayout = useCallback(() => {
+    if (gecxCloseoutPendingRef.current) return;
+    gecxCloseoutPendingRef.current = true;
+    const audioCtx = audioContextRef.current;
+    const delayMs = audioCtx
+      ? closeoutPlayoutAcknowledgementDelayMs(
+          audioCtx.currentTime,
+          nextPlayoutTimeRef.current,
+          activeSourcesRef.current.length,
+        )
+      : 100;
+    closeoutPlayoutTimerRef.current = setTimeout(() => {
+      closeoutPlayoutTimerRef.current = null;
+      const ws = wsRef.current;
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: DataChannelEvent.CLOSEOUT_PLAYOUT_COMPLETE,
+        }));
+      }
+    }, delayMs);
+  }, []);
+
   const handleGecxControlMessage = useCallback((payload) => {
     if (handleOperationalVoiceEvent(payload)) return;
     if (payload.type === 'TRANSCRIPT') {
@@ -1116,10 +1146,17 @@ export default function VoiceSupportView() {
       stopPlayoutQueue();
     } else if (payload.type === 'ERROR') {
       setErrorMessage(payload.message);
+    } else if (payload.type === DataChannelEvent.CLOSEOUT_FAREWELL_COMPLETE) {
+      acknowledgeCloseoutAfterPlayout();
     } else if (payload.type === DataChannelEvent.SESSION_END) {
       startDisconnectCountdown();
     }
-  }, [handleOperationalVoiceEvent, startDisconnectCountdown, stopPlayoutQueue]);
+  }, [
+    acknowledgeCloseoutAfterPlayout,
+    handleOperationalVoiceEvent,
+    startDisconnectCountdown,
+    stopPlayoutQueue,
+  ]);
 
   const startGecxConsultation = async () => {
     if (isConnecting || isConnected) return;
@@ -1334,7 +1371,10 @@ export default function VoiceSupportView() {
           // CES requires continuous audio, including silence. Muting therefore
           // substitutes a zero-valued frame instead of pausing the stream.
           wsRef.current.send(
-            pcmFrameForMicrophoneState(rawBuffer, micEnabledRef.current)
+            pcmFrameForMicrophoneState(
+              rawBuffer,
+              micEnabledRef.current && !gecxCloseoutPendingRef.current,
+            )
           );
         }
       };
