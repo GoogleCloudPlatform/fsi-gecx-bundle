@@ -37,6 +37,11 @@ GCP_ACCOUNT ?= $(shell ACCOUNT=$$(gcloud config get-value account 2>/dev/null); 
 GCP_ACCOUNT_ENCODED = $(subst @,%40,$(GCP_ACCOUNT))
 GECX_APP_ID ?= $(shell grep -E '^[[:space:]]*cx_agent_studio_voice_agent_deployment_name[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]' || echo "")
 GECX_LOCATION ?= $(shell gecx_loc=$$(grep -E '^[[:space:]]*gecx_location[[:space:]]*=[[:space:]]*' deployment/terraform/$(TF_VARS) 2>/dev/null | cut -d'=' -f2 | tr -d ' "[:space:]'); echo $${gecx_loc:-us})
+SCRAPI_VENV ?= scripts/cxas/.venv
+SCRAPI_SCENARIO ?= checkpoint
+SCRAPI_MODALITY ?= audio
+SCRAPI_OUTPUT ?= /tmp/cxas-scrapi-closeout.json
+SCRAPI_DEPLOYMENT_ID ?=
 VOICE_AGENT_AUDIO_MODEL ?= publishers/google/models/gemini-live-2.5-flash-native-audio
 VOICE_AGENT_VIDEO_MODEL ?= publishers/google/models/gemini-3.1-flash-live-preview-04-2026
 BRANCH ?= $(shell git branch --show-current)
@@ -381,6 +386,30 @@ ifndef AGENT_FOLDER
 endif
 	@echo "Executing overwrite CES agent script for project $(PROJECT_ID), App ID $(APP_ID) and Agent Folder $(AGENT_FOLDER)..."
 	cd scripts/cxas && PROJECT_ID=$(PROJECT_ID) APP_ID=$(APP_ID) AGENT_FOLDER=$(AGENT_FOLDER) bash overwrite_cxas_agent.sh
+
+.PHONY: setup-cxas-scrapi
+setup-cxas-scrapi: ## Install the pinned SCRAPI evaluator in an isolated local environment
+	@if [ ! -x "$(SCRAPI_VENV)/bin/python" ]; then \
+		uv venv --python 3.12 "$(SCRAPI_VENV)"; \
+	fi
+	uv pip install --python $(SCRAPI_VENV)/bin/python -r scripts/cxas/requirements-scrapi.txt
+
+.PHONY: test-cxas-closeout
+test-cxas-closeout: ## Exercise the CES closeout contract through a real SCRAPI session (draft by default)
+	@if [ -z "$(GECX_APP_ID)" ]; then \
+		echo "Error: GECX_APP_ID is required. Set it directly or in the project terraform.tfvars."; \
+		exit 1; \
+	fi
+	@deployment_arg=""; \
+	if [ -n "$(SCRAPI_DEPLOYMENT_ID)" ]; then \
+		deployment_arg="--deployment-id $(SCRAPI_DEPLOYMENT_ID)"; \
+	fi; \
+	$(SCRAPI_VENV)/bin/python scripts/cxas/scrapi_closeout_simulation.py \
+		--app "projects/$(PROJECT_ID)/locations/$(GECX_LOCATION)/apps/$(GECX_APP_ID)" \
+		--scenario "$(SCRAPI_SCENARIO)" \
+		--modality "$(SCRAPI_MODALITY)" \
+		--output "$(SCRAPI_OUTPUT)" \
+		$$deployment_arg
 
 .PHONY: patch-convo-profile
 patch-convo-profile: ## Patch Dialogflow conversational profile to point to a new agent deployment (usage: make patch-convo-profile CONVERSATIONAL_PROFILE_ID=<profile-id> DEPLOYMENT_ID=<deployment-id>)

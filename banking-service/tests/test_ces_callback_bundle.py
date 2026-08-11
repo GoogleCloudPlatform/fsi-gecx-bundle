@@ -773,9 +773,11 @@ def test_voice_bundle_isolates_native_session_end_in_closeout_agent():
     assert "beforeModelCallbacks" not in closeout_agent
     assert "beforeToolCallbacks" not in closeout_agent
     assert "afterModelCallbacks" not in closeout_agent
-    assert "exactly one short, polite, context-neutral farewell" in (
+    assert "verbal spoken text FIRST" in closeout_instruction
+    assert "exactly one short, polite, context-neutral spoken farewell" in (
         closeout_instruction
     )
+    assert "Append the tool call" in closeout_instruction
     assert (
         '{@TOOL: end_session}(reason="customer_query_ended")'
         in closeout_instruction
