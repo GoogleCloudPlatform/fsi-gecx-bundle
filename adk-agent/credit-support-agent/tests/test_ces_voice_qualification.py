@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
+import json
 from pathlib import Path
 
 
@@ -304,12 +305,115 @@ def test_conversational_golden_includes_wallet_recovery_and_close() -> None:
         == "eval-turn-wallet-proposal"
     )
     terminal_steps = golden["turns"][5]["steps"]
-    assert len(terminal_steps) == 2
+    assert len(terminal_steps) == 5
     assert (
-        terminal_steps[1]["expectation"]["toolCall"]["tool"].rsplit("/", 1)[-1]
+        terminal_steps[1]["expectation"]["agentTransfer"]["displayName"]
+        == "Session Closeout Agent"
+    )
+    assert terminal_steps[1]["expectation"]["agentTransfer"]["targetAgent"] == (
+        f"projects/example/locations/us/apps/app/agents/"
+        f"{qualification.SESSION_CLOSEOUT_AGENT_ID}"
+    )
+    assert (
+        terminal_steps[4]["expectation"]["toolCall"]["tool"].rsplit("/", 1)[-1]
         == "end_session"
     )
     assert len(golden["turns"]) == 6
+
+
+def test_closeout_contract_requires_checkpoint_transfer_and_terminal_tool() -> None:
+    app = "projects/example/locations/us/apps/app"
+    golden = qualification._closeout_contract_golden(app)
+    rendered = repr(golden)
+
+    assert len(golden["turns"]) == 4
+    assert "request_credit_limit_increase" in rendered
+    assert "offer_session_closeout" in rendered
+    action_steps = golden["turns"][2]["steps"]
+    action_tools = [
+        step["expectation"]["toolCall"]["toolsetTool"]["toolId"]
+        for step in action_steps
+        if (step.get("expectation") or {}).get("toolCall")
+    ]
+    assert action_tools == [
+        "request_credit_limit_increase",
+        "offer_session_closeout",
+    ]
+    assert action_steps[1]["expectation"]["toolCall"]["args"] == {}
+    checkpoint = action_steps[5]["expectation"]["updatedVariables"]
+    assert checkpoint["closeout_checkpoint_state"] == "OFFERED"
+    assert checkpoint["closeout_delegation_authorized"] is False
+    terminal_steps = golden["turns"][3]["steps"]
+    assert terminal_steps[1]["expectation"]["agentTransfer"]["targetAgent"] == (
+        f"{app}/agents/{qualification.SESSION_CLOSEOUT_AGENT_ID}"
+    )
+    assert terminal_steps[2]["expectation"]["agentTransfer"] == (
+        terminal_steps[1]["expectation"]["agentTransfer"]
+    )
+    assert terminal_steps[3]["expectation"]["agentResponse"]["role"] == (
+        "Session Closeout Agent"
+    )
+    assert terminal_steps[4]["expectation"]["toolCall"]["tool"] == (
+        f"{app}/tools/end_session"
+    )
+    assert terminal_steps[4]["expectation"]["toolCall"]["args"] == {
+        "reason": "customer_query_ended"
+    }
+
+
+def test_full_fraud_golden_clears_wallet_proposal_before_closeout() -> None:
+    app = "projects/example/locations/us/apps/app"
+    reference = json.loads(qualification.DEFAULT_CONVERSATIONAL_REFERENCE.read_text())
+    golden = qualification._conversational_golden(app, reference)
+
+    closeout_state = golden["turns"][4]["steps"][-2]["expectation"][
+        "updatedVariables"
+    ]
+    assert closeout_state["proposal_id"] == ""
+    assert closeout_state["proposal_commit_attempted"] is False
+    assert closeout_state["closeout_checkpoint_state"] == "OFFERED"
+
+
+def test_conversational_quality_counts_just_to_confirm() -> None:
+    reference = json.loads(qualification.DEFAULT_CONVERSATIONAL_REFERENCE.read_text())
+    texts = [
+        (
+            "Hi, I'm Nova with Nova Horizon Bank. Your card ending in 0001 has "
+            "$4.99 at GAME*TEST TOKEN ONLINE, $1,499.00 at APPLE.COM*ONLINE, "
+            "$2,150.00 at BEST BUY*MKTPLACE, $1,250.00 at RAZER GOLD GIFT "
+            "CARD, and $950.00 at TARGET.COM GIFT CARDS."
+        ),
+        (
+            "Just to confirm, dispute $4.99 at GAME*TEST TOKEN ONLINE, "
+            "$1,499.00 at APPLE.COM*ONLINE, $2,150.00 at BEST BUY*MKTPLACE, "
+            "$1,250.00 at RAZER GOLD GIFT CARD, and $950.00 at TARGET.COM "
+            "GIFT CARDS?"
+        ),
+        (
+            "The case was submitted for specialist review. Five pending charges "
+            "were released, the card was blocked, replacement virtual card ending "
+            "in 0002 is active, and a secure message was sent."
+        ),
+    ]
+
+    result = qualification._evaluate_conversational_quality(texts, reference)
+
+    assert result["proposal_confirmation_turns"] == 1
+    assert result["passed"] is True
+
+
+def test_evaluation_fake_tool_supports_credit_limit_contract() -> None:
+    response = fake_tools.fake_tool_call(
+        {"id": "request_credit_limit_increase"},
+        {"requested_limit": 11250},
+        None,
+    )
+
+    assert response == {
+        "success": True,
+        "new_limit": 11250,
+        "message": "Credit limit increase approved.",
+    }
 
 
 def test_managed_evaluation_normalizes_numeric_project_version_parent() -> None:
@@ -329,6 +433,8 @@ def test_managed_contract_uses_reviewed_reference_not_a_live_generated_golden() 
     assert "conversation_name" not in signature.parameters
     assert "generateEvaluation" not in source
     assert "_conversational_golden(app, reference)" in source
+    assert "required_agent_response_role" in signature.parameters
+    assert "required_agent_response_observed" in source
 
 
 def test_ces_commit_callback_binds_opaque_proposal_id_when_model_omits_it() -> None:

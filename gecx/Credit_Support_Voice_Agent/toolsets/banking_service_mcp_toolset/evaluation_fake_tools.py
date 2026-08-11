@@ -37,6 +37,7 @@ def fake_tool_call(tool, input, callback_context):
         "commit_wallet_provisioning",
         "decide_action_proposal",
         "offer_session_closeout",
+        "request_credit_limit_increase",
     )
     tool_id = next(
         (
@@ -200,6 +201,17 @@ def fake_tool_call(tool, input, callback_context):
             "success": True,
             "status": "CLOSEOUT_OFFERED",
             "customer_prompt": "Is there anything else I can help you with?",
+        }
+    elif tool_id == "request_credit_limit_increase":
+        requested_limit = int(
+            (input or {}).get("amount")
+            or (input or {}).get("requested_limit")
+            or 0
+        )
+        output = {
+            "success": requested_limit > 0,
+            "new_limit": requested_limit,
+            "message": "Credit limit increase approved.",
         }
     else:
         return None

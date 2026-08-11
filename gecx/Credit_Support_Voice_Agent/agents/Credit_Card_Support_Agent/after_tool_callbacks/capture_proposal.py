@@ -24,6 +24,10 @@ _COMMIT_TOOLS = {
     "commit_card_reissue",
     "commit_wallet_provisioning",
 }
+_DIRECT_SERVICING_TOOLS = {
+    "request_credit_limit_increase",
+    "reverse_overdraft_fee",
+}
 
 
 def _payload(tool_response):
@@ -73,10 +77,47 @@ def _record_completed_proposal_evidence(callback_context) -> None:
     )
 
 
+def _clear_closeout_checkpoint(callback_context) -> None:
+    callback_context.variables["closeout_checkpoint_state"] = ""
+    callback_context.variables["closeout_originating_turn_id"] = ""
+    callback_context.variables["closeout_originating_input_fingerprint"] = ""
+    callback_context.variables["closeout_delegation_authorized"] = False
+    callback_context.variables["closeout_end_attempted"] = False
+
+
 def after_tool_callback(tool, input, callback_context, tool_response):
     """Capture banking-owned alert state and successful proposal responses."""
     tool_name = str(tool.name or "")
     payload = _payload(tool_response)
+
+    if tool_name.endswith("transfer_to_agent"):
+        # Closeout authorization is owned by enforce_closeout's before-tool
+        # callback. Do not recompute or consume it after either phase of the
+        # same-turn transfer; the child before-agent callback is the consumer.
+        return None
+
+    if tool_name.endswith("offer_session_closeout"):
+        # The before-tool callback tentatively records the checkpoint so its
+        # trusted turn evidence can be sent with the MCP call. A transport or
+        # banking rejection must consume it before the model runs again.
+        if payload.get("success") is not True:
+            _clear_closeout_checkpoint(callback_context)
+        callback_context.variables["closeout_offer_required"] = False
+        return None
+
+    direct_servicing_tool = next(
+        (
+            suffix
+            for suffix in _DIRECT_SERVICING_TOOLS
+            if tool_name.endswith(suffix)
+        ),
+        None,
+    )
+    if direct_servicing_tool is not None:
+        callback_context.variables["closeout_offer_required"] = bool(
+            payload.get("success") is True
+        )
+        return None
 
     if tool_name.endswith("get_open_fraud_alert"):
         alert = payload.get("fraud_alert")
@@ -129,7 +170,9 @@ def after_tool_callback(tool, input, callback_context, tool_response):
             _clear_current_proposal(callback_context)
             if commit_tool == "commit_fraud_triage":
                 callback_context.variables["fraud_review_stage"] = "COMMITTED"
+            callback_context.variables["closeout_offer_required"] = True
         else:
+            callback_context.variables["closeout_offer_required"] = False
             recovery_class = str(payload.get("recovery_class") or "")
             if recovery_class == "REPRESENT_AND_RECONFIRM":
                 callback_context.variables["proposal_presentation_turn_id"] = ""

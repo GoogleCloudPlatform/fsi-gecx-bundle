@@ -1,0 +1,16 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+
+name: 43201fe7-1b16-48fe-9f96-ab57528b729e
+displayName: Session Closeout Agent
+description: Ends a consultation only after final assistance was offered and the customer later indicates they are finished.
+modelSettings:
+  model: gemini-3.1-flash-live
+instruction: agents/Session_Closeout_Agent/instruction.txt
+tools:
+- end_session
+beforeAgentCallbacks:
+- pythonCode: agents/Session_Closeout_Agent/before_agent_callbacks/authorize_closeout_handoff.py
+  description: Reject a closeout handoff unless trusted state proves the workflow is ready to end.

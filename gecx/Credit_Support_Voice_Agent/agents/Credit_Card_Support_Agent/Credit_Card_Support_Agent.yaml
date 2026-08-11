@@ -14,11 +14,18 @@
 
 name: 80f02b21-5b77-4907-94a3-bd67534bff66
 displayName: Credit Card Support Agent
+description: Handles credit-card support work and delegates only confirmed consultation closeout.
 modelSettings:
   model: gemini-3.1-flash-live
 instruction: agents/Credit_Card_Support_Agent/instruction.txt
-tools:
-- end_session
+childAgents:
+- Session Closeout Agent
+transferRules:
+- childAgent: Session Closeout Agent
+  direction: CHILD_TO_PARENT
+  disablePlannerTransfer:
+    expressionCondition:
+      expression: closeout_delegation_authorized == true
 beforeToolCallbacks:
 - pythonCode: agents/Credit_Card_Support_Agent/before_tool_callbacks/enforce_closeout.py
   description: Keep consultation closeout checkpoints outside proposal authorization.
@@ -27,6 +34,9 @@ beforeToolCallbacks:
 afterToolCallbacks:
 - pythonCode: agents/Credit_Card_Support_Agent/after_tool_callbacks/capture_proposal.py
   description: Capture active-alert identifiers plus the opaque proposal and banking-authored summary.
+afterModelCallbacks:
+- pythonCode: agents/Credit_Card_Support_Agent/after_model_callbacks/ensure_closeout_offer.py
+  description: Append a required closeout offer without replacing native model audio.
 toolsets:
 - toolset: banking_service_mcp_toolset
   toolIds:

@@ -172,6 +172,18 @@ variableDeclarations:
   description: Opaque callback-owned identity for the customer input that opened closeout.
   schema:
     type: STRING
+- name: closeout_delegation_authorized
+  description: Whether the closeout child accepted the trusted checkpoint for this handoff.
+  schema:
+    type: BOOLEAN
+- name: closeout_end_attempted
+  description: Whether the closeout child already attempted the native terminal call.
+  schema:
+    type: BOOLEAN
+- name: closeout_offer_required
+  description: Whether a successful servicing action still requires a final-assistance checkpoint.
+  schema:
+    type: BOOLEAN
 - name: active_fraud_alert_id
   description: Banking-owned active fraud alert captured from the read tool.
   schema:
