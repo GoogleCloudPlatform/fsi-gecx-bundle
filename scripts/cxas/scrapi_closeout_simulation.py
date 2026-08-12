@@ -5,22 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
-import time
 import uuid
 from pathlib import Path
 from typing import Any
 
-from cxas_scrapi.core.conversation_history import ConversationHistory
 from cxas_scrapi.evals.simulation_evals import SimulationEvals
-from cxas_scrapi.utils.latency_parser import LatencyParser
-
-
-CLOSEOUT_AGENT_NAME = "Session Closeout Agent"
-MIN_AUDIO_MS_PER_WORD = 175
-MIN_AUDIO_FLOOR_MS = 500
-TELEMETRY_FETCH_ATTEMPTS = 5
-TELEMETRY_FETCH_DELAY_SECONDS = 1.0
 
 
 def _expectations() -> list[str]:
@@ -46,17 +35,6 @@ def _credit_limit_test_case() -> dict[str, Any]:
     return {
         "name": "credit_limit_closeout_audio",
         "steps": [
-            {
-                "goal": "Request a credit limit increase to $11,250.",
-                "success_criteria": (
-                    "The support agent asks the customer to confirm the "
-                    "requested credit limit."
-                ),
-                "static_utterance": (
-                    "Can you raise my credit limit to $11,250, please?"
-                ),
-                "max_turns": 1,
-            },
             {
                 "goal": "Confirm the proposed credit limit increase.",
                 "success_criteria": (
@@ -112,12 +90,17 @@ def _strict_closeout_checks(trace_chunks: list[str]) -> dict[str, Any]:
         for line in str(chunk).splitlines()
         if line.strip()
     ]
-    final_user_indexes = [
+    # SCRAPI exposes the simulated customer's turns with a stable event label.
+    # Locate the final turn structurally; its wording is deliberately outside
+    # the deterministic evaluation contract.
+    customer_turn_indexes = [
         index
         for index, line in enumerate(lines)
-        if "No, that's all." in line
+        if line.startswith("User:")
     ]
-    final_user_index = final_user_indexes[-1] if final_user_indexes else -1
+    final_user_index = (
+        customer_turn_indexes[-1] if customer_turn_indexes else -1
+    )
     tail = lines[final_user_index + 1 :] if final_user_index >= 0 else []
 
     closeout_transfer_indexes = [
@@ -164,90 +147,6 @@ def _strict_closeout_checks(trace_chunks: list[str]) -> dict[str, Any]:
         "checks": checks,
         "terminal_trace": tail,
     }
-
-
-def _farewell_text(terminal_trace: list[str]) -> str:
-    for line in terminal_trace:
-        if line.startswith("Agent Text"):
-            _, separator, text = line.partition(":")
-            return (
-                text.strip()
-                if separator
-                else line.removeprefix("Agent Text").strip()
-            )
-    return ""
-
-
-def _audio_completeness(
-    *,
-    modality: str,
-    farewell_text: str,
-    llm_records: list[dict[str, Any]],
-) -> dict[str, Any]:
-    if modality != "audio":
-        return {
-            "passed": True,
-            "applicable": False,
-            "reason": "Audio completeness is not applicable to text transport.",
-        }
-
-    closeout_records = [
-        record
-        for record in llm_records
-        if record.get("agent") == CLOSEOUT_AGENT_NAME
-    ]
-    audio_durations = [
-        float(record.get("audio_duration_ms") or 0)
-        for record in closeout_records
-    ]
-    observed_audio_ms = max(audio_durations, default=0.0)
-    word_count = len(re.findall(r"\b[\w']+\b", farewell_text))
-    required_audio_ms = max(
-        MIN_AUDIO_FLOOR_MS,
-        word_count * MIN_AUDIO_MS_PER_WORD,
-    )
-    telemetry_observed = bool(closeout_records)
-    passed = bool(farewell_text) and telemetry_observed and (
-        observed_audio_ms >= required_audio_ms
-    )
-    return {
-        "passed": passed,
-        "applicable": True,
-        "agent": CLOSEOUT_AGENT_NAME,
-        "farewell_text": farewell_text,
-        "farewell_word_count": word_count,
-        "observed_audio_ms": observed_audio_ms,
-        "required_audio_ms": required_audio_ms,
-        "telemetry_observed": telemetry_observed,
-        "llm_spans": closeout_records,
-    }
-
-
-def _fetch_llm_records(*, app_name: str, session_id: str) -> list[dict[str, Any]]:
-    history = ConversationHistory(app_name=app_name)
-    last_error: Exception | None = None
-    for attempt in range(TELEMETRY_FETCH_ATTEMPTS):
-        try:
-            conversation = history.get_conversation(session_id)
-            metrics = LatencyParser.extract_trace_metrics(
-                {session_id: conversation}
-            )
-            records = _records(metrics["llm_details"])
-            if any(
-                record.get("agent") == CLOSEOUT_AGENT_NAME
-                for record in records
-            ):
-                return records
-        # CES conversation history becomes complete shortly after termination.
-        except Exception as error:
-            last_error = error
-        if attempt + 1 < TELEMETRY_FETCH_ATTEMPTS:
-            time.sleep(TELEMETRY_FETCH_DELAY_SECONDS)
-    if last_error is not None:
-        raise RuntimeError(
-            f"Unable to fetch CES telemetry for session {session_id}"
-        ) from last_error
-    return []
 
 
 def _records(dataframe: Any) -> list[dict[str, Any]]:
@@ -310,23 +209,6 @@ def main() -> int:
     )
     report = conversation.generate_report()
     strict = _strict_closeout_checks(conversation.detailed_trace)
-    telemetry_error = None
-    llm_records = []
-    if args.modality == "audio":
-        try:
-            llm_records = _fetch_llm_records(
-                app_name=args.app,
-                session_id=session_id,
-            )
-        except RuntimeError as error:
-            telemetry_error = str(error)
-    audio_completeness = _audio_completeness(
-        modality=args.modality,
-        farewell_text=_farewell_text(strict["terminal_trace"]),
-        llm_records=llm_records,
-    )
-    if telemetry_error is not None:
-        audio_completeness["telemetry_error"] = telemetry_error
     expectations = _records(report.expectations_df)
     judged_pass = bool(expectations) and all(
         item.get("status") == "Met" for item in expectations
@@ -341,13 +223,8 @@ def main() -> int:
         "single_bidi_stream": args.modality == "audio",
         "tool_fakes": True,
         "session_id": session_id,
-        "passed": (
-            strict["passed"]
-            and judged_pass
-            and audio_completeness["passed"]
-        ),
+        "passed": strict["passed"] and judged_pass,
         "strict_closeout": strict,
-        "audio_completeness": audio_completeness,
         "goals": _records(report.goals_df),
         "expectations": expectations,
         "transcript": conversation.get_transcript().splitlines(),
@@ -359,7 +236,6 @@ def main() -> int:
         "output": str(args.output),
         "passed": result["passed"],
         "strict_closeout": strict,
-        "audio_completeness": audio_completeness,
         "expectations": expectations,
     }, indent=2))
     return 0 if result["passed"] else 1

@@ -165,16 +165,15 @@ directory is explicitly ignored and can be removed with
 retainable qualification evidence.
 
 SCRAPI judges natural-language expectations and applies focused deterministic
-checks for a farewell before native `end_session`, the terminal reason, no
-return to the support agent, and no speech after the terminal tool call. For
-audio runs SCRAPI also
-reads the completed CES conversation telemetry and rejects closeouts whose
-generated-audio duration is too short to plausibly contain the farewell. This
-detects transcript-complete responses truncated by terminal-tool execution.
-Browser and proxy tests separately verify that `EndSession` suppresses further
-input without truncating later provider frames, that the proxy drains through
-terminal turn completion, and that the browser drains its AudioContext before
-local transport teardown.
+checks over trace event kinds for a farewell before native `end_session`, the
+terminal reason, no return to the support agent, and no speech after the
+terminal tool call. The deterministic checks locate the final simulated
+customer turn by its trace-event type and do not interpret transcript wording.
+They also do not estimate audio completeness from word count or model-span
+duration. Browser and proxy tests verify that `EndSession` suppresses further
+input without truncating trailing provider frames, that the proxy closes after
+a bounded terminal-output idle interval, and that the browser drains its
+AudioContext before local transport teardown.
 SCRAPI's
 flattened detailed trace does not preserve enough role information to replace
 the repository's managed CES role/event checker. The existing managed

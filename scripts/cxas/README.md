@@ -73,15 +73,13 @@ The focused contract requires:
 3. A native CES `EndSession` terminal signal.
 4. No transfer back to the credit-card support agent.
 5. No speech after `end_session`.
-6. CES telemetry shows enough generated closeout audio to plausibly contain the
-   full farewell. The conservative lower bound is 175 milliseconds per spoken
-   word, with a 500 millisecond floor.
 
 For audio simulations, the harness enables SCRAPI's simulated-playback wait and
-retrieves the completed CES conversation trace. It verifies provider-side
-farewell generation plus native terminal ordering. Proxy and banking UI tests
-cover draining every CES response after `EndSession`, outbound WebSocket flush,
-and browser AudioContext playout drain before local teardown.
+verifies provider-side farewell generation plus native terminal ordering. It
+does not infer closeout intent from transcript wording or estimate playout
+completeness from word count. Proxy and banking UI tests cover the transport
+contract: draining trailing CES output after `EndSession`, outbound WebSocket
+flush, and browser AudioContext playout drain before local teardown.
 
 Useful overrides:
 
