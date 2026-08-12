@@ -911,7 +911,6 @@ def _conversational_golden(
                                 ),
                                 "closeout_originating_input_fingerprint": "",
                                 "closeout_delegation_authorized": False,
-                                "closeout_end_attempted": False,
                             }
                         }
                     },
@@ -1043,7 +1042,6 @@ def _closeout_contract_golden(app: str) -> dict[str, Any]:
                                 ),
                                 "closeout_originating_input_fingerprint": "",
                                 "closeout_delegation_authorized": False,
-                                "closeout_end_attempted": False,
                                 "proposal_id": "",
                                 "proposal_commit_attempted": False,
                             }

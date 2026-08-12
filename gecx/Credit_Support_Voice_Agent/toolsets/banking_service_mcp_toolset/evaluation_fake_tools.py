@@ -37,7 +37,6 @@ def fake_tool_call(tool, input, callback_context):
         "commit_wallet_provisioning",
         "decide_action_proposal",
         "offer_session_closeout",
-        "complete_consultation",
         "request_credit_limit_increase",
     )
     tool_id = next(
@@ -203,12 +202,6 @@ def fake_tool_call(tool, input, callback_context):
             "status": "CLOSEOUT_OFFERED",
             "customer_prompt": "Is there anything else I can help you with?",
         }
-    elif tool_id == "complete_consultation":
-        output = {
-            "success": False,
-            "error": "NATIVE_END_SESSION_REWRITE_REQUIRED",
-            "reason": str((input or {}).get("reason") or ""),
-        }
     elif tool_id == "request_credit_limit_increase":
         requested_limit = int(
             (input or {}).get("amount")
@@ -259,10 +252,6 @@ def fake_commit_wallet_provisioning(tool, input, callback_context):
 
 def fake_offer_session_closeout(tool, input, callback_context):
     return fake_tool_call({"id": "offer_session_closeout"}, input, callback_context)
-
-
-def fake_complete_consultation(tool, input, callback_context):
-    return fake_tool_call({"id": "complete_consultation"}, input, callback_context)
 
 
 def fake_decide_action_proposal(tool, input, callback_context):

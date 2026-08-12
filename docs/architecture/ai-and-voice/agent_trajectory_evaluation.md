@@ -166,17 +166,15 @@ retainable qualification evidence.
 
 SCRAPI judges natural-language expectations and applies focused deterministic
 checks for a farewell before native `end_session`, the terminal reason, no
-return to the support agent, and no speech after the terminal tool call. A
-callback unit test separately verifies that the closeout agent's
-`complete_consultation` intent completes a farewell-only turn, and that the
-subsequent playout-complete event produces native `end_session` without an LLM
-call. SCRAPI sends that event after its simulated audio playout; the live proxy
-sends it only after browser acknowledgment. For audio runs SCRAPI also
+return to the support agent, and no speech after the terminal tool call. For
+audio runs SCRAPI also
 reads the completed CES conversation telemetry and rejects closeouts whose
 generated-audio duration is too short to plausibly contain the farewell. This
 detects transcript-complete responses truncated by terminal-tool execution.
-Browser and proxy tests separately verify the real AudioContext drain, terminal
-event ordering, and the documented CES `EndSession`-driven transport close.
+Browser and proxy tests separately verify that `EndSession` suppresses further
+input without truncating later provider frames, that the proxy drains through
+terminal turn completion, and that the browser drains its AudioContext before
+local transport teardown.
 SCRAPI's
 flattened detailed trace does not preserve enough role information to replace
 the repository's managed CES role/event checker. The existing managed

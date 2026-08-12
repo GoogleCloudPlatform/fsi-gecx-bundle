@@ -35,12 +35,6 @@ logger = logging.getLogger(__name__)
 # Keyed by user_id
 active_sessions: Dict[str, asyncio.Queue] = {}
 
-CLOSEOUT_FAREWELL_COMPLETE = "CLOSEOUT_FAREWELL_COMPLETE"
-CLOSEOUT_PLAYOUT_COMPLETE = "CLOSEOUT_PLAYOUT_COMPLETE"
-CLOSEOUT_PLAYOUT_EVENT = "closeout_playout_complete"
-CLOSEOUT_ACK_TIMEOUT_SECONDS = 10
-
-
 def _configured_sample_rate(name: str, default: int = 16_000) -> int:
     value = int(os.getenv(name, str(default)))
     if value < 8_000 or value > 48_000:
@@ -71,25 +65,6 @@ def _pcm_peak(chunk: bytes) -> int:
     if not chunk or len(chunk) % 2:
         return 0
     return max((abs(sample) for sample in memoryview(chunk).cast("h")), default=0)
-
-
-def _diagnostic_has_agent(diagnostic_info: object, display_name: str) -> bool:
-    """Match callback-owned agent identity in CES structural diagnostics."""
-    if not isinstance(diagnostic_info, dict):
-        return False
-    root_span = diagnostic_info.get("rootSpan") or diagnostic_info.get("root_span")
-    if not isinstance(root_span, dict):
-        return False
-    spans = [root_span]
-    while spans:
-        span = spans.pop()
-        attributes = span.get("attributes")
-        if isinstance(attributes, dict) and attributes.get("agent") == display_name:
-            return True
-        children = span.get("childSpans") or span.get("child_spans") or []
-        if isinstance(children, list):
-            spans.extend(child for child in children if isinstance(child, dict))
-    return False
 
 
 async def send_session_event(session_key: str, event_payload: dict):
@@ -313,45 +288,7 @@ class VoiceBidiSession:
             logger.info("Initial greeting trigger query transmitted.")
 
             # Task A: Read frames from browser WebSocket client
-            closeout_farewell_complete = asyncio.Event()
-            closeout_terminal_event_sent = asyncio.Event()
-            closeout_terminal_lock = asyncio.Lock()
-            closeout_timeout_tasks = set()
-
-            async def transmit_closeout_terminal_event(source: str) -> bool:
-                async with closeout_terminal_lock:
-                    if (
-                        not closeout_farewell_complete.is_set()
-                        or closeout_terminal_event_sent.is_set()
-                    ):
-                        return False
-                    closeout_farewell_complete.clear()
-                    closeout_terminal_event_sent.set()
-                    await gecx_ws.send(
-                        json.dumps(
-                            {
-                                "realtimeInput": {
-                                    "event": {"event": CLOSEOUT_PLAYOUT_EVENT}
-                                }
-                            }
-                        )
-                    )
-                    logger.info(
-                        "CES closeout terminal event transmitted source=%s "
-                        "customer_ref=%s",
-                        source,
-                        self.bootstrap.customer_ref,
-                    )
-                    return True
-
-            async def closeout_ack_timeout() -> None:
-                await asyncio.sleep(CLOSEOUT_ACK_TIMEOUT_SECONDS)
-                if await transmit_closeout_terminal_event("ack_timeout"):
-                    logger.warning(
-                        "CES closeout used playout acknowledgment timeout "
-                        "customer_ref=%s",
-                        self.bootstrap.customer_ref,
-                    )
+            provider_end_received = asyncio.Event()
 
             async def read_client():
                 try:
@@ -359,6 +296,8 @@ class VoiceBidiSession:
                         data = await self.client_ws.receive()
                         if "bytes" in data:
                             message = data["bytes"]
+                            if provider_end_received.is_set():
+                                continue
                             if len(message) > 65536:
                                 logger.error(
                                     "Security warning: Client sent binary frame exceeding 64KB limit."
@@ -393,17 +332,6 @@ class VoiceBidiSession:
                                     payload.get("auto_gain_control"),
                                     payload.get("latency_seconds"),
                                 )
-                            elif payload.get("type") == CLOSEOUT_PLAYOUT_COMPLETE:
-                                if not closeout_farewell_complete.is_set():
-                                    logger.warning(
-                                        "Ignoring premature CES closeout playout "
-                                        "acknowledgment customer_ref=%s",
-                                        self.bootstrap.customer_ref,
-                                    )
-                                    continue
-                                await transmit_closeout_terminal_event(
-                                    "browser_ack"
-                                )
                 except (WebSocketDisconnect, RuntimeError) as ex:
                     if (
                         isinstance(ex, RuntimeError)
@@ -430,6 +358,8 @@ class VoiceBidiSession:
                         self.client_to_gecx_queue.task_done()
                         if chunk is None:
                             break
+                        if provider_end_received.is_set():
+                            continue
                         b64_audio = base64.b64encode(chunk).decode("utf-8")
                         realtime_input = {"realtimeInput": {"audio": b64_audio}}
                         await gecx_ws.send(json.dumps(realtime_input))
@@ -465,19 +395,13 @@ class VoiceBidiSession:
                 agent_transcript = ""
                 agent_transcript_id = None
                 agent_transcript_sequence = 0
-                closeout_agent_turn_seen = False
+                end_session_reason = ""
+                session_end_forwarded = False
                 try:
                     async for message in gecx_ws:
                         response = json.loads(message)
                         session_output = response.get("sessionOutput", {})
                         if session_output:
-                            diagnostic_info = session_output.get(
-                                "diagnosticInfo"
-                            ) or session_output.get("diagnostic_info")
-                            if _diagnostic_has_agent(
-                                diagnostic_info, "Session Closeout Agent"
-                            ):
-                                closeout_agent_turn_seen = True
                             b64_audio = session_output.get("audio", "")
                             if b64_audio:
                                 received_at = time.monotonic()
@@ -522,28 +446,16 @@ class VoiceBidiSession:
                                         "replace_previous": True,
                                     }
                                 )
-                            if session_output.get(
-                                "turnCompleted"
-                            ) or session_output.get("turn_completed"):
+                            turn_completed = bool(
+                                session_output.get("turnCompleted")
+                                or session_output.get("turn_completed")
+                            )
+                            if turn_completed:
                                 transport_stats["completed_turns"] += 1
                                 agent_transcript = ""
                                 agent_transcript_id = None
-                                if (
-                                    closeout_agent_turn_seen
-                                    and not closeout_terminal_event_sent.is_set()
-                                ):
-                                    closeout_agent_turn_seen = False
-                                    closeout_farewell_complete.set()
-                                    await self.gecx_to_client_queue.put(
-                                        {"type": CLOSEOUT_FAREWELL_COMPLETE}
-                                    )
-                                    timeout_task = asyncio.create_task(
-                                        closeout_ack_timeout()
-                                    )
-                                    closeout_timeout_tasks.add(timeout_task)
-                                    timeout_task.add_done_callback(
-                                        closeout_timeout_tasks.discard
-                                    )
+                        else:
+                            turn_completed = False
 
                         recognition_result = response.get("recognitionResult", {})
                         if recognition_result:
@@ -603,16 +515,20 @@ class VoiceBidiSession:
                             )
                             await self.gecx_to_client_queue.put({"type": "INTERRUPT"})
 
-                        if "endSession" in response or "end_session" in response:
-                            end_session = response.get("endSession")
+                        end_session = response.get("endSession")
+                        if end_session is None:
+                            end_session = response.get("end_session")
+                        if end_session is None and isinstance(session_output, dict):
+                            end_session = session_output.get("endSession")
                             if end_session is None:
-                                end_session = response.get("end_session")
+                                end_session = session_output.get("end_session")
+                        if end_session is not None:
                             metadata = (
                                 end_session.get("metadata", {})
                                 if isinstance(end_session, dict)
                                 else {}
                             )
-                            end_reason = str(
+                            end_session_reason = str(
                                 metadata.get("reason")
                                 or (
                                     end_session.get("reason")
@@ -622,13 +538,21 @@ class VoiceBidiSession:
                                 or ""
                             )
                             transport_stats["provider_end_signal"] = "end_session"
+                            provider_end_received.set()
                             logger.info(
-                                "CES end-session signal received reason=%s.",
-                                end_reason or "unspecified",
+                                "CES end-session signal received reason=%s; "
+                                "draining remaining provider output.",
+                                end_session_reason or "unspecified",
                             )
+
+                        if provider_end_received.is_set() and turn_completed:
                             await self.gecx_to_client_queue.put(
-                                {"type": "SESSION_END", "reason": "CES_END_SESSION"}
+                                {
+                                    "type": "SESSION_END",
+                                    "reason": "CES_END_SESSION",
+                                }
                             )
+                            session_end_forwarded = True
                             break
                         if "goAway" in response or "go_away" in response:
                             transport_stats["provider_end_signal"] = "go_away"
@@ -640,6 +564,14 @@ class VoiceBidiSession:
                 except Exception as ex:
                     logger.error(f"Error in read_from_gecx: {ex}")
                 finally:
+                    if provider_end_received.is_set() and not session_end_forwarded:
+                        # Some transports close immediately after their terminal
+                        # output instead of emitting a separate turn-complete
+                        # frame. The async iterator has still drained every
+                        # response available before this fallback is published.
+                        await self.gecx_to_client_queue.put(
+                            {"type": "SESSION_END", "reason": "CES_END_SESSION"}
+                        )
                     finished_at = time.monotonic()
                     first_input_at = transport_stats["first_browser_input_at"]
                     last_input_at = transport_stats["last_browser_input_at"]
@@ -758,14 +690,10 @@ class VoiceBidiSession:
                     }
                 )
             finally:
-                for task in closeout_timeout_tasks:
-                    if not task.done():
-                        task.cancel()
                 for task in tasks.values():
                     if not task.done():
                         task.cancel()
                 await asyncio.gather(
                     *tasks.values(),
-                    *closeout_timeout_tasks,
                     return_exceptions=True,
                 )

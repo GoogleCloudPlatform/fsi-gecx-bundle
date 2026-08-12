@@ -68,24 +68,20 @@ make test-cxas-closeout \
 The focused contract requires:
 
 1. A short spoken farewell after the final customer turn.
-2. A `complete_consultation(reason="customer_query_ended")` intent after the
-   farewell, converted by an after-model callback into a farewell-only completed
-   turn.
-3. After simulated or browser-confirmed playout, a before-model callback emits
-   native `end_session(reason="customer_query_ended")` without invoking Gemini.
-4. A native CES `EndSession` terminal signal.
-5. No transfer back to the credit-card support agent.
-6. No speech after `end_session`.
-7. CES telemetry shows enough generated closeout audio to plausibly contain the
+2. A native `end_session(reason="customer_query_ended")` call after the farewell
+   in the same agent turn.
+3. A native CES `EndSession` terminal signal.
+4. No transfer back to the credit-card support agent.
+5. No speech after `end_session`.
+6. CES telemetry shows enough generated closeout audio to plausibly contain the
    full farewell. The conservative lower bound is 175 milliseconds per spoken
    word, with a 500 millisecond floor.
 
 For audio simulations, the harness enables SCRAPI's simulated-playback wait and
-retrieves the completed CES conversation trace. After SCRAPI's simulated
-playback wait, the harness sends `closeout_playout_complete` on the same
-session and verifies provider-side farewell generation plus native terminal
-ordering. Proxy and banking UI tests cover outbound WebSocket flush, real
-browser playout acknowledgment, the terminal event, and CES `EndSession`.
+retrieves the completed CES conversation trace. It verifies provider-side
+farewell generation plus native terminal ordering. Proxy and banking UI tests
+cover draining every CES response after `EndSession`, outbound WebSocket flush,
+and browser AudioContext playout drain before local teardown.
 
 Useful overrides:
 
@@ -135,9 +131,8 @@ focused contract tests before changing production behavior.
 
 Do not respond to generic LLM-lint hardening suggestions by expanding a
 single-purpose agent's scope. For the session closeout agent, the relevant
-contract is deliberately narrow: speak one farewell, select
-`complete_consultation` without more speech, finish that turn, and let the
-playout-complete callback emit native `end_session` separately.
+contract is deliberately narrow: speak one farewell and then call native
+`end_session` without more speech.
 
 ## Related evaluation layers
 

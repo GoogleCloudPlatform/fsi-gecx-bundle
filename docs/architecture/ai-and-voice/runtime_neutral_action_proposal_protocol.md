@@ -427,17 +427,15 @@ of production authorization. See [Agent Trajectory Evaluation](./agent_trajector
 
 Session closeout is a separate runtime concern. It may occur only after the
 consequential action result has been presented, but it does not participate in
-proposal authorization or banking mutation. The closeout agent produces its
-farewell and then selects `complete_consultation`; an after-model callback
-validates the trusted checkpoint, suppresses wrapper execution, and completes a
-farewell-only turn. After CES reports that turn complete, the proxy finishes
-every queued browser write and waits for the browser to acknowledge its
-AudioContext playout drain. It then sends the typed
-`closeout_playout_complete` event. A before-model callback validates that
-event and the persisted `FAREWELL_READY` state, skips Gemini, and emits CES'
-native `end_session`. The resulting CES protocol `EndSession` signal is the
-authoritative terminal boundary. No transcript interpretation or second model
-generation participates in teardown.
+proposal authorization or banking mutation. After validating the trusted
+`OFFERED` checkpoint, the closeout agent produces one farewell and calls CES'
+native `end_session` in the same turn. The resulting CES protocol `EndSession`
+signal stops further customer input but does not truncate the provider response:
+the proxy continues consuming the Bidi stream through terminal turn completion,
+flushes all received frames to the browser, and the browser drains its scheduled
+AudioContext playout before local teardown. No transcript interpretation,
+wrapper tool, synthetic event, or second model generation participates in
+teardown.
 
 ## Implementation Map
 

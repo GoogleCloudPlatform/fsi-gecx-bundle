@@ -18,7 +18,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  closeoutPlayoutAcknowledgementDelayMs,
   connectSilentPcmSink,
   pcmFrameForMicrophoneState,
   remainingPlayoutSeconds,
@@ -68,10 +67,4 @@ test('remote close drains only audio that is still scheduled', () => {
   assert.equal(remainingPlayoutSeconds(10, 13.5, 2), 3.5);
   assert.equal(remainingPlayoutSeconds(14, 13.5, 2), 0);
   assert.equal(remainingPlayoutSeconds(10, 13.5, 0), 0);
-});
-
-test('closeout acknowledgement waits for scheduled playout plus a safety margin', () => {
-  assert.equal(closeoutPlayoutAcknowledgementDelayMs(10, 13.5, 2), 3600);
-  assert.equal(closeoutPlayoutAcknowledgementDelayMs(14, 13.5, 2), 100);
-  assert.equal(closeoutPlayoutAcknowledgementDelayMs(10, 13.5, 0), 100);
 });

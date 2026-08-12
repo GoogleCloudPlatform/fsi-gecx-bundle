@@ -50,7 +50,6 @@ import { DataChannelEvent } from '../utils/constants.js';
 import { encodeTypedCustomerTurn, resolveTypedDelivery } from '../utils/voiceTypedInput.js';
 import { formatVoiceLedgerAmount } from '../utils/voiceLedger.js';
 import {
-  closeoutPlayoutAcknowledgementDelayMs,
   connectSilentPcmSink,
   pcmFrameForMicrophoneState,
   remainingPlayoutSeconds,
@@ -465,8 +464,6 @@ export default function VoiceSupportView() {
   const gecxOutputSampleRateRef = useRef(null);
   const pendingGecxAudioRef = useRef([]);
   const playoutDrainTimerRef = useRef(null);
-  const closeoutPlayoutTimerRef = useRef(null);
-  const gecxCloseoutPendingRef = useRef(false);
   const volumeRef = useRef(0.8);
   const micEnabledRef = useRef(true);
   const pingIntervalRef = useRef(null);
@@ -574,11 +571,6 @@ export default function VoiceSupportView() {
       clearTimeout(playoutDrainTimerRef.current);
       playoutDrainTimerRef.current = null;
     }
-    if (closeoutPlayoutTimerRef.current) {
-      clearTimeout(closeoutPlayoutTimerRef.current);
-      closeoutPlayoutTimerRef.current = null;
-    }
-    gecxCloseoutPendingRef.current = false;
     if (pingIntervalRef.current) {
       clearInterval(pingIntervalRef.current);
       pingIntervalRef.current = null;
@@ -700,11 +692,21 @@ export default function VoiceSupportView() {
 
   const startDisconnectCountdown = useCallback(() => {
     if (disconnectTimerRef.current) return; // already scheduled
+    if (engine === 'gecx') {
+      setTranscripts(prev => [...prev, { author: 'system', text: 'Consultation complete.' }]);
+      cleanupGecxSession({
+        drainPlayout: true,
+        onDrained: () => {
+          setTranscripts(prev => [...prev, { author: 'system', text: 'Session ended.' }]);
+        },
+      });
+      return;
+    }
     setTranscripts(prev => [...prev, { author: 'system', text: 'Consultation complete. Disconnecting in 5 seconds...' }]);
     disconnectTimerRef.current = setTimeout(() => {
       endConsultation();
     }, 5000);
-  }, [endConsultation]);
+  }, [cleanupGecxSession, endConsultation, engine]);
 
   const refreshCreditCardData = useCallback(async () => {
     const data = await getCreditCardAccount();
@@ -1088,28 +1090,6 @@ export default function VoiceSupportView() {
     nextPlayoutTimeRef.current = playTime + audioBuffer.duration;
   };
 
-  const acknowledgeCloseoutAfterPlayout = useCallback(() => {
-    if (gecxCloseoutPendingRef.current) return;
-    gecxCloseoutPendingRef.current = true;
-    const audioCtx = audioContextRef.current;
-    const delayMs = audioCtx
-      ? closeoutPlayoutAcknowledgementDelayMs(
-          audioCtx.currentTime,
-          nextPlayoutTimeRef.current,
-          activeSourcesRef.current.length,
-        )
-      : 100;
-    closeoutPlayoutTimerRef.current = setTimeout(() => {
-      closeoutPlayoutTimerRef.current = null;
-      const ws = wsRef.current;
-      if (ws?.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          type: DataChannelEvent.CLOSEOUT_PLAYOUT_COMPLETE,
-        }));
-      }
-    }, delayMs);
-  }, []);
-
   const handleGecxControlMessage = useCallback((payload) => {
     if (handleOperationalVoiceEvent(payload)) return;
     if (payload.type === 'TRANSCRIPT') {
@@ -1146,13 +1126,10 @@ export default function VoiceSupportView() {
       stopPlayoutQueue();
     } else if (payload.type === 'ERROR') {
       setErrorMessage(payload.message);
-    } else if (payload.type === DataChannelEvent.CLOSEOUT_FAREWELL_COMPLETE) {
-      acknowledgeCloseoutAfterPlayout();
     } else if (payload.type === DataChannelEvent.SESSION_END) {
       startDisconnectCountdown();
     }
   }, [
-    acknowledgeCloseoutAfterPlayout,
     handleOperationalVoiceEvent,
     startDisconnectCountdown,
     stopPlayoutQueue,
@@ -1373,7 +1350,7 @@ export default function VoiceSupportView() {
           wsRef.current.send(
             pcmFrameForMicrophoneState(
               rawBuffer,
-              micEnabledRef.current && !gecxCloseoutPendingRef.current,
+              micEnabledRef.current,
             )
           );
         }

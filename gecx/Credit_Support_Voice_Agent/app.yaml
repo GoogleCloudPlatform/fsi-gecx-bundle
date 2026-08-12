@@ -165,7 +165,7 @@ variableDeclarations:
   schema:
     type: STRING
 - name: closeout_checkpoint_state
-  description: Typed CES closeout checkpoint state, either empty, OFFERED, FAREWELL_READY, or ENDING.
+  description: Typed CES closeout checkpoint state, either empty, OFFERED, or ENDING.
   schema:
     type: STRING
 - name: closeout_originating_input_fingerprint
@@ -174,18 +174,6 @@ variableDeclarations:
     type: STRING
 - name: closeout_delegation_authorized
   description: Whether the closeout child accepted the trusted checkpoint for this handoff.
-  schema:
-    type: BOOLEAN
-- name: closeout_end_attempted
-  description: Whether the closeout child already attempted the native terminal call.
-  schema:
-    type: BOOLEAN
-- name: closeout_farewell_ready
-  description: Whether the authorized closeout agent completed its spoken farewell turn.
-  schema:
-    type: BOOLEAN
-- name: closeout_playout_acknowledged
-  description: Whether the gateway confirmed browser playout before native termination.
   schema:
     type: BOOLEAN
 - name: closeout_offer_required

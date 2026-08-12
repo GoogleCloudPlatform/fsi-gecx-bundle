@@ -11,16 +11,6 @@ modelSettings:
 instruction: agents/Session_Closeout_Agent/instruction.txt
 tools:
 - end_session
-toolsets:
-- toolset: banking_service_mcp_toolset
-  toolIds:
-  - complete_consultation
 beforeAgentCallbacks:
 - pythonCode: agents/Session_Closeout_Agent/before_agent_callbacks/authorize_closeout_handoff.py
   description: Reject a closeout handoff unless trusted state proves the workflow is ready to end.
-beforeModelCallbacks:
-- pythonCode: agents/Session_Closeout_Agent/before_model_callbacks/complete_closeout.py
-  description: Emit native end-session only after the gateway acknowledges farewell playout.
-afterModelCallbacks:
-- pythonCode: agents/Session_Closeout_Agent/after_model_callbacks/finalize_closeout.py
-  description: Complete the farewell turn and defer native termination until playout drains.

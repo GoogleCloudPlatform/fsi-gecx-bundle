@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
+import base64
 import json
 import pytest
 from types import SimpleNamespace
@@ -24,7 +24,6 @@ from services.ces_session_bootstrap import CesSessionBootstrap
 from services.voice_bidi import (
     _configured_noise_suppression_level,
     _configured_session_timeout_seconds,
-    _diagnostic_has_agent,
     _pcm_peak,
 )
 
@@ -35,23 +34,6 @@ def test_pcm_peak_reports_signal_without_recording_audio():
     assert _pcm_peak(bytes(8)) == 0
     assert _pcm_peak((1024).to_bytes(2, "little", signed=True) + bytes(2)) == 1024
     assert _pcm_peak(b"odd") == 0
-
-
-def test_structural_diagnostics_identify_closeout_agent_without_transcript():
-    diagnostic = {
-        "rootSpan": {
-            "attributes": {},
-            "childSpans": [
-                {
-                    "attributes": {"agent": "Session Closeout Agent"},
-                    "childSpans": [],
-                }
-            ],
-        }
-    }
-
-    assert _diagnostic_has_agent(diagnostic, "Session Closeout Agent") is True
-    assert _diagnostic_has_agent(diagnostic, "Credit Card Support Agent") is False
 
 
 def test_ces_noise_suppression_level_is_validated(monkeypatch):
@@ -126,15 +108,7 @@ def test_gecx_voice_stream_success(
 
     # 2. Setup GECX Mock server WebSocket connection instance
     mock_gecx_ws = AsyncMock()
-    closeout_event_received = asyncio.Event()
-
-    async def record_gecx_send(message):
-        payload = json.loads(message)
-        if (
-            payload.get("realtimeInput", {}).get("event", {}).get("event")
-            == "closeout_playout_complete"
-        ):
-            closeout_event_received.set()
+    trailing_audio = b"\x01\x02\x03\x04"
 
     async def gecx_responses():
         yield json.dumps({"sessionOutput": {"text": "Welcome to Horizon"}})
@@ -157,12 +131,18 @@ def test_gecx_voice_stream_success(
                 }
             }
         )
-        await asyncio.wait_for(closeout_event_received.wait(), timeout=1)
         yield json.dumps(
             {"endSession": {"metadata": {"reason": "customer_query_ended"}}}
         )
+        yield json.dumps(
+            {
+                "sessionOutput": {
+                    "audio": base64.b64encode(trailing_audio).decode("ascii")
+                }
+            }
+        )
+        yield json.dumps({"sessionOutput": {"turnCompleted": True}})
 
-    mock_gecx_ws.send.side_effect = record_gecx_send
     mock_gecx_ws.__aiter__.side_effect = gecx_responses
     mock_ws_connect.return_value.__aenter__.return_value = mock_gecx_ws
 
@@ -201,9 +181,8 @@ def test_gecx_voice_stream_success(
             "replace_previous": True,
         }
 
-        closeout_response = websocket.receive_json()
-        assert closeout_response == {"type": "CLOSEOUT_FAREWELL_COMPLETE"}
-        websocket.send_text(json.dumps({"type": "CLOSEOUT_PLAYOUT_COMPLETE"}))
+        # EndSession stops further input but does not truncate provider output.
+        assert websocket.receive_bytes() == trailing_audio
 
         end_response = websocket.receive_json()
         assert end_response == {
@@ -252,16 +231,6 @@ def test_gecx_voice_stream_success(
         assert welcome_msg is not None
         assert welcome_msg["realtimeInput"]["event"]["event"] == "sys.welcome"
         assert sent_messages.index(variables_msg) < sent_messages.index(welcome_msg)
-        closeout_event = next(
-            (
-                msg
-                for msg in sent_messages
-                if msg.get("realtimeInput", {}).get("event", {}).get("event")
-                == "closeout_playout_complete"
-            ),
-            None,
-        )
-        assert closeout_event is not None
     runtime_session_id = mock_build_bootstrap.call_args.kwargs["runtime_session_id"]
     assert runtime_session_id.startswith("ces-")
     assert mock_build_bootstrap.call_args.kwargs["auth_provider_uid"] == (

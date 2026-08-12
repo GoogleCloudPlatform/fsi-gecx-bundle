@@ -586,23 +586,6 @@ async def offer_session_closeout(ctx: Context = None) -> dict:
 
 
 @mcp.tool()
-async def complete_consultation(
-    reason: Literal["customer_query_ended"],
-) -> dict:
-    """Declare terminal intent for callback conversion to native end_session.
-
-    The Session Closeout Agent's after-model callback replaces this call before
-    tool execution. This defensive response exists only for configurations in
-    which that callback was not installed.
-    """
-    return {
-        "success": False,
-        "error": "NATIVE_END_SESSION_REWRITE_REQUIRED",
-        "reason": reason,
-    }
-
-
-@mcp.tool()
 @requires_user_assertion
 async def decide_action_proposal(
     proposal_id: str,

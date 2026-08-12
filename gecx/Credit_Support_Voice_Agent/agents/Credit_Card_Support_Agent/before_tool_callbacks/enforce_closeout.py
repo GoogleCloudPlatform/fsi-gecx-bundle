@@ -28,9 +28,6 @@ def _clear_closeout_checkpoint(callback_context) -> None:
     callback_context.variables["closeout_originating_turn_id"] = ""
     callback_context.variables["closeout_originating_input_fingerprint"] = ""
     callback_context.variables["closeout_delegation_authorized"] = False
-    callback_context.variables["closeout_end_attempted"] = False
-    callback_context.variables["closeout_farewell_ready"] = False
-    callback_context.variables["closeout_playout_acknowledged"] = False
 
 
 def _later_customer_turn_is_present(callback_context) -> bool:
@@ -77,9 +74,6 @@ def before_tool_callback(tool, input, callback_context):
             input_fingerprint
         )
         callback_context.variables["closeout_delegation_authorized"] = False
-        callback_context.variables["closeout_end_attempted"] = False
-        callback_context.variables["closeout_farewell_ready"] = False
-        callback_context.variables["closeout_playout_acknowledged"] = False
         return None
     if (
         tool_name.endswith("transfer_to_agent")
@@ -114,7 +108,6 @@ def before_tool_callback(tool, input, callback_context):
         # customer input. The child trusts the persisted typed checkpoint
         # because CES does not expose that input to its before-agent callback.
         callback_context.variables["closeout_delegation_authorized"] = True
-        callback_context.variables["closeout_end_attempted"] = False
         # Consume the model's first transfer as a local authorization result.
         # The resulting model continuation is replaced with a native transfer
         # by the after-model callback, activating the child in this same turn.
