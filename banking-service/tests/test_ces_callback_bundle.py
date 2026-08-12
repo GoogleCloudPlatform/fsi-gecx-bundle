@@ -633,8 +633,8 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     assert "completed_proposal_confirmation_source" in declared_variables
     assert "closeout_delegation_authorized" in declared_variables
     assert "closeout_end_attempted" in declared_variables
-    assert "closeout_farewell_ready" not in declared_variables
-    assert "closeout_playout_acknowledged" not in declared_variables
+    assert "closeout_farewell_ready" in declared_variables
+    assert "closeout_playout_acknowledged" in declared_variables
     assert "closeout_offer_required" in declared_variables
     custom_headers = toolset["mcpToolset"]["customHeaders"]
     assert custom_headers == {
@@ -780,7 +780,18 @@ def test_voice_bundle_isolates_native_session_end_in_closeout_agent():
         }
     ]
     assert "beforeToolCallbacks" not in closeout_agent
-    assert "beforeModelCallbacks" not in closeout_agent
+    assert closeout_agent["beforeModelCallbacks"] == [
+        {
+            "pythonCode": (
+                "agents/Session_Closeout_Agent/"
+                "before_model_callbacks/complete_closeout.py"
+            ),
+            "description": (
+                "Emit native end-session only after the gateway "
+                "acknowledges farewell playout."
+            ),
+        }
+    ]
     assert closeout_agent["afterModelCallbacks"] == [
         {
             "pythonCode": (
@@ -788,8 +799,8 @@ def test_voice_bundle_isolates_native_session_end_in_closeout_agent():
                 "after_model_callbacks/finalize_closeout.py"
             ),
             "description": (
-                "Replace an authorized completion intent with the native "
-                "end-session system call."
+                "Complete the farewell turn and defer native termination "
+                "until playout drains."
             ),
         }
     ]
@@ -917,22 +928,22 @@ def test_closeout_agent_rejects_handoff_during_pending_proposal():
     assert variables["closeout_end_attempted"] is False
 
 
-def test_closeout_completion_intent_becomes_native_end_session():
+def test_closeout_completion_intent_marks_farewell_ready_without_speech():
     callback = _load_closeout("after_model_callbacks/finalize_closeout.py")
 
     class FakePart:
-        def __init__(self, *, text=None, function_name=None, args=None, end_reason=None):
+        def __init__(self, *, text=None, function_name=None, args=None, data=None):
             self.text = text
             self.function_call = (
                 SimpleNamespace(name=function_name, args=args or {})
                 if function_name
                 else None
             )
-            self.end_reason = end_reason
+            self.data = data
 
         @classmethod
-        def from_end_session(cls, *, reason):
-            return cls(end_reason=reason)
+        def from_json(cls, *, data):
+            return cls(data=data)
 
     class FakeResponse:
         @classmethod
@@ -966,9 +977,11 @@ def test_closeout_completion_intent_becomes_native_end_session():
         SimpleNamespace(variables=variables), response
     )
     assert len(result.content.parts) == 1
-    assert result.content.parts[0].end_reason == "customer_query_ended"
-    assert variables["closeout_checkpoint_state"] == "ENDING"
-    assert variables["closeout_end_attempted"] is True
+    assert result.content.parts[0].data == '{"status":"FAREWELL_READY"}'
+    assert variables["closeout_checkpoint_state"] == "FAREWELL_READY"
+    assert variables["closeout_farewell_ready"] is True
+    assert variables["closeout_playout_acknowledged"] is False
+    assert variables["closeout_end_attempted"] is False
 
 
 def test_closeout_completion_intent_with_wrong_reason_is_not_rewritten():
@@ -1012,21 +1025,21 @@ def test_closeout_completion_intent_with_wrong_reason_is_not_rewritten():
     assert variables["closeout_end_attempted"] is False
 
 
-def test_closeout_streamed_tool_only_chunk_becomes_native_end_session():
+def test_closeout_streamed_tool_only_chunk_marks_farewell_ready():
     callback = _load_closeout("after_model_callbacks/finalize_closeout.py")
 
     class FakePart:
-        def __init__(self, *, function_name=None, args=None, end_reason=None):
+        def __init__(self, *, function_name=None, args=None, data=None):
             self.function_call = (
                 SimpleNamespace(name=function_name, args=args or {})
                 if function_name
                 else None
             )
-            self.end_reason = end_reason
+            self.data = data
 
         @classmethod
-        def from_end_session(cls, *, reason):
-            return cls(end_reason=reason)
+        def from_json(cls, *, data):
+            return cls(data=data)
 
     class FakeResponse:
         @classmethod
@@ -1051,6 +1064,64 @@ def test_closeout_streamed_tool_only_chunk_becomes_native_end_session():
     result = callback.after_model_callback(
         SimpleNamespace(variables=variables), response
     )
-    assert result.content.parts[0].end_reason == "customer_query_ended"
+    assert result.content.parts[0].data == '{"status":"FAREWELL_READY"}'
+    assert variables["closeout_checkpoint_state"] == "FAREWELL_READY"
+    assert variables["closeout_end_attempted"] is False
+
+
+def test_playout_complete_event_deterministically_emits_native_end_session():
+    callback = _load_closeout("before_model_callbacks/complete_closeout.py")
+
+    class FakePart:
+        def __init__(self, *, reason):
+            self.reason = reason
+
+        @classmethod
+        def from_end_session(cls, *, reason):
+            return cls(reason=reason)
+
+    class FakeResponse:
+        @classmethod
+        def from_parts(cls, *, parts):
+            return SimpleNamespace(content=SimpleNamespace(parts=parts))
+
+    callback.Part = FakePart
+    callback.LlmResponse = FakeResponse
+    variables = {
+        "closeout_delegation_authorized": True,
+        "closeout_checkpoint_state": "FAREWELL_READY",
+        "closeout_farewell_ready": True,
+        "closeout_playout_acknowledged": False,
+        "closeout_end_attempted": False,
+        "proposal_id": "",
+        "proposal_commit_attempted": False,
+    }
+    context = Context(
+        variables=variables,
+        user_text="<event>sys.closeout_playout_complete</event>",
+    )
+
+    result = callback.before_model_callback(context, SimpleNamespace())
+
+    assert result.content.parts[0].reason == "customer_query_ended"
     assert variables["closeout_checkpoint_state"] == "ENDING"
+    assert variables["closeout_playout_acknowledged"] is True
     assert variables["closeout_end_attempted"] is True
+
+
+def test_closeout_agent_accepts_authorized_playout_continuation():
+    callback = _load_closeout(
+        "before_agent_callbacks/authorize_closeout_handoff.py"
+    )
+    variables = {
+        "closeout_delegation_authorized": True,
+        "closeout_checkpoint_state": "FAREWELL_READY",
+        "closeout_farewell_ready": True,
+        "closeout_end_attempted": False,
+        "proposal_id": "",
+        "proposal_commit_attempted": False,
+    }
+
+    assert callback.before_agent_callback(Context(variables=variables)) is None
+    assert variables["closeout_delegation_authorized"] is True
+    assert variables["closeout_farewell_ready"] is True

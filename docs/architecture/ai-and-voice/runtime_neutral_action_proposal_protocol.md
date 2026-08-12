@@ -429,15 +429,15 @@ Session closeout is a separate runtime concern. It may occur only after the
 consequential action result has been presented, but it does not participate in
 proposal authorization or banking mutation. The closeout agent produces its
 farewell and then selects `complete_consultation`; an after-model callback
-validates the trusted checkpoint and replaces that wrapper call with CES'
-native `end_session` before execution. The replacement response contains only
-the terminal action, leaving the farewell text and audio Gemini Live already
-streamed untouched and preventing replay. The proxy treats
-the resulting CES protocol `EndSession` signal
-as the authoritative terminal boundary. It finishes every queued browser
-write, waits for the browser to acknowledge its AudioContext playout drain, and
-then half-closes the provider transport. No transcript interpretation, second
-model turn, or synthetic CES event participates in teardown.
+validates the trusted checkpoint, suppresses wrapper execution, and completes a
+farewell-only turn. After CES reports that turn complete, the proxy finishes
+every queued browser write and waits for the browser to acknowledge its
+AudioContext playout drain. It then sends the typed
+`sys.closeout_playout_complete` event. A before-model callback validates that
+event and the persisted `FAREWELL_READY` state, skips Gemini, and emits CES'
+native `end_session`. The resulting CES protocol `EndSession` signal is the
+authoritative terminal boundary. No transcript interpretation or second model
+generation participates in teardown.
 
 ## Implementation Map
 

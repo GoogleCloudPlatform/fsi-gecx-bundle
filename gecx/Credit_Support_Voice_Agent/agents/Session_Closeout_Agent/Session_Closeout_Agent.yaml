@@ -18,6 +18,9 @@ toolsets:
 beforeAgentCallbacks:
 - pythonCode: agents/Session_Closeout_Agent/before_agent_callbacks/authorize_closeout_handoff.py
   description: Reject a closeout handoff unless trusted state proves the workflow is ready to end.
+beforeModelCallbacks:
+- pythonCode: agents/Session_Closeout_Agent/before_model_callbacks/complete_closeout.py
+  description: Emit native end-session only after the gateway acknowledges farewell playout.
 afterModelCallbacks:
 - pythonCode: agents/Session_Closeout_Agent/after_model_callbacks/finalize_closeout.py
-  description: Replace an authorized completion intent with the native end-session system call.
+  description: Complete the farewell turn and defer native termination until playout drains.

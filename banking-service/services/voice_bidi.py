@@ -37,6 +37,7 @@ active_sessions: Dict[str, asyncio.Queue] = {}
 
 CLOSEOUT_FAREWELL_COMPLETE = "CLOSEOUT_FAREWELL_COMPLETE"
 CLOSEOUT_PLAYOUT_COMPLETE = "CLOSEOUT_PLAYOUT_COMPLETE"
+CLOSEOUT_PLAYOUT_EVENT = "sys.closeout_playout_complete"
 CLOSEOUT_ACK_TIMEOUT_SECONDS = 10
 
 
@@ -312,42 +313,40 @@ class VoiceBidiSession:
             logger.info("Initial greeting trigger query transmitted.")
 
             # Task A: Read frames from browser WebSocket client
-            closeout_turn_complete = asyncio.Event()
-            closeout_gateway_close_started = asyncio.Event()
+            closeout_farewell_complete = asyncio.Event()
+            closeout_terminal_event_sent = asyncio.Event()
             closeout_terminal_lock = asyncio.Lock()
             closeout_timeout_tasks = set()
 
-            async def close_gateway_after_playout(source: str) -> bool:
+            async def transmit_closeout_terminal_event(source: str) -> bool:
                 async with closeout_terminal_lock:
                     if (
-                        not closeout_turn_complete.is_set()
-                        or closeout_gateway_close_started.is_set()
+                        not closeout_farewell_complete.is_set()
+                        or closeout_terminal_event_sent.is_set()
                     ):
                         return False
-                    closeout_gateway_close_started.set()
-                    await self.gecx_to_client_queue.put(
-                        {
-                            "type": "SESSION_END",
-                            "reason": "CES_GRACEFUL_CLOSEOUT",
-                        }
+                    closeout_farewell_complete.clear()
+                    closeout_terminal_event_sent.set()
+                    await gecx_ws.send(
+                        json.dumps(
+                            {
+                                "realtimeInput": {
+                                    "event": {"event": CLOSEOUT_PLAYOUT_EVENT}
+                                }
+                            }
+                        )
                     )
-                    # Queue order proves every provider frame observed before
-                    # EndSession has completed its browser WebSocket write.
-                    # The browser acknowledgment separately proves those audio
-                    # frames have drained from its AudioContext playout queue.
-                    await self.gecx_to_client_queue.join()
                     logger.info(
-                        "CES graceful closeout transport drain complete source=%s "
+                        "CES closeout terminal event transmitted source=%s "
                         "customer_ref=%s",
                         source,
                         self.bootstrap.customer_ref,
                     )
-                    await gecx_ws.close(code=1000, reason="graceful_closeout")
                     return True
 
             async def closeout_ack_timeout() -> None:
                 await asyncio.sleep(CLOSEOUT_ACK_TIMEOUT_SECONDS)
-                if await close_gateway_after_playout("ack_timeout"):
+                if await transmit_closeout_terminal_event("ack_timeout"):
                     logger.warning(
                         "CES closeout used playout acknowledgment timeout "
                         "customer_ref=%s",
@@ -395,15 +394,16 @@ class VoiceBidiSession:
                                     payload.get("latency_seconds"),
                                 )
                             elif payload.get("type") == CLOSEOUT_PLAYOUT_COMPLETE:
-                                if not closeout_turn_complete.is_set():
+                                if not closeout_farewell_complete.is_set():
                                     logger.warning(
                                         "Ignoring premature CES closeout playout "
                                         "acknowledgment customer_ref=%s",
                                         self.bootstrap.customer_ref,
                                     )
                                     continue
-                                await close_gateway_after_playout("browser_ack")
-                                return
+                                await transmit_closeout_terminal_event(
+                                    "browser_ack"
+                                )
                 except (WebSocketDisconnect, RuntimeError) as ex:
                     if (
                         isinstance(ex, RuntimeError)
@@ -528,6 +528,22 @@ class VoiceBidiSession:
                                 transport_stats["completed_turns"] += 1
                                 agent_transcript = ""
                                 agent_transcript_id = None
+                                if (
+                                    closeout_agent_turn_seen
+                                    and not closeout_terminal_event_sent.is_set()
+                                ):
+                                    closeout_agent_turn_seen = False
+                                    closeout_farewell_complete.set()
+                                    await self.gecx_to_client_queue.put(
+                                        {"type": CLOSEOUT_FAREWELL_COMPLETE}
+                                    )
+                                    timeout_task = asyncio.create_task(
+                                        closeout_ack_timeout()
+                                    )
+                                    closeout_timeout_tasks.add(timeout_task)
+                                    timeout_task.add_done_callback(
+                                        closeout_timeout_tasks.discard
+                                    )
 
                         recognition_result = response.get("recognitionResult", {})
                         if recognition_result:
@@ -610,28 +626,6 @@ class VoiceBidiSession:
                                 "CES end-session signal received reason=%s.",
                                 end_reason or "unspecified",
                             )
-                            if (
-                                end_reason == "customer_query_ended"
-                                or closeout_agent_turn_seen
-                            ):
-                                # EndSession is the authoritative CES terminal
-                                # boundary. At this point all preceding provider
-                                # audio has been queued locally; wait for browser
-                                # playout before half-closing the provider stream.
-                                closeout_agent_turn_seen = False
-                                if not closeout_turn_complete.is_set():
-                                    closeout_turn_complete.set()
-                                    await self.gecx_to_client_queue.put(
-                                        {"type": CLOSEOUT_FAREWELL_COMPLETE}
-                                    )
-                                    timeout_task = asyncio.create_task(
-                                        closeout_ack_timeout()
-                                    )
-                                    closeout_timeout_tasks.add(timeout_task)
-                                    timeout_task.add_done_callback(
-                                        closeout_timeout_tasks.discard
-                                    )
-                                continue
                             await self.gecx_to_client_queue.put(
                                 {"type": "SESSION_END", "reason": "CES_END_SESSION"}
                             )

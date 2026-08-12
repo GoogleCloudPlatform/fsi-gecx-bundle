@@ -3,7 +3,7 @@
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 
-"""Replace an authorized closeout intent with CES' native terminal action."""
+"""Finish the spoken turn and defer native termination until playout drains."""
 
 
 _COMPLETE_TOOL_SUFFIX = "complete_consultation"
@@ -63,12 +63,12 @@ def after_model_callback(callback_context, llm_response):
         return None
 
     # Gemini Live streams farewell text/audio before emitting a tool-only model
-    # response. Return the documented replacement response for that pending
-    # tool chunk, leaving the already-streamed farewell untouched. The wrapper
-    # never executes; CES executes its native terminal system action and emits
-    # a protocol EndSession signal.
-    variables["closeout_checkpoint_state"] = "ENDING"
-    variables["closeout_end_attempted"] = True
+    # response. Replace that tool chunk with a non-spoken payload so the wrapper
+    # never executes and the already-streamed farewell can complete normally.
+    # The gateway releases the separate native terminal turn after playout.
+    variables["closeout_checkpoint_state"] = "FAREWELL_READY"
+    variables["closeout_farewell_ready"] = True
+    variables["closeout_playout_acknowledged"] = False
     return LlmResponse.from_parts(  # noqa: F821
-        parts=[Part.from_end_session(reason=_END_REASON)]  # noqa: F821
+        parts=[Part.from_json(data='{"status":"FAREWELL_READY"}')]  # noqa: F821
     )

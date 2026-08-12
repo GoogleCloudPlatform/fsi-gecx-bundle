@@ -31,8 +31,8 @@ def _expectations() -> list[str]:
             "session ends."
         ),
         (
-            "The closeout completion intent is converted to native "
-            "end_session with reason customer_query_ended."
+            "After farewell playout completion, the deterministic callback "
+            "calls native end_session with reason customer_query_ended."
         ),
         (
             "The Session Closeout Agent does not transfer control back "
@@ -69,9 +69,18 @@ def _credit_limit_test_case() -> dict[str, Any]:
             {
                 "goal": "End the consultation after declining more help.",
                 "success_criteria": (
-                    "The closeout agent speaks one short farewell and then "
-                    "ends the session."
+                    "The closeout agent speaks one short farewell without "
+                    "ending the session in that spoken turn."
                 ),
+                "max_turns": 1,
+            },
+            {
+                "goal": "Terminate only after simulated farewell playout.",
+                "success_criteria": (
+                    "The playout-complete event deterministically causes "
+                    "native end_session with reason customer_query_ended."
+                ),
+                "static_utterance": "event: sys.closeout_playout_complete",
                 "max_turns": 1,
             },
         ],
@@ -95,10 +104,19 @@ def _checkpoint_test_case() -> dict[str, Any]:
             {
                 "goal": "Generate an authorized consultation farewell.",
                 "success_criteria": (
-                    "The closeout agent speaks one short farewell and its "
-                    "completion intent becomes native end_session."
+                    "The closeout agent speaks one short farewell without "
+                    "ending the session in that spoken turn."
                 ),
                 "static_utterance": "No, that's all.",
+                "max_turns": 1,
+            },
+            {
+                "goal": "Terminate only after simulated farewell playout.",
+                "success_criteria": (
+                    "The playout-complete event deterministically causes "
+                    "native end_session with reason customer_query_ended."
+                ),
+                "static_utterance": "event: sys.closeout_playout_complete",
                 "max_turns": 1,
             },
         ],
