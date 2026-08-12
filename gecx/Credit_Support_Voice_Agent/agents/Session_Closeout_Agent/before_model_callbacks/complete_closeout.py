@@ -6,7 +6,7 @@
 """Emit native termination only after the gateway confirms farewell playout."""
 
 
-_PLAYOUT_COMPLETE_EVENT = "<event>sys.closeout_playout_complete</event>"
+_PLAYOUT_COMPLETE_EVENT = "<event>closeout_playout_complete</event>"
 
 
 def _is_playout_complete_event(callback_context) -> bool:

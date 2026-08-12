@@ -80,7 +80,7 @@ def _credit_limit_test_case() -> dict[str, Any]:
                     "The playout-complete event deterministically causes "
                     "native end_session with reason customer_query_ended."
                 ),
-                "static_utterance": "event: sys.closeout_playout_complete",
+                "static_utterance": "event: closeout_playout_complete",
                 "max_turns": 1,
             },
         ],
@@ -116,7 +116,7 @@ def _checkpoint_test_case() -> dict[str, Any]:
                     "The playout-complete event deterministically causes "
                     "native end_session with reason customer_query_ended."
                 ),
-                "static_utterance": "event: sys.closeout_playout_complete",
+                "static_utterance": "event: closeout_playout_complete",
                 "max_turns": 1,
             },
         ],

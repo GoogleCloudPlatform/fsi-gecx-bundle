@@ -132,7 +132,7 @@ def test_gecx_voice_stream_success(
         payload = json.loads(message)
         if (
             payload.get("realtimeInput", {}).get("event", {}).get("event")
-            == "sys.closeout_playout_complete"
+            == "closeout_playout_complete"
         ):
             closeout_event_received.set()
 
@@ -257,7 +257,7 @@ def test_gecx_voice_stream_success(
                 msg
                 for msg in sent_messages
                 if msg.get("realtimeInput", {}).get("event", {}).get("event")
-                == "sys.closeout_playout_complete"
+                == "closeout_playout_complete"
             ),
             None,
         )

@@ -82,7 +82,7 @@ The focused contract requires:
 
 For audio simulations, the harness enables SCRAPI's simulated-playback wait and
 retrieves the completed CES conversation trace. After SCRAPI's simulated
-playback wait, the harness sends `sys.closeout_playout_complete` on the same
+playback wait, the harness sends `closeout_playout_complete` on the same
 session and verifies provider-side farewell generation plus native terminal
 ordering. Proxy and banking UI tests cover outbound WebSocket flush, real
 browser playout acknowledgment, the terminal event, and CES `EndSession`.

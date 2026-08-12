@@ -433,7 +433,7 @@ validates the trusted checkpoint, suppresses wrapper execution, and completes a
 farewell-only turn. After CES reports that turn complete, the proxy finishes
 every queued browser write and waits for the browser to acknowledge its
 AudioContext playout drain. It then sends the typed
-`sys.closeout_playout_complete` event. A before-model callback validates that
+`closeout_playout_complete` event. A before-model callback validates that
 event and the persisted `FAREWELL_READY` state, skips Gemini, and emits CES'
 native `end_session`. The resulting CES protocol `EndSession` signal is the
 authoritative terminal boundary. No transcript interpretation or second model

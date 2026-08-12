@@ -1098,7 +1098,7 @@ def test_playout_complete_event_deterministically_emits_native_end_session():
     }
     context = Context(
         variables=variables,
-        user_text="<event>sys.closeout_playout_complete</event>",
+        user_text="<event>closeout_playout_complete</event>",
     )
 
     result = callback.before_model_callback(context, SimpleNamespace())
