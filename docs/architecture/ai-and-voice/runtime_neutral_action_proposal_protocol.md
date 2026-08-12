@@ -430,8 +430,9 @@ consequential action result has been presented, but it does not participate in
 proposal authorization or banking mutation. The closeout agent produces its
 farewell and then selects `complete_consultation`; an after-model callback
 validates the trusted checkpoint and replaces that wrapper call with CES'
-native `end_session` before execution, leaving the farewell text and audio that
-Gemini Live streamed before its tool-only response untouched. The proxy treats
+native `end_session` before execution. The replacement response contains only
+the terminal action, leaving the farewell text and audio Gemini Live already
+streamed untouched and preventing replay. The proxy treats
 the resulting CES protocol `EndSession` signal
 as the authoritative terminal boundary. It finishes every queued browser
 write, waits for the browser to acknowledge its AudioContext playout drain, and

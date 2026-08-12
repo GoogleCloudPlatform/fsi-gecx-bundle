@@ -965,8 +965,8 @@ def test_closeout_completion_intent_becomes_native_end_session():
     result = callback.after_model_callback(
         SimpleNamespace(variables=variables), response
     )
-    assert result.content.parts[0].text == "You're very welcome. Goodbye."
-    assert result.content.parts[1].end_reason == "customer_query_ended"
+    assert len(result.content.parts) == 1
+    assert result.content.parts[0].end_reason == "customer_query_ended"
     assert variables["closeout_checkpoint_state"] == "ENDING"
     assert variables["closeout_end_attempted"] is True
 
