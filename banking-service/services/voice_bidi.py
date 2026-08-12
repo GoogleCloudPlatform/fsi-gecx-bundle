@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 # Registry of active session queues for out-of-band updates (e.g. card locking sync)
 # Keyed by user_id
 active_sessions: Dict[str, asyncio.Queue] = {}
+CES_TERMINAL_DRAIN_IDLE_SECONDS = 0.5
 
 def _configured_sample_rate(name: str, default: int = 16_000) -> int:
     value = int(os.getenv(name, str(default)))
@@ -397,8 +398,26 @@ class VoiceBidiSession:
                 agent_transcript_sequence = 0
                 end_session_reason = ""
                 session_end_forwarded = False
+                provider_messages = gecx_ws.__aiter__()
                 try:
-                    async for message in gecx_ws:
+                    while True:
+                        try:
+                            if provider_end_received.is_set():
+                                message = await asyncio.wait_for(
+                                    provider_messages.__anext__(),
+                                    timeout=CES_TERMINAL_DRAIN_IDLE_SECONDS,
+                                )
+                            else:
+                                message = await provider_messages.__anext__()
+                        except StopAsyncIteration:
+                            break
+                        except asyncio.TimeoutError:
+                            logger.info(
+                                "CES terminal output drain reached idle boundary "
+                                "idle_ms=%d.",
+                                round(CES_TERMINAL_DRAIN_IDLE_SECONDS * 1000),
+                            )
+                            break
                         response = json.loads(message)
                         session_output = response.get("sessionOutput", {})
                         if session_output:

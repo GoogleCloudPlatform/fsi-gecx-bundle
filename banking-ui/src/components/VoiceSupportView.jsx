@@ -694,12 +694,7 @@ export default function VoiceSupportView() {
     if (disconnectTimerRef.current) return; // already scheduled
     if (engine === 'gecx') {
       setTranscripts(prev => [...prev, { author: 'system', text: 'Consultation complete.' }]);
-      cleanupGecxSession({
-        drainPlayout: true,
-        onDrained: () => {
-          setTranscripts(prev => [...prev, { author: 'system', text: 'Session ended.' }]);
-        },
-      });
+      cleanupGecxSession({ drainPlayout: true });
       return;
     }
     setTranscripts(prev => [...prev, { author: 'system', text: 'Consultation complete. Disconnecting in 5 seconds...' }]);

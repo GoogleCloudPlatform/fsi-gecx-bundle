@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import base64
 import json
 import pytest
@@ -84,6 +85,10 @@ def test_gecx_voice_stream_success(
         "services.voice_bidi.mint_ces_session_capability",
         lambda _bootstrap: "opaque-session-capability",
     )
+    monkeypatch.setattr(
+        "services.voice_bidi.CES_TERMINAL_DRAIN_IDLE_SECONDS",
+        0.01,
+    )
 
     # 1. Setup Mock user validation claims
     mock_get_project_id.return_value = "evo-genai-workspace"
@@ -141,7 +146,10 @@ def test_gecx_voice_stream_success(
                 }
             }
         )
-        yield json.dumps({"sessionOutput": {"turnCompleted": True}})
+        # CES can leave the Bidi socket open after EndSession without sending
+        # another turnCompleted frame. The gateway must finish after a bounded
+        # idle drain instead of waiting for the provider socket timeout.
+        await asyncio.Event().wait()
 
     mock_gecx_ws.__aiter__.side_effect = gecx_responses
     mock_ws_connect.return_value.__aenter__.return_value = mock_gecx_ws
