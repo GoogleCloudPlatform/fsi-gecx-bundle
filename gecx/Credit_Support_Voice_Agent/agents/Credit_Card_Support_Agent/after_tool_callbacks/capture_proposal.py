@@ -83,8 +83,6 @@ def _clear_closeout_checkpoint(callback_context) -> None:
     callback_context.variables["closeout_originating_input_fingerprint"] = ""
     callback_context.variables["closeout_delegation_authorized"] = False
     callback_context.variables["closeout_end_attempted"] = False
-    callback_context.variables["closeout_farewell_ready"] = False
-    callback_context.variables["closeout_playout_acknowledged"] = False
 
 
 def after_tool_callback(tool, input, callback_context, tool_response):

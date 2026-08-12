@@ -31,14 +31,14 @@ def _expectations() -> list[str]:
             "session ends."
         ),
         (
-            "The agent calls end_session with reason "
-            "customer_query_ended only after the playout-complete event."
+            "The closeout completion intent is converted to native "
+            "end_session with reason customer_query_ended."
         ),
         (
             "The Session Closeout Agent does not transfer control back "
             "to the Credit Card Support Agent."
         ),
-        "The agent emits no speech after end_session.",
+        "The agent emits no speech after the native end_session call.",
     ]
 
 
@@ -74,14 +74,6 @@ def _credit_limit_test_case() -> dict[str, Any]:
                 ),
                 "max_turns": 1,
             },
-            {
-                "goal": "Acknowledge that the farewell finished playing.",
-                "success_criteria": (
-                    "The session ends without additional agent speech."
-                ),
-                "static_utterance": "event: sys.closeout_playout_complete",
-                "max_turns": 1,
-            },
         ],
         "expectations": _expectations(),
     }
@@ -103,18 +95,10 @@ def _checkpoint_test_case() -> dict[str, Any]:
             {
                 "goal": "Generate an authorized consultation farewell.",
                 "success_criteria": (
-                    "The closeout agent speaks one short farewell without "
-                    "ending the session in the same turn."
+                    "The closeout agent speaks one short farewell and its "
+                    "completion intent becomes native end_session."
                 ),
                 "static_utterance": "No, that's all.",
-                "max_turns": 1,
-            },
-            {
-                "goal": "Acknowledge that the farewell finished playing.",
-                "success_criteria": (
-                    "The session ends without additional agent speech."
-                ),
-                "static_utterance": "event: sys.closeout_playout_complete",
                 "max_turns": 1,
             },
         ],
@@ -155,12 +139,6 @@ def _strict_closeout_checks(trace_chunks: list[str]) -> dict[str, Any]:
         for index, line in enumerate(tail)
         if "Tool Call" in line and "end_session" in line
     ]
-    playout_event_indexes = [
-        index
-        for index, line in enumerate(tail)
-        if "sys.closeout_playout_complete" in line
-    ]
-
     farewell_before_end = bool(
         farewell_indexes
         and end_indexes
@@ -172,11 +150,6 @@ def _strict_closeout_checks(trace_chunks: list[str]) -> dict[str, Any]:
     correct_reason = any(
         "customer_query_ended" in tail[index] for index in end_indexes
     )
-    end_after_playout = bool(
-        playout_event_indexes
-        and end_indexes
-        and playout_event_indexes[0] < end_indexes[0]
-    )
     checks = {
         "final_customer_turn_observed": final_user_index >= 0,
         "closeout_transfer_observed": bool(closeout_transfer_indexes),
@@ -184,8 +157,6 @@ def _strict_closeout_checks(trace_chunks: list[str]) -> dict[str, Any]:
         "end_session_observed": bool(end_indexes),
         "farewell_before_end_session": farewell_before_end,
         "end_session_reason_correct": correct_reason,
-        "playout_event_observed": bool(playout_event_indexes),
-        "end_session_after_playout_event": end_after_playout,
         "no_return_to_support_agent": not support_return_indexes,
         "no_speech_after_end_session": no_speech_after_end,
     }

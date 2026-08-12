@@ -70,32 +70,28 @@ def test_farewell_text_is_extracted_from_terminal_trace() -> None:
     ) == "You're very welcome. Goodbye."
 
 
-def test_strict_closeout_requires_playout_event_before_terminal_call() -> None:
+def test_strict_closeout_accepts_native_terminal_call() -> None:
     result = _strict_closeout_checks(
         [
             "User: No, that's all.",
             "Agent Transfer: Transferred to Session Closeout Agent",
             "Agent Text: You're very welcome. Goodbye.",
-            "User Query: <event>sys.closeout_playout_complete</event>",
             "Tool Call: end_session with args "
             "{'reason': 'customer_query_ended'}",
         ]
     )
 
     assert result["passed"] is True
-    assert result["checks"]["end_session_after_playout_event"] is True
 
 
-def test_strict_closeout_rejects_same_turn_terminal_call() -> None:
+def test_strict_closeout_rejects_missing_native_terminal_call() -> None:
     result = _strict_closeout_checks(
         [
             "User: No, that's all.",
             "Agent Transfer: Transferred to Session Closeout Agent",
             "Agent Text: You're very welcome. Goodbye.",
-            "Tool Call: end_session with args "
-            "{'reason': 'customer_query_ended'}",
         ]
     )
 
     assert result["passed"] is False
-    assert result["checks"]["playout_event_observed"] is False
+    assert result["checks"]["end_session_observed"] is False

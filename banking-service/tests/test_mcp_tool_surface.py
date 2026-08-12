@@ -115,3 +115,13 @@ async def test_model_visible_proposal_tool_schemas_are_frozen() -> None:
         "REVISE",
         "CANCEL",
     }
+
+
+@pytest.mark.asyncio
+async def test_closeout_wrapper_exposes_only_the_terminal_reason() -> None:
+    published = {tool.name: tool for tool in await mcp.list_tools()}
+
+    schema = published["complete_consultation"].parameters
+    assert set(schema["properties"]) == {"reason"}
+    assert schema["required"] == ["reason"]
+    assert schema["properties"]["reason"]["const"] == "customer_query_ended"

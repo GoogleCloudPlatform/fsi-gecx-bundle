@@ -427,13 +427,15 @@ of production authorization. See [Agent Trajectory Evaluation](./agent_trajector
 
 Session closeout is a separate runtime concern. It may occur only after the
 consequential action result has been presented, but it does not participate in
-proposal authorization or banking mutation. CES implements closeout in two
-phases: the closeout agent produces farewell speech without invoking a terminal
-tool; CES diagnostic metadata identifies the callback-authorized closeout turn
-structurally, without transcript parsing. After the provider completes that
-turn, the browser drains its scheduled audio and acknowledges playout through
-the trusted voice proxy. The proxy then sends a typed CES event that a callback
-converts directly to `end_session`, without another model-generated response.
+proposal authorization or banking mutation. The closeout agent produces its
+farewell and then selects `complete_consultation`; an after-model callback
+validates the trusted checkpoint and replaces that wrapper call with CES'
+native `end_session` before execution, preserving the generated farewell in the
+same response. The proxy treats the resulting CES protocol `EndSession` signal
+as the authoritative terminal boundary. It finishes every queued browser
+write, waits for the browser to acknowledge its AudioContext playout drain, and
+then half-closes the provider transport. No transcript interpretation, second
+model turn, or synthetic CES event participates in teardown.
 
 ## Implementation Map
 

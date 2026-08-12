@@ -126,15 +126,12 @@ def test_gecx_voice_stream_success(
 
     # 2. Setup GECX Mock server WebSocket connection instance
     mock_gecx_ws = AsyncMock()
-    closeout_event_received = asyncio.Event()
+    provider_close_requested = asyncio.Event()
 
-    async def record_gecx_send(message):
-        payload = json.loads(message)
-        if (
-            payload.get("realtimeInput", {}).get("event", {}).get("event")
-            == "sys.closeout_playout_complete"
-        ):
-            closeout_event_received.set()
+    async def record_gecx_close(*, code, reason):
+        assert code == 1000
+        assert reason == "graceful_closeout"
+        provider_close_requested.set()
 
     async def gecx_responses():
         yield json.dumps({"sessionOutput": {"text": "Welcome to Horizon"}})
@@ -142,29 +139,16 @@ def test_gecx_voice_stream_success(
             {
                 "sessionOutput": {
                     "text": " Financial support.",
-                    "diagnosticInfo": {
-                        "rootSpan": {
-                            "childSpans": [
-                                {
-                                    "attributes": {
-                                        "agent": "Session Closeout Agent"
-                                    }
-                                }
-                            ]
-                        }
-                    },
                     "turnCompleted": True,
                 }
             }
         )
-        await asyncio.wait_for(closeout_event_received.wait(), timeout=1)
         yield json.dumps(
-            {"recognitionResult": {"transcript": "Hello are you there?"}}
+            {"endSession": {"metadata": {"reason": "customer_query_ended"}}}
         )
-        yield json.dumps({"interruptionSignal": {"bargeIn": True}})
-        yield json.dumps({"endSession": {}})
+        await asyncio.wait_for(provider_close_requested.wait(), timeout=1)
 
-    mock_gecx_ws.send.side_effect = record_gecx_send
+    mock_gecx_ws.close.side_effect = record_gecx_close
     mock_gecx_ws.__aiter__.side_effect = gecx_responses
     mock_ws_connect.return_value.__aenter__.return_value = mock_gecx_ws
 
@@ -207,20 +191,11 @@ def test_gecx_voice_stream_success(
         assert closeout_response == {"type": "CLOSEOUT_FAREWELL_COMPLETE"}
         websocket.send_text(json.dumps({"type": "CLOSEOUT_PLAYOUT_COMPLETE"}))
 
-        recognition_response = websocket.receive_json()
-        assert recognition_response == {
-            "type": "TRANSCRIPT",
-            "text": "Hello are you there?",
-            "author": "user",
-            "replace_previous": True,
-        }
-
-        # D2. Await the interruption event
-        interrupt_response = websocket.receive_json()
-        assert interrupt_response["type"] == "INTERRUPT"
-
         end_response = websocket.receive_json()
-        assert end_response == {"type": "SESSION_END", "reason": "CES_END_SESSION"}
+        assert end_response == {
+            "type": "SESSION_END",
+            "reason": "CES_GRACEFUL_CLOSEOUT",
+        }
 
         # E. Verify backend handshake call payload parameters
         sent_messages = [json.loads(c[0][0]) for c in mock_gecx_ws.send.call_args_list]
@@ -272,12 +247,15 @@ def test_gecx_voice_stream_success(
             ),
             None,
         )
-        assert closeout_event is not None
-
+        assert closeout_event is None
     runtime_session_id = mock_build_bootstrap.call_args.kwargs["runtime_session_id"]
     assert runtime_session_id.startswith("ces-")
     assert mock_build_bootstrap.call_args.kwargs["auth_provider_uid"] == (
         "borrower-123"
+    )
+    mock_gecx_ws.close.assert_awaited_once_with(
+        code=1000,
+        reason="graceful_closeout",
     )
 
 
