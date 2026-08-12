@@ -1009,15 +1009,26 @@ def test_closeout_completion_intent_with_wrong_reason_is_not_rewritten():
     assert variables["closeout_end_attempted"] is False
 
 
-def test_closeout_completion_without_preceding_farewell_is_not_rewritten():
+def test_closeout_streamed_tool_only_chunk_becomes_native_end_session():
     callback = _load_closeout("after_model_callbacks/finalize_closeout.py")
 
-    wrapper = SimpleNamespace(
-        text=None,
-        function_call=SimpleNamespace(
-            name="banking_service_mcp_toolset_complete_consultation",
-            args={"reason": "customer_query_ended"},
-        ),
+    class FakePart:
+        def __init__(self, *, function_name=None, args=None, end_reason=None):
+            self.function_call = (
+                SimpleNamespace(name=function_name, args=args or {})
+                if function_name
+                else None
+            )
+            self.end_reason = end_reason
+
+        @classmethod
+        def from_end_session(cls, *, reason):
+            return cls(end_reason=reason)
+
+    callback.Part = FakePart
+    wrapper = FakePart(
+        function_name="banking_service_mcp_toolset_complete_consultation",
+        args={"reason": "customer_query_ended"},
     )
     response = SimpleNamespace(content=SimpleNamespace(parts=[wrapper]))
     variables = {
@@ -1034,5 +1045,6 @@ def test_closeout_completion_without_preceding_farewell_is_not_rewritten():
         )
         is None
     )
-    assert response.content.parts == [wrapper]
-    assert variables["closeout_checkpoint_state"] == "OFFERED"
+    assert response.content.parts[0].end_reason == "customer_query_ended"
+    assert variables["closeout_checkpoint_state"] == "ENDING"
+    assert variables["closeout_end_attempted"] is True

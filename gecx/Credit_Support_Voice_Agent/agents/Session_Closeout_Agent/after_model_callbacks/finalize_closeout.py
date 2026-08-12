@@ -33,7 +33,7 @@ def _call_reason(part) -> str:
 
 
 def after_model_callback(callback_context, llm_response):
-    """Convert only a trusted wrapper call, preserving the generated farewell."""
+    """Convert only a trusted wrapper call after streamed farewell output."""
     variables = callback_context.variables
     authorized = bool(
         variables.get("closeout_delegation_authorized")
@@ -61,15 +61,11 @@ def after_model_callback(callback_context, llm_response):
     wrapper_index = wrapper_indexes[0]
     if _call_reason(parts[wrapper_index]) != _END_REASON:
         return None
-    if not any(
-        bool(str(getattr(part, "text", "") or "").strip())
-        for part in parts[:wrapper_index]
-    ):
-        return None
 
-    # Mutate the pending response so Gemini Live's already-generated farewell
-    # remains in the same response. The wrapper never executes; CES executes
-    # its native terminal system action and emits a protocol EndSession signal.
+    # Gemini Live streams farewell text/audio before emitting a tool-only model
+    # response. Mutate that pending tool response so the already-streamed
+    # farewell remains untouched. The wrapper never executes; CES executes its
+    # native terminal system action and emits a protocol EndSession signal.
     parts[wrapper_index] = Part.from_end_session(  # noqa: F821
         reason=_END_REASON
     )
