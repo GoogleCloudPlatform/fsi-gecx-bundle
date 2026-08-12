@@ -63,12 +63,14 @@ def after_model_callback(callback_context, llm_response):
         return None
 
     # Gemini Live streams farewell text/audio before emitting a tool-only model
-    # response. Mutate that pending tool response so the already-streamed
-    # farewell remains untouched. The wrapper never executes; CES executes its
-    # native terminal system action and emits a protocol EndSession signal.
-    parts[wrapper_index] = Part.from_end_session(  # noqa: F821
+    # response. Return the documented replacement response for that pending
+    # tool chunk, leaving the already-streamed farewell untouched. The wrapper
+    # never executes; CES executes its native terminal system action and emits
+    # a protocol EndSession signal.
+    replacement_parts = list(parts)
+    replacement_parts[wrapper_index] = Part.from_end_session(  # noqa: F821
         reason=_END_REASON
     )
     variables["closeout_checkpoint_state"] = "ENDING"
     variables["closeout_end_attempted"] = True
-    return None
+    return LlmResponse.from_parts(parts=replacement_parts)  # noqa: F821

@@ -934,7 +934,13 @@ def test_closeout_completion_intent_becomes_native_end_session():
         def from_end_session(cls, *, reason):
             return cls(end_reason=reason)
 
+    class FakeResponse:
+        @classmethod
+        def from_parts(cls, *, parts):
+            return SimpleNamespace(content=SimpleNamespace(parts=parts))
+
     callback.Part = FakePart
+    callback.LlmResponse = FakeResponse
     variables = {
         "closeout_delegation_authorized": True,
         "closeout_checkpoint_state": "OFFERED",
@@ -956,14 +962,11 @@ def test_closeout_completion_intent_becomes_native_end_session():
         )
     )
 
-    assert (
-        callback.after_model_callback(
-            SimpleNamespace(variables=variables), response
-        )
-        is None
+    result = callback.after_model_callback(
+        SimpleNamespace(variables=variables), response
     )
-    assert response.content.parts[0].text == "You're very welcome. Goodbye."
-    assert response.content.parts[1].end_reason == "customer_query_ended"
+    assert result.content.parts[0].text == "You're very welcome. Goodbye."
+    assert result.content.parts[1].end_reason == "customer_query_ended"
     assert variables["closeout_checkpoint_state"] == "ENDING"
     assert variables["closeout_end_attempted"] is True
 
@@ -1025,7 +1028,13 @@ def test_closeout_streamed_tool_only_chunk_becomes_native_end_session():
         def from_end_session(cls, *, reason):
             return cls(end_reason=reason)
 
+    class FakeResponse:
+        @classmethod
+        def from_parts(cls, *, parts):
+            return SimpleNamespace(content=SimpleNamespace(parts=parts))
+
     callback.Part = FakePart
+    callback.LlmResponse = FakeResponse
     wrapper = FakePart(
         function_name="banking_service_mcp_toolset_complete_consultation",
         args={"reason": "customer_query_ended"},
@@ -1039,12 +1048,9 @@ def test_closeout_streamed_tool_only_chunk_becomes_native_end_session():
         "proposal_commit_attempted": False,
     }
 
-    assert (
-        callback.after_model_callback(
-            SimpleNamespace(variables=variables), response
-        )
-        is None
+    result = callback.after_model_callback(
+        SimpleNamespace(variables=variables), response
     )
-    assert response.content.parts[0].end_reason == "customer_query_ended"
+    assert result.content.parts[0].end_reason == "customer_query_ended"
     assert variables["closeout_checkpoint_state"] == "ENDING"
     assert variables["closeout_end_attempted"] is True
