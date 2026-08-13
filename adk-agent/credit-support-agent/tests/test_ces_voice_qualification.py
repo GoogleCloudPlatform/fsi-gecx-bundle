@@ -328,19 +328,16 @@ def test_closeout_contract_requires_checkpoint_transfer_and_terminal_tool() -> N
 
     assert len(golden["turns"]) == 4
     assert "request_credit_limit_increase" in rendered
-    assert "offer_session_closeout" in rendered
+    assert "offer_session_closeout" not in rendered
     action_steps = golden["turns"][2]["steps"]
     action_tools = [
         step["expectation"]["toolCall"]["toolsetTool"]["toolId"]
         for step in action_steps
         if (step.get("expectation") or {}).get("toolCall")
     ]
-    assert action_tools == [
-        "request_credit_limit_increase",
-        "offer_session_closeout",
-    ]
+    assert action_tools == ["request_credit_limit_increase"]
     assert action_steps[1]["expectation"]["toolCall"]["args"] == {}
-    checkpoint = action_steps[5]["expectation"]["updatedVariables"]
+    checkpoint = action_steps[3]["expectation"]["updatedVariables"]
     assert checkpoint["closeout_checkpoint_state"] == "OFFERED"
     assert checkpoint["closeout_delegation_authorized"] is False
     terminal_steps = golden["turns"][3]["steps"]

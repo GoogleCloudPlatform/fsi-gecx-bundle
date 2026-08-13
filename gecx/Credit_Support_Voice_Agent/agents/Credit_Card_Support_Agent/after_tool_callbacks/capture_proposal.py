@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 _PROPOSAL_ACTIONS = {
     "propose_fraud_triage": "TRIAGE_FRAUD_CASE",
     "propose_card_reissue": "REISSUE_CARD",
@@ -84,6 +86,32 @@ def _clear_closeout_checkpoint(callback_context) -> None:
     callback_context.variables["closeout_delegation_authorized"] = False
 
 
+def _customer_input_fingerprint(callback_context) -> str:
+    """Return an opaque identity for the customer turn completing the action."""
+    digest = hashlib.sha256()
+    part_count = 0
+    for part in callback_context.get_last_user_input() or []:
+        value = str(part.text_or_transcript() or "")
+        if not value:
+            continue
+        encoded = value.encode("utf-8")
+        digest.update(len(encoded).to_bytes(8, "big"))
+        digest.update(encoded)
+        part_count += 1
+    return digest.hexdigest() if part_count else ""
+
+
+def _mark_closeout_pending(callback_context) -> None:
+    """Open callback-owned closeout state after a successful banking action."""
+    invocation_id = str(callback_context.invocation_id or "")
+    callback_context.variables["closeout_checkpoint_state"] = "OFFER_PENDING"
+    callback_context.variables["closeout_originating_turn_id"] = invocation_id
+    callback_context.variables["closeout_originating_input_fingerprint"] = (
+        _customer_input_fingerprint(callback_context)
+    )
+    callback_context.variables["closeout_delegation_authorized"] = False
+
+
 def after_tool_callback(tool, input, callback_context, tool_response):
     """Capture banking-owned alert state and successful proposal responses."""
     tool_name = str(tool.name or "")
@@ -95,15 +123,6 @@ def after_tool_callback(tool, input, callback_context, tool_response):
         # same-turn transfer; the child before-agent callback is the consumer.
         return None
 
-    if tool_name.endswith("offer_session_closeout"):
-        # The before-tool callback tentatively records the checkpoint so its
-        # trusted turn evidence can be sent with the MCP call. A transport or
-        # banking rejection must consume it before the model runs again.
-        if payload.get("success") is not True:
-            _clear_closeout_checkpoint(callback_context)
-        callback_context.variables["closeout_offer_required"] = False
-        return None
-
     direct_servicing_tool = next(
         (
             suffix
@@ -113,9 +132,10 @@ def after_tool_callback(tool, input, callback_context, tool_response):
         None,
     )
     if direct_servicing_tool is not None:
-        callback_context.variables["closeout_offer_required"] = bool(
-            payload.get("success") is True
-        )
+        if payload.get("success") is True:
+            _mark_closeout_pending(callback_context)
+        else:
+            _clear_closeout_checkpoint(callback_context)
         return None
 
     if tool_name.endswith("get_open_fraud_alert"):
@@ -169,9 +189,9 @@ def after_tool_callback(tool, input, callback_context, tool_response):
             _clear_current_proposal(callback_context)
             if commit_tool == "commit_fraud_triage":
                 callback_context.variables["fraud_review_stage"] = "COMMITTED"
-            callback_context.variables["closeout_offer_required"] = True
+            _mark_closeout_pending(callback_context)
         else:
-            callback_context.variables["closeout_offer_required"] = False
+            _clear_closeout_checkpoint(callback_context)
             recovery_class = str(payload.get("recovery_class") or "")
             if recovery_class == "REPRESENT_AND_RECONFIRM":
                 callback_context.variables["proposal_presentation_turn_id"] = ""

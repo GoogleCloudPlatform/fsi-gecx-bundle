@@ -165,7 +165,7 @@ variableDeclarations:
   schema:
     type: STRING
 - name: closeout_checkpoint_state
-  description: Typed CES closeout checkpoint state, either empty, OFFERED, or ENDING.
+  description: Typed CES closeout checkpoint state, either empty, OFFER_PENDING, OFFERED, or ENDING.
   schema:
     type: STRING
 - name: closeout_originating_input_fingerprint
@@ -174,10 +174,6 @@ variableDeclarations:
     type: STRING
 - name: closeout_delegation_authorized
   description: Whether the closeout child accepted the trusted checkpoint for this handoff.
-  schema:
-    type: BOOLEAN
-- name: closeout_offer_required
-  description: Whether a successful servicing action still requires a final-assistance checkpoint.
   schema:
     type: BOOLEAN
 - name: active_fraud_alert_id

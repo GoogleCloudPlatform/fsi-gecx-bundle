@@ -349,15 +349,19 @@ def test_ces_questions_preserve_proposal_and_revision_is_explicit():
     assert variables["proposal_id"] == "proposal-1"
     closeout_callback = _load("before_tool_callbacks/enforce_closeout.py")
     closeout = closeout_callback.before_tool_callback(
-        SimpleNamespace(name="banking_service_mcp_toolset.offer_session_closeout"),
-        {},
+        SimpleNamespace(name="transfer_to_agent"),
+        {"agent_name": "Session Closeout Agent"},
         Context(invocation_id="turn-2", variables=variables),
     )
     assert closeout["error"] == "PROPOSAL_DECISION_REQUIRED"
 
 
-def test_ces_closeout_uses_typed_offer_and_later_turn_ordering():
-    offer_callback = _load("before_tool_callbacks/enforce_closeout.py")
+def test_ces_closeout_uses_callback_checkpoint_and_later_turn_ordering():
+    capture_callback = _load("after_tool_callbacks/capture_proposal.py")
+    advance_callback = _load(
+        "after_model_callbacks/advance_closeout_checkpoint.py"
+    )
+    enforce_callback = _load("before_tool_callbacks/enforce_closeout.py")
     authorize_callback = _load_closeout(
         "before_agent_callbacks/authorize_closeout_handoff.py"
     )
@@ -374,27 +378,29 @@ def test_ces_closeout_uses_typed_offer_and_later_turn_ordering():
     authorize_callback.Part = FakePart
     authorize_callback.Content = FakeContent
     variables = {}
-    offer_callback.before_tool_callback(
-        SimpleNamespace(name="banking_service_mcp_toolset.offer_session_closeout"),
+    context = Context(invocation_id="turn-1", variables=variables)
+    capture_callback.after_tool_callback(
+        SimpleNamespace(
+            name="banking_service_mcp_toolset.request_credit_limit_increase"
+        ),
         {},
-        Context(invocation_id="turn-1", variables=variables),
+        context,
+        {"success": True, "new_limit": 11250},
     )
-    blocked_handoff = offer_callback.before_tool_callback(
+    assert variables["closeout_checkpoint_state"] == "OFFER_PENDING"
+    blocked_handoff = enforce_callback.before_tool_callback(
         SimpleNamespace(name="transfer_to_agent"),
         {"agent_name": "Session Closeout Agent"},
         Context(invocation_id="turn-1", variables=variables),
     )
     assert blocked_handoff["error"] == "CLOSEOUT_HANDOFF_NOT_READY"
 
-    variables = {}
-    offer_callback.before_tool_callback(
-        SimpleNamespace(name="banking_service_mcp_toolset.offer_session_closeout"),
-        {},
-        Context(invocation_id="turn-1", variables=variables),
-    )
-    # The parent validates the later customer input. The child validates the
-    # persisted checkpoint without depending on callback mutation ordering.
-    authorization = offer_callback.before_tool_callback(
+    response = SimpleNamespace(content=SimpleNamespace(parts=[object()]))
+    assert advance_callback.after_model_callback(context, response) is None
+    assert variables["closeout_checkpoint_state"] == "OFFERED"
+    # The parent validates only that a later customer input exists. The child
+    # trusts the persisted checkpoint without interpreting that input.
+    authorization = enforce_callback.before_tool_callback(
         SimpleNamespace(name="transfer_to_agent"),
         {"agent_name": "Session Closeout Agent"},
         Context(
@@ -422,22 +428,31 @@ def test_ces_closeout_uses_typed_offer_and_later_turn_ordering():
 
 
 def test_ces_closeout_handoff_accepts_later_input_without_invocation_id():
-    offer_callback = _load("before_tool_callbacks/enforce_closeout.py")
-    variables = {"customer_turn_id": "action-confirmation-turn"}
-    assert (
-        offer_callback.before_tool_callback(
-            SimpleNamespace(name="banking_service_mcp_toolset.offer_session_closeout"),
-            {},
-            Context(
-                invocation_id="",
-                variables=variables,
-                user_text=None,
-            ),
-        )
-        is None
+    capture_callback = _load("after_tool_callbacks/capture_proposal.py")
+    advance_callback = _load(
+        "after_model_callbacks/advance_closeout_checkpoint.py"
+    )
+    enforce_callback = _load("before_tool_callbacks/enforce_closeout.py")
+    variables = {}
+    context = Context(
+        invocation_id="",
+        variables=variables,
+        user_text="Approve the requested limit.",
+    )
+    capture_callback.after_tool_callback(
+        SimpleNamespace(
+            name="banking_service_mcp_toolset.request_credit_limit_increase"
+        ),
+        {},
+        context,
+        {"success": True, "new_limit": 11250},
+    )
+    advance_callback.after_model_callback(
+        context,
+        SimpleNamespace(content=SimpleNamespace(parts=[object()])),
     )
 
-    authorization = offer_callback.before_tool_callback(
+    authorization = enforce_callback.before_tool_callback(
         SimpleNamespace(name="transfer_to_agent"),
         {"agent_name": "Session Closeout Agent"},
         Context(
@@ -453,17 +468,16 @@ def test_ces_closeout_handoff_accepts_later_input_without_invocation_id():
 
     assert variables["closeout_delegation_authorized"] is True
     assert variables["closeout_checkpoint_state"] == "OFFERED"
-    assert variables["closeout_originating_turn_id"] == "action-confirmation-turn"
+    assert variables["closeout_originating_turn_id"] == ""
 
 
 def test_ces_non_closeout_tool_consumes_open_closeout_checkpoint():
     callback = _load("before_tool_callbacks/enforce_closeout.py")
-    variables = {}
-    callback.before_tool_callback(
-        SimpleNamespace(name="banking_service_mcp_toolset.offer_session_closeout"),
-        {},
-        Context(invocation_id="turn-1", variables=variables),
-    )
+    variables = {
+        "closeout_checkpoint_state": "OFFERED",
+        "closeout_originating_turn_id": "turn-1",
+        "closeout_originating_input_fingerprint": "opaque",
+    }
 
     assert (
         callback.before_tool_callback(
@@ -481,12 +495,11 @@ def test_ces_non_closeout_tool_consumes_open_closeout_checkpoint():
 def test_ces_closeout_transfer_preserves_open_checkpoint_for_child():
     before_callback = _load("before_tool_callbacks/enforce_closeout.py")
     after_callback = _load("after_tool_callbacks/capture_proposal.py")
-    variables = {}
-    before_callback.before_tool_callback(
-        SimpleNamespace(name="banking_service_mcp_toolset.offer_session_closeout"),
-        {},
-        Context(invocation_id="turn-1", variables=variables),
-    )
+    variables = {
+        "closeout_checkpoint_state": "OFFERED",
+        "closeout_originating_turn_id": "turn-1",
+        "closeout_originating_input_fingerprint": "opaque",
+    }
 
     transfer = SimpleNamespace(name="transfer_to_agent")
     context = Context(invocation_id="turn-2", variables=variables)
@@ -525,24 +538,19 @@ def test_ces_closeout_transfer_preserves_open_checkpoint_for_child():
     )
 
 
-def test_ces_closeout_offer_binds_turn_header_and_clears_failed_checkpoint():
-    before_callback = _load("before_tool_callbacks/enforce_closeout.py")
+def test_failed_servicing_action_does_not_open_closeout_checkpoint():
     after_callback = _load("after_tool_callbacks/capture_proposal.py")
-    variables = {}
+    variables = {"closeout_checkpoint_state": "OFFERED"}
     context = Context(invocation_id="servicing-turn", variables=variables)
     tool = SimpleNamespace(
-        name="banking_service_mcp_toolset.offer_session_closeout"
+        name="banking_service_mcp_toolset.request_credit_limit_increase"
     )
-
-    assert before_callback.before_tool_callback(tool, {}, context) is None
-    assert variables["customer_turn_id"] == "servicing-turn"
-    assert variables["closeout_checkpoint_state"] == "OFFERED"
 
     assert after_callback.after_tool_callback(
         tool,
         {},
         context,
-        {"status": "error", "error": "transport rejected"},
+        {"success": False, "error": "request rejected"},
     ) is None
     assert variables["closeout_checkpoint_state"] == ""
     assert variables["closeout_originating_turn_id"] == ""
@@ -635,7 +643,7 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     assert "closeout_end_attempted" not in declared_variables
     assert "closeout_farewell_ready" not in declared_variables
     assert "closeout_playout_acknowledged" not in declared_variables
-    assert "closeout_offer_required" in declared_variables
+    assert "closeout_offer_required" not in declared_variables
     custom_headers = toolset["mcpToolset"]["customHeaders"]
     assert custom_headers == {
         "x-banking-session-capability": "$context.variables.session_capability",
@@ -702,7 +710,6 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
         "propose_wallet_provisioning",
         "commit_wallet_provisioning",
         "decide_action_proposal",
-        "offer_session_closeout",
         "request_credit_limit_increase",
         "reverse_overdraft_fee",
     }
@@ -726,7 +733,9 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     }
     assert any("enforce_closeout.py" in path for path in callback_paths)
     assert any("enforce_proposal_context.py" in path for path in callback_paths)
-    assert any("ensure_closeout_offer.py" in path for path in callback_paths)
+    assert any(
+        "advance_closeout_checkpoint.py" in path for path in callback_paths
+    )
     assert not any("sanitize_voice_output.py" in path for path in callback_paths)
     assert not any("present_commit_result.py" in path for path in callback_paths)
     assert not any("start_fraud_review.py" in path for path in callback_paths)
@@ -787,58 +796,44 @@ def test_voice_bundle_isolates_native_session_end_in_closeout_agent():
     assert "Do not assume or refer to any time of day" in closeout_instruction
 
 
-def test_parent_appends_missing_closeout_offer_without_replacing_audio():
+def test_parent_promotes_pending_closeout_without_mutating_response():
     callback = _load(
-        "after_model_callbacks/ensure_closeout_offer.py"
+        "after_model_callbacks/advance_closeout_checkpoint.py"
     )
 
     class FakePart:
-        def __init__(
-            self, *, text=None, function_name=None, args=None, agent_transfer=None
-        ):
+        def __init__(self, *, text=None, agent_transfer=None):
             self.text = text
             self.agent_transfer = agent_transfer
-            self.function_call = (
-                SimpleNamespace(name=function_name, args=args or {})
-                if function_name
-                else None
-            )
-
-        @classmethod
-        def from_function_call(cls, *, name, args):
-            return cls(function_name=name, args=args)
 
         @classmethod
         def from_agent_transfer(cls, *, agent):
             return cls(agent_transfer=agent)
 
-        def has_function_call(self, name):
-            return bool(self.function_call and self.function_call.name == name)
-
     callback.Part = FakePart
     response = SimpleNamespace(
         content=SimpleNamespace(parts=[FakePart(text="Action completed.")])
     )
+    variables = {
+        "closeout_checkpoint_state": "OFFER_PENDING",
+        "proposal_id": "",
+        "proposal_commit_attempted": False,
+    }
     result = callback.after_model_callback(
-        SimpleNamespace(
-            variables={
-                "closeout_offer_required": True,
-                "proposal_id": "",
-                "proposal_commit_attempted": False,
-            }
-        ),
+        SimpleNamespace(variables=variables),
         response,
     )
 
     assert result is None
+    assert variables["closeout_checkpoint_state"] == "OFFERED"
     assert response.content.parts[0].text == "Action completed."
-    assert response.content.parts[1].function_call.name.endswith(
-        "offer_session_closeout"
-    )
+    assert len(response.content.parts) == 1
 
 
 def test_authorized_closeout_continuation_becomes_child_transfer():
-    callback = _load("after_model_callbacks/ensure_closeout_offer.py")
+    callback = _load(
+        "after_model_callbacks/advance_closeout_checkpoint.py"
+    )
 
     class FakePart:
         def __init__(self, *, text=None, agent_transfer=None):

@@ -129,7 +129,7 @@ def test_read_only_mcp_tool_ignores_partial_proposal_headers() -> None:
         mcp_utils._proposal_context_for_tool("propose_fraud_triage", partial_headers)
 
 
-def test_closeout_uses_base_runtime_context_not_proposal_registration() -> None:
+def test_retired_closeout_tool_has_no_runtime_context_registration() -> None:
     headers = {
         "x-support-session-id": "support-session-1",
         "x-runtime-name": "CES_GEMINI_LIVE",
@@ -141,10 +141,7 @@ def test_closeout_uses_base_runtime_context_not_proposal_registration() -> None:
     assert (
         mcp_utils._proposal_context_for_tool("offer_session_closeout", headers) is None
     )
-    assert (
-        mcp_utils._runtime_context_for_tool("offer_session_closeout", headers)
-        is not None
-    )
+    assert mcp_utils._runtime_context_for_tool("offer_session_closeout", headers) is None
 
 
 def test_ces_capability_identity_rejects_stale_reset_generation(monkeypatch) -> None:

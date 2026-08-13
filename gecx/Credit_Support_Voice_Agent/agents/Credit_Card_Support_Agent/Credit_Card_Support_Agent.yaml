@@ -35,8 +35,8 @@ afterToolCallbacks:
 - pythonCode: agents/Credit_Card_Support_Agent/after_tool_callbacks/capture_proposal.py
   description: Capture active-alert identifiers plus the opaque proposal and banking-authored summary.
 afterModelCallbacks:
-- pythonCode: agents/Credit_Card_Support_Agent/after_model_callbacks/ensure_closeout_offer.py
-  description: Append a required closeout offer without replacing native model audio.
+- pythonCode: agents/Credit_Card_Support_Agent/after_model_callbacks/advance_closeout_checkpoint.py
+  description: Advance callback-owned closeout state after the action-result response.
 toolsets:
 - toolset: banking_service_mcp_toolset
   toolIds:
@@ -49,6 +49,5 @@ toolsets:
   - propose_wallet_provisioning
   - commit_wallet_provisioning
   - decide_action_proposal
-  - offer_session_closeout
   - request_credit_limit_increase
   - reverse_overdraft_fee

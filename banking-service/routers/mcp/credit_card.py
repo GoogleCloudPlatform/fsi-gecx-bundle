@@ -561,32 +561,6 @@ def _safe_protocol_failure(
 
 @mcp.tool()
 @requires_user_assertion
-async def offer_session_closeout(ctx: Context = None) -> dict:
-    """Open a runtime-attested final-assistance checkpoint."""
-    runtime_context = proposal_runtime_context_var.get()
-    if runtime_context is None:
-        return {
-            "success": False,
-            "error": "TRUSTED_RUNTIME_CONTEXT_REQUIRED",
-            "message": "Trusted runtime session context is required.",
-        }
-    try:
-        runtime_context.require_customer_turn()
-    except RuntimeContextError as exc:
-        return {
-            "success": False,
-            "error": "CLOSEOUT_CHECKPOINT_REJECTED",
-            "message": str(exc),
-        }
-    return {
-        "success": True,
-        "status": "CLOSEOUT_OFFERED",
-        "customer_prompt": "Is there anything else I can help you with?",
-    }
-
-
-@mcp.tool()
-@requires_user_assertion
 async def decide_action_proposal(
     proposal_id: str,
     decision: Literal["DECLINE", "REVISE", "CANCEL"],

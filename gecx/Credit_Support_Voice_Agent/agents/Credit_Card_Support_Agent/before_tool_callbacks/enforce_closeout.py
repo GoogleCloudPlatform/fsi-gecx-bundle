@@ -53,32 +53,17 @@ def _later_customer_turn_is_present(callback_context) -> bool:
 def before_tool_callback(tool, input, callback_context):
     tool_name = str(tool.name or "")
     invocation_id = str(callback_context.invocation_id or "")
-    if tool_name.endswith("offer_session_closeout"):
-        if str(callback_context.variables.get("proposal_id") or ""):
-            return {
-                "success": False,
-                "error": "PROPOSAL_DECISION_REQUIRED",
-                "message": "Resolve the current proposal before offering closeout.",
-            }
-        input_fingerprint = _customer_input_fingerprint(callback_context)
-        originating_turn = str(
-            callback_context.variables.get("customer_turn_id") or invocation_id
-        )
-        # The MCP transport projects this protected variable into the required
-        # x-customer-turn-id header. Non-proposal servicing paths do not set it
-        # elsewhere, so bind it at the closeout-offer boundary.
-        callback_context.variables["customer_turn_id"] = invocation_id
-        callback_context.variables["closeout_checkpoint_state"] = "OFFERED"
-        callback_context.variables["closeout_originating_turn_id"] = originating_turn
-        callback_context.variables["closeout_originating_input_fingerprint"] = (
-            input_fingerprint
-        )
-        callback_context.variables["closeout_delegation_authorized"] = False
-        return None
     if (
         tool_name.endswith("transfer_to_agent")
         and str(input.get("agent_name") or "") == "Session Closeout Agent"
     ):
+        if str(callback_context.variables.get("proposal_id") or ""):
+            callback_context.variables["closeout_delegation_authorized"] = False
+            return {
+                "success": False,
+                "error": "PROPOSAL_DECISION_REQUIRED",
+                "message": "Resolve the current proposal before closeout.",
+            }
         # The after-model callback emits the second, structural transfer after
         # this callback has authorized the handoff. Allow that transfer through
         # without revalidating customer input that the continuation no longer
@@ -94,8 +79,7 @@ def before_tool_callback(tool, input, callback_context):
         ):
             return None
         if (
-            str(callback_context.variables.get("proposal_id") or "")
-            or bool(callback_context.variables.get("proposal_commit_attempted"))
+            bool(callback_context.variables.get("proposal_commit_attempted"))
             or not _later_customer_turn_is_present(callback_context)
         ):
             callback_context.variables["closeout_delegation_authorized"] = False

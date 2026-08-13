@@ -130,9 +130,7 @@ PROPOSAL_CONTEXT_TOOL_NAMES = frozenset(
         "decide_action_proposal",
     }
 )
-RUNTIME_CONTEXT_TOOL_NAMES = PROPOSAL_CONTEXT_TOOL_NAMES | frozenset(
-    {"offer_session_closeout"}
-)
+RUNTIME_CONTEXT_TOOL_NAMES = PROPOSAL_CONTEXT_TOOL_NAMES
 
 
 def _proposal_context_for_tool(
@@ -147,7 +145,7 @@ def _proposal_context_for_tool(
 def _runtime_context_for_tool(
     tool_name: str, headers: dict[str, str]
 ) -> ProposalRuntimeContext | None:
-    """Parse base runtime evidence for proposal tools and closeout separately."""
+    """Parse base runtime evidence for proposal lifecycle tools."""
     if tool_name not in RUNTIME_CONTEXT_TOOL_NAMES:
         return None
     return ProposalRuntimeContext.from_headers(headers)

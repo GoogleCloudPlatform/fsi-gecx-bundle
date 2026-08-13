@@ -315,12 +315,6 @@ def _managed_fake_output(tool: str) -> dict[str, Any]:
             "decision": "DECLINE",
             "invalidation_reason": "CUSTOMER_DECLINED",
         }
-    if tool == "offer_session_closeout":
-        return {
-            "success": True,
-            "status": "CLOSEOUT_OFFERED",
-            "customer_prompt": "Is there anything else I can help you with?",
-        }
     if tool == "request_credit_limit_increase":
         return {
             "success": True,
@@ -822,12 +816,6 @@ def _conversational_golden(
                     _tool_response_expectation(
                         app, "commit_fraud_triage", "eval-commit"
                     ),
-                    _tool_expectation(
-                        app, "offer_session_closeout", "eval-closeout-offer-1"
-                    ),
-                    _tool_response_expectation(
-                        app, "offer_session_closeout", "eval-closeout-offer-1"
-                    ),
                     _agent_response_expectation(str(commit["expected_agent"])),
                 ]
             },
@@ -886,12 +874,6 @@ def _conversational_golden(
                         "commit_wallet_provisioning",
                         "eval-wallet-provisioning",
                     ),
-                    _tool_expectation(
-                        app, "offer_session_closeout", "eval-closeout-offer-2"
-                    ),
-                    _tool_response_expectation(
-                        app, "offer_session_closeout", "eval-closeout-offer-2"
-                    ),
                     {
                         "expectation": {
                             "updatedVariables": {
@@ -907,7 +889,7 @@ def _conversational_golden(
                                 "proposal_commit_attempted": False,
                                 "closeout_checkpoint_state": "OFFERED",
                                 "closeout_originating_turn_id": (
-                                    "eval-closeout-offer-2"
+                                    "eval-wallet-provisioning"
                                 ),
                                 "closeout_originating_input_fingerprint": "",
                                 "closeout_delegation_authorized": False,
@@ -1023,22 +1005,12 @@ def _closeout_contract_golden(app: str) -> dict[str, Any]:
                         "request_credit_limit_increase",
                         "eval-limit-increase",
                     ),
-                    _tool_expectation(
-                        app,
-                        "offer_session_closeout",
-                        "eval-closeout-offer",
-                    ),
-                    _tool_response_expectation(
-                        app,
-                        "offer_session_closeout",
-                        "eval-closeout-offer",
-                    ),
                     {
                         "expectation": {
                             "updatedVariables": {
                                 "closeout_checkpoint_state": "OFFERED",
                                 "closeout_originating_turn_id": (
-                                    "eval-closeout-offer"
+                                    "eval-limit-increase"
                                 ),
                                 "closeout_originating_input_fingerprint": "",
                                 "closeout_delegation_authorized": False,

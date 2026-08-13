@@ -45,7 +45,6 @@
           "get_open_fraud_alert": 1,
           "propose_fraud_triage": 1,
           "commit_fraud_triage": 1,
-          "offer_session_closeout": 2,
           "propose_wallet_provisioning": 1,
           "commit_wallet_provisioning": 1
         },

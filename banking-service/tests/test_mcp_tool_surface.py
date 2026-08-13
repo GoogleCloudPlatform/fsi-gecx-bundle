@@ -18,6 +18,7 @@ from routers.mcp import mcp
 
 
 RETIRED_TOOLS = {
+    "offer_session_closeout",
     "report_lost_stolen_card",
     "issue_replacement_card_tool",
     "push_card_to_google_wallet",

@@ -193,8 +193,8 @@ CES projects the same opaque identity and ordered turns through declared
 variables. Its checked-in MCP contract maps those variables exactly to the
 protected transport headers. A commit-retry checkpoint preserves the original
 presentation and confirmation turns and permits only the same opaque proposal
-id. CES closeout ordering is implemented by a separate callback, and banking
-parses closeout's base runtime context outside the proposal-tool registration.
+id. CES closeout ordering is implemented by a separate callback-owned state
+transition and has no banking tool or proposal-tool registration.
 
 The ADK-only customer-reported fraud compatibility path is still a direct
 action and therefore retains its existing bounded local authorization payload.
@@ -427,15 +427,18 @@ of production authorization. See [Agent Trajectory Evaluation](./agent_trajector
 
 Session closeout is a separate runtime concern. It may occur only after the
 consequential action result has been presented, but it does not participate in
-proposal authorization or banking mutation. After validating the trusted
-`OFFERED` checkpoint, the closeout agent produces one farewell and calls CES'
+proposal authorization or banking mutation. A successful banking-action
+callback opens `OFFER_PENDING`; completion of the follow-on model response
+promotes it to `OFFERED` without inspecting generated text. After validating
+that trusted checkpoint on a later customer turn, the closeout agent produces
+one farewell and calls CES'
 native `end_session` in the same turn. The resulting CES protocol `EndSession`
 signal stops further customer input but does not truncate the provider response:
-the proxy continues consuming the Bidi stream through terminal turn completion,
-flushes all received frames to the browser, and the browser drains its scheduled
-AudioContext playout before local teardown. No transcript interpretation,
-wrapper tool, synthetic event, or second model generation participates in
-teardown.
+the proxy consumes trailing Bidi frames through a bounded terminal-output idle
+interval, flushes all received frames to the browser, and the browser drains its
+scheduled AudioContext playout before local teardown. No transcript
+interpretation, closeout bookkeeping tool, synthetic event, or second model
+generation participates in teardown.
 
 ## Implementation Map
 
