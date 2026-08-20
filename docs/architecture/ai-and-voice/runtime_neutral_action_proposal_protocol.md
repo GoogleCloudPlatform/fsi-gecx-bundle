@@ -37,6 +37,45 @@ evidence, or make transport events authoritative.
 There is no confirmation phrase list, regular-expression gate, or transcript
 classification callback in the authorization path.
 
+## Current Workflow At A Glance
+
+This is the implemented workflow shared by ADK and CES. Runtime-specific code
+adapts provider turns and session identity into trusted evidence, but it does
+not decide whether the customer's words constitute authorization.
+
+1. The model identifies a consequential banking action and invokes its typed
+   propose tool with the business facts it has gathered.
+2. Banking service authenticates the customer and session, resolves current
+   domain facts, creates an immutable proposal, and returns an opaque proposal
+   id plus a customer-safe summary.
+3. The model presents that banking-owned summary. The runtime records the
+   presentation checkpoint using provider turn events, without inspecting the
+   generated text.
+4. On a later customer turn, the model chooses a typed operation: commit,
+   decline, revise, cancel, or continue the conversation without advancing the
+   proposal.
+5. The runtime sends only the opaque proposal id and protected session and turn
+   evidence. It never reconstructs the mutation or supplies model-authored
+   authorization fields.
+6. Banking service validates scope, lifecycle, expiry, reset generation,
+   ordered-turn evidence, authorization policy, and current domain
+   preconditions. A commit is claimed and executed exactly once in the
+   lifecycle-owned transaction.
+7. The runtime reports success only from the authoritative banking result. A
+   retry uses the same proposal id; a changed action requires a terminal
+   disposition and a new proposal.
+8. Conversation closeout happens afterward as a separate runtime lifecycle. It
+   cannot authorize, execute, or alter the banking proposal.
+
+The three registered production actions currently use the Tier 1
+general-acknowledgment policy: the customer agrees to the presented action on a
+later turn and the model expresses that agreement through a typed decision.
+The same kernel can host stricter protocols, such as required restatement,
+verbatim disclosure, trusted UI confirmation, step-up verification, or human
+approval, by registering a different authorization policy and its required
+trusted evidence. These policies do not require a second lifecycle engine or a
+semantic transcript parser.
+
 ## Characterized Protocol Baseline
 
 The protocol-refinement baseline is application commit `6c563f3`. The focused
@@ -443,11 +482,26 @@ generation participates in teardown.
 ## Implementation Map
 
 - Trusted context: `banking-service/services/action_proposal_context.py`
-- Proposal lifecycle and domain dispatch:
+- Authorization policies, evidence validation, and action specifications:
+  `banking-service/services/proposal_protocol.py`
+- Durable lifecycle and transaction engine:
+  `banking-service/services/proposal_lifecycle.py`
+- Application façade and typed domain dispatch:
   `banking-service/services/action_proposals.py`
 - Durable model: `banking-service/models/action_proposal.py`
 - MCP authentication and request-local context:
   `banking-service/routers/mcp/utils.py`
 - Typed credit-card MCP tools: `banking-service/routers/mcp/credit_card.py`
-- ADK trusted header adapter:
-  `adk-agent/credit-support-agent/agent/agent.py`
+- ADK proposal evidence adapter:
+  `adk-agent/credit-support-agent/agent/proposal_evidence.py`
+- CES proposal callbacks:
+  `gecx/Credit_Support_Voice_Agent/agents/Credit_Card_Support_Agent/`
+- CES closeout agent and checkpoint callbacks:
+  `gecx/Credit_Support_Voice_Agent/agents/Session_Closeout_Agent/` and
+  `gecx/Credit_Support_Voice_Agent/agents/Credit_Card_Support_Agent/`
+- CES Bidi transport and terminal-output drain:
+  `banking-service/services/voice_bidi.py`
+- Runtime-neutral qualification entry point:
+  `scripts/test_action_proposal_boundary.sh`
+- CES managed and local SCRAPI qualification:
+  `scripts/cxas/ces_voice_qualification.py` and `scripts/cxas/README.md`
