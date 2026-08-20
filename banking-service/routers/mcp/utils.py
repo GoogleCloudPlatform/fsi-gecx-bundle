@@ -128,9 +128,9 @@ PROPOSAL_CONTEXT_TOOL_NAMES = frozenset(
         "propose_wallet_provisioning",
         "commit_wallet_provisioning",
         "decide_action_proposal",
-        "offer_session_closeout",
     }
 )
+RUNTIME_CONTEXT_TOOL_NAMES = PROPOSAL_CONTEXT_TOOL_NAMES
 
 
 def _proposal_context_for_tool(
@@ -138,6 +138,15 @@ def _proposal_context_for_tool(
 ) -> ProposalRuntimeContext | None:
     """Parse protected proposal headers only for proposal lifecycle tools."""
     if tool_name not in PROPOSAL_CONTEXT_TOOL_NAMES:
+        return None
+    return ProposalRuntimeContext.from_headers(headers)
+
+
+def _runtime_context_for_tool(
+    tool_name: str, headers: dict[str, str]
+) -> ProposalRuntimeContext | None:
+    """Parse base runtime evidence for proposal lifecycle tools."""
+    if tool_name not in RUNTIME_CONTEXT_TOOL_NAMES:
         return None
     return ProposalRuntimeContext.from_headers(headers)
 
@@ -329,7 +338,7 @@ def requires_user_assertion(func):
         # Set ContextVars for internal resolution
         t_cust = verified_customer_id_var.set(effective_id)
         t_assert = assertion_token_var.set(assertion_token)
-        runtime_context = _proposal_context_for_tool(func.__name__, headers)
+        runtime_context = _runtime_context_for_tool(func.__name__, headers)
         t_runtime = proposal_runtime_context_var.set(runtime_context)
 
         try:

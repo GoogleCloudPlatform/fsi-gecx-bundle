@@ -16,6 +16,7 @@ import importlib.util
 from pathlib import Path
 
 from models.synthetic_schedule import SyntheticScheduledEventSchema
+from utils.database import _sqlite_attach_statements
 
 
 def _load_data_generator_schedule_model():
@@ -72,6 +73,7 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
         "2ea57c78ba89_alloydb_unified_baseline.py",
         "7c4f2a9d1e63_canonical_journal_and_outbox_relay.py",
         "91d7b4a6c2ef_runtime_neutral_action_proposals.py",
+        "c3a91f2b7d44_one_active_proposal_per_session.py",
     ]
     baseline = versions[0].read_text()
     assert "down_revision: Union[str, Sequence[str], None] = None" in baseline
@@ -95,10 +97,22 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
     assert "action_proposals" in proposal_migration
     assert "uq_action_proposals_scope_idempotency" in proposal_migration
 
+    active_proposal_migration = versions[3].read_text()
+    assert 'down_revision: Union[str, Sequence[str], None] = "91d7b4a6c2ef"' in (
+        active_proposal_migration
+    )
+    assert "uq_action_proposals_active_session" in active_proposal_migration
+    assert "HAVING COUNT(*) > 1" in active_proposal_migration
+    assert "FROM operations.action_proposals" in active_proposal_migration
+    assert any(
+        statement.endswith(" AS operations;")
+        for statement in _sqlite_attach_statements("/tmp/migration.db")
+    )
+
 
 def test_current_schema_head_is_reconciled_before_banking_deploy() -> None:
     repository_root = Path(__file__).parents[2]
-    expected_head = "91d7b4a6c2ef"
+    expected_head = "c3a91f2b7d44"
     cloudbuild = repository_root.joinpath(
         "banking-service", "cloudbuild-publish-deploy.yaml"
     ).read_text()

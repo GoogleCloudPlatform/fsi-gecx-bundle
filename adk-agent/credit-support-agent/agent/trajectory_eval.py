@@ -61,6 +61,7 @@ class TrajectoryExpectation:
     require_runtime_version: bool = False
     require_catalog_identity: bool = False
     required_contract_version: str | None = None
+    minimum_interruptions: int = 0
 
 
 @dataclass(frozen=True)
@@ -344,6 +345,13 @@ def evaluate_trajectory(
     if terminal_outcome not in expectation.allowed_terminal_outcomes:
         failures.append(f"Unexpected terminal outcome {terminal_outcome}.")
 
+    interruption_count = len(_events_of_type(events, "INTERRUPTION"))
+    if interruption_count < expectation.minimum_interruptions:
+        failures.append(
+            f"Expected at least {expectation.minimum_interruptions} interruption(s), "
+            f"observed {interruption_count}."
+        )
+
     timestamps = [
         float(event["elapsed_ms"])
         for event in events
@@ -360,7 +368,7 @@ def evaluate_trajectory(
                 for event in tool_results
                 if event.get("success") is not True
             ),
-            "interruptions": len(_events_of_type(events, "INTERRUPTION")),
+            "interruptions": interruption_count,
             "duration_ms": max(timestamps, default=0.0),
             "guidance_source": guidance.get("source"),
             "catalog_snapshot_id": guidance.get("snapshot_id"),

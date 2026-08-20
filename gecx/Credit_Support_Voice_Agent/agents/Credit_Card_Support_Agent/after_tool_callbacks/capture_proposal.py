@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 _PROPOSAL_ACTIONS = {
     "propose_fraud_triage": "TRIAGE_FRAUD_CASE",
     "propose_card_reissue": "REISSUE_CARD",
@@ -23,6 +25,10 @@ _COMMIT_TOOLS = {
     "commit_fraud_triage",
     "commit_card_reissue",
     "commit_wallet_provisioning",
+}
+_DIRECT_SERVICING_TOOLS = {
+    "request_credit_limit_increase",
+    "reverse_overdraft_fee",
 }
 
 
@@ -51,6 +57,7 @@ def _clear_current_proposal(callback_context) -> None:
     callback_context.variables["proposal_confirmation_method"] = ""
     callback_context.variables["proposal_confirmation_source"] = ""
     callback_context.variables["proposal_decision_type"] = ""
+    callback_context.variables["proposal_commit_attempted"] = False
 
 
 def _record_completed_proposal_evidence(callback_context) -> None:
@@ -72,10 +79,64 @@ def _record_completed_proposal_evidence(callback_context) -> None:
     )
 
 
+def _clear_closeout_checkpoint(callback_context) -> None:
+    callback_context.variables["closeout_checkpoint_state"] = ""
+    callback_context.variables["closeout_originating_turn_id"] = ""
+    callback_context.variables["closeout_originating_input_fingerprint"] = ""
+    callback_context.variables["closeout_delegation_authorized"] = False
+
+
+def _customer_input_fingerprint(callback_context) -> str:
+    """Return an opaque identity for the customer turn completing the action."""
+    digest = hashlib.sha256()
+    part_count = 0
+    for part in callback_context.get_last_user_input() or []:
+        value = str(part.text_or_transcript() or "")
+        if not value:
+            continue
+        encoded = value.encode("utf-8")
+        digest.update(len(encoded).to_bytes(8, "big"))
+        digest.update(encoded)
+        part_count += 1
+    return digest.hexdigest() if part_count else ""
+
+
+def _mark_closeout_pending(callback_context) -> None:
+    """Open callback-owned closeout state after a successful banking action."""
+    invocation_id = str(callback_context.invocation_id or "")
+    callback_context.variables["closeout_checkpoint_state"] = "OFFER_PENDING"
+    callback_context.variables["closeout_originating_turn_id"] = invocation_id
+    callback_context.variables["closeout_originating_input_fingerprint"] = (
+        _customer_input_fingerprint(callback_context)
+    )
+    callback_context.variables["closeout_delegation_authorized"] = False
+
+
 def after_tool_callback(tool, input, callback_context, tool_response):
     """Capture banking-owned alert state and successful proposal responses."""
     tool_name = str(tool.name or "")
     payload = _payload(tool_response)
+
+    if tool_name.endswith("transfer_to_agent"):
+        # Closeout authorization is owned by enforce_closeout's before-tool
+        # callback. Do not recompute or consume it after either phase of the
+        # same-turn transfer; the child before-agent callback is the consumer.
+        return None
+
+    direct_servicing_tool = next(
+        (
+            suffix
+            for suffix in _DIRECT_SERVICING_TOOLS
+            if tool_name.endswith(suffix)
+        ),
+        None,
+    )
+    if direct_servicing_tool is not None:
+        if payload.get("success") is True:
+            _mark_closeout_pending(callback_context)
+        else:
+            _clear_closeout_checkpoint(callback_context)
+        return None
 
     if tool_name.endswith("get_open_fraud_alert"):
         alert = payload.get("fraud_alert")
@@ -106,9 +167,6 @@ def after_tool_callback(tool, input, callback_context, tool_response):
     if tool_name.endswith("review_fraud_selection"):
         if payload.get("success") is True:
             fingerprint = str(payload.get("selection_fingerprint") or "")
-            previous = str(
-                callback_context.variables.get("fraud_review_fingerprint") or ""
-            )
             callback_context.variables["fraud_review_stage"] = str(
                 payload.get("stage") or ""
             )
@@ -119,9 +177,6 @@ def after_tool_callback(tool, input, callback_context, tool_response):
             callback_context.variables["fraud_review_ready"] = bool(
                 payload.get("ready_to_propose")
             )
-            if previous and fingerprint and previous != fingerprint:
-                callback_context.variables["proposal_id"] = ""
-                callback_context.variables["proposal_customer_safe_summary"] = ""
         return None
 
     commit_tool = next(
@@ -134,6 +189,19 @@ def after_tool_callback(tool, input, callback_context, tool_response):
             _clear_current_proposal(callback_context)
             if commit_tool == "commit_fraud_triage":
                 callback_context.variables["fraud_review_stage"] = "COMMITTED"
+            _mark_closeout_pending(callback_context)
+        else:
+            _clear_closeout_checkpoint(callback_context)
+            recovery_class = str(payload.get("recovery_class") or "")
+            if recovery_class == "REPRESENT_AND_RECONFIRM":
+                callback_context.variables["proposal_presentation_turn_id"] = ""
+                callback_context.variables["proposal_confirmation_turn_id"] = ""
+                callback_context.variables["proposal_confirmation_method"] = ""
+                callback_context.variables["proposal_confirmation_source"] = ""
+                callback_context.variables["proposal_decision_type"] = ""
+                callback_context.variables["proposal_commit_attempted"] = False
+            elif recovery_class and recovery_class != "RETRY_SAME_PROPOSAL":
+                _clear_current_proposal(callback_context)
         return None
 
     if tool_name.endswith("decide_action_proposal"):
@@ -166,6 +234,7 @@ def after_tool_callback(tool, input, callback_context, tool_response):
         callback_context.variables["proposal_action_type"] = proposal_action
         callback_context.variables["proposal_id"] = proposal_id
         callback_context.variables["proposal_customer_safe_summary"] = summary
+        callback_context.variables["proposal_commit_attempted"] = False
         # CES persists after-tool state reliably across invocations. Record the
         # protected proposal-producing invocation here; a commit must still
         # arrive from a different, later customer invocation. Presentation

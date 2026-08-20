@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from google.adk.plugins import BasePlugin
 
-from agent.workflow_authorization import mark_authorization_presented
+from agent.proposal_evidence import mark_proposal_presented
 from agent.telemetry import record_action_proposal_event
 
 
@@ -33,9 +33,7 @@ def _record_proposal_transition(
         runtime="ADK_GEMINI_LIVE",
         support_session_id=str(state.get("session_id") or ""),
         proposal_id=str(proposal_id),
-        contract_version=str(
-            authorization.get("contract_version") or "fraud-triage.v1"
-        ),
+        contract_version=str(authorization.get("contract_version") or "unknown"),
         catalog_snapshot_id=guidance.get("snapshot_id"),
         tool="fraud_workflow_state",
         outcome=outcome,
@@ -81,16 +79,16 @@ class FraudWorkflowStatePlugin(BasePlugin):
 
         output_transcription = getattr(event, "output_transcription", None)
         if output_transcription and output_transcription.finished:
-            authorization = updated.get("workflow_authorization") or {}
-            if authorization.get("status") == "PREPARED":
-                updated["workflow_authorization"] = mark_authorization_presented(
-                    authorization,
-                    assistant_event_id=event_id,
-                    now_epoch_s=event.timestamp,
+            proposal = updated.get("pending_proposal") or {}
+            if proposal.get("evidence_state") == "AWAITING_PRESENTATION":
+                updated["pending_proposal"] = mark_proposal_presented(
+                    proposal,
+                    assistant_turn_id=event_id,
+                    observed_at_epoch_s=event.timestamp,
                 )
                 _record_proposal_transition(
                     invocation_context.session.state,
-                    updated["workflow_authorization"],
+                    updated["pending_proposal"],
                     "PRESENTED",
                 )
 

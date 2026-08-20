@@ -89,6 +89,7 @@ SCENARIOS = {
         forbidden_tools=("commit_fraud_triage", "triage_fraud_case"),
         required_proposal_outcomes=("PROPOSED",),
         forbidden_proposal_outcomes=("CONFIRMED", "COMMITTED", "INVALIDATED"),
+        minimum_interruptions=1,
     ),
     "fraud-reset": TrajectoryExpectation(
         required_tools={"get_open_fraud_alert": 1},

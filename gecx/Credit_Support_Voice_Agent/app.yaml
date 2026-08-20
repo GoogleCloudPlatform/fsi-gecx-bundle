@@ -136,6 +136,10 @@ variableDeclarations:
   description: Model-selected typed decision for the active proposal.
   schema:
     type: STRING
+- name: proposal_commit_attempted
+  description: Whether CES must retry only the same opaque proposal commit.
+  schema:
+    type: BOOLEAN
 - name: completed_proposal_action_type
   description: Audit-only action type recorded when a proposal commit succeeds.
   schema:
@@ -160,6 +164,18 @@ variableDeclarations:
   description: CES callback-owned customer turn after which final assistance was offered.
   schema:
     type: STRING
+- name: closeout_checkpoint_state
+  description: Typed CES closeout checkpoint state, either empty, OFFER_PENDING, OFFERED, or ENDING.
+  schema:
+    type: STRING
+- name: closeout_originating_input_fingerprint
+  description: Opaque callback-owned identity for the customer input that opened closeout.
+  schema:
+    type: STRING
+- name: closeout_delegation_authorized
+  description: Whether the closeout child accepted the trusted checkpoint for this handoff.
+  schema:
+    type: BOOLEAN
 - name: active_fraud_alert_id
   description: Banking-owned active fraud alert captured from the read tool.
   schema:

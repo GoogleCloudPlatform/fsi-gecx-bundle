@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # Registry of active session queues for out-of-band updates (e.g. card locking sync)
 # Keyed by user_id
 active_sessions: Dict[str, asyncio.Queue] = {}
-
+CES_TERMINAL_DRAIN_IDLE_SECONDS = 0.5
 
 def _configured_sample_rate(name: str, default: int = 16_000) -> int:
     value = int(os.getenv(name, str(default)))
@@ -289,12 +289,16 @@ class VoiceBidiSession:
             logger.info("Initial greeting trigger query transmitted.")
 
             # Task A: Read frames from browser WebSocket client
+            provider_end_received = asyncio.Event()
+
             async def read_client():
                 try:
                     while True:
                         data = await self.client_ws.receive()
                         if "bytes" in data:
                             message = data["bytes"]
+                            if provider_end_received.is_set():
+                                continue
                             if len(message) > 65536:
                                 logger.error(
                                     "Security warning: Client sent binary frame exceeding 64KB limit."
@@ -355,6 +359,8 @@ class VoiceBidiSession:
                         self.client_to_gecx_queue.task_done()
                         if chunk is None:
                             break
+                        if provider_end_received.is_set():
+                            continue
                         b64_audio = base64.b64encode(chunk).decode("utf-8")
                         realtime_input = {"realtimeInput": {"audio": b64_audio}}
                         await gecx_ws.send(json.dumps(realtime_input))
@@ -390,8 +396,28 @@ class VoiceBidiSession:
                 agent_transcript = ""
                 agent_transcript_id = None
                 agent_transcript_sequence = 0
+                end_session_reason = ""
+                session_end_forwarded = False
+                provider_messages = gecx_ws.__aiter__()
                 try:
-                    async for message in gecx_ws:
+                    while True:
+                        try:
+                            if provider_end_received.is_set():
+                                message = await asyncio.wait_for(
+                                    provider_messages.__anext__(),
+                                    timeout=CES_TERMINAL_DRAIN_IDLE_SECONDS,
+                                )
+                            else:
+                                message = await provider_messages.__anext__()
+                        except StopAsyncIteration:
+                            break
+                        except asyncio.TimeoutError:
+                            logger.info(
+                                "CES terminal output drain reached idle boundary "
+                                "idle_ms=%d.",
+                                round(CES_TERMINAL_DRAIN_IDLE_SECONDS * 1000),
+                            )
+                            break
                         response = json.loads(message)
                         session_output = response.get("sessionOutput", {})
                         if session_output:
@@ -439,12 +465,16 @@ class VoiceBidiSession:
                                         "replace_previous": True,
                                     }
                                 )
-                            if session_output.get(
-                                "turnCompleted"
-                            ) or session_output.get("turn_completed"):
+                            turn_completed = bool(
+                                session_output.get("turnCompleted")
+                                or session_output.get("turn_completed")
+                            )
+                            if turn_completed:
                                 transport_stats["completed_turns"] += 1
                                 agent_transcript = ""
                                 agent_transcript_id = None
+                        else:
+                            turn_completed = False
 
                         recognition_result = response.get("recognitionResult", {})
                         if recognition_result:
@@ -504,12 +534,44 @@ class VoiceBidiSession:
                             )
                             await self.gecx_to_client_queue.put({"type": "INTERRUPT"})
 
-                        if "endSession" in response or "end_session" in response:
-                            transport_stats["provider_end_signal"] = "end_session"
-                            logger.info("CES end-session signal received.")
-                            await self.gecx_to_client_queue.put(
-                                {"type": "SESSION_END", "reason": "CES_END_SESSION"}
+                        end_session = response.get("endSession")
+                        if end_session is None:
+                            end_session = response.get("end_session")
+                        if end_session is None and isinstance(session_output, dict):
+                            end_session = session_output.get("endSession")
+                            if end_session is None:
+                                end_session = session_output.get("end_session")
+                        if end_session is not None:
+                            metadata = (
+                                end_session.get("metadata", {})
+                                if isinstance(end_session, dict)
+                                else {}
                             )
+                            end_session_reason = str(
+                                metadata.get("reason")
+                                or (
+                                    end_session.get("reason")
+                                    if isinstance(end_session, dict)
+                                    else ""
+                                )
+                                or ""
+                            )
+                            transport_stats["provider_end_signal"] = "end_session"
+                            provider_end_received.set()
+                            logger.info(
+                                "CES end-session signal received reason=%s; "
+                                "draining remaining provider output.",
+                                end_session_reason or "unspecified",
+                            )
+
+                        if provider_end_received.is_set() and turn_completed:
+                            await self.gecx_to_client_queue.put(
+                                {
+                                    "type": "SESSION_END",
+                                    "reason": "CES_END_SESSION",
+                                }
+                            )
+                            session_end_forwarded = True
                             break
                         if "goAway" in response or "go_away" in response:
                             transport_stats["provider_end_signal"] = "go_away"
@@ -521,6 +583,14 @@ class VoiceBidiSession:
                 except Exception as ex:
                     logger.error(f"Error in read_from_gecx: {ex}")
                 finally:
+                    if provider_end_received.is_set() and not session_end_forwarded:
+                        # Some transports close immediately after their terminal
+                        # output instead of emitting a separate turn-complete
+                        # frame. The async iterator has still drained every
+                        # response available before this fallback is published.
+                        await self.gecx_to_client_queue.put(
+                            {"type": "SESSION_END", "reason": "CES_END_SESSION"}
+                        )
                     finished_at = time.monotonic()
                     first_input_at = transport_stats["first_browser_input_at"]
                     last_input_at = transport_stats["last_browser_input_at"]
@@ -642,4 +712,7 @@ class VoiceBidiSession:
                 for task in tasks.values():
                     if not task.done():
                         task.cancel()
-                await asyncio.gather(*tasks.values(), return_exceptions=True)
+                await asyncio.gather(
+                    *tasks.values(),
+                    return_exceptions=True,
+                )

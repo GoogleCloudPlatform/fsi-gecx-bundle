@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
+import base64
 import json
 import pytest
 from types import SimpleNamespace
@@ -83,6 +85,10 @@ def test_gecx_voice_stream_success(
         "services.voice_bidi.mint_ces_session_capability",
         lambda _bootstrap: "opaque-session-capability",
     )
+    monkeypatch.setattr(
+        "services.voice_bidi.CES_TERMINAL_DRAIN_IDLE_SECONDS",
+        0.01,
+    )
 
     # 1. Setup Mock user validation claims
     mock_get_project_id.return_value = "evo-genai-workspace"
@@ -107,21 +113,45 @@ def test_gecx_voice_stream_success(
 
     # 2. Setup GECX Mock server WebSocket connection instance
     mock_gecx_ws = AsyncMock()
-    # Mock the GECX response: Yield a single transcript json frame, then exit loop
-    mock_gecx_ws.__aiter__.return_value = [
-        json.dumps({"sessionOutput": {"text": "Welcome to Horizon"}}),
-        json.dumps(
+    trailing_audio = b"\x01\x02\x03\x04"
+
+    async def gecx_responses():
+        yield json.dumps({"sessionOutput": {"text": "Welcome to Horizon"}})
+        yield json.dumps(
             {
                 "sessionOutput": {
                     "text": " Financial support.",
+                    "diagnosticInfo": {
+                        "rootSpan": {
+                            "childSpans": [
+                                {
+                                    "attributes": {
+                                        "agent": "Session Closeout Agent"
+                                    }
+                                }
+                            ]
+                        }
+                    },
                     "turnCompleted": True,
                 }
             }
-        ),
-        json.dumps({"recognitionResult": {"transcript": "Hello are you there?"}}),
-        json.dumps({"interruptionSignal": {"bargeIn": True}}),
-        json.dumps({"endSession": {}}),
-    ]
+        )
+        yield json.dumps(
+            {"endSession": {"metadata": {"reason": "customer_query_ended"}}}
+        )
+        yield json.dumps(
+            {
+                "sessionOutput": {
+                    "audio": base64.b64encode(trailing_audio).decode("ascii")
+                }
+            }
+        )
+        # CES can leave the Bidi socket open after EndSession without sending
+        # another turnCompleted frame. The gateway must finish after a bounded
+        # idle drain instead of waiting for the provider socket timeout.
+        await asyncio.Event().wait()
+
+    mock_gecx_ws.__aiter__.side_effect = gecx_responses
     mock_ws_connect.return_value.__aenter__.return_value = mock_gecx_ws
 
     # 3. Trigger WebSocket connection using FastAPI TestClient
@@ -159,20 +189,14 @@ def test_gecx_voice_stream_success(
             "replace_previous": True,
         }
 
-        recognition_response = websocket.receive_json()
-        assert recognition_response == {
-            "type": "TRANSCRIPT",
-            "text": "Hello are you there?",
-            "author": "user",
-            "replace_previous": True,
-        }
-
-        # D2. Await the interruption event
-        interrupt_response = websocket.receive_json()
-        assert interrupt_response["type"] == "INTERRUPT"
+        # EndSession stops further input but does not truncate provider output.
+        assert websocket.receive_bytes() == trailing_audio
 
         end_response = websocket.receive_json()
-        assert end_response == {"type": "SESSION_END", "reason": "CES_END_SESSION"}
+        assert end_response == {
+            "type": "SESSION_END",
+            "reason": "CES_END_SESSION",
+        }
 
         # E. Verify backend handshake call payload parameters
         sent_messages = [json.loads(c[0][0]) for c in mock_gecx_ws.send.call_args_list]
@@ -215,7 +239,6 @@ def test_gecx_voice_stream_success(
         assert welcome_msg is not None
         assert welcome_msg["realtimeInput"]["event"]["event"] == "sys.welcome"
         assert sent_messages.index(variables_msg) < sent_messages.index(welcome_msg)
-
     runtime_session_id = mock_build_bootstrap.call_args.kwargs["runtime_session_id"]
     assert runtime_session_id.startswith("ces-")
     assert mock_build_bootstrap.call_args.kwargs["auth_provider_uid"] == (

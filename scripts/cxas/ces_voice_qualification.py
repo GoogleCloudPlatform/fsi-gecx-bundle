@@ -47,6 +47,7 @@ DEFAULT_CONVERSATIONAL_REFERENCE = (
     / "evaluations"
     / "ces_fraud_conversational_reference.json"
 )
+SESSION_CLOSEOUT_AGENT_ID = "43201fe7-1b16-48fe-9f96-ab57528b729e"
 sys.path.insert(0, str(AGENT_ROOT))
 
 from agent.ces_trajectory import (  # noqa: E402
@@ -152,6 +153,18 @@ def _scenario(matrix: dict[str, Any], scenario_id: str) -> dict[str, Any]:
 
 def _resource_id(name: str | None) -> str | None:
     return name.rsplit("/", 1)[-1] if name else None
+
+
+def _app_version_for_app(app: str, app_version: str | None) -> str | None:
+    """Bind CES's immutable version id to the caller-selected app parent.
+
+    Conversation resources may return the project-number spelling while the
+    evaluation endpoint receives the equivalent project-id spelling. CES
+    compares resource parents textually, so preserve the immutable version id
+    while normalizing its parent.
+    """
+    version_id = _resource_id(app_version)
+    return f"{app}/versions/{version_id}" if version_id else None
 
 
 def _latest_live_conversation(api: CesApi, app: str) -> str:
@@ -302,11 +315,11 @@ def _managed_fake_output(tool: str) -> dict[str, Any]:
             "decision": "DECLINE",
             "invalidation_reason": "CUSTOMER_DECLINED",
         }
-    if tool == "offer_session_closeout":
+    if tool == "request_credit_limit_increase":
         return {
             "success": True,
-            "status": "CLOSEOUT_OFFERED",
-            "customer_prompt": "Is there anything else I can help you with?",
+            "new_limit": 11250,
+            "message": "Credit limit increase approved.",
         }
     return {}
 
@@ -406,6 +419,10 @@ def _managed_contract_evaluation(
     reference: dict[str, Any],
     dataset_id: str,
     display_name: str,
+    golden: dict[str, Any] | None = None,
+    tags: list[str] | None = None,
+    run_count: int = 1,
+    required_agent_response_role: str | None = None,
 ) -> dict[str, Any]:
     evaluation_id = f"{dataset_id}-reviewed"
     evaluation_path = f"{app}/evaluations/{evaluation_id}"
@@ -415,13 +432,14 @@ def _managed_contract_evaluation(
             "Reviewed synthetic trajectory for typed tool and workflow invariants. "
             "Live traces are canary evidence and never become golden implicitly."
         ),
-        "tags": [
+        "tags": tags
+        or [
             "bounded-qualification",
             "reviewed-contract",
             "fraud",
             "work-item-1",
         ],
-        "golden": _conversational_golden(app, reference),
+        "golden": golden or _conversational_golden(app, reference),
         "evaluationMetricsThresholdOverride": {
             "goldenHallucinationMetricBehavior": "DISABLED",
             "goldenEvaluationMetricsThresholds": {
@@ -495,7 +513,7 @@ def _managed_contract_evaluation(
                 ),
                 "appVersion": app_version,
                 "goldenRunMethod": "STABLE",
-                "runCount": 1,
+                "runCount": run_count,
                 "config": {
                     "evaluationChannel": "TEXT",
                     "toolCallBehaviour": "FAKE",
@@ -520,6 +538,26 @@ def _managed_contract_evaluation(
             for expectation in turn.get("expectationOutcome") or []
             if expectation.get("outcome")
         ]
+        required_agent_response_observed = (
+            required_agent_response_role is None
+            or any(
+                str(
+                    (expectation.get("observedAgentResponse") or {}).get("role")
+                    or ""
+                )
+                == required_agent_response_role
+                and any(
+                    str(chunk.get("text") or "").strip()
+                    for chunk in (
+                        expectation.get("observedAgentResponse") or {}
+                    ).get("chunks")
+                    or []
+                    if isinstance(chunk, dict)
+                )
+                for turn in replay_turns
+                for expectation in turn.get("expectationOutcome") or []
+            )
+        )
         results.append(
             {
                 "name": result.get("name"),
@@ -528,6 +566,10 @@ def _managed_contract_evaluation(
                 "app_version": result.get("appVersion"),
                 "turn_count": len(replay_turns),
                 "failed_expectation_count": expectation_outcomes.count("FAIL"),
+                "required_agent_response_role": required_agent_response_role,
+                "required_agent_response_observed": (
+                    required_agent_response_observed
+                ),
             }
         )
     return {
@@ -546,6 +588,7 @@ def _managed_contract_evaluation(
         and all(
             result.get("execution_state") == "COMPLETED"
             and result.get("evaluation_status") == "PASS"
+            and result.get("required_agent_response_observed") is True
             for result in results
         ),
     }
@@ -601,11 +644,15 @@ def _tool_response_expectation(
     }
 
 
-def _agent_response_expectation(text: str) -> dict[str, Any]:
+def _agent_response_expectation(
+    text: str,
+    *,
+    role: str = "Credit Card Support Agent",
+) -> dict[str, Any]:
     return {
         "expectation": {
             "agentResponse": {
-                "role": "Credit Card Support Agent",
+                "role": role,
                 "chunks": [{"text": text}],
             }
         }
@@ -769,12 +816,6 @@ def _conversational_golden(
                     _tool_response_expectation(
                         app, "commit_fraud_triage", "eval-commit"
                     ),
-                    _tool_expectation(
-                        app, "offer_session_closeout", "eval-closeout-offer-1"
-                    ),
-                    _tool_response_expectation(
-                        app, "offer_session_closeout", "eval-closeout-offer-1"
-                    ),
                     _agent_response_expectation(str(commit["expected_agent"])),
                 ]
             },
@@ -833,18 +874,25 @@ def _conversational_golden(
                         "commit_wallet_provisioning",
                         "eval-wallet-provisioning",
                     ),
-                    _tool_expectation(
-                        app, "offer_session_closeout", "eval-closeout-offer-2"
-                    ),
-                    _tool_response_expectation(
-                        app, "offer_session_closeout", "eval-closeout-offer-2"
-                    ),
                     {
                         "expectation": {
                             "updatedVariables": {
+                                "proposal_id": "",
+                                "proposal_customer_safe_summary": "",
+                                "proposal_action_type": "",
+                                "proposal_originating_turn_id": "",
+                                "proposal_presentation_turn_id": "",
+                                "proposal_confirmation_turn_id": "",
+                                "proposal_confirmation_method": "",
+                                "proposal_confirmation_source": "",
+                                "proposal_decision_type": "",
+                                "proposal_commit_attempted": False,
+                                "closeout_checkpoint_state": "OFFERED",
                                 "closeout_originating_turn_id": (
-                                    "eval-closeout-offer-2"
-                                )
+                                    "eval-wallet-provisioning"
+                                ),
+                                "closeout_originating_input_fingerprint": "",
+                                "closeout_delegation_authorized": False,
                             }
                         }
                     },
@@ -854,11 +902,166 @@ def _conversational_golden(
             {
                 "steps": [
                     {"userInput": {"text": str(close["user"])}},
+                    {
+                        "expectation": {
+                            "agentTransfer": {
+                                "targetAgent": (
+                                    f"{app}/agents/{SESSION_CLOSEOUT_AGENT_ID}"
+                                ),
+                                "displayName": "Session Closeout Agent",
+                            }
+                        }
+                    },
+                    # The wording is illustrative rather than fixed; the
+                    # zero semantic threshold leaves phrasing to the model,
+                    # while the response expectation requires a farewell text
+                    # chunk to exist before the terminal tool executes.
+                    _agent_response_expectation(
+                        "You're very welcome.",
+                        role="Session Closeout Agent",
+                    ),
+                    # The first transfer intent is consumed as typed
+                    # authorization. The after-model callback then emits the
+                    # second structural transfer that activates the child in
+                    # the same customer turn.
+                    {
+                        "expectation": {
+                            "agentTransfer": {
+                                "targetAgent": (
+                                    f"{app}/agents/{SESSION_CLOSEOUT_AGENT_ID}"
+                                ),
+                                "displayName": "Session Closeout Agent",
+                            }
+                        }
+                    },
                     # CES terminates the streaming turn as soon as the system
                     # tool executes, so post-tool farewell audio is not a
                     # stable managed-replay surface. The terminal tool is the
                     # deterministic assertion; live canaries cover playout.
-                    _tool_expectation(app, "end_session", "eval-end-session"),
+                    _tool_expectation(
+                        app,
+                        "end_session",
+                        "eval-end-session",
+                        {
+                            "reason": "customer_query_ended",
+                        },
+                    ),
+                ]
+            },
+        ]
+    }
+
+
+def _closeout_contract_golden(app: str) -> dict[str, Any]:
+    """Build a focused servicing-to-closeout trajectory."""
+    return {
+        "turns": [
+            {
+                "steps": [
+                    {
+                        "userInput": {
+                            "variables": {
+                                "has_active_fraud_alert": False,
+                                "entry_reason": "general_support",
+                                "runtime_name": "CES_GEMINI_LIVE",
+                                "reset_generation": "eval-reset-1",
+                                "language_code": "en",
+                                "runtime_language_code": "en-US",
+                                "language_selection_source": "default",
+                                "ces_app_id": _resource_id(app),
+                                "ces_version_or_deployment_id": "eval-version",
+                            }
+                        }
+                    },
+                    {"userInput": {"event": {"event": "sys.welcome"}}},
+                    _agent_response_expectation(
+                        "Hi, I'm Nova with Nova Horizon Bank. How can I help you?"
+                    ),
+                ]
+            },
+            {
+                "steps": [
+                    {
+                        "userInput": {
+                            "text": "Please raise my credit limit to $11,250."
+                        }
+                    },
+                    _agent_response_expectation(
+                        "To confirm, you want a new credit limit of $11,250. "
+                        "Is that correct?"
+                    ),
+                ]
+            },
+            {
+                "steps": [
+                    {"userInput": {"text": "That's correct."}},
+                    _tool_expectation(
+                        app,
+                        "request_credit_limit_increase",
+                        "eval-limit-increase",
+                    ),
+                    _tool_response_expectation(
+                        app,
+                        "request_credit_limit_increase",
+                        "eval-limit-increase",
+                    ),
+                    {
+                        "expectation": {
+                            "updatedVariables": {
+                                "closeout_checkpoint_state": "OFFERED",
+                                "closeout_originating_turn_id": (
+                                    "eval-limit-increase"
+                                ),
+                                "closeout_originating_input_fingerprint": "",
+                                "closeout_delegation_authorized": False,
+                                "proposal_id": "",
+                                "proposal_commit_attempted": False,
+                            }
+                        }
+                    },
+                    _agent_response_expectation(
+                        "Your credit limit increase was approved. Your new limit "
+                        "is $11,250. Is there anything else I can help you with?"
+                    ),
+                ]
+            },
+            {
+                "steps": [
+                    {"userInput": {"text": "No, that's all."}},
+                    {
+                        "expectation": {
+                            "agentTransfer": {
+                                "targetAgent": (
+                                    f"{app}/agents/{SESSION_CLOSEOUT_AGENT_ID}"
+                                ),
+                                "displayName": "Session Closeout Agent",
+                            }
+                        }
+                    },
+                    # The authorization attempt and the structural handoff are
+                    # both observable agent-transfer events in managed replay.
+                    {
+                        "expectation": {
+                            "agentTransfer": {
+                                "targetAgent": (
+                                    f"{app}/agents/{SESSION_CLOSEOUT_AGENT_ID}"
+                                ),
+                                "displayName": "Session Closeout Agent",
+                            }
+                        }
+                    },
+                    _agent_response_expectation(
+                        "You're very welcome.",
+                        role="Session Closeout Agent",
+                    ),
+                    _tool_expectation(
+                        app,
+                        "end_session",
+                        "eval-end-session",
+                        {
+                            "reason": "customer_query_ended",
+                        },
+                    ),
                 ]
             },
         ]
@@ -986,6 +1189,7 @@ def _evaluate_conversational_quality(
     confirmation_markers = (
         "do you confirm",
         "please confirm",
+        "just to confirm",
         "is that correct",
         "does that sound right",
         "does that sound good",
@@ -1171,6 +1375,15 @@ def main() -> int:
     parser.add_argument("--scenario", default="fraud-contract")
     parser.add_argument("--managed", action="store_true")
     parser.add_argument(
+        "--managed-suite",
+        choices=("all", "closeout"),
+        default="all",
+        help=(
+            "Run the complete managed qualification suite or only the focused "
+            "servicing closeout contract."
+        ),
+    )
+    parser.add_argument(
         "--conversational-reference",
         type=Path,
         default=DEFAULT_CONVERSATIONAL_REFERENCE,
@@ -1206,36 +1419,62 @@ def main() -> int:
         },
     }
     if args.managed:
-        app_version = args.app_version or conversation.get("appVersion")
+        app_version = _app_version_for_app(
+            args.app,
+            args.app_version or conversation.get("appVersion"),
+        )
         if not app_version:
             raise ValueError("--app-version is required when the conversation omits it.")
         conversational_reference = json.loads(
             args.conversational_reference.read_text()
         )
-        report["managed_evaluation"] = _managed_contract_evaluation(
-            api,
-            app=args.app,
-            app_version=app_version,
-            reference=conversational_reference,
-            dataset_id=args.dataset_id,
-            display_name="Bounded CES fraud qualification work item 1",
-        )
-        report["conversational_evaluation"] = (
-            _managed_conversational_evaluation(
+        if args.managed_suite == "all":
+            report["managed_evaluation"] = _managed_contract_evaluation(
                 api,
                 app=args.app,
                 app_version=app_version,
                 reference=conversational_reference,
+                dataset_id=args.dataset_id,
+                display_name="Bounded CES fraud qualification work item 1",
+            )
+        report["closeout_evaluation"] = _managed_contract_evaluation(
+            api,
+            app=args.app,
+            app_version=app_version,
+            reference=conversational_reference,
+            dataset_id="ces-servicing-closeout-v1",
+            display_name="CES servicing closeout contract",
+            golden=_closeout_contract_golden(args.app),
+            tags=[
+                "bounded-qualification",
+                "reviewed-contract",
+                "closeout",
+                "credit-limit",
+            ],
+            run_count=3,
+            required_agent_response_role="Session Closeout Agent",
+        )
+        if args.managed_suite == "all":
+            report["conversational_evaluation"] = (
+                _managed_conversational_evaluation(
+                    api,
+                    app=args.app,
+                    app_version=app_version,
+                    reference=conversational_reference,
+                )
+            )
+
+    if args.managed and args.managed_suite == "closeout":
+        report["passed"] = report["closeout_evaluation"]["passed"]
+    else:
+        report["passed"] = result.passed and (
+            not args.managed
+            or (
+                report["closeout_evaluation"]["passed"]
+                and report["managed_evaluation"]["passed"]
+                and report["conversational_evaluation"]["passed"]
             )
         )
-
-    report["passed"] = result.passed and (
-        not args.managed
-        or (
-            report["managed_evaluation"]["passed"]
-            and report["conversational_evaluation"]["passed"]
-        )
-    )
     rendered = json.dumps(report, indent=2, sort_keys=True)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

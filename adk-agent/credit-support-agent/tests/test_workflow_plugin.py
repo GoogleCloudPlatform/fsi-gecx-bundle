@@ -18,10 +18,7 @@ import pytest
 from google.adk.events import Event
 from google.genai import types
 
-from agent.workflow_authorization import (
-    TRIAGE_FRAUD_CASE,
-    create_workflow_authorization,
-)
+from agent.proposal_evidence import create_pending_proposal
 from agent.workflow_plugin import FraudWorkflowStatePlugin
 
 
@@ -47,20 +44,13 @@ def transcript_event(
 
 
 def prepared_playbook() -> dict:
-    authorization = create_workflow_authorization(
-        action=TRIAGE_FRAUD_CASE,
-        payload={
-            "fraud_alert_id": "fraud-123",
-            "disputed_authorization_ids": ["auth-1"],
-            "disputed_transaction_ids": [],
-            "issue_replacement": True,
-        },
-        session_id="session-1",
-        originating_customer_event_id="customer-origin",
+    proposal = create_pending_proposal(
+        proposal_id="proposal-123",
+        action_type="TRIAGE_FRAUD_CASE",
+        contract_version="fraud-triage.v1",
+        originating_customer_turn_id="customer-origin",
     )
-    authorization["proposal_id"] = "proposal-123"
-    authorization["customer_safe_summary"] = "Banking-owned structured summary."
-    return {"workflow_authorization": authorization}
+    return {"pending_proposal": proposal}
 
 
 @pytest.mark.asyncio
@@ -88,12 +78,10 @@ async def test_completed_proposal_assistant_turn_is_recorded_without_text_parsin
 
     await plugin.on_event_callback(invocation_context=context, event=event)
 
-    authorization = event.actions.state_delta["fraud_playbook"][
-        "workflow_authorization"
-    ]
-    assert authorization["status"] == "PENDING"
-    assert authorization["assistant_event_id"] == "agent-event"
-    assert authorization["presented_at_epoch_s"] == event.timestamp
+    proposal = event.actions.state_delta["fraud_playbook"]["pending_proposal"]
+    assert proposal["evidence_state"] == "AWAITING_DECISION"
+    assert proposal["presentation_turn_id"] == "agent-event"
+    assert proposal["presentation_observed_at_epoch_s"] == event.timestamp
 
 
 @pytest.mark.asyncio
@@ -116,11 +104,13 @@ async def test_incomplete_assistant_stream_does_not_mark_proposal_presented() ->
 
 
 @pytest.mark.asyncio
-async def test_customer_transcript_records_turn_identity_but_not_authorization() -> None:
+async def test_customer_transcript_records_turn_identity_but_not_authorization() -> (
+    None
+):
     playbook = prepared_playbook()
-    playbook["workflow_authorization"]["status"] = "PENDING"
-    playbook["workflow_authorization"]["assistant_event_id"] = "agent-event"
-    playbook["workflow_authorization"]["presented_at_epoch_s"] = 1000.0
+    playbook["pending_proposal"]["evidence_state"] = "AWAITING_DECISION"
+    playbook["pending_proposal"]["presentation_turn_id"] = "agent-event"
+    playbook["pending_proposal"]["presentation_observed_at_epoch_s"] = 1000.0
     session = SimpleNamespace(
         state={"session_id": "session-1", "fraud_playbook": playbook}
     )
@@ -142,7 +132,7 @@ async def test_customer_transcript_records_turn_identity_but_not_authorization()
 
     assert observed[0][1]["event_id"] == "user-event"
     assert "fraud_playbook" not in event.actions.state_delta
-    assert playbook["workflow_authorization"]["status"] == "PENDING"
+    assert playbook["pending_proposal"]["evidence_state"] == "AWAITING_DECISION"
 
 
 @pytest.mark.asyncio
@@ -163,8 +153,7 @@ async def test_interruption_does_not_change_uncommitted_proposal() -> None:
     await plugin.on_event_callback(invocation_context=context, event=event)
 
     assert "fraud_playbook" not in event.actions.state_delta
-    assert playbook["workflow_authorization"]["status"] == "PREPARED"
-    assert playbook["workflow_authorization"]["invalidation_reason"] is None
+    assert playbook["pending_proposal"]["evidence_state"] == ("AWAITING_PRESENTATION")
 
 
 @pytest.mark.asyncio

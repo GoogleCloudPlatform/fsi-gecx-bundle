@@ -17,12 +17,16 @@ from types import SimpleNamespace
 import pytest
 
 from agent import agent as agent_module
-from agent.agent import after_tool_callback, prepare_customer_reported_fraud_confirmation
+from agent.agent import (
+    after_tool_callback,
+    prepare_customer_reported_fraud_confirmation,
+)
+from agent.proposal_evidence import (
+    COMMIT_IN_FLIGHT,
+    create_pending_proposal,
+)
 from agent.workflow_authorization import (
-    PROVISION_GOOGLE_WALLET,
     TRIAGE_CUSTOMER_REPORTED_FRAUD,
-    create_workflow_authorization,
-    mark_authorization_executing,
 )
 
 
@@ -170,21 +174,22 @@ async def test_transaction_history_result_builds_trusted_selection_index(
 
 @pytest.mark.asyncio
 async def test_wallet_commit_error_preserves_idempotent_retry_authorization() -> None:
-    authorization = create_workflow_authorization(
-        action=PROVISION_GOOGLE_WALLET,
-        payload={"wallet_provider": "GOOGLE_WALLET"},
-        session_id="voice-session-1",
+    proposal = create_pending_proposal(
+        proposal_id="wallet-proposal",
+        action_type="PROVISION_GOOGLE_WALLET",
+        contract_version="wallet-provisioning.v1",
+        originating_customer_turn_id="customer-origin",
     )
-    authorization.update(
+    proposal.update(
         {
-            "status": "CONFIRMED",
-            "assistant_event_id": "agent-offer",
-            "customer_event_id": "customer-confirmation",
+            "evidence_state": COMMIT_IN_FLIGHT,
+            "presentation_turn_id": "agent-offer",
+            "confirmation_turn_id": "customer-confirmation",
         }
     )
     state = {
         "fraud_playbook": {
-            "workflow_authorization": mark_authorization_executing(authorization),
+            "pending_proposal": proposal,
         }
     }
 
@@ -203,8 +208,8 @@ async def test_wallet_commit_error_preserves_idempotent_retry_authorization() ->
         },
     )
 
-    recovered = state["fraud_playbook"]["workflow_authorization"]
-    assert recovered["status"] == "RECOVERY_REQUIRED"
+    recovered = state["fraud_playbook"]["pending_proposal"]
+    assert recovered["evidence_state"] == "COMMIT_RETRY"
     assert recovered["recovery_reason"] == (
         "TOOL_RESULT_NOT_SUCCESSFUL:commit_wallet_provisioning"
     )

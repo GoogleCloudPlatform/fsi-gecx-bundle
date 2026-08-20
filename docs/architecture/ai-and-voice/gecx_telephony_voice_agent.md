@@ -70,6 +70,14 @@ Because GECX operates as a Google-managed cloud agent orchestrator, it must secu
 1. **Google OIDC ID Token Verification**: The FastMCP router ensures that invocations come exclusively from Google Cloud Customer Experience Suite services by verifying the Google service account OIDC token in the `Authorization: Bearer <JWT>` header.
 2. **Banking-Issued Session Capability (`x-banking-session-capability`)**: The Firebase token terminates at the banking WebSocket gateway and is never sent to CES. After resolving the exact customer and reset generation, banking mints an encrypted 15-minute capability bound to the support session, CES runtime session, reset generation, app, and deployment. CES forwards the opaque capability with those protected headers. The MCP boundary accepts it only from an authorized CES service caller, verifies every binding, and checks the current reset generation before resolving the customer identity.
 3. **Transport-Owned Consent Evidence**: CES callbacks, rather than model-authored tool arguments, own the proposal id, presentation turn, confirmation turn, method, and decision-source headers. Banking-service accepts a commit only when the model chooses the typed commit operation on a later customer invocation for the active proposal.
+4. **Managed-Service Ingress Boundary**: CES reaches the banking-service Cloud Run URL from Google's managed service plane, so that service cannot use internal-only ingress without routing CES through a separate authenticated edge. The endpoint is network-reachable but not anonymously invokable: Cloud Run IAM admits named service identities, the MCP boundary verifies the CES service-agent OIDC token, and the encrypted capability binds every identity and session header. A caller-supplied `x-target-customer-id` or `x-banking-session-capability` header alone grants no authority. Any future public proxy placed in front of this boundary must remove client-supplied identity and capability headers before adding its own trusted values.
+
+The capability currently uses one Secret Manager key. Rotating that key
+invalidates capabilities minted under the previous key; their maximum lifetime
+is 15 minutes. A production rotation workflow that cannot tolerate that bounded
+interruption must deploy overlapping current and previous decryption keys before
+rotating the encryption key. That operational workflow is not implemented by
+the demo environment.
 
 ### Protected action callback chain
 

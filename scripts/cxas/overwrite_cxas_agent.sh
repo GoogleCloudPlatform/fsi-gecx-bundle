@@ -20,13 +20,22 @@ BASE_URL="${BASE_URL:-https://ces.clients6.google.com/v1beta}"
 PROJECT_ID="${PROJECT_ID:-}"
 APP_ID="${APP_ID:-}"
 LOCATION="${LOCATION:-us}"
+BANKING_SERVICE_REGION="${BANKING_SERVICE_REGION:-us-central1}"
+BANKING_SERVICE_URL="${BANKING_SERVICE_URL:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENT_DIR="${SCRIPT_DIR}/../../gecx" # Directory containing your agent configs
 AGENT_FOLDER="${AGENT_FOLDER:-Nova_Horizon_Bot_v2}"
-ZIP_OUT="/tmp/agent_export.zip"
+TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cxas-agent-overwrite.XXXXXX")"
+ZIP_OUT="${TEMP_DIR}/agent_export.zip"
+UPDATED_DEPLOYMENTS_FILE="${TEMP_DIR}/updated_deployments.txt"
 EXPECTED_MODEL="${EXPECTED_MODEL:-}"
 TARGET_DEPLOYMENT_NAME="${TARGET_DEPLOYMENT_NAME:-}"
 RESULT_FILE="${RESULT_FILE:-}"
+
+cleanup() {
+  rm -rf -- "$TEMP_DIR"
+}
+trap cleanup EXIT
 
 if [ -z "$EXPECTED_MODEL" ]; then
   EXPECTED_MODEL=$(awk '
@@ -47,8 +56,25 @@ if [ -z "$APP_ID" ]; then
   exit 1
 fi
 
-# Clean up the temporary zip file on exit
-trap 'rm -f "$ZIP_OUT"' EXIT
+# CES imports consume rendered YAML, while environment-specific generated files
+# remain intentionally ignored by Git. Materialize the MCP toolset immediately
+# before packaging so a clean checkout is independently deployable.
+TOOLSET_TEMPLATE="$AGENT_DIR/$AGENT_FOLDER/toolsets/banking_service_mcp_toolset/banking_service_mcp_toolset.yaml.tftpl"
+if [ -f "$TOOLSET_TEMPLATE" ]; then
+  if [ -z "$BANKING_SERVICE_URL" ]; then
+    BANKING_SERVICE_URL=$(gcloud run services describe banking-service \
+      --project "$PROJECT_ID" \
+      --region "$BANKING_SERVICE_REGION" \
+      --format='value(status.url)')
+  fi
+  if [ -z "$BANKING_SERVICE_URL" ]; then
+    echo "Error: Could not resolve the banking-service URL for the CES toolset." >&2
+    exit 1
+  fi
+  python3 "$SCRIPT_DIR/materialize_agent_bundle.py" \
+    --agent-folder "$AGENT_DIR/$AGENT_FOLDER" \
+    --banking-service-url "$BANKING_SERVICE_URL"
+fi
 
 # 1. Compress the directory structure
 # We change directory (cd) first so that the root of the ZIP is the actual agent files, not the parent folder.
@@ -272,8 +298,7 @@ fi
 echo "New Version Resource Name: $VERSION_RESOURCE_NAME"
 
 # 10. Update the existing deployments to use the new version
-UPDATED_DEPLOYMENTS_FILE=$(mktemp)
-trap 'rm -f "$ZIP_OUT" "$UPDATED_DEPLOYMENTS_FILE"' EXIT
+: > "$UPDATED_DEPLOYMENTS_FILE"
 if [ -n "$DEPLOYMENT_NAMES" ]; then
   while read -r DEPLOYMENT_NAME; do
     if [ -n "$DEPLOYMENT_NAME" ]; then

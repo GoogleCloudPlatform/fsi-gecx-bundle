@@ -692,11 +692,16 @@ export default function VoiceSupportView() {
 
   const startDisconnectCountdown = useCallback(() => {
     if (disconnectTimerRef.current) return; // already scheduled
+    if (engine === 'gecx') {
+      setTranscripts(prev => [...prev, { author: 'system', text: 'Consultation complete.' }]);
+      cleanupGecxSession({ drainPlayout: true });
+      return;
+    }
     setTranscripts(prev => [...prev, { author: 'system', text: 'Consultation complete. Disconnecting in 5 seconds...' }]);
     disconnectTimerRef.current = setTimeout(() => {
       endConsultation();
     }, 5000);
-  }, [endConsultation]);
+  }, [cleanupGecxSession, endConsultation, engine]);
 
   const refreshCreditCardData = useCallback(async () => {
     const data = await getCreditCardAccount();
@@ -1119,7 +1124,11 @@ export default function VoiceSupportView() {
     } else if (payload.type === DataChannelEvent.SESSION_END) {
       startDisconnectCountdown();
     }
-  }, [handleOperationalVoiceEvent, startDisconnectCountdown, stopPlayoutQueue]);
+  }, [
+    handleOperationalVoiceEvent,
+    startDisconnectCountdown,
+    stopPlayoutQueue,
+  ]);
 
   const startGecxConsultation = async () => {
     if (isConnecting || isConnected) return;
@@ -1334,7 +1343,10 @@ export default function VoiceSupportView() {
           // CES requires continuous audio, including silence. Muting therefore
           // substitutes a zero-valued frame instead of pausing the stream.
           wsRef.current.send(
-            pcmFrameForMicrophoneState(rawBuffer, micEnabledRef.current)
+            pcmFrameForMicrophoneState(
+              rawBuffer,
+              micEnabledRef.current,
+            )
           );
         }
       };

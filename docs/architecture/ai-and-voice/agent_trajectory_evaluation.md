@@ -141,4 +141,52 @@ CES live-trajectory, managed replay, and conversational qualification:
 
 The report is safe to retain because it contains resource provenance, pass/fail results, and aggregate metrics rather than transcripts or protected identifiers. Managed evaluation resources are app-level resources; an app overwrite can remove them, so recreate the contract replay and conversational reference after importing a new app bundle.
 
+### SCRAPI companion simulation
+
+The repository pins `cxas-scrapi` in a separate, ignored virtual environment so
+its evaluation dependencies do not enter the banking service or agent runtime:
+
+```bash
+make setup-cxas-scrapi
+make test-cxas-closeout \
+  PROJECT_ID=PROJECT_ID \
+  GECX_APP_ID=APP_ID
+```
+
+The closeout harness starts a real CES Sessions API conversation. In its
+default `audio` mode it uses one bidirectional stream, a simulated customer,
+and fake tools to exercise the current Agent Studio draft without a manual
+microphone session. Set `SCRAPI_DEPLOYMENT_ID` to evaluate an immutable deployed
+version instead, or set `SCRAPI_SCENARIO=credit-limit` to run the broader
+credit-limit workflow before closeout. Reports default to
+`scripts/cxas/.artifacts/closeout.json` and include transcripts. The artifact
+directory is explicitly ignored and can be removed with
+`make clean-cxas-scrapi`, so these reports remain local diagnostics rather than
+retainable qualification evidence.
+
+SCRAPI judges natural-language expectations and applies focused deterministic
+checks over trace event kinds for a farewell before native `end_session`, the
+terminal reason, no return to the support agent, and no speech after the
+terminal tool call. The deterministic checks locate the final simulated
+customer turn by its trace-event type and do not interpret transcript wording.
+They also do not estimate audio completeness from word count or model-span
+duration. Browser and proxy tests verify that `EndSession` suppresses further
+input without truncating trailing provider frames, that the proxy closes after
+a bounded terminal-output idle interval, and that the browser drains its
+AudioContext before local transport teardown.
+SCRAPI's
+flattened detailed trace does not preserve enough role information to replace
+the repository's managed CES role/event checker. The existing managed
+qualification therefore remains authoritative for exact response-role and
+event-order assertions; SCRAPI adds repeatable full-agent and Gemini Live
+coverage.
+
+`cxas lint` and `cxas llm-lint` are advisory during this integration. The
+current exported YAML bundle produces compatibility false positives when read
+directly, and even SCRAPI's canonical pulled representation reports naming,
+schema, and guardrail findings that do not correspond to runtime failures.
+Do not make those linters release gates until the export formats and accepted
+exceptions are normalized. Setup, authentication, scenario, and data-handling
+details are maintained in the [CX Agent Studio tooling guide](../../../scripts/cxas/README.md).
+
 Operational procedures and the complete ADK scenario list are in [Credit Support Agent Operations](../../../adk-agent/credit-support-agent/OPERATIONS.md). CES-specific fixture boundaries are in [CES Voice Qualification](../../../gecx/Credit_Support_Voice_Agent/evaluations/README.md).

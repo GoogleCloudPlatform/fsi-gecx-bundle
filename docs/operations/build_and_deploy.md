@@ -54,6 +54,7 @@ developer project without deploying them:
 export SOURCE_PROJECT=evo-genai-workspace
 export BRANCH=feature/example
 export COMMIT=$(git rev-parse origin/$BRANCH)
+export ROLLBACK_MANIFEST="gs://$SOURCE_PROJECT-fsi-release-manifests/alloydb/LAST_KNOWN_GOOD_COMMIT/qualify.json"
 
 gcloud config set project "$SOURCE_PROJECT"
 make run-triggers BRANCH="$BRANCH"
@@ -73,7 +74,7 @@ gcloud builds triggers run release-qualify \
   --project="$SOURCE_PROJECT" \
   --region=us-central1 \
   --sha="$COMMIT" \
-  --substitutions="_RELEASE_COMMIT=$COMMIT"
+  --substitutions="_RELEASE_COMMIT=$COMMIT,_ROLLBACK_MANIFEST_URI=$ROLLBACK_MANIFEST"
 ```
 
 Qualification applies Terraform, reconciles database grants and schema,
@@ -105,12 +106,13 @@ the qualification manifest:
 ```bash
 export TARGET_PROJECT=fsi-demo-1841
 export MANIFEST="gs://$SOURCE_PROJECT-fsi-release-manifests/alloydb/$COMMIT/qualify.json"
+export ROLLBACK_MANIFEST="gs://$TARGET_PROJECT-fsi-release-manifests/alloydb/LAST_KNOWN_GOOD_COMMIT/promote.json"
 
 gcloud builds triggers run release-promote \
   --project="$TARGET_PROJECT" \
   --region=us-central1 \
   --sha="$COMMIT" \
-  --substitutions="_RELEASE_COMMIT=$COMMIT,_MANIFEST_URI=$MANIFEST"
+  --substitutions="_RELEASE_COMMIT=$COMMIT,_MANIFEST_URI=$MANIFEST,_ROLLBACK_MANIFEST_URI=$ROLLBACK_MANIFEST"
 ```
 
 Approve the pending build in Cloud Build. Promotion reads the source manifest,
@@ -133,6 +135,17 @@ It also records and verifies:
 - the environment-local CES app, immutable version, and configured deployment
 - the Knowledge Catalog seed snapshot
 - the Alembic schema head
+- one environment-local, previously successful manifest as the coherent
+  rollback target
+
+The release controller rejects a rollback manifest from another environment,
+a manifest without successful validation, a mutable component image, or a
+manifest that does not pin exactly one schema head. It records the rollback
+manifest URI and digest together with its complete image, CES, catalog, and
+database identity. Rollback selection is therefore one release unit rather
+than an independently chosen set of component revisions. Database migrations
+remain forward-only; the selected application rollback must be compatible with
+the current schema head.
 
 CES versions are project-local, so promotion imports the exact source-addressed
 bundle and creates a target-local version rather than attempting to reuse the

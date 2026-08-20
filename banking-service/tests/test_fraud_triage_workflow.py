@@ -39,6 +39,7 @@ from models.identity import User, UserSecureMessage
 from repositories.fraud import FraudAlertRepository
 from services.action_proposals import (
     ActionProposalService,
+    ActiveProposalExistsError,
     ProposalScopeError,
     ProposalTransitionError,
 )
@@ -653,7 +654,7 @@ def test_proposal_commit_invalidates_when_alert_is_no_longer_open(
     fraud_alert.status = "RESOLVED_CUSTOMER_RECOGNIZED"
     db_session.commit()
 
-    with pytest.raises(ProposalTransitionError, match="no longer open"):
+    with pytest.raises(ProposalTransitionError, match="no longer open") as captured:
         ActionProposalService(db_session).commit_fraud_triage(
             proposal.id,
             customer_id=fraud_alert.customer_id,
@@ -664,6 +665,8 @@ def test_proposal_commit_invalidates_when_alert_is_no_longer_open(
         )
 
     refreshed = db_session.get(ActionProposal, proposal.id)
+    assert captured.value.safe_result()["error"] == "ACTION_PRECONDITION_CHANGED"
+    assert captured.value.safe_result()["recovery_class"] == "CREATE_NEW_PROPOSAL"
     assert refreshed.status == "INVALIDATED"
     assert refreshed.invalidation_reason == "FRAUD_ALERT_NO_LONGER_OPEN"
     assert (
@@ -706,18 +709,21 @@ def test_proposal_commit_persists_reset_invalidation_without_fraud_mutation(
     )
 
 
-def test_competing_confirmed_proposal_is_invalidated_after_first_commit(
+def test_competing_confirmed_proposal_is_rejected_before_first_commit(
     db_session, fraud_alert
 ):
     first = _confirmed_fraud_proposal(db_session, fraud_alert)
-    second = _confirmed_fraud_proposal(
-        db_session,
-        fraud_alert,
-        idempotency_key="proposal-turn-12",
-        turn_suffix="12",
-    )
-    service = ActionProposalService(db_session)
+    with pytest.raises(ActiveProposalExistsError) as captured:
+        _confirmed_fraud_proposal(
+            db_session,
+            fraud_alert,
+            idempotency_key="proposal-turn-12",
+            turn_suffix="12",
+        )
+    assert captured.value.safe_result()["error"] == "ACTIVE_PROPOSAL_EXISTS"
+    assert captured.value.safe_result()["proposal_id"] == str(first.id)
 
+    service = ActionProposalService(db_session)
     first_result = service.commit_fraud_triage(
         first.id,
         customer_id=fraud_alert.customer_id,
@@ -726,18 +732,9 @@ def test_competing_confirmed_proposal_is_invalidated_after_first_commit(
         runtime_session_id="adk-proposal-session",
         reset_generation="3:9",
     )
-    with pytest.raises(ProposalTransitionError, match="no longer open"):
-        service.commit_fraud_triage(
-            second.id,
-            customer_id=fraud_alert.customer_id,
-            support_session_id="support-proposal-session",
-            runtime_name="ADK_GEMINI_LIVE",
-            runtime_session_id="adk-proposal-session",
-            reset_generation="3:9",
-        )
 
     assert first_result["status"] == "COMMITTED"
-    assert db_session.get(ActionProposal, second.id).status == "INVALIDATED"
+    assert db_session.query(ActionProposal).count() == 1
     assert (
         db_session.query(FraudCaseAction)
         .filter_by(

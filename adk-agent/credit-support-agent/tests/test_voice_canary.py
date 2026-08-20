@@ -217,3 +217,4 @@ def test_canary_scenarios_use_proposal_commit_and_keep_direct_baseline() -> None
         ]
         == 1
     )
+    assert voice_canary.SCENARIOS["fraud-interrupted"].minimum_interruptions == 1

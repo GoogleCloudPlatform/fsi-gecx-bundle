@@ -571,7 +571,17 @@ def create_fraud_triage_proposal(
         )
     except (ProposalError, RuntimeContextError) as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        detail = (
+            exc.safe_result()
+            if isinstance(exc, ProposalError)
+            else {
+                "success": False,
+                "error": "TRUSTED_RUNTIME_CONTEXT_REQUIRED",
+                "recovery_class": "REFRESH_SESSION",
+                "message": "Trusted runtime evidence is missing or invalid.",
+            }
+        )
+        raise HTTPException(status_code=409, detail=detail) from exc
 
 
 @router.post("/fraud-alert/acknowledge")
