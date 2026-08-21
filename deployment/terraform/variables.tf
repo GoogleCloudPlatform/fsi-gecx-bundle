@@ -655,3 +655,20 @@ variable "enable_avatar_modality" {
   description = "Whether to enable the avatar modality in the banking UI"
   default     = false
 }
+
+variable "gemini_enterprise_app" {
+  type = object({
+    engine_id    = string
+    display_name = string
+  })
+  description = "Optional Gemini Enterprise intranet app hosted in the us multi-region. OAuth clients and end-user consent remain manual Google Auth Platform controls."
+  default     = null
+
+  validation {
+    condition = var.gemini_enterprise_app == null || (
+      can(regex("^[a-z][a-z0-9-]{3,62}$", var.gemini_enterprise_app.engine_id)) &&
+      trimspace(var.gemini_enterprise_app.display_name) != ""
+    )
+    error_message = "gemini_enterprise_app.engine_id must be a valid lowercase resource ID and display_name must not be empty."
+  }
+}

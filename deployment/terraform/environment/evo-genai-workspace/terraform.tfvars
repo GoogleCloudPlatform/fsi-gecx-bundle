@@ -20,6 +20,10 @@ datastream_psc_subnet_cidr = "10.3.0.0/28"
 datastream_psc_producer_accept_lists = [
   "gf20e5a6ce5abca8fp-tp",
 ]
+gemini_enterprise_app = {
+  engine_id    = "nova-horizon-dev-workbench"
+  display_name = "Nova Horizon Dev Workbench"
+}
 alloydb_availability_type     = "ZONAL"
 alloydb_cpu_count             = 2
 cloudbuild_source_bucket_name = "evo-genai-workspace_cloudbuild"

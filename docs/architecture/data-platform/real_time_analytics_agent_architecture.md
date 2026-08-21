@@ -19,6 +19,11 @@ projects/{project-id}/locations/us/dataAgents/real-time-analytics
 
 The agent is deployed independently of `banking-service` and `banking-ui`.
 
+Gemini Enterprise can surface this same managed agent through an environment-local A2A
+registration. See
+[Gemini Enterprise BigQuery A2A Architecture](../ai-and-voice/gemini_enterprise_bigquery_a2a.md)
+for the interface, OAuth delegation, environment, and promotion boundaries.
+
 ## System Context
 
 ```mermaid
@@ -207,3 +212,6 @@ Operational failures are intentionally explicit:
 | `deployment/cloud_build/cloudbuild-data-agent-deploy.yaml` | Manual Cloud Build execution definition. |
 | `deployment/bigquery/analytics_curated/` | Curated SQL definitions and dependency manifest. |
 | `scripts/datastream/reconcile_lakehouse_views.py` | Direct curated-view reconciliation entry point. |
+
+For initial publication, registration, licensing, and end-to-end verification, see
+[Gemini Enterprise BigQuery A2A operations](../../operations/gemini_enterprise_bigquery_a2a.md).
