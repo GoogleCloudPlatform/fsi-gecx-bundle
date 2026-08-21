@@ -34,6 +34,63 @@ resource "google_compute_subnetwork" "livekit_subnet" {
   private_ip_google_access = true
 }
 
+# Datastream allocates its managed Private Service Connect interface from this
+# dedicated subnet. Keeping it separate lets egress policy identify Datastream
+# traffic by source range without trusting producer-managed network tags.
+resource "google_compute_subnetwork" "datastream_psc_subnet" {
+  name                     = "datastream-psc-subnet"
+  ip_cidr_range            = var.datastream_psc_subnet_cidr
+  region                   = var.region
+  network                  = google_compute_network.fsi_gecx_vpc.self_link
+  private_ip_google_access = true
+
+  log_config {
+    aggregation_interval = "INTERVAL_5_SEC"
+    flow_sampling        = 0.5
+    metadata             = "INCLUDE_ALL_METADATA"
+  }
+}
+
+resource "google_compute_network_attachment" "datastream_psc" {
+  name                  = "datastream-psc-attachment"
+  region                = var.region
+  description           = "Consumer attachment for the managed Datastream PSC interface"
+  connection_preference = "ACCEPT_MANUAL"
+  subnetworks           = [google_compute_subnetwork.datastream_psc_subnet.self_link]
+  producer_accept_lists = var.datastream_psc_producer_accept_lists
+  deletion_policy       = "DELETE"
+}
+
+# PSC interfaces are producer-managed NICs, so source-range egress rules are
+# the consumer-controlled enforcement point. Allow only PostgreSQL to the
+# current AlloyDB primary, then reject every other destination from this subnet.
+resource "google_compute_firewall" "allow_datastream_psc_to_alloydb" {
+  name               = "allow-datastream-psc-to-alloydb"
+  network            = google_compute_network.fsi_gecx_vpc.id
+  direction          = "EGRESS"
+  priority           = 900
+  source_ranges      = [google_compute_subnetwork.datastream_psc_subnet.ip_cidr_range]
+  destination_ranges = ["${google_alloydb_instance.banking_primary.ip_address}/32"]
+
+  allow {
+    protocol = "tcp"
+    ports    = ["5432"]
+  }
+}
+
+resource "google_compute_firewall" "deny_datastream_psc_other_egress" {
+  name               = "deny-datastream-psc-other-egress"
+  network            = google_compute_network.fsi_gecx_vpc.id
+  direction          = "EGRESS"
+  priority           = 1000
+  source_ranges      = [google_compute_subnetwork.datastream_psc_subnet.ip_cidr_range]
+  destination_ranges = ["0.0.0.0/0"]
+
+  deny {
+    protocol = "all"
+  }
+}
+
 resource "google_compute_router" "router" {
   name    = "fsi-gecx-router"
   region  = var.region
@@ -167,5 +224,4 @@ resource "google_compute_firewall" "deny_livekit_to_internal" {
 
   target_tags = ["livekit-server"]
 }
-
 

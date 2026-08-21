@@ -15,27 +15,36 @@
 # Divergence A & B: Replace scheduled federated queries with real-time Google Cloud Datastream CDC
 # streaming directly from PostgreSQL WAL into BigQuery for bounded domain tables.
 
-resource "google_datastream_private_connection" "vpc_connection" {
-  display_name          = "VPC Peering Connection for Datastream"
+resource "google_datastream_private_connection" "psc_connection" {
+  display_name          = "PSC Interface Connection for Datastream"
   location              = var.region
-  private_connection_id = "datastream-vpc-connection"
+  private_connection_id = "datastream-psc-connection"
 
-  vpc_peering_config {
-    vpc    = google_compute_network.fsi_gecx_vpc.id
-    subnet = "172.16.1.0/29"
+  psc_interface_config {
+    network_attachment = google_compute_network_attachment.datastream_psc.id
   }
 
-  depends_on = [google_project_service.datastream_googleapis_com]
+  lifecycle {
+    precondition {
+      condition     = length(var.datastream_psc_producer_accept_lists) > 0
+      error_message = "Discover and configure the Datastream producer project before creating the PSC private connection."
+    }
+  }
+
+  depends_on = [
+    google_project_service.datastream_googleapis_com,
+    google_compute_firewall.allow_datastream_psc_to_alloydb,
+    google_compute_firewall.deny_datastream_psc_other_egress,
+  ]
 }
 
 resource "google_datastream_connection_profile" "postgres_source" {
-  display_name              = "PostgreSQL Source Profile"
-  location                  = var.region
-  connection_profile_id     = "postgres-source-profile"
-  create_without_validation = true
+  display_name          = "PostgreSQL Source Profile"
+  location              = var.region
+  connection_profile_id = "postgres-source-profile"
 
   postgresql_profile {
-    hostname = google_compute_address.datastream_alloydb_proxy_internal_ip.address
+    hostname = google_alloydb_instance.banking_primary.ip_address
     port     = 5432
     username = google_alloydb_user.banking_bq_connector.user_id
     password = random_password.banking_bq_connector_password.result
@@ -43,13 +52,13 @@ resource "google_datastream_connection_profile" "postgres_source" {
   }
 
   private_connectivity {
-    private_connection = google_datastream_private_connection.vpc_connection.id
+    private_connection = google_datastream_private_connection.psc_connection.id
   }
 
   depends_on = [
     google_project_service.datastream_googleapis_com,
-    google_compute_instance.datastream_alloydb_proxy,
-    google_compute_firewall.allow_datastream_to_alloydb_proxy,
+    google_alloydb_user.banking_bq_connector,
+    google_datastream_private_connection.psc_connection,
   ]
 }
 

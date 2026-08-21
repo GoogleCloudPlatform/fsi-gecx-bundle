@@ -27,6 +27,36 @@ variable "region" {
   default = "us-central1"
 }
 
+variable "datastream_psc_subnet_cidr" {
+  description = "Dedicated regional subnet used only by the managed Datastream PSC interface. It must not overlap application, peered, PSA, or Datastream-reserved ranges."
+  type        = string
+  default     = "10.3.0.0/28"
+
+  validation {
+    condition = (
+      can(cidrhost(var.datastream_psc_subnet_cidr, 0)) &&
+      can(tonumber(split("/", var.datastream_psc_subnet_cidr)[1])) &&
+      tonumber(split("/", var.datastream_psc_subnet_cidr)[1]) >= 24 &&
+      tonumber(split("/", var.datastream_psc_subnet_cidr)[1]) <= 28
+    )
+    error_message = "datastream_psc_subnet_cidr must be a valid IPv4 CIDR with a /24 through /28 prefix."
+  }
+}
+
+variable "datastream_psc_producer_accept_lists" {
+  description = "Datastream tenant project IDs or numbers discovered with the validate-only PSC helper and explicitly accepted by the network attachment."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for producer in var.datastream_psc_producer_accept_lists :
+      can(regex("^([a-z][a-z0-9-]{4,28}[a-z0-9]|[0-9]{6,})$", producer))
+    ])
+    error_message = "Datastream producer allowlist entries must be valid project IDs or project numbers."
+  }
+}
+
 variable "alloydb_cpu_count" {
   description = "vCPU count for the AlloyDB primary instance. Lower environments may use 2; the prod-like environment should size from observed load."
   type        = number
