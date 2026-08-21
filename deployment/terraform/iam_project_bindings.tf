@@ -416,6 +416,19 @@ resource "google_project_iam_member" "database_viewer_bq_data_viewer" {
   member   = each.value
 }
 
+# Shared demo presenters already receive the environment's bounded backend
+# viewer roles through iam_console_viewers. When Gemini Enterprise is enabled,
+# grant the same principals access to the employee-facing app. Evo intentionally
+# has no shared viewer principals and remains a personal development sandbox.
+resource "google_project_iam_member" "gemini_enterprise_users" {
+  for_each = var.gemini_enterprise_app == null ? toset([]) : toset(local.iam_console_viewers)
+  project  = data.google_project.project.project_id
+  role     = "roles/discoveryengine.agentspaceUser"
+  member   = each.value
+
+  depends_on = [google_project_service.discoveryengine_googleapis_com]
+}
+
 resource "google_project_iam_member" "cloudbuild_sa_data_agent_creator" {
   project = data.google_project.project.project_id
   role    = "roles/geminidataanalytics.dataAgentCreator"

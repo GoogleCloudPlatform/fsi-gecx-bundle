@@ -156,3 +156,7 @@ IAP login UI and site crawling remain independent component triggers.
 
 For AlloyDB recovery, CDC troubleshooting, reset behavior, and the one-time
 Cloud SQL cutover procedure, see [AlloyDB demo operations](alloydb_demo_runbook.md).
+
+Gemini Enterprise app provisioning, BigQuery DataAgent publication, environment-local OAuth/A2A
+registration, licensing, and end-to-end checks are documented separately in
+[Gemini Enterprise BigQuery A2A operations](gemini_enterprise_bigquery_a2a.md).

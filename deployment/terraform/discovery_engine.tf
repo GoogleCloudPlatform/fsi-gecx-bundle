@@ -46,3 +46,31 @@ resource "google_discovery_engine_search_engine" "nova_horizon_site" {
     company_name = "Nova Horizon Credit Union"
   }
 }
+
+resource "google_discovery_engine_search_engine" "gemini_enterprise" {
+  for_each = var.gemini_enterprise_app == null ? {} : { app = var.gemini_enterprise_app }
+
+  provider          = google.google_billing
+  engine_id         = each.value.engine_id
+  collection_id     = "default_collection"
+  location          = "us"
+  display_name      = each.value.display_name
+  data_store_ids    = []
+  industry_vertical = "GENERIC"
+  app_type          = "APP_TYPE_INTRANET"
+  deletion_policy   = "PREVENT"
+
+  search_engine_config {
+    search_tier                = "SEARCH_TIER_ENTERPRISE"
+    required_subscription_tier = "SUBSCRIPTION_TIER_SEARCH_AND_ASSISTANT"
+    search_add_ons             = ["SEARCH_ADD_ON_LLM"]
+  }
+
+  features = {
+    "agent-sharing-without-admin-approval" = "FEATURE_STATE_ON"
+    "disable-agent-sharing"                = "FEATURE_STATE_OFF"
+    "enable-end-user-sharing-with-groups"  = "FEATURE_STATE_OFF"
+  }
+
+  depends_on = [google_project_service.discoveryengine_googleapis_com]
+}
