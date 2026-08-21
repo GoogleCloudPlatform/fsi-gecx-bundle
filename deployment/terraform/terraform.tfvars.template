@@ -16,6 +16,8 @@
 # in this file. Secrets should be stored in Secret Manager and accessed dynamically.
 
 project_id                                  = "${PROJECT_ID}"
+datastream_psc_subnet_cidr                  = "10.3.0.0/28"
+datastream_psc_producer_accept_lists        = ["[DATASTREAM_TENANT_PROJECT_ID]"]
 cloudbuild_source_bucket_name               = "${PROJECT_ID}_cloudbuild"
 release_manifest_reader_members = [
   "serviceAccount:cloudbuild-terraform-sa@[PROMOTION_PROJECT_ID].iam.gserviceaccount.com",

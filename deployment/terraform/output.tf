@@ -29,6 +29,21 @@ output "region" {
   value = var.region
 }
 
+output "datastream_psc_network_attachment" {
+  description = "Network attachment used by the managed Datastream PSC interface."
+  value       = google_compute_network_attachment.datastream_psc.id
+}
+
+output "datastream_psc_subnet_cidr" {
+  description = "Dedicated source range allocated to managed Datastream PSC interfaces."
+  value       = google_compute_subnetwork.datastream_psc_subnet.ip_cidr_range
+}
+
+output "datastream_psc_private_connection" {
+  description = "Terraform-managed Datastream PSC private connectivity resource."
+  value       = google_datastream_private_connection.psc_connection.id
+}
+
 output "alloydb_iam_group_users" {
   description = "IAM groups reconciled as AlloyDB database groups by the release controller."
   value = distinct(concat(

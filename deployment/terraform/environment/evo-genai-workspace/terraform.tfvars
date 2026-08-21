@@ -15,7 +15,11 @@
 # WARNING: Do NOT place any secrets (passwords, private keys, API keys, OAuth tokens)
 # in this file. Secrets should be stored in Secret Manager and accessed dynamically.
 
-project_id                    = "evo-genai-workspace"
+project_id                 = "evo-genai-workspace"
+datastream_psc_subnet_cidr = "10.3.0.0/28"
+datastream_psc_producer_accept_lists = [
+  "gf20e5a6ce5abca8fp-tp",
+]
 alloydb_availability_type     = "ZONAL"
 alloydb_cpu_count             = 2
 cloudbuild_source_bucket_name = "evo-genai-workspace_cloudbuild"

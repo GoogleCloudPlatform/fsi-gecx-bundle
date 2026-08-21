@@ -5,8 +5,8 @@ Nova Horizon separates transactional processing in AlloyDB for PostgreSQL from a
 ```mermaid
 flowchart LR
     Services["Cloud Run services and jobs"] -->|"private VPC + IAM database auth + TLS"| AlloyDB["AlloyDB PostgreSQL 18<br/>banking-data / banking-primary"]
-    AlloyDB -->|"logical decoding"| Bridge["Datastream TCP bridge"]
-    Bridge --> Datastream["Datastream CDC"]
+    AlloyDB -->|"logical decoding over private IP"| PSC["Datastream PSC interface"]
+    PSC --> Datastream["Datastream CDC"]
     Datastream --> BigQuery["BigQuery CDC and curated analytics"]
     AlloyDB --> Federation["BigQuery AlloyDB federation"]
     Outbox["audit.audit_outbox"] --> Relay["Bounded relay"]
@@ -23,6 +23,13 @@ The `banking` database is divided into bounded schemas: `identity`, `kyc`, `ledg
 - `fsi-demo-1841` uses a regional high-availability primary.
 - All application traffic uses private IP; there is no public database endpoint.
 - Runtime services authenticate as AlloyDB IAM database users with short-lived tokens and required TLS.
+
+Datastream reaches the same private AlloyDB primary through a managed Private
+Service Connect interface. Terraform owns the dedicated PSC subnet, manual
+producer allowlist, network attachment, source-range egress policy, private
+connection, profiles, and stream. AlloyDB's independent Private Service Access
+connection remains in place; PSC replaces only the former Datastream peering
+and customer-managed TCP bridge path.
 
 ## Database release contract
 

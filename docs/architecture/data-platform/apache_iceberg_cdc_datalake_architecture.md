@@ -7,13 +7,24 @@ This document describes the complementary mutable-table CDC and immutable Iceber
 ```mermaid
 flowchart LR
     AlloyDB["AlloyDB PostgreSQL 18<br/>private IP + logical decoding"] --> Publication["datastream_publication<br/>datastream_alloydb_replication_slot"]
-    Publication --> Bridge["Internal TCP bridge<br/>datastream-alloydb-proxy"]
-    Bridge --> Datastream["Datastream private connection"]
+    Publication --> PSC["Managed Datastream PSC interface<br/>dedicated consumer subnet"]
+    PSC --> Datastream["Datastream private connection"]
     Datastream --> NativeBQ["BigQuery native current-state CDC tables<br/>oltp_cdc dataset"]
     NativeBQ --> Curated["analytics_curated views"]
 ```
 
-AlloyDB connects to the application VPC through Private Service Access, while Datastream uses a separate peered producer network (`172.16.1.0/29`). Because VPC peering is non-transitive, a Container-Optimized OS VM in the application subnet exposes TCP 5432 only to the Datastream subnet and forwards the connection to the AlloyDB private address. It runs Google's supported, digest-pinned Database Migration Service TCP proxy in host-network mode. The bridge has no public IP and does not hold database credentials.
+AlloyDB connects to `fsi-gecx-vpc` through Private Service Access. Datastream
+uses a separate Private Service Connect interface allocated from the dedicated
+`datastream-psc-subnet`. A manual-accept network attachment admits only the
+validated Datastream tenant project. Source-range egress rules allow that
+subnet to reach only the AlloyDB primary private IP on TCP 5432 and deny its
+other egress. No customer-managed proxy process handles database traffic.
+
+Private Service Access and Private Service Connect have different roles here:
+Private Service Access retains AlloyDB's managed-service attachment, while the
+Datastream PSC interface gives the managed CDC producer a transitive identity
+inside the consumer VPC. Terraform owns both consumer-side configurations;
+Datastream manages the PSC interface itself.
 
 The `banking_bq_connector` built-in database user owns the Datastream password boundary. The ordered database reconciliation job creates and verifies its replication grant, publication, and AlloyDB-specific logical slot after Alembic completes. Terraform creates a new AlloyDB-specific stream identity rather than retaining a Cloud SQL WAL checkpoint, and the release controller starts that stopped stream only after database and analytics prerequisites pass.
 

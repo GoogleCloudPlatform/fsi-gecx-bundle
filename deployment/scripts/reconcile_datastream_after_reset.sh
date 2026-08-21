@@ -135,18 +135,28 @@ done
   exit 1
 }
 
-declare -A discovered=()
 for object in "${objects[@]}"; do
   source_name="${object#*,}"
   [[ "${source_name}" =~ ^[a-z0-9_]+\.[a-z0-9_]+$ ]] || {
     echo "Unsafe Datastream source object name: ${source_name}" >&2
     exit 1
   }
-  discovered["${source_name}"]=1
 done
-for source_name in "${expected_objects[@]}"; do
-  [[ -n "${discovered[$source_name]:-}" ]] || {
-    echo "Expected Datastream object was not discovered: ${source_name}" >&2
+
+# macOS ships Bash 3.2, which has no associative arrays. The object inventory
+# is intentionally small, so a portable bounded scan is preferable to making
+# release operators install a second shell runtime.
+for expected_source_name in "${expected_objects[@]}"; do
+  discovered=false
+  for object in "${objects[@]}"; do
+    source_name="${object#*,}"
+    if [[ "${source_name}" == "${expected_source_name}" ]]; then
+      discovered=true
+      break
+    fi
+  done
+  [[ "${discovered}" == "true" ]] || {
+    echo "Expected Datastream object was not discovered: ${expected_source_name}" >&2
     exit 1
   }
 done

@@ -57,6 +57,25 @@ To promote, run `release-promote` in `fsi-demo-1841` from the same commit, provi
 
 IAM tokens are short lived. SQLAlchemy pools recycle connections before token expiry and use pre-ping; repeated authentication failures normally indicate IAM/user mismatch rather than a stale pooled token.
 
+## Datastream PSC bootstrap
+
+Each environment needs a dedicated `datastream-psc-subnet`, an
+`ACCEPT_MANUAL` network attachment, and its own reviewed Datastream tenant
+project allowlist. Bootstrap a new environment in two bounded Terraform steps:
+
+1. Target `google_compute_network_attachment.datastream_psc`; Terraform creates
+   the dedicated subnet and empty manual-accept attachment.
+2. Run `PROJECT_ID=PROJECT_ID REGION=us-central1 deployment/scripts/discover_datastream_psc_producer_project.sh`.
+3. Record the printed non-secret project ID in the environment's
+   `datastream_psc_producer_accept_lists` variable.
+4. Review the full plan, then apply the PSC private connection, validated
+   PostgreSQL profile, and stopped stream through the normal release workflow.
+
+The helper uses Datastream's validate-only request and does not create a
+private connection. Do not use `ACCEPT_AUTOMATIC`, do not reuse the application
+subnet, and do not remove AlloyDB's `private_vpc_connection` Private Service
+Access resource.
+
 ## Reset and seed
 
 Run `scripts/reinit_postgres_db/reset_db_and_migrate.sh` for an ordered reset. It drains and pauses Datastream, verifies the database lifecycle, runs the guarded reset/seed job, reconciles federation, recreates stream-owned BigQuery destinations, resumes CDC, backfills every configured stream object, and then reconciles curated views. Do not drop schemas manually in a deployed environment.
@@ -66,16 +85,20 @@ This rebuild is required because Datastream does not replicate PostgreSQL `TRUNC
 ## CDC and federation health
 
 - Datastream stream: `gcloud datastream streams describe banking-alloydb-oltp-cdc-stream --location us-central1`.
+- PSC private connection: `gcloud datastream private-connections describe datastream-psc-connection --location us-central1`; require `state: CREATED` and no errors.
+- PSC attachment: `gcloud compute network-attachments describe datastream-psc-attachment --region us-central1`; require `ACCEPT_MANUAL`, the reviewed producer allowlist, and only accepted endpoints from `datastream-psc-subnet`.
+- PSC policy: verify `allow-datastream-psc-to-alloydb` permits only the PSC subnet to the current AlloyDB `/32` on TCP 5432 and `deny-datastream-psc-other-egress` rejects its remaining egress. Use subnet VPC Flow Logs for packet-path diagnosis.
 - Publication: `SELECT * FROM pg_publication WHERE pubname = 'datastream_publication';`
 - Slot: `SELECT slot_name, active, restart_lsn, confirmed_flush_lsn FROM pg_replication_slots WHERE slot_name = 'datastream_alloydb_replication_slot';`
-- Bridge: verify the `datastream-alloydb-proxy` systemd unit runs the digest-pinned `gcr.io/dms-images/tcp-proxy` image in host-network mode, inspect serial output, and verify TCP 5432 is allowed only from `172.16.1.0/29`.
 - Federation: run `deployment/scripts/reconcile_alloydb_federation.sh`; it verifies `EXTERNAL_QUERY(..., 'SELECT 1')`.
 - Audit relay: execute `audit-outbox-relay` once and verify its checkpoint advances with no old-message alert.
 - Dataflow: verify `nova-audit-iceberg` is running, the Pub/Sub backlog is draining, and the Iceberg DLQ is empty.
 - Iceberg table management: the bootstrap enforces a six-hour history horizon, at least 60 retained snapshots, metadata cleanup, and BigLake automatic maintenance. To reconcile and report the two tables explicitly, run `PROJECT_ID=PROJECT_ID REGION=us-central1 deployment/scripts/manage_audit_iceberg_tables.sh`.
 - Catalog interoperability: run `deployment/scripts/validate_lakehouse_interoperability.sh`; it reads catalog-native Iceberg and native BigQuery CDC tables in one Spark session.
 
-If the slot is inactive, check the bridge and Datastream source profile before recreating it. Never drop an active slot merely to clear lag; a backfill decision must be explicit.
+If the slot is inactive, check the PSC private connection, network attachment,
+egress rules, and Datastream source profile before recreating it. Never drop an
+active slot merely to clear lag; a backfill decision must be explicit.
 
 ## Restart, failover, and recovery
 

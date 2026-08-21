@@ -56,7 +56,7 @@ flowchart TB
     ADB[("AlloyDB PostgreSQL<br/>banking-primary")]
     REDIS[("Memorystore Redis")]
     BASTION["Bastion VM<br/>IAP SSH tunnel"]
-    DSPROXY["Datastream Proxy VM"]
+    DSPSC["Datastream PSC interface<br/>dedicated subnet + network attachment"]
     DS["Datastream CDC"]
     BQ[("BigQuery<br/>oltp_cdc / analytics_curated / compliance_audit")]
     ICE[("BigLake Iceberg Catalog<br/>GCS iceberg-warehouse")]
@@ -117,7 +117,7 @@ flowchart TB
   CCAI -->|web widget| UI
 
   %% CDC & lakehouse
-  ADB --> DSPROXY --> DS
+  ADB -->|logical decoding over private IP| DSPSC --> DS
   DS --> BQ
   DS --> ICE
   PSA --> DF --> ICE
