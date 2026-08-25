@@ -15,7 +15,15 @@
 # WARNING: Do NOT place any secrets (passwords, private keys, API keys, OAuth tokens)
 # in this file. Secrets should be stored in Secret Manager and accessed dynamically.
 
-project_id                                      = "fsi-demo-1841"
+project_id                 = "fsi-demo-1841"
+datastream_psc_subnet_cidr = "10.3.0.0/28"
+datastream_psc_producer_accept_lists = [
+  "v78faea53dd33924ap-tp",
+]
+gemini_enterprise_app = {
+  engine_id    = "nova-horizon-banking-demo"
+  display_name = "Nova Horizon Banking Demo"
+}
 alloydb_availability_type                       = "REGIONAL"
 alloydb_cpu_count                               = 2
 cloudbuild_source_bucket_name                   = "fsi-demo-1841_cloudbuild"

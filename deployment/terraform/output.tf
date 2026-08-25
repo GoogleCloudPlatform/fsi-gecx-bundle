@@ -94,3 +94,15 @@ output "real_time_analytics_agent_name" {
   description = "Stable Gemini Data Analytics agent resource name deployed by the manual Cloud Build trigger."
   value       = "projects/${var.project_id}/locations/us/dataAgents/real-time-analytics"
 }
+
+output "gemini_enterprise_app_name" {
+  description = "Gemini Enterprise app resource name when enabled for the environment."
+  value       = try(google_discovery_engine_search_engine.gemini_enterprise["app"].name, null)
+}
+
+output "gemini_enterprise_console_url" {
+  description = "Admin console URL for the Gemini Enterprise app. The dashboard exposes the generated end-user web app URL."
+  value = var.gemini_enterprise_app == null ? null : (
+    "https://console.cloud.google.com/gemini-enterprise/locations/us/engines/${var.gemini_enterprise_app.engine_id}/overview/dashboard?project=${var.project_id}"
+  )
+}

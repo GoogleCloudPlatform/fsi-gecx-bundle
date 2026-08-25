@@ -10,6 +10,12 @@ The Google Terraform provider does not currently expose a native Gemini Data Ana
 and a manual Cloud Build deployment trigger. The script owns idempotent DataAgent creation and
 updates through the GA REST API.
 
+Gemini Enterprise surfaces the deployed agent through an environment-local A2A registration. The
+Gemini Enterprise app is Terraform-managed, while ordinary OAuth client creation remains a manual
+Google Auth Platform control. See the
+[Gemini Enterprise BigQuery A2A runbook](../../docs/operations/gemini_enterprise_bigquery_a2a.md)
+before publishing or updating a card.
+
 ## Deploy
 
 After applying Terraform, run the `real-time-analytics-agent-deploy` Cloud Build trigger against
@@ -61,3 +67,7 @@ The deployed agent is instructed and grounded to handle these exact demo questio
 
 Deploy or reconcile the `analytics_curated` views before running the DataAgent deployment trigger;
 the deployer deliberately rejects a source allowlist that references a missing view.
+
+Updating this specification does not automatically update an existing Gemini Enterprise A2A
+registration. After deployment, regenerate the environment's agent card and update both the
+registered description and embedded card while preserving its environment-local authorization.

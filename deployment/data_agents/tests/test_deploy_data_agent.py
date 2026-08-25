@@ -98,6 +98,19 @@ def test_checked_in_spec_uses_reusable_curated_building_blocks():
     assert "evo-genai-workspace" not in AGENT_SPEC_PATH.read_text(encoding="utf-8")
 
 
+def test_checked_in_spec_has_gemini_enterprise_routing_description():
+    spec = deploy_data_agent.load_spec(AGENT_SPEC_PATH)
+
+    assert spec["description"] == (
+        "Analyzes real-time retail banking operational data including customer accounts, "
+        "transactions, merchant activity, fraud signals, credit activity, transaction velocity, "
+        "premium travel offer candidates, and compliance/audit evidence. Use this agent for "
+        "questions requiring quantitative analysis of current or historical banking activity, "
+        "transaction trends, customer behavior, fraud patterns, balances, portfolio metrics, and "
+        "audit evidence."
+    )
+
+
 def test_deploy_creates_missing_agent_after_source_validation():
     calls = []
 

@@ -2,7 +2,7 @@
   "agent_id": "real-time-analytics",
   "location": "us",
   "display_name": "Real Time Analytics Agent",
-  "description": "A senior banking analytics agent grounded in the environment-local real-time CDC lakehouse, curated business views, and compliance audit data.",
+  "description": "Analyzes real-time retail banking operational data including customer accounts, transactions, merchant activity, fraud signals, credit activity, transaction velocity, premium travel offer candidates, and compliance/audit evidence. Use this agent for questions requiring quantitative analysis of current or historical banking activity, transaction trends, customer behavior, fraud patterns, balances, portfolio metrics, and audit evidence.",
   "labels": {
     "managed-by": "fsi-gecx-bundle",
     "workload": "real-time-analytics"

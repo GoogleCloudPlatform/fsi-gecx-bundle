@@ -28,6 +28,7 @@ Specifications detailing our Google Cloud AI integrations, conversational teleph
 | :--- | :--- |
 | **[Gemini Multimodal Live Voice Agent](./ai-and-voice/gemini_live_voice_agent.md)** | Bidirectional WebSocket voice streaming, PyTorch CPU optimization, and real-time tool orchestration with Gemini Live. |
 | **[GECX Telephony Voice Agent](./ai-and-voice/gecx_telephony_voice_agent.md)** | Customer Experience Suite Bidi audio proxy, session capability, callback-owned consent, and managed conversational workflows. |
+| **[Gemini Enterprise BigQuery A2A](./ai-and-voice/gemini_enterprise_bigquery_a2a.md)** | Environment-local Gemini Enterprise apps, A2A delegation to the governed BigQuery DataAgent, OAuth user delegation, and promotion boundaries. |
 | **[Runtime-Neutral Banking Action Proposal/Commit Protocol](./ai-and-voice/runtime_neutral_action_proposal_protocol.md)** | Shared ADK/CES authorization boundary, trusted runtime evidence, immutable proposals, and exactly-once consequential commits. |
 | **[Agent Trajectory Evaluation](./ai-and-voice/agent_trajectory_evaluation.md)** | Shared ADK/CES event vocabulary, release evidence layers, typed-decision qualification, and runtime parity evaluation. |
 | **[Document AI Processing Pipeline](./ai-and-voice/doc_ai_processing_pipeline.md)** | Asynchronous optical character recognition (OCR) and structured entity extraction for W-2 tax forms, paystubs, and bank statements. |
