@@ -1,5 +1,12 @@
 # Current Release
 
+## ✨ Proposal Protocol Observability
+
+* **Admin-only live trace**: Added an expandable Proposal Protocol trace beneath the voice consultation transcript so presenters can see proposal creation, presentation, confirmation, commit, and completion checkpoints without covering the conversation.
+* **Multi-proposal history**: Keeps the current proposal expanded while earlier proposals remain available as compact status rows for the duration of the consultation.
+* **Governed policy provenance**: Shows the correlation-safe Knowledge Catalog snapshot associated with each banking-owned proposal without exposing raw proposal identifiers.
+* **Runtime-to-durable synchronization**: Combines real-time ADK checkpoints with authoritative banking-service outcomes so the display advances with the conversation and never rolls back committed state.
+
 ## ✨ Runtime-Neutral Voice Actions
 
 * **Consistent action confirmation**: ADK and CES voice agents now use the same proposal-and-confirmation protocol for fraud triage, card replacement, and Google Wallet provisioning.
@@ -8,6 +15,8 @@
 
 ## 🐛 Voice Reliability
 
+* **Cold-start tool availability**: Allows additional initialization time for remote MCP tools so newly deployed services do not start a consultation with only local fallback tools.
+* **Confirmation recovery**: Retries transient reset-generation checks while continuing to fail closed on genuine session resets, and safely preserves proposal recovery state for unstructured tool failures.
 * **CES session closeout**: Added a guarded farewell handoff and native session termination, with terminal audio draining before the browser disconnects.
 * **Authoritative Wallet status**: Voice agents report Google Wallet provisioning as queued only after the banking service confirms the request.
 * **Runtime parity checks**: Added shared ADK/CES trajectory qualification, negative-path coverage, and release metadata gates for safer promotion and rollback.
