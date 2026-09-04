@@ -45,6 +45,16 @@ class _Client:
         return self.response
 
 
+class _FlakyClient(_Client):
+    attempts = 0
+
+    async def get(self, *args, **kwargs):
+        type(self).attempts += 1
+        if type(self).attempts < 3:
+            raise RuntimeError("transient")
+        return self.response
+
+
 @pytest.mark.asyncio
 async def test_reset_guard_accepts_current_generation(monkeypatch):
     monkeypatch.setattr(reset_guard.httpx, "AsyncClient", _Client)
@@ -61,3 +71,19 @@ async def test_reset_guard_fails_closed_on_generation_change(monkeypatch):
     )
     assert valid is False
     assert reason == "SESSION_INVALIDATED_BY_RESET"
+
+
+@pytest.mark.asyncio
+async def test_reset_guard_retries_transient_transport_failure(monkeypatch):
+    _FlakyClient.attempts = 0
+    monkeypatch.setattr(reset_guard.httpx, "AsyncClient", _FlakyClient)
+    monkeypatch.setattr(reset_guard.asyncio, "sleep", lambda _delay: _no_op())
+
+    assert await reset_guard.validate_reset_generation(
+        banking_service_url="http://banking", headers={}, expected_token="3:7"
+    ) == (True, "CURRENT")
+    assert _FlakyClient.attempts == 3
+
+
+async def _no_op():
+    return None

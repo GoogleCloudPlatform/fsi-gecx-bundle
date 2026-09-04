@@ -56,6 +56,7 @@ import {
   remainingPlayoutSeconds,
 } from '../utils/gecxAudio.js';
 import { mergeGecxTranscript } from '../utils/gecxTranscript.js';
+import { applyRuntimeProposalStatus } from '../utils/proposalTrace.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
@@ -335,6 +336,7 @@ export default function VoiceSupportView() {
   const [proposalTraceAllowed, setProposalTraceAllowed] = useState(false);
   const [proposalTraceSessionId, setProposalTraceSessionId] = useState(null);
   const [proposalTraces, setProposalTraces] = useState([]);
+  const [proposalRuntimeStatuses, setProposalRuntimeStatuses] = useState({});
 
   const [agentVideoTrack, setAgentVideoTrack] = useState(null);
   const [videoLoaded, setVideoLoaded] = useState(false);
@@ -642,6 +644,7 @@ export default function VoiceSupportView() {
       setProposalTraceAllowed(false);
       setProposalTraceSessionId(null);
       setProposalTraces([]);
+      setProposalRuntimeStatuses({});
       onDrained?.();
     };
     const drainSeconds = audioCtx
@@ -691,6 +694,7 @@ export default function VoiceSupportView() {
     setProposalTraceAllowed(false);
     setProposalTraceSessionId(null);
     setProposalTraces([]);
+    setProposalRuntimeStatuses({});
     if (typedAckTimerRef.current) {
       clearTimeout(typedAckTimerRef.current);
       typedAckTimerRef.current = null;
@@ -759,6 +763,14 @@ export default function VoiceSupportView() {
       window.clearInterval(interval);
     };
   }, [isConnected, proposalTraceAllowed, proposalTraceSessionId]);
+
+  const displayedProposalTraces = useMemo(
+    () => proposalTraces.map(proposal => applyRuntimeProposalStatus(
+      proposal,
+      proposalRuntimeStatuses[proposal.proposal_ref],
+    )),
+    [proposalTraces, proposalRuntimeStatuses],
+  );
 
   useEffect(() => {
     const isGranted = micPermissionState === 'granted';
@@ -1174,6 +1186,7 @@ export default function VoiceSupportView() {
     setProposalTraceAllowed(false);
     setProposalTraceSessionId(null);
     setProposalTraces([]);
+    setProposalRuntimeStatuses({});
     setTranscripts([{ author: 'system', text: 'Connecting to GECX voice stream...' }]);
 
     try {
@@ -1533,6 +1546,13 @@ export default function VoiceSupportView() {
             ]);
           } else if (event.type === DataChannelEvent.GUIDANCE_SNAPSHOT) {
             setGuidanceSnapshot(event);
+          } else if (event.type === DataChannelEvent.PROPOSAL_PROTOCOL_TRACE) {
+            if (event.proposal_ref && event.status) {
+              setProposalRuntimeStatuses(previous => ({
+                ...previous,
+                [event.proposal_ref]: event.status,
+              }));
+            }
           } else if (event.type === DataChannelEvent.LIMIT_UPDATED) {
             setCreditLimit(event.credit_limit_cents / 100);
             setAvailableCredit(event.available_credit_cents / 100);
@@ -2046,9 +2066,9 @@ export default function VoiceSupportView() {
             })}
           </div>
 
-          {proposalTraceAllowed && proposalTraces.length > 0 && (
+          {proposalTraceAllowed && displayedProposalTraces.length > 0 && (
             <ProposalProtocolTrace
-              proposals={proposalTraces}
+              proposals={displayedProposalTraces}
             />
           )}
 

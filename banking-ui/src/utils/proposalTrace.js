@@ -48,3 +48,29 @@ export function latestProposalSignature(proposals) {
   const latest = proposals?.[proposals.length - 1];
   return latest ? `${latest.proposal_ref}:${latest.status}` : '';
 }
+
+const STATUS_RANK = {
+  PROPOSED: 0,
+  PRESENTED: 1,
+  CONFIRMED: 2,
+  COMMITTING: 3,
+  COMMITTED: 4,
+  DECLINED: 4,
+  INVALIDATED: 4,
+  EXPIRED: 4,
+};
+
+export function applyRuntimeProposalStatus(proposal, runtimeStatus) {
+  const durableStatus = String(proposal?.status || 'PROPOSED').toUpperCase();
+  const observedStatus = String(runtimeStatus || '').toUpperCase();
+  if (STATUS_RANK[observedStatus] === undefined || STATUS_RANK[observedStatus] <= STATUS_RANK[durableStatus]) {
+    return proposal;
+  }
+  return {
+    ...proposal,
+    status: observedStatus,
+    presentation_verified: STATUS_RANK[observedStatus] >= STATUS_RANK.PRESENTED,
+    confirmation_verified: STATUS_RANK[observedStatus] >= STATUS_RANK.CONFIRMED,
+    commit_started: STATUS_RANK[observedStatus] >= STATUS_RANK.COMMITTING,
+  };
+}
