@@ -50,7 +50,7 @@ from services.action_proposal_context import ProposalRuntimeContext, RuntimeCont
 from services.action_proposals import ActionProposalService, ProposalError
 from services.taxonomy_service import TaxonomyService
 from services.simulation import SimulationService
-from utils.auth import get_current_user, is_support_staff
+from utils.auth import get_current_user, has_admin_access, is_support_staff
 from utils.database import get_db
 from utils.internal_auth import is_valid_internal_switch_token
 from utils.internal_execution import (
@@ -457,6 +457,7 @@ def get_voice_room_token(
     mode: str = "audio",
     db: Session = Depends(get_db),
     customer_id: str = Depends(_get_active_customer_id),
+    caller: ValidatedToken = Depends(get_current_user),
 ):
     """
     Generates a secure, temporary LiveKit access token enabling
@@ -490,6 +491,7 @@ def get_voice_room_token(
             "token": token.to_jwt(),
             "room_name": room_name,
             "session_id": session_id,
+            "proposal_trace_allowed": has_admin_access(caller),
             "fraud_context": fraud_context,
         }
     except Exception as e:
@@ -506,6 +508,23 @@ def get_voice_session_context(
     return _to_json_safe(
         FraudAlertService(db).get_active_voice_context(auth_provider_uid=customer_id)
     )
+
+
+@router.get("/voice/proposal-trace/{support_session_id}")
+def get_voice_proposal_trace(
+    support_session_id: str,
+    db: Session = Depends(get_db),
+    customer_id: str = Depends(_get_active_customer_id),
+    token: ValidatedToken = Depends(get_current_user),
+):
+    """Return an admin-only, presenter-safe proposal history for a voice session."""
+    if not has_admin_access(token):
+        raise HTTPException(status_code=403, detail="Admin access is required.")
+    proposals = ActionProposalService(db).proposal_trace_for_identity(
+        customer_identity=customer_id,
+        support_session_id=support_session_id,
+    )
+    return {"support_session_id": support_session_id, "proposals": proposals}
 
 
 class FraudTriageProposalRequest(BaseModel):

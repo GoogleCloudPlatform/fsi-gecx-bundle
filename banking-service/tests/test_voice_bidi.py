@@ -168,6 +168,8 @@ def test_gecx_voice_stream_success(
             "input_sample_rate_hz": 16000,
             "output_sample_rate_hz": 16000,
             "encoding": "LINEAR16",
+            "support_session_id": "support-session-1",
+            "proposal_trace_allowed": True,
         }
 
         # C. Await response message forwarded from GECX

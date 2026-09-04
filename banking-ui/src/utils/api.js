@@ -284,6 +284,11 @@ export async function getCreditCardVoiceContext() {
   return res.data;
 }
 
+export async function getCreditCardProposalTrace(supportSessionId) {
+  const res = await api.get(`credit-card/voice/proposal-trace/${encodeURIComponent(supportSessionId)}`);
+  return res.data;
+}
+
 // Support Handoff Escalations
 export async function getPendingEscalations() {
   const res = await api.get('support/escalations');

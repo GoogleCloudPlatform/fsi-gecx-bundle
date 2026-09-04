@@ -19,7 +19,7 @@ import asyncio
 import uuid
 from fastapi import APIRouter, WebSocket
 
-from utils.auth import validate_firebase_token
+from utils.auth import has_admin_access, validate_firebase_token
 from utils.env import is_running_locally
 from services.voice_bidi import VoiceBidiSession
 
@@ -36,6 +36,7 @@ async def gecx_voice_stream(websocket: WebSocket):
 
     user_id = None
     session_id = None
+    proposal_trace_allowed = False
 
     try:
         # 1. First-Frame Authentication Gate (enforces JWT token context)
@@ -52,9 +53,11 @@ async def gecx_voice_stream(websocket: WebSocket):
             if is_running_locally() and auth_frame.get("token") == "mock-local-token":
                 user_id = "mock_user_id"
                 session_id = "mock_session_id"
+                proposal_trace_allowed = True
             else:
                 validated_token = validate_firebase_token(auth_frame["token"])
                 user_id = validated_token.claims.get("sub")
+                proposal_trace_allowed = has_admin_access(validated_token)
                 if not user_id:
                     raise ValueError("Authenticated token is missing a subject claim.")
                 session_id = f"ces-{uuid.uuid4().hex}"
@@ -84,6 +87,7 @@ async def gecx_voice_stream(websocket: WebSocket):
             websocket=websocket,
             gecx_app_id=gecx_app_id,
             location=location,
+            proposal_trace_allowed=proposal_trace_allowed,
         )
         await session.start()
 
