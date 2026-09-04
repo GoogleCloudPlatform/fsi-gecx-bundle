@@ -14,7 +14,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings, Bell, ExternalLink, Sparkles, Activity } from 'lucide-react';
+import { FileCheck, MessageSquare, Shield, ChevronRight, LayoutDashboard, Volume2, AlertCircle, CheckCircle2, Settings, Bell, ExternalLink, Sparkles, Activity, Bot } from 'lucide-react';
 import { resetDatabase, getResetDatabaseAccess, getSystemSettings, updateSystemSettings, provisionMyDemo, resetMyDemo, deprovisionMyDemo, ensureVipMexicoLeaders, getCreditCardAccount } from '../utils/api.js';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
@@ -32,6 +32,7 @@ function AdminDashboardView() {
   const navigate = useNavigate();
   const location = useLocation();
   const projectId = window.firebaseConfig?.projectId;
+  const geminiEnterpriseWebUrl = window.env?.GEMINI_ENTERPRISE_WEB_URL || import.meta.env.VITE_GEMINI_ENTERPRISE_WEB_URL;
   const [isResetting, setIsResetting] = useState(false);
   const [purgeAuditLogs, setPurgeAuditLogs] = useState(false);
   const [purgeDataLake, setPurgeDataLake] = useState(false);
@@ -421,6 +422,39 @@ function AdminDashboardView() {
           );
         })}
       </div>
+
+      {geminiEnterpriseWebUrl && (
+        <div className="mt-8 overflow-hidden rounded-3xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-violet-50 p-6 shadow-sm dark:border-indigo-900/70 dark:from-indigo-950/35 dark:via-slate-900 dark:to-violet-950/30">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md">
+                <Bot className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-500 dark:text-indigo-300">
+                  Conversational Analytics
+                </p>
+                <h3 className="mt-1 text-lg font-bold text-slate-900 dark:text-white">
+                  Gemini Enterprise
+                </h3>
+                <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                  Ask the Real Time Analytics Agent quantitative banking questions backed by governed BigQuery data. Nova Horizon Console Viewer membership is required, and first use may prompt for OAuth consent.
+                </p>
+              </div>
+            </div>
+            <a
+              href={geminiEnterpriseWebUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-white px-5 py-3 text-xs font-bold text-indigo-700 shadow-sm transition-all hover:border-indigo-300 hover:bg-indigo-100 active:scale-95 sm:w-auto dark:border-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:border-indigo-700 dark:hover:bg-indigo-900/60"
+              aria-label="Open Gemini Enterprise in a new tab"
+            >
+              <span>Open Gemini Enterprise</span>
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
+        </div>
+      )}
 
       <div className="mt-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col xl:flex-row xl:items-center justify-between gap-5" id="demo-suite-management">
         <div className="min-w-0">

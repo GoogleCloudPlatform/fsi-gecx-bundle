@@ -409,6 +409,13 @@ resource "google_cloud_run_v2_service" "banking_ui" {
           value = var.feedback_url
         }
       }
+      dynamic "env" {
+        for_each = var.gemini_enterprise_web_url != null && var.gemini_enterprise_web_url != "" ? [1] : []
+        content {
+          name  = "VITE_GEMINI_ENTERPRISE_WEB_URL"
+          value = var.gemini_enterprise_web_url
+        }
+      }
       env {
         name  = "VITE_CCAI_COMPANY_ID"
         value = var.ccai_company_id

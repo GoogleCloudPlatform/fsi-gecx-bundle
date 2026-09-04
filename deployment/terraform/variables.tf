@@ -650,6 +650,21 @@ variable "feedback_url" {
   default     = null
 }
 
+variable "gemini_enterprise_web_url" {
+  type        = string
+  description = "Gemini Enterprise end-user web URL linked from the admin portal (leave empty to hide the link)"
+  default     = null
+
+  validation {
+    condition = (
+      var.gemini_enterprise_web_url == null ||
+      var.gemini_enterprise_web_url == "" ||
+      startswith(var.gemini_enterprise_web_url, "https://vertexaisearch.cloud.google.com/")
+    )
+    error_message = "gemini_enterprise_web_url must use the https://vertexaisearch.cloud.google.com/ origin."
+  }
+}
+
 variable "enable_avatar_modality" {
   type        = bool
   description = "Whether to enable the avatar modality in the banking UI"
