@@ -65,6 +65,20 @@ def is_support_staff(token: ValidatedToken) -> bool:
     return False
 
 
+def has_admin_access(token: ValidatedToken) -> bool:
+    """Return whether the authenticated caller may use admin-only UI features."""
+    if is_running_locally():
+        return True
+    email = (token.email or "").lower() if token else ""
+    return bool(
+        email
+        and any(
+            email.endswith(f"@{domain.strip().lower()}")
+            for domain in ADMIN_EMAIL_DOMAINS
+        )
+    )
+
+
 def is_ces_service_agent(token: ValidatedToken) -> bool:
     """Return whether the verified caller is this project's CES service agent."""
     if not token or not hasattr(token, "claims"):
@@ -366,12 +380,7 @@ async def get_current_user(
 async def require_admin_user(
     token: ValidatedToken = Depends(get_current_user),
 ) -> ValidatedToken:
-    if is_running_locally():
-        return token
-    email = (token.email or "").lower()
-    if email and any(
-        email.endswith(f"@{domain.strip().lower()}") for domain in ADMIN_EMAIL_DOMAINS
-    ):
+    if has_admin_access(token):
         return token
     raise HTTPException(
         status_code=403, detail="Admin access is required for this operation."

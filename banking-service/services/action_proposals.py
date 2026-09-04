@@ -896,6 +896,53 @@ class ActionProposalService(ProposalLifecycleEngine):
             expected_action_type=expected_action_type,
         )
 
+    def proposal_trace_for_identity(
+        self,
+        *,
+        customer_identity: str,
+        support_session_id: str,
+    ) -> list[dict[str, Any]]:
+        """Return a presenter-safe lifecycle view for one support session."""
+        customer_id = self._resolve_customer_id(customer_identity)
+        proposals = (
+            self.db.query(ActionProposal)
+            .filter(
+                ActionProposal.customer_id == customer_id,
+                ActionProposal.support_session_id == str(support_session_id),
+            )
+            .order_by(ActionProposal.created_at.asc(), ActionProposal.id.asc())
+            .all()
+        )
+        return [self._proposal_trace_view(proposal) for proposal in proposals]
+
+    @staticmethod
+    def _proposal_trace_view(proposal: ActionProposal) -> dict[str, Any]:
+        """Serialize only customer-safe and correlation-safe proposal fields."""
+        return {
+            "proposal_ref": stable_log_reference(str(proposal.id), "proposal"),
+            "action_type": proposal.action_type,
+            "contract_version": proposal.contract_version,
+            "status": proposal.status,
+            "customer_safe_summary": proposal.customer_safe_summary,
+            "catalog_snapshot_ref": (
+                stable_log_reference(
+                    proposal.catalog_snapshot_id, "catalog-snapshot"
+                )
+                if proposal.catalog_snapshot_id
+                else None
+            ),
+            "presentation_verified": bool(proposal.presented_assistant_turn_id),
+            "confirmation_verified": bool(proposal.confirmation_customer_turn_id),
+            "commit_started": bool(proposal.commit_started_at),
+            "created_at": proposal.created_at.isoformat()
+            if proposal.created_at
+            else None,
+            "completed_at": proposal.completed_at.isoformat()
+            if proposal.completed_at
+            else None,
+            "invalidation_reason": proposal.invalidation_reason,
+        }
+
     def _resolve_customer_id(self, customer_identity: str):
         identity = str(customer_identity or "").strip()
         identity_filters = [

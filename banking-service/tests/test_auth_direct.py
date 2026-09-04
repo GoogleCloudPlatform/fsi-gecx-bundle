@@ -20,7 +20,7 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
 from models.authentication import ValidatedToken, ForwardedUserContextType
-from utils.auth import get_current_user, PROJECT_ID, is_route_allowed
+from utils.auth import get_current_user, has_admin_access, PROJECT_ID, is_route_allowed
 
 
 class MockURL:
@@ -190,3 +190,25 @@ def test_is_route_allowed_patch_application():
         context_type=ForwardedUserContextType.CXAS_AGENT.value
     ) is True
 
+
+@pytest.mark.parametrize(
+    ("email", "expected"),
+    (
+        ("presenter@google.com", True),
+        ("presenter@gcp.solutions", True),
+        ("presenter@altostrat.com", True),
+        ("customer@novahorizon.com", False),
+        (None, False),
+    ),
+)
+def test_has_admin_access_uses_configured_admin_domains(
+    monkeypatch,
+    email,
+    expected,
+):
+    monkeypatch.setattr("utils.auth.is_running_locally", lambda: False)
+    claims = {"sub": "trace-viewer"}
+    if email:
+        claims["email"] = email
+
+    assert has_admin_access(ValidatedToken(claims=claims)) is expected

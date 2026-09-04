@@ -308,6 +308,48 @@ def test_current_actions_share_the_frozen_exactly_once_lifecycle_contract(
     }
 
 
+def test_proposal_trace_is_session_scoped_and_presenter_safe(
+    db_session,
+    fraud_alert,
+):
+    service = ActionProposalService(db_session)
+    proposal = _propose(service, fraud_alert)
+    service.mark_presented(proposal.id, assistant_turn_id="assistant-turn-10")
+    service.confirm(
+        proposal.id,
+        customer_turn_id="customer-turn-11",
+        protected_evidence={"source": "MODEL_TOOL_INTENT"},
+    )
+
+    trace = service.proposal_trace_for_identity(
+        customer_identity="proposal-customer",
+        support_session_id="support-session-1",
+    )
+
+    assert len(trace) == 1
+    assert trace[0] == {
+        "proposal_ref": trace[0]["proposal_ref"],
+        "action_type": TRIAGE_FRAUD_CASE,
+        "contract_version": FRAUD_TRIAGE_CONTRACT_VERSION,
+        "status": "CONFIRMED",
+        "customer_safe_summary": proposal.customer_safe_summary,
+        "catalog_snapshot_ref": trace[0]["catalog_snapshot_ref"],
+        "presentation_verified": True,
+        "confirmation_verified": True,
+        "commit_started": False,
+        "created_at": proposal.created_at.isoformat(),
+        "completed_at": None,
+        "invalidation_reason": None,
+    }
+    assert trace[0]["proposal_ref"] != str(proposal.id)
+    assert trace[0]["catalog_snapshot_ref"] != proposal.catalog_snapshot_id
+    assert str(proposal.id) not in str(trace[0])
+    assert service.proposal_trace_for_identity(
+        customer_identity="proposal-customer",
+        support_session_id="another-session",
+    ) == []
+
+
 @pytest.mark.parametrize(("action_type", "contract_version"), CURRENT_ACTION_CONTRACTS)
 def test_current_actions_share_expiry_and_reset_invalidation(
     db_session,

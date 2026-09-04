@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import {
   getCreditCardAccount,
+  getCreditCardProposalTrace,
   getCreditCardVoiceContext,
   getCreditCardVoiceToken,
   getCreditCardTransactions
@@ -55,10 +56,12 @@ import {
   remainingPlayoutSeconds,
 } from '../utils/gecxAudio.js';
 import { mergeGecxTranscript } from '../utils/gecxTranscript.js';
+import { applyRuntimeProposalStatus } from '../utils/proposalTrace.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
+import ProposalProtocolTrace from './ProposalProtocolTrace.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
@@ -330,6 +333,10 @@ export default function VoiceSupportView() {
   const [showLiveAvatarBetaModal, setShowLiveAvatarBetaModal] = useState(false);
   const [warningMessage, setWarningMessage] = useState('');
   const [guidanceSnapshot, setGuidanceSnapshot] = useState(null);
+  const [proposalTraceAllowed, setProposalTraceAllowed] = useState(false);
+  const [proposalTraceSessionId, setProposalTraceSessionId] = useState(null);
+  const [proposalTraces, setProposalTraces] = useState([]);
+  const [proposalRuntimeStatuses, setProposalRuntimeStatuses] = useState({});
 
   const [agentVideoTrack, setAgentVideoTrack] = useState(null);
   const [videoLoaded, setVideoLoaded] = useState(false);
@@ -634,6 +641,10 @@ export default function VoiceSupportView() {
       playoutDrainTimerRef.current = null;
       setIsConnected(false);
       setLatency(0);
+      setProposalTraceAllowed(false);
+      setProposalTraceSessionId(null);
+      setProposalTraces([]);
+      setProposalRuntimeStatuses({});
       onDrained?.();
     };
     const drainSeconds = audioCtx
@@ -680,6 +691,10 @@ export default function VoiceSupportView() {
     setVideoLoaded(false);
     setAgentMode(null);
     setGuidanceSnapshot(null);
+    setProposalTraceAllowed(false);
+    setProposalTraceSessionId(null);
+    setProposalTraces([]);
+    setProposalRuntimeStatuses({});
     if (typedAckTimerRef.current) {
       clearTimeout(typedAckTimerRef.current);
       typedAckTimerRef.current = null;
@@ -725,6 +740,37 @@ export default function VoiceSupportView() {
   useEffect(() => {
     micEnabledRef.current = micEnabled;
   }, [micEnabled]);
+
+  useEffect(() => {
+    if (!isConnected || !proposalTraceAllowed || !proposalTraceSessionId) {
+      return undefined;
+    }
+    let cancelled = false;
+
+    const refreshProposalTrace = async () => {
+      try {
+        const trace = await getCreditCardProposalTrace(proposalTraceSessionId);
+        if (!cancelled) setProposalTraces(trace.proposals || []);
+      } catch (error) {
+        if (!cancelled) console.warn('Unable to refresh presenter proposal trace.', error);
+      }
+    };
+
+    refreshProposalTrace();
+    const interval = window.setInterval(refreshProposalTrace, 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [isConnected, proposalTraceAllowed, proposalTraceSessionId]);
+
+  const displayedProposalTraces = useMemo(
+    () => proposalTraces.map(proposal => applyRuntimeProposalStatus(
+      proposal,
+      proposalRuntimeStatuses[proposal.proposal_ref],
+    )),
+    [proposalTraces, proposalRuntimeStatuses],
+  );
 
   useEffect(() => {
     const isGranted = micPermissionState === 'granted';
@@ -1095,6 +1141,8 @@ export default function VoiceSupportView() {
     } else if (payload.type === 'AUDIO_CONFIG') {
       gecxInputSampleRateRef.current = payload.input_sample_rate_hz;
       gecxOutputSampleRateRef.current = payload.output_sample_rate_hz;
+      setProposalTraceSessionId(payload.support_session_id || null);
+      setProposalTraceAllowed(Boolean(payload.proposal_trace_allowed));
     } else if (payload.type === 'CARD_STATUS') {
       setCardStatus(payload.status);
       setTranscripts(prev => [...prev, { author: 'system', text: `SECURITY ALERT: Card status updated to ${payload.status}.` }]);
@@ -1135,6 +1183,10 @@ export default function VoiceSupportView() {
     setIsConnecting(true);
     setErrorMessage('');
     setGuidanceSnapshot(null);
+    setProposalTraceAllowed(false);
+    setProposalTraceSessionId(null);
+    setProposalTraces([]);
+    setProposalRuntimeStatuses({});
     setTranscripts([{ author: 'system', text: 'Connecting to GECX voice stream...' }]);
 
     try {
@@ -1396,9 +1448,11 @@ export default function VoiceSupportView() {
       }
 
       // 1. Fetch token and room name from server
-      const { token, room_name, fraud_context } = await getCreditCardVoiceToken(mode);
+      const { token, room_name, session_id, proposal_trace_allowed, fraud_context } = await getCreditCardVoiceToken(mode);
       console.log(`LiveKit token received. Room: ${room_name}`);
       setFraudContext(fraud_context || null);
+      setProposalTraceSessionId(session_id || null);
+      setProposalTraceAllowed(Boolean(proposal_trace_allowed));
 
       // 2. Initialize LiveKit Room
       const room = new Room({
@@ -1492,6 +1546,13 @@ export default function VoiceSupportView() {
             ]);
           } else if (event.type === DataChannelEvent.GUIDANCE_SNAPSHOT) {
             setGuidanceSnapshot(event);
+          } else if (event.type === DataChannelEvent.PROPOSAL_PROTOCOL_TRACE) {
+            if (event.proposal_ref && event.status) {
+              setProposalRuntimeStatuses(previous => ({
+                ...previous,
+                [event.proposal_ref]: event.status,
+              }));
+            }
           } else if (event.type === DataChannelEvent.LIMIT_UPDATED) {
             setCreditLimit(event.credit_limit_cents / 100);
             setAvailableCredit(event.available_credit_cents / 100);
@@ -2004,6 +2065,12 @@ export default function VoiceSupportView() {
               );
             })}
           </div>
+
+          {proposalTraceAllowed && displayedProposalTraces.length > 0 && (
+            <ProposalProtocolTrace
+              proposals={displayedProposalTraces}
+            />
+          )}
 
           {isConnected && engine === 'livekit' && (
             <form

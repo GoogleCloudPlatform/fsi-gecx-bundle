@@ -36,6 +36,7 @@ from agent.closeout import (
 )
 from agent.guidance_snapshot import guidance_observability_payload
 from agent.log_safety import (
+    banking_trace_reference,
     stable_log_reference,
     tool_args_log_summary,
     tool_response_is_expected_checkpoint,
@@ -506,6 +507,23 @@ def notify_event(event_dict):
             pass
 
 
+def notify_proposal_trace(proposal: dict | None, status: str) -> None:
+    """Publish one presenter-safe runtime checkpoint for the active proposal."""
+    proposal = proposal or {}
+    proposal_ref = banking_trace_reference(
+        proposal.get("proposal_id"), prefix="proposal"
+    )
+    if not proposal_ref:
+        return
+    notify_event(
+        {
+            "type": DataChannelEvent.PROPOSAL_PROTOCOL_TRACE.value,
+            "proposal_ref": proposal_ref,
+            "status": str(status or "").upper(),
+        }
+    )
+
+
 # Custom dynamic auth class for OIDC token refreshing
 class DynamicGoogleAuth(httpx.Auth):
     async def async_auth_flow(self, request: httpx.Request):
@@ -533,7 +551,15 @@ def get_auth_token_for_audience(audience: str) -> str:
 
 def custom_client_factory(headers=None, timeout=None, auth=None):
     dynamic_auth = DynamicGoogleAuth()
-    return create_mcp_http_client(headers=headers, timeout=timeout, auth=dynamic_auth)
+    # A newly deployed banking-service can take longer than ADK's short default
+    # while the streamable MCP transport initializes. Keep the toolset intact
+    # instead of letting graceful degradation start the model with local tools only.
+    mcp_timeout = httpx.Timeout(20.0)
+    return create_mcp_http_client(
+        headers=headers,
+        timeout=mcp_timeout,
+        auth=dynamic_auth,
+    )
 
 
 def create_mcp_toolset() -> LiveMcpToolset:
@@ -744,48 +770,6 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
                     "customer needs anything else and wait for their next turn."
                 ),
             }
-    consequential_tools = {
-        "unfreeze_card",
-        "reverse_overdraft_fee",
-        "request_credit_limit_increase",
-        "resolve_fraud_alert",
-        "commit_fraud_triage",
-        "commit_card_reissue",
-        "commit_wallet_provisioning",
-        "triage_customer_reported_fraud",
-    }
-    if tool_name in consequential_tools:
-        expected_generation = str(
-            tool_context.state.get("reset_generation_token")
-            or (tool_context.state.get("reset_generation") or {}).get("token")
-            or ""
-        )
-        try:
-            reset_headers = get_auth_headers()
-        except Exception:
-            reset_headers = {}
-        generation_valid, generation_reason = await validate_reset_generation(
-            banking_service_url=BANKING_SERVICE_URL,
-            headers=reset_headers,
-            expected_token=expected_generation,
-        )
-        if not generation_valid:
-            logger.warning(
-                "[CALLBACK] reset generation blocked consequential tool %s",
-                format_log_context(
-                    state=tool_context.state,
-                    tool_name=tool_name,
-                    drift=generation_reason,
-                ),
-            )
-            return {
-                "success": False,
-                "isError": True,
-                "error": "SESSION_INVALIDATED",
-                "message": "This consultation is no longer current because demo data changed. Start a new consultation before taking action.",
-                "required_action": generation_reason,
-                "model_instruction": "Do not claim success or retry this tool in the current session.",
-            }
     pending_proposal = fraud_playbook.get("pending_proposal") or {}
     authorization_action = COMMIT_ACTION_BY_TOOL.get(tool_name)
     if tool_name == "decide_action_proposal":
@@ -822,6 +806,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
                     outcome="CONFIRMED",
                     latency_ms=0,
                 )
+                notify_proposal_trace(pending_proposal, "CONFIRMED")
         authorization_error = proposal_evidence_error(
             pending_proposal,
             proposal_id=proposal_id,
@@ -918,6 +903,48 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
             }
             return blocked_result
         authorization_to_execute = authorization
+    consequential_tools = {
+        "unfreeze_card",
+        "reverse_overdraft_fee",
+        "request_credit_limit_increase",
+        "resolve_fraud_alert",
+        "commit_fraud_triage",
+        "commit_card_reissue",
+        "commit_wallet_provisioning",
+        "triage_customer_reported_fraud",
+    }
+    if tool_name in consequential_tools:
+        expected_generation = str(
+            tool_context.state.get("reset_generation_token")
+            or (tool_context.state.get("reset_generation") or {}).get("token")
+            or ""
+        )
+        try:
+            reset_headers = get_auth_headers()
+        except Exception:
+            reset_headers = {}
+        generation_valid, generation_reason = await validate_reset_generation(
+            banking_service_url=BANKING_SERVICE_URL,
+            headers=reset_headers,
+            expected_token=expected_generation,
+        )
+        if not generation_valid:
+            logger.warning(
+                "[CALLBACK] reset generation blocked consequential tool %s",
+                format_log_context(
+                    state=tool_context.state,
+                    tool_name=tool_name,
+                    drift=generation_reason,
+                ),
+            )
+            return {
+                "success": False,
+                "isError": True,
+                "error": "SESSION_INVALIDATED",
+                "message": "This consultation is no longer current because demo data changed. Start a new consultation before taking action.",
+                "required_action": generation_reason,
+                "model_instruction": "Do not claim success or retry this tool in the current session.",
+            }
     if tool_name == "transfer_to_human":
         fraud_playbook["escalation_status"] = "EXECUTING"
         fraud_playbook["escalation_reason"] = str(args.get("reason") or "").strip()
@@ -987,6 +1014,9 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
         elif tool_name in COMMIT_ACTION_BY_TOOL:
             fraud_playbook["pending_proposal"] = mark_commit_in_flight(
                 authorization_to_execute
+            )
+            notify_proposal_trace(
+                fraud_playbook["pending_proposal"], "COMMITTING"
             )
         else:
             fraud_playbook["workflow_authorization"] = mark_authorization_executing(
@@ -1120,6 +1150,13 @@ async def after_tool_callback(
             outcome=outcome,
             latency_ms=duration_seconds * 1000,
         )
+        if success and isinstance(structured, dict):
+            notify_proposal_trace(
+                (tool_context.state.get("fraud_playbook") or {}).get(
+                    "pending_proposal"
+                ),
+                str(structured.get("status") or "COMMITTED"),
+            )
     if isinstance(structured, dict):
         guidance = structured.get("support_guidance")
         if isinstance(guidance, dict) and guidance:
@@ -1161,6 +1198,7 @@ async def after_tool_callback(
                 outcome="PROPOSED",
                 latency_ms=duration_seconds * 1000,
             )
+            notify_proposal_trace(proposal, "PROPOSED")
         if tool_name == "review_fraud_selection" and structured.get("success") is True:
             playbook = dict(tool_context.state.get("fraud_playbook") or {})
             review = {
@@ -1462,7 +1500,7 @@ async def after_tool_callback(
             tool_name in COMMIT_ACTION_BY_TOOL
             and pending_proposal.get("evidence_state") == COMMIT_IN_FLIGHT
         ):
-            recovery_class = str(structured.get("recovery_class") or "")
+            recovery_class = str((structured or {}).get("recovery_class") or "")
             if recovery_class == "REPRESENT_AND_RECONFIRM":
                 playbook["pending_proposal"] = require_re_presentation(pending_proposal)
                 tool_context.state["fraud_playbook"] = playbook

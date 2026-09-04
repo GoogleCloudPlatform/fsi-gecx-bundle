@@ -76,6 +76,21 @@ def allow_reset(monkeypatch) -> None:
     monkeypatch.setattr(agent, "get_auth_headers", lambda: {})
 
 
+def test_proposal_trace_event_is_correlation_safe() -> None:
+    events = []
+    proposal_id = "11111111-1111-4111-8111-111111111111"
+    tokens = agent.bind_session_context("customer-1", events.append)
+    try:
+        agent.notify_proposal_trace({"proposal_id": proposal_id}, "PRESENTED")
+    finally:
+        agent.reset_session_context(tokens)
+
+    assert events[0]["type"] == "PROPOSAL_PROTOCOL_TRACE"
+    assert events[0]["status"] == "PRESENTED"
+    assert events[0]["proposal_ref"].startswith("proposal:")
+    assert proposal_id not in str(events[0])
+
+
 @pytest.mark.asyncio
 async def test_commit_uses_only_proposal_id_and_protected_transport_evidence(
     monkeypatch,

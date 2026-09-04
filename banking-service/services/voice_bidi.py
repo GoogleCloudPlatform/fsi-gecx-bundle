@@ -133,12 +133,14 @@ class VoiceBidiSession:
         websocket: WebSocket,
         gecx_app_id: str,
         location: str,
+        proposal_trace_allowed: bool = False,
     ):
         self.user_id = user_id
         self.session_id = session_id
         self.client_ws = websocket
         self.gecx_app_id = gecx_app_id
         self.location = location
+        self.proposal_trace_allowed = bool(proposal_trace_allowed)
         self.client_to_gecx_queue = asyncio.Queue(maxsize=100)
         self.gecx_to_client_queue = asyncio.Queue(maxsize=100)
         self.bootstrap = None
@@ -269,6 +271,8 @@ class VoiceBidiSession:
                     "input_sample_rate_hz": input_sample_rate_hz,
                     "output_sample_rate_hz": output_sample_rate_hz,
                     "encoding": "LINEAR16",
+                    "support_session_id": self.bootstrap.support_session_id,
+                    "proposal_trace_allowed": self.proposal_trace_allowed,
                 }
             )
 

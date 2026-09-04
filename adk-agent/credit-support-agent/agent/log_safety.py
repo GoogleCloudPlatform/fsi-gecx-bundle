@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from typing import Any
 
 
@@ -32,6 +33,15 @@ def stable_log_reference(value: Any, *, prefix: str = "ref") -> str | None:
         return None
     digest = hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:12]
     return f"{prefix}_{digest}"
+
+
+def banking_trace_reference(value: Any, *, prefix: str) -> str | None:
+    """Match banking-service's salted, non-reversible trace reference."""
+    if value in (None, ""):
+        return None
+    salt = os.getenv("LOG_REFERENCE_SALT", "fsi-gecx-log-reference")
+    digest = hashlib.sha256(f"{salt}:{value}".encode()).hexdigest()[:12]
+    return f"{prefix}:{digest}"
 
 
 def tool_args_log_summary(tool_name: str, args: dict | None) -> dict[str, Any]:

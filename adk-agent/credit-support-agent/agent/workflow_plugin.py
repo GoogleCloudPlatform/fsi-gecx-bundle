@@ -91,6 +91,9 @@ class FraudWorkflowStatePlugin(BasePlugin):
                     updated["pending_proposal"],
                     "PRESENTED",
                 )
+                from agent.agent import notify_proposal_trace
+
+                notify_proposal_trace(updated["pending_proposal"], "PRESENTED")
 
         if updated != playbook:
             event.actions.state_delta["fraud_playbook"] = updated
