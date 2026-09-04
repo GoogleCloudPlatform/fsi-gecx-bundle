@@ -106,3 +106,8 @@ output "gemini_enterprise_console_url" {
     "https://console.cloud.google.com/gemini-enterprise/locations/us/engines/${var.gemini_enterprise_app.engine_id}/overview/dashboard?project=${var.project_id}"
   )
 }
+
+output "gemini_enterprise_web_url" {
+  description = "Generated end-user web console URL for the Gemini Enterprise app."
+  value       = local.gemini_enterprise_web_url
+}

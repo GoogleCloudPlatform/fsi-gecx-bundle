@@ -410,10 +410,10 @@ resource "google_cloud_run_v2_service" "banking_ui" {
         }
       }
       dynamic "env" {
-        for_each = var.gemini_enterprise_web_url != null && var.gemini_enterprise_web_url != "" ? [1] : []
+        for_each = local.gemini_enterprise_web_url != null ? [1] : []
         content {
           name  = "VITE_GEMINI_ENTERPRISE_WEB_URL"
-          value = var.gemini_enterprise_web_url
+          value = local.gemini_enterprise_web_url
         }
       }
       env {

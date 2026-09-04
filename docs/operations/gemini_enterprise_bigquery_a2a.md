@@ -167,14 +167,22 @@ license assignments.
 
 ## 6. Obtain the End-User URL
 
-Open the app's Gemini Enterprise dashboard and copy **Link to webapp**. A `us` URL has this shape:
+Terraform reads the app's `default_search_widget_config`, obtains its generated `configId`, and
+composes the environment-local end-user URL. Retrieve it after apply with:
+
+```bash
+terraform output -raw gemini_enterprise_web_url
+```
+
+A `us` URL has this shape:
 
 ```text
 https://vertexaisearch.cloud.google.com/us/home/cid/GENERATED_CONFIGURATION_ID
 ```
 
-Do not substitute the project number for `GENERATED_CONFIGURATION_ID`. The project-number form can
-resolve against the wrong location and return a false "not assigned an active license" error.
+Do not substitute the project number or engine ID for `GENERATED_CONFIGURATION_ID`. The generated
+widget `configId` is different in every environment; substituting another identifier can resolve
+against the wrong location or return a false "not assigned an active license" error.
 
 ## 7. Verify End to End
 
