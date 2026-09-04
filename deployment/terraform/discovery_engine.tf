@@ -74,3 +74,23 @@ resource "google_discovery_engine_search_engine" "gemini_enterprise" {
 
   depends_on = [google_project_service.discoveryengine_googleapis_com]
 }
+
+data "external" "gemini_enterprise_web_config" {
+  for_each = var.gemini_enterprise_app == null ? {} : { app = var.gemini_enterprise_app }
+
+  program = [
+    "bash",
+    "${path.module}/scripts/get_gemini_enterprise_web_config.sh",
+    var.project_id,
+    "us",
+    each.value.engine_id,
+  ]
+
+  depends_on = [google_discovery_engine_search_engine.gemini_enterprise]
+}
+
+locals {
+  gemini_enterprise_web_url = var.gemini_enterprise_app == null ? null : (
+    "https://vertexaisearch.cloud.google.com/us/home/cid/${data.external.gemini_enterprise_web_config["app"].result.config_id}"
+  )
+}
