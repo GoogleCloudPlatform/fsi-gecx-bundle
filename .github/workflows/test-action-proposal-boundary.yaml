@@ -163,12 +163,34 @@ jobs:
         run: uv sync --frozen --default-index https://pypi.org/simple
         working-directory: banking-service
 
-      - name: Validate migration upgrade and downgrade
+      - name: Validate reversible migrations and forward-only Money upgrade
         env:
           DATABASE_URL: postgresql://postgres:secret@127.0.0.1:5432/banking
           SKIP_IAM_GRANTS: "true"
         run: |
-          uv run alembic upgrade head
+          # Preserve round-trip coverage below the irreversible Money boundary.
+          uv run alembic upgrade c3a91f2b7d44
           uv run alembic downgrade base
+          uv run alembic upgrade head
+          uv run python - <<'PYTEST'
+          import os
+          import subprocess
+          from sqlalchemy import create_engine, inspect, text
+
+          engine = create_engine(os.environ["DATABASE_URL"])
+          with engine.connect() as connection:
+              before = connection.execute(text("SELECT version_num FROM admin.alembic_version")).scalar_one()
+          result = subprocess.run(
+              ["alembic", "downgrade", "c3a91f2b7d44"], capture_output=True, text=True
+          )
+          assert result.returncode != 0, "Money downgrade must be rejected"
+          assert "Money denomination is retained" in result.stderr, result.stderr
+          with engine.connect() as connection:
+              after = connection.execute(text("SELECT version_num FROM admin.alembic_version")).scalar_one()
+              constraints = inspect(connection).get_check_constraints("transactions", schema="ledger")
+          assert before == after == "d8e2f6a910bc", (before, after)
+          assert any(c["name"] == "ck_transactions_currency" for c in constraints)
+          engine.dispose()
+          PYTEST
           uv run alembic upgrade head
         working-directory: banking-service
