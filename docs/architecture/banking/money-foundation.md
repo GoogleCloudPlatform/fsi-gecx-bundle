@@ -52,43 +52,11 @@ Run `./scripts/test_money_foundation.sh`. The active Money Foundation workflow
 runs this entry point on PRs and main updates. Contract tests block network
 connections and avoid backend startup and cloud credentials.
 
-## Delivery evidence
+## Qualification records
 
-The current deployed qualification record for Packets 01–06 is
-maintained in the FSI solutions workbench under the active
+Implementation plans, review notes and deployment qualification evidence live
+in the FSI solutions workbench under the active
 `internationalization-and-money-foundation` work item.
-
-- Packet 01: strict Money, metadata, external USD helpers, finite legacy guard,
-  offline serialization/OpenAPI tests, and active CI definition delivered.
-- Packet 01 validation: 43 offline contract/guard cases passed.
-- Packet 02: account constraints, durable journal currency, Money posting inputs,
-  currency-specific clearing, transfer retry/denomination checks, additive
-  migration, and reconciliation implemented. Combined offline Money/journal/
-  SQLite and PostgreSQL migration suite: 67 passed. Existing journal, transfer,
-  and credit-service regressions: 28 passed.
-- Packet 03: Money account summaries, atomic same-currency bill payment,
-  durable retries, simulation caller migration, and baseline UI contract
-  migration implemented. Combined offline suite: 87 passed, including real
-  PostgreSQL lock contention and concurrent duplicate/distinct requests.
-  Existing backend regressions: 42 passed. UI tests: 26 passed; build passed.
-- Packet 03 generator auto-paydown regressions: 2 passed.
-- Packet 04: active presentation locale, English/Spanish payment copy, exact
-  currency formatting, and visual qualification implemented. UI suite: 31
-  passed, including en-US/USD, es-MX/USD, es-MX/MXN, ja-JP/JPY and ar-BH/BHD.
-  UI build and focused ESLint passed.
-- Packet 05 implementation: financial event v2, strict versioned Java reader,
-  immutable raw history and physical Iceberg schema, normalized logical views,
-  and per-currency customer balances/spend metrics. Active CI includes parser
-  replay and logical-view regressions. 87 Money tests, 48 backend regressions,
-  and 8 Java parser tests passed. BigQuery dry runs of both curated views passed
-  in `evo-genai-workspace` on 2026-09-08. Integrated CDC/outbox/Iceberg runtime
-  reconciliation remains pending; dry runs do not establish runtime qualification.
-- Packets 06–07 and deployed environment qualification: pending.
-
-Deployment qualification will use `evo-genai-workspace`. Preserve its existing
-database; use focused checks and additive migration. A full refresh is reserved
-for demonstrated necessity. Production staged rollout/rollback certification is
-out of scope; financial correctness and immutable-history replay remain in scope.
 
 ## Currency migration and reconciliation
 
@@ -140,33 +108,12 @@ Simulation auto-paydown returns structured target/paid/remaining amounts.
 
 The browser parses decimal strings with integer arithmetic, uses currency
 metadata for precision, and retains payment intent keys across retries.
-Dashboard totals group currencies separately. Packet 04 adds active-locale
-presentation and visual qualification on top of this contract migration.
+Dashboard totals group currencies separately. Active locale controls display
+and copy while currency metadata controls amount precision.
 
-## Browser qualification (2026-09-08)
-
-The dev-only `banking-ui/tests/fixtures/money.html?currency=MXN` fixture mounts
-actual BillPayModal and Money utilities without Firebase. Playwright used
-intercepted fixture HTTP responses; these browser checks are separate from the
-real PostgreSQL posting tests and are not deployed-environment qualification.
-
-- Inspected 390×844 Spanish and 1440×1000 English layouts. Balance text has its
-  own visible line so long account names cannot clip consequential amounts.
-- Rejected `12.345` for MXN before HTTP submission. Switching language updates
-  the validation message and display amounts without changing decimal input.
-- Submitted `12.34` as `{amount_minor:1234,currency_code:"MXN"}`. After a
-  fixture 409, switched Spanish to English and retried. Both captured requests
-  had identical account IDs, Money and idempotency keys.
-- A posted fixture response refreshed deposit/card balances to MX$87.66 and
-  MX$37.66. No compatibility fields were sent by the browser.
-- Screenshots are local artifacts under `output/playwright/`:
-  `money-es-mxn-mobile.png` and `money-en-mxn-desktop.png`.
-
-Locale only changes presentation. English is the UI-copy fallback for Japanese
-and Arabic projection fixtures. Spanish consequential content has received the
-user-authorized assistant review recorded below; live multilingual qualification
-remains required.
-
+Locale changes presentation only; it never changes the denomination or payment
+intent. English is the UI-copy fallback when translated copy is unavailable.
+Credit history is scoped to the selected account and authenticated customer.
 
 ## Event and analytical Money
 
@@ -187,27 +134,14 @@ retain their raw payload but have no inferred normalized amount.
 Posted-card analytics exposes exact NUMERIC unit projections and integer
 minor-unit facts. Customer balances are an array grouped by denomination,
 which prevents a customer with USD and MXN accounts from silently combining
-those balances. Legacy dollar aliases cover USD alone. The data agent is
+those balances. Selected views expose no legacy dollar aliases. The data agent is
 restricted to normalized sources for monetary questions; unrelated curated
 views remain available for non-monetary facts only.
 
 
-## Environment progress (2026-09-08)
+## Spanish fraud voice contracts
 
-Release `101adbf`, project `evo-genai-workspace`: the seven logical Iceberg views
-and both selected curated views were reconciled. The read returned 2,238,061
-audit events (all distinct), 1,593,180 ledger entries (all distinct), and zero
-imbalanced transaction/currency groups. This verifies retained history through
-the new views, not yet v2 posting/CDC end-to-end reconciliation.
-
-Dataflow build `ee9074e1-2e2f-4bb5-85c0-bbdd492d70ca` succeeded. Replacement job
-`2026-09-08_18_03_03-5377683810347333006` reached RUNNING and replaced
-`2026-07-31_14_03_15-14773413879608518577`; exactly one matching job was running.
-No database refresh, migration or banking-service deployment has occurred yet.
-
-## Spanish voice increment
-
-Fraud context now resolves account-scoped authoritative transaction and billing
+Fraud context resolves account-scoped authoritative transaction and billing
 Money; an ambiguous historical alert snapshot cannot select currency or override
 the posting. English/Spanish display and speech use integer arithmetic. Proposal
 Money and both deterministic presentations are frozen inside its payload
@@ -216,65 +150,20 @@ presentation/confirmation evidence. An uncertain commit must finish recovery
 before the language changes. Live reconnect uses a fresh speech configuration
 without changing the support session or currency.
 
-The user explicitly delegated Spanish content review to the assistant on
-2026-09-08. The review record in the FSI solutions workbench documents that this
-is assistant review, not human/native-speaker certification. This user direction
-supersedes the plan's human-review prerequisite; live qualification is still
-required. The shared content resource records review method and date.
+Available credit sums validated billing Money for PENDING and FLAGGED holds.
+A flagged MXN purchase billed in USD is released by its USD billed amount;
+mismatched billing currency rolls back. Authorization releases, provisional
+credits, alert snapshots, secure-message amounts and aggregate audit facts use
+currency-aware Money. One reader normalizes immutable pre-Money USD action
+results without rewriting stored payloads.
 
-Incremental checks: 104 focused Money tests (including PostgreSQL), 105 backend
-regressions, and 196 ADK tests pass after Live stream restart wiring. UI tests
-and build pass. Final whole-scope verification remains
-pending. Remaining Packet 06 work includes selected result/history consumers,
-Spanish trajectory fixtures, UI inspection, deployed USD/MXN and Spanish live
-qualification with transcript/tool/proposal/final-state evidence. Packet 07
-compatibility removal is still pending qualification.
-
-
-The next fraud increment fixes available-credit recalculation to sum validated
-billing Money for PENDING and FLAGGED holds. A flagged MXN purchase billed in
-USD is released by its USD billed amount; mismatched billing currency rolls
-back. Fraud authorization releases, provisional credits, alert snapshots,
-secure-message amounts and aggregate audit facts now carry/use currency-aware
-Money. External projections now contain only Money. One reader normalizes
-immutable pre-Money USD action results without rewriting their stored payloads.
-Checks after this increment: 105 focused Money tests and 108 backend regressions
-passed, including cross-currency billed holds and MXN provisional credits.
-
-### Qualification build and MCP fixture checks
-
-Cloud Build `c0f97904-9e8e-417e-acb2-a7f61b2bca29` succeeded in
-`evo-genai-workspace` for source `f8bec0b394fcffc2a9a464272602f0ab2f6e7883`,
-building banking-service, banking-ui and credit-support-agent images. This is
-build evidence only; database migration and live qualification remain pending.
-
-The additional MCP/simulation regression run passed 35 checks and exposed four
-fraud fixtures that omitted currency facts. Replacing those mocks with persisted
-USD authorizations made all four targeted reruns pass. Their physical storage
-columns are explicitly covered by the reviewed legacy allowlist.
-
-### Snapshot reconciliation and runtime fallback
-
-The first read-only deployed preflight (`money-foundation-preflight-vz68t`)
-archived 6,063 ledger accounts, 2,021 card accounts, 195,082 transaction headers
-and 390,166 entries. It reported two apparent orphan entries while demo traffic
-continued. Because the old preflight used separate READ COMMITTED reads, that
-report does not establish an actual orphan: a transaction can commit between
-header and entry scans. A second execution, `money-foundation-preflight-g8tt9`,
-uses the same built image with an explicit REPEATABLE READ engine override and
-archives to `money-foundation/preflight-f8bec0b-snapshot-20260909.json.gz` in the
-interaction-artifacts bucket. Its result is pending. No migration or reset has
-run and writes remain enabled.
-
-Both standalone reconciliation scripts now use a consistent PostgreSQL snapshot.
-The migration locks its four source tables against concurrent writes and uses a
-set-based denomination backfill. All 20 actual migration checks pass on SQLite
-and PostgreSQL, including preservation of USD, MXN, JPY and BHD records.
-
-Explicit Spanish runtime language rejection now persists English locale and
+Explicit Spanish runtime language rejection persists English locale and
 invalidated proposal evidence before reconnecting. It preserves Money and opaque
 proposal identity, surfaces reviewed fallback wording, and requires another
-presentation and confirmation. Unrelated runtime errors and uncertain commits do
-not trigger this fallback. The full ADK suite passes (201 tests). CES fake fraud
-responses now include canonical purchase/billing Money and deterministic
-projections; all 27 CES callback checks pass and are included in Money CI.
+presentation and confirmation. Unrelated runtime errors and uncertain commits
+do not trigger this fallback.
+
+Both standalone reconciliation scripts use a consistent PostgreSQL snapshot.
+The additive migration locks its four source tables against concurrent writes
+and uses a set-based denomination backfill. Reconciliation must preserve
+existing entries and immutable events; it does not reset the demo database.
