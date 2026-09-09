@@ -138,6 +138,13 @@ def test_payment_schemas_are_money_only():
     assert set(request["required"]) == {"source_account_id", "credit_account_id", "money"}
     assert set(request["properties"]) == set(request["required"])
     assert not any(name.endswith("_cents") for name in BillPaymentResponse.model_json_schema()["properties"])
+    from routers.credit_card import router
+    app = FastAPI()
+    app.include_router(router)
+    schemas = app.openapi()["components"]["schemas"]
+    for name in ("BillPaymentRequest", "BillPaymentResponse"):
+        assert not any(field.endswith("_cents") for field in schemas[name]["properties"])
+    assert "money" in schemas["BillPaymentRequest"]["required"]
 
 
 @pytest.fixture
