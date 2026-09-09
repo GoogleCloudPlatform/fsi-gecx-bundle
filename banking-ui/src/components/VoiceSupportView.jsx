@@ -299,7 +299,8 @@ function MicTester({ deviceId, onError }) {
 export default function VoiceSupportView({ customerProfile }) {
   const [consultationLocale, setConsultationLocale] = useState('');
   const profileLocale = customerProfile?.preferred_support_locale === 'es-MX' ? 'es-MX' : 'en-US';
-  const voiceLocale = consultationLocale || profileLocale;
+  const consultationOverride = consultationLocale === profileLocale ? '' : consultationLocale;
+  const voiceLocale = consultationOverride || profileLocale;
   const { brandColorFrom, resolvedTheme } = useSettings();
   const location = useLocation();
   const projectId = window.firebaseConfig?.projectId;
@@ -1249,7 +1250,7 @@ export default function VoiceSupportView({ customerProfile }) {
         ws.send(JSON.stringify({
           type: "AUTH",
           token: fbToken,
-          ...(consultationLocale ? { locale: consultationLocale } : {}),
+          ...(consultationOverride ? { locale: consultationOverride } : {}),
         }));
         const micSettings = micStream.getAudioTracks()[0]?.getSettings?.() || {};
         ws.send(JSON.stringify({
@@ -1468,7 +1469,7 @@ export default function VoiceSupportView({ customerProfile }) {
       }
 
       // 1. Fetch token and room name from server
-      const { token, room_name, session_id, proposal_trace_allowed, fraud_context } = await getCreditCardVoiceToken(mode, consultationLocale || undefined);
+      const { token, room_name, session_id, proposal_trace_allowed, fraud_context } = await getCreditCardVoiceToken(mode, consultationOverride || undefined);
       console.log(`LiveKit token received. Room: ${room_name}`);
       setFraudContext(fraud_context || null);
       setProposalTraceSessionId(session_id || null);
@@ -2303,16 +2304,33 @@ export default function VoiceSupportView({ customerProfile }) {
                 <Settings className="w-5 h-5 text-emerald-500" />
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">Options</h3>
               </div>
-              <AnalyticsButton
-                analyticsId="voice_support_view_refresh_audio_devices"
-                type="button"
-                onClick={() => refreshAudioDevices(true)}
-                disabled={isConnecting || isRefreshingAudioDevices}
-                className="flex items-center gap-2 rounded-lg px-3 py-1.5 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-xs font-bold text-slate-600 transition hover:border-blue-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-blue-400"
-              >
-                <RefreshCw size={14} className={isRefreshingAudioDevices ? 'animate-spin' : ''} />
-                Refresh Audio Devices
-              </AnalyticsButton>
+              <div className="flex flex-wrap items-center gap-2">
+                <AnalyticsButton
+                  analyticsId="voice_support_view_13"
+                  type="button"
+                  onClick={() => setIsTestingMic(!isTestingMic)}
+                  disabled={isConnecting || isConnected || micPermissionState === 'denied'}
+                  aria-pressed={isTestingMic}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                    isTestingMic
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-600 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-400'
+                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-400 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-blue-400'
+                  }`}
+                >
+                  <Mic size={14} className={isTestingMic ? 'animate-pulse' : ''} />
+                  {isTestingMic ? 'Stop Testing' : 'Test Microphone'}
+                </AnalyticsButton>
+                <AnalyticsButton
+                  analyticsId="voice_support_view_refresh_audio_devices"
+                  type="button"
+                  onClick={() => refreshAudioDevices(true)}
+                  disabled={isConnecting || isRefreshingAudioDevices}
+                  className="flex items-center gap-2 rounded-lg px-3 py-1.5 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-xs font-bold text-slate-600 transition hover:border-blue-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-blue-400"
+                >
+                  <RefreshCw size={14} className={isRefreshingAudioDevices ? 'animate-spin' : ''} />
+                  Refresh Audio Devices
+                </AnalyticsButton>
+              </div>
             </div>
 
             <div className="grid w-full min-w-0 grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -2353,23 +2371,7 @@ export default function VoiceSupportView({ customerProfile }) {
                   </div>
                 </div>
 
-                {/* Test Microphone Button */}
-                <div className="pt-3">
-                  <AnalyticsButton
-                    analyticsId="voice_support_view_13"
-                    type="button"
-                    onClick={() => setIsTestingMic(!isTestingMic)}
-                    disabled={isConnecting || isConnected || micPermissionState === 'denied'}
-                    className={`flex w-full h-11 items-center justify-center gap-2 rounded-xl border text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                      isTestingMic
-                        ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:border-emerald-800 dark:text-emerald-400'
-                        : 'border-slate-300 bg-slate-50 dark:bg-slate-950/20 text-slate-600 hover:border-blue-400 hover:text-blue-600 dark:border-slate-800 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-blue-400'
-                    }`}
-                  >
-                    <Mic size={16} className={isTestingMic ? 'animate-pulse' : ''} />
-                    {isTestingMic ? 'Stop Testing' : 'Test Microphone'}
-                  </AnalyticsButton>
-                </div>
+
               </div>
 
               {/* Right Column: Output */}
@@ -2404,18 +2406,18 @@ export default function VoiceSupportView({ customerProfile }) {
                 </div>
               </div>
               <div className="flex min-w-0 flex-col space-y-2 text-left">
-                <label htmlFor="voice-support-language" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Language / Idioma</label>
+                <label htmlFor="voice-support-language" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Language</label>
                 <div className="relative w-full">
                   <Languages className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
                   <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
-                  <select id="voice-support-language" value={consultationLocale}
+                  <select id="voice-support-language" value={consultationOverride}
                     onChange={(event) => setConsultationLocale(event.target.value)}
                     disabled={isConnecting || isConnected}
                     aria-describedby="voice-support-language-help"
                     className="appearance-none h-11 w-full rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-10 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200">
-                    <option value="">Profile: {profileLocale === 'es-MX' ? 'Español' : 'English'}</option>
-                    <option value="en-US">English</option>
-                    <option value="es-MX">Español (México)</option>
+                    <option value="">Profile default: {profileLocale === 'es-MX' ? 'Español' : 'English'}</option>
+                    {profileLocale !== 'en-US' && <option value="en-US">English</option>}
+                    {profileLocale !== 'es-MX' && <option value="es-MX">Español (México)</option>}
                   </select>
                 </div>
                 <p id="voice-support-language-help" className="text-xs leading-5 text-slate-500 dark:text-slate-400">
