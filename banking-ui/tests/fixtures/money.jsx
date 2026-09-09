@@ -29,7 +29,7 @@ const initial = {
   credit_accounts: [{account_id:'22222222-2222-4222-8222-222222222222', currency_code:currency,
     cleared_balance:value(5000), available_credit:value(5000), credit_limit:value(10000)}],
 };
-function Fixture() {
+export function Fixture() {
   const [open, setOpen] = useState(true);
   const [accounts, setAccounts] = useState(initial);
   const [locale] = useMoneyLocale();

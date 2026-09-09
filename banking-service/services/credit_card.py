@@ -501,7 +501,6 @@ def void_fraud_authorization_hold(
         release_money = Money(amount_minor=auth.billing_amount_cents, currency_code=auth.billing_currency)
         if release_money.currency_code != account.currency or release_money.amount_minor < 0:
             raise ValueError("Authorization billing Money does not match the account")
-        release_amount = release_money.amount_minor
         auth.status = "REVERSED"
         repo.save_authorization(auth)
         repo.recalculate_available_credit(account)

@@ -42,8 +42,10 @@ def fraud_proposal_presentations(*, card_last_four: str, facts: list[dict], issu
                         billing=project_money(billing, locale)[kind],
                         merchant=fact["merchant_name"]))
                 text = copy["dispute_proposal"].format(selection="; ".join(descriptions).rstrip("."), card_last_four=card_last_four)
-                if issue_replacement: text += " " + copy["replacement_consequence"]
-                if escalate: text += " " + copy["escalation_consequence"]
+                if issue_replacement:
+                    text += " " + copy["replacement_consequence"]
+                if escalate:
+                    text += " " + copy["escalation_consequence"]
             projections[kind] = text
         result[locale] = {"locale": locale, "content_version": CONTENT["version"], **projections}
     return result

@@ -1180,6 +1180,7 @@ export default function VoiceSupportView() {
     handleOperationalVoiceEvent,
     startDisconnectCountdown,
     stopPlayoutQueue,
+    voiceLocale,
   ]);
 
   const startGecxConsultation = async () => {
