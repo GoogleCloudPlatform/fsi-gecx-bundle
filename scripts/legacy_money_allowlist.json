@@ -431,13 +431,10 @@
     },
     "banking-service/routers/credit_card.py": {
       "lines": {
-        "475700bfe0c51026d6651c0da515edf6c3f08310cb4e4618417a017b0478df5c": 1,
         "5acfbda590b78c3b162136e0773c5a858e9d79fc8e4ba6761ed579d6a1db32f2": 1,
-        "83c509e5de2714e576ebd5b679d12126974a68bbde655bd24073076db5eb6f03": 1,
-        "e68e4ef06e725a5c004b09b7c4b08cb9dc0f4daef909f499e75f1b44026aed6c": 1
+        "83c509e5de2714e576ebd5b679d12126974a68bbde655bd24073076db5eb6f03": 1
       },
       "symbols": [
-        "amount_cents",
         "requested_limit_cents"
       ],
       "owner": "packet-03",
@@ -496,56 +493,44 @@
     "banking-service/services/accounts.py": {
       "lines": {
         "00e7938101512d69c07f9108725be96c70a3138730caac893b5f01ffb918967f": 1,
-        "02fea31d93a41778b04bf9962f6f1c2b775fc2059316a480383cbf525fb34c7a": 1,
-        "048a271750b7434ef0951cfa20002c112704908a9817e778e1a21cebc32b873e": 1,
         "0df5b2983f9a6fe4bb07089e7021ec5d20782298c1e83fcb1ddf10a6ee870276": 1,
-        "168674a7f72a314f26d27b926928bc7891f7dca187a24e8e838032182ac1ea53": 1,
-        "2d142a834b74aec41803f521baddcc1802bed743b7e3c03f99eeec2c33612a14": 1,
-        "3132c073fa29a043c019d967bd86290c4ecf9dcde27cba5f6e2caea5ac961665": 1,
+        "10b7d28a588559a177819696baa57b5332d2c27aba6bdebb16f4dbecd1d49a36": 1,
+        "2ca95ba4f5d0b9f4db67c7fcd817a6517f5321e42e7a4bbe8cdb98f1e68e4a71": 1,
+        "2df1847637dfc1d46afe3bccf4c505979cf0727ff8444606d941f8c965dc9754": 1,
         "363b4e062c88b2b9c9ebcd765fa1b4de954a2117b93eee0ee9ef3dd90b96edcf": 1,
         "37573adc44cc59c3a9103dc87c18a7508d41da41031e819bbd385e217f3607d6": 1,
-        "3b7f40569ee6dfad23386e4228fc505673b7685275105d7d126ddaef05ef7961": 1,
-        "3e10eb1bd0849e81a175d54f843bf5d7cb47e1514aa1481feedaf90c151e816a": 1,
+        "37abd2b1ee45006e8b596fd45eafb96e80c7167860453b7f1b68ce9f129bd742": 1,
         "43c4387f539ba88aff54d86264f7ea45986c5a85436e3ee69dc6554081c57ee3": 1,
         "486770aeb502553674da081cba7c1d802b73ee25b27e4b93b15b952f91375e51": 1,
-        "4e0caa264001577813e8c38530faef41e1b82efe607eae01c5361e9cdf24afd8": 1,
-        "50c91b50bd8d4a2de2d24b0206b4c0fd11bf356ae3a214a5a4cd5c0f5edece11": 1,
-        "5932ae4f49e08dde8f79f76c8f77af8d012f9c96645dbb002d26f77304ea9032": 1,
-        "5b7784e01bc01af4390f9cc7eb25fc7ad996e3083a4704d581ba8bcd3f5a86e8": 1,
+        "59bfbc46b4912902743a461d178656fb79f1d3dbd0934f59d94d221a42f41012": 1,
         "761377e48a0c11a8a898a25e2cf30cced3f203d1afd3f2b59bf156542952132b": 1,
         "7da999c3a0553c0a8d9a056f132d2270688f7ded7988f9b655aafc74504c76cc": 1,
-        "86c59d33cc1530c4032eb6c04d1fc916007eb3352ded5808488deaf759adc6a3": 1,
-        "8bd33ce5f2a20e1b98e4b6f412b9e0b15673b774e3e0f7b4c98111cf97d38fdf": 1,
-        "94d1b2e99a7ab0853f8e6fc571d1510528ef2afc8e68b596460edaa4c775eec2": 1,
-        "9716326755c5a8c5f6fe942b3be8f3154e99e55ccf433793a46b4d0e255e57b6": 1,
-        "973496c1a211a54c501f187d2786408070fa8747325a005e6cee05d34ed69998": 1,
+        "7fc9360c67cd6627c2077b9cda96169d8419c91712068341152a5c14b28495ed": 1,
+        "8bd7395dfb84de9a3588cb734f104d89bb6874bd65e020f34f2150363ce4d0f0": 1,
         "af05dc5e596a76c26c063cd7e23315962b14fd34178f523bf1b04ec6e7045b4e": 1,
+        "b04691c5d1af599df7f5f64d28981e00b8376910c9093df51b077b2fb8e74bbf": 1,
         "b0fa01dd1bfaad578c2d3ce170dfcb380c1254ee0983120c4bd7949e1628eecb": 1,
-        "b56ba9ff3fc2549c568749da2fa35b8e2e899af7bfa5e3e9067e0ece69cb2f84": 1,
+        "b2473e1944f1119755189a19c684223c02696dbdf4cbab1a364b986d08fd2046": 1,
+        "b30f1fc8d494ffd34b0ba5258e414d5d9f8ab438bb648e1a94925fdc5981ed74": 1,
+        "ba3b93bba353788cbeb8d02e8aaa25d11ce73025688659f9ccbd686953a496fb": 1,
         "c829831b60111b8dff6e0f5cc23f3486969d726efee945b8f6a4a870bde7b233": 1,
+        "cd84239590e7bf551e8cac21a31952ba371c638495073a37b1ce97e8e82064bc": 1,
         "d19474f5ace20131308c51a70eb5bf303e5225b7facee6b0ca476fd2a9936094": 1,
-        "d7006b6151d65883f41b8f2b29928a96fb7a25d0e3068a1bdd1262667f1a7161": 1,
         "d828e7844a9f310ea1f8c23ac2b222ab5c50824ea152f7a6ca77163a144ea280": 1,
-        "da111e55100906a6e0ca031ab58475f856c9156e43c4d5cc681c6b3a11f808dd": 1,
+        "dee072f2869ba6ef64bb19766f4353892d83bc5687e9a46294e44f98bf70efa5": 1,
         "e2aed06ab5020e5341aad25fe2c775ccb883c6bba47575ed1e8d941acfb9ef42": 1,
         "e3edb47a284f2f8855c75a2fc85030915113b15173e64ac1686e09246f48b5d6": 1,
-        "ee793054a606f8354351acb138837304961543ed459e747cf340d4e71da43132": 1,
-        "f369f6a2e90e483108fda077e26744ded93bb1a18f720deb113424a570953d3c": 1,
-        "fb4fb093e889e91d4d47df2dcee9c04bb54e7fa9c5da5458220d353d3bea98a4": 1
+        "e973d26934eb0017165249ed78f9d9860e341138a4b8c9db2cd6a174bb5ecab2": 1,
+        "f369f6a2e90e483108fda077e26744ded93bb1a18f720deb113424a570953d3c": 1
       },
       "symbols": [
         "amount_cents",
         "available_credit_cents",
         "cleared_balance_cents",
-        "credit_available_credit_cents",
-        "credit_cleared_balance_cents",
         "credit_limit_cents",
         "initial_deposit_cents",
-        "minimum_due_cents",
         "requested_amount_cents",
-        "running_balance_cents",
-        "source_cleared_balance_cents",
-        "statement_balance_cents"
+        "running_balance_cents"
       ],
       "owner": "packet-03",
       "rationale": "Existing USD account/payment consumer or fixture; migrate delivered contracts and classify unrelated USD remainder."
@@ -859,9 +844,7 @@
     },
     "banking-service/services/simulation.py": {
       "lines": {
-        "00561440c1718570c175a694065fab691ac5136c380ca14c5895941b9b5a9903": 1,
         "0355f5bff9943c3fe75b2dc5a7851a57592638a36ebee21d5c969ffe364d25ad": 1,
-        "06d9e72f94b98ac7698de07e8a0ef1def9e2dc2584818f180a0f2a67b0945380": 1,
         "0a0f4e3de8bfe55fe0f3edba91f4174819f0272ec5574cf00dae6f593f8e57ad": 1,
         "0cbbd894c3c7f6d4b6bc3e8e58074601bb89ede9265f70573724320123bd3661": 1,
         "17566efd8c524d3f5754fdc24076b9d2b126b587c871be838c42b3c6e516c4cc": 1,
@@ -873,72 +856,52 @@
         "3b37d25260508e8fff428a8eb68fdb9299eef24fd8f47c242031776053f0e69f": 1,
         "4829c43d323c643bafdf685917c5e5563d6d429e219d27200bf1112e971f8991": 1,
         "499418a6684ce182afbc063767ea6be0df732894d7038262c1394c17625ae080": 1,
+        "4b0d1f8c5df6da5dabfd70bd014e5f33825a2eaacbba21b6505de05704523975": 1,
         "50c8a5f3f380095880b68d550b5daee2c372ba62ae2bd9ffaa81c9ab14097488": 1,
         "52289551c562a3da5e75b5642e12e9ccccac8c21da0094bf177b0eaf7c10bae1": 1,
-        "55e889e0ff96034eb2ca83314ab6df49877f965de172dd3d51f1f10d488b72f8": 1,
         "56cf2f66442090c29fd3cdb0a18df86ae2c93c29acba52153cc556e0d2c4317d": 2,
         "5f570c68e22cbc0bf16d0f736762da18dc96a7ef0451952ac55bef0fa414801d": 1,
-        "615d19ba561c7b0b36148e269ec94ffecad00891865b60d8df6f033d551a2872": 1,
-        "645536a9dc467092fbfc1a540af43951c320bc80bd18683bbb3b4b3949d81d07": 1,
+        "60e73e81d07f1b5050c360593c6e2992ec78293c249d779561734bbc5daefe52": 1,
         "6538fdc996ea7f845664c5ceb6ece9b4c3230779b031d1f7581de2776bff8015": 1,
         "6a4144aa44760f938c9f630b5a1994b9fbb63e84eebdac0c147d8bd6136904d6": 1,
-        "6abf9878cf162f88ec4ca4b2463e8462746bacf4137bf34c6ac313687573a8da": 1,
         "703d63a7214ebbf74431abac809950433d04fdf988978741c1fad840eb4b2285": 1,
         "751760506a228daf760566294805e74165a214f55f7d41873ec831a2ff173766": 1,
         "77031a6a34bee49ef4ced717e52d0c66905ec34db2fa6afcc55d5bc3d36a2a6b": 1,
         "7ddf028b6c2bca979b7695d84da6b8efe7a83b845a9f44870f83a822a80562ba": 1,
         "82203ee4652b67da62a390a6c00e041dc0c9c8320b13142252b4d2e7f04387fd": 3,
-        "84f5bfa4bded0fada62b1799381de178a40246884cea850f97d82925c92407f0": 1,
+        "9fea53a6a42980f1fd7762a3e76db917c7f7892279b92ffb4e84f9699b89e68c": 1,
         "a09d7dbefa41b144f85a6caeacc4bd4b9c4245b645fa877bf09943f02c71c4a3": 1,
         "ac40b90949141650950947c196f0caf6209331f34293b257fc92c914c87159d4": 1,
         "b050eec4e8c430fcd7391eed4edde22b0246b71c101e1c71011dd33dda716fd0": 1,
-        "b06c4855efac4be7147fa383c18b19586d7f7853b6d51d579421504971d936a5": 1,
         "b302ed7795c30163149c2ca81608e6c37061d7e7c057bc260b186bcd35fd3aff": 1,
-        "b949705352064c19b11ec218f91bd03f5c4540e28c8652d1d1203b1f46779ace": 1,
-        "bc2813eb209df2ff5d8b15097af56bf9dbcf357b6473c300cf16920bcb23b713": 1,
         "be7a3fb307c869a2d05beca9d3819724df68f9c7afa89b3611ad3172d4ca665d": 2,
-        "c01b6c3eef50a08bebb7e977f7ffb837726f0b754582f5a871a6257303a20534": 1,
         "c0b9c4223d1a9acd8dd89563e254161d85ffee30d9001b14b7b6d35a4cde1406": 1,
-        "c1aee7b7957a9fd74970e8e3776bf63aa91ad8f601e6ec85314d07de82b71783": 1,
-        "c5e61659a8a01387500c40bf3b9d28abb86c3c4540f55f5935ae0a7798e19287": 1,
-        "c6b59224096d3d62903bb26d3520d8ebf57ecaa2a33ab22673008b80ae7ea4bb": 1,
         "d2e020de93a59f08c22dc6b605d97e9c716f5576695f2639716a7c97b37bcc50": 1,
-        "d997144b3f9d0290304858c9fb43cf4a266a12882e835029aeb140ee1c66357a": 1,
         "dae72be97c17d16759aa91546665de262b757d5d6f5ebe7e996b723b16eb71b2": 2,
         "db9103538af7c047dbb35169af5365f0d068b0f0faa724e4f781d48b1b2697ca": 1,
-        "e41271fe883b63bd0d3be5d8821a7b07a82ac66dd5f5fb4661aa2e5ecce1d664": 1,
+        "e3b251b97dd66bbabf699fdfd33ce432499e87c55bc8ec7547354b1e2666b595": 1,
         "e524a9b388af17ce5eb99dd6975bfb0036bf39807812cdce4596449b997eab20": 1,
-        "e8800bf5a4e5276086d4e45d1875346630bba6c9b70518169a7cd7469c4dcd23": 1,
         "e97c1897e6d58fa2d5de47e94d67d254be281f3de80c2a412b7f8739720043e2": 1,
         "f144a60d29a583ce4e2b8958d255616c1fc232b05010a27020a3d18143c3dabf": 1,
         "f357c02d785070ac8806e1bff3442dcba9a4efcc362abf4e1638c79db9d53606": 1
       },
       "symbols": [
         "amount_cents",
-        "amount_needed_cents",
         "available_credit_cents",
         "billing_amount_cents",
         "cleared_balance_cents",
         "credit_limit_cents",
         "current_spend_cents",
-        "final_credit_available_credit_cents",
-        "final_credit_cleared_balance_cents",
         "generic_ceiling_cents",
         "guarantee_spend_cents",
         "margin_cents",
         "minimum_target_cents",
         "minimum_vip_target_cents",
-        "paid_amount_cents",
-        "remaining_amount_cents",
-        "remaining_cents",
         "spend_cents",
-        "target_amount_cents",
-        "target_balance_cents",
         "target_cents",
         "top_off_cents",
         "total_added_cents",
         "total_fraud_cents",
-        "total_paid_cents",
         "transaction_amount_cents"
       ],
       "owner": "packet-03 / packet-06",
@@ -1001,7 +964,6 @@
         "2b81a96c44d068c284f3126f5e48a863ae9973774fbb93feab3e1cfae05e1382": 1,
         "2d1a630e3b91e24f111a9fa300690aab8c4c0480b3a95efd03bddfb4cc5af62b": 1,
         "33919621e988b713cdd0d1463608a9c1ac4d41c5137c3efc6ff703bf1256c36c": 1,
-        "3484a416e2c6b152b9df081268fa5b84cfce5e2d1f6bae2f49a3348990b38652": 1,
         "377eee61537fb11ce2c650ac6db53043bc1b742b7e91e8c8f1237cfbbe2bb42c": 1,
         "3eb0265a0e56037d35da8427bfb64028f4929831fbbd6cdba3e3399f9c2ef551": 1,
         "4135b1152486fd6dd31d08958ba4e508f51c2e774c7874b73f176e91aee13c98": 1,
@@ -1040,7 +1002,6 @@
         "credit_cleared_balance_cents",
         "credit_limit_cents",
         "minimum_due_cents",
-        "paid_amount_cents",
         "source_cleared_balance_cents",
         "statement_balance_cents",
         "transaction_amount_cents"
@@ -1372,26 +1333,13 @@
       "lines": {
         "02721411b5bfa59b1c67adc84204b83eec5d6ed027e994bb023322d92c02d650": 1,
         "2230503e502112c45ad2a779d43953e4a238a86319f5f9463b75c3fc9d021ac1": 2,
-        "68077f71ac7ca63406dd564c7640ffb40d46da577aa5c9390d40231b26b3b0ca": 1,
-        "6ead0542310d9dc8a371afa941dc86847d0b71de691a770e9b504c3f92570b58": 1,
-        "768b3c04a56b46b5939fe139b9e17e5ad34440e81d4ca97b5c9994271858822b": 1,
-        "85ab48ae755f4229fc45273d137fa1dd559177c0db3e3bf9936e43dfbeeb90ed": 1,
-        "9bbd001192ba69db47299d63411f72925f093bce78a4e00fbb552c2503368d51": 1,
         "aab9a697827fc0b26ea3ff76453cd1fdbf65583ec6fb4f660acb5497dfc8bdad": 1,
         "b524e60540d5620c7f6bb41abb01efdbf484b3b6419ba901c8be60351b9c8db5": 1,
-        "bbaa1ec736e6ea5eb6f157b2ffd6666c5bc14eda38939cce319f22e1dce1e3dc": 1,
-        "d6b2b7ab120c97136afb4e29f9f26d9879ee52e75342e2a6ad2f05414a90ead2": 1,
-        "df66830d3b953098e0590429ca263f7d293311736ec0fa44ac97a952cd269435": 1,
-        "e50ce6af78ba8783af121f2aba4cbb4a52bd9da91249491a808762794ecf6636": 2
+        "d6b2b7ab120c97136afb4e29f9f26d9879ee52e75342e2a6ad2f05414a90ead2": 1
       },
       "symbols": [
         "amount_cents",
-        "available_credit_cents",
-        "cleared_balance_cents",
-        "credit_limit_cents",
-        "minimum_due_cents",
-        "running_balance_cents",
-        "statement_balance_cents"
+        "running_balance_cents"
       ],
       "owner": "packet-03",
       "rationale": "Existing USD account/payment consumer or fixture; migrate delivered contracts and classify unrelated USD remainder."
@@ -1428,36 +1376,6 @@
       ],
       "owner": "packet-06",
       "rationale": "Existing USD fraud/presentation fixture or consumer; replace delivered monetary facts and retain explicit USD-only unrelated fixtures."
-    },
-    "banking-ui/src/components/BillPayModal.jsx": {
-      "lines": {
-        "0d6d362589276fa2f7f244327770ec0b0338a12d8f006708bacc175cbfcf3e85": 1,
-        "1655aae378ec540aba2ed67b1eb57497718a4096e0416e7a8dd1ff2b09253cdd": 1,
-        "1ca9ee7353a7a8c416c81edae94fc04708100b3d0b262c6501d8e3d44e5f6a29": 1,
-        "31993821846a136ae5f2cf0e7585558adc25700cd28e6e8164db1f5749ea7869": 1,
-        "87ce8698254117512c8cb8dfa98c0f4651ec2d6abbed08b5ebc494aa072a96d9": 1,
-        "95d559637c84162d08f9492568ba55d7fa59221384e3717f1891a9442b317cc7": 1,
-        "d0fa0f5bc2d147d3352f0c3d582c8b216ac142b9edee6b8decf6195b6e31ea04": 1
-      },
-      "symbols": [
-        "amount_cents",
-        "cleared_balance_cents"
-      ],
-      "owner": "packet-03",
-      "rationale": "Existing USD account/payment consumer or fixture; migrate delivered contracts and classify unrelated USD remainder."
-    },
-    "banking-ui/src/components/HomeView.jsx": {
-      "lines": {
-        "06510801bb93c95de5aba5a528584ffab11288f03a09c66a516ee28954ac6c0b": 1,
-        "3d2999c69026bca41744ad17a7bc8e844dc8aa39e2c61f44b99179a33b016191": 3,
-        "6e6e6dee76f781cec2bb40a1c6771e8014be1a1a83209c596d6f9e9cc1165822": 1
-      },
-      "symbols": [
-        "cleared_balance_cents",
-        "credit_limit_cents"
-      ],
-      "owner": "packet-03",
-      "rationale": "Existing USD account/payment consumer or fixture; migrate delivered contracts and classify unrelated USD remainder."
     },
     "banking-ui/src/components/SpendAnalyzerModal.jsx": {
       "lines": {
@@ -1673,7 +1591,6 @@
         "b9f42c1522f19443b642f21d52d0c5568f38c936001c69a86d973adfcf28636f": 1,
         "bdc0ae5f610b7a47df9257b35305970950e2a060338e9fa098076265d914b6b2": 1,
         "dabe4b269aa5933cd5f9d53e4f61624732f6b822805893301cd344c49898cd05": 1,
-        "e3f91da72f9743131237d796f9b287f8569b925f216573c634350e9d87acf1ad": 2,
         "e7b19c6af0222a144901cfd3d9783463126c33628c84e1178808cee72465328c": 1,
         "f04391a7d81d17c55b1fb1c4f8a0619e9e2d9a2be1489ad778f1b46e4f7cf54e": 1,
         "fe2ab77a6457c5384302cb24c6f1e00bde37011a753a34a1c96fb66378f6d6d5": 1,
@@ -1683,7 +1600,6 @@
         "amount_cents",
         "available_credit_cents",
         "credit_limit_cents",
-        "paid_amount_cents",
         "target_cents",
         "top_off_cents",
         "total_added_cents"
@@ -1845,6 +1761,25 @@
       ],
       "owner": "packet-02:legacy-storage-reconciliation",
       "rationale": "Read-only reflection of retained BIGINT storage columns to reconcile and migrate legacy rows; output uses minor-unit names."
+    },
+    "banking-service/models/payment.py": {
+      "lines": {
+        "1ad74be0fa060874ea2a02ad8e5b5c2d7fc49e376c7a5c89c5545336ac1a7f21": 1,
+        "372bb28c69b3b77d085e7d4360c981bedc34871435330db6231d8fb18dbeb30f": 1,
+        "497409676f98e332ed9d339fb1572de4cde15e401b4b5450c906b494cd5247a0": 1,
+        "7d86bff54a4328d3508a2072f3eb5d45606c91949ba77e2eddb154235a4cb1c9": 1,
+        "7ff46424f2109793f76b049761815d13f8c88d49c9171957d21c7edb704d0d08": 1,
+        "a076e4ad97ade9d2c8bf513245d01c88f9793f4b6b37f45dae4d954f23a63454": 1,
+        "d9c3c350b300c3295d8cac09e9f59b1e66023f28970d26e8046c8db7a2045a31": 1
+      },
+      "symbols": [
+        "amount_cents",
+        "credit_available_credit_cents",
+        "credit_cleared_balance_cents",
+        "source_cleared_balance_cents"
+      ],
+      "owner": "packet-07",
+      "rationale": "Temporary external USD bill-payment request/response compatibility only; internal payment service uses structured Money."
     }
   }
 }

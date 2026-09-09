@@ -18,7 +18,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import (
     APIRouter,
@@ -31,6 +31,8 @@ from fastapi import (
 )
 from fastapi.security import HTTPAuthorizationCredentials
 from livekit import api as lk_api
+from models.payment import BillPaymentRequest, BillPaymentResponse
+from models.money import Money, money_fields
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -617,12 +619,6 @@ def acknowledge_fraud_alert_false_positive(
     )
 
 
-class BillPaymentRequest(BaseModel):
-    source_account_id: str = Field(..., description="Deposit account UUID to debit")
-    credit_account_id: str = Field(..., description="Credit account UUID to credit")
-    amount_cents: int = Field(..., gt=0, description="Amount in cents")
-
-
 class ScenarioFraudCustomerActionRequest(BaseModel):
     fraud_alert_id: str = Field(
         ...,
@@ -708,11 +704,12 @@ class AutoPaydownRequest(BaseModel):
     )
 
 
-@router.post("/pay", status_code=status.HTTP_200_OK)
-@apiv1_router.post("/pay", status_code=status.HTTP_200_OK)
-@v1_router.post("/pay", status_code=status.HTTP_200_OK)
+@router.post("/pay", status_code=status.HTTP_200_OK, response_model=BillPaymentResponse, response_model_exclude_none=True)
+@apiv1_router.post("/pay", status_code=status.HTTP_200_OK, response_model=BillPaymentResponse, response_model_exclude_none=True)
+@v1_router.post("/pay", status_code=status.HTTP_200_OK, response_model=BillPaymentResponse, response_model_exclude_none=True)
 def pay_credit_card(
     request: BillPaymentRequest,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
     token: ValidatedToken = Depends(get_current_user),
 ):
@@ -722,12 +719,18 @@ def pay_credit_card(
     from services.accounts import AccountsService
 
     service = AccountsService(db)
-    return service.execute_bill_payment(
+    if request.money is not None and not idempotency_key:
+        raise HTTPException(status_code=400, detail="Idempotency-Key is required for structured payments.")
+    result = service.execute_bill_payment(
         token=token,
         source_account_id=request.source_account_id,
         credit_account_id=request.credit_account_id,
-        amount_cents=request.amount_cents,
+        money=request.payment_money(),
+        idempotency_key=idempotency_key or str(uuid4()),
     )
+    for field in ("source_cleared_balance", "credit_cleared_balance", "credit_available_credit"):
+        result.update(money_fields(field, Money.model_validate(result[field]), legacy=True))
+    return result
 
 
 @router.post("/internal/auto-paydown", status_code=status.HTTP_200_OK)

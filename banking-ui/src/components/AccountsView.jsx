@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { formatMoney } from '../utils/money.js';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
@@ -198,9 +199,6 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
     return `${tx.cardholder_name || 'Cardholder'} ...${lastFour}`;
   };
 
-  const formatMoneyFromCents = (cents = 0) => (
-    (Math.abs(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  );
 
   const formatDateShort = (value) => {
     if (!value) return 'Not set';
@@ -377,20 +375,17 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
 
   const creditSummary = useMemo(() => {
     if (selectedAccountType !== 'credit' || !activeAccountObj) return null;
-    const creditLimitCents = activeAccountObj.credit_limit_cents || 0;
-    const currentBalanceCents = activeAccountObj.cleared_balance_cents || 0;
-    const statementBalanceCents = activeAccountObj.statement_balance_cents ?? currentBalanceCents;
-    const minimumDueCents = activeAccountObj.minimum_due_cents ?? Math.min(3500, Math.max(0, statementBalanceCents));
-    const availableCreditCents = activeAccountObj.available_credit_cents || 0;
-    const utilization = creditLimitCents > 0
-      ? Math.min(100, Math.max(0, Math.round(((creditLimitCents - availableCreditCents) / creditLimitCents) * 100)))
+    const creditLimitMinor = activeAccountObj.credit_limit.amount_minor;
+    const availableCreditMinor = activeAccountObj.available_credit.amount_minor;
+    const utilization = creditLimitMinor > 0
+      ? Math.min(100, Math.max(0, Math.round(((creditLimitMinor - availableCreditMinor) / creditLimitMinor) * 100)))
       : 0;
     return {
-      currentBalanceCents,
-      statementBalanceCents,
-      minimumDueCents,
-      availableCreditCents,
-      creditLimitCents,
+      currentBalance: activeAccountObj.cleared_balance,
+      statementBalance: activeAccountObj.statement_balance,
+      minimumDue: activeAccountObj.minimum_due,
+      availableCredit: activeAccountObj.available_credit,
+      creditLimit: activeAccountObj.credit_limit,
       utilization,
       paymentDueDate: activeAccountObj.payment_due_date,
       statementCloseDate: activeAccountObj.statement_close_date,
@@ -513,7 +508,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                   </div>
                   <div className="border-t border-slate-200 dark:border-slate-850/80 pt-4 flex justify-between items-end">
                     <span className="text-xs text-slate-500 dark:text-slate-400">Balance</span>
-                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{formatMoney(acc.cleared_balance)}</span>
                   </div>
                 </div>
               ))}
@@ -537,7 +532,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                   </div>
                   <div className="border-t border-slate-200 dark:border-slate-850/80 pt-4 flex justify-between items-end">
                     <span className="text-xs text-slate-550 dark:text-slate-400">Balance</span>
-                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{formatMoney(acc.cleared_balance)}</span>
                   </div>
                 </div>
               ))}
@@ -571,7 +566,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                   </div>
                   <div className="border-t border-slate-200 dark:border-slate-850/80 pt-4 flex justify-between items-end">
                     <span className="text-xs text-slate-550 dark:text-slate-400">Current Balance</span>
-                    <span className="text-2xl font-extrabold text-slate-900 dark:text-slate-200">${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-2xl font-extrabold text-slate-900 dark:text-slate-200">{formatMoney(acc.cleared_balance)}</span>
                   </div>
                 </div>
                 );
@@ -645,12 +640,12 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 pt-6 border-t border-slate-205 dark:border-slate-850/80">
                     {[
-                      { label: 'Current balance', value: `$${formatMoneyFromCents(creditSummary?.currentBalanceCents)}`, strong: true },
+                      { label: 'Current balance', value: formatMoney(creditSummary?.currentBalance), strong: true },
                       { label: 'Statement period', value: `${formatDateShort(creditSummary?.statementCloseDate)} - ${formatDateShort(creditSummary?.paymentDueDate)}` },
-                      { label: 'Minimum due', value: `$${formatMoneyFromCents(creditSummary?.minimumDueCents)}`, strong: true },
+                      { label: 'Minimum due', value: formatMoney(creditSummary?.minimumDue), strong: true },
                       { label: 'Payment due', value: formatDateShort(creditSummary?.paymentDueDate), accent: true },
-                      { label: 'Available credit', value: `$${formatMoneyFromCents(creditSummary?.availableCreditCents)}`, positive: true },
-                      { label: 'Credit limit', value: `$${formatMoneyFromCents(creditSummary?.creditLimitCents)}` },
+                      { label: 'Available credit', value: formatMoney(creditSummary?.availableCredit), positive: true },
+                      { label: 'Credit limit', value: formatMoney(creditSummary?.creditLimit) },
                     ].map(metric => (
                       <div key={metric.label} className="min-h-24 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/30 p-4">
                         <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wide">{metric.label}</div>
@@ -698,7 +693,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                   <div className="text-left md:text-right">
                     <div className="text-xs text-slate-505 dark:text-slate-400 font-medium">Cleared Balance</div>
                     <div className="text-3xl font-black text-slate-900 dark:text-white mt-1">
-                      ${((activeAccountObj?.cleared_balance_cents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {formatMoney(activeAccountObj?.cleared_balance)}
                     </div>
                   </div>
                 </div>

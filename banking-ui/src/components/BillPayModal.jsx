@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { X, CheckCircle2, AlertCircle } from 'lucide-react';
 import { payCreditCard } from '../utils/api.js';
+import { formatMoney, parseMoneyInput, paymentIntent } from '../utils/money.js';
 import AnalyticsButton from './AnalyticsButton.jsx';
 
 
@@ -40,6 +41,10 @@ export default function BillPayModal({
   const [selectedSourceId, setSelectedSourceId] = useState(depositAccounts[0]?.account_id || '');
   const [selectedCreditId, setSelectedCreditId] = useState(creditAccounts[0]?.account_id || '');
   const [amountStr, setAmountStr] = useState('');
+  const retryIntent = useRef(null);
+  useEffect(() => {
+    if (!isOpen && retryIntent.current?.completed) retryIntent.current = null;
+  }, [isOpen]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -67,12 +72,6 @@ export default function BillPayModal({
     setErrorMsg('');
     setSuccessMsg('');
 
-    const amountCents = Math.round(parseFloat(amountStr) * 100);
-    if (isNaN(amountCents) || amountCents <= 0) {
-      setErrorMsg("Please enter a valid payment amount.");
-      return;
-    }
-
     if (!sourceAccount) {
       setErrorMsg("Please select a valid funding account.");
       return;
@@ -83,23 +82,21 @@ export default function BillPayModal({
       return;
     }
 
-    if (amountCents > sourceAccount.cleared_balance_cents) {
-      setErrorMsg(`Insufficient funds. Your selected funding account has $${(sourceAccount.cleared_balance_cents / 100).toFixed(2)}.`);
-      return;
-    }
-
-    if (amountCents > creditAccount.cleared_balance_cents) {
-      setErrorMsg(`Payment amount exceeds outstanding credit card balance of $${(creditAccount.cleared_balance_cents / 100).toFixed(2)}.`);
-      return;
-    }
-
     try {
+      const money = parseMoneyInput(amountStr, sourceAccount.currency_code);
+      if (money.amount_minor <= 0) throw new Error('Please enter a positive payment amount.');
+      if (creditAccount.currency_code !== money.currency_code) throw new Error('Both accounts must use the same currency.');
+      if (money.amount_minor > sourceAccount.cleared_balance.amount_minor) {
+        throw new Error(`Insufficient funds. Available: ${formatMoney(sourceAccount.cleared_balance)}.`);
+      }
+      if (money.amount_minor > creditAccount.cleared_balance.amount_minor) {
+        throw new Error(`Payment exceeds the outstanding balance of ${formatMoney(creditAccount.cleared_balance)}.`);
+      }
+      const request = { source_account_id: selectedSourceId, credit_account_id: selectedCreditId, money };
+      retryIntent.current = paymentIntent(retryIntent.current, request);
       setIsSubmitting(true);
-      await payCreditCard({
-        source_account_id: selectedSourceId,
-        credit_account_id: selectedCreditId,
-        amount_cents: amountCents
-      });
+      await payCreditCard(request, retryIntent.current.key);
+      retryIntent.current.completed = true;
       setSuccessMsg("Payment successfully processed! Balances have been updated.");
       setTimeout(() => {
         handleSuccess();
@@ -108,7 +105,7 @@ export default function BillPayModal({
         setAmountStr('');
       }, 2000);
     } catch (err) {
-      setErrorMsg(err.response?.data?.detail || "An unexpected error occurred processing your payment.");
+      setErrorMsg((typeof err.response?.data?.detail === "string" ? err.response.data.detail : err.message) || "An unexpected error occurred processing your payment.");
     } finally {
       setIsSubmitting(false);
     }
@@ -154,7 +151,7 @@ export default function BillPayModal({
                 ) : (
                   depositAccounts.map(a => (
                     <option key={a.account_id} value={a.account_id}>
-                      {a.product_name} (**** {a.account_number.slice(-4)}) - ${(a.cleared_balance_cents / 100).toFixed(2)}
+                      {a.product_name} (**** {a.account_number.slice(-4)}) - {formatMoney(a.cleared_balance)}
                     </option>
                   ))
                 )}
@@ -173,7 +170,7 @@ export default function BillPayModal({
                 ) : (
                   creditAccounts.map(c => (
                     <option key={c.account_id} value={c.account_id}>
-                      Nova Credit Card (Outstanding: ${(c.cleared_balance_cents / 100).toFixed(2)})
+                      Nova Credit Card (Outstanding: {formatMoney(c.cleared_balance)})
                     </option>
                   ))
                 )}
@@ -181,12 +178,11 @@ export default function BillPayModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Payment Amount ($)</label>
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Payment Amount ({sourceAccount?.currency_code || "—"})</label>
               <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                placeholder="0.00"
+                type="text"
+                inputMode="decimal"
+                placeholder="Enter amount using a decimal point"
                 value={amountStr}
                 onChange={(e) => setAmountStr(e.target.value)}
                 className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl px-4 py-3 text-xs font-semibold focus:outline-none focus:border-blue-500"

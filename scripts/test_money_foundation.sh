@@ -25,4 +25,6 @@ PYTHONPATH="${REPOSITORY_ROOT}:${REPOSITORY_ROOT}/banking-service" \
   -p scripts.testing.money.conftest \
   banking-service/tests/test_financial_journal.py \
   banking-service/tests/test_ledger_idempotency.py \
-  banking-service/tests/test_credit_services.py --log-cli-level=CRITICAL
+  banking-service/tests/test_credit_services.py \
+  banking-service/tests/test_card_network_and_billpay.py \
+  banking-service/tests/test_accounts_router.py --log-cli-level=CRITICAL

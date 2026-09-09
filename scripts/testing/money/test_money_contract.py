@@ -118,3 +118,11 @@ def test_guard_detects_new_changed_and_duplicate_usage(tmp_path):
     assert violations(inventory(tmp_path), baseline)
     source.write_text("amount_minor = 1\n")
     assert not violations(inventory(tmp_path), baseline)
+
+
+def test_browser_currency_metadata_matches_service():
+    import re
+    source = (ROOT / "banking-ui/src/utils/money.js").read_text()
+    table = re.search(r"currencyExponents = Object.freeze\(\{([^}]+)\}", source).group(1)
+    browser = {code: int(exponent) for code, exponent in re.findall(r"([A-Z]{3}): (\d+)", table)}
+    assert browser == dict(CURRENCY_EXPONENTS)

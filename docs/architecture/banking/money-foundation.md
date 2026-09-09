@@ -57,7 +57,12 @@ connections and avoid backend startup and cloud credentials.
   migration, and reconciliation implemented. Combined offline Money/journal/
   SQLite and PostgreSQL migration suite: 67 passed. Existing journal, transfer,
   and credit-service regressions: 28 passed.
-- Packets 03–07 and deployed environment qualification: pending.
+- Packet 03: Money account summaries, atomic same-currency bill payment,
+  durable retries, simulation caller migration, and baseline UI contract
+  migration implemented. Combined offline suite: 87 passed, including real
+  PostgreSQL lock contention and concurrent duplicate/distinct requests.
+  Existing backend regressions: 42 passed. UI tests: 26 passed; build passed.
+- Packets 04–07 and deployed environment qualification: pending.
 
 Deployment qualification will use `evo-genai-workspace`. Preserve its existing
 database; use focused checks and additive migration. A full refresh is reserved
@@ -91,3 +96,28 @@ entry point. Those tests create/drop fixture tables only in that test database.
 CI supplies PostgreSQL 16; local validation also exercised PostgreSQL 14.
 The additive migration refuses downgrade; use fix-forward or the explicit
 existing demo reset path only if necessary.
+
+## Bill-payment authority and retry contract
+
+`POST /v1/credit-card/pay` (and existing route aliases) accepts account UUIDs and
+`money`. Structured requests require `Idempotency-Key` (1–128 nonblank characters).
+Its durable identity is scoped to the authenticated user and operation. Reusing
+it with a changed account, amount, or denomination returns 409; exact replay
+returns the original posted result and original resulting balances, even after
+later payments. It does not post another journal, statement, or audit record.
+
+The simulator locks deposit, card, and existing journal mirror rows before
+mutation. Journal, balances, statement, audit, and response persistence commit
+atomically. Insufficient funds, overpayment and denomination mismatch return
+422; contention returns 409 with same-key retry guidance. Malformed or unsupported
+currency returns 400. Ownership and source account type are validated.
+
+External legacy USD requests may temporarily omit a key and have no retry
+protection. They cannot pay a non-USD account. Non-USD summaries and payment
+responses omit legacy cents fields. Checked-in payment/UI consumers use Money.
+Simulation auto-paydown returns structured target/paid/remaining amounts.
+
+The browser parses decimal strings with integer arithmetic, uses currency
+metadata for precision, and retains payment intent keys across retries.
+Dashboard totals group currencies separately. Packet 04 adds active-locale
+presentation and visual qualification on top of this contract migration.

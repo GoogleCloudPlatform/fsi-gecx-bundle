@@ -818,7 +818,7 @@ async def test_auto_paydown_high_utilization_cards_calls_internal_endpoint():
         f"{BANKING_SERVICE_URL}/api/v1/credit-card/internal/auto-paydown"
     ).mock(
         return_value=httpx.Response(
-            200, json={"status": "SUCCESS", "paid_amount_cents": 25000}
+            200, json={"status": "SUCCESS", "paid_amount": {"amount_minor": 25000, "currency_code": "USD"}}
         )
     )
 
@@ -856,7 +856,7 @@ async def test_auto_paydown_high_utilization_cards_caps_accounts_per_pulse(monke
         f"{BANKING_SERVICE_URL}/api/v1/credit-card/internal/auto-paydown"
     ).mock(
         return_value=httpx.Response(
-            200, json={"status": "SUCCESS", "paid_amount_cents": 25000}
+            200, json={"status": "SUCCESS", "paid_amount": {"amount_minor": 25000, "currency_code": "USD"}}
         )
     )
 

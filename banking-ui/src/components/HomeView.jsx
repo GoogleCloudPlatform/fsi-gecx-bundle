@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { formatMoney, sumMoneyByCurrency } from '../utils/money.js';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Shield, 
@@ -367,7 +368,7 @@ function HomeView({
                     <div>
                       <div className="text-sm text-slate-500 dark:text-slate-400">Total Liquid Deposits</div>
                       <div className="text-4xl font-bold text-slate-900 dark:text-white mt-1">
-                        ${((accountsData.deposit_accounts?.reduce((sum, acc) => sum + acc.cleared_balance_cents, 0) || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {sumMoneyByCurrency((accountsData.deposit_accounts || []).map(acc => acc.cleared_balance)).map(value => formatMoney(value)).join(' · ') || '—'}
                       </div>
                     </div>
                     {/* Schema trigger button on top right */}
@@ -399,7 +400,7 @@ function HomeView({
                           </div>
                         </div>
                         <div className="font-semibold text-slate-900 dark:text-white">
-                          ${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          {formatMoney(acc.cleared_balance)}
                         </div>
                       </div>
                     ))}
@@ -420,7 +421,7 @@ function HomeView({
                           </div>
                         </div>
                         <div className="font-semibold text-slate-900 dark:text-white">
-                          ${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          {formatMoney(acc.cleared_balance)}
                         </div>
                       </div>
                     ))}
@@ -441,8 +442,8 @@ function HomeView({
                           </div>
                         </div>
                         <div className="font-semibold text-slate-900 dark:text-white text-right">
-                          ${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                          <div className="text-[10px] font-normal text-slate-400 dark:text-slate-500">Limit: ${(acc.credit_limit_cents / 100).toLocaleString()}</div>
+                          {formatMoney(acc.cleared_balance)}
+                          <div className="text-[10px] font-normal text-slate-400 dark:text-slate-500">Limit: {formatMoney(acc.credit_limit)}</div>
                         </div>
                       </div>
                     ))}

@@ -486,8 +486,10 @@ export async function getAccountsSummary() {
   return res.data;
 }
 
-export async function payCreditCard(paymentData) {
-  const res = await api.post('v1/credit-card/pay', paymentData);
+export async function payCreditCard(paymentData, idempotencyKey) {
+  const res = await api.post('v1/credit-card/pay', paymentData, {
+    headers: { 'Idempotency-Key': idempotencyKey }
+  });
   return res.data;
 }
 

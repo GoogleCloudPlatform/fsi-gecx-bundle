@@ -539,7 +539,7 @@ async def test_internal_auto_paydown_uses_checking_then_savings(async_client, db
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["status"] == "SUCCESS"
-    assert data["paid_amount_cents"] == 35000
+    assert data["paid_amount"] == {"amount_minor": 35000, "currency_code": "USD"}
     assert len(data["payments"]) == 2
     assert data["payments"][0]["source_account_type"] == "CHECKING"
     assert data["payments"][1]["source_account_type"] == "SAVINGS"
