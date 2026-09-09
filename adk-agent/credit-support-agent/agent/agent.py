@@ -633,7 +633,8 @@ def prepare_customer_reported_fraud_confirmation(
     allowed_transaction_ids = {
         item_id
         for item_id, item in recent_index.items()
-        if item.get("pending") is False and int(item.get("amount_cents") or 0) < 0
+        if item.get("pending") is False
+        and int((item.get("money") or {}).get("amount_minor") or 0) < 0
     }
     if requested_authorization_ids - allowed_authorization_ids:
         return {
@@ -682,7 +683,7 @@ def prepare_customer_reported_fraud_confirmation(
         "selected_transactions": [
             {
                 **recent_index[item_id],
-                "amount_cents": recent_index[item_id].get("display_amount_cents"),
+                "money": recent_index[item_id].get("display_money"),
             }
             for item_id in sorted(
                 requested_authorization_ids | requested_transaction_ids
@@ -1270,8 +1271,13 @@ async def after_tool_callback(
                 recent_index[str(item_id)] = {
                     "id": str(item_id),
                     "description": item.get("description"),
-                    "amount_cents": item.get("amount_cents"),
-                    "display_amount_cents": abs(int(item.get("amount_cents") or 0)),
+                    "money": item.get("money"),
+                    "display_money": {
+                        **(item.get("money") or {}),
+                        "amount_minor": abs(
+                            int((item.get("money") or {}).get("amount_minor") or 0)
+                        ),
+                    },
                     "pending": bool(item.get("pending")),
                     "posted_at": item.get("posted_at") or item.get("timestamp"),
                     "last_four": item.get("last_four"),
@@ -1468,10 +1474,8 @@ async def after_tool_callback(
                 notify_event(
                     {
                         "type": DataChannelEvent.LIMIT_UPDATED.value,
-                        "credit_limit_cents": account_data.get("credit_limit_cents"),
-                        "available_credit_cents": account_data.get(
-                            "available_credit_cents"
-                        ),
+                        "credit_limit": account_data.get("credit_limit"),
+                        "available_credit": account_data.get("available_credit"),
                     }
                 )
             elif (
@@ -1490,12 +1494,8 @@ async def after_tool_callback(
                 notify_event(
                     {
                         "type": DataChannelEvent.FEE_REVERSED.value,
-                        "cleared_balance_cents": account_data.get(
-                            "cleared_balance_cents"
-                        ),
-                        "available_credit_cents": account_data.get(
-                            "available_credit_cents"
-                        ),
+                        "cleared_balance": account_data.get("cleared_balance"),
+                        "available_credit": account_data.get("available_credit"),
                     }
                 )
             elif tool_name == "block_card_instrument":

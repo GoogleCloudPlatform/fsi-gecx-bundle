@@ -44,6 +44,7 @@ from services.fraud_alerts import FraudAlertService
 from services.action_proposal_context import RuntimeContextError
 from services.action_proposals import ActionProposalService, ProposalError
 from services.voice_bidi import send_session_event
+from models.money import Money
 
 logger = logging.getLogger(__name__)
 
@@ -1259,8 +1260,8 @@ async def reverse_overdraft_fee(
             session_id = f"session-{verified_customer_id}"
             await send_session_event(session_id, {
                 "type": "FEE_REVERSED",
-                "cleared_balance_cents": account.cleared_balance_cents,
-                "available_credit_cents": account.available_credit_cents
+                "cleared_balance": Money(amount_minor=account.cleared_balance_cents, currency_code=account.currency).model_dump(),
+                "available_credit": Money(amount_minor=account.available_credit_cents, currency_code=account.currency).model_dump(),
             })
             return {"success": True, "message": "Pending late fee successfully voided."}
 
@@ -1290,8 +1291,8 @@ async def reverse_overdraft_fee(
         session_id = f"session-{verified_customer_id}"
         await send_session_event(session_id, {
             "type": "FEE_REVERSED",
-            "cleared_balance_cents": res["cleared_balance_cents"],
-            "available_credit_cents": res["available_credit_cents"]
+            "cleared_balance": Money(amount_minor=res["cleared_balance_cents"], currency_code=account.currency).model_dump(),
+            "available_credit": Money(amount_minor=res["available_credit_cents"], currency_code=account.currency).model_dump(),
         })
 
         return {
@@ -1381,8 +1382,8 @@ async def request_credit_limit_increase(
         session_id = f"session-{verified_customer_id}"
         await send_session_event(session_id, {
             "type": "LIMIT_UPDATED",
-            "credit_limit_cents": res["new_limit_cents"],
-            "available_credit_cents": res["available_credit_cents"]
+            "credit_limit": Money(amount_minor=res["new_limit_cents"], currency_code=account.currency).model_dump(),
+            "available_credit": Money(amount_minor=res["available_credit_cents"], currency_code=account.currency).model_dump(),
         })
 
         return {

@@ -30,6 +30,7 @@ from services.credit_card import (
     apply_fraud_provisional_credit,
     freeze_card,
     get_account_summary_dto,
+    get_transaction_history_dto,
     issue_replacement_card,
     queue_wallet_provisioning,
     reverse_posted_fee,
@@ -319,10 +320,29 @@ def test_account_summary_surfaces_virtual_card_and_wallet_status(db_session):
     summary = get_account_summary_dto(CreditCardRepository(db_session), "cust-test-xyz")
     virtual_card = next(card for card in summary["cards"] if card["card_id"] == replacement["new_card_id"])
 
+    assert summary["credit_limit"] == {"amount_minor": 500000, "currency_code": "USD"}
+    assert summary["cleared_balance"] == {"amount_minor": 3500, "currency_code": "USD"}
+    assert summary["available_credit"] == {"amount_minor": 496500, "currency_code": "USD"}
+    assert summary["credit_limit_cents"] == 500000
     assert virtual_card["is_virtual"] is True
     assert virtual_card["status"] == "ACTIVE"
     assert virtual_card["wallet_provider"] == "GOOGLE_WALLET"
     assert virtual_card["wallet_provisioning_status"] == "QUEUED"
+
+
+def test_transaction_history_uses_money_and_limits_legacy_adapter_to_usd(db_session):
+    repo = CreditCardRepository(db_session)
+    usd_history = get_transaction_history_dto(repo, "cust-test-xyz")
+    assert usd_history[0]["money"] == {"amount_minor": -3500, "currency_code": "USD"}
+    assert usd_history[0]["amount_cents"] == -3500
+
+    account = repo.get_account_by_customer("cust-test-xyz")
+    account.currency = "MXN"
+    db_session.commit()
+    mxn_history = get_transaction_history_dto(repo, "cust-test-xyz")
+    assert mxn_history[0]["money"] == {"amount_minor": -3500, "currency_code": "MXN"}
+    assert "amount_cents" not in mxn_history[0]
+    assert "amount" not in mxn_history[0]
 
 
 def test_freeze_card_not_found(db_session):

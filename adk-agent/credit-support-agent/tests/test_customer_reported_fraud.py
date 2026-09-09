@@ -43,13 +43,15 @@ def test_prepare_customer_reported_fraud_binds_trusted_recent_selection() -> Non
             "auth-1": {
                 "id": "auth-1",
                 "description": "PENDING SHOP",
-                "amount_cents": 4200,
+                "money": {"amount_minor": 4200, "currency_code": "MXN"},
+                "display_money": {"amount_minor": 4200, "currency_code": "MXN"},
                 "pending": True,
             },
             "txn-1": {
                 "id": "txn-1",
                 "description": "POSTED SHOP",
-                "amount_cents": -3500,
+                "money": {"amount_minor": -3500, "currency_code": "MXN"},
+                "display_money": {"amount_minor": 3500, "currency_code": "MXN"},
                 "pending": False,
             },
         },
@@ -153,14 +155,14 @@ async def test_transaction_history_result_builds_trusted_selection_index(
                         "authorization_id": "auth-1",
                         "transaction_id": None,
                         "description": "PENDING SHOP",
-                        "amount_cents": 4200,
+                        "money": {"amount_minor": 4200, "currency_code": "MXN"},
                         "pending": True,
                     },
                     {
                         "authorization_id": None,
                         "transaction_id": "txn-1",
                         "description": "POSTED SHOP",
-                        "amount_cents": -3500,
+                        "money": {"amount_minor": -3500, "currency_code": "MXN"},
                         "pending": False,
                     },
                 ],
@@ -169,7 +171,14 @@ async def test_transaction_history_result_builds_trusted_selection_index(
     )
 
     assert state["recent_transaction_index"]["auth-1"]["pending"] is True
-    assert state["recent_transaction_index"]["txn-1"]["amount_cents"] == -3500
+    assert state["recent_transaction_index"]["txn-1"]["money"] == {
+        "amount_minor": -3500,
+        "currency_code": "MXN",
+    }
+    assert state["recent_transaction_index"]["txn-1"]["display_money"] == {
+        "amount_minor": 3500,
+        "currency_code": "MXN",
+    }
 
 
 @pytest.mark.asyncio

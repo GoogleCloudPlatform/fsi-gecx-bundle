@@ -180,6 +180,10 @@ async def test_reverse_overdraft_fee_success(mock_send_event, mock_validate_toke
     args, kwargs = mock_send_event.call_args
     assert args[0] == "session-jane.doe@example.com"
     assert args[1]["type"] == "FEE_REVERSED"
+    assert args[1]["cleared_balance"] == {
+        "amount_minor": original_balance - 3500,
+        "currency_code": "USD",
+    }
 
 @pytest.mark.asyncio
 @patch("routers.mcp.utils.validate_firebase_token")
@@ -234,6 +238,10 @@ async def test_request_credit_limit_increase_success(mock_send_event, mock_valid
     args, kwargs = mock_send_event.call_args
     assert args[0] == "session-jane.doe@example.com"
     assert args[1]["type"] == "LIMIT_UPDATED"
+    assert args[1]["credit_limit"] == {
+        "amount_minor": 1500000,
+        "currency_code": "USD",
+    }
 
 @pytest.mark.asyncio
 @patch("routers.mcp.utils.validate_firebase_token")

@@ -829,9 +829,10 @@ def get_account_summary_dto(repo: Any, customer_id: str) -> Optional[Dict[str, A
     wallet_statuses = get_wallet_status_by_card_token(repo.db, str(account.id))
     return {
         "account_id": account.id,
-        "credit_limit_cents": account.credit_limit_cents,
-        "cleared_balance_cents": account.cleared_balance_cents,
-        "available_credit_cents": account.available_credit_cents,
+        "currency_code": account.currency,
+        **money_fields("credit_limit", Money(amount_minor=account.credit_limit_cents, currency_code=account.currency), legacy=True),
+        **money_fields("cleared_balance", Money(amount_minor=account.cleared_balance_cents, currency_code=account.currency), legacy=True),
+        **money_fields("available_credit", Money(amount_minor=account.available_credit_cents, currency_code=account.currency), legacy=True),
         "payment_due_date": account.payment_due_date,
         "status": account.status,
         "cards": [
@@ -862,10 +863,19 @@ def get_transaction_history_dto(repo: Any, customer_id: str) -> Optional[List[Di
     results = []
     for auth in auths:
         cat = TaxonomyService.get_category(auth.merchant_category_code)
-        results.append({
+        billing_money = Money(
+            amount_minor=auth.billing_amount_cents,
+            currency_code=auth.billing_currency,
+        )
+        transaction_money = Money(
+            amount_minor=auth.transaction_amount_cents,
+            currency_code=auth.transaction_currency,
+        )
+        item = {
             "id": str(auth.id),
-            "amount_cents": auth.transaction_amount_cents,
-            "amount": auth.transaction_amount_cents / 100.0,
+            "money": billing_money.model_dump(),
+            "transaction_money": transaction_money.model_dump(),
+            "billing_money": billing_money.model_dump(),
             "description": auth.merchant_name or auth.auth_code,
             "posted_at": auth.created_at.isoformat() if auth.created_at else None,
             "pending": True,
@@ -880,15 +890,19 @@ def get_transaction_history_dto(repo: Any, customer_id: str) -> Optional[List[Di
             "merchant_store_id": str(auth.merchant_store_id) if auth.merchant_store_id else None,
             "cardholder_name": auth.card.cardholder_name if auth.card else "Cardholder",
             "last_four": auth.card.last_four if auth.card else None,
-        })
+        }
+        if billing_money.currency_code == "USD":
+            item["amount_cents"] = billing_money.amount_minor
+            item["amount"] = billing_money.amount_minor / 100.0
+        results.append(item)
         
     for entry in ledger:
         mcc = entry.authorization.merchant_category_code if entry.authorization else "5411"
         cat = TaxonomyService.get_category(mcc)
-        results.append({
+        money = Money(amount_minor=entry.amount_cents, currency_code=account.currency)
+        item = {
             "id": str(entry.id),
-            "amount_cents": entry.amount_cents,
-            "amount": abs(entry.amount_cents) / 100.0,
+            "money": money.model_dump(),
             "description": entry.description,
             "posted_at": entry.posted_at.isoformat() if entry.posted_at else None,
             "posted_timestamp": entry.posted_at.isoformat() if entry.posted_at else None,
@@ -904,6 +918,19 @@ def get_transaction_history_dto(repo: Any, customer_id: str) -> Optional[List[Di
             "merchant_store_id": str(entry.authorization.merchant_store_id) if entry.authorization and entry.authorization.merchant_store_id else None,
             "cardholder_name": entry.authorization.card.cardholder_name if entry.authorization and entry.authorization.card else "Cardholder",
             "last_four": entry.authorization.card.last_four if entry.authorization and entry.authorization.card else None,
-        })
+        }
+        if entry.authorization:
+            item["transaction_money"] = Money(
+                amount_minor=entry.authorization.transaction_amount_cents,
+                currency_code=entry.authorization.transaction_currency,
+            ).model_dump()
+            item["billing_money"] = Money(
+                amount_minor=entry.authorization.billing_amount_cents,
+                currency_code=entry.authorization.billing_currency,
+            ).model_dump()
+        if money.currency_code == "USD":
+            item["amount_cents"] = money.amount_minor
+            item["amount"] = abs(money.amount_minor) / 100.0
+        results.append(item)
         
     return results

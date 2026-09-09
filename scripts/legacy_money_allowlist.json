@@ -432,6 +432,7 @@
     },
     "banking-service/routers/mcp/credit_card.py": {
       "lines": {
+        "32b4143ee478cb0abdfa3eae6506fca548b2601aa5cc8483d705b77a6791442d": 1,
         "37150da7ade0231d1365781ccb716d884134b1c5b41fc74cbd591156be5befed": 1,
         "4ec48496a2648b3cc9b2672433d243e6d3e2ec27fde0bc79e02351aaeb1035e2": 1,
         "677fe071ec107363e8cb4217ff1984e67bead0817c183d4f71d84c3c65d9ca45": 1,
@@ -440,11 +441,15 @@
         "7f496e3b3d316b148433cb645421cc299f11d2928203d455146c9b87919d0995": 1,
         "85443a99a841bbf7719f6138512d70284a21c3abdfbcfae343f6fe4fa09ca1c1": 1,
         "8d5f51754ccfb000a27c6bc49aaa35731fa0dd96813e9bcb0f09b9f675c3e88d": 1,
+        "924344969221dd8f0adb3f86b2413c064f274f50b870fd0a0340c426c86ce727": 2,
         "af1d867fa58da3f220daab7e10e9d6c9903c9d65c1a44bf7a0e400ed81c505d4": 1,
         "bb861e5ae24f0ef9cc11e9171c98fd01af579f6b976737bcb0b36f568bc5e0de": 1,
         "c2accbe4db37ad76eb91f8a0ed94ec29cfa8f5b0aa2470742d7da6f41b706894": 2,
         "c5764852707b02b3be0089e844d414f8a5e45633d0e8ec628eeb12ce9ce4c7d0": 1,
         "cdf89445619fd2edabd7a8106406dd3fb047e9b44a7b71efdeffa0aaf5d2417d": 1,
+        "dfdd3003d996d23604f9cfdad575dc3ef1d7fa780f681dbbee43b3bf144ca5b9": 1,
+        "e222626dbe93dcd1b26f60094e005fefa2b0349c147e805d52756f9b90a48f98": 1,
+        "e83d41249923f8c310674bc1ded0d2ae0d35294efb5e9e23e22227d8baffdc2e": 1,
         "f1a8c0a0ecede156a42563b8cf592458aff5fa8c2014a83735b5eaa92723820b": 1,
         "fb3c41cd448bb3a4e7dc07e083b2249e50aee81aa6c89eb4bdd2c03f5a70edd6": 1
       },
@@ -458,8 +463,8 @@
         "requested_limit_cents",
         "transaction_amount_cents"
       ],
-      "owner": "packet-03",
-      "rationale": "Existing USD account/payment consumer or fixture; migrate delivered contracts and classify unrelated USD remainder."
+      "owner": "packet-06",
+      "rationale": "Persisted minor-unit storage is converted to canonical Money at the MCP event boundary; no legacy monetary field is emitted."
     },
     "banking-service/scripts/bootstrap_iceberg_catalog.py": {
       "lines": {
@@ -586,7 +591,7 @@
         "1b06ecd4cb9c9fb4948f2687aeed9c7f68d4b6f047b891d95b3c9c1edfea94bb": 1,
         "25eee28514ba0242c544753bcb4c29e43179045257c8d4abc5335209bdab98f2": 1,
         "284122060f67f00c97d7f34d75bcfef203674ca3946f104f54f2bbfa6e75be72": 1,
-        "292bd56fd79e0fe0571972b5baf497c6fc1066a87425dc8f9e6412ca186322e4": 2,
+        "292bd56fd79e0fe0571972b5baf497c6fc1066a87425dc8f9e6412ca186322e4": 3,
         "2ac1515e4cadf7b1b44b93cb1fe5fdef3f801b163b759326a78f1d277e1be65a": 1,
         "3069bc077e9fcfa5b7e728b0a8bb07214f683ce765204e77c5bf442ceecbde22": 1,
         "3a09562cfd0b880de4d78d1b20fc011f557fe9558b5d14eab2a0ffc87cad6e68": 1,
@@ -597,22 +602,29 @@
         "58225a943741c1dafe5c7efb40f2f0f64d4d27620de9bcabf41cfeccf5fe33b8": 1,
         "5e69f86ea75b543874a971ff14db92da3d9faee946f39dc435e7b66c255df23d": 1,
         "6c3efe97fa54de1e9ba8eafb7c995b452847e1636c05bb4fe3ff6deb3a2ce8ae": 2,
+        "7b10c987a2952bb80e3dce41262dc7fe0f7ea5469e71f528e14bf5368ef42099": 1,
         "7844fd63ea3831b4b2fd6233cb473e4b1947ede2b4747fad4e31c5ccdc8983d6": 1,
         "7bf8a398adb230cc25038e2072f6731dbd553e1d1d0307e95db211686f02201b": 1,
         "8433ba1b3688b5c712f4bb143c4324d4c7dbdce7004d5ff2b573d52e076aa8b9": 1,
         "889924070dcabd43390fb9c395b63df4ec398c4cb8ddf681b21783e3883fc1e3": 1,
         "8d3a8a1eaac2cfa1db71fbbeb9aceab66ebf5bd36c82032f1a8e43b84c2e23c1": 1,
         "991f618fc819226ca1890c6746832205e6c62bfb6c00ea84321945b9ca002bdf": 2,
+        "9935cbd5ec8acdef6c61e26897f9cd589656b134d3c0687edbc76913d98004a9": 1,
         "9dc3d2b891bf60b837f90210dd1a4ace177a67a2b19c6054abdca9eccb6ca6d3": 1,
         "9e4211d382cbaa4c3d722d6e53d0d2c0127a059fb40cd92d636e755904c8a3af": 1,
-        "a025a44ed2bd35aa3f4a0f12bd4331b73fe4648fb4db5ca38abb175fdc424065": 1,
+        "a025a44ed2bd35aa3f4a0f12bd4331b73fe4648fb4db5ca38abb175fdc424065": 2,
+        "a0611b65cf5c19a378622da0461fbc64f921c250fb11865d4b153aaf9c4fd1c1": 1,
+        "a0b1496014868164d2bf0d7b21f1e26d77c22e08e0a12ef2509f3dfee251b595": 1,
         "b0fa01dd1bfaad578c2d3ce170dfcb380c1254ee0983120c4bd7949e1628eecb": 1,
         "b2842b52cd5cec31acd45fa5fe85a6bc0109dae96b41730515a5a9b28df11aea": 1,
         "b6d8c37acb575a30b199ea068e429ff41613cc012b1c5d80c373460a2150cbf0": 1,
+        "b95e60a460fe00ba51dbcf1db228a39029ad9df3004c5ac8dfce3d057c9732fa": 1,
+        "c0f129c504e35faf383f32c01c3cbe4062270af6970093aea3b92f5095c90d95": 1,
         "c96e10b792cf03a9a086e6a44c5f98455bb114b4e1a1583448302b2266f5d7a9": 1,
         "ce7edf94d2c6bfb0617c4af371fb952c5682730001c095d4c4bf0f4185dfe467": 1,
         "d3ad568851d4ded60be24658a93d0c1a7381d34a37149d221ec9c2afac30412f": 1,
         "d41feb9ce4726b8a555e8cf897345719fd930d0a5c817cd194cccd81eacb2b95": 1,
+        "d552a420707bc94a8fc7bf3a459d1e03097dcdf7abe0db011e5cf905ad675d4d": 1,
         "d748c31c4ef23f32695c0145b340d4e2f293f2160700ac1c30a03a7bd70bb5de": 1,
         "d975a881dfbeb8daf762c7d88edf522b590102a9248855b8aab27fe301fb96ad": 1,
         "dbbfe56df92769f7ff9596daa1a52207dc1bab766192908caa875d67d27e81f3": 1,
@@ -622,6 +634,7 @@
         "e5d288162f9bf8b059429e1c2157b3e822e5f9494acfe64604613e432794e39b": 1,
         "e69b784ca8650307d8abdf9ff38611fd16d9303b080252ed932c5257aade584c": 1,
         "ece3586ebba1a45ccc76d2128bd134ad65739214bcb2b834f67065ac9e33d2a6": 1,
+        "f1d9d57a4502a3d68bfcbe10288362e7d5117ef2ddad2f80db2db8fe648a2093": 1,
         "f3f3d08d9eb5c5c3982b705f54f7fafd8b67a2bc8ba1c307d2a9f28d33f2bc50": 1,
         "f6a0bdaf0f1d9092cb932ec3a4b188b3b875916fffb929610d829ff29eb17563": 1,
         "fb3c41cd448bb3a4e7dc07e083b2249e50aee81aa6c89eb4bdd2c03f5a70edd6": 2,
@@ -965,8 +978,8 @@
         "pending_exposure_cents",
         "transaction_amount_cents"
       ],
-      "owner": "packet-05",
-      "rationale": "Existing legacy financial projection; normalize currency-aware selected event and retain immutable v1 replay only."
+      "owner": "packet-06",
+      "rationale": "Persisted minor-unit columns are converted to authoritative Money DTOs; USD-only response aliases remain temporary server adapters until Packet 07."
     },
     "banking-service/tests/test_credit_card_mcp.py": {
       "lines": {
@@ -1008,6 +1021,7 @@
         "357e2af106cf32ef5ebc4bc81d2f9b0cb449cc4492079b086671d2fbe83a2039": 1,
         "37182d48940b727b2771b1caf23ef2fe96cc2f358e4e2258982badd676277c28": 2,
         "460cda189ed8eb17b025d98224d1bd12c08bf22f7aed4b27596ac2c25590b47b": 1,
+        "5557dba6443f791e83bf19aebbc2be3270e14534c7d20c391f73bbd930efdbfe": 1,
         "5a1b5465e28b4948973b494c34f5b5a37ae941304c46027c57098b23ce099a87": 1,
         "5a5cb0210fad50270799fa2e64d2101513670f0c40b7b37985aa6da6951fad97": 1,
         "5c1e00114f2125423c1ca80d1c88a3807d49f5ecb50418c00b36b5fbb7a066cd": 1,
@@ -1017,6 +1031,7 @@
         "76262e86bf8e608e74aa63607f6306fef973b675e21666fc72359ca673b7c170": 1,
         "8937c89fe8e6c32edccb3b30ae5ef2d985a4d724e67211c6798afa0ee8962c94": 1,
         "961ca44a65cdfc3805925d367e1a77e570b0af91d8b0251bc39c692cd0f2f769": 2,
+        "9f503d210d789c986f249b3257b8503502e9ec228017c0aaa18989dc9444bcbd": 1,
         "9fb007c73bb3c4c5d061c4e7c13e4799b6c79b5b8c47095ca952e0bd9d2f8b69": 1,
         "a8be5aef0779d9b951a277d8f37546f463081b88cdf342820730dac9ef8c0ed3": 1,
         "aaf7871b3b0903b3cd152ac01076c1d82c08c058487f98d46e4fe424125e0a98": 1,
@@ -1024,6 +1039,7 @@
         "b4c2a381463ca8e69c2d4dc62239ea279d7fae2f5d48f97cf1f79ad03273f36d": 1,
         "b74a7c95152198a846461befb574d8426dd774c7865500a6527ce01f6aa3b86c": 1,
         "c0f72604c3ae2020298df1874a4b6d1f0b14630913371fd81f59e49ccb50b496": 3,
+        "c2a003466e8cb479c68bfd6177bb51a5a27be77f3c65aa3eede8dff1760dab28": 1,
         "cf92317fc4fe6905ae3671a6b4c2e8f92ebaad6e8ae546050c21a289aaafddfd": 1,
         "da84a23a6297855c4a6d032f570a29755316ee48ac464977ee1ac2b6653e61e4": 1,
         "df0172a363170c4666e21ebcfa5baab58b27a566a18271604e50aa15f92ad0b9": 1,

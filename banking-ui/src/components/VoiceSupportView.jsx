@@ -50,6 +50,7 @@ import {
 } from '../utils/api.js';
 import { DataChannelEvent } from '../utils/constants.js';
 import { encodeTypedCustomerTurn, resolveTypedDelivery } from '../utils/voiceTypedInput.js';
+import { formatMoney } from '../utils/money.js';
 import { formatVoiceLedgerAmount } from '../utils/voiceLedger.js';
 import {
   connectSilentPcmSink,
@@ -307,9 +308,9 @@ export default function VoiceSupportView() {
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [account, setAccount] = useState(null);
   const [cardStatus, setCardStatus] = useState('ACTIVE');
-  const [creditLimit, setCreditLimit] = useState(0);
-  const [availableCredit, setAvailableCredit] = useState(0);
-  const [clearedBalance, setClearedBalance] = useState(0);
+  const [creditLimit, setCreditLimit] = useState(null);
+  const [availableCredit, setAvailableCredit] = useState(null);
+  const [clearedBalance, setClearedBalance] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [transcripts, setTranscripts] = useState([]);
   const [fraudContext, setFraudContext] = useState(null);
@@ -727,9 +728,9 @@ export default function VoiceSupportView() {
     if (data.cards && data.cards.length > 0) {
       setCardStatus(data.cards[0].status);
     }
-    setCreditLimit(data.credit_limit_cents / 100);
-    setAvailableCredit(data.available_credit_cents / 100);
-    setClearedBalance(data.cleared_balance_cents / 100);
+    setCreditLimit(data.credit_limit);
+    setAvailableCredit(data.available_credit);
+    setClearedBalance(data.cleared_balance);
 
     const txData = await getCreditCardTransactions();
     setTransactions(txData);
@@ -1150,12 +1151,12 @@ export default function VoiceSupportView() {
       setCardStatus(payload.status);
       setTranscripts(prev => [...prev, { author: 'system', text: `SECURITY ALERT: Card status updated to ${payload.status}.` }]);
     } else if (payload.type === 'LIMIT_UPDATED') {
-      setCreditLimit(payload.credit_limit_cents / 100);
-      setAvailableCredit(payload.available_credit_cents / 100);
-      setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to $${(payload.credit_limit_cents / 100).toLocaleString()}.` }]);
+      setCreditLimit(payload.credit_limit);
+      setAvailableCredit(payload.available_credit);
+      setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to ${formatMoney(payload.credit_limit, voiceLocale)}.` }]);
     } else if (payload.type === 'FEE_REVERSED') {
-      setClearedBalance(payload.cleared_balance_cents / 100);
-      setAvailableCredit(payload.available_credit_cents / 100);
+      setClearedBalance(payload.cleared_balance);
+      setAvailableCredit(payload.available_credit);
       setTranscripts(prev => [...prev, { author: 'system', text: `LEDGER UPDATE: Late fee reversed. Available credit adjusted.` }]);
       getCreditCardTransactions().then(setTransactions).catch(console.error);
     } else if (payload.type === 'HIGHLIGHT_TRANSACTION') {
@@ -1557,12 +1558,12 @@ export default function VoiceSupportView() {
               }));
             }
           } else if (event.type === DataChannelEvent.LIMIT_UPDATED) {
-            setCreditLimit(event.credit_limit_cents / 100);
-            setAvailableCredit(event.available_credit_cents / 100);
-            setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to $${(event.credit_limit_cents / 100).toLocaleString()}.` }]);
+            setCreditLimit(event.credit_limit);
+            setAvailableCredit(event.available_credit);
+            setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to ${formatMoney(event.credit_limit, voiceLocale)}.` }]);
           } else if (event.type === DataChannelEvent.FEE_REVERSED) {
-            setClearedBalance(event.cleared_balance_cents / 100);
-            setAvailableCredit(event.available_credit_cents / 100);
+            setClearedBalance(event.cleared_balance);
+            setAvailableCredit(event.available_credit);
             setTranscripts(prev => [...prev, { author: 'system', text: `LEDGER UPDATE: Late fee reversed. Available credit adjusted.` }]);
 
             getCreditCardTransactions().then(setTransactions).catch(console.error);
@@ -1947,17 +1948,17 @@ export default function VoiceSupportView() {
           <div id="voice-balances-ledger" className="grid grid-cols-3 gap-4">
             <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Available Credit</span>
-              <p className="text-xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">${availableCredit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className="text-xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">{formatMoney(availableCredit, voiceLocale)}</p>
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Credit Limit</span>
-              <p className="text-xl font-bold mt-1 text-slate-800 dark:text-slate-200">${creditLimit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className="text-xl font-bold mt-1 text-slate-800 dark:text-slate-200">{formatMoney(creditLimit, voiceLocale)}</p>
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Current Balance</span>
-              <p className="text-xl font-bold mt-1 text-indigo-600 dark:text-indigo-400">${clearedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className="text-xl font-bold mt-1 text-indigo-600 dark:text-indigo-400">{formatMoney(clearedBalance, voiceLocale)}</p>
             </div>
           </div>
 
@@ -1983,8 +1984,8 @@ export default function VoiceSupportView() {
                         <p className="font-semibold text-slate-900 dark:text-slate-200">{tx.description}</p>
                         <p className="text-[9px] text-slate-450 dark:text-slate-500">{new Date(tx.posted_at).toLocaleDateString()}</p>
                       </div>
-                      <span className={`font-mono font-bold ${tx.amount_cents > 0 ? 'text-indigo-600 dark:text-indigo-300' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                        {formatVoiceLedgerAmount(tx.amount_cents)}
+                      <span className={`font-mono font-bold ${tx.money.amount_minor > 0 ? 'text-indigo-600 dark:text-indigo-300' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                        {formatVoiceLedgerAmount(tx.money, voiceLocale)}
                       </span>
                     </div>
                   );

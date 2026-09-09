@@ -17,14 +17,24 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { formatVoiceLedgerAmount } from '../src/utils/voiceLedger.js';
+import { absoluteMoney, formatVoiceLedgerAmount } from '../src/utils/voiceLedger.js';
 
 
 test('voice ledger displays pending and posted amounts without accounting signs', () => {
-  assert.equal(formatVoiceLedgerAmount(123456), '$1234.56');
-  assert.equal(formatVoiceLedgerAmount(-123456), '$1234.56');
+  assert.equal(
+    formatVoiceLedgerAmount({ amount_minor: 123456, currency_code: 'USD' }),
+    '$1,234.56',
+  );
+  assert.match(
+    formatVoiceLedgerAmount({ amount_minor: -123456, currency_code: 'MXN' }, 'es-MX'),
+    /\$1,234\.56/,
+  );
+  assert.deepEqual(absoluteMoney({ amount_minor: -1234, currency_code: 'MXN' }), {
+    amount_minor: 1234,
+    currency_code: 'MXN',
+  });
 });
 
-test('voice ledger safely formats missing values', () => {
-  assert.equal(formatVoiceLedgerAmount(undefined), '$0.00');
+test('voice ledger rejects legacy cent-only values', () => {
+  assert.throws(() => formatVoiceLedgerAmount(1234), /Invalid Money amount or currency/);
 });
