@@ -55,3 +55,13 @@ def test_unverifiable_or_mismatched_fraud_money_is_rejected(problem):
     else: repo.get_authorization_by_id_for_account.return_value.billing_currency = "MXN"
     with pytest.raises(ValueError):
         fraud_money_facts(repo, alert)
+
+
+def test_historical_usd_action_replay_is_centralized_and_does_not_mutate_history():
+    from services.fraud_money import normalize_historical_fraud_action
+    old = {"voided_amount_cents": 1053, "available_credit_cents": 10000}
+    projected = normalize_historical_fraud_action(old, "USD")
+    assert projected["voided_amount"] == {"amount_minor": 1053, "currency_code": "USD"}
+    assert "voided_amount" not in old
+    with pytest.raises(ValueError, match="non-USD"):
+        normalize_historical_fraud_action(old, "MXN")

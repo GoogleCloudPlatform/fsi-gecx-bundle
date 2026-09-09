@@ -423,7 +423,7 @@ def test_void_fraud_authorization_hold_releases_available_credit_and_records_act
     event = db_session.query(AuditOutbox).filter_by(event_type="FRAUD_AUTHORIZATION_VOIDED").first()
     account = db_session.query(FinancialAccount).filter_by(id="12300000-0000-4000-8000-000000000123").first()
 
-    assert result["voided_amount_cents"] == 4200
+    assert result["voided_amount"]["amount_minor"] == 4200
     assert refreshed_auth.status == "REVERSED"
     assert account.available_credit_cents == 496500
     assert action is not None
@@ -455,7 +455,7 @@ def test_void_fraud_authorization_hold_is_idempotent(db_session):
     ).all()
     account = db_session.query(FinancialAccount).filter_by(id="12300000-0000-4000-8000-000000000123").first()
 
-    assert first["voided_amount_cents"] == second["voided_amount_cents"] == 4200
+    assert first["voided_amount"]["amount_minor"] == second["voided_amount"]["amount_minor"] == 4200
     assert second["idempotent_replay"] is True
     assert account.available_credit_cents == 496500
     assert len(actions) == 1
@@ -475,7 +475,7 @@ def test_void_fraud_authorization_hold_recalculates_drifted_available_credit(db_
         fraud_alert_id=str(alert.id),
     )
 
-    assert result["voided_amount_cents"] == 4200
+    assert result["voided_amount"]["amount_minor"] == 4200
     assert account.available_credit_cents == 496500
     assert account.available_credit_cents <= account.credit_limit_cents
 
@@ -498,7 +498,7 @@ def test_apply_fraud_provisional_credit_posts_credit_and_records_action(db_sessi
     event = db_session.query(AuditOutbox).filter_by(event_type="FRAUD_PROVISIONAL_CREDIT_APPLIED").first()
     account = db_session.query(FinancialAccount).filter_by(id="12300000-0000-4000-8000-000000000123").first()
 
-    assert result["credited_amount_cents"] == 3500
+    assert result["credited_amount"]["amount_minor"] == 3500
     assert credit_entry.amount_cents == 3500
     assert credit_entry.description == "FRAUD_PROVISIONAL_CREDIT_REF_01000000-0000-4000-8000-000000000001"
     assert account.cleared_balance_cents == 0
@@ -530,7 +530,7 @@ def test_apply_fraud_provisional_credit_is_idempotent(db_session):
     ).all()
     account = db_session.query(FinancialAccount).filter_by(id="12300000-0000-4000-8000-000000000123").first()
 
-    assert first["credited_amount_cents"] == second["credited_amount_cents"] == 3500
+    assert first["credited_amount"]["amount_minor"] == second["credited_amount"]["amount_minor"] == 3500
     assert second["idempotent_replay"] is True
     assert account.cleared_balance_cents == 0
     assert account.available_credit_cents == 500000
@@ -569,3 +569,46 @@ def test_void_fraud_authorization_hold_rejects_wrong_account(db_session):
             authorization_id=str(auth.id),
             fraud_alert_id=str(alert.id),
         )
+
+
+def test_flagged_foreign_purchase_releases_only_billed_money(db_session):
+    alert = _create_fraud_alert(db_session)
+    auth = _create_pending_fraud_authorization(db_session)
+    auth.transaction_currency = "MXN"
+    auth.transaction_amount_cents = 19900
+    auth.billing_currency = "USD"
+    auth.billing_amount_cents = 1053
+    auth.status = "FLAGGED"
+    db_session.commit()
+    repo = CreditCardRepository(db_session)
+    assert repo.get_pending_auth_total(str(auth.account_id)) == 1053
+    result = void_fraud_authorization_hold(db_session, account_id=str(auth.account_id),
+        authorization_id=str(auth.id), fraud_alert_id=str(alert.id))
+    assert result["voided_amount"] == {"amount_minor": 1053, "currency_code": "USD"}
+    assert result["available_credit"] == {"amount_minor": 496500, "currency_code": "USD"}
+    assert repo.get_pending_auth_total(str(auth.account_id)) == 0
+
+
+def test_billing_currency_mismatch_rolls_back_fraud_void(db_session):
+    alert = _create_fraud_alert(db_session)
+    auth = _create_pending_fraud_authorization(db_session)
+    auth.billing_currency = "MXN"
+    db_session.commit()
+    with pytest.raises(ValueError, match="billing Money"):
+        void_fraud_authorization_hold(db_session, account_id=str(auth.account_id),
+            authorization_id=str(auth.id), fraud_alert_id=str(alert.id))
+    db_session.refresh(auth)
+    assert auth.status == "PENDING"
+    assert db_session.query(FraudCaseAction).filter_by(fraud_alert_id=alert.id).count() == 0
+
+
+def test_mxn_provisional_credit_returns_only_mxn_money(db_session):
+    alert = _create_fraud_alert(db_session)
+    account = CreditCardRepository(db_session).get_account_by_id(str(alert.credit_account_id))
+    account.currency = "MXN"
+    db_session.commit()
+    result = apply_fraud_provisional_credit(db_session, account_id=str(account.id),
+        transaction_id="01000000-0000-4000-8000-000000000001", fraud_alert_id=str(alert.id))
+    assert result["credited_amount"] == {"amount_minor": 3500, "currency_code": "MXN"}
+    assert result["cleared_balance"] == {"amount_minor": 0, "currency_code": "MXN"}
+    assert not any(key.endswith("_cents") for key in result)

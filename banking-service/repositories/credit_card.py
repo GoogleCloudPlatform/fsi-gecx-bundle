@@ -236,13 +236,25 @@ class CreditCardRepository:
         return self.db.query(FinancialAccount).all()
 
     def get_pending_auth_total(self, account_id: str) -> int:
-        """Calculates the sum of all pending authorization holds for an account."""
-        from sqlalchemy import func
-        res = self.db.query(func.sum(TransactionAuthorization.transaction_amount_cents)).filter(
+        """Sum active holds in the account's billing denomination."""
+        from models.money import Money
+        account = self.get_account_by_id(account_id)
+        if account is None:
+            raise ValueError("Authorization account does not exist")
+        holds = self.db.query(
+            TransactionAuthorization.billing_amount_cents,
+            TransactionAuthorization.billing_currency,
+        ).filter(
             TransactionAuthorization.account_id == account_id,
-            TransactionAuthorization.status == "PENDING"
-        ).scalar()
-        return int(res or 0)
+            TransactionAuthorization.status.in_(["PENDING", "FLAGGED"]),
+        ).all()
+        total = 0
+        for amount, currency in holds:
+            money = Money(amount_minor=amount, currency_code=currency)
+            if money.currency_code != account.currency or money.amount_minor < 0:
+                raise ValueError("Authorization billing Money does not match the account")
+            total += money.amount_minor
+        return Money(amount_minor=total, currency_code=account.currency).amount_minor
 
     def calculate_available_credit_cents(self, account: FinancialAccount) -> int:
         """Calculates available credit from the ledger balance and active pending holds."""

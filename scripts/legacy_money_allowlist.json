@@ -261,21 +261,21 @@
     "banking-service/repositories/credit_card.py": {
       "lines": {
         "1727bd0d16e704edf7e04409689bddaecb0b8020342064a17a13f47d2890527e": 1,
-        "249d030c9212ae5d3419445fbbc216636a7ebbdaeb24df57adee4a8e0737ccc3": 1,
         "45af545b34bbf01d64f6101ae08b9a971b47c49bef0d855001c0dca82db718a4": 1,
+        "625d684a04c752d4358407b50700952e7d51b098424fe1929b2276afeeb97e21": 1,
         "6f0cf349748a7a0f8a253cfbbed5764ac79b3678e4ab40f813bc2e2bbd709657": 1,
         "a6366619b0a70d5edce9d259e8451c794a60093e7ff26649e37f6d778673b232": 1,
         "e91ab4f0174cdd8e75531bb41063f0e99b5d43d8c6924099ec0cc180c72030b9": 1
       },
       "symbols": [
         "available_credit_cents",
+        "billing_amount_cents",
         "calculate_available_credit_cents",
         "cleared_balance_cents",
-        "credit_limit_cents",
-        "transaction_amount_cents"
+        "credit_limit_cents"
       ],
-      "owner": "packet-03",
-      "rationale": "Existing USD account/payment consumer or fixture; migrate delivered contracts and classify unrelated USD remainder."
+      "owner": "money-foundation",
+      "rationale": "Physical card and authorization storage. Active-hold totals now use validated billing denomination, including flagged holds."
     },
     "banking-service/repositories/fraud.py": {
       "lines": {
@@ -584,31 +584,28 @@
         "0a1b9b9753b8bbdc41c98376fa24c0dea279d8f9345fceba5c42726cd7e6411f": 1,
         "17bb21cb49f4f22a7f07eb5f3c330bc92bf7efbd09d6287fdb9d22439e47e599": 1,
         "1b06ecd4cb9c9fb4948f2687aeed9c7f68d4b6f047b891d95b3c9c1edfea94bb": 1,
-        "206d634eca94a5ad8a094382687f324edee1a230791e8747eb8d01d1f936f1bd": 1,
         "25eee28514ba0242c544753bcb4c29e43179045257c8d4abc5335209bdab98f2": 1,
         "284122060f67f00c97d7f34d75bcfef203674ca3946f104f54f2bbfa6e75be72": 1,
+        "292bd56fd79e0fe0571972b5baf497c6fc1066a87425dc8f9e6412ca186322e4": 2,
         "2ac1515e4cadf7b1b44b93cb1fe5fdef3f801b163b759326a78f1d277e1be65a": 1,
         "3069bc077e9fcfa5b7e728b0a8bb07214f683ce765204e77c5bf442ceecbde22": 1,
         "3a09562cfd0b880de4d78d1b20fc011f557fe9558b5d14eab2a0ffc87cad6e68": 1,
         "3ee81bd9b7a3634e9376560bb6e6628887bfeecb2355abea930eea29c440f240": 1,
-        "43218f15019cfa46743e754f46665ddd13de5f5cbf2d2bb7815f90ebcefe8b9d": 3,
+        "43218f15019cfa46743e754f46665ddd13de5f5cbf2d2bb7815f90ebcefe8b9d": 1,
         "4576624dca645f91dad68f4465ddad4b65508391e2adbbd2346db1f96941e64e": 2,
         "4a05b5fc0c2017ae9f971c445f5efccc42924d5c1bded48cffe7ab203ff42e77": 1,
         "58225a943741c1dafe5c7efb40f2f0f64d4d27620de9bcabf41cfeccf5fe33b8": 1,
-        "58c9396650fa477b8ed97236894b445b7e7d1c10eb6a74968f32aa179e99482b": 1,
         "5e69f86ea75b543874a971ff14db92da3d9faee946f39dc435e7b66c255df23d": 1,
-        "5f400f31ada50a7f3ae360013979047ec3142f349e006a69f95710e960223dc9": 1,
-        "6c3efe97fa54de1e9ba8eafb7c995b452847e1636c05bb4fe3ff6deb3a2ce8ae": 3,
-        "72e545c61cdad7c6127d7a0449d5dda1d15644778349235f5c2ebae93e227992": 1,
+        "6c3efe97fa54de1e9ba8eafb7c995b452847e1636c05bb4fe3ff6deb3a2ce8ae": 2,
         "7844fd63ea3831b4b2fd6233cb473e4b1947ede2b4747fad4e31c5ccdc8983d6": 1,
         "7bf8a398adb230cc25038e2072f6731dbd553e1d1d0307e95db211686f02201b": 1,
         "8433ba1b3688b5c712f4bb143c4324d4c7dbdce7004d5ff2b573d52e076aa8b9": 1,
-        "87dfcea9ac66436883083f4d71596fe32f3a5dee7898f684f026f21a25bb7122": 1,
         "889924070dcabd43390fb9c395b63df4ec398c4cb8ddf681b21783e3883fc1e3": 1,
         "8d3a8a1eaac2cfa1db71fbbeb9aceab66ebf5bd36c82032f1a8e43b84c2e23c1": 1,
         "991f618fc819226ca1890c6746832205e6c62bfb6c00ea84321945b9ca002bdf": 2,
         "9dc3d2b891bf60b837f90210dd1a4ace177a67a2b19c6054abdca9eccb6ca6d3": 1,
         "9e4211d382cbaa4c3d722d6e53d0d2c0127a059fb40cd92d636e755904c8a3af": 1,
+        "a025a44ed2bd35aa3f4a0f12bd4331b73fe4648fb4db5ca38abb175fdc424065": 1,
         "b0fa01dd1bfaad578c2d3ce170dfcb380c1254ee0983120c4bd7949e1628eecb": 1,
         "b2842b52cd5cec31acd45fa5fe85a6bc0109dae96b41730515a5a9b28df11aea": 1,
         "b6d8c37acb575a30b199ea068e429ff41613cc012b1c5d80c373460a2150cbf0": 1,
@@ -626,6 +623,7 @@
         "e69b784ca8650307d8abdf9ff38611fd16d9303b080252ed932c5257aade584c": 1,
         "ece3586ebba1a45ccc76d2128bd134ad65739214bcb2b834f67065ac9e33d2a6": 1,
         "f3f3d08d9eb5c5c3982b705f54f7fafd8b67a2bc8ba1c307d2a9f28d33f2bc50": 1,
+        "f6a0bdaf0f1d9092cb932ec3a4b188b3b875916fffb929610d829ff29eb17563": 1,
         "fb3c41cd448bb3a4e7dc07e083b2249e50aee81aa6c89eb4bdd2c03f5a70edd6": 2,
         "fcc63253bccdab58ca7ab059fedafbf46fcafec432f3443a8961d70440e8adc0": 1
       },
@@ -635,7 +633,6 @@
         "billing_amount_cents",
         "cleared_balance_cents",
         "credit_limit_cents",
-        "credited_amount_cents",
         "max_credit_limit_cents",
         "min_credit_limit_cents",
         "new_limit_cents",
@@ -644,11 +641,10 @@
         "requested_limit_cents",
         "reversal_amount_cents",
         "reversed_amount_cents",
-        "transaction_amount_cents",
-        "voided_amount_cents"
+        "transaction_amount_cents"
       ],
-      "owner": "packet-02 / packet-06",
-      "rationale": "Legacy card posting inputs and transaction/billing minor-unit storage; migrate journal callers and preserve distinct currency facts."
+      "owner": "money-foundation",
+      "rationale": "Physical account/posting storage and unrelated USD contracts; delivered fraud results expose Money with temporary USD-only aliases."
     },
     "banking-service/services/financial_journal.py": {
       "lines": {
@@ -672,40 +668,20 @@
     },
     "banking-service/services/fraud_alerts.py": {
       "lines": {
-        "00b68c2ceed339a596f1227d4d73544aacbf4c58299d98f99becf477bba768e9": 1,
-        "17d1eb912cf52ba22400f5a5a564e3f7ea62ee487ece9b8142c82497708f349f": 1,
-        "2a8c2c0285f98e134b882a671243ae5dfb9f7290739e0eaec58c03f91f04e7e4": 1,
-        "2f6cad61549ec432ea6b9488f3ab7344693d84265c21d30ac82be11d696bbe86": 1,
-        "352dd1d0f77487f686a58edd8d0a3e4b949b3d11d62900107d3a9b95456ac244": 1,
-        "4da30d742790971987288bbb60655a06dbfcfab43df186886d4716604712404b": 1,
+        "1ca2f24caf804fea8dc99b1799ebb26525410b93f44c3d1f29237a6e885916b6": 1,
+        "4ccb8af7cc7cb99f3b0754ccd65446065033d09be02d2a30583c958c08fbc830": 1,
+        "4e474dca1e64b12956070979e152468861b57680279ff5b00a64f602ea000b58": 1,
         "5d35a7aabdc0d6cc7bc59c5627a81bbe3b89c7d5074cd389f39aa31cff00fecc": 1,
         "5fb593a29381b9908001f498035d12ae00d022a74fab024d9bb40dbde3d9a071": 1,
-        "6836fc1efacdbe6e243db2bdad7751a980c8f2d935ae6281cec9a7a451d906b1": 1,
-        "6a33916790f61392d0aa8d603a6832fc60e8bc7ac99cc05717337e9620b55e19": 1,
-        "9dc4bb847631dd035a2e1d3afd24191d120b6b46a6e466e6fa8b190a05385e56": 1,
-        "a65595ca34ba8f69ad36af127adc4d516f790f6ce42c75d05ad902a953cbbb73": 1,
-        "b4405d479169218d8f6c82226192ccc802e15e4b52a69e037c1f23faf2fa2137": 1,
-        "dbbfe56df92769f7ff9596daa1a52207dc1bab766192908caa875d67d27e81f3": 1,
-        "dd59de87a8da0d6ac5ea7437150a5857e0a8112f16d2b4c12f6ec787a7734f06": 1,
-        "e1bf9a794ff70179605bf8576f6d8f6c6c4ac5674de696f7d936130057591e19": 1,
-        "eb512088306cce32c12e6ac70c7253ad058532b1feafa6f4d09c466c620d6ded": 1,
-        "ec35123ed01b8dcde973b99d633d84d88b9f010c9fdd3eb93514c4e60596771f": 1,
-        "ec63ec456d85a5ca2d025dba05ddf9f731b0af90324adeba6f073ef5e2068e5f": 1,
-        "f424efe21950c6d82b740819bc2cc61ce270c0ce997cd0f5a35506f41a5ef1e8": 1,
-        "fdbb0988d5d7b06009ca2821cab8f27da86acccad5ebd663c6a45a1db5702b77": 1
+        "b4405d479169218d8f6c82226192ccc802e15e4b52a69e037c1f23faf2fa2137": 1
       },
       "symbols": [
-        "_format_cents",
         "amount_cents",
-        "billing_amount_cents",
-        "credited_amount_cents",
         "provisional_credit_cents",
-        "transaction_amount_cents",
-        "voided_amount_cents",
-        "voided_authorization_cents"
+        "transaction_amount_cents"
       ],
       "owner": "money-foundation",
-      "rationale": "Existing storage and secure messaging consumers pending Packet 06 migration; active voice context is Money."
+      "rationale": "Physical fraud case aggregate storage only on delivered flow; alerts, messages and audit amounts now use canonical Money."
     },
     "banking-service/services/fraud_scoring.py": {
       "lines": {
@@ -1027,8 +1003,7 @@
         "05e44e0c6739c9bec6f4c3fc5fd64519a9e5614bebc5ca35f219f3e76a43074d": 1,
         "0b7210189be2542e1e05cb5b303a6b4244f2b8d8c21f6d648ad2301138b3d003": 1,
         "1e1ac307aae9ba897dc247da543c43c95527a1f304fa1a26ca8e23a8cb73cf19": 1,
-        "20a93448f094a589d3cc6e55f5e684ea3920915499e04ec9f3ac9e5903caa815": 1,
-        "334f9efa143ccb9755737390980e0d8175fa4ef1475f4a024df1fafd3ac5db50": 2,
+        "357e2af106cf32ef5ebc4bc81d2f9b0cb449cc4492079b086671d2fbe83a2039": 1,
         "37182d48940b727b2771b1caf23ef2fe96cc2f358e4e2258982badd676277c28": 2,
         "460cda189ed8eb17b025d98224d1bd12c08bf22f7aed4b27596ac2c25590b47b": 1,
         "5a1b5465e28b4948973b494c34f5b5a37ae941304c46027c57098b23ce099a87": 1,
@@ -1036,10 +1011,10 @@
         "5c1e00114f2125423c1ca80d1c88a3807d49f5ecb50418c00b36b5fbb7a066cd": 1,
         "601f1f8ddeeff881a3f70ca6b3d68f6421cd634576868816d69d6507ea69d1da": 1,
         "6830a5988b984f80bec71b05fcefc9f04452a432438dfdeb9c1b16b6161660d6": 1,
+        "6b2187295f6f1ec3f295f8809ad24d17a33eb000976c91d578af7aa119aeae51": 1,
         "76262e86bf8e608e74aa63607f6306fef973b675e21666fc72359ca673b7c170": 1,
         "8937c89fe8e6c32edccb3b30ae5ef2d985a4d724e67211c6798afa0ee8962c94": 1,
         "961ca44a65cdfc3805925d367e1a77e570b0af91d8b0251bc39c692cd0f2f769": 2,
-        "99cd15bbcb6e0b8b1fdb92c2df67f45a6e9f2b7ed77c7feb22e50eb16ee426da": 1,
         "9fb007c73bb3c4c5d061c4e7c13e4799b6c79b5b8c47095ca952e0bd9d2f8b69": 1,
         "a8be5aef0779d9b951a277d8f37546f463081b88cdf342820730dac9ef8c0ed3": 1,
         "aaf7871b3b0903b3cd152ac01076c1d82c08c058487f98d46e4fe424125e0a98": 1,
@@ -1050,7 +1025,6 @@
         "cf92317fc4fe6905ae3671a6b4c2e8f92ebaad6e8ae546050c21a289aaafddfd": 1,
         "da84a23a6297855c4a6d032f570a29755316ee48ac464977ee1ac2b6653e61e4": 1,
         "df0172a363170c4666e21ebcfa5baab58b27a566a18271604e50aa15f92ad0b9": 1,
-        "ed94fd67cf982ba717a4843ed624e2e8ba26901f1938d70818c6a3b73f27ccf5": 1,
         "f524014d647531d368d490ceb35ae1487341ae82502e29be5e54db452ebd6d11": 1,
         "fb5498c021f29e0b8a8882edda71e0cfeb7c9a023f13f4e4bb9dc70b2dc4ac31": 1,
         "fd72321a25e438c7f090efd7b059af25c88f417cd6773775372f02af0af28cd1": 1
@@ -1062,17 +1036,15 @@
         "billing_amount_cents",
         "cleared_balance_cents",
         "credit_limit_cents",
-        "credited_amount_cents",
         "max_credit_limit_cents",
         "min_credit_limit_cents",
         "new_limit_cents",
         "requested_limit_cents",
         "reversed_amount_cents",
-        "transaction_amount_cents",
-        "voided_amount_cents"
+        "transaction_amount_cents"
       ],
-      "owner": "packet-03",
-      "rationale": "Existing USD account/payment consumer or fixture; migrate delivered contracts and classify unrelated USD remainder."
+      "owner": "money-foundation",
+      "rationale": "Explicitly denominated database fixtures and regression for omitted non-USD compatibility fields."
     },
     "banking-service/tests/test_fraud_repository.py": {
       "lines": {
@@ -1150,8 +1122,8 @@
         "provisional_credit_cents",
         "transaction_amount_cents"
       ],
-      "owner": "packet-06",
-      "rationale": "Existing USD fraud/presentation fixture or consumer; replace delivered monetary facts and retain explicit USD-only unrelated fixtures."
+      "owner": "money-foundation",
+      "rationale": "Physical USD fixture and cached aggregate checks; delivered message assertions use currency-explicit formatting."
     },
     "banking-service/tests/test_fraud_voice_context.py": {
       "lines": {
@@ -1756,8 +1728,10 @@
     },
     "banking-service/services/fraud_money.py": {
       "lines": {
+        "592f1681c484550d4795f01292370f0629314c8aa8f34cd1ab8a03da1e7380af": 1,
         "6918e45c9206146bf1ba259c6ba08081b997787b7fe85e5b5ec18632519db811": 1,
         "6a7103ffa68abef23154ab0a4043c3f67ca32ba68681005308e98f0e1e462308": 1,
+        "87664a7ef11ae3f34eeb96fae268450ea4cf31f50d15554b70c3c3da227885a2": 1,
         "963759052f67cfca13aea51ede1e590ab32de5238fe29477a367f39145fe3add": 1
       },
       "symbols": [
@@ -1766,7 +1740,7 @@
         "transaction_amount_cents"
       ],
       "owner": "money-foundation",
-      "rationale": "Account-scoped physical card/authorization storage mapping to canonical Money; no legacy alert snapshot reads."
+      "rationale": "Account-scoped physical storage mapping; centralized immutable pre-Money USD action-result reader."
     }
   }
 }

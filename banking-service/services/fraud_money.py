@@ -56,3 +56,32 @@ def fraud_money_facts(repository, alert) -> list[dict]:
         fact.update(project_transaction_money(original, billing))
         facts.append(fact)
     return facts
+
+
+def authorization_money_facts(authorization) -> dict:
+    return project_transaction_money(
+        Money(amount_minor=authorization.transaction_amount_cents,
+              currency_code=authorization.transaction_currency),
+        Money(amount_minor=authorization.billing_amount_cents,
+              currency_code=authorization.billing_currency))
+
+
+def normalize_historical_fraud_action(result: dict, currency_code: str) -> dict:
+    """Read immutable pre-Money USD action results at one compatibility edge."""
+    from models.money import from_legacy_usd, money_fields
+    normalized = dict(result)
+    for field in ("voided_amount", "credited_amount", "available_credit", "cleared_balance"):
+        legacy_field = field + "_cents"
+        if field in result:
+            money = Money.model_validate(result[field])
+        elif legacy_field in result:
+            if currency_code != "USD":
+                raise ValueError("Historical USD fraud result cannot be used for a non-USD account")
+            money = from_legacy_usd(result[legacy_field])
+        else:
+            continue
+        if money.currency_code != currency_code:
+            raise ValueError("Fraud result denomination does not match the account")
+        normalized.pop(legacy_field, None)
+        normalized.update(money_fields(field, money, legacy=True))
+    return normalized

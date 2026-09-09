@@ -25,7 +25,9 @@ from repositories.credit_card import CreditCardRepository
 from models.secure_messaging import SecureMessageCreateRequest, SENDER_TYPE_BANK
 from repositories.fraud import FraudAlertRepository, ScenarioOutcomeRepository
 from services.knowledge_catalog import KnowledgeCatalogService
-from services.fraud_money import fraud_money_facts
+from services.fraud_money import fraud_money_facts, authorization_money_facts
+from models.money import Money
+from services.money_presentation import project_money, project_transaction_money
 from services.fraud_presentation import CONTENT as MONEY_VOICE_CONTENT
 from services.messaging import MessagingService
 from utils.audit import record_audit_event
@@ -52,7 +54,7 @@ class FraudAlertService:
             {
                 "authorization_id": str(auth.id),
                 "merchant_name": auth.merchant_name,
-                "amount_cents": auth.transaction_amount_cents,
+                **authorization_money_facts(auth),
                 "merchant_category_code": auth.merchant_category_code,
                 "card_network": auth.card_network,
                 "created_at": auth.created_at.isoformat() if auth.created_at else None,
@@ -131,7 +133,7 @@ class FraudAlertService:
         suspicious_transaction = {
             "authorization_id": str(authorization.id),
             "merchant_name": authorization.merchant_name,
-            "amount_cents": authorization.transaction_amount_cents,
+            **authorization_money_facts(authorization),
             "merchant_category_code": authorization.merchant_category_code,
             "card_network": authorization.card_network,
             "created_at": authorization.created_at.isoformat()
@@ -540,11 +542,7 @@ class FraudAlertService:
                     "authorization_id": str(authorization.id),
                     "transaction_id": None,
                     "merchant_name": authorization.merchant_name or authorization.auth_code,
-                    "amount_cents": int(
-                        authorization.billing_amount_cents
-                        or authorization.transaction_amount_cents
-                        or 0
-                    ),
+                    **authorization_money_facts(authorization),
                     "merchant_category_code": authorization.merchant_category_code,
                     "card_network": authorization.card_network,
                     "created_at": authorization.created_at.isoformat()
@@ -573,7 +571,10 @@ class FraudAlertService:
                     else None,
                     "transaction_id": str(transaction.id),
                     "merchant_name": transaction.description,
-                    "amount_cents": abs(int(transaction.amount_cents)),
+                    **project_transaction_money(
+                        Money(amount_minor=authorization.transaction_amount_cents, currency_code=authorization.transaction_currency)
+                        if authorization else Money(amount_minor=abs(transaction.amount_cents), currency_code=account.currency),
+                        Money(amount_minor=abs(transaction.amount_cents), currency_code=account.currency)),
                     "merchant_category_code": authorization.merchant_category_code
                     if authorization
                     else None,
@@ -953,10 +954,11 @@ class FraudAlertService:
                 commit_transaction=False,
             )
 
+        account_currency = CreditCardRepository(self.db).get_account_by_id(str(alert.credit_account_id)).currency
         provisional_credit_total = sum(
-            item["credited_amount_cents"] for item in provisional_credits
+            item["credited_amount"]["amount_minor"] for item in provisional_credits
         )
-        void_total = sum(item["voided_amount_cents"] for item in voided_authorizations)
+        void_total = sum(item["voided_amount"]["amount_minor"] for item in voided_authorizations)
         message = self._send_triage_secure_message(
             auth_provider_uid=auth_provider_uid,
             alert=alert,
@@ -1000,8 +1002,8 @@ class FraudAlertService:
                 "outcome": triaged.remediation_status,
                 "disputed_authorization_ids": disputed_authorization_ids,
                 "disputed_transaction_ids": disputed_transaction_ids,
-                "voided_authorization_cents": void_total,
-                "provisional_credit_cents": provisional_credit_total,
+                "voided_authorizations": Money(amount_minor=void_total, currency_code=account_currency).model_dump(),
+                "provisional_credit": Money(amount_minor=provisional_credit_total, currency_code=account_currency).model_dump(),
                 "replacement_card_id": replacement_result["new_card_id"]
                 if replacement_result
                 else None,
@@ -1286,8 +1288,8 @@ class FraudAlertService:
             "Please review these recent purchases:",
         ]
         for txn in suspicious_transactions:
-            amount = txn["amount_cents"] / 100
-            lines.append(f"- {txn['merchant_name']}: ${amount:,.2f}")
+            shown = txn["presentations"]["en-US"]
+            lines.append(f"- {txn['merchant_name']}: {shown['transaction']['display_text']} (billed {shown['billing']['display_text']})")
         lines.append(
             "If you did not make these purchases, chat now with a credit card support agent at /support/voice?entry=fraud-alert."
         )
@@ -1348,10 +1350,6 @@ class FraudAlertService:
         key_digest = hashlib.sha256(key_material.encode("utf-8")).hexdigest()[:32]
         return f"triage:{key_digest}:{replacement_part}:{escalation_part}"
 
-    @staticmethod
-    def _format_cents(amount_cents: int) -> str:
-        return f"${amount_cents / 100:,.2f}"
-
     def _build_recognized_triage_message(self, alert) -> str:
         return "\n".join(
             [
@@ -1375,11 +1373,11 @@ class FraudAlertService:
         lines = [
             f"Your fraud case for card ending in {alert.card_last_four} is now pending review by our fraud specialist team.",
         ]
-        suspicious_transactions = alert.suspicious_transactions or []
+        suspicious_transactions = fraud_money_facts(CreditCardRepository(self.db), alert)
         disputed_authorization_ids = set(disputed_authorization_ids or [])
         disputed_transaction_ids = set(disputed_transaction_ids or [])
         disputed_lines = [
-            f"- {txn.get('merchant_name', 'Unknown merchant')}: {self._format_cents(int(txn.get('amount_cents') or 0))}"
+            f"- {txn.get('merchant_name', 'Unknown merchant')}: {txn['presentations']['en-US']['transaction']['display_text']} (billed {txn['presentations']['en-US']['billing']['display_text']})"
             for txn in suspicious_transactions
             if txn.get("authorization_id") in disputed_authorization_ids
             or txn.get("transaction_id") in disputed_transaction_ids
@@ -1387,15 +1385,16 @@ class FraudAlertService:
         if disputed_lines:
             lines.append("Disputed transactions:")
             lines.extend(disputed_lines)
+        account = CreditCardRepository(self.db).get_account_by_id(str(alert.credit_account_id))
         if voided_authorizations:
-            total = sum(item["voided_amount_cents"] for item in voided_authorizations)
+            total = sum(item["voided_amount"]["amount_minor"] for item in voided_authorizations)
             lines.append(
-                f"We released pending authorization holds totaling {self._format_cents(total)}."
+                f"We released pending authorization holds totaling {project_money(Money(amount_minor=total, currency_code=account.currency))['display_text']}."
             )
         if provisional_credits:
-            total = sum(item["credited_amount_cents"] for item in provisional_credits)
+            total = sum(item["credited_amount"]["amount_minor"] for item in provisional_credits)
             lines.append(
-                f"We applied provisional credits totaling {self._format_cents(total)} pending the full fraud investigation."
+                f"We applied provisional credits totaling {project_money(Money(amount_minor=total, currency_code=account.currency))['display_text']} pending the full fraud investigation."
             )
         if replacement_result:
             lines.append(

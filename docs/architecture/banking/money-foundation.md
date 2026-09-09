@@ -219,3 +219,14 @@ pending. Remaining Packet 06 work includes selected result/history consumers,
 Spanish trajectory fixtures, UI inspection, deployed USD/MXN and Spanish live
 qualification with transcript/tool/proposal/final-state evidence. Packet 07
 compatibility removal is still pending qualification.
+
+
+The next fraud increment fixes available-credit recalculation to sum validated
+billing Money for PENDING and FLAGGED holds. A flagged MXN purchase billed in
+USD is released by its USD billed amount; mismatched billing currency rolls
+back. Fraud authorization releases, provisional credits, alert snapshots,
+secure-message amounts and aggregate audit facts now carry/use currency-aware
+Money. Temporary external legacy aliases are USD-only. One reader normalizes
+immutable pre-Money USD action results without rewriting their stored payloads.
+Checks after this increment: 105 focused Money tests and 108 backend regressions
+passed, including cross-currency billed holds and MXN provisional credits.
