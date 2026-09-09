@@ -37,6 +37,8 @@ afterToolCallbacks:
 afterModelCallbacks:
 - pythonCode: agents/Credit_Card_Support_Agent/after_model_callbacks/advance_closeout_checkpoint.py
   description: Advance callback-owned closeout state after the action-result response.
+tools:
+- set_conversation_language
 toolsets:
 - toolset: banking_service_mcp_toolset
   toolIds:

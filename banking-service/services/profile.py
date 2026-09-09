@@ -98,7 +98,8 @@ class ProfileService:
             auth_provider_uid=user_id,
             first_name=request.first_name,
             last_name=request.last_name,
-            phone_number=request.phone_number
+            phone_number=request.phone_number,
+            preferred_support_locale=request.preferred_support_locale,
         )
         return {
             "message": "Customer profile updated successfully",

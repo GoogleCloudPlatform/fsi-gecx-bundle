@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import { useMoneyLocale } from '../utils/moneyLocale';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Room, RoomEvent, Track } from 'livekit-client';
 import { useLocation } from 'react-router-dom';
@@ -39,7 +38,8 @@ import {
   Activity,
   Volume2,
   Send,
-  ChevronDown
+  ChevronDown,
+  Languages
 } from 'lucide-react';
 import {
   getCreditCardAccount,
@@ -296,9 +296,10 @@ function MicTester({ deviceId, onError }) {
   );
 }
 
-export default function VoiceSupportView() {
-  const [presentationLocale, setPresentationLocale] = useMoneyLocale();
-  const voiceLocale = presentationLocale === 'es-MX' ? 'es-MX' : 'en-US';
+export default function VoiceSupportView({ customerProfile }) {
+  const [consultationLocale, setConsultationLocale] = useState('');
+  const profileLocale = customerProfile?.preferred_support_locale === 'es-MX' ? 'es-MX' : 'en-US';
+  const voiceLocale = consultationLocale || profileLocale;
   const { brandColorFrom, resolvedTheme } = useSettings();
   const location = useLocation();
   const projectId = window.firebaseConfig?.projectId;
@@ -645,6 +646,7 @@ export default function VoiceSupportView() {
       gecxOutputSampleRateRef.current = null;
       playoutDrainTimerRef.current = null;
       setIsConnected(false);
+      setConsultationLocale('');
       setLatency(0);
       setProposalTraceAllowed(false);
       setProposalTraceSessionId(null);
@@ -690,6 +692,7 @@ export default function VoiceSupportView() {
       container.innerHTML = "";
     }
     setIsConnected(false);
+    setConsultationLocale('');
     setIsHumanAgentActive(false);
     setWarningMessage('');
     setAgentVideoTrack(null);
@@ -1245,7 +1248,8 @@ export default function VoiceSupportView() {
         setTranscripts(prev => [...prev, { author: 'system', text: 'Securing streaming session...' }]);
         ws.send(JSON.stringify({
           type: "AUTH",
-          token: fbToken
+          token: fbToken,
+          ...(consultationLocale ? { locale: consultationLocale } : {}),
         }));
         const micSettings = micStream.getAudioTracks()[0]?.getSettings?.() || {};
         ws.send(JSON.stringify({
@@ -1464,7 +1468,7 @@ export default function VoiceSupportView() {
       }
 
       // 1. Fetch token and room name from server
-      const { token, room_name, session_id, proposal_trace_allowed, fraud_context } = await getCreditCardVoiceToken(mode, voiceLocale);
+      const { token, room_name, session_id, proposal_trace_allowed, fraud_context } = await getCreditCardVoiceToken(mode, consultationLocale || undefined);
       console.log(`LiveKit token received. Room: ${room_name}`);
       setFraudContext(fraud_context || null);
       setProposalTraceSessionId(session_id || null);
@@ -1610,6 +1614,7 @@ export default function VoiceSupportView() {
 
       room.on(RoomEvent.Disconnected, () => {
         setIsConnected(false);
+        setConsultationLocale('');
         setIsHumanAgentActive(false);
         setWarningMessage('');
         setAgentVideoTrack(null);
@@ -1758,17 +1763,6 @@ export default function VoiceSupportView() {
           </AnalyticsButton>
         </div>
 
-        {!isConnected && !isConnecting && engine === 'livekit' && (
-          <label className="mt-4 flex items-center gap-2 text-sm">
-            Voice language / Idioma
-            <select aria-label="Voice language" value={voiceLocale}
-              onChange={(event) => setPresentationLocale(event.target.value)}
-              className="rounded border border-slate-300 bg-white px-2 py-1 dark:bg-slate-900">
-              <option value="en-US">English</option>
-              <option value="es-MX">Español (México)</option>
-            </select>
-          </label>
-        )}
         {/* Engine Selection Toggle */}
         {!isConnected && !isConnecting && (
           <div id="voice-engine-select" className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-950/60 rounded-full border border-slate-200 dark:border-slate-800/80 mt-4">
@@ -2321,7 +2315,7 @@ export default function VoiceSupportView() {
               </AnalyticsButton>
             </div>
 
-            <div className="grid w-full min-w-0 grid-cols-1 gap-6 sm:grid-cols-2">
+            <div className="grid w-full min-w-0 grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {/* Left Column: Input */}
               <div className="flex min-w-0 flex-col space-y-2 text-left">
                 <label htmlFor="voice-audio-input" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
@@ -2408,6 +2402,25 @@ export default function VoiceSupportView() {
                     </select>
                   </div>
                 </div>
+              </div>
+              <div className="flex min-w-0 flex-col space-y-2 text-left">
+                <label htmlFor="voice-support-language" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Language / Idioma</label>
+                <div className="relative w-full">
+                  <Languages className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                  <select id="voice-support-language" value={consultationLocale}
+                    onChange={(event) => setConsultationLocale(event.target.value)}
+                    disabled={isConnecting || isConnected}
+                    aria-describedby="voice-support-language-help"
+                    className="appearance-none h-11 w-full rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-10 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200">
+                    <option value="">Profile: {profileLocale === 'es-MX' ? 'Español' : 'English'}</option>
+                    <option value="en-US">English</option>
+                    <option value="es-MX">Español (México)</option>
+                  </select>
+                </div>
+                <p id="voice-support-language-help" className="text-xs leading-5 text-slate-500 dark:text-slate-400">
+                  {isConnected ? 'Starting language shown. Ask the agent to switch during your consultation.' : 'Applies to this consultation. Change your default in your profile.'}
+                </p>
               </div>
             </div>
 

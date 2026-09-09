@@ -134,7 +134,9 @@ class VoiceBidiSession:
         gecx_app_id: str,
         location: str,
         proposal_trace_allowed: bool = False,
+        locale: str | None = None,
     ):
+        self.locale = locale
         self.user_id = user_id
         self.session_id = session_id
         self.client_ws = websocket
@@ -158,6 +160,7 @@ class VoiceBidiSession:
                     auth_provider_uid=self.user_id,
                     runtime_session_id=self.session_id,
                     gecx_app_id=self.gecx_app_id,
+                    locale=self.locale,
                 )
             finally:
                 db.close()

@@ -20,6 +20,8 @@ from decimal import Decimal
 from typing import Any, Dict
 from uuid import UUID
 
+from repositories import identity as identity_repo
+from utils.support_locale import SupportLocale, resolve_support_locale
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -458,7 +460,7 @@ async def trigger_voice_agent_session_async(
 def get_voice_room_token(
     background_tasks: BackgroundTasks,
     mode: str = "audio",
-    locale: str = "en-US",
+    locale: SupportLocale | None = None,
     db: Session = Depends(get_db),
     customer_id: str = Depends(_get_active_customer_id),
     caller: ValidatedToken = Depends(get_current_user),
@@ -470,6 +472,8 @@ def get_voice_room_token(
     Triggers the voice worker to dynamically join the room.
     """
     logger.info("Generating LiveKit token for authenticated customer.")
+    profile = identity_repo.get_customer(db, customer_id) or {}
+    locale = resolve_support_locale(profile.get("preferred_support_locale"), locale)
     room_name = f"room-{customer_id}"
     import uuid
 

@@ -165,3 +165,21 @@ def test_build_bootstrap_rejects_missing_ces_configuration() -> None:
             runtime_session_id="ces-runtime-1",
             gecx_app_id="",
         )
+
+
+@pytest.mark.parametrize("profile,override,expected,source", [
+    ("es-MX", None, "es-MX", "profile"),
+    ("es-MX", "en-US", "en-US", "consultation"),
+    ("en-US", "es-MX", "es-MX", "consultation"),
+])
+@patch("services.ces_session_bootstrap.FraudAlertService")
+@patch("services.ces_session_bootstrap.AccountsRepository")
+def test_profile_default_and_consultation_override(accounts, fraud, profile, override, expected, source):
+    user = SimpleNamespace(id=uuid.uuid4(), preferred_support_locale=profile)
+    accounts.return_value.get_user_by_auth_provider_uid.return_value = user
+    fraud.return_value.get_active_voice_context.return_value = voice_context()
+    bootstrap = build_ces_session_bootstrap(MagicMock(), auth_provider_uid="user", runtime_session_id="session", gecx_app_id="app", locale=override)
+    assert bootstrap.runtime_language_code == expected
+    assert bootstrap.language_code == expected.split("-")[0]
+    assert bootstrap.language_selection_source == source
+    assert user.preferred_support_locale == profile

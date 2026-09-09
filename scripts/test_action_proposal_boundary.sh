@@ -28,6 +28,7 @@ run_banking_contract() {
     tests/test_fraud_triage_workflow.py \
     tests/test_ces_session_capability.py \
     tests/test_ces_session_bootstrap.py \
+    tests/test_support_locale.py \
     tests/test_ces_callback_bundle.py \
     tests/test_voice_bidi.py \
     tests/test_voice_deployment_contract.py \

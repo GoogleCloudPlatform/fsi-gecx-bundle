@@ -1,0 +1,6 @@
+name: 78401b82-e21f-4c19-b86e-70584e515e61
+displayName: set_conversation_language
+pythonFunction:
+  name: set_conversation_language
+  pythonCode: tools/set_conversation_language/python_code.py
+executionType: SYNCHRONOUS

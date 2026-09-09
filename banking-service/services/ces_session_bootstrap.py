@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from repositories.accounts import AccountsRepository
 from services.fraud_alerts import FraudAlertService
 from utils.log_safety import stable_log_reference
+from utils.support_locale import resolve_support_locale
 
 
 CES_RUNTIME_NAME = "CES_GEMINI_LIVE"
@@ -109,6 +110,7 @@ def build_ces_session_bootstrap(
     runtime_session_id: str,
     gecx_app_id: str,
     support_session_id: str | None = None,
+    locale: str | None = None,
 ) -> CesSessionBootstrap:
     """Resolve one authenticated customer and build immutable session context."""
     identity = str(auth_provider_uid or "").strip()
@@ -134,7 +136,17 @@ def build_ces_session_bootstrap(
         raise CesSessionBootstrapError("Voice reset generation is missing.")
     guidance = voice_context.get("support_guidance") or {}
 
+    profile_locale = getattr(user, "preferred_support_locale", None)
+    selected_locale = resolve_support_locale(profile_locale, locale)
+    selection_source = "default"
+    if profile_locale in ("en-US", "es-MX"):
+        selection_source = "profile"
+    if locale is not None:
+        selection_source = "consultation"
     return CesSessionBootstrap(
+        language_code=selected_locale.split("-")[0],
+        runtime_language_code=selected_locale,
+        language_selection_source=selection_source,
         support_session_id=(
             str(support_session_id or "").strip() or f"ces-support-{uuid.uuid4().hex}"
         ),

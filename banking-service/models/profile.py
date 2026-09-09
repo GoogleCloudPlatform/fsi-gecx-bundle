@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
@@ -24,12 +24,14 @@ class CustomerProfileCreateRequest(BaseModel):
 
 
 class CustomerProfileUpdateRequest(BaseModel):
+    preferred_support_locale: Optional[Literal["en-US", "es-MX"]] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone_number: Optional[str] = None
 
 
 class CustomerProfile(BaseModel):
+    preferred_support_locale: Literal["en-US", "es-MX"] = "en-US"
     user_id: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None

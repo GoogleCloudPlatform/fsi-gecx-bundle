@@ -22,6 +22,7 @@ from fastapi import APIRouter, WebSocket
 from utils.auth import has_admin_access, validate_firebase_token
 from utils.env import is_running_locally
 from services.voice_bidi import VoiceBidiSession
+from utils.support_locale import resolve_support_locale
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -77,6 +78,13 @@ async def gecx_voice_stream(websocket: WebSocket):
             await websocket.close(code=4001, reason="Authentication failed.")
             return
 
+        locale = auth_frame.get("locale")
+        try:
+            resolve_support_locale(None, locale)
+        except ValueError:
+            await websocket.close(code=1008, reason="Unsupported support language.")
+            return
+
         # 2. Delegate real-time session execution to service
         gecx_app_id = os.getenv("GECX_APP_ID")
         location = os.getenv("GECX_LOCATION", "us")
@@ -88,6 +96,7 @@ async def gecx_voice_stream(websocket: WebSocket):
             gecx_app_id=gecx_app_id,
             location=location,
             proposal_trace_allowed=proposal_trace_allowed,
+            locale=locale,
         )
         await session.start()
 

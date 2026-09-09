@@ -30,6 +30,7 @@ def _user_to_dict(user: User) -> Dict[str, Any]:
         "last_name": user.last_name,
         "email": user.email,
         "phone_number": user.phone_number,
+        "preferred_support_locale": user.preferred_support_locale or "en-US",
     }
 
 
@@ -79,6 +80,7 @@ def update_customer(
     first_name: Optional[str],
     last_name: Optional[str],
     phone_number: Optional[str],
+    preferred_support_locale: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     user = db.query(User).filter(User.auth_provider_uid == auth_provider_uid).first()
     if not user:
@@ -90,6 +92,8 @@ def update_customer(
         user.last_name = last_name
     if phone_number is not None:
         user.phone_number = phone_number
+    if preferred_support_locale is not None:
+        user.preferred_support_locale = preferred_support_locale
 
     record_audit_event(
         db,
@@ -99,6 +103,7 @@ def update_customer(
             "first_name": user.first_name,
             "last_name": user.last_name,
             "phone_number": user.phone_number,
+            "preferred_support_locale": user.preferred_support_locale or "en-US",
         },
     )
     db.commit()

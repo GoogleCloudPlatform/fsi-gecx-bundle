@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import datetime
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Float, Index
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Float, Index, CheckConstraint
 from utils.database import UniversalUUID as UUID, generate_uuid
 from sqlalchemy.orm import relationship
 from utils.database import Base
@@ -25,13 +25,18 @@ class User(Base):
     Uses 16-byte native UUID as internal surrogate key while storing external Firebase UID.
     """
     __tablename__ = "users"
-    __table_args__ = {'schema': 'identity'}
+    __table_args__ = (
+        CheckConstraint("preferred_support_locale IN ('en-US', 'es-MX')",
+                        name="ck_users_preferred_support_locale"),
+        {'schema': 'identity'},
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     auth_provider_uid = Column(String(128), unique=True, nullable=False, index=True)
     first_name = Column(String(100), nullable=True)
     last_name = Column(String(100), nullable=True)
     email = Column(String(255), nullable=True, index=True)
+    preferred_support_locale = Column(String(5), nullable=False, default="en-US", server_default="en-US")
     phone_number = Column(String(50), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
