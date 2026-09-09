@@ -31,16 +31,14 @@ def set_conversation_language(locale: str) -> dict:
     invocation_id = str(context.invocation_id or "")
     if not invocation_id or not any(part.text_or_transcript() for part in context.get_last_user_input() or []):
         return {"success": False, "error": "CUSTOMER_TURN_REQUIRED"}
+    try:
+        facts = json.loads(variables.get("proposal_facts_json") or "{}")
+        if not isinstance(facts, dict):
+            raise ValueError("Invalid proposal context")
+    except (ValueError, TypeError):
+        return {"success": False, "error": "INVALID_PROPOSAL_CONTEXT"}
     summary = str(variables.get("proposal_customer_safe_summary") or "")
     if variables.get("proposal_id"):
-        if variables.get("proposal_action_type") == "TRIAGE_FRAUD_CASE":
-            try:
-                presentations = json.loads(variables.get("proposal_presentations_json") or "{}")
-                summary = presentations[locale]["speech_text"]
-                if not isinstance(summary, str) or not summary:
-                    raise ValueError("Missing presentation")
-            except (ValueError, KeyError, TypeError):
-                return {"success": False, "error": "LOCALIZED_PRESENTATION_REQUIRED"}
         # The language request cannot authorize the existing proposal, even if
         # the customer also says yes in this same turn.
         variables["proposal_presentation_turn_id"] = invocation_id
@@ -54,4 +52,5 @@ def set_conversation_language(locale: str) -> dict:
     return {"success": True, "locale": locale,
             "requires_reconfirmation": bool(variables.get("proposal_id")),
             "customer_safe_summary": summary,
+            "proposal_facts": facts,
             "instruction": "Continue in the selected language. If a proposal is pending, present it again and wait for a later customer confirmation. Do not commit in this turn."}

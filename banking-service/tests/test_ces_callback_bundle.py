@@ -926,16 +926,17 @@ def test_language_switch_preserves_proposal_and_demands_later_confirmation(local
     capture = _load("after_tool_callbacks/capture_proposal.py")
     guard = _load("before_tool_callbacks/enforce_proposal_context.py")
     variables = {"runtime_language_code": "en-US"}
-    from services.fraud_presentation import fraud_proposal_presentations
-    presentations = fraud_proposal_presentations(card_last_four="1234", facts=[], issue_replacement=False, escalate=False)
+    money_facts = [{"money": {"amount_minor": 19900, "currency_code": "MXN"},
+                    "billing_money": {"amount_minor": 1053, "currency_code": "USD"}}]
     capture.after_tool_callback(SimpleNamespace(name="propose_fraud_triage"), {},
         Context(invocation_id="turn-1", variables=variables),
         {"success": True, "proposal_id": "proposal-1", "customer_safe_summary": "English summary",
-         "presentations": presentations})
+         "money_facts": money_facts})
     context = Context(invocation_id="turn-2", variables=variables, user_text="Sí, en español")
     result = _language_tool(context)(locale)
     assert result["success"] and result["requires_reconfirmation"]
-    assert result["customer_safe_summary"] == presentations[locale]["speech_text"]
+    assert result["customer_safe_summary"] == "English summary"
+    assert result["proposal_facts"]["money_facts"] == money_facts
     assert variables["proposal_id"] == "proposal-1"
     assert variables["runtime_language_code"] == locale
     commit = SimpleNamespace(name="commit_fraud_triage")
@@ -946,7 +947,6 @@ def test_language_switch_preserves_proposal_and_demands_later_confirmation(local
 @pytest.mark.parametrize("locale,variables,error", [
     ("ja-JP", {}, "UNSUPPORTED_LANGUAGE"),
     ("es-MX", {"proposal_commit_attempted": True}, "COMMIT_RESULT_PENDING"),
-    ("es-MX", {"proposal_id": "p", "proposal_action_type": "TRIAGE_FRAUD_CASE"}, "LOCALIZED_PRESENTATION_REQUIRED"),
 ])
 def test_language_switch_rejections_do_not_mutate_protected_state(locale, variables, error):
     before = variables.copy()
@@ -954,10 +954,10 @@ def test_language_switch_rejections_do_not_mutate_protected_state(locale, variab
     assert variables == before
 
 
-def test_spanish_proposal_capture_uses_frozen_banking_speech():
+def test_historical_speech_is_not_a_required_script_for_new_conversations():
     capture = _load("after_tool_callbacks/capture_proposal.py")
     variables = {"runtime_language_code": "es-MX"}
     capture.after_tool_callback(SimpleNamespace(name="propose_fraud_triage"), {}, Context(variables=variables),
         {"success": True, "proposal_id": "p", "customer_safe_summary": "English",
          "presentations": {"es-MX": {"speech_text": "Texto bancario exacto."}}})
-    assert variables["proposal_customer_safe_summary"] == "Texto bancario exacto."
+    assert variables["proposal_customer_safe_summary"] == "English"

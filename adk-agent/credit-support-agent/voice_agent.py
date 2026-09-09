@@ -61,7 +61,7 @@ from agent.session_store import (
 from agent.workflow_plugin import FraudWorkflowStatePlugin
 from agent.version import BUILD_VERSION, BUILD_COMMIT_ID, BUILD_TIME
 from agent.events import DataChannelEvent, INTERNAL_TOOL_RUNTIME_STATUS
-from agent.money_locale import change_voice_language, effective_voice_locale, stream_with_language_changes, LIVE_LANGUAGE_CODES
+from agent.money_locale import change_voice_language, effective_voice_locale, stream_with_language_changes, LIVE_LANGUAGE_CODES, MONEY_LANGUAGE_INSTRUCTION
 from agent.typed_input import (
     TypedInputError,
     parse_customer_text_packet,
@@ -189,7 +189,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     except Exception as e:
         logger.error("Failed to query system settings from API %s error=%s", session_log_context(room_name, customer_id, session_id, mode), e, exc_info=True)
 
-    voice_locale = effective_voice_locale(locale, voice_context.get("money_voice_content") or {})
+    voice_locale = effective_voice_locale(locale)
     mock_avatar_enabled = settings.mock_avatar_enabled
     avatar_name = settings.avatar_name
     max_duration = settings.max_duration
@@ -205,7 +205,6 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         fraud_alert_state = dict(voice_context["fraud_alert"])
     session_state = {
         "room_name": room_name,
-        "money_voice_content": voice_context.get("money_voice_content") or {},
         "voice_locale": voice_locale,
         "customer_id": customer_id,
         "session_id": session_id,
@@ -275,8 +274,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         active_flows.append("fraud_alert")
         fraud_alert = voice_context["fraud_alert"]
         suspicious_lines = "\n".join(
-            f"- {txn['merchant_name']}: {txn['presentations'][voice_locale]['transaction']['speech_text']} "
-            f"(billed: {txn['presentations'][voice_locale]['billing']['speech_text']})"
+            f"- {txn['merchant_name']}: {txn['presentations'][voice_locale]['transaction']['display_text']} "
+            f"(billed: {txn['presentations'][voice_locale]['billing']['display_text']})"
             for txn in fraud_alert.get("suspicious_transactions", [])
         )
         session_context_text = (
@@ -296,7 +295,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         guidance_summary=guidance_summary,
     )
     session_instruction += f"\nStart this conversation in {voice_locale}."
-    session_instruction += "\nSupported locales: en-US: English (US); es-MX: Spanish (Mexico); es-ES: Spanish (Spain); es-US: Spanish (US); fr-CA: French (Canada); fr-FR: French (France); de-DE: German (Germany); pt-BR: Portuguese (Brazil). Keep the selected language unless the customer explicitly requests a change. Use set_conversation_language before switching. Do not switch for foreign greetings, borrowed words, merchant names, accents, background speech, or sentences in another language. If intent is unclear, ask whether they want to switch and wait. For unspecified Spanish use es-MX; for unspecified French use fr-FR. Keep the regional locale if already speaking the requested language. Use banking-provided speech_text verbatim for Money and consequential proposals; never translate or calculate amounts. A language change requires complete re-presentation and a later customer confirmation."
+    session_instruction += "\nSupported locales: en-US: English (US); es-MX: Spanish (Mexico); es-ES: Spanish (Spain); es-US: Spanish (US); fr-CA: French (Canada); fr-FR: French (France); de-DE: German (Germany); pt-BR: Portuguese (Brazil). Keep the selected language unless the customer explicitly requests a change. Use set_conversation_language before switching. Do not switch for foreign greetings, borrowed words, merchant names, accents, background speech, or sentences in another language. If intent is unclear, ask whether they want to switch and wait. For unspecified Spanish use es-MX; for unspecified French use fr-FR. Keep the regional locale if already speaking the requested language. Explain banking amounts and consequences naturally in the selected language, preserving exact values and currencies. A language change requires complete re-presentation and a later customer confirmation."
+    session_instruction += "\n" + MONEY_LANGUAGE_INSTRUCTION
     session_agent = create_voice_agent(instruction=session_instruction)
     if mode == "video":
         model_name = os.getenv("VOICE_AGENT_VIDEO_MODEL")
@@ -929,7 +929,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             # Keep the same support session and opaque proposal, with a fresh Live
             # connection so speech configuration cannot retain the prior language.
             live_queue.send_content(types.Content(parts=[types.Part(text=(
-                f"{runtime_fallback_notice} Continue in {selected_locale}. Read the banking proposal speech_text "
+                f"{runtime_fallback_notice} Continue in {selected_locale}. Explain the unchanged banking proposal facts "
                 "in this language completely, then wait for a new customer confirmation. "
                 "The language-change request is not confirmation of the action."
             ))]))

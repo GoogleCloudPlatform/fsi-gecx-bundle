@@ -13,8 +13,6 @@
 # limitations under the License.
 
 from copy import deepcopy
-import json
-from pathlib import Path
 import pytest
 
 from agent.money_locale import change_voice_language, select_banking_presentation
@@ -22,14 +20,13 @@ from agent.proposal_evidence import (create_pending_proposal, mark_proposal_pres
     attest_model_decision, proposal_evidence_error, AWAITING_PRESENTATION, COMMIT_RETRY)
 
 
-CONTENT = json.loads((Path(__file__).resolve().parents[3] / "banking-service/resources/data/money_fraud_voice_content.json").read_text())
 
 
 def state():
     projection = create_pending_proposal(proposal_id="p", action_type="TRIAGE_FRAUD_CASE",
         contract_version="fraud-triage.v1", originating_customer_turn_id="c1")
     projection = mark_proposal_presented(projection, assistant_turn_id="a1", observed_at_epoch_s=2)
-    return {"voice_locale": "en-US", "money_voice_content": deepcopy(CONTENT),
+    return {"voice_locale": "en-US",
             "fraud_playbook": {"pending_proposal": projection},
             "banking_proposal_presentation": {"proposal_id": "p", "money_facts": [{"money": {"amount_minor": 19900, "currency_code": "MXN"}}],
               "presentations": {"en-US": {"speech_text": "English"}, "es-MX": {"speech_text": "Español"}}}}
@@ -41,7 +38,8 @@ def test_language_switch_preserves_identity_and_money_but_rejects_stale_confirma
     result = change_voice_language(current, "es-MX")
     assert result["effective_locale"] == "es-MX"
     assert result["requires_fresh_confirmation"] is True
-    assert result["proposal"]["presentation"]["speech_text"] == "Español"
+    assert "speech_text" not in result["proposal"]["presentation"]
+    assert result["proposal"]["money_facts"] == before["money_facts"]
     assert current["banking_proposal_presentation"] == before
     pending = current["fraud_playbook"]["pending_proposal"]
     assert pending["proposal_id"] == "p"
@@ -55,12 +53,11 @@ def test_language_switch_preserves_identity_and_money_but_rejects_stale_confirma
     assert proposal_evidence_error(confirmed, proposal_id="p", action_type="TRIAGE_FRAUD_CASE") is None
 
 
-def test_unreviewed_spanish_falls_back_to_english_with_fresh_evidence():
+def test_supported_locale_does_not_require_a_translation_catalog():
     current = state()
-    current["money_voice_content"]["review_status"] = "PENDING_HUMAN_REVIEW"
-    result = change_voice_language(current, "es-MX")
-    assert result["fallback"] is True
-    assert result["effective_locale"] == "en-US"
+    result = change_voice_language(current, "fr-CA")
+    assert result["fallback"] is False
+    assert result["effective_locale"] == "fr-CA"
     assert result["requires_fresh_confirmation"] is True
 
 
@@ -72,9 +69,14 @@ def test_language_switch_does_not_discard_uncertain_commit_retry():
     assert current == before
 
 
-def test_no_missing_presentation_translation_or_fallback_guess():
-    with pytest.raises(ValueError):
-        select_banking_presentation({"presentations": {"en-US": {"speech_text": "English"}}}, "es-MX")
+def test_legacy_speech_is_discarded_without_mutating_immutable_facts():
+    value = {"money": {"amount_minor": 1299, "currency_code": "USD"},
+             "presentations": {"en-US": {"display_text": "USD 12.99", "speech_text": "Old script"}}}
+    before = deepcopy(value)
+    result = select_banking_presentation(value, "fr-FR")
+    assert result["money"] == value["money"]
+    assert result["presentation"] == {"display_text": "USD 12.99"}
+    assert value == before
 
 
 @pytest.mark.asyncio
@@ -112,7 +114,7 @@ def test_runtime_fallback_preserves_banking_facts_and_invalidates_confirmation()
     before = deepcopy(current['banking_proposal_presentation'])
     result = change_voice_language(current, 'es-MX', runtime_unavailable=True)
     assert result['effective_locale'] == 'en-US'
-    assert result['message'] == CONTENT['en-US']['fallback']
+    assert 'English' in result['message']
     assert result['requires_fresh_confirmation']
     assert current['banking_proposal_presentation'] == before
     assert current['fraud_playbook']['pending_proposal']['evidence_state'] == AWAITING_PRESENTATION
@@ -166,7 +168,6 @@ async def test_live_fallback_does_not_hide_unrelated_errors_or_uncertain_commits
 @pytest.mark.parametrize("locale", ["es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR"])
 def test_expanded_locale_preserves_proposal_and_requires_fresh_confirmation(locale):
     current = state()
-    current["banking_proposal_presentation"]["presentations"][locale] = {"speech_text": CONTENT[locale]["recognized_proposal"].format(card_last_four="1234")}
     before = deepcopy(current["banking_proposal_presentation"])
     result = change_voice_language(current, locale)
     assert result["success"] and result["effective_locale"] == locale
@@ -175,11 +176,12 @@ def test_expanded_locale_preserves_proposal_and_requires_fresh_confirmation(loca
     assert current["fraud_playbook"]["pending_proposal"]["evidence_state"] == AWAITING_PRESENTATION
 
 
-def test_missing_new_language_in_old_immutable_proposal_does_not_mutate_state():
+def test_missing_translation_in_old_proposal_preserves_facts_and_demands_confirmation():
     current = state()
     before = deepcopy(current)
-    assert change_voice_language(current, "fr-FR")["error"] == "LOCALIZED_PRESENTATION_REQUIRED"
-    assert current == before
+    result = change_voice_language(current, "fr-FR")
+    assert result["success"] and result["requires_fresh_confirmation"]
+    assert current["banking_proposal_presentation"] == before["banking_proposal_presentation"]
 
 
 def test_unknown_language_is_rejected_without_switching_to_english():
@@ -193,5 +195,5 @@ def test_unknown_language_is_rejected_without_switching_to_english():
 @pytest.mark.parametrize("locale,code", [("fr-CA", "fr-FR"), ("es-ES", "es-US"), ("es-MX", "es-US"), ("de-DE", "de-DE")])
 def test_live_transport_mapping_does_not_change_customer_locale(locale, code):
     from agent.money_locale import LIVE_LANGUAGE_CODES, effective_voice_locale
-    assert effective_voice_locale(locale, CONTENT) == locale
+    assert effective_voice_locale(locale) == locale
     assert LIVE_LANGUAGE_CODES[locale] == code

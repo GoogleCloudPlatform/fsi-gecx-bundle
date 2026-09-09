@@ -36,8 +36,8 @@ guardrails:
 - Default Safety Guardrail
 - Default Prompt Guardrail
 variableDeclarations:
-- name: proposal_presentations_json
-  description: Callback-owned frozen banking proposal presentations for language switching.
+- name: proposal_facts_json
+  description: Callback-owned frozen banking proposal facts for natural language re-presentation.
   schema:
     type: STRING
 - name: user_id

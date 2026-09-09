@@ -433,7 +433,7 @@ def test_fraud_triage_proposal_normalizes_and_binds_immutable_payload(
     assert proposal.contract_version == "fraud-triage.v1"
     assert proposal.action_type == TRIAGE_FRAUD_CASE
     assert {key: value for key, value in proposal.action_payload.items()
-            if key not in {"money_facts", "presentations"}} == {
+            if key not in {"money_facts", "presentations", "card_last_four"}} == {
         "disputed_authorization_ids": ["auth-1", "auth-2"],
         "disputed_transaction_ids": [],
         "escalate": False,
@@ -444,15 +444,16 @@ def test_fraud_triage_proposal_normalizes_and_binds_immutable_payload(
     assert str(proposal.customer_id) == str(fraud_alert.customer_id)
     assert str(proposal.account_id) == str(fraud_alert.credit_account_id)
     assert proposal.action_payload["money_facts"] == fraud_alert.suspicious_transactions
-    assert "12 dólares estadounidenses con 99 centavos" in proposal.action_payload["presentations"]["es-MX"]["speech_text"]
+    assert "presentations" not in proposal.action_payload
+    assert "USD 12.99" in proposal.customer_safe_summary
     assert proposal.reset_generation == "3:9"
     assert proposal.catalog_snapshot_id == "fraud-guidance-v7"
     assert "USD 12.99 at Corner Market" in proposal.customer_safe_summary
     assert "USD 45.00 at Transit Pass" in proposal.customer_safe_summary
     assert f"card ending in {fraud_alert.card_last_four}" in proposal.customer_safe_summary
-    assert "dispute" in proposal.customer_safe_summary
+    assert "dispute" in proposal.customer_safe_summary.lower()
     assert "block the current card and issue a replacement" in (
-        proposal.customer_safe_summary
+        proposal.customer_safe_summary.lower()
     )
 
 

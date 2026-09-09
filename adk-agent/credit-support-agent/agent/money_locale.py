@@ -14,7 +14,6 @@
 
 """Locale-only voice state; banking retains proposal and Money authority."""
 
-from copy import deepcopy
 from agent.proposal_evidence import COMMIT_IN_FLIGHT, COMMIT_RETRY, require_re_presentation
 from agent.workflow_authorization import invalidate_workflow_authorization
 
@@ -26,26 +25,32 @@ LIVE_LANGUAGE_CODES = {locale: locale for locale in SUPPORTED_SUPPORT_LOCALES}
 LIVE_LANGUAGE_CODES.update({"fr-CA": "fr-FR", "es-MX": "es-US", "es-ES": "es-US"})
 
 
-def effective_voice_locale(requested: str, content: dict) -> str:
-    if (requested in SUPPORTED_SUPPORT_LOCALES and content.get("review_status") == "APPROVED"
-            and content.get(requested)):
-        return requested
-    return "en-US"
+def effective_voice_locale(requested: str) -> str:
+    return requested if requested in SUPPORTED_SUPPORT_LOCALES else "en-US"
+
+
+MONEY_LANGUAGE_INSTRUCTION = (
+    "Explain banking facts naturally in the selected language. Use concise amounts "
+    "such as 'twelve ninety-nine' or 'doce con noventa y nueve' when USD is established. "
+    "Use decimal notation in text. Make the currency explicit when ambiguous, when it "
+    "changes, or when original and billing currencies differ. Preserve every amount, "
+    "currency, merchant, and action consequence. Never perform FX or recalculate amounts. "
+    "Reference summaries are facts to explain, not scripts to recite."
+)
 
 
 def select_banking_presentation(value, locale: str):
-    """Select precomputed text, without translating or calculating Money."""
+    """Expose exact display facts and discard legacy scripted speech without mutation."""
     if isinstance(value, list):
         return [select_banking_presentation(item, locale) for item in value]
     if not isinstance(value, dict):
         return value
     result = {key: select_banking_presentation(item, locale)
-              for key, item in value.items() if key != "presentations"}
-    if "presentations" in value:
-        selected = value["presentations"].get(locale)
-        if selected is None:
-            raise ValueError("Banking presentation is unavailable in the selected language")
-        result["presentation"] = deepcopy(selected)
+              for key, item in value.items() if key not in {"presentations", "speech_text"}}
+    presentations = value.get("presentations") or {}
+    selected = presentations.get(locale) or presentations.get("en-US")
+    if selected:
+        result["presentation"] = select_banking_presentation(selected, locale)
     return result
 
 
@@ -53,8 +58,7 @@ def change_voice_language(state, requested_locale: str, *, runtime_unavailable=F
     if requested_locale not in SUPPORTED_SUPPORT_LOCALES:
         return {"success": False, "error": "UNSUPPORTED_LANGUAGE",
                 "effective_locale": state.get("voice_locale", "en-US")}
-    content = state.get("money_voice_content") or {}
-    selected = "en-US" if runtime_unavailable else effective_voice_locale(requested_locale, content)
+    selected = "en-US" if runtime_unavailable else effective_voice_locale(requested_locale)
     playbook = dict(state.get("fraud_playbook") or {})
     pending = playbook.get("pending_proposal") or {}
     if pending.get("evidence_state") in {COMMIT_IN_FLIGHT, COMMIT_RETRY}:
@@ -63,11 +67,7 @@ def change_voice_language(state, requested_locale: str, *, runtime_unavailable=F
     cached = state.get("banking_proposal_presentation") or {}
     selected_proposal = None
     if pending and cached.get("proposal_id") == pending.get("proposal_id"):
-        try:
-            selected_proposal = select_banking_presentation(cached, selected)
-        except ValueError:
-            return {"success": False, "error": "LOCALIZED_PRESENTATION_REQUIRED",
-                    "effective_locale": state.get("voice_locale", "en-US")}
+        selected_proposal = select_banking_presentation(cached, selected)
     changed = selected != state.get("voice_locale", "en-US")
     fallback = selected != requested_locale
     if changed or fallback:
@@ -77,11 +77,10 @@ def change_voice_language(state, requested_locale: str, *, runtime_unavailable=F
                 playbook["workflow_authorization"], reason="LANGUAGE_CHANGED")
         state["fraud_playbook"] = playbook
         state["voice_locale"] = selected
-    copy = content.get(selected) or {}
     result = {"success": True, "effective_locale": selected, "fallback": fallback,
               "requires_fresh_confirmation": bool(pending and (changed or fallback)),
-              "message": copy.get("fallback" if fallback else "language_changed") if changed or fallback else "Language unchanged.",
-              "model_instruction": f"Continue in {selected}. Use banking speech_text exactly. Never translate amounts or infer currency. Present the complete proposal and wait for a later customer turn before committing."}
+              "message": ("The selected language is unavailable. Explain the switch to English." if fallback else "Language changed." if changed else "Language unchanged."),
+              "model_instruction": f"Continue in {selected}. {MONEY_LANGUAGE_INSTRUCTION} Explain the complete proposal and wait for a later customer turn before committing."}
     if selected_proposal is not None:
         result["proposal"] = selected_proposal
     return result

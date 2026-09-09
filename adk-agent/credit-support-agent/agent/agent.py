@@ -50,7 +50,7 @@ from agent.fraud_voice import (
     validate_fraud_tool_sequence,
 )
 from agent.instructions import INSTRUCTION_TEXT
-from agent.money_locale import change_voice_language, select_banking_presentation
+from agent.money_locale import change_voice_language, select_banking_presentation, MONEY_LANGUAGE_INSTRUCTION
 from agent.reset_guard import validate_reset_generation
 from agent.tooling import RETIRED_MCP_TOOLS, LiveMcpToolset
 from agent.proposal_evidence import (
@@ -1183,11 +1183,11 @@ async def after_tool_callback(
             )
         proposal_action = PROPOSAL_ACTION_BY_TOOL.get(tool_name)
         if proposal_action and structured.get("success") is True:
-            if "presentations" in structured:
+            if "money_facts" in structured or "presentations" in structured:
                 from copy import deepcopy
                 tool_context.state["banking_proposal_presentation"] = deepcopy(structured)
                 selected = select_banking_presentation(structured, tool_context.state.get("voice_locale", "en-US"))
-                selected["model_instruction"] = "Speak the selected banking presentation speech_text exactly. Do not translate or calculate monetary facts. Wait for a later customer confirmation."
+                selected["model_instruction"] = MONEY_LANGUAGE_INSTRUCTION + " Explain every proposed consequence and wait for a later customer confirmation."
                 tool_response["structuredContent"] = selected
             playbook = dict(tool_context.state.get("fraud_playbook") or {})
             proposal = create_pending_proposal(
@@ -1338,7 +1338,7 @@ async def after_tool_callback(
         if tool_name == "get_open_fraud_alert":
             locale = tool_context.state.get("voice_locale", "en-US")
             selected = select_banking_presentation(structured, locale)
-            selected["model_instruction"] = f"Continue in {locale}. State transaction and billing speech_text exactly as provided. Never calculate, translate amounts, or infer currency."
+            selected["model_instruction"] = f"Continue in {locale}. {MONEY_LANGUAGE_INSTRUCTION}"
             tool_response["structuredContent"] = selected
             fraud_alert = structured.get("fraud_alert") or {}
             logger.info(
@@ -1420,8 +1420,7 @@ async def after_tool_callback(
                 }
             )
             return build_triage_model_result(
-                structured, locale=tool_context.state.get("voice_locale", "en-US"),
-                content=tool_context.state.get("money_voice_content"))
+                structured, locale=tool_context.state.get("voice_locale", "en-US"))
 
         if tool_name == "commit_card_reissue":
             replacement = structured.get("replacement_card") or {}

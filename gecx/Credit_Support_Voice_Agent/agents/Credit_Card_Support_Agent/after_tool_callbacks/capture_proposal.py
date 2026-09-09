@@ -49,7 +49,7 @@ def _payload(tool_response):
 
 def _clear_current_proposal(callback_context) -> None:
     """Clear CES' projection only after banking resolves the proposal."""
-    callback_context.variables["proposal_presentations_json"] = ""
+    callback_context.variables["proposal_facts_json"] = ""
     callback_context.variables["proposal_id"] = ""
     callback_context.variables["proposal_customer_safe_summary"] = ""
     callback_context.variables["proposal_action_type"] = ""
@@ -230,11 +230,10 @@ def after_tool_callback(tool, input, callback_context, tool_response):
     proposal_id = str(payload.get("proposal_id") or "")
     summary = str(payload.get("customer_safe_summary") or "")
     if payload.get("success") is True and proposal_id and summary:
-        presentations = payload.get("presentations") or {}
-        callback_context.variables["proposal_presentations_json"] = json.dumps(presentations)
-        locale = callback_context.variables.get("runtime_language_code") or "en-US"
-        localized = presentations.get(locale, {})
-        summary = localized.get("speech_text") or summary
+        facts = {key: payload[key] for key in (
+            "proposal_id", "money_facts", "card_last_four", "issue_replacement",
+            "escalate", "customer_safe_summary") if key in payload}
+        callback_context.variables["proposal_facts_json"] = json.dumps(facts)
         invocation_id = str(callback_context.invocation_id or "")
         callback_context.variables["customer_turn_id"] = invocation_id
         callback_context.variables["proposal_originating_turn_id"] = invocation_id
