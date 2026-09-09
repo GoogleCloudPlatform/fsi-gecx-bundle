@@ -62,7 +62,12 @@ connections and avoid backend startup and cloud credentials.
   migration implemented. Combined offline suite: 87 passed, including real
   PostgreSQL lock contention and concurrent duplicate/distinct requests.
   Existing backend regressions: 42 passed. UI tests: 26 passed; build passed.
-- Packets 04–07 and deployed environment qualification: pending.
+- Packet 03 generator auto-paydown regressions: 2 passed.
+- Packet 04: active presentation locale, English/Spanish payment copy, exact
+  currency formatting, and visual qualification implemented. UI suite: 31
+  passed, including en-US/USD, es-MX/USD, es-MX/MXN, ja-JP/JPY and ar-BH/BHD.
+  UI build and focused ESLint passed.
+- Packets 05–07 and deployed environment qualification: pending.
 
 Deployment qualification will use `evo-genai-workspace`. Preserve its existing
 database; use focused checks and additive migration. A full refresh is reserved
@@ -121,3 +126,26 @@ The browser parses decimal strings with integer arithmetic, uses currency
 metadata for precision, and retains payment intent keys across retries.
 Dashboard totals group currencies separately. Packet 04 adds active-locale
 presentation and visual qualification on top of this contract migration.
+
+## Browser qualification (2026-09-08)
+
+The dev-only `banking-ui/tests/fixtures/money.html?currency=MXN` fixture mounts
+actual BillPayModal and Money utilities without Firebase. Playwright used
+intercepted fixture HTTP responses; these browser checks are separate from the
+real PostgreSQL posting tests and are not deployed-environment qualification.
+
+- Inspected 390×844 Spanish and 1440×1000 English layouts. Balance text has its
+  own visible line so long account names cannot clip consequential amounts.
+- Rejected `12.345` for MXN before HTTP submission. Switching language updates
+  the validation message and display amounts without changing decimal input.
+- Submitted `12.34` as `{amount_minor:1234,currency_code:"MXN"}`. After a
+  fixture 409, switched Spanish to English and retried. Both captured requests
+  had identical account IDs, Money and idempotency keys.
+- A posted fixture response refreshed deposit/card balances to MX$87.66 and
+  MX$37.66. No compatibility fields were sent by the browser.
+- Screenshots are local artifacts under `output/playwright/`:
+  `money-es-mxn-mobile.png` and `money-en-mxn-desktop.png`.
+
+Locale only changes presentation. English is the UI-copy fallback for Japanese
+and Arabic projection fixtures. Spanish consequential content still needs human
+review before the later live multilingual qualification.

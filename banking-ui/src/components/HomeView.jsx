@@ -15,6 +15,7 @@
  */
 
 import { formatMoney, sumMoneyByCurrency } from '../utils/money.js';
+import { useMoneyLocale } from '../utils/moneyLocale.js';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Shield, 
@@ -55,6 +56,7 @@ function HomeView({
   calculateMonthlyPayment,
   interestRate
 }) {
+  const [locale] = useMoneyLocale();
   const { 
     bankName,
     brandColorFrom,
@@ -368,7 +370,7 @@ function HomeView({
                     <div>
                       <div className="text-sm text-slate-500 dark:text-slate-400">Total Liquid Deposits</div>
                       <div className="text-4xl font-bold text-slate-900 dark:text-white mt-1">
-                        {sumMoneyByCurrency((accountsData.deposit_accounts || []).map(acc => acc.cleared_balance)).map(value => formatMoney(value)).join(' · ') || '—'}
+                        {sumMoneyByCurrency((accountsData.deposit_accounts || []).map(acc => acc.cleared_balance)).map(value => formatMoney(value, locale)).join(' · ') || '—'}
                       </div>
                     </div>
                     {/* Schema trigger button on top right */}
@@ -400,7 +402,7 @@ function HomeView({
                           </div>
                         </div>
                         <div className="font-semibold text-slate-900 dark:text-white">
-                          {formatMoney(acc.cleared_balance)}
+                          {formatMoney(acc.cleared_balance, locale)}
                         </div>
                       </div>
                     ))}
@@ -421,7 +423,7 @@ function HomeView({
                           </div>
                         </div>
                         <div className="font-semibold text-slate-900 dark:text-white">
-                          {formatMoney(acc.cleared_balance)}
+                          {formatMoney(acc.cleared_balance, locale)}
                         </div>
                       </div>
                     ))}
@@ -442,8 +444,8 @@ function HomeView({
                           </div>
                         </div>
                         <div className="font-semibold text-slate-900 dark:text-white text-right">
-                          {formatMoney(acc.cleared_balance)}
-                          <div className="text-[10px] font-normal text-slate-400 dark:text-slate-500">Limit: {formatMoney(acc.credit_limit)}</div>
+                          {formatMoney(acc.cleared_balance, locale)}
+                          <div className="text-[10px] font-normal text-slate-400 dark:text-slate-500">Limit: {formatMoney(acc.credit_limit, locale)}</div>
                         </div>
                       </div>
                     ))}

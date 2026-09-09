@@ -57,3 +57,13 @@ test('retries retain intent identity; changing account, currency or amount creat
     {...request, money: {...request.money, amount_minor: 126}},
   ]) assert.notEqual(paymentIntent(first, change, key).key, first.key);
 });
+
+for (const [locale, code, expected] of [
+  ['en-US', 'USD', '$12.34'], ['es-MX', 'USD', 'USD\u00a012.34'],
+  ['es-MX', 'MXN', '$12.34'], ['ja-JP', 'JPY', '￥1,234'],
+  ['ar-BH', 'BHD', '\u200f١٫٢٣٤\u00a0د.ب.\u200f'],
+]) test(`locale projection ${locale} ${code}`, () => {
+  const money = {amount_minor: 1234, currency_code: code};
+  assert.equal(formatMoney(money, locale), expected);
+  assert.deepEqual(money, {amount_minor: 1234, currency_code: code});
+});

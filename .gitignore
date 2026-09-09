@@ -37,3 +37,7 @@ npm-debug.log*
 .env
 .env.local
 .env.*.local
+
+# Local browser qualification artifacts
+.playwright-cli/
+output/playwright/

@@ -15,6 +15,7 @@
  */
 
 import { formatMoney } from '../utils/money.js';
+import { useMoneyLocale } from '../utils/moneyLocale.js';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
@@ -48,6 +49,7 @@ import ConsoleAccessStep from './ConsoleAccessStep.jsx';
 
 
 function AccountsView({ fbUser, customerProfile, isReady }) {
+  const [locale] = useMoneyLocale();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -508,7 +510,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                   </div>
                   <div className="border-t border-slate-200 dark:border-slate-850/80 pt-4 flex justify-between items-end">
                     <span className="text-xs text-slate-500 dark:text-slate-400">Balance</span>
-                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{formatMoney(acc.cleared_balance)}</span>
+                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{formatMoney(acc.cleared_balance, locale)}</span>
                   </div>
                 </div>
               ))}
@@ -532,7 +534,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                   </div>
                   <div className="border-t border-slate-200 dark:border-slate-850/80 pt-4 flex justify-between items-end">
                     <span className="text-xs text-slate-550 dark:text-slate-400">Balance</span>
-                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{formatMoney(acc.cleared_balance)}</span>
+                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{formatMoney(acc.cleared_balance, locale)}</span>
                   </div>
                 </div>
               ))}
@@ -566,7 +568,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                   </div>
                   <div className="border-t border-slate-200 dark:border-slate-850/80 pt-4 flex justify-between items-end">
                     <span className="text-xs text-slate-550 dark:text-slate-400">Current Balance</span>
-                    <span className="text-2xl font-extrabold text-slate-900 dark:text-slate-200">{formatMoney(acc.cleared_balance)}</span>
+                    <span className="text-2xl font-extrabold text-slate-900 dark:text-slate-200">{formatMoney(acc.cleared_balance, locale)}</span>
                   </div>
                 </div>
                 );
@@ -640,12 +642,12 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 pt-6 border-t border-slate-205 dark:border-slate-850/80">
                     {[
-                      { label: 'Current balance', value: formatMoney(creditSummary?.currentBalance), strong: true },
+                      { label: 'Current balance', value: formatMoney(creditSummary?.currentBalance, locale), strong: true },
                       { label: 'Statement period', value: `${formatDateShort(creditSummary?.statementCloseDate)} - ${formatDateShort(creditSummary?.paymentDueDate)}` },
-                      { label: 'Minimum due', value: formatMoney(creditSummary?.minimumDue), strong: true },
+                      { label: 'Minimum due', value: formatMoney(creditSummary?.minimumDue, locale), strong: true },
                       { label: 'Payment due', value: formatDateShort(creditSummary?.paymentDueDate), accent: true },
-                      { label: 'Available credit', value: formatMoney(creditSummary?.availableCredit), positive: true },
-                      { label: 'Credit limit', value: formatMoney(creditSummary?.creditLimit) },
+                      { label: 'Available credit', value: formatMoney(creditSummary?.availableCredit, locale), positive: true },
+                      { label: 'Credit limit', value: formatMoney(creditSummary?.creditLimit, locale) },
                     ].map(metric => (
                       <div key={metric.label} className="min-h-24 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/30 p-4">
                         <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wide">{metric.label}</div>
@@ -693,7 +695,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                   <div className="text-left md:text-right">
                     <div className="text-xs text-slate-505 dark:text-slate-400 font-medium">Cleared Balance</div>
                     <div className="text-3xl font-black text-slate-900 dark:text-white mt-1">
-                      {formatMoney(activeAccountObj?.cleared_balance)}
+                      {formatMoney(activeAccountObj?.cleared_balance, locale)}
                     </div>
                   </div>
                 </div>
