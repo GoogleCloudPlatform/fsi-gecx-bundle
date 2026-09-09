@@ -37,13 +37,19 @@ latest_credit_profile AS (
 credit_account_summary AS (
   SELECT
     customer_id,
-    COUNT(*) AS credit_account_count,
-    COUNTIF(UPPER(status) = 'ACTIVE') AS active_credit_account_count,
-    SUM(credit_limit_cents) AS total_credit_limit_cents,
-    SUM(cleared_balance_cents) AS total_cleared_balance_cents,
-    SUM(available_credit_cents) AS total_available_credit_cents
-  FROM `__PROJECT_ID__.oltp_cdc.cards_credit_accounts`
-  WHERE UPPER(status) = 'ACTIVE'
+    SUM(account_count) AS credit_account_count,
+    SUM(account_count) AS active_credit_account_count,
+    ARRAY_AGG(STRUCT(currency_code, credit_limit_minor, cleared_balance_minor,
+                     available_credit_minor)) AS balances_by_currency
+  FROM (
+    SELECT customer_id, currency AS currency_code, COUNT(*) AS account_count,
+           SUM(credit_limit_cents) AS credit_limit_minor,
+           SUM(cleared_balance_cents) AS cleared_balance_minor,
+           SUM(available_credit_cents) AS available_credit_minor
+    FROM `__PROJECT_ID__.oltp_cdc.cards_credit_accounts`
+    WHERE UPPER(status) = 'ACTIVE'
+    GROUP BY customer_id, currency
+  )
   GROUP BY customer_id
 )
 SELECT
@@ -111,9 +117,7 @@ SELECT
   credit.stated_annual_income_cents / 100.0 AS stated_annual_income_dollars,
   COALESCE(accounts.credit_account_count, 0) AS credit_account_count,
   COALESCE(accounts.active_credit_account_count, 0) AS active_credit_account_count,
-  COALESCE(accounts.total_credit_limit_cents, 0) / 100.0 AS total_credit_limit_dollars,
-  COALESCE(accounts.total_cleared_balance_cents, 0) / 100.0 AS total_cleared_balance_dollars,
-  COALESCE(accounts.total_available_credit_cents, 0) / 100.0 AS total_available_credit_dollars
+  accounts.balances_by_currency
 FROM `__PROJECT_ID__.oltp_cdc.identity_users` user
 LEFT JOIN primary_address address
   ON user.id = address.user_id

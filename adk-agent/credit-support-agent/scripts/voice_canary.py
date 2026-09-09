@@ -45,6 +45,14 @@ TOOL_PATTERN = re.compile(r"tool_name=([a-z0-9_]+)")
 EVENT_PATTERN = re.compile(r"event_type=([A-Z0-9_]+)")
 RESET_PATTERN = re.compile(r"reset_generation=([^ ]+)")
 OUTCOME_PATTERN = re.compile(r"terminal_outcome=([A-Z_]+)")
+ACTION_TYPE_BY_PROPOSAL_TOOL = {
+    "propose_fraud_triage": "TRIAGE_FRAUD_CASE",
+    "commit_fraud_triage": "TRIAGE_FRAUD_CASE",
+    "propose_card_reissue": "REISSUE_CARD",
+    "commit_card_reissue": "REISSUE_CARD",
+    "propose_wallet_provisioning": "PROVISION_GOOGLE_WALLET",
+    "commit_wallet_provisioning": "PROVISION_GOOGLE_WALLET",
+}
 
 
 SCENARIOS = {
@@ -211,6 +219,9 @@ def extract_trajectory(
                     "proposal_ref": proposal_payload.get("proposal_ref"),
                     "contract_version": proposal_payload.get("contract_version"),
                     "tool": proposal_payload.get("tool"),
+                    "action_type": ACTION_TYPE_BY_PROPOSAL_TOOL.get(
+                        proposal_payload.get("tool")
+                    ),
                     "outcome": proposal_payload.get("outcome"),
                     "banking_outcome": proposal_payload.get("banking_outcome"),
                     "invalidation_reason": proposal_payload.get("invalidation_reason"),

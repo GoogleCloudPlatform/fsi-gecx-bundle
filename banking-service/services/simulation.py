@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import random
+from decimal import Decimal
 import uuid
 from typing import Any
 
@@ -35,6 +36,7 @@ from models.identity import User, UserAddress
 from repositories.accounts import AccountsRepository
 from repositories.credit_card import CreditCardRepository
 from repositories.fraud import FraudDecisionRepository
+from models.money import Money
 from services.accounts import AccountsService
 from services.cdc_monitoring import CdcMonitoringService
 from services.seeding_service import (
@@ -837,9 +839,9 @@ class SimulationService:
                 "utilization": round(utilization, 4),
             }
 
-        target_balance_cents = int(credit_acc.credit_limit_cents * target_utilization)
-        amount_needed_cents = max(0, credit_acc.cleared_balance_cents - target_balance_cents)
-        if amount_needed_cents <= 0:
+        target_balance_minor = int(Decimal(credit_acc.credit_limit_cents) * Decimal(str(target_utilization)))
+        amount_needed_minor = max(0, credit_acc.cleared_balance_cents - target_balance_minor)
+        if amount_needed_minor <= 0:
             return {"status": "SKIPPED", "message": "No paydown required.", "payments": []}
 
         funding_accounts = self.accounts_repo.list_funding_accounts_for_user(user.id)
@@ -848,48 +850,51 @@ class SimulationService:
         ordered_funding_accounts = checking_accounts + savings_accounts
 
         payments = []
-        remaining_cents = amount_needed_cents
+        remaining_minor = amount_needed_minor
         accounts_service = AccountsService(self.db)
 
         for deposit_acc in ordered_funding_accounts:
-            if remaining_cents <= 0:
+            if remaining_minor <= 0:
                 break
 
+            if deposit_acc.currency != credit_acc.currency:
+                continue
             available_funds = max(0, deposit_acc.cleared_balance_cents)
             if available_funds <= 0:
                 continue
 
-            payment_amount = min(remaining_cents, available_funds)
+            payment_amount = min(remaining_minor, available_funds)
             payment_result = accounts_service.execute_bill_payment_for_user(
                 user=user,
                 source_account_id=str(deposit_acc.id),
                 credit_account_id=credit_account_id,
-                amount_cents=payment_amount,
+                money=Money(amount_minor=payment_amount, currency_code=credit_acc.currency),
+                idempotency_key=f"auto-paydown:{uuid.uuid4()}",
                 internal_context=context,
             )
             payments.append(
                 {
                     "source_account_id": str(deposit_acc.id),
                     "source_account_type": deposit_acc.account_type,
-                    "amount_cents": payment_amount,
+                    "money": {"amount_minor": payment_amount, "currency_code": credit_acc.currency},
                     "result": payment_result,
                 }
             )
-            remaining_cents -= payment_amount
+            remaining_minor -= payment_amount
 
         self.db.refresh(credit_acc)
         final_utilization = credit_acc.cleared_balance_cents / credit_acc.credit_limit_cents
-        total_paid_cents = sum(payment["amount_cents"] for payment in payments)
+        total_paid_minor = sum(payment["money"]["amount_minor"] for payment in payments)
 
         return {
-            "status": "SUCCESS" if total_paid_cents > 0 else "SKIPPED",
-            "message": "Auto-paydown processed." if total_paid_cents > 0 else "No deposit funds available for auto-paydown.",
+            "status": "SUCCESS" if total_paid_minor > 0 else "SKIPPED",
+            "message": "Auto-paydown processed." if total_paid_minor > 0 else "No deposit funds available for auto-paydown.",
             "payments": payments,
-            "target_amount_cents": amount_needed_cents,
-            "paid_amount_cents": total_paid_cents,
-            "remaining_amount_cents": max(0, remaining_cents),
-            "final_credit_cleared_balance_cents": credit_acc.cleared_balance_cents,
-            "final_credit_available_credit_cents": credit_acc.available_credit_cents,
+            "target_amount": Money(amount_minor=amount_needed_minor, currency_code=credit_acc.currency).model_dump(),
+            "paid_amount": Money(amount_minor=total_paid_minor, currency_code=credit_acc.currency).model_dump(),
+            "remaining_amount": Money(amount_minor=max(0, remaining_minor), currency_code=credit_acc.currency).model_dump(),
+            "final_credit_cleared_balance": Money(amount_minor=credit_acc.cleared_balance_cents, currency_code=credit_acc.currency).model_dump(),
+            "final_credit_available_credit": Money(amount_minor=credit_acc.available_credit_cents, currency_code=credit_acc.currency).model_dump(),
             "final_utilization": round(final_utilization, 4),
         }
 

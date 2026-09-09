@@ -21,6 +21,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
 
+from models.money import Money
 from models.origination import Account, Transaction
 from services.financial_journal import JournalEntrySpec, post_financial_transaction
 from utils.audit import record_audit_event
@@ -64,7 +65,7 @@ class LedgerService:
         self,
         source_account_id: str | uuid.UUID,
         dest_account_id: str | uuid.UUID,
-        amount_cents: int,
+        money: Money,
         description: str,
         idempotency_key: str,
         user_id: str | uuid.UUID | None = None,
@@ -74,7 +75,10 @@ class LedgerService:
         Executes an immutable double-entry journal transfer between two universal accounts.
         Enforces idempotency, pessimistic row locking, and balance invariants.
         """
-        if amount_cents <= 0:
+        if not isinstance(money, Money):
+            raise HTTPException(status_code=400, detail="Transfer requires structured Money.")
+        amount_minor = money.amount_minor
+        if amount_minor <= 0:
             raise HTTPException(status_code=400, detail="Transfer amount must be positive.")
 
         req_hash = None
@@ -87,6 +91,12 @@ class LedgerService:
         ).first()
 
         if existing_tx:
+            previous = json.loads(existing_tx.response_payload or "{}")
+            if (existing_tx.currency_code != money.currency_code
+                    or previous.get("money") != money.model_dump()
+                    or previous.get("source_account_id") != str(source_account_id)
+                    or previous.get("dest_account_id") != str(dest_account_id)):
+                raise HTTPException(status_code=409, detail="Idempotency key collision with altered parameters.")
             if req_hash and existing_tx.request_hash and req_hash != existing_tx.request_hash:
                 raise HTTPException(status_code=409, detail="Idempotency key collision with altered parameters.")
             if existing_tx.response_payload:
@@ -97,12 +107,15 @@ class LedgerService:
         src_acc = locks[str(source_account_id)]
         dst_acc = locks[str(dest_account_id)]
 
+        if src_acc.currency != money.currency_code or dst_acc.currency != money.currency_code:
+            raise HTTPException(status_code=422, detail="Transfer account denomination mismatch.")
+
         # 3. Verify balance constraints
         if src_acc.account_type in ('CHECKING', 'SAVINGS'):
-            if src_acc.cleared_balance_cents < amount_cents:
+            if src_acc.cleared_balance_cents < amount_minor:
                 raise HTTPException(status_code=422, detail="Insufficient cash funds in checking/savings account.")
         elif src_acc.account_type == 'CREDIT_CARD':
-            if src_acc.available_credit_cents < amount_cents:
+            if src_acc.available_credit_cents < amount_minor:
                 raise HTTPException(status_code=422, detail="Insufficient available credit.")
 
         # 4. Atomically append the balanced canonical journal and outbox event.
@@ -118,8 +131,8 @@ class LedgerService:
             },
             currency=src_acc.currency or "USD",
             entries=(
-                JournalEntrySpec(src_acc.id, "DEBIT", amount_cents),
-                JournalEntrySpec(dst_acc.id, "CREDIT", amount_cents),
+                JournalEntrySpec(src_acc.id, "DEBIT", money),
+                JournalEntrySpec(dst_acc.id, "CREDIT", money),
             ),
         )
         tx = posting.transaction
@@ -127,23 +140,23 @@ class LedgerService:
 
         # 5. Update cached account balances
         if src_acc.account_type in ('CHECKING', 'SAVINGS'):
-            src_acc.cleared_balance_cents -= amount_cents
+            src_acc.cleared_balance_cents -= amount_minor
         elif src_acc.account_type == 'CREDIT_CARD':
-            src_acc.available_credit_cents -= amount_cents
-            src_acc.cleared_balance_cents += amount_cents
+            src_acc.available_credit_cents -= amount_minor
+            src_acc.cleared_balance_cents += amount_minor
 
         if dst_acc.account_type in ('CHECKING', 'SAVINGS'):
-            dst_acc.cleared_balance_cents += amount_cents
+            dst_acc.cleared_balance_cents += amount_minor
         elif dst_acc.account_type == 'CREDIT_CARD':
-            dst_acc.available_credit_cents += amount_cents
-            dst_acc.cleared_balance_cents -= amount_cents
+            dst_acc.available_credit_cents += amount_minor
+            dst_acc.cleared_balance_cents -= amount_minor
 
         result = {
             "status": "SUCCESS",
             "transaction_id": str(tx.id),
             "source_account_id": str(src_acc.id),
             "dest_account_id": str(dst_acc.id),
-            "amount_cents": amount_cents,
+            "money": money.model_dump(),
             "idempotency_key": idempotency_key
         }
 

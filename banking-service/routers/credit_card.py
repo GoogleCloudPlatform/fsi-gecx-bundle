@@ -31,6 +31,7 @@ from fastapi import (
 )
 from fastapi.security import HTTPAuthorizationCredentials
 from livekit import api as lk_api
+from models.payment import BillPaymentRequest, BillPaymentResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -227,13 +228,14 @@ def get_customer_account(
 @router.get("/transactions")
 def get_transaction_history(
     target_customer_id: str | None = None,
+    account_id: UUID | None = None,
     repo: CreditCardRepository = Depends(get_credit_card_repo),
     token: ValidatedToken = Depends(get_current_user),
     customer_id: str = Depends(_get_active_customer_id),
 ):
     """Fetches full transaction and statement ledger lines for the customer, including pending authorizations."""
     effective_id = resolve_effective_id(target_customer_id, customer_id, token)
-    dto = get_transaction_history_dto(repo, effective_id)
+    dto = get_transaction_history_dto(repo, effective_id, account_id=str(account_id) if account_id else None)
     if dto is None:
         raise HTTPException(status_code=404, detail="No account registered.")
     return dto
@@ -406,7 +408,7 @@ def get_google_oidc_token(audience: str) -> str:
 
 
 async def trigger_voice_agent_session_async(
-    room_name: str, customer_id: str, session_id: str, mode: str = "audio"
+    room_name: str, customer_id: str, session_id: str, mode: str = "audio", locale: str = "en-US"
 ):
     voice_service_url = os.getenv("VOICE_AGENT_SERVICE_URL")
     if not voice_service_url:
@@ -435,6 +437,7 @@ async def trigger_voice_agent_session_async(
                     "customer_id": customer_id,
                     "session_id": session_id,
                     "mode": mode,
+                    "locale": locale,
                 },
                 headers=headers,
                 timeout=5.0,
@@ -455,6 +458,7 @@ async def trigger_voice_agent_session_async(
 def get_voice_room_token(
     background_tasks: BackgroundTasks,
     mode: str = "audio",
+    locale: str = "en-US",
     db: Session = Depends(get_db),
     customer_id: str = Depends(_get_active_customer_id),
     caller: ValidatedToken = Depends(get_current_user),
@@ -485,7 +489,7 @@ def get_voice_room_token(
             )
         )
         background_tasks.add_task(
-            trigger_voice_agent_session_async, room_name, customer_id, session_id, mode
+            trigger_voice_agent_session_async, room_name, customer_id, session_id, mode, locale
         )
         return {
             "token": token.to_jwt(),
@@ -617,12 +621,6 @@ def acknowledge_fraud_alert_false_positive(
     )
 
 
-class BillPaymentRequest(BaseModel):
-    source_account_id: str = Field(..., description="Deposit account UUID to debit")
-    credit_account_id: str = Field(..., description="Credit account UUID to credit")
-    amount_cents: int = Field(..., gt=0, description="Amount in cents")
-
-
 class ScenarioFraudCustomerActionRequest(BaseModel):
     fraud_alert_id: str = Field(
         ...,
@@ -708,11 +706,12 @@ class AutoPaydownRequest(BaseModel):
     )
 
 
-@router.post("/pay", status_code=status.HTTP_200_OK)
-@apiv1_router.post("/pay", status_code=status.HTTP_200_OK)
-@v1_router.post("/pay", status_code=status.HTTP_200_OK)
+@router.post("/pay", status_code=status.HTTP_200_OK, response_model=BillPaymentResponse, response_model_exclude_none=True)
+@apiv1_router.post("/pay", status_code=status.HTTP_200_OK, response_model=BillPaymentResponse, response_model_exclude_none=True)
+@v1_router.post("/pay", status_code=status.HTTP_200_OK, response_model=BillPaymentResponse, response_model_exclude_none=True)
 def pay_credit_card(
     request: BillPaymentRequest,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
     token: ValidatedToken = Depends(get_current_user),
 ):
@@ -722,12 +721,16 @@ def pay_credit_card(
     from services.accounts import AccountsService
 
     service = AccountsService(db)
-    return service.execute_bill_payment(
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail="Idempotency-Key is required for structured payments.")
+    result = service.execute_bill_payment(
         token=token,
         source_account_id=request.source_account_id,
         credit_account_id=request.credit_account_id,
-        amount_cents=request.amount_cents,
+        money=request.money,
+        idempotency_key=idempotency_key,
     )
+    return result
 
 
 @router.post("/internal/auto-paydown", status_code=status.HTTP_200_OK)

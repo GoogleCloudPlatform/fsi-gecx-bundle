@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { useMoneyLocale } from '../utils/moneyLocale';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Room, RoomEvent, Track } from 'livekit-client';
 import { useLocation } from 'react-router-dom';
@@ -49,6 +50,7 @@ import {
 } from '../utils/api.js';
 import { DataChannelEvent } from '../utils/constants.js';
 import { encodeTypedCustomerTurn, resolveTypedDelivery } from '../utils/voiceTypedInput.js';
+import { formatMoney } from '../utils/money.js';
 import { formatVoiceLedgerAmount } from '../utils/voiceLedger.js';
 import {
   connectSilentPcmSink,
@@ -295,6 +297,8 @@ function MicTester({ deviceId, onError }) {
 }
 
 export default function VoiceSupportView() {
+  const [presentationLocale, setPresentationLocale] = useMoneyLocale();
+  const voiceLocale = presentationLocale === 'es-MX' ? 'es-MX' : 'en-US';
   const { brandColorFrom, resolvedTheme } = useSettings();
   const location = useLocation();
   const projectId = window.firebaseConfig?.projectId;
@@ -303,10 +307,11 @@ export default function VoiceSupportView() {
   const appId = voiceParts.includes('apps') ? voiceParts[voiceParts.indexOf('apps') + 1] : '';
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [account, setAccount] = useState(null);
-  const [cardStatus, setCardStatus] = useState('ACTIVE');
-  const [creditLimit, setCreditLimit] = useState(0);
-  const [availableCredit, setAvailableCredit] = useState(0);
-  const [clearedBalance, setClearedBalance] = useState(0);
+  const [cardStatus, setCardStatus] = useState(null);
+  const [accountLoadState, setAccountLoadState] = useState('loading');
+  const [creditLimit, setCreditLimit] = useState(null);
+  const [availableCredit, setAvailableCredit] = useState(null);
+  const [clearedBalance, setClearedBalance] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [transcripts, setTranscripts] = useState([]);
   const [fraudContext, setFraudContext] = useState(null);
@@ -365,7 +370,7 @@ export default function VoiceSupportView() {
   const [typedInputError, setTypedInputError] = useState('');
 
   const affectedCardId = normalizeCardId(fraudContext?.fraud_alert?.card_id);
-  const cards = account?.cards || [];
+  const cards = accountLoadState === 'ready' ? account?.cards || [] : [];
   const compromisedCard = cards.find((card) => normalizeCardId(card.card_id || card.id) === affectedCardId) || cards[0];
   const replacementCardId = normalizeCardId(fraudTriage.replacement_card?.new_card_id);
   const replacementCard = cards.find((card) => normalizeCardId(card.card_id || card.id) === replacementCardId);
@@ -719,14 +724,24 @@ export default function VoiceSupportView() {
   }, [cleanupGecxSession, endConsultation, engine]);
 
   const refreshCreditCardData = useCallback(async () => {
-    const data = await getCreditCardAccount();
-    setAccount(data);
-    if (data.cards && data.cards.length > 0) {
-      setCardStatus(data.cards[0].status);
+    setAccountLoadState('loading');
+    setCardStatus(null);
+    try {
+      const data = await getCreditCardAccount();
+      setAccount(data);
+      setCardStatus(data?.cards?.[0]?.status ?? null);
+      setCreditLimit(data?.credit_limit ?? null);
+      setAvailableCredit(data?.available_credit ?? null);
+      setClearedBalance(data?.cleared_balance ?? null);
+      setAccountLoadState('ready');
+    } catch (error) {
+      setAccount(null);
+      setCreditLimit(null);
+      setAvailableCredit(null);
+      setClearedBalance(null);
+      setAccountLoadState('error');
+      throw error;
     }
-    setCreditLimit(data.credit_limit_cents / 100);
-    setAvailableCredit(data.available_credit_cents / 100);
-    setClearedBalance(data.cleared_balance_cents / 100);
 
     const txData = await getCreditCardTransactions();
     setTransactions(txData);
@@ -1147,12 +1162,12 @@ export default function VoiceSupportView() {
       setCardStatus(payload.status);
       setTranscripts(prev => [...prev, { author: 'system', text: `SECURITY ALERT: Card status updated to ${payload.status}.` }]);
     } else if (payload.type === 'LIMIT_UPDATED') {
-      setCreditLimit(payload.credit_limit_cents / 100);
-      setAvailableCredit(payload.available_credit_cents / 100);
-      setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to $${(payload.credit_limit_cents / 100).toLocaleString()}.` }]);
+      setCreditLimit(payload.credit_limit);
+      setAvailableCredit(payload.available_credit);
+      setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to ${formatMoney(payload.credit_limit, voiceLocale)}.` }]);
     } else if (payload.type === 'FEE_REVERSED') {
-      setClearedBalance(payload.cleared_balance_cents / 100);
-      setAvailableCredit(payload.available_credit_cents / 100);
+      setClearedBalance(payload.cleared_balance);
+      setAvailableCredit(payload.available_credit);
       setTranscripts(prev => [...prev, { author: 'system', text: `LEDGER UPDATE: Late fee reversed. Available credit adjusted.` }]);
       getCreditCardTransactions().then(setTransactions).catch(console.error);
     } else if (payload.type === 'HIGHLIGHT_TRANSACTION') {
@@ -1176,6 +1191,7 @@ export default function VoiceSupportView() {
     handleOperationalVoiceEvent,
     startDisconnectCountdown,
     stopPlayoutQueue,
+    voiceLocale,
   ]);
 
   const startGecxConsultation = async () => {
@@ -1448,7 +1464,7 @@ export default function VoiceSupportView() {
       }
 
       // 1. Fetch token and room name from server
-      const { token, room_name, session_id, proposal_trace_allowed, fraud_context } = await getCreditCardVoiceToken(mode);
+      const { token, room_name, session_id, proposal_trace_allowed, fraud_context } = await getCreditCardVoiceToken(mode, voiceLocale);
       console.log(`LiveKit token received. Room: ${room_name}`);
       setFraudContext(fraud_context || null);
       setProposalTraceSessionId(session_id || null);
@@ -1554,12 +1570,12 @@ export default function VoiceSupportView() {
               }));
             }
           } else if (event.type === DataChannelEvent.LIMIT_UPDATED) {
-            setCreditLimit(event.credit_limit_cents / 100);
-            setAvailableCredit(event.available_credit_cents / 100);
-            setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to $${(event.credit_limit_cents / 100).toLocaleString()}.` }]);
+            setCreditLimit(event.credit_limit);
+            setAvailableCredit(event.available_credit);
+            setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to ${formatMoney(event.credit_limit, voiceLocale)}.` }]);
           } else if (event.type === DataChannelEvent.FEE_REVERSED) {
-            setClearedBalance(event.cleared_balance_cents / 100);
-            setAvailableCredit(event.available_credit_cents / 100);
+            setClearedBalance(event.cleared_balance);
+            setAvailableCredit(event.available_credit);
             setTranscripts(prev => [...prev, { author: 'system', text: `LEDGER UPDATE: Late fee reversed. Available credit adjusted.` }]);
 
             getCreditCardTransactions().then(setTransactions).catch(console.error);
@@ -1742,6 +1758,17 @@ export default function VoiceSupportView() {
           </AnalyticsButton>
         </div>
 
+        {!isConnected && !isConnecting && engine === 'livekit' && (
+          <label className="mt-4 flex items-center gap-2 text-sm">
+            Voice language / Idioma
+            <select aria-label="Voice language" value={voiceLocale}
+              onChange={(event) => setPresentationLocale(event.target.value)}
+              className="rounded border border-slate-300 bg-white px-2 py-1 dark:bg-slate-900">
+              <option value="en-US">English</option>
+              <option value="es-MX">Español (México)</option>
+            </select>
+          </label>
+        )}
         {/* Engine Selection Toggle */}
         {!isConnected && !isConnecting && (
           <div id="voice-engine-select" className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-950/60 rounded-full border border-slate-200 dark:border-slate-800/80 mt-4">
@@ -1838,7 +1865,7 @@ export default function VoiceSupportView() {
           )}
 
           {/* Card Mockup */}
-          <div id="voice-cc-mockup" className="relative aspect-[1.586/1] w-full rounded-2xl overflow-hidden bg-gradient-to-tr from-slate-900 via-indigo-950 to-indigo-900 p-6 shadow-2xl flex flex-col justify-between border border-slate-700/50">
+          <div id="voice-cc-mockup" aria-busy={accountLoadState === 'loading'} className="relative aspect-[1.586/1] w-full rounded-2xl overflow-hidden bg-gradient-to-tr from-slate-900 via-indigo-950 to-indigo-900 p-6 shadow-2xl flex flex-col justify-between border border-slate-700/50">
             <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
 
             <div className="flex justify-between items-start">
@@ -1853,7 +1880,7 @@ export default function VoiceSupportView() {
 
             <div className="my-auto">
               <p className="text-2xl font-mono tracking-widest text-slate-100 flex justify-between">
-                <span>••••</span> <span>••••</span> <span>••••</span> <span>{displayCard?.last_four || "8234"}</span>
+                <span>••••</span> <span>••••</span> <span>••••</span> <span>{displayCard?.last_four || "••••"}</span>
               </p>
             </div>
 
@@ -1862,14 +1889,14 @@ export default function VoiceSupportView() {
                 <p className="text-[9px] uppercase tracking-wider text-slate-400">Cardholder</p>
                 <p className="text-sm font-semibold tracking-wide text-slate-200 flex items-center gap-1.5">
                   <User size={13} className="text-slate-400" />
-                  {displayCard?.cardholder_name || "Jane Doe"}
+                  {displayCard?.cardholder_name || "—"}
                 </p>
               </div>
               <div>
                 <p className="text-[9px] uppercase tracking-wider text-slate-400">Expires</p>
                 <p className="text-sm font-semibold tracking-wide text-slate-200 flex items-center gap-1">
                   <Calendar size={13} className="text-slate-400" />
-                  {displayCard ? `${displayCard.exp_month}/${displayCard.exp_year?.toString().slice(-2)}` : "12/28"}
+                  {displayCard?.exp_month && displayCard?.exp_year ? `${displayCard.exp_month}/${displayCard.exp_year.toString().slice(-2)}` : "••/••"}
                 </p>
               </div>
             </div>
@@ -1884,6 +1911,16 @@ export default function VoiceSupportView() {
               </div>
             )}
           </div>
+
+          {!displayCard && (
+            <p role="status" className="text-sm text-slate-500 dark:text-slate-400">
+              {accountLoadState === 'loading'
+                ? 'Loading card details…'
+                : accountLoadState === 'error'
+                  ? 'Card details unavailable.'
+                  : 'No credit card available.'}
+            </p>
+          )}
 
           {cards.length > 0 && (
             <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/30 p-4">
@@ -1933,17 +1970,17 @@ export default function VoiceSupportView() {
           <div id="voice-balances-ledger" className="grid grid-cols-3 gap-4">
             <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Available Credit</span>
-              <p className="text-xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">${availableCredit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className="text-xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">{formatMoney(availableCredit, voiceLocale)}</p>
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Credit Limit</span>
-              <p className="text-xl font-bold mt-1 text-slate-800 dark:text-slate-200">${creditLimit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className="text-xl font-bold mt-1 text-slate-800 dark:text-slate-200">{formatMoney(creditLimit, voiceLocale)}</p>
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Current Balance</span>
-              <p className="text-xl font-bold mt-1 text-indigo-600 dark:text-indigo-400">${clearedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className="text-xl font-bold mt-1 text-indigo-600 dark:text-indigo-400">{formatMoney(clearedBalance, voiceLocale)}</p>
             </div>
           </div>
 
@@ -1969,8 +2006,8 @@ export default function VoiceSupportView() {
                         <p className="font-semibold text-slate-900 dark:text-slate-200">{tx.description}</p>
                         <p className="text-[9px] text-slate-450 dark:text-slate-500">{new Date(tx.posted_at).toLocaleDateString()}</p>
                       </div>
-                      <span className={`font-mono font-bold ${tx.amount_cents > 0 ? 'text-indigo-600 dark:text-indigo-300' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                        {formatVoiceLedgerAmount(tx.amount_cents)}
+                      <span className={`font-mono font-bold ${tx.money.amount_minor > 0 ? 'text-indigo-600 dark:text-indigo-300' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                        {formatVoiceLedgerAmount(tx.money, voiceLocale)}
                       </span>
                     </div>
                   );

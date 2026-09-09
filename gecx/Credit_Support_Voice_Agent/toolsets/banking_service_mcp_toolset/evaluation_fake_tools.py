@@ -50,27 +50,130 @@ def fake_tool_call(tool, input, callback_context):
         {
             "authorization_id": "eval-auth-1",
             "merchant_name": "GAME*TEST TOKEN ONLINE",
-            "amount_cents": 499,
+            **{'money': {'amount_minor': 499, 'currency_code': 'USD'},
+             'billing_money': {'amount_minor': 499, 'currency_code': 'USD'},
+             'presentations': {'en-US': {'transaction': {'money': {'amount_minor': 499, 'currency_code': 'USD'},
+                                                         'locale': 'en-US',
+                                                         'display_text': 'USD 4.99',
+                                                         'speech_text': '4 US dollars and 99 cents'},
+                                         'billing': {'money': {'amount_minor': 499, 'currency_code': 'USD'},
+                                                     'locale': 'en-US',
+                                                     'display_text': 'USD 4.99',
+                                                     'speech_text': '4 US dollars and 99 cents'}},
+                               'es-MX': {'transaction': {'money': {'amount_minor': 499, 'currency_code': 'USD'},
+                                                         'locale': 'es-MX',
+                                                         'display_text': 'USD 4.99',
+                                                         'speech_text': '4 dólares estadounidenses con 99 '
+                                                                        'centavos'},
+                                         'billing': {'money': {'amount_minor': 499, 'currency_code': 'USD'},
+                                                     'locale': 'es-MX',
+                                                     'display_text': 'USD 4.99',
+                                                     'speech_text': '4 dólares estadounidenses con 99 '
+                                                                    'centavos'}}}},
         },
         {
             "authorization_id": "eval-auth-2",
             "merchant_name": "APPLE.COM*ONLINE",
-            "amount_cents": 149900,
+            **{'money': {'amount_minor': 149900, 'currency_code': 'USD'},
+             'billing_money': {'amount_minor': 149900, 'currency_code': 'USD'},
+             'presentations': {'en-US': {'transaction': {'money': {'amount_minor': 149900,
+                                                                   'currency_code': 'USD'},
+                                                         'locale': 'en-US',
+                                                         'display_text': 'USD 1,499.00',
+                                                         'speech_text': '1499 US dollars and 0 cents'},
+                                         'billing': {'money': {'amount_minor': 149900, 'currency_code': 'USD'},
+                                                     'locale': 'en-US',
+                                                     'display_text': 'USD 1,499.00',
+                                                     'speech_text': '1499 US dollars and 0 cents'}},
+                               'es-MX': {'transaction': {'money': {'amount_minor': 149900,
+                                                                   'currency_code': 'USD'},
+                                                         'locale': 'es-MX',
+                                                         'display_text': 'USD 1,499.00',
+                                                         'speech_text': '1499 dólares estadounidenses con 0 '
+                                                                        'centavos'},
+                                         'billing': {'money': {'amount_minor': 149900, 'currency_code': 'USD'},
+                                                     'locale': 'es-MX',
+                                                     'display_text': 'USD 1,499.00',
+                                                     'speech_text': '1499 dólares estadounidenses con 0 '
+                                                                    'centavos'}}}},
         },
         {
             "authorization_id": "eval-auth-3",
             "merchant_name": "BEST BUY*MKTPLACE",
-            "amount_cents": 215000,
+            **{'money': {'amount_minor': 215000, 'currency_code': 'USD'},
+             'billing_money': {'amount_minor': 215000, 'currency_code': 'USD'},
+             'presentations': {'en-US': {'transaction': {'money': {'amount_minor': 215000,
+                                                                   'currency_code': 'USD'},
+                                                         'locale': 'en-US',
+                                                         'display_text': 'USD 2,150.00',
+                                                         'speech_text': '2150 US dollars and 0 cents'},
+                                         'billing': {'money': {'amount_minor': 215000, 'currency_code': 'USD'},
+                                                     'locale': 'en-US',
+                                                     'display_text': 'USD 2,150.00',
+                                                     'speech_text': '2150 US dollars and 0 cents'}},
+                               'es-MX': {'transaction': {'money': {'amount_minor': 215000,
+                                                                   'currency_code': 'USD'},
+                                                         'locale': 'es-MX',
+                                                         'display_text': 'USD 2,150.00',
+                                                         'speech_text': '2150 dólares estadounidenses con 0 '
+                                                                        'centavos'},
+                                         'billing': {'money': {'amount_minor': 215000, 'currency_code': 'USD'},
+                                                     'locale': 'es-MX',
+                                                     'display_text': 'USD 2,150.00',
+                                                     'speech_text': '2150 dólares estadounidenses con 0 '
+                                                                    'centavos'}}}},
         },
         {
             "authorization_id": "eval-auth-4",
             "merchant_name": "RAZER GOLD GIFT CARD",
-            "amount_cents": 125000,
+            **{'money': {'amount_minor': 125000, 'currency_code': 'USD'},
+             'billing_money': {'amount_minor': 125000, 'currency_code': 'USD'},
+             'presentations': {'en-US': {'transaction': {'money': {'amount_minor': 125000,
+                                                                   'currency_code': 'USD'},
+                                                         'locale': 'en-US',
+                                                         'display_text': 'USD 1,250.00',
+                                                         'speech_text': '1250 US dollars and 0 cents'},
+                                         'billing': {'money': {'amount_minor': 125000, 'currency_code': 'USD'},
+                                                     'locale': 'en-US',
+                                                     'display_text': 'USD 1,250.00',
+                                                     'speech_text': '1250 US dollars and 0 cents'}},
+                               'es-MX': {'transaction': {'money': {'amount_minor': 125000,
+                                                                   'currency_code': 'USD'},
+                                                         'locale': 'es-MX',
+                                                         'display_text': 'USD 1,250.00',
+                                                         'speech_text': '1250 dólares estadounidenses con 0 '
+                                                                        'centavos'},
+                                         'billing': {'money': {'amount_minor': 125000, 'currency_code': 'USD'},
+                                                     'locale': 'es-MX',
+                                                     'display_text': 'USD 1,250.00',
+                                                     'speech_text': '1250 dólares estadounidenses con 0 '
+                                                                    'centavos'}}}},
         },
         {
             "authorization_id": "eval-auth-5",
             "merchant_name": "TARGET.COM GIFT CARDS",
-            "amount_cents": 95000,
+            **{'money': {'amount_minor': 95000, 'currency_code': 'USD'},
+             'billing_money': {'amount_minor': 95000, 'currency_code': 'USD'},
+             'presentations': {'en-US': {'transaction': {'money': {'amount_minor': 95000,
+                                                                   'currency_code': 'USD'},
+                                                         'locale': 'en-US',
+                                                         'display_text': 'USD 950.00',
+                                                         'speech_text': '950 US dollars and 0 cents'},
+                                         'billing': {'money': {'amount_minor': 95000, 'currency_code': 'USD'},
+                                                     'locale': 'en-US',
+                                                     'display_text': 'USD 950.00',
+                                                     'speech_text': '950 US dollars and 0 cents'}},
+                               'es-MX': {'transaction': {'money': {'amount_minor': 95000,
+                                                                   'currency_code': 'USD'},
+                                                         'locale': 'es-MX',
+                                                         'display_text': 'USD 950.00',
+                                                         'speech_text': '950 dólares estadounidenses con 0 '
+                                                                        'centavos'},
+                                         'billing': {'money': {'amount_minor': 95000, 'currency_code': 'USD'},
+                                                     'locale': 'es-MX',
+                                                     'display_text': 'USD 950.00',
+                                                     'speech_text': '950 dólares estadounidenses con 0 '
+                                                                    'centavos'}}}},
         },
     ]
     if tool_id == "get_open_fraud_alert":
@@ -83,10 +186,10 @@ def fake_tool_call(tool, input, callback_context):
                 "suspicious_transactions": authorizations,
                 "summary": (
                     "Customer has an active fraud alert on card ending in 0001. "
-                    "Flagged transactions are $4.99 at GAME*TEST TOKEN ONLINE, "
-                    "$1,499.00 at APPLE.COM*ONLINE, $2,150.00 at BEST "
-                    "BUY*MKTPLACE, $1,250.00 at RAZER GOLD GIFT CARD, and "
-                    "$950.00 at TARGET.COM GIFT CARDS."
+                    "Flagged transactions are USD 4.99 at GAME*TEST TOKEN ONLINE, "
+                    "USD 1,499.00 at APPLE.COM*ONLINE, USD 2,150.00 at BEST "
+                    "BUY*MKTPLACE, USD 1,250.00 at RAZER GOLD GIFT CARD, and "
+                    "USD 950.00 at TARGET.COM GIFT CARDS."
                 ),
             },
             "support_guidance": {
@@ -103,10 +206,11 @@ def fake_tool_call(tool, input, callback_context):
             "action_type": "TRIAGE_FRAUD_CASE",
             "contract_version": "fraud-triage.v1",
             "proposal_id": "eval-proposal-1",
+            "money_facts": authorizations,
             "customer_safe_summary": (
-                "Confirm that you want to dispute $4.99 at GAME*TEST TOKEN ONLINE, "
-                "$1,499.00 at APPLE.COM*ONLINE, $2,150.00 at BEST BUY*MKTPLACE, "
-                "$1,250.00 at RAZER GOLD GIFT CARD, and $950.00 at TARGET.COM "
+                "Confirm that you want to dispute USD 4.99 at GAME*TEST TOKEN ONLINE, "
+                "USD 1,499.00 at APPLE.COM*ONLINE, USD 2,150.00 at BEST BUY*MKTPLACE, "
+                "USD 1,250.00 at RAZER GOLD GIFT CARD, and USD 950.00 at TARGET.COM "
                 "GIFT CARDS on card ending 0001, block the current card, and issue "
                 "a replacement."
             ),

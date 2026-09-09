@@ -893,3 +893,21 @@ def test_closeout_agent_rejects_handoff_during_pending_proposal():
 
     assert response.parts[0].agent_transfer == "Credit Card Support Agent"
     assert variables["closeout_delegation_authorized"] is False
+
+
+def test_ces_fake_fraud_facts_match_canonical_banking_projection():
+    from models.money import Money
+    from services.money_presentation import project_transaction_money
+    path = APP_DIR / 'toolsets/banking_service_mcp_toolset/evaluation_fake_tools.py'
+    spec = importlib.util.spec_from_file_location('money_ces_fakes', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    alert = module.fake_tool_call({'id': 'get_open_fraud_alert'}, {}, None)
+    proposal = module.fake_tool_call({'id': 'propose_fraud_triage'}, {}, None)
+    facts = alert['fraud_alert']['suspicious_transactions']
+    assert proposal['money_facts'] == facts
+    for fact, amount in zip(facts, [499, 149900, 215000, 125000, 95000], strict=True):
+        money = Money(amount_minor=amount, currency_code='USD')
+        for key, expected in project_transaction_money(money, money).items():
+            assert fact[key] == expected
+        assert set(fact) == {'authorization_id', 'merchant_name', 'money', 'billing_money', 'presentations'}

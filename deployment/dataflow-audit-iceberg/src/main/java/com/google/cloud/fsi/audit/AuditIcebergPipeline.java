@@ -155,7 +155,18 @@ public final class AuditIcebergPipeline {
         throw new IllegalArgumentException("financial payload event_id differs from envelope");
       }
       String transactionId = requiredText(financial, "transaction_id");
-      String currency = requiredText(financial, "currency");
+      if (schemaVersion != 1 && schemaVersion != 2) {
+        throw new IllegalArgumentException("unsupported financial schema version");
+      }
+      if ((schemaVersion == 2 || financial.has("schema_version"))
+          && requiredLong(financial, "schema_version") != schemaVersion) {
+        throw new IllegalArgumentException("financial schema version differs from envelope");
+      }
+      String currency = requiredText(financial, schemaVersion == 1 ? "currency" : "currency_code");
+      if (!currency.matches("[A-Z]{3}") || (schemaVersion == 2
+          && !java.util.Set.of("USD", "MXN", "JPY", "BHD").contains(currency))) {
+        throw new IllegalArgumentException("unsupported or malformed currency");
+      }
       String sourceType = requiredText(financial, "source_type");
       Instant postedAt = parseTimestamp(requiredText(financial, "posted_at"));
       JsonNode sourceReferences = financial.path("source_references");
@@ -165,9 +176,21 @@ public final class AuditIcebergPipeline {
       }
       long debits = 0L;
       long credits = 0L;
+      java.util.Set<String> entryIds = new java.util.HashSet<>();
       for (JsonNode entry : entries) {
+        String entryId = requiredText(entry, "entry_id");
+        if (!entryIds.add(entryId)) {
+          throw new IllegalArgumentException("duplicate financial entry_id");
+        }
         String direction = requiredText(entry, "direction").toUpperCase();
-        long amount = requiredLong(entry, "amount_cents");
+        // The sole historical event adapter. Physical Iceberg column names remain
+        // unchanged; logical views expose amount_minor and currency_code.
+        JsonNode money = schemaVersion == 1 ? entry : entry.path("money");
+        long amount = requiredLong(money, schemaVersion == 1 ? "amount_cents" : "amount_minor");
+        if (schemaVersion == 2 && (!currency.equals(requiredText(money, "currency_code"))
+            || amount > 9007199254740991L)) {
+          throw new IllegalArgumentException("entry Money currency mismatch or unsafe amount");
+        }
         if (amount <= 0 || !(direction.equals("DEBIT") || direction.equals("CREDIT"))) {
           throw new IllegalArgumentException("invalid financial entry amount or direction");
         }
@@ -179,7 +202,7 @@ public final class AuditIcebergPipeline {
         ledger.add(
             Row.withSchema(LEDGER_SCHEMA)
                 .addValues(
-                    requiredText(entry, "entry_id"),
+                    entryId,
                     eventId,
                     transactionId,
                     requiredText(entry, "account_id"),
@@ -226,7 +249,7 @@ public final class AuditIcebergPipeline {
 
   private static long requiredLong(JsonNode node, String field) {
     JsonNode value = node.get(field);
-    if (value == null || !value.canConvertToLong()) {
+    if (value == null || !value.isIntegralNumber() || !value.canConvertToLong()) {
       throw new IllegalArgumentException("missing integer field: " + field);
     }
     return value.longValue();

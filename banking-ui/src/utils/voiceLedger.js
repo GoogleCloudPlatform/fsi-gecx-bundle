@@ -12,8 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export function formatVoiceLedgerAmount(amountCents) {
-  const numericAmount = Number(amountCents);
-  const safeAmount = Number.isFinite(numericAmount) ? numericAmount : 0;
-  return `$${Math.abs(safeAmount / 100).toFixed(2)}`;
+import { formatMoney, validateMoney } from './money.js';
+
+export function absoluteMoney(money) {
+  const validMoney = validateMoney(money);
+  return { ...validMoney, amount_minor: Math.abs(validMoney.amount_minor) };
+}
+
+export function formatVoiceLedgerAmount(money, locale = 'en-US') {
+  return formatMoney(absoluteMoney(money), locale);
 }

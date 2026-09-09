@@ -53,6 +53,7 @@ ADK_BANKING_MCP_TOOL_ALLOWLIST = frozenset(
 ADK_RUNTIME_TOOL_NAMES = frozenset(
     {
         "prepare_customer_reported_fraud_confirmation",
+        "set_conversation_language",
         "end_consultation",
         "transfer_to_human",
     }

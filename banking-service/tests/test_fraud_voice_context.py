@@ -13,6 +13,8 @@
 # limitations under the License.
 
 from services.fraud_alerts import FraudAlertService
+from models.money import Money
+from services.money_presentation import project_transaction_money
 
 
 def test_voice_context_summary_enumerates_every_flagged_transaction_with_amount():
@@ -24,12 +26,17 @@ def test_voice_context_summary_enumerates_every_flagged_transaction_with_amount(
         {"merchant_name": "TARGET.COM GIFT CARDS", "amount_cents": 95000},
     ]
 
+    transactions = [{"merchant_name": row["merchant_name"],
+                     **project_transaction_money(
+                         Money(amount_minor=row["amount_cents"], currency_code="USD"),
+                         Money(amount_minor=row["amount_cents"], currency_code="USD"))}
+                    for row in transactions]
     summary = FraudAlertService._build_voice_context_summary("6141", transactions)
 
     assert "card ending in 6141" in summary
-    assert "$4.99 at GAME*TEST TOKEN ONLINE" in summary
-    assert "$1,499.00 at APPLE.COM*ONLINE" in summary
-    assert "$2,150.00 at BEST BUY*MKTPLACE" in summary
-    assert "$1,250.00 at RAZER GOLD GIFT CARD" in summary
-    assert "$950.00 at TARGET.COM GIFT CARDS" in summary
+    assert "USD 4.99 at GAME*TEST TOKEN ONLINE" in summary
+    assert "USD 1,499.00 at APPLE.COM*ONLINE" in summary
+    assert "USD 2,150.00 at BEST BUY*MKTPLACE" in summary
+    assert "USD 1,250.00 at RAZER GOLD GIFT CARD" in summary
+    assert "USD 950.00 at TARGET.COM GIFT CARDS" in summary
     assert "other" not in summary.lower()

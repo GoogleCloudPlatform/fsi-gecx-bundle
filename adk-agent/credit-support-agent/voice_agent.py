@@ -61,6 +61,7 @@ from agent.session_store import (
 from agent.workflow_plugin import FraudWorkflowStatePlugin
 from agent.version import BUILD_VERSION, BUILD_COMMIT_ID, BUILD_TIME
 from agent.events import DataChannelEvent, INTERNAL_TOOL_RUNTIME_STATUS
+from agent.money_locale import change_voice_language, effective_voice_locale, stream_with_language_changes
 from agent.typed_input import (
     TypedInputError,
     parse_customer_text_packet,
@@ -142,7 +143,7 @@ def get_livekit_token(room_name: str) -> str:
         logger.error(f"Failed to generate LiveKit token dynamically: {e}")
         raise e
 
-async def run_voice_agent_session(room_name: str, customer_id: str, session_id: str, mode: str = "audio"):
+async def run_voice_agent_session(room_name: str, customer_id: str, session_id: str, mode: str = "audio", locale: str = "en-US"):
     requested_mode = mode
     session_started_at = time.monotonic()
     record_session_started(mode)
@@ -188,6 +189,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     except Exception as e:
         logger.error("Failed to query system settings from API %s error=%s", session_log_context(room_name, customer_id, session_id, mode), e, exc_info=True)
 
+    voice_locale = effective_voice_locale(locale, voice_context.get("money_voice_content") or {})
     mock_avatar_enabled = settings.mock_avatar_enabled
     avatar_name = settings.avatar_name
     max_duration = settings.max_duration
@@ -203,6 +205,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         fraud_alert_state = dict(voice_context["fraud_alert"])
     session_state = {
         "room_name": room_name,
+        "money_voice_content": voice_context.get("money_voice_content") or {},
+        "voice_locale": voice_locale,
         "customer_id": customer_id,
         "session_id": session_id,
         "mode": mode,
@@ -226,13 +230,17 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     )
     # Create the session dynamically using the passed IDs
     user_id = f"user-{customer_id}"
-    _, resumed, resume_reason = await open_or_resume_session(
+    opened_session, resumed, resume_reason = await open_or_resume_session(
         session_service,
         user_id=user_id,
         session_id=session_id,
         state=session_state,
         reset_generation_token=str(reset_generation.get("token") or ""),
     )
+    if resumed:
+        # Reconnect follows the persisted language chosen in this support session.
+        voice_locale = str(opened_session.state.get("voice_locale") or "en-US")
+
     logger.info(
         "Opened ADK session state %s resumed=%s reason=%s reset_generation=%s",
         session_log_context(
@@ -267,7 +275,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         active_flows.append("fraud_alert")
         fraud_alert = voice_context["fraud_alert"]
         suspicious_lines = "\n".join(
-            f"- {txn['merchant_name']}: ${txn['amount_cents'] / 100:,.2f}"
+            f"- {txn['merchant_name']}: {txn['presentations'][voice_locale]['transaction']['speech_text']} "
+            f"(billed: {txn['presentations'][voice_locale]['billing']['speech_text']})"
             for txn in fraud_alert.get("suspicious_transactions", [])
         )
         session_context_text = (
@@ -286,6 +295,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         session_context=session_context_text,
         guidance_summary=guidance_summary,
     )
+    session_instruction += f"\nStart this conversation in {voice_locale}."
+    session_instruction += "\nUse set_conversation_language when the customer requests English or Spanish. Use banking-provided speech_text verbatim for Money and consequential proposals; never translate or calculate amounts. A language change requires complete re-presentation and a later customer confirmation."
     session_agent = create_voice_agent(instruction=session_instruction)
     if mode == "video":
         model_name = os.getenv("VOICE_AGENT_VIDEO_MODEL")
@@ -422,6 +433,9 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 voice_name = 'Charon'
             else:
                 voice_name = 'Aoede'
+
+    if voice_locale == "es-MX":
+        lang_code = "es-MX"
 
     run_config = build_live_run_config(
         mode=mode,
@@ -873,14 +887,68 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 
         session_end_disconnect_task = asyncio.create_task(delayed_disconnect())
 
+    runtime_fallback_notice = ""
+
+    async def persist_english_runtime_fallback():
+        nonlocal runtime_fallback_notice
+        from copy import deepcopy
+        from google.adk.events import Event, EventActions
+        from agent.session_store import APP_NAME
+        session = await session_service.get_session(
+            app_name=APP_NAME, user_id=user_id, session_id=session_id)
+        if session is None:
+            return False
+        updated = deepcopy(session.state)
+        result = change_voice_language(updated, "es-MX", runtime_unavailable=True)
+        if not result["success"]:
+            return False
+        # Persist invalidated evidence before opening another Live connection.
+        await session_service.append_event(session=session, event=Event(
+            author="system", actions=EventActions(state_delta={
+                "voice_locale": updated["voice_locale"],
+                "fraud_playbook": updated["fraud_playbook"],
+            })))
+        runtime_fallback_notice = result["message"]
+        on_agent_event({"type": "VOICE_LANGUAGE_FALLBACK", "locale": "en-US",
+                        "message": runtime_fallback_notice})
+        return True
+
+    async def restart_live_language(selected_locale: str):
+        nonlocal live_queue, run_config, lang_code, voice_locale, runtime_fallback_notice
+        runtime_transition_active.set()
+        try:
+            live_queue.close()
+            playout_bridge.clear()
+            voice_locale = selected_locale
+            lang_code = selected_locale
+            live_queue = LiveRequestQueue()
+            run_config = build_live_run_config(
+                mode=mode, avatar_name=avatar_name, voice_name=voice_name,
+                language_code=lang_code, enable_session_resumption=False,
+                manual_activity_detection=video_manual_activity_enabled)
+            # ADK has already persisted the tool's locale and invalidated evidence.
+            # Keep the same support session and opaque proposal, with a fresh Live
+            # connection so speech configuration cannot retain the prior language.
+            live_queue.send_content(types.Content(parts=[types.Part(text=(
+                f"{runtime_fallback_notice} Continue in {selected_locale}. Read the banking proposal speech_text "
+                "in this language completely, then wait for a new customer confirmation. "
+                "The language-change request is not confirmation of the action."
+            ))]))
+            runtime_fallback_notice = ""
+            on_agent_event({"type": "VOICE_LANGUAGE_CHANGED", "locale": selected_locale})
+        finally:
+            runtime_transition_active.clear()
+
     async def run_gemini_loop():
         logger.info("Starting run_live stream loop %s", session_log_context(room_name, customer_id, session_id, mode, fraud_alert_id=fraud_playbook.get("fraud_alert_id")))
         try:
-            async for event in runner.run_live(
-                user_id=user_id,
-                session_id=session_id,
-                live_request_queue=live_queue,
-                run_config=run_config
+            async for event in stream_with_language_changes(
+                stream_factory=lambda: runner.run_live(
+                    user_id=user_id, session_id=session_id,
+                    live_request_queue=live_queue, run_config=run_config),
+                current_locale=lambda: voice_locale,
+                restart=restart_live_language,
+                runtime_fallback=persist_english_runtime_fallback,
             ):
                 live_event = normalize_live_event(event)
                 if event.content and event.content.parts:
@@ -1393,6 +1461,7 @@ class VoiceSessionStartRequest(BaseModel):
     customer_id: str
     session_id: str
     mode: str = "audio"
+    locale: str = "en-US"
 
 @app.get("/healthz")
 @app.get("/")
@@ -1460,12 +1529,14 @@ async def start_session(
     customer_id: str | None = None,
     session_id: str | None = None,
     mode: str = "audio",
+    locale: str = "en-US",
 ):
     if payload is not None:
         room_name = payload.room_name
         customer_id = payload.customer_id
         session_id = payload.session_id
         mode = payload.mode
+        locale = payload.locale
     if not room_name or not customer_id or not session_id:
         raise HTTPException(status_code=422, detail="Missing voice session dispatch fields.")
     try:
@@ -1515,7 +1586,7 @@ async def start_session(
 
         async def run_session_wrapper():
             try:
-                await run_voice_agent_session(room_name, customer_id, session_id, mode)
+                await run_voice_agent_session(room_name, customer_id, session_id, mode, locale)
             finally:
                 # An older cancelled task must never delete a newer replacement.
                 if active_sessions.get(room_name) is task:

@@ -93,7 +93,7 @@ integrity="$(bq query \
      (SELECT COUNT(DISTINCT event_id) FROM \`${PROJECT_ID}.compliance_audit.audit_events\`) AS distinct_audit_events,
      (SELECT COUNT(*) FROM \`${PROJECT_ID}.compliance_audit.account_ledger_entries\`) AS ledger_entries,
      (SELECT COUNT(DISTINCT entry_id) FROM \`${PROJECT_ID}.compliance_audit.account_ledger_entries\`) AS distinct_ledger_entries,
-     (SELECT COUNT(*) FROM \`${PROJECT_ID}.compliance_audit.account_ledger_balance\` WHERE imbalance_cents != 0) AS imbalanced_transactions")"
+     (SELECT COUNT(*) FROM \`${PROJECT_ID}.compliance_audit.account_ledger_balance\` WHERE imbalance_minor != 0) AS imbalanced_transactions")"
 
 audit_events="$(jq -r '.[0].audit_events | tonumber' <<<"${integrity}")"
 distinct_audit_events="$(jq -r '.[0].distinct_audit_events | tonumber' <<<"${integrity}")"

@@ -507,7 +507,7 @@ def test_triage_fraud_case_disputed_activity_applies_remediation_and_message(
     assert len(messages) == 1
     assert "pending review" in messages[0].message
     assert "Disputed transactions:" in messages[0].message
-    assert "TEST FRAUD MERCHANT: $42.00" in messages[0].message
+    assert "TEST FRAUD MERCHANT: USD 42.00" in messages[0].message
     assert "provisional credits" in messages[0].message
     assert "pending the full fraud investigation" in messages[0].message
     assert triage_event is not None

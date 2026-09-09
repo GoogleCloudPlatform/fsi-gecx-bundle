@@ -14,7 +14,7 @@
 
 import datetime
 from sqlalchemy import (
-    Column, String, Boolean, BigInteger, Integer, 
+    Column, String, Boolean, BigInteger, Integer, CheckConstraint,
     DateTime, Numeric, ForeignKey, Index
 )
 from utils.database import UniversalUUID as UUID, generate_uuid
@@ -54,6 +54,7 @@ class CreditAccount(Base):
     """
     __tablename__ = "credit_accounts"
     __table_args__ = (
+        CheckConstraint("currency IN ('USD', 'MXN', 'JPY', 'BHD')", name="ck_credit_accounts_currency"),
         Index("idx_credit_accounts_customer_id", "customer_id"),
         Index("idx_credit_accounts_product_code", "product_code"),
         {'schema': 'cards'},
@@ -75,7 +76,7 @@ class CreditAccount(Base):
     last_payment_date = Column(DateTime, nullable=True)
     last_payment_amount_cents = Column(BigInteger, nullable=False, default=0)
     
-    currency = Column(String(3), default="USD")
+    currency = Column(String(3), nullable=False, default="USD")
     opened_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     # Relationships

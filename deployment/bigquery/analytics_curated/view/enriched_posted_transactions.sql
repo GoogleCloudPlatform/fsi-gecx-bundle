@@ -20,9 +20,14 @@ SELECT
   c.id AS card_id,
   c.last_four AS card_last_four,
   c.is_active AS card_is_active,
-  pt.amount_cents,
-  pt.amount_cents / 100.0 AS signed_amount_dollars,
-  IF(pt.amount_cents < 0, ABS(pt.amount_cents) / 100.0, 0) AS spend_amount_dollars,
+  pt.amount_cents AS amount_minor,
+  account.currency AS currency_code,
+  IF(pt.amount_cents < 0, ABS(pt.amount_cents), 0) AS spend_amount_minor,
+  -- NUMERIC projections are exact; authoritative values remain INT64 + currency.
+  CAST(pt.amount_cents AS NUMERIC) / CASE account.currency
+    WHEN 'JPY' THEN 1 WHEN 'BHD' THEN 1000 ELSE 100 END AS signed_amount_units,
+  CAST(IF(pt.amount_cents < 0, ABS(pt.amount_cents), 0) AS NUMERIC) / CASE account.currency
+    WHEN 'JPY' THEN 1 WHEN 'BHD' THEN 1000 ELSE 100 END AS spend_amount_units,
   pt.amount_cents < 0 AS is_spend,
   auth.merchant_name,
   auth.merchant_category_code,
@@ -35,6 +40,10 @@ SELECT
   auth.card_network,
   auth.fraud_risk_score,
   auth.transaction_currency,
+  auth.transaction_amount_cents AS transaction_amount_minor,
+  auth.billing_currency,
+  auth.billing_amount_cents AS billing_amount_minor,
+  auth.exchange_rate,
   auth.transaction_channel,
   pt.description,
   pt.posted_at,

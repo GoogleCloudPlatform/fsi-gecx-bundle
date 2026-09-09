@@ -24,6 +24,8 @@ from typing import Any, Iterable
 
 from sqlalchemy.orm import Session
 
+from models.money import Money
+
 from models.audit import AuditOutbox
 from models.credit_card import CreditAccount
 from models.origination import Account, AccountLedgerEntry, Transaction
@@ -31,14 +33,14 @@ from utils.audit import record_audit_event
 
 
 FINANCIAL_EVENT_TYPE = "FINANCIAL_TRANSACTION_POSTED"
-FINANCIAL_EVENT_SCHEMA_VERSION = 1
+FINANCIAL_EVENT_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
 class JournalEntrySpec:
     account_id: uuid.UUID | str
     direction: str
-    amount_cents: int
+    money: Money
 
 
 @dataclass(frozen=True)
@@ -48,10 +50,18 @@ class JournalPosting:
     event_id: str
 
 
-def ensure_system_journal_account(db: Session, account_number: str, description: str) -> Account:
+def ensure_system_journal_account(
+    db: Session, account_number: str, description: str, *, currency: str = "USD"
+) -> Account:
     """Returns a durable clearing account used as a balancing counterparty."""
+    Money(amount_minor=0, currency_code=currency)
+    # Preserve historical USD account identity; other denominations get their own.
+    if currency != "USD":
+        account_number = f"{account_number}_{currency}"
     account = db.query(Account).filter(Account.account_number == account_number).one_or_none()
     if account:
+        if account.currency != currency:
+            raise ValueError("Clearing account denomination mismatch")
         return account
     account = Account(
         user_id=None,
@@ -62,7 +72,7 @@ def ensure_system_journal_account(db: Session, account_number: str, description:
         cleared_balance_cents=0,
         available_credit_cents=0,
         credit_limit_cents=0,
-        currency="USD",
+        currency=currency,
         status="ACTIVE",
     )
     db.add(account)
@@ -78,6 +88,8 @@ def ensure_credit_journal_account(db: Session, credit_account: CreditAccount) ->
         .one_or_none()
     )
     if account:
+        if account.currency != credit_account.currency:
+            raise ValueError("Card journal mirror denomination mismatch")
         account.status = credit_account.status
         account.cleared_balance_cents = credit_account.cleared_balance_cents
         account.available_credit_cents = credit_account.available_credit_cents
@@ -94,7 +106,7 @@ def ensure_credit_journal_account(db: Session, credit_account: CreditAccount) ->
         credit_limit_cents=credit_account.credit_limit_cents,
         cleared_balance_cents=credit_account.cleared_balance_cents,
         available_credit_cents=credit_account.available_credit_cents,
-        currency=credit_account.currency or "USD",
+        currency=credit_account.currency,
         status=credit_account.status,
     )
     db.add(account)
@@ -115,20 +127,25 @@ def post_financial_transaction(
     posted_at: datetime.datetime | None = None,
 ) -> JournalPosting:
     """Appends a balanced transaction and versioned event without committing."""
+    Money(amount_minor=0, currency_code=currency)
     normalized: list[JournalEntrySpec] = []
     for spec in entries:
         direction = str(spec.direction).upper()
-        amount = int(spec.amount_cents)
+        if not isinstance(spec.money, Money):
+            raise ValueError("Journal entries require structured Money")
+        if spec.money.currency_code != currency:
+            raise ValueError("Journal entry currency does not match transaction currency")
+        amount = spec.money.amount_minor
         if direction not in {"DEBIT", "CREDIT"}:
             raise ValueError(f"Invalid journal direction: {spec.direction!r}")
         if amount <= 0:
             raise ValueError("Journal amounts must be positive; direction carries the sign.")
-        normalized.append(JournalEntrySpec(spec.account_id, direction, amount))
+        normalized.append(JournalEntrySpec(spec.account_id, direction, spec.money))
 
     if len(normalized) < 2:
         raise ValueError("A financial transaction requires at least two journal entries.")
-    debit_total = sum(item.amount_cents for item in normalized if item.direction == "DEBIT")
-    credit_total = sum(item.amount_cents for item in normalized if item.direction == "CREDIT")
+    debit_total = sum(item.money.amount_minor for item in normalized if item.direction == "DEBIT")
+    credit_total = sum(item.money.amount_minor for item in normalized if item.direction == "CREDIT")
     if debit_total != credit_total:
         raise ValueError(
             f"Unbalanced {currency} transaction: debits={debit_total}, credits={credit_total}."
@@ -143,13 +160,13 @@ def post_financial_transaction(
             .all()
         )
         requested_signature = Counter(
-            (str(item.account_id), item.direction, item.amount_cents) for item in normalized
+            (str(item.account_id), item.direction, item.money.amount_minor) for item in normalized
         )
         existing_signature = Counter(
-            (str(item.account_id), item.entry_type, item.amount_cents)
+            (str(item.account_id), item.entry_type, item.amount_minor)
             for item in existing_entries
         )
-        if requested_signature != existing_signature:
+        if currency != existing.currency_code or requested_signature != existing_signature:
             raise ValueError(
                 "Financial transaction idempotency key was reused with different "
                 f"journal entries: {idempotency_key}"
@@ -168,12 +185,20 @@ def post_financial_transaction(
             event_id=event.event_id if event else f"existing:{existing.id}",
         )
 
+    account_ids = {uuid.UUID(str(item.account_id)) for item in normalized}
+    accounts = db.query(Account).filter(Account.id.in_(account_ids)).all()
+    if len(accounts) != len(account_ids):
+        raise ValueError("Journal entry account not found")
+    if any(account.currency != currency for account in accounts):
+        raise ValueError("Journal account denomination does not match transaction currency")
+
     timestamp = posted_at or datetime.datetime.now(datetime.timezone.utc)
     transaction = Transaction(
         id=uuid.uuid4(),
         idempotency_key=idempotency_key,
         user_id=user_id,
         status="COMPLETED",
+        currency_code=currency,
         description=description,
     )
     journal_entries = tuple(
@@ -181,7 +206,7 @@ def post_financial_transaction(
             entry_id=uuid.uuid4(),
             transaction_id=transaction.id,
             account_id=spec.account_id,
-            amount_cents=spec.amount_cents,
+            amount_minor=spec.money.amount_minor,
             entry_type=spec.direction,
             posted_at=timestamp,
         )
@@ -198,7 +223,7 @@ def post_financial_transaction(
         "transaction_id": str(transaction.id),
         "event_time": timestamp.isoformat(),
         "posted_at": timestamp.isoformat(),
-        "currency": currency.upper(),
+        "currency_code": currency,
         "source_type": source_type,
         "source_references": source_references or {},
         "description": description,
@@ -207,7 +232,7 @@ def post_financial_transaction(
                 "entry_id": str(entry.entry_id),
                 "account_id": str(entry.account_id),
                 "direction": entry.entry_type,
-                "amount_cents": entry.amount_cents,
+                "money": Money(amount_minor=entry.amount_minor, currency_code=currency).model_dump(),
             }
             for entry in journal_entries
         ],

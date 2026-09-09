@@ -156,6 +156,7 @@ def test_origination_and_ledger_models(test_db):
     assert app.mortgage_detail.property_address == "123 Main St"
 
     tx = orig_models.Transaction(
+        currency_code="USD",
         idempotency_key="IDEMP-TX-101",
         user_id=user.id,
         description="Initial deposit",

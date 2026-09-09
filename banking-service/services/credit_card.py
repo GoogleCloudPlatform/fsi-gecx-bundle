@@ -26,6 +26,7 @@ from models.fdx import (
     PaymentMeta, PaymentNetwork, PaginatedPaymentNetworksResult, FDXAccount
 )
 from services.taxonomy_service import TaxonomyService
+from models.money import Money, money_fields
 from services.financial_journal import (
     JournalEntrySpec,
     ensure_credit_journal_account,
@@ -381,6 +382,7 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
             db,
             "SYSTEM_CARD_REVERSAL_CLEARING",
             "Card reversal and dispute clearing",
+            currency=account.currency,
         )
         posting = post_financial_transaction(
             db,
@@ -395,8 +397,8 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
             currency=account.currency or "USD",
             posted_at=posted_at,
             entries=(
-                JournalEntrySpec(clearing_account.id, "DEBIT", reversal_amount),
-                JournalEntrySpec(journal_account.id, "CREDIT", reversal_amount),
+                JournalEntrySpec(clearing_account.id, "DEBIT", Money(amount_minor=reversal_amount, currency_code=account.currency)),
+                JournalEntrySpec(journal_account.id, "CREDIT", Money(amount_minor=reversal_amount, currency_code=account.currency)),
             ),
         )
         reversal_entry = AccountLedger(
@@ -466,7 +468,11 @@ def void_fraud_authorization_hold(
             idempotency_key=idempotency_key,
         )
         if existing_action and existing_action.status == "SUCCEEDED":
-            result = dict(existing_action.result_payload or {})
+            from services.fraud_money import normalize_historical_fraud_action
+            account = repo.get_account_by_id(account_id)
+            if account is None:
+                raise ValueError("Fraud result account no longer exists")
+            result = normalize_historical_fraud_action(existing_action.result_payload or {}, account.currency)
             result["idempotent_replay"] = True
             return result
 
@@ -477,7 +483,7 @@ def void_fraud_authorization_hold(
         auth = repo.get_authorization_by_id_for_account(authorization_id, account.id)
         if not auth:
             raise ValueError(f"Authorization '{authorization_id}' not found for account.")
-        if auth.status != "PENDING":
+        if auth.status not in {"PENDING", "FLAGGED"}:
             raise ValueError(f"Authorization '{authorization_id}' is not pending and cannot be voided.")
 
         action = fraud_repo.create_case_action(
@@ -492,7 +498,9 @@ def void_fraud_authorization_hold(
             },
         )
 
-        release_amount = int(auth.billing_amount_cents or auth.transaction_amount_cents or 0)
+        release_money = Money(amount_minor=auth.billing_amount_cents, currency_code=auth.billing_currency)
+        if release_money.currency_code != account.currency or release_money.amount_minor < 0:
+            raise ValueError("Authorization billing Money does not match the account")
         auth.status = "REVERSED"
         repo.save_authorization(auth)
         repo.recalculate_available_credit(account)
@@ -501,9 +509,9 @@ def void_fraud_authorization_hold(
             "account_id": str(account.id),
             "authorization_id": str(auth.id),
             "fraud_alert_id": fraud_alert_id,
-            "voided_amount_cents": release_amount,
+            **money_fields("voided_amount", release_money),
             "authorization_status": auth.status,
-            "available_credit_cents": account.available_credit_cents,
+            **money_fields("available_credit", Money(amount_minor=account.available_credit_cents, currency_code=account.currency)),
             "message": "Pending fraud authorization reversed.",
         }
         record_audit_event(
@@ -515,7 +523,7 @@ def void_fraud_authorization_hold(
                 "account_id": str(account.id),
                 "card_id": str(auth.card_id),
                 "authorization_id": str(auth.id),
-                "amount_cents": release_amount,
+                "money": release_money.model_dump(),
                 "reason": reason,
             },
         )
@@ -566,7 +574,11 @@ def apply_fraud_provisional_credit(
             idempotency_key=idempotency_key,
         )
         if existing_action and existing_action.status == "SUCCEEDED":
-            result = dict(existing_action.result_payload or {})
+            from services.fraud_money import normalize_historical_fraud_action
+            account = repo.get_account_by_id(account_id)
+            if account is None:
+                raise ValueError("Fraud result account no longer exists")
+            result = normalize_historical_fraud_action(existing_action.result_payload or {}, account.currency)
             result["idempotent_replay"] = True
             return result
 
@@ -602,6 +614,7 @@ def apply_fraud_provisional_credit(
             db,
             "SYSTEM_FRAUD_LOSS_CLEARING",
             "Fraud provisional credit loss clearing",
+            currency=account.currency,
         )
         posting = post_financial_transaction(
             db,
@@ -617,8 +630,8 @@ def apply_fraud_provisional_credit(
             currency=account.currency or "USD",
             posted_at=posted_at,
             entries=(
-                JournalEntrySpec(clearing_account.id, "DEBIT", credit_amount),
-                JournalEntrySpec(journal_account.id, "CREDIT", credit_amount),
+                JournalEntrySpec(clearing_account.id, "DEBIT", Money(amount_minor=credit_amount, currency_code=account.currency)),
+                JournalEntrySpec(journal_account.id, "CREDIT", Money(amount_minor=credit_amount, currency_code=account.currency)),
             ),
         )
         credit_entry = AccountLedger(
@@ -639,10 +652,10 @@ def apply_fraud_provisional_credit(
             "transaction_id": str(original_tx.id),
             "provisional_credit_transaction_id": str(credit_entry.id),
             "fraud_alert_id": fraud_alert_id,
-            "credited_amount_cents": credit_amount,
+            **money_fields("credited_amount", Money(amount_minor=credit_amount, currency_code=account.currency)),
             "journal_transaction_id": str(posting.transaction.id),
-            "cleared_balance_cents": account.cleared_balance_cents,
-            "available_credit_cents": account.available_credit_cents,
+            **money_fields("cleared_balance", Money(amount_minor=account.cleared_balance_cents, currency_code=account.currency)),
+            **money_fields("available_credit", Money(amount_minor=account.available_credit_cents, currency_code=account.currency)),
             "message": "Provisional fraud credit applied pending investigation.",
         }
         record_audit_event(
@@ -654,7 +667,7 @@ def apply_fraud_provisional_credit(
                 "account_id": str(account.id),
                 "posted_transaction_id": str(original_tx.id),
                 "provisional_credit_transaction_id": str(credit_entry.id),
-                "amount_cents": credit_amount,
+                "money": Money(amount_minor=credit_amount, currency_code=account.currency).model_dump(),
                 "transaction_id": str(posting.transaction.id),
                 "financial_event_id": posting.event_id,
                 "reason": reason,
@@ -815,9 +828,10 @@ def get_account_summary_dto(repo: Any, customer_id: str) -> Optional[Dict[str, A
     wallet_statuses = get_wallet_status_by_card_token(repo.db, str(account.id))
     return {
         "account_id": account.id,
-        "credit_limit_cents": account.credit_limit_cents,
-        "cleared_balance_cents": account.cleared_balance_cents,
-        "available_credit_cents": account.available_credit_cents,
+        "currency_code": account.currency,
+        **money_fields("credit_limit", Money(amount_minor=account.credit_limit_cents, currency_code=account.currency)),
+        **money_fields("cleared_balance", Money(amount_minor=account.cleared_balance_cents, currency_code=account.currency)),
+        **money_fields("available_credit", Money(amount_minor=account.available_credit_cents, currency_code=account.currency)),
         "payment_due_date": account.payment_due_date,
         "status": account.status,
         "cards": [
@@ -836,9 +850,9 @@ def get_account_summary_dto(repo: Any, customer_id: str) -> Optional[Dict[str, A
     }
 
 
-def get_transaction_history_dto(repo: Any, customer_id: str) -> Optional[List[Dict[str, Any]]]:
-    """Retrieves unified transaction ledger and pending authorization history DTO for a customer."""
-    account = repo.get_account_by_customer(customer_id)
+def get_transaction_history_dto(repo: Any, customer_id: str, *, account_id: str | None = None) -> Optional[List[Dict[str, Any]]]:
+    """Retrieve Money history for an owned selected account or the customer default."""
+    account = repo.get_account_by_id_for_customer(account_id, customer_id) if account_id else repo.get_account_by_customer(customer_id)
     if not account:
         return None
         
@@ -848,10 +862,19 @@ def get_transaction_history_dto(repo: Any, customer_id: str) -> Optional[List[Di
     results = []
     for auth in auths:
         cat = TaxonomyService.get_category(auth.merchant_category_code)
-        results.append({
+        billing_money = Money(
+            amount_minor=auth.billing_amount_cents,
+            currency_code=auth.billing_currency,
+        )
+        transaction_money = Money(
+            amount_minor=auth.transaction_amount_cents,
+            currency_code=auth.transaction_currency,
+        )
+        item = {
             "id": str(auth.id),
-            "amount_cents": auth.transaction_amount_cents,
-            "amount": auth.transaction_amount_cents / 100.0,
+            "money": billing_money.model_dump(),
+            "transaction_money": transaction_money.model_dump(),
+            "billing_money": billing_money.model_dump(),
             "description": auth.merchant_name or auth.auth_code,
             "posted_at": auth.created_at.isoformat() if auth.created_at else None,
             "pending": True,
@@ -866,15 +889,16 @@ def get_transaction_history_dto(repo: Any, customer_id: str) -> Optional[List[Di
             "merchant_store_id": str(auth.merchant_store_id) if auth.merchant_store_id else None,
             "cardholder_name": auth.card.cardholder_name if auth.card else "Cardholder",
             "last_four": auth.card.last_four if auth.card else None,
-        })
+        }
+        results.append(item)
         
     for entry in ledger:
         mcc = entry.authorization.merchant_category_code if entry.authorization else "5411"
         cat = TaxonomyService.get_category(mcc)
-        results.append({
+        money = Money(amount_minor=entry.amount_cents, currency_code=account.currency)
+        item = {
             "id": str(entry.id),
-            "amount_cents": entry.amount_cents,
-            "amount": abs(entry.amount_cents) / 100.0,
+            "money": money.model_dump(),
             "description": entry.description,
             "posted_at": entry.posted_at.isoformat() if entry.posted_at else None,
             "posted_timestamp": entry.posted_at.isoformat() if entry.posted_at else None,
@@ -890,6 +914,16 @@ def get_transaction_history_dto(repo: Any, customer_id: str) -> Optional[List[Di
             "merchant_store_id": str(entry.authorization.merchant_store_id) if entry.authorization and entry.authorization.merchant_store_id else None,
             "cardholder_name": entry.authorization.card.cardholder_name if entry.authorization and entry.authorization.card else "Cardholder",
             "last_four": entry.authorization.card.last_four if entry.authorization and entry.authorization.card else None,
-        })
+        }
+        if entry.authorization:
+            item["transaction_money"] = Money(
+                amount_minor=entry.authorization.transaction_amount_cents,
+                currency_code=entry.authorization.transaction_currency,
+            ).model_dump()
+            item["billing_money"] = Money(
+                amount_minor=entry.authorization.billing_amount_cents,
+                currency_code=entry.authorization.billing_currency,
+            ).model_dump()
+        results.append(item)
         
     return results

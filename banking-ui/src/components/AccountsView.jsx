@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { formatMoney, parseMoneyInput, currencyExponents } from '../utils/money.js';
+import { useMoneyLocale } from '../utils/moneyLocale.js';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
@@ -47,6 +49,7 @@ import ConsoleAccessStep from './ConsoleAccessStep.jsx';
 
 
 function AccountsView({ fbUser, customerProfile, isReady }) {
+  const [locale] = useMoneyLocale();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -92,7 +95,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
     try {
       setIsTxsLoading(true);
       if (type === 'credit') {
-        const txs = await getCreditCardTransactions(null);
+        const txs = await getCreditCardTransactions(null, accountId);
         setTransactions(txs || []);
       } else {
         const txs = await getDepositTransactions(accountId);
@@ -198,9 +201,6 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
     return `${tx.cardholder_name || 'Cardholder'} ...${lastFour}`;
   };
 
-  const formatMoneyFromCents = (cents = 0) => (
-    (Math.abs(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  );
 
   const formatDateShort = (value) => {
     if (!value) return 'Not set';
@@ -209,9 +209,20 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const getTransactionAmountCents = (tx) => (
-    tx.amount_cents !== undefined ? tx.amount_cents : Math.round((tx.amount || 0) * 100)
-  );
+  const absoluteTransactionMoney = (tx) => ({
+    ...tx.money, amount_minor: Math.abs(tx.money.amount_minor),
+  });
+  const isLargeTransaction = (tx) => Math.abs(tx.money.amount_minor) >=
+    500 * (10 ** currencyExponents[tx.money.currency_code]);
+  const withinAmountBound = (tx, input, minimum) => {
+    try {
+      const bound = parseMoneyInput(input, tx.money.currency_code).amount_minor;
+      const amount = Math.abs(tx.money.amount_minor);
+      return minimum ? amount >= bound : amount <= bound;
+    } catch {
+      return true;
+    }
+  };
 
   const getTransactionKey = (tx, idx, prefix = 'tx') => (
     tx.transaction_id || tx.authorization_id || tx.retrieval_reference_number || tx.id || `${prefix}-${idx}`
@@ -248,13 +259,12 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
 
     if (activeLedgerTab !== 'ALL') {
       result = result.filter(tx => {
-        const amountCents = Math.abs(getTransactionAmountCents(tx));
         if (activeLedgerTab === 'PENDING') return Boolean(tx.pending);
         if (activeLedgerTab === 'POSTED') return !tx.pending;
         if (activeLedgerTab === 'DISPUTES') return isDisputeCandidate(tx);
         if (activeLedgerTab === 'SUBSCRIPTIONS') return isSubscriptionTransaction(tx);
         if (activeLedgerTab === 'TRAVEL') return isTravelTransaction(tx);
-        if (activeLedgerTab === 'LARGE') return amountCents >= 50000;
+        if (activeLedgerTab === 'LARGE') return isLargeTransaction(tx);
         return true;
       });
     }
@@ -265,7 +275,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
       result = result.filter(tx => {
         const desc = `${tx.description || ''} ${tx.merchant_slug || ''} ${tx.merchant_id || ''} ${tx.merchant_store_id || ''}`.toLowerCase();
         const cat = (tx.personal_finance_category?.primary || '').toLowerCase();
-        const amount = String(Math.abs(getTransactionAmountCents(tx)) / 100);
+        const amount = formatMoney(absoluteTransactionMoney(tx), locale).toLowerCase();
         return desc.includes(q) || cat.includes(q) || amount.includes(q);
       });
     }
@@ -278,25 +288,9 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
       });
     }
 
-    // 3. Amount Filter (Min/Max in dollars)
-    if (filters.minAmount !== '') {
-      const minVal = parseFloat(filters.minAmount);
-      if (!isNaN(minVal)) {
-        result = result.filter(tx => {
-          const amt = Math.abs(getTransactionAmountCents(tx)) / 100;
-          return amt >= minVal;
-        });
-      }
-    }
-    if (filters.maxAmount !== '') {
-      const maxVal = parseFloat(filters.maxAmount);
-      if (!isNaN(maxVal)) {
-        result = result.filter(tx => {
-          const amt = Math.abs(getTransactionAmountCents(tx)) / 100;
-          return amt <= maxVal;
-        });
-      }
-    }
+    // Amount bounds are parsed in each transaction's explicit currency.
+    if (filters.minAmount !== '') result = result.filter(tx => withinAmountBound(tx, filters.minAmount, true));
+    if (filters.maxAmount !== '') result = result.filter(tx => withinAmountBound(tx, filters.maxAmount, false));
 
     // 4. Date Range Filter
     if (filters.dateRange !== 'ALL') {
@@ -350,7 +344,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
     }
 
     return result;
-  }, [transactions, activeLedgerTab, searchQuery, filters, cardFilterOptions]);
+  }, [transactions, activeLedgerTab, searchQuery, filters, cardFilterOptions, locale]);
 
   const ledgerQuickTabs = useMemo(() => {
     const counts = transactions.reduce((acc, tx) => {
@@ -360,7 +354,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
       if (isDisputeCandidate(tx)) acc.DISPUTES += 1;
       if (isSubscriptionTransaction(tx)) acc.SUBSCRIPTIONS += 1;
       if (isTravelTransaction(tx)) acc.TRAVEL += 1;
-      if (Math.abs(getTransactionAmountCents(tx)) >= 50000) acc.LARGE += 1;
+      if (isLargeTransaction(tx)) acc.LARGE += 1;
       return acc;
     }, { ALL: 0, PENDING: 0, POSTED: 0, DISPUTES: 0, SUBSCRIPTIONS: 0, TRAVEL: 0, LARGE: 0 });
 
@@ -377,20 +371,17 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
 
   const creditSummary = useMemo(() => {
     if (selectedAccountType !== 'credit' || !activeAccountObj) return null;
-    const creditLimitCents = activeAccountObj.credit_limit_cents || 0;
-    const currentBalanceCents = activeAccountObj.cleared_balance_cents || 0;
-    const statementBalanceCents = activeAccountObj.statement_balance_cents ?? currentBalanceCents;
-    const minimumDueCents = activeAccountObj.minimum_due_cents ?? Math.min(3500, Math.max(0, statementBalanceCents));
-    const availableCreditCents = activeAccountObj.available_credit_cents || 0;
-    const utilization = creditLimitCents > 0
-      ? Math.min(100, Math.max(0, Math.round(((creditLimitCents - availableCreditCents) / creditLimitCents) * 100)))
+    const creditLimitMinor = activeAccountObj.credit_limit.amount_minor;
+    const availableCreditMinor = activeAccountObj.available_credit.amount_minor;
+    const utilization = creditLimitMinor > 0
+      ? Math.min(100, Math.max(0, Math.round(((creditLimitMinor - availableCreditMinor) / creditLimitMinor) * 100)))
       : 0;
     return {
-      currentBalanceCents,
-      statementBalanceCents,
-      minimumDueCents,
-      availableCreditCents,
-      creditLimitCents,
+      currentBalance: activeAccountObj.cleared_balance,
+      statementBalance: activeAccountObj.statement_balance,
+      minimumDue: activeAccountObj.minimum_due,
+      availableCredit: activeAccountObj.available_credit,
+      creditLimit: activeAccountObj.credit_limit,
       utilization,
       paymentDueDate: activeAccountObj.payment_due_date,
       statementCloseDate: activeAccountObj.statement_close_date,
@@ -513,7 +504,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                   </div>
                   <div className="border-t border-slate-200 dark:border-slate-850/80 pt-4 flex justify-between items-end">
                     <span className="text-xs text-slate-500 dark:text-slate-400">Balance</span>
-                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{formatMoney(acc.cleared_balance, locale)}</span>
                   </div>
                 </div>
               ))}
@@ -537,7 +528,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                   </div>
                   <div className="border-t border-slate-200 dark:border-slate-850/80 pt-4 flex justify-between items-end">
                     <span className="text-xs text-slate-550 dark:text-slate-400">Balance</span>
-                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{formatMoney(acc.cleared_balance, locale)}</span>
                   </div>
                 </div>
               ))}
@@ -571,7 +562,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                   </div>
                   <div className="border-t border-slate-200 dark:border-slate-850/80 pt-4 flex justify-between items-end">
                     <span className="text-xs text-slate-550 dark:text-slate-400">Current Balance</span>
-                    <span className="text-2xl font-extrabold text-slate-900 dark:text-slate-200">${(acc.cleared_balance_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-2xl font-extrabold text-slate-900 dark:text-slate-200">{formatMoney(acc.cleared_balance, locale)}</span>
                   </div>
                 </div>
                 );
@@ -645,12 +636,12 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 pt-6 border-t border-slate-205 dark:border-slate-850/80">
                     {[
-                      { label: 'Current balance', value: `$${formatMoneyFromCents(creditSummary?.currentBalanceCents)}`, strong: true },
+                      { label: 'Current balance', value: formatMoney(creditSummary?.currentBalance, locale), strong: true },
                       { label: 'Statement period', value: `${formatDateShort(creditSummary?.statementCloseDate)} - ${formatDateShort(creditSummary?.paymentDueDate)}` },
-                      { label: 'Minimum due', value: `$${formatMoneyFromCents(creditSummary?.minimumDueCents)}`, strong: true },
+                      { label: 'Minimum due', value: formatMoney(creditSummary?.minimumDue, locale), strong: true },
                       { label: 'Payment due', value: formatDateShort(creditSummary?.paymentDueDate), accent: true },
-                      { label: 'Available credit', value: `$${formatMoneyFromCents(creditSummary?.availableCreditCents)}`, positive: true },
-                      { label: 'Credit limit', value: `$${formatMoneyFromCents(creditSummary?.creditLimitCents)}` },
+                      { label: 'Available credit', value: formatMoney(creditSummary?.availableCredit, locale), positive: true },
+                      { label: 'Credit limit', value: formatMoney(creditSummary?.creditLimit, locale) },
                     ].map(metric => (
                       <div key={metric.label} className="min-h-24 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/30 p-4">
                         <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wide">{metric.label}</div>
@@ -698,7 +689,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                   <div className="text-left md:text-right">
                     <div className="text-xs text-slate-505 dark:text-slate-400 font-medium">Cleared Balance</div>
                     <div className="text-3xl font-black text-slate-900 dark:text-white mt-1">
-                      ${((activeAccountObj?.cleared_balance_cents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {formatMoney(activeAccountObj?.cleared_balance, locale)}
                     </div>
                   </div>
                 </div>
@@ -931,7 +922,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                         </label>
                         <div className="flex items-center gap-3">
                           <div className="flex-1">
-                            <span className="block text-[11px] font-semibold text-slate-500 mb-1">Min Amount ($)</span>
+                            <span className="block text-[11px] font-semibold text-slate-500 mb-1">Min Amount ({activeAccountObj?.currency_code})</span>
                             <input
                               type="number"
                               placeholder="0.00"
@@ -942,7 +933,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                           </div>
                           <span className="text-slate-400 font-bold mt-5">—</span>
                           <div className="flex-1">
-                            <span className="block text-[11px] font-semibold text-slate-500 mb-1">Max Amount ($)</span>
+                            <span className="block text-[11px] font-semibold text-slate-500 mb-1">Max Amount ({activeAccountObj?.currency_code})</span>
                             <input
                               type="number"
                               placeholder="1000.00"
@@ -1124,9 +1115,9 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                               <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
                                 {filteredTransactions.filter(t => t.pending).map((tx, idx) => {
                                   const isLateFee = tx.description === "LATE_FEE" || tx.merchant_name === "LATE_FEE";
-                                  const isCredit = (tx.amount_cents !== undefined && tx.amount_cents < 0) || tx.description?.toUpperCase().includes('OFFER');
+                                  const isCredit = (tx.money.amount_minor < 0) || tx.description?.toUpperCase().includes('OFFER');
                                   const catLabel = formatCategoryLabel(tx, "Fees");
-                                  const amountVal = Math.abs(getTransactionAmountCents(tx)) / 100;
+                                  const amountVal = formatMoney(absoluteTransactionMoney(tx), locale);
                                   const rowKey = getTransactionKey(tx, idx, 'pending');
                                   const isExpanded = expandedTransactionKey === rowKey;
                                   return (
@@ -1155,7 +1146,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                                           {formatTransactionCardLabel(tx)}
                                         </td>
                                         <td className={`py-3 text-right font-bold text-sm w-[14%] ${isCredit ? 'text-emerald-600 dark:text-emerald-400 italic' : isLateFee ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-300'}`}>
-                                          {isCredit ? '-' : ''}${amountVal.toFixed(2)}
+                                          {isCredit ? '-' : ''}{amountVal}
                                         </td>
                                       </tr>
                                       {isExpanded && (
@@ -1200,9 +1191,9 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                             </thead>
                             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
                               {filteredTransactions.filter(t => !t.pending).map((tx, idx) => {
-                                const isPayment = tx.transaction_type === "DIRECTDEPOSIT" || (tx.amount_cents !== undefined ? tx.amount_cents > 0 : tx.amount < 0) || tx.description?.toUpperCase().includes('PAYMENT');
+                                const isPayment = tx.transaction_type === "DIRECTDEPOSIT" || (tx.money.amount_minor > 0) || tx.description?.toUpperCase().includes('PAYMENT');
                                 const catLabel = formatCategoryLabel(tx, "General");
-                                const amountVal = Math.abs(getTransactionAmountCents(tx)) / 100;
+                                const amountVal = formatMoney(absoluteTransactionMoney(tx), locale);
                                 const rowKey = getTransactionKey(tx, idx, 'posted');
                                 const isExpanded = expandedTransactionKey === rowKey;
                                 return (
@@ -1230,7 +1221,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                                         {formatTransactionCardLabel(tx)}
                                       </td>
                                       <td className={`py-4 text-right font-bold text-sm w-[14%] ${isPayment ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                                        {isPayment ? '-' : ''}${amountVal.toFixed(2)}
+                                        {isPayment ? '-' : ''}{amountVal}
                                       </td>
                                     </tr>
                                     {isExpanded && (
@@ -1278,15 +1269,15 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                             </thead>
                             <tbody className="divide-y divide-slate-200 dark:divide-slate-850/50">
                               {filteredTransactions.filter(t => t.pending).map((tx, idx) => {
-                                const isIncoming = tx.entry_type === "DEBIT";
-                                const amountVal = Math.abs(tx.amount || (tx.amount_cents ? tx.amount_cents / 100 : 0));
+                                const isIncoming = tx.entry_type === "CREDIT";
+                                const amountVal = formatMoney(absoluteTransactionMoney(tx), locale);
                                 return (
                                   <tr key={`dep-pen-${idx}`} className="hover:bg-slate-100/50 dark:hover:bg-slate-900/30 transition-colors">
                                     <td className="py-4 text-xs text-slate-450 dark:text-slate-500 italic">Pending</td>
                                     <td className="py-4 font-medium text-slate-800 dark:text-slate-200">{tx.description}</td>
                                     <td className="py-4 text-xs text-slate-500 dark:text-slate-400">Hold</td>
                                     <td className={`py-4 text-right font-bold text-sm ${isIncoming ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-850 dark:text-slate-300'}`}>
-                                      {isIncoming ? '' : '-'}${amountVal.toFixed(2)}
+                                      {isIncoming ? '' : '-'}{amountVal}
                                     </td>
                                   </tr>
                                 );
@@ -1310,8 +1301,8 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                           </thead>
                           <tbody className="divide-y divide-slate-200 dark:divide-slate-850/50">
                             {filteredTransactions.filter(t => !t.pending).map((tx, idx) => {
-                              const isIncoming = tx.entry_type === "DEBIT";
-                              const amountVal = Math.abs(tx.amount || (tx.amount_cents ? tx.amount_cents / 100 : 0));
+                              const isIncoming = tx.entry_type === "CREDIT";
+                              const amountVal = formatMoney(absoluteTransactionMoney(tx), locale);
                               return (
                                 <tr key={`dep-pos-${idx}`} className="hover:bg-slate-100/50 dark:hover:bg-slate-900/30 transition-colors">
                                   <td className="py-4 text-xs text-slate-500 dark:text-slate-400">
@@ -1322,10 +1313,10 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                                     {isIncoming ? "Direct Deposit" : "ACH Withdrawal"}
                                   </td>
                                   <td className={`py-4 text-right font-bold text-sm ${isIncoming ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-850 dark:text-slate-300'}`}>
-                                    {isIncoming ? '' : '-'}${amountVal.toFixed(2)}
+                                    {isIncoming ? '' : '-'}{amountVal}
                                   </td>
                                   <td className="py-4 text-right text-slate-800 dark:text-slate-300">
-                                    ${(tx.running_balance_cents !== undefined ? tx.running_balance_cents / 100 : 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    {formatMoney(tx.running_balance, locale)}
                                   </td>
                                 </tr>
                               );

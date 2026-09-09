@@ -9,3 +9,14 @@ node_modules/
 **/.venv/
 **/.terraform/
 **/.pytest_cache/
+# Local test databases and generated output are not deployment inputs.
+file:*mode=memory*cache=shared*
+**/file:*mode=memory*cache=shared*
+**/__pycache__/
+banking-ui/dist/
+.env
+.env.local
+**/.env
+**/.env.local
+output/
+.playwright-cli/

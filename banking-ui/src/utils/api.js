@@ -263,8 +263,9 @@ export async function getCreditCardAccount(targetCustomerId = null, fallback = t
   return res.data;
 }
 
-export async function getCreditCardTransactions(targetCustomerId = null) {
+export async function getCreditCardTransactions(targetCustomerId = null, accountId = null) {
   const params = targetCustomerId ? { target_customer_id: targetCustomerId } : {};
+  if (accountId) params.account_id = accountId;
   const res = await api.get('credit-card/transactions', { params });
   return res.data;
 }
@@ -274,8 +275,8 @@ export async function acknowledgeFraudAlert() {
   return res.data;
 }
 
-export async function getCreditCardVoiceToken(mode = 'audio') {
-  const res = await api.get('credit-card/voice/token', { params: { mode } });
+export async function getCreditCardVoiceToken(mode = 'audio', locale = 'en-US') {
+  const res = await api.get('credit-card/voice/token', { params: { mode, locale } });
   return res.data;
 }
 
@@ -486,8 +487,10 @@ export async function getAccountsSummary() {
   return res.data;
 }
 
-export async function payCreditCard(paymentData) {
-  const res = await api.post('v1/credit-card/pay', paymentData);
+export async function payCreditCard(paymentData, idempotencyKey) {
+  const res = await api.post('v1/credit-card/pay', paymentData, {
+    headers: { 'Idempotency-Key': idempotencyKey }
+  });
   return res.data;
 }
 

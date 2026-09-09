@@ -106,6 +106,15 @@ FROZEN_PROPOSAL_COLUMNS = {
 }
 
 
+@pytest.fixture(autouse=True)
+def isolated_banking_money(monkeypatch):
+    # Lifecycle tests use opaque fake transaction IDs. Real scoped resolution is
+    # exercised by fraud workflow and Money tests, including denomination errors.
+    from copy import deepcopy
+    monkeypatch.setattr("services.action_proposals.fraud_money_facts",
+                        lambda repository, alert: deepcopy(alert.suspicious_transactions or []))
+
+
 @pytest.fixture(name="db_session")
 def fixture_db_session():
     engine = create_engine("sqlite:///:memory:")
@@ -143,13 +152,15 @@ def _add_fraud_alert(db_session):
             {
                 "authorization_id": "auth-1",
                 "merchant_name": "Corner Market",
-                "amount_cents": 1299,
+                "money": {"amount_minor": 1299, "currency_code": "USD"},
+                "billing_money": {"amount_minor": 1299, "currency_code": "USD"},
             },
             {
                 "authorization_id": "auth-2",
                 "transaction_id": "txn-2",
                 "merchant_name": "Transit Pass",
-                "amount_cents": 4500,
+                "money": {"amount_minor": 4500, "currency_code": "USD"},
+                "billing_money": {"amount_minor": 4500, "currency_code": "USD"},
             },
         ],
     )
@@ -421,7 +432,8 @@ def test_fraud_triage_proposal_normalizes_and_binds_immutable_payload(
     assert proposal.status == "PROPOSED"
     assert proposal.contract_version == "fraud-triage.v1"
     assert proposal.action_type == TRIAGE_FRAUD_CASE
-    assert proposal.action_payload == {
+    assert {key: value for key, value in proposal.action_payload.items()
+            if key not in {"money_facts", "presentations"}} == {
         "disputed_authorization_ids": ["auth-1", "auth-2"],
         "disputed_transaction_ids": [],
         "escalate": False,
@@ -431,11 +443,13 @@ def test_fraud_triage_proposal_normalizes_and_binds_immutable_payload(
     assert len(proposal.payload_fingerprint) == 64
     assert str(proposal.customer_id) == str(fraud_alert.customer_id)
     assert str(proposal.account_id) == str(fraud_alert.credit_account_id)
+    assert proposal.action_payload["money_facts"] == fraud_alert.suspicious_transactions
+    assert "12 dólares estadounidenses con 99 centavos" in proposal.action_payload["presentations"]["es-MX"]["speech_text"]
     assert proposal.reset_generation == "3:9"
     assert proposal.catalog_snapshot_id == "fraud-guidance-v7"
-    assert "$12.99 at Corner Market" in proposal.customer_safe_summary
-    assert "$45.00 at Transit Pass" in proposal.customer_safe_summary
-    assert f"card ending {fraud_alert.card_last_four}" in proposal.customer_safe_summary
+    assert "USD 12.99 at Corner Market" in proposal.customer_safe_summary
+    assert "USD 45.00 at Transit Pass" in proposal.customer_safe_summary
+    assert f"card ending in {fraud_alert.card_last_four}" in proposal.customer_safe_summary
     assert "dispute" in proposal.customer_safe_summary
     assert "block the current card and issue a replacement" in (
         proposal.customer_safe_summary

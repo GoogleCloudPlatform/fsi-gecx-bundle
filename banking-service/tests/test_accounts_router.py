@@ -16,8 +16,32 @@ import uuid
 import pytest
 from httpx import AsyncClient, ASGITransport
 from main import app
-from utils.database import SessionLocal
+from utils.database import SessionLocal, Base, get_db, create_db_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 from models.origination import Account, AccountLedgerEntry
+
+
+@pytest.fixture(autouse=True)
+def isolated_account_database(monkeypatch):
+    engine = create_db_engine("sqlite:///:memory:", poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr(__import__(__name__, fromlist=["SessionLocal"]), "SessionLocal", factory)
+    def sessions():
+        with factory() as db:
+            yield db
+    previous = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = sessions
+    try:
+        yield
+    finally:
+        if previous is None:
+            app.dependency_overrides.pop(get_db, None)
+        else:
+            app.dependency_overrides[get_db] = previous
+        Base.metadata.drop_all(engine)
+        engine.dispose()
 
 
 @pytest.fixture
@@ -123,8 +147,8 @@ async def test_get_deposit_transactions(async_client):
     assert tx_res.status_code == 200
     tx_data = tx_res.json()
     assert len(tx_data) >= 1
-    assert tx_data[0]["amount_cents"] == 25000
+    assert tx_data[0]["money"] == {"amount_minor": 25000, "currency_code": "USD"}
     # A deposit increases the bank's liability to the customer, so the
     # customer account receives the credit side of the balanced journal.
     assert tx_data[0]["entry_type"] == "CREDIT"
-    assert "running_balance_cents" in tx_data[0]
+    assert "running_balance" in tx_data[0]

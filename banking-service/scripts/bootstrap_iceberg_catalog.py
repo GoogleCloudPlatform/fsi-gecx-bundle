@@ -93,7 +93,8 @@ def _view_queries(project_id: str, catalog_id: str) -> dict[str, str]:
           CREATE OR REPLACE VIEW {dataset}.account_ledger_entries` AS
           SELECT * EXCEPT (dedupe_ordinal)
           FROM (
-            SELECT *, ROW_NUMBER() OVER (
+            SELECT * EXCEPT (amount_cents),
+                   amount_cents AS amount_minor, currency AS currency_code, ROW_NUMBER() OVER (
               PARTITION BY entry_id ORDER BY ingested_at DESC, published_at DESC
             ) AS dedupe_ordinal
             FROM {ledger}
@@ -102,13 +103,13 @@ def _view_queries(project_id: str, catalog_id: str) -> dict[str, str]:
         """,
         "account_ledger_balance": f"""
           CREATE OR REPLACE VIEW {dataset}.account_ledger_balance` AS
-          SELECT transaction_id, currency,
-                 SUM(IF(direction = 'DEBIT', amount_cents, 0)) AS debit_cents,
-                 SUM(IF(direction = 'CREDIT', amount_cents, 0)) AS credit_cents,
-                 SUM(IF(direction = 'DEBIT', amount_cents, -amount_cents)) AS imbalance_cents,
+          SELECT transaction_id, currency_code, currency_code AS currency,
+                 SUM(IF(direction = 'DEBIT', amount_minor, 0)) AS debit_minor,
+                 SUM(IF(direction = 'CREDIT', amount_minor, 0)) AS credit_minor,
+                 SUM(IF(direction = 'DEBIT', amount_minor, -amount_minor)) AS imbalance_minor,
                  COUNT(*) AS entry_count
           FROM {dataset}.account_ledger_entries`
-          GROUP BY transaction_id, currency
+          GROUP BY transaction_id, currency_code
         """,
         "origination_audit_log": f"""
           CREATE OR REPLACE VIEW {dataset}.origination_audit_log` AS
@@ -128,14 +129,18 @@ def _view_queries(project_id: str, catalog_id: str) -> dict[str, str]:
           SELECT event_id, event_type,
                  JSON_VALUE(payload, '$.account_id') AS account_id,
                  JSON_VALUE(payload, '$.transaction_id') AS transaction_id,
-                 COALESCE(
-                   CAST(JSON_VALUE(payload, '$.amount_cents') AS INT64),
-                   (SELECT SUM(CAST(JSON_VALUE(entry, '$.amount_cents') AS INT64))
-                    FROM UNNEST(JSON_QUERY_ARRAY(payload, '$.entries')) entry
-                    WHERE JSON_VALUE(entry, '$.direction') = 'DEBIT')
-                 ) AS amount_cents,
+                 COALESCE(posting.amount_minor,
+                          CAST(JSON_VALUE(payload, '$.money.amount_minor') AS INT64)) AS amount_minor,
+                 COALESCE(posting.currency_code,
+                          JSON_VALUE(payload, '$.money.currency_code')) AS currency_code,
                  payload, created_at
-          FROM {dataset}.audit_events`
+          FROM {dataset}.audit_events` events
+          LEFT JOIN (
+            SELECT event_id, currency_code,
+                   SUM(IF(direction = 'DEBIT', amount_minor, 0)) AS amount_minor
+            FROM {dataset}.account_ledger_entries`
+            GROUP BY event_id, currency_code
+          ) posting USING (event_id)
           WHERE event_type IN (
             'FINANCIAL_TRANSACTION_POSTED', 'MONETARY_TRANSFER_EXECUTED',
             'CREDIT_LIMIT_INCREASED', 'FEE_REVERSED', 'CARD_FROZEN',

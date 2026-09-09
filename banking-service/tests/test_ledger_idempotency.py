@@ -14,6 +14,7 @@
 
 import json
 import uuid
+from models.money import Money
 import pytest
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import AsyncMock
@@ -56,6 +57,7 @@ def test_idempotency_dependency(db_session):
     real_hash = hashlib.sha256(json.dumps(payload_dict, sort_keys=True).encode("utf-8")).hexdigest()
 
     tx = Transaction(
+        currency_code="USD",
         idempotency_key="key_123",
         user_id=user.id,
         status="COMPLETED",
@@ -93,10 +95,10 @@ def test_execute_transfer_success(db_session):
     db_session.commit()
 
     service = LedgerService(db_session)
-    res = service.execute_transfer(src.id, dst.id, 3000, "Transfer to savings", "idemp_trans_1", user.id)
+    res = service.execute_transfer(src.id, dst.id, Money(amount_minor=3000, currency_code="USD"), "Transfer to savings", "idemp_trans_1", user.id)
 
     assert res["status"] == "SUCCESS"
-    assert res["amount_cents"] == 3000
+    assert res["money"] == {"amount_minor": 3000, "currency_code": "USD"}
 
     db_session.refresh(src)
     db_session.refresh(dst)
@@ -154,7 +156,7 @@ def test_concurrent_double_spend_simulation():
                 res = service.execute_transfer(
                     source_account_id=chk_id,
                     dest_account_id=sys_id,
-                    amount_cents=5000, # $50.00
+                    money=Money(amount_minor=5000, currency_code="USD"), # $50.00
                     description=f"Withdrawal {index}",
                     idempotency_key=f"idemp_concurrent_{index}",
                     user_id=user_id
