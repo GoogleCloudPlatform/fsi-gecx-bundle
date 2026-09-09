@@ -633,3 +633,13 @@ def test_mxn_provisional_credit_returns_only_mxn_money(db_session):
     assert result["credited_amount"] == {"amount_minor": 3500, "currency_code": "MXN"}
     assert result["cleared_balance"] == {"amount_minor": 0, "currency_code": "MXN"}
     assert not any(key.endswith("_cents") for key in result)
+
+
+def test_selected_history_resolves_firebase_identity_before_enforcing_ownership(db_session):
+    repo = CreditCardRepository(db_session)
+    account = repo.get_account_by_customer("cust-test-xyz")
+    selected = get_transaction_history_dto(repo, "cust-test-xyz", account_id=str(account.id))
+    assert selected == get_transaction_history_dto(repo, "cust-test-xyz")
+    assert selected[0]["money"] == {"amount_minor": -3500, "currency_code": "USD"}
+    assert get_transaction_history_dto(repo, "another-firebase-user", account_id=str(account.id)) is None
+    assert get_transaction_history_dto(repo, str(account.customer_id), account_id=str(account.id)) == selected

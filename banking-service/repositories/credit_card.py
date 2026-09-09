@@ -62,6 +62,15 @@ class CreditCardRepository:
             FinancialAccount.status == "ACTIVE",
         ).first()
 
+    def get_account_by_id_for_customer(self, account_id: str, customer_id: str) -> Optional[FinancialAccount]:
+        """Resolve the authenticated identity before enforcing selected-account ownership."""
+        resolved_uid = self._resolve_user_id(customer_id)
+        return self.db.query(FinancialAccount).filter(
+            FinancialAccount.id == account_id,
+            FinancialAccount.customer_id == resolved_uid,
+            FinancialAccount.status == "ACTIVE",
+        ).first()
+
     def save_account(self, account: FinancialAccount) -> FinancialAccount:
         """Saves a Financial Account instance to the session."""
         self.db.add(account)

@@ -92,7 +92,8 @@ def test_selected_credit_history_uses_owned_account_currency(owned):
     from unittest.mock import MagicMock
     from services.credit_card import get_transaction_history_dto
     repo = MagicMock()
-    repo.get_account_by_id.return_value = SimpleNamespace(id="mxn-account", customer_id="owner", currency="MXN")
+    repo.get_account_by_id_for_customer.return_value = (
+        SimpleNamespace(id="mxn-account", customer_id="owner", currency="MXN") if owned else None)
     repo.list_authorizations.return_value = []
     repo.list_ledger_entries.return_value = [SimpleNamespace(
         id="posted", amount_cents=-234, description="MXN purchase", posted_at=None, authorization=None)]
