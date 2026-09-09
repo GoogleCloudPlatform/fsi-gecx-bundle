@@ -918,8 +918,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         runtime_transition_active.set()
         try:
             live_queue.close()
-            discard_audio_queue(playout_queue)
-            audio_source.clear_queue()
+            playout_bridge.clear()
             voice_locale = selected_locale
             lang_code = selected_locale
             live_queue = LiveRequestQueue()

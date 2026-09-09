@@ -167,7 +167,7 @@ export default function BillPayModal({
                 ) : (
                   depositAccounts.map(a => (
                     <option key={a.account_id} value={a.account_id}>
-                      {a.product_name} (**** {a.account_number.slice(-4)})
+                      {a.product_name} (**** {a.account_number?.slice(-4) ?? '----'})
                     </option>
                   ))
                 )}

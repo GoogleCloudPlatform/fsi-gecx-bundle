@@ -25,7 +25,7 @@ from repositories.credit_card import CreditCardRepository
 from models.secure_messaging import SecureMessageCreateRequest, SENDER_TYPE_BANK
 from repositories.fraud import FraudAlertRepository, ScenarioOutcomeRepository
 from services.knowledge_catalog import KnowledgeCatalogService
-from services.fraud_money import fraud_money_facts, authorization_money_facts, normalize_historical_fraud_workflow
+from services.fraud_money import require_fraud_account, fraud_money_facts, authorization_money_facts, normalize_historical_fraud_workflow
 from models.money import Money
 from services.money_presentation import project_money, project_transaction_money
 from services.fraud_presentation import CONTENT as MONEY_VOICE_CONTENT
@@ -778,6 +778,8 @@ class FraudAlertService:
                 "fraud_alert": None,
             }
 
+        account = require_fraud_account(CreditCardRepository(self.db), alert)
+
         workflow_key = idempotency_key or self._build_triage_idempotency_key(
             disputed_authorization_ids=disputed_authorization_ids,
             disputed_transaction_ids=disputed_transaction_ids,
@@ -791,7 +793,7 @@ class FraudAlertService:
         if workflow_action and workflow_action.status == "SUCCEEDED":
             result = normalize_historical_fraud_workflow(
                 workflow_action.result_payload or {},
-                CreditCardRepository(self.db).get_account_by_id(str(alert.credit_account_id)).currency)
+                account.currency)
             result["idempotent_replay"] = True
             return result
         if not workflow_action:
@@ -956,7 +958,7 @@ class FraudAlertService:
                 commit_transaction=False,
             )
 
-        account_currency = CreditCardRepository(self.db).get_account_by_id(str(alert.credit_account_id)).currency
+        account_currency = account.currency
         provisional_credit_total = sum(
             item["credited_amount"]["amount_minor"] for item in provisional_credits
         )
@@ -1387,7 +1389,7 @@ class FraudAlertService:
         if disputed_lines:
             lines.append("Disputed transactions:")
             lines.extend(disputed_lines)
-        account = CreditCardRepository(self.db).get_account_by_id(str(alert.credit_account_id))
+        account = require_fraud_account(CreditCardRepository(self.db), alert)
         if voided_authorizations:
             total = sum(item["voided_amount"]["amount_minor"] for item in voided_authorizations)
             lines.append(

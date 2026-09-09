@@ -92,11 +92,19 @@ class BufferedAudioPlayout:
     def __init__(self, *, audio_source, queue: asyncio.Queue):
         self.audio_source = audio_source
         self.queue = queue
+        self._generation = 0
+
+    def clear(self) -> None:
+        """Invalidate buffered PCM as well as queued and native-source audio."""
+        self._generation += 1
+        discard_audio_queue(self.queue)
+        self.audio_source.clear_queue()
 
     async def run(self) -> None:
         from livekit import rtc
 
         accumulator = b""
+        generation = self._generation
         chunk_size = 480
         start_time = None
         frame_count = 0
@@ -105,6 +113,10 @@ class BufferedAudioPlayout:
         while True:
             pcm_bytes = await self.queue.get()
             try:
+                if generation != self._generation:
+                    accumulator = b""
+                    buffering = True
+                    generation = self._generation
                 accumulator += pcm_bytes
                 if buffering:
                     if len(accumulator) < 7200:
@@ -112,7 +124,7 @@ class BufferedAudioPlayout:
                     buffering = False
                     start_time = loop.time()
                     frame_count = 0
-                while len(accumulator) >= chunk_size:
+                while len(accumulator) >= chunk_size and generation == self._generation:
                     chunk = accumulator[:chunk_size]
                     accumulator = accumulator[chunk_size:]
                     await self.audio_source.capture_frame(
@@ -123,6 +135,11 @@ class BufferedAudioPlayout:
                             samples_per_channel=240,
                         )
                     )
+                    if generation != self._generation:
+                        # A capture already awaiting native capacity can finish
+                        # after clear(); remove that old frame before new PCM.
+                        self.audio_source.clear_queue()
+                        break
                     frame_count += 1
                     delay = start_time + (frame_count * 0.010) - loop.time()
                     if delay > 0:

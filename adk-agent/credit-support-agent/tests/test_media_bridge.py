@@ -16,9 +16,12 @@ import asyncio
 
 import numpy as np
 import pytest
-
 from agent import media_bridge
-from agent.media_bridge import BufferedAudioPlayout, SileroVADTracker, discard_audio_queue
+from agent.media_bridge import (
+    BufferedAudioPlayout,
+    SileroVADTracker,
+    discard_audio_queue,
+)
 
 
 class _AudioSource:
@@ -75,3 +78,43 @@ def test_synthetic_streaming_audio_fixture_drives_vad(monkeypatch):
     started, ended = tracker.process_chunk(np.zeros(2048, dtype=np.float32))
     assert started is False
     assert ended is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("capture_in_flight", [False, True])
+async def test_language_restart_discards_buffered_and_inflight_old_audio(capture_in_flight):
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class Source(_AudioSource):
+        def clear_queue(self):
+            self.frames.clear()
+
+        async def capture_frame(self, frame):
+            if capture_in_flight and not started.is_set():
+                started.set()
+                await release.wait()
+            await super().capture_frame(frame)
+
+    queue = asyncio.Queue()
+    source = Source()
+    bridge = BufferedAudioPlayout(audio_source=source, queue=queue)
+    task = asyncio.create_task(bridge.run())
+    try:
+        await queue.put(b"\x01\x00" * (3600 if capture_in_flight else 1800))
+        if capture_in_flight:
+            await asyncio.wait_for(started.wait(), timeout=1)
+        else:
+            # This has left the queue but remains below the worker's PCM threshold.
+            assert await bridge.wait_for_drain(timeout=1)
+        await queue.put(b"\x01\x00" * 3600)
+        bridge.clear()
+        release.set()
+        await queue.put(b"\x02\x00" * 3600)
+        assert await bridge.wait_for_drain(timeout=1)
+        assert len(source.frames) == 15
+        assert all(bytes(frame.data) == b"\x02\x00" * 240 for frame in source.frames)
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task

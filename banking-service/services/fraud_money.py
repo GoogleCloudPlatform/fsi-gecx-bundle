@@ -18,10 +18,15 @@ from models.money import Money
 from services.money_presentation import project_transaction_money
 
 
-def fraud_money_facts(repository, alert) -> list[dict]:
+def require_fraud_account(repository, alert):
     account = repository.get_account_by_id(str(alert.credit_account_id))
     if account is None or str(account.customer_id) != str(alert.customer_id):
         raise ValueError("Fraud account ownership cannot be verified")
+    return account
+
+
+def fraud_money_facts(repository, alert) -> list[dict]:
+    account = require_fraud_account(repository, alert)
     facts = []
     for item in alert.suspicious_transactions or []:
         authorization = None

@@ -105,3 +105,33 @@ def test_selected_credit_history_uses_owned_account_currency(owned):
     else:
         assert result is None
         repo.list_ledger_entries.assert_not_called()
+
+
+@pytest.mark.parametrize("replay", [False, True])
+@pytest.mark.parametrize("missing", [False, True])
+def test_fraud_triage_rejects_unverifiable_account_before_actions(monkeypatch, replay, missing):
+    from services.fraud_alerts import FraudAlertService
+
+    card_repo, alert = repository_and_alert()
+    alert.id = "alert"
+    if missing:
+        card_repo.get_account_by_id.return_value = None
+    else:
+        card_repo.get_account_by_id.return_value.customer_id = "another-customer"
+    monkeypatch.setattr("services.fraud_alerts.CreditCardRepository", lambda db: card_repo)
+    db = MagicMock()
+    service = FraudAlertService(db)
+    service.repo = MagicMock()
+    service.repo.get_alert_for_customer.return_value = alert
+    service.repo.get_case_action_by_idempotency_key.return_value = (
+        SimpleNamespace(status="SUCCEEDED", result_payload={}) if replay else None
+    )
+    with pytest.raises(ValueError, match="Fraud account ownership cannot be verified"):
+        service.triage_fraud_case(
+            auth_provider_uid="customer", fraud_alert_id="alert", idempotency_key="same-intent"
+        )
+    service.repo.get_case_action_by_idempotency_key.assert_not_called()
+    service.repo.create_case_action.assert_not_called()
+    service.repo.resolve_alert.assert_not_called()
+    db.commit.assert_not_called()
+    db.rollback.assert_called_once()
