@@ -49,6 +49,10 @@ connections and avoid backend startup and cloud credentials.
 
 ## Delivery evidence
 
+The current deployed qualification record for Packets 01–06 is
+maintained in the FSI solutions workbench under the active
+`internationalization-and-money-foundation` work item.
+
 - Packet 01: strict Money, metadata, external USD helpers, finite legacy guard,
   offline serialization/OpenAPI tests, and active CI definition delivered.
 - Packet 01 validation: 43 offline contract/guard cases passed.
