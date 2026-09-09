@@ -154,8 +154,9 @@ real PostgreSQL posting tests and are not deployed-environment qualification.
   `money-es-mxn-mobile.png` and `money-en-mxn-desktop.png`.
 
 Locale only changes presentation. English is the UI-copy fallback for Japanese
-and Arabic projection fixtures. Spanish consequential content still needs human
-review before the later live multilingual qualification.
+and Arabic projection fixtures. Spanish consequential content has received the
+user-authorized assistant review recorded below; live multilingual qualification
+remains required.
 
 
 ## Event and analytical Money
@@ -230,3 +231,15 @@ Money. Temporary external legacy aliases are USD-only. One reader normalizes
 immutable pre-Money USD action results without rewriting their stored payloads.
 Checks after this increment: 105 focused Money tests and 108 backend regressions
 passed, including cross-currency billed holds and MXN provisional credits.
+
+### Qualification build and MCP fixture checks
+
+Cloud Build `c0f97904-9e8e-417e-acb2-a7f61b2bca29` succeeded in
+`evo-genai-workspace` for source `f8bec0b394fcffc2a9a464272602f0ab2f6e7883`,
+building banking-service, banking-ui and credit-support-agent images. This is
+build evidence only; database migration and live qualification remain pending.
+
+The additional MCP/simulation regression run passed 35 checks and exposed four
+fraud fixtures that omitted currency facts. Replacing those mocks with persisted
+USD authorizations made all four targeted reruns pass. Their physical storage
+columns are explicitly covered by the reviewed legacy allowlist.

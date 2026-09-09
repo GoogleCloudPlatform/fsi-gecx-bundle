@@ -972,16 +972,18 @@
       "lines": {
         "030f928698d8720961436a79a33247bbce6b093f076780bda38d841aef22c363": 1,
         "3545c439f8411c8d569bf3532517921123c1ca4889df7b768fcc6d2abf5e0895": 1,
-        "460cda189ed8eb17b025d98224d1bd12c08bf22f7aed4b27596ac2c25590b47b": 1,
         "4958ba34df8f4744cb344df6bcb0f3571b0593499c6bc28d78c46d443f236ffa": 1,
-        "5c1e00114f2125423c1ca80d1c88a3807d49f5ecb50418c00b36b5fbb7a066cd": 1,
         "601f1c36cd6003f224dc04ef048781c3b8c3f63a2dcbff2976426970b5823388": 1,
+        "61ba2dd5bcac1854f82ce97bf91069a1bf963ab27bb66f5fe8cf7d08a3ee42dc": 1,
         "684c8ec7b94bf4ca27362edf1025f056b243de37c6d9ad2d78978d64669f10d7": 1,
         "7d8d788505b421b11c58c65586815652be83184a94d45d7c4fc307fcc86aee6b": 1,
         "82203ee4652b67da62a390a6c00e041dc0c9c8320b13142252b4d2e7f04387fd": 1,
         "a8c4d8424ef0e0b0d5157cc15ab1f21c9ca6a6b0a26b4e193ffa0369424fcd0e": 2,
+        "b341b04f0b52343aa9f509edc3babc86e1b9ab28ef9bac1334d4d36fe7d0a8d8": 1,
         "b4652f43e7ed3aa3342dc7c56ccd1f789ddf3a82ca08622f64131393ba59118d": 1,
         "c1b028ab2cbfa9290f8eaed76e5060aca77b7d018941e2295153d87825815e59": 1,
+        "d4a09842548dc3e51338dd544b2217a3b651bf857a0f743a0223439af76ce7fc": 2,
+        "d6b8ef544d1685d9e55fa1d580de2e62c51934a6ed662ca62730500bdab8ecc6": 1,
         "f77818bb5be69628d06461517c9775b3a0e240ab26e689d635f7efd0121a1520": 1
       },
       "symbols": [
@@ -993,7 +995,7 @@
         "transaction_amount_cents"
       ],
       "owner": "packet-03",
-      "rationale": "Existing USD account/payment consumer or fixture; migrate delivered contracts and classify unrelated USD remainder."
+      "rationale": "Persisted authorization fixtures use physical storage amount columns with explicit purchase and billing currencies; MCP contract assertions consume canonical Money."
     },
     "banking-service/tests/test_credit_services.py": {
       "lines": {

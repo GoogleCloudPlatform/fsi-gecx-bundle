@@ -319,14 +319,24 @@ async def test_get_open_fraud_alert_success(mock_validate_token, db_session):
     seeded_account = db_session.query(FinancialAccount).filter_by(id="88888888-8888-4888-8888-999999999999").first()
     customer = db_session.query(User).filter_by(id=seeded_account.customer_id).first()
 
-    suspicious_auth = MagicMock(
+    suspicious_auth = TransactionAuthorization(
         id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         merchant_name="TEST FRAUD MERCHANT",
         transaction_amount_cents=12345,
+        billing_amount_cents=12345,
+        transaction_currency="USD",
+        billing_currency="USD",
+        card_id=seeded_card.id,
+        account_id=seeded_account.id,
+        status="PENDING",
+        auth_code="123456",
+        retrieval_reference_number="123456789012",
+        expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7),
         merchant_category_code="5311",
         card_network="VISA",
-        created_at=None,
     )
+    db_session.add(suspicious_auth)
+    db_session.flush()
     FraudAlertService(db_session).create_alert_from_simulation(
         auth_token=MagicMock(user_id="jane.doe@example.com"),
         customer=customer,
@@ -442,14 +452,24 @@ async def test_resolve_fraud_alert_recognized_success(mock_validate_token, db_se
     seeded_account = db_session.query(FinancialAccount).filter_by(id="88888888-8888-4888-8888-999999999999").first()
     customer = db_session.query(User).filter_by(id=seeded_account.customer_id).first()
 
-    suspicious_auth = MagicMock(
+    suspicious_auth = TransactionAuthorization(
         id="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         merchant_name="KNOWN MERCHANT",
         transaction_amount_cents=9999,
+        billing_amount_cents=9999,
+        transaction_currency="USD",
+        billing_currency="USD",
+        card_id=seeded_card.id,
+        account_id=seeded_account.id,
+        status="PENDING",
+        auth_code="123456",
+        retrieval_reference_number="123456789012",
+        expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7),
         merchant_category_code="5311",
         card_network="VISA",
-        created_at=None,
     )
+    db_session.add(suspicious_auth)
+    db_session.flush()
     FraudAlertService(db_session).create_alert_from_simulation(
         auth_token=MagicMock(user_id="jane.doe@example.com"),
         customer=customer,
@@ -489,14 +509,24 @@ def _seed_mcp_fraud_alert(db_session, *, auth_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaa
     seeded_card = db_session.query(IssuedCard).filter_by(id="11111111-1111-4111-8111-222222222222").first()
     seeded_account = db_session.query(FinancialAccount).filter_by(id="88888888-8888-4888-8888-999999999999").first()
     customer = db_session.query(User).filter_by(id=seeded_account.customer_id).first()
-    suspicious_auth = MagicMock(
+    suspicious_auth = TransactionAuthorization(
         id=auth_id,
         merchant_name=merchant,
         transaction_amount_cents=12345,
+        billing_amount_cents=12345,
+        transaction_currency="USD",
+        billing_currency="USD",
+        card_id=seeded_card.id,
+        account_id=seeded_account.id,
+        status="PENDING",
+        auth_code="123456",
+        retrieval_reference_number="123456789012",
+        expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7),
         merchant_category_code="5311",
         card_network="VISA",
-        created_at=None,
     )
+    db_session.add(suspicious_auth)
+    db_session.flush()
     alert_result = FraudAlertService(db_session).create_alert_from_simulation(
         auth_token=MagicMock(user_id="jane.doe@example.com"),
         customer=customer,
@@ -548,20 +578,9 @@ async def test_triage_fraud_case_confirmed_fraud_success(mock_send_event, mock_v
     posted_id = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
     alert_result, seeded_card, seeded_account = _seed_mcp_fraud_alert(db_session, auth_id=auth_id)
 
-    pending_auth = TransactionAuthorization(
-        id=auth_id,
-        card_id=seeded_card.id,
-        account_id=seeded_account.id,
-        transaction_amount_cents=4200,
-        billing_amount_cents=4200,
-        status="PENDING",
-        auth_code="123456",
-        retrieval_reference_number="123456789012",
-        card_network="VISA",
-        merchant_category_code="5999",
-        merchant_name="TEST FRAUD MERCHANT",
-        expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7),
-    )
+    pending_auth = db_session.get(TransactionAuthorization, auth_id)
+    pending_auth.transaction_amount_cents = 4200
+    pending_auth.billing_amount_cents = 4200
     posted_tx = AccountLedger(
         id=posted_id,
         account_id=seeded_account.id,
