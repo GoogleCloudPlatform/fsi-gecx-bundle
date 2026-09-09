@@ -28,4 +28,7 @@ PYTHONPATH="${REPOSITORY_ROOT}:${REPOSITORY_ROOT}/banking-service" \
   banking-service/tests/test_credit_services.py \
   banking-service/tests/test_card_network_and_billpay.py \
   banking-service/tests/test_accounts_router.py \
-  banking-service/tests/test_bootstrap_iceberg_catalog.py --log-cli-level=CRITICAL
+  banking-service/tests/test_bootstrap_iceberg_catalog.py \
+  banking-service/tests/test_fraud_voice_context.py \
+  banking-service/tests/test_action_proposals.py \
+  banking-service/tests/test_fraud_triage_workflow.py --log-cli-level=CRITICAL

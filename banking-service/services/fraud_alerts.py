@@ -25,6 +25,8 @@ from repositories.credit_card import CreditCardRepository
 from models.secure_messaging import SecureMessageCreateRequest, SENDER_TYPE_BANK
 from repositories.fraud import FraudAlertRepository, ScenarioOutcomeRepository
 from services.knowledge_catalog import KnowledgeCatalogService
+from services.fraud_money import fraud_money_facts
+from services.fraud_presentation import CONTENT as MONEY_VOICE_CONTENT
 from services.messaging import MessagingService
 from utils.audit import record_audit_event
 
@@ -243,6 +245,7 @@ class FraudAlertService:
         if not alert:
             return {
                 "entry_reason": "general_support",
+                "money_voice_content": MONEY_VOICE_CONTENT,
                 "has_active_fraud_alert": False,
                 "fraud_alert": None,
                 "reset_generation": reset_generation,
@@ -254,10 +257,11 @@ class FraudAlertService:
                 },
             }
 
-        suspicious_transactions = alert.suspicious_transactions or []
+        suspicious_transactions = fraud_money_facts(CreditCardRepository(self.db), alert)
         guidance = KnowledgeCatalogService().get_guidance_bundle_for_voice_fraud()
         return {
             "entry_reason": "fraud_alert",
+            "money_voice_content": MONEY_VOICE_CONTENT,
             "has_active_fraud_alert": True,
             "reset_generation": reset_generation,
             "fraud_alert": {
@@ -1434,7 +1438,7 @@ class FraudAlertService:
             return f"Customer has an active fraud alert on card ending in {card_last_four}."
         transaction_descriptions = ", ".join(
             (
-                f"{FraudAlertService._format_cents(int(txn.get('amount_cents') or 0))} "
+                f"{txn['presentations']['en-US']['transaction']['display_text']} "
                 f"at {txn.get('merchant_name') or 'Unknown merchant'}"
             )
             for txn in suspicious_transactions

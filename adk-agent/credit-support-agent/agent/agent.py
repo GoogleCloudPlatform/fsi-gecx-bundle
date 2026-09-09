@@ -50,6 +50,7 @@ from agent.fraud_voice import (
     validate_fraud_tool_sequence,
 )
 from agent.instructions import INSTRUCTION_TEXT
+from agent.money_locale import change_voice_language, select_banking_presentation
 from agent.reset_guard import validate_reset_generation
 from agent.tooling import RETIRED_MCP_TOOLS, LiveMcpToolset
 from agent.proposal_evidence import (
@@ -570,6 +571,15 @@ def create_mcp_toolset() -> LiveMcpToolset:
         ),
         header_provider=proposal_request_header_provider,
     )
+
+
+def set_conversation_language(locale: str, tool_context: ToolContext) -> dict:
+    """Select en-US or es-MX when the customer requests a language change.
+
+    Language never selects currency. A change requires a full new presentation
+    and later confirmation of the same proposal before an action can run.
+    """
+    return change_voice_language(tool_context.state, locale)
 
 
 def end_consultation() -> dict:
@@ -1169,6 +1179,12 @@ async def after_tool_callback(
             )
         proposal_action = PROPOSAL_ACTION_BY_TOOL.get(tool_name)
         if proposal_action and structured.get("success") is True:
+            if "presentations" in structured:
+                from copy import deepcopy
+                tool_context.state["banking_proposal_presentation"] = deepcopy(structured)
+                selected = select_banking_presentation(structured, tool_context.state.get("voice_locale", "en-US"))
+                selected["model_instruction"] = "Speak the selected banking presentation speech_text exactly. Do not translate or calculate monetary facts. Wait for a later customer confirmation."
+                tool_response["structuredContent"] = selected
             playbook = dict(tool_context.state.get("fraud_playbook") or {})
             proposal = create_pending_proposal(
                 proposal_id=str(structured.get("proposal_id") or ""),
@@ -1311,6 +1327,10 @@ async def after_tool_callback(
             tool_context.state["fraud_playbook"] = updated_playbook
 
         if tool_name == "get_open_fraud_alert":
+            locale = tool_context.state.get("voice_locale", "en-US")
+            selected = select_banking_presentation(structured, locale)
+            selected["model_instruction"] = f"Continue in {locale}. State transaction and billing speech_text exactly as provided. Never calculate, translate amounts, or infer currency."
+            tool_response["structuredContent"] = selected
             fraud_alert = structured.get("fraud_alert") or {}
             logger.info(
                 "[CALLBACK] fraud playbook inspection completed %s",
@@ -1390,7 +1410,9 @@ async def after_tool_callback(
                     "escalated": structured.get("escalated", False),
                 }
             )
-            return build_triage_model_result(structured)
+            return build_triage_model_result(
+                structured, locale=tool_context.state.get("voice_locale", "en-US"),
+                content=tool_context.state.get("money_voice_content"))
 
         if tool_name == "commit_card_reissue":
             replacement = structured.get("replacement_card") or {}
@@ -1561,6 +1583,7 @@ def create_voice_agent(*, model=None, instruction: str = INSTRUCTION_TEXT) -> Ag
         instruction=instruction,
         tools=[
             create_mcp_toolset(),
+            set_conversation_language,
             prepare_customer_reported_fraud_confirmation,
             end_consultation,
             transfer_to_human,

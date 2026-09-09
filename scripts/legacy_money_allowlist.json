@@ -64,16 +64,6 @@
       "owner": "packet-06",
       "rationale": "Existing USD fraud/presentation fixture or consumer; replace delivered monetary facts and retain explicit USD-only unrelated fixtures."
     },
-    "adk-agent/credit-support-agent/voice_agent.py": {
-      "lines": {
-        "6334e69467f2c3142a20edae7a67d5e65de457ac7e73100cb45448568a4b877d": 1
-      },
-      "symbols": [
-        "amount_cents"
-      ],
-      "owner": "packet-06",
-      "rationale": "Existing USD fraud/presentation fixture or consumer; replace delivered monetary facts and retain explicit USD-only unrelated fixtures."
-    },
     "banking-service/alembic/versions/2ea57c78ba89_alloydb_unified_baseline.py": {
       "lines": {
         "05381faac768c16d02207873cf5ea91fecfd1a10d85f8db3a2590bb518ad6b41": 1,
@@ -536,17 +526,6 @@
       "owner": "packet-03",
       "rationale": "Existing USD account/payment consumer or fixture; migrate delivered contracts and classify unrelated USD remainder."
     },
-    "banking-service/services/action_proposals.py": {
-      "lines": {
-        "00b42637de6813abb0caf7e20a2cd7bc5824b785c918c08fca2fd1942ad7eea3": 1,
-        "327a482fe181dfc1f2e5e4d52b9d10ca5f3c14d82d99e2a9f00f1af0b7b254a2": 1
-      },
-      "symbols": [
-        "amount_cents"
-      ],
-      "owner": "packet-06",
-      "rationale": "Existing USD fraud/presentation fixture or consumer; replace delivered monetary facts and retain explicit USD-only unrelated fixtures."
-    },
     "banking-service/services/card_network.py": {
       "lines": {
         "015a21f201837b3db61174a72079165ad8837191c07a4fcdea0d07c8cd365234": 1,
@@ -706,7 +685,6 @@
         "9dc4bb847631dd035a2e1d3afd24191d120b6b46a6e466e6fa8b190a05385e56": 1,
         "a65595ca34ba8f69ad36af127adc4d516f790f6ce42c75d05ad902a953cbbb73": 1,
         "b4405d479169218d8f6c82226192ccc802e15e4b52a69e037c1f23faf2fa2137": 1,
-        "d5d5a4ad06ca166df66fedd686a06cb5d6c38589aabf51a1a3060e571a7f6c64": 1,
         "dbbfe56df92769f7ff9596daa1a52207dc1bab766192908caa875d67d27e81f3": 1,
         "dd59de87a8da0d6ac5ea7437150a5857e0a8112f16d2b4c12f6ec787a7734f06": 1,
         "e1bf9a794ff70179605bf8576f6d8f6c6c4ac5674de696f7d936130057591e19": 1,
@@ -726,8 +704,8 @@
         "voided_amount_cents",
         "voided_authorization_cents"
       ],
-      "owner": "packet-06",
-      "rationale": "Existing USD fraud/presentation fixture or consumer; replace delivered monetary facts and retain explicit USD-only unrelated fixtures."
+      "owner": "money-foundation",
+      "rationale": "Existing storage and secure messaging consumers pending Packet 06 migration; active voice context is Money."
     },
     "banking-service/services/fraud_scoring.py": {
       "lines": {
@@ -936,17 +914,6 @@
       ],
       "owner": "packet-03",
       "rationale": "Existing USD account/payment consumer or fixture; migrate delivered contracts and classify unrelated USD remainder."
-    },
-    "banking-service/tests/test_action_proposals.py": {
-      "lines": {
-        "c2970ceef93ee74cd81fd1d3f15223fee8b89d91c2a0110a02886406d66cc934": 1,
-        "c564622bd76e37cb48d9281a0f131d8725616abf28af44b3c1e0da9cd8d907db": 1
-      },
-      "symbols": [
-        "amount_cents"
-      ],
-      "owner": "packet-06",
-      "rationale": "Existing USD fraud/presentation fixture or consumer; replace delivered monetary facts and retain explicit USD-only unrelated fixtures."
     },
     "banking-service/tests/test_card_network_and_billpay.py": {
       "lines": {
@@ -1192,13 +1159,15 @@
         "1ccdf4cbfe97e249e83cf8cabd2ffb00c2960782c89557763a391af5d329975c": 1,
         "39d70d909d970daaf81281c97c80bdff25ee313ba72c54e7df7e03f7b7ad2028": 1,
         "59733d93a63bf74f36fe7c55d61c81dfe648b9c9af079a85fa2d7e8f620f3840": 1,
-        "7860e10d472ee27d2af8eac9a3b6ab06f61115d38d6e2b27214eb13f18820d6f": 1
+        "7860e10d472ee27d2af8eac9a3b6ab06f61115d38d6e2b27214eb13f18820d6f": 1,
+        "80c2f38b293b2398495e5e90974c20cf710e11f59a259cabe2867f9a24643acc": 1,
+        "ab2282db4ed70cfcd47a28934a65c1b0d6657026f7b8d5cdbcd0116a5d57c6fb": 1
       },
       "symbols": [
         "amount_cents"
       ],
-      "owner": "packet-06",
-      "rationale": "Existing USD fraud/presentation fixture or consumer; replace delivered monetary facts and retain explicit USD-only unrelated fixtures."
+      "owner": "money-foundation",
+      "rationale": "USD source fixture translated to canonical Money before testing the selected voice contract."
     },
     "banking-service/tests/test_ledger_idempotency.py": {
       "lines": {
@@ -1784,6 +1753,20 @@
       ],
       "owner": "money-foundation",
       "rationale": "Regression assertions for retained immutable storage translation and no direct historical payload field consumers."
+    },
+    "banking-service/services/fraud_money.py": {
+      "lines": {
+        "6918e45c9206146bf1ba259c6ba08081b997787b7fe85e5b5ec18632519db811": 1,
+        "6a7103ffa68abef23154ab0a4043c3f67ca32ba68681005308e98f0e1e462308": 1,
+        "963759052f67cfca13aea51ede1e590ab32de5238fe29477a367f39145fe3add": 1
+      },
+      "symbols": [
+        "amount_cents",
+        "billing_amount_cents",
+        "transaction_amount_cents"
+      ],
+      "owner": "money-foundation",
+      "rationale": "Account-scoped physical card/authorization storage mapping to canonical Money; no legacy alert snapshot reads."
     }
   }
 }

@@ -180,3 +180,42 @@ which prevents a customer with USD and MXN accounts from silently combining
 those balances. Legacy dollar aliases cover USD alone. The data agent is
 restricted to normalized sources for monetary questions; unrelated curated
 views remain available for non-monetary facts only.
+
+
+## Environment progress (2026-09-08)
+
+Release `101adbf`, project `evo-genai-workspace`: the seven logical Iceberg views
+and both selected curated views were reconciled. The read returned 2,238,061
+audit events (all distinct), 1,593,180 ledger entries (all distinct), and zero
+imbalanced transaction/currency groups. This verifies retained history through
+the new views, not yet v2 posting/CDC end-to-end reconciliation.
+
+Dataflow build `ee9074e1-2e2f-4bb5-85c0-bbdd492d70ca` succeeded. Replacement job
+`2026-09-08_18_03_03-5377683810347333006` reached RUNNING and replaced
+`2026-07-31_14_03_15-14773413879608518577`; exactly one matching job was running.
+No database refresh, migration or banking-service deployment has occurred yet.
+
+## Spanish voice increment
+
+Fraud context now resolves account-scoped authoritative transaction and billing
+Money; an ambiguous historical alert snapshot cannot select currency or override
+the posting. English/Spanish display and speech use integer arithmetic. Proposal
+Money and both deterministic presentations are frozen inside its payload
+fingerprint. A language change retains the opaque proposal and clears prior
+presentation/confirmation evidence. An uncertain commit must finish recovery
+before the language changes. Live reconnect uses a fresh speech configuration
+without changing the support session or currency.
+
+The user explicitly delegated Spanish content review to the assistant on
+2026-09-08. The review record in the FSI solutions workbench documents that this
+is assistant review, not human/native-speaker certification. This user direction
+supersedes the plan's human-review prerequisite; live qualification is still
+required. The shared content resource records review method and date.
+
+Incremental checks: 104 focused Money tests (including PostgreSQL), 105 backend
+regressions, and 196 ADK tests pass after Live stream restart wiring. UI tests
+and build pass. Final whole-scope verification remains
+pending. Remaining Packet 06 work includes selected result/history consumers,
+Spanish trajectory fixtures, UI inspection, deployed USD/MXN and Spanish live
+qualification with transcript/tool/proposal/final-state evidence. Packet 07
+compatibility removal is still pending qualification.

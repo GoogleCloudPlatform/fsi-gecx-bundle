@@ -274,8 +274,8 @@ export async function acknowledgeFraudAlert() {
   return res.data;
 }
 
-export async function getCreditCardVoiceToken(mode = 'audio') {
-  const res = await api.get('credit-card/voice/token', { params: { mode } });
+export async function getCreditCardVoiceToken(mode = 'audio', locale = 'en-US') {
+  const res = await api.get('credit-card/voice/token', { params: { mode, locale } });
   return res.data;
 }
 

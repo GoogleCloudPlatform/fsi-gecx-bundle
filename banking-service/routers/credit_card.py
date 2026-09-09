@@ -408,7 +408,7 @@ def get_google_oidc_token(audience: str) -> str:
 
 
 async def trigger_voice_agent_session_async(
-    room_name: str, customer_id: str, session_id: str, mode: str = "audio"
+    room_name: str, customer_id: str, session_id: str, mode: str = "audio", locale: str = "en-US"
 ):
     voice_service_url = os.getenv("VOICE_AGENT_SERVICE_URL")
     if not voice_service_url:
@@ -437,6 +437,7 @@ async def trigger_voice_agent_session_async(
                     "customer_id": customer_id,
                     "session_id": session_id,
                     "mode": mode,
+                    "locale": locale,
                 },
                 headers=headers,
                 timeout=5.0,
@@ -457,6 +458,7 @@ async def trigger_voice_agent_session_async(
 def get_voice_room_token(
     background_tasks: BackgroundTasks,
     mode: str = "audio",
+    locale: str = "en-US",
     db: Session = Depends(get_db),
     customer_id: str = Depends(_get_active_customer_id),
     caller: ValidatedToken = Depends(get_current_user),
@@ -487,7 +489,7 @@ def get_voice_room_token(
             )
         )
         background_tasks.add_task(
-            trigger_voice_agent_session_async, room_name, customer_id, session_id, mode
+            trigger_voice_agent_session_async, room_name, customer_id, session_id, mode, locale
         )
         return {
             "token": token.to_jwt(),

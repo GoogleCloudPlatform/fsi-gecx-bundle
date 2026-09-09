@@ -35,6 +35,8 @@ from repositories.credit_card import CreditCardRepository
 from repositories.fraud import FraudAlertRepository
 from services.action_proposal_context import ProposalRuntimeContext, RuntimeContextError
 from services.credit_card import issue_replacement_card, queue_wallet_provisioning
+from services.fraud_money import fraud_money_facts
+from services.fraud_presentation import fraud_proposal_presentations
 from services.proposal_lifecycle import (
     ActionPreconditionError,
     ActiveProposalExistsError as ActiveProposalExistsError,
@@ -453,7 +455,15 @@ class ActionProposalService(ProposalLifecycleEngine):
                 + ", ".join(unexpected_transactions)
             )
 
+        facts = [fact for fact in fraud_money_facts(CreditCardRepository(self.db), alert)
+                 if str(fact.get("authorization_id")) in set(authorization_ids)
+                 or str(fact.get("transaction_id")) in set(transaction_ids)]
+        presentations = fraud_proposal_presentations(
+            card_last_four=alert.card_last_four, facts=facts,
+            issue_replacement=bool(issue_replacement), escalate=bool(escalate))
         payload = {
+            "money_facts": facts,
+            "presentations": presentations,
             "fraud_alert_id": str(alert.id),
             "disputed_authorization_ids": authorization_ids,
             "disputed_transaction_ids": transaction_ids,
@@ -472,13 +482,7 @@ class ActionProposalService(ProposalLifecycleEngine):
             reset_generation=reset_generation,
             confirmation_policy="EXPLICIT_VERBAL",
             action_payload=payload,
-            customer_safe_summary=self._fraud_triage_summary(
-                alert=alert,
-                authorization_ids=authorization_ids,
-                transaction_ids=transaction_ids,
-                issue_replacement=bool(issue_replacement),
-                escalate=bool(escalate),
-            ),
+            customer_safe_summary=presentations["en-US"]["display_text"],
             catalog_snapshot_id=catalog_snapshot_id,
             idempotency_key=idempotency_key,
             expires_at=expires_at,
@@ -960,43 +964,12 @@ class ActionProposalService(ProposalLifecycleEngine):
             )
         return user.id
 
-    @staticmethod
-    def _fraud_triage_summary(
-        *,
-        alert: FraudAlert,
-        authorization_ids: list[str],
-        transaction_ids: list[str],
-        issue_replacement: bool,
-        escalate: bool,
-    ) -> str:
-        if not authorization_ids and not transaction_ids:
-            return (
-                f"Confirm that you recognize all reviewed activity on card ending "
-                f"{alert.card_last_four}; no fraud dispute or replacement card will be opened."
-            )
-
-        selected_authorizations = set(authorization_ids)
-        selected_transactions = set(transaction_ids)
-        descriptions: list[str] = []
-        for item in alert.suspicious_transactions or []:
-            if (
-                str(item.get("authorization_id")) not in selected_authorizations
-                and str(item.get("transaction_id")) not in selected_transactions
-            ):
-                continue
-            merchant = str(item.get("merchant_name") or "unknown merchant")
-            amount_cents = int(item.get("amount_cents") or 0)
-            descriptions.append(f"${amount_cents / 100:,.2f} at {merchant}")
-        selection = ", ".join(descriptions) or (
-            f"{len(authorization_ids) + len(transaction_ids)} selected transaction(s)"
-        )
-        followups = []
-        if issue_replacement:
-            followups.append("block the current card and issue a replacement")
-        if escalate:
-            followups.append("request specialist review")
-        suffix = f", and {' and '.join(followups)}" if followups else ""
-        return (
-            f"Confirm that you want to dispute {selection} on card ending "
-            f"{alert.card_last_four}{suffix}."
-        )
+    def proposal_view(self, proposal: ActionProposal) -> dict[str, Any]:
+        view = super().proposal_view(proposal)
+        payload = proposal.action_payload or {}
+        if proposal.action_type == TRIAGE_FRAUD_CASE and "presentations" in payload:
+            # Presentation content and Money are frozen inside the same fingerprint
+            # as the action. A language change never mutates proposal identity.
+            view["presentations"] = payload["presentations"]
+            view["money_facts"] = payload["money_facts"]
+        return view

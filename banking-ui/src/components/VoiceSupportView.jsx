@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { useMoneyLocale } from '../utils/moneyLocale';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Room, RoomEvent, Track } from 'livekit-client';
 import { useLocation } from 'react-router-dom';
@@ -295,6 +296,8 @@ function MicTester({ deviceId, onError }) {
 }
 
 export default function VoiceSupportView() {
+  const [presentationLocale, setPresentationLocale] = useMoneyLocale();
+  const voiceLocale = presentationLocale === 'es-MX' ? 'es-MX' : 'en-US';
   const { brandColorFrom, resolvedTheme } = useSettings();
   const location = useLocation();
   const projectId = window.firebaseConfig?.projectId;
@@ -1448,7 +1451,7 @@ export default function VoiceSupportView() {
       }
 
       // 1. Fetch token and room name from server
-      const { token, room_name, session_id, proposal_trace_allowed, fraud_context } = await getCreditCardVoiceToken(mode);
+      const { token, room_name, session_id, proposal_trace_allowed, fraud_context } = await getCreditCardVoiceToken(mode, voiceLocale);
       console.log(`LiveKit token received. Room: ${room_name}`);
       setFraudContext(fraud_context || null);
       setProposalTraceSessionId(session_id || null);
@@ -1742,6 +1745,17 @@ export default function VoiceSupportView() {
           </AnalyticsButton>
         </div>
 
+        {!isConnected && !isConnecting && engine === 'livekit' && (
+          <label className="mt-4 flex items-center gap-2 text-sm">
+            Voice language / Idioma
+            <select aria-label="Voice language" value={voiceLocale}
+              onChange={(event) => setPresentationLocale(event.target.value)}
+              className="rounded border border-slate-300 bg-white px-2 py-1 dark:bg-slate-900">
+              <option value="en-US">English</option>
+              <option value="es-MX">Español (México)</option>
+            </select>
+          </label>
+        )}
         {/* Engine Selection Toggle */}
         {!isConnected && !isConnecting && (
           <div id="voice-engine-select" className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-950/60 rounded-full border border-slate-200 dark:border-slate-800/80 mt-4">
