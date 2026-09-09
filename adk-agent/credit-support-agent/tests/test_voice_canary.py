@@ -204,6 +204,7 @@ def test_extracts_normalized_proposal_event_for_same_hashed_session() -> None:
 
     proposal = next(event for event in events if event["type"] == "ACTION_PROPOSAL")
     assert proposal["proposal_ref"] == "proposal_abc123"
+    assert proposal["action_type"] == "TRIAGE_FRAUD_CASE"
     assert proposal["outcome"] == "COMMITTED"
     assert proposal["banking_outcome"] == "CONFIRMED_FRAUD_REMEDIATED"
 
