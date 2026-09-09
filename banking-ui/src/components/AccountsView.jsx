@@ -95,7 +95,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
     try {
       setIsTxsLoading(true);
       if (type === 'credit') {
-        const txs = await getCreditCardTransactions(null);
+        const txs = await getCreditCardTransactions(null, accountId);
         setTransactions(txs || []);
       } else {
         const txs = await getDepositTransactions(accountId);

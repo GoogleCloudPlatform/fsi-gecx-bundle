@@ -263,8 +263,9 @@ export async function getCreditCardAccount(targetCustomerId = null, fallback = t
   return res.data;
 }
 
-export async function getCreditCardTransactions(targetCustomerId = null) {
+export async function getCreditCardTransactions(targetCustomerId = null, accountId = null) {
   const params = targetCustomerId ? { target_customer_id: targetCustomerId } : {};
+  if (accountId) params.account_id = accountId;
   const res = await api.get('credit-card/transactions', { params });
   return res.data;
 }

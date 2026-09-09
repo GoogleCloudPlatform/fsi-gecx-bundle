@@ -228,13 +228,14 @@ def get_customer_account(
 @router.get("/transactions")
 def get_transaction_history(
     target_customer_id: str | None = None,
+    account_id: UUID | None = None,
     repo: CreditCardRepository = Depends(get_credit_card_repo),
     token: ValidatedToken = Depends(get_current_user),
     customer_id: str = Depends(_get_active_customer_id),
 ):
     """Fetches full transaction and statement ledger lines for the customer, including pending authorizations."""
     effective_id = resolve_effective_id(target_customer_id, customer_id, token)
-    dto = get_transaction_history_dto(repo, effective_id)
+    dto = get_transaction_history_dto(repo, effective_id, account_id=str(account_id) if account_id else None)
     if dto is None:
         raise HTTPException(status_code=404, detail="No account registered.")
     return dto

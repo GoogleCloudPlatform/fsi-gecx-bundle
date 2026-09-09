@@ -851,10 +851,10 @@ def get_account_summary_dto(repo: Any, customer_id: str) -> Optional[Dict[str, A
     }
 
 
-def get_transaction_history_dto(repo: Any, customer_id: str) -> Optional[List[Dict[str, Any]]]:
-    """Retrieves unified transaction ledger and pending authorization history DTO for a customer."""
-    account = repo.get_account_by_customer(customer_id)
-    if not account:
+def get_transaction_history_dto(repo: Any, customer_id: str, *, account_id: str | None = None) -> Optional[List[Dict[str, Any]]]:
+    """Retrieve Money history for an owned selected account or the customer default."""
+    account = repo.get_account_by_id(account_id) if account_id else repo.get_account_by_customer(customer_id)
+    if not account or (account_id and str(account.customer_id) != str(customer_id)):
         return None
         
     auths = repo.list_authorizations(account.id, status="PENDING")

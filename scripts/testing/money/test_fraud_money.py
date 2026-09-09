@@ -84,3 +84,23 @@ def test_historical_workflow_replay_projects_nested_money_without_rewriting_outc
     assert stored == original
     with pytest.raises(ValueError, match="non-USD"):
         normalize_historical_fraud_workflow(stored, "MXN")
+
+
+@pytest.mark.parametrize("owned", [True, False])
+def test_selected_credit_history_uses_owned_account_currency(owned):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+    from services.credit_card import get_transaction_history_dto
+    repo = MagicMock()
+    repo.get_account_by_id.return_value = SimpleNamespace(id="mxn-account", customer_id="owner", currency="MXN")
+    repo.list_authorizations.return_value = []
+    repo.list_ledger_entries.return_value = [SimpleNamespace(
+        id="posted", amount_cents=-234, description="MXN purchase", posted_at=None, authorization=None)]
+    result = get_transaction_history_dto(repo, "owner" if owned else "other", account_id="mxn-account")
+    repo.get_account_by_customer.assert_not_called()
+    if owned:
+        assert result[0]["money"] == {"amount_minor": -234, "currency_code": "MXN"}
+        repo.list_ledger_entries.assert_called_once_with("mxn-account")
+    else:
+        assert result is None
+        repo.list_ledger_entries.assert_not_called()
