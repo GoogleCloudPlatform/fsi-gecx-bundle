@@ -16,6 +16,7 @@ import datetime
 import json
 import uuid
 
+from models.money import Money
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -68,8 +69,8 @@ def test_post_financial_transaction_is_balanced_and_emits_v1_contract(db_session
         idempotency_key="journal-test-1",
         description="Balanced test",
         entries=(
-            JournalEntrySpec(debit.id, "DEBIT", 1250),
-            JournalEntrySpec(credit.id, "CREDIT", 1250),
+            JournalEntrySpec(debit.id, "DEBIT", Money(amount_minor=1250, currency_code="USD")),
+            JournalEntrySpec(credit.id, "CREDIT", Money(amount_minor=1250, currency_code="USD")),
         ),
         source_type="TEST",
         source_references={"case_id": "case-1"},
@@ -90,8 +91,8 @@ def test_post_financial_transaction_is_balanced_and_emits_v1_contract(db_session
         idempotency_key="journal-test-1",
         description="Balanced test retry",
         entries=(
-            JournalEntrySpec(debit.id, "DEBIT", 1250),
-            JournalEntrySpec(credit.id, "CREDIT", 1250),
+            JournalEntrySpec(debit.id, "DEBIT", Money(amount_minor=1250, currency_code="USD")),
+            JournalEntrySpec(credit.id, "CREDIT", Money(amount_minor=1250, currency_code="USD")),
         ),
         source_type="TEST",
     )
@@ -108,8 +109,8 @@ def test_post_financial_transaction_rejects_idempotency_key_reuse(db_session):
         idempotency_key="journal-reuse",
         description="Original",
         entries=(
-            JournalEntrySpec(debit.id, "DEBIT", 100),
-            JournalEntrySpec(credit.id, "CREDIT", 100),
+            JournalEntrySpec(debit.id, "DEBIT", Money(amount_minor=100, currency_code="USD")),
+            JournalEntrySpec(credit.id, "CREDIT", Money(amount_minor=100, currency_code="USD")),
         ),
         source_type="TEST",
     )
@@ -120,8 +121,8 @@ def test_post_financial_transaction_rejects_idempotency_key_reuse(db_session):
             idempotency_key="journal-reuse",
             description="Conflicting retry",
             entries=(
-                JournalEntrySpec(debit.id, "DEBIT", 200),
-                JournalEntrySpec(credit.id, "CREDIT", 200),
+                JournalEntrySpec(debit.id, "DEBIT", Money(amount_minor=200, currency_code="USD")),
+                JournalEntrySpec(credit.id, "CREDIT", Money(amount_minor=200, currency_code="USD")),
             ),
             source_type="TEST",
         )
@@ -130,18 +131,18 @@ def test_post_financial_transaction_rejects_idempotency_key_reuse(db_session):
 @pytest.mark.parametrize(
     "entries,error",
     [
-        ((JournalEntrySpec(uuid.uuid4(), "DEBIT", 100),), "at least two"),
+        ((JournalEntrySpec(uuid.uuid4(), "DEBIT", Money(amount_minor=100, currency_code="USD")),), "at least two"),
         (
             (
-                JournalEntrySpec(uuid.uuid4(), "DEBIT", 100),
-                JournalEntrySpec(uuid.uuid4(), "CREDIT", 99),
+                JournalEntrySpec(uuid.uuid4(), "DEBIT", Money(amount_minor=100, currency_code="USD")),
+                JournalEntrySpec(uuid.uuid4(), "CREDIT", Money(amount_minor=99, currency_code="USD")),
             ),
             "Unbalanced",
         ),
         (
             (
-                JournalEntrySpec(uuid.uuid4(), "DEBIT", 0),
-                JournalEntrySpec(uuid.uuid4(), "CREDIT", 0),
+                JournalEntrySpec(uuid.uuid4(), "DEBIT", Money(amount_minor=0, currency_code="USD")),
+                JournalEntrySpec(uuid.uuid4(), "CREDIT", Money(amount_minor=0, currency_code="USD")),
             ),
             "positive",
         ),

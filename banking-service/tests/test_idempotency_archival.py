@@ -38,6 +38,7 @@ def test_archive_stale_transactions(tx_db):
     recent_time = now - datetime.timedelta(days=10)
 
     tx_old = Transaction(
+        currency_code="USD",
         id=uuid.uuid4(),
         idempotency_key="key_old_1",
         user_id=user_id,
@@ -48,6 +49,7 @@ def test_archive_stale_transactions(tx_db):
         created_at=old_time
     )
     tx_recent = Transaction(
+        currency_code="USD",
         id=uuid.uuid4(),
         idempotency_key="key_recent_1",
         user_id=user_id,

@@ -19,3 +19,10 @@ cd "${REPOSITORY_ROOT}"
 python3 scripts/check_legacy_money.py
 cd banking-service
 uv run --frozen pytest -q --confcutdir=../scripts/testing/money ../scripts/testing/money
+cd "${REPOSITORY_ROOT}"
+PYTHONPATH="${REPOSITORY_ROOT}:${REPOSITORY_ROOT}/banking-service" \
+  uv run --project banking-service --frozen pytest -q \
+  -p scripts.testing.money.conftest \
+  banking-service/tests/test_financial_journal.py \
+  banking-service/tests/test_ledger_idempotency.py \
+  banking-service/tests/test_credit_services.py --log-cli-level=CRITICAL

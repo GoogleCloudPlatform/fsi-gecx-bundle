@@ -28,6 +28,7 @@ from repositories.accounts import AccountsRepository
 from services.profile import ProfileService
 from utils.database import enable_session_rbac_override
 from utils.internal_execution import InternalServiceContext, apply_internal_db_access
+from models.money import Money
 from services.financial_journal import (
     JournalEntrySpec,
     ensure_credit_journal_account,
@@ -96,8 +97,8 @@ class AccountsService:
             },
             currency=credit_acc.currency or deposit_acc.currency or "USD",
             entries=(
-                JournalEntrySpec(deposit_acc.id, "DEBIT", amount_cents),
-                JournalEntrySpec(credit_journal_acc.id, "CREDIT", amount_cents),
+                JournalEntrySpec(deposit_acc.id, "DEBIT", Money(amount_minor=amount_cents, currency_code=credit_acc.currency or deposit_acc.currency)),
+                JournalEntrySpec(credit_journal_acc.id, "CREDIT", Money(amount_minor=amount_cents, currency_code=credit_acc.currency or deposit_acc.currency)),
             ),
         )
         deposit_acc.cleared_balance_cents -= amount_cents
@@ -212,6 +213,7 @@ class AccountsService:
                 self.db,
                 "SYSTEM_EXTERNAL_FUNDING",
                 "External funding clearing counterparty",
+                currency=new_acc.currency,
             )
             post_financial_transaction(
                 self.db,
@@ -222,8 +224,8 @@ class AccountsService:
                 source_references={"account_id": str(new_acc.id), "application_id": str(app.id)},
                 currency=new_acc.currency or "USD",
                 entries=(
-                    JournalEntrySpec(sys_acc.id, "DEBIT", request.initial_deposit_cents),
-                    JournalEntrySpec(new_acc.id, "CREDIT", request.initial_deposit_cents),
+                    JournalEntrySpec(sys_acc.id, "DEBIT", Money(amount_minor=request.initial_deposit_cents, currency_code=new_acc.currency)),
+                    JournalEntrySpec(new_acc.id, "CREDIT", Money(amount_minor=request.initial_deposit_cents, currency_code=new_acc.currency)),
                 ),
             )
             sys_acc.cleared_balance_cents += request.initial_deposit_cents

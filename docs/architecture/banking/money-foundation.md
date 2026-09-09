@@ -51,9 +51,43 @@ connections and avoid backend startup and cloud credentials.
 
 - Packet 01: strict Money, metadata, external USD helpers, finite legacy guard,
   offline serialization/OpenAPI tests, and active CI definition delivered.
-- Packets 02–07: pending.
+- Packet 01 validation: 43 offline contract/guard cases passed.
+- Packet 02: account constraints, durable journal currency, Money posting inputs,
+  currency-specific clearing, transfer retry/denomination checks, additive
+  migration, and reconciliation implemented. Combined offline Money/journal/
+  SQLite and PostgreSQL migration suite: 67 passed. Existing journal, transfer,
+  and credit-service regressions: 28 passed.
+- Packets 03–07 and deployed environment qualification: pending.
 
 Deployment qualification will use `evo-genai-workspace`. Preserve its existing
 database; use focused checks and additive migration. A full refresh is reserved
 for demonstrated necessity. Production staged rollout/rollback certification is
 out of scope; financial correctness and immutable-history replay remain in scope.
+
+## Currency migration and reconciliation
+
+Migration `d8e2f6a910bc` first archives `MONEY_RECONCILIATION_REPORT` (default
+`money-reconciliation-before.json`) before changing data. It stops for invalid
+currencies, card mirror conflicts, mixed/unresolved transaction currencies,
+orphans, or unbalanced entries. Only reported null denominations become USD.
+Transaction headers inherit the unambiguous account currency; existing journal
+entries and outbox payloads remain unchanged.
+
+For a read-only preflight, run from banking-service:
+
+```sh
+uv run python scripts/reconcile_money.py --output /tmp/money-before.json
+```
+
+Use the configured `DATABASE_URL`/IAM connector for the selected environment.
+Reports contain account/entry identifiers and cached-versus-journal differences.
+Seeded demo balances may have opening offsets; report those differences and
+compare before/after rather than inventing corrective financial postings.
+The migration does not reconcile caches by rewriting history or reseeding.
+
+For local PostgreSQL migration checks, set `TEST_MONEY_DATABASE_URL` to a
+**disposable** database whose name ends in `_money_test`, then run the Money
+entry point. Those tests create/drop fixture tables only in that test database.
+CI supplies PostgreSQL 16; local validation also exercised PostgreSQL 14.
+The additive migration refuses downgrade; use fix-forward or the explicit
+existing demo reset path only if necessary.

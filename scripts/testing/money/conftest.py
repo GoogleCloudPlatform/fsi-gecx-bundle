@@ -14,8 +14,18 @@
 
 """Money tests must never use cloud/network services."""
 
+import os
+from pathlib import Path
+import sys
 import socket
 import pytest
+
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "banking-service"))
+os.environ["DISABLE_INIT_DB"] = "true"
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["LEDGER_DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["KYC_DATABASE_URL"] = "sqlite:///:memory:"
 
 
 @pytest.fixture(autouse=True)
@@ -24,3 +34,19 @@ def no_external_network(monkeypatch):
         raise AssertionError("Money unit tests must not open network connections")
     monkeypatch.setattr(socket.socket, "connect", denied)
     monkeypatch.setattr(socket, "create_connection", denied)
+
+
+@pytest.fixture
+def db_session():
+    import importlib
+    from sqlalchemy.orm import Session
+    from utils.database import Base, create_db_engine
+    for name in ("identity", "origination", "audit", "credit_card", "fraud", "support",
+                 "action_proposal", "settings", "kyc", "reference", "merchant"):
+        importlib.import_module(f"models.{name}")
+    engine = create_db_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        yield session
+    Base.metadata.drop_all(engine)
+    engine.dispose()

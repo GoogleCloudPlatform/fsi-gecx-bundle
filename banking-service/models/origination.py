@@ -16,7 +16,7 @@ from typing import Optional
 import datetime
 from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Integer, Index, Text, Float, Numeric, Boolean, CheckConstraint
 from utils.database import UniversalUUID as UUID, generate_uuid
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, synonym
 from utils.database import Base
 from models.application import ProductCategory
 
@@ -44,6 +44,7 @@ class Account(Base):
     """Universal account record supporting CREDIT_CARD, CHECKING, SAVINGS, and SYSTEM clearing accounts."""
     __tablename__ = "accounts"
     __table_args__ = (
+        CheckConstraint("currency IN ('USD', 'MXN', 'JPY', 'BHD')", name="ck_accounts_currency"),
         Index("idx_accounts_user_id", "user_id"),
         Index("idx_accounts_product_code", "product_code"),
         Index("idx_accounts_credit_account_id", "credit_account_id", unique=True),
@@ -62,7 +63,7 @@ class Account(Base):
     credit_limit_cents = Column(BigInteger, nullable=False, default=0)
     cleared_balance_cents = Column(BigInteger, nullable=False, default=0)
     available_credit_cents = Column(BigInteger, nullable=False, default=0)
-    currency = Column(String(3), default="USD")
+    currency = Column(String(3), nullable=False, default="USD")
     opened_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     # Relationships
@@ -220,6 +221,7 @@ class Transaction(Base):
     """Parent financial transaction header supporting idempotency tracking."""
     __tablename__ = "transactions"
     __table_args__ = (
+        CheckConstraint("currency_code IN ('USD', 'MXN', 'JPY', 'BHD')", name="ck_transactions_currency"),
         Index("idx_transactions_user_id", "user_id"),
         {'schema': 'ledger'},
     )
@@ -233,6 +235,8 @@ class Transaction(Base):
     response_payload = Column(Text, nullable=True)
     response_status = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    currency_code = Column(String(3), nullable=False)
 
     ledger_splits = relationship("AccountLedgerEntry", back_populates="transaction")
 
@@ -251,7 +255,8 @@ class AccountLedgerEntry(Base):
     entry_id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     transaction_id = Column(UUID(as_uuid=True), ForeignKey("ledger.transactions.id", ondelete="RESTRICT"), nullable=False)
     account_id = Column(UUID(as_uuid=True), ForeignKey("ledger.accounts.id", ondelete="RESTRICT"), nullable=False)
-    amount_cents = Column(BigInteger, nullable=False)
+    amount_minor = Column("amount_cents", BigInteger, nullable=False)
+    amount_cents = synonym("amount_minor")  # Legacy storage consumers outside this packet.
     entry_type = Column(String(10), nullable=False)  # 'DEBIT', 'CREDIT'
     posted_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 

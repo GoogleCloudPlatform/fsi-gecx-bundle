@@ -29,6 +29,7 @@ from services.merchant_service import MerchantEnrichmentService
 import json
 from utils.audit import record_audit_event
 from utils.database import enable_session_rbac_override
+from models.money import Money
 from services.financial_journal import (
     JournalEntrySpec,
     ensure_credit_journal_account,
@@ -517,6 +518,7 @@ def process_settlement(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
             db,
             "SYSTEM_CARD_MERCHANT_CLEARING",
             "Card network merchant settlement clearing",
+            currency=account.currency,
         )
         posting = post_financial_transaction(
             db,
@@ -532,8 +534,8 @@ def process_settlement(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
             currency=auth.billing_currency or account.currency or "USD",
             posted_at=posted_at_val,
             entries=(
-                JournalEntrySpec(journal_account.id, "DEBIT", settle_amount),
-                JournalEntrySpec(clearing_account.id, "CREDIT", settle_amount),
+                JournalEntrySpec(journal_account.id, "DEBIT", Money(amount_minor=settle_amount, currency_code=auth.billing_currency or account.currency)),
+                JournalEntrySpec(clearing_account.id, "CREDIT", Money(amount_minor=settle_amount, currency_code=auth.billing_currency or account.currency)),
             ),
         )
         posted_tx = PostedTransaction(

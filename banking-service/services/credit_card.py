@@ -26,6 +26,7 @@ from models.fdx import (
     PaymentMeta, PaymentNetwork, PaginatedPaymentNetworksResult, FDXAccount
 )
 from services.taxonomy_service import TaxonomyService
+from models.money import Money
 from services.financial_journal import (
     JournalEntrySpec,
     ensure_credit_journal_account,
@@ -381,6 +382,7 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
             db,
             "SYSTEM_CARD_REVERSAL_CLEARING",
             "Card reversal and dispute clearing",
+            currency=account.currency,
         )
         posting = post_financial_transaction(
             db,
@@ -395,8 +397,8 @@ def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason
             currency=account.currency or "USD",
             posted_at=posted_at,
             entries=(
-                JournalEntrySpec(clearing_account.id, "DEBIT", reversal_amount),
-                JournalEntrySpec(journal_account.id, "CREDIT", reversal_amount),
+                JournalEntrySpec(clearing_account.id, "DEBIT", Money(amount_minor=reversal_amount, currency_code=account.currency)),
+                JournalEntrySpec(journal_account.id, "CREDIT", Money(amount_minor=reversal_amount, currency_code=account.currency)),
             ),
         )
         reversal_entry = AccountLedger(
@@ -602,6 +604,7 @@ def apply_fraud_provisional_credit(
             db,
             "SYSTEM_FRAUD_LOSS_CLEARING",
             "Fraud provisional credit loss clearing",
+            currency=account.currency,
         )
         posting = post_financial_transaction(
             db,
@@ -617,8 +620,8 @@ def apply_fraud_provisional_credit(
             currency=account.currency or "USD",
             posted_at=posted_at,
             entries=(
-                JournalEntrySpec(clearing_account.id, "DEBIT", credit_amount),
-                JournalEntrySpec(journal_account.id, "CREDIT", credit_amount),
+                JournalEntrySpec(clearing_account.id, "DEBIT", Money(amount_minor=credit_amount, currency_code=account.currency)),
+                JournalEntrySpec(journal_account.id, "CREDIT", Money(amount_minor=credit_amount, currency_code=account.currency)),
             ),
         )
         credit_entry = AccountLedger(

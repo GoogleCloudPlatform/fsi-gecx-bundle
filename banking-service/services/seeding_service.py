@@ -47,6 +47,7 @@ from models.settings import SystemSetting
 from models.reference import MerchantCategoryCode
 from services.taxonomy_service import TaxonomyService
 from services.merchant_service import MerchantEnrichmentService
+from models.money import Money
 from services.financial_journal import (
     JournalEntrySpec,
     ensure_credit_journal_account,
@@ -859,6 +860,7 @@ def _seed_user_transactions(
         db,
         "SYSTEM_DEMO_SEED_CLEARING",
         "Synthetic demo history clearing",
+        currency=checking_acc.currency if checking_acc else savings_acc.currency if savings_acc else "USD",
     )
 
     # 2. Checking Account Seeding (Pending & Posted)
@@ -877,8 +879,8 @@ def _seed_user_transactions(
                 currency=checking_acc.currency or "USD",
                 posted_at=now - datetime.timedelta(hours=hours_ago),
                 entries=(
-                    JournalEntrySpec(checking_acc.id, "DEBIT", amount),
-                    JournalEntrySpec(seed_clearing.id, "CREDIT", amount),
+                    JournalEntrySpec(checking_acc.id, "DEBIT", Money(amount_minor=amount, currency_code=checking_acc.currency)),
+                    JournalEntrySpec(seed_clearing.id, "CREDIT", Money(amount_minor=amount, currency_code=checking_acc.currency)),
                 ),
             )
             posting.transaction.status = "PENDING"
@@ -905,13 +907,17 @@ def _seed_user_transactions(
                 currency=checking_acc.currency or "USD",
                 posted_at=now - datetime.timedelta(days=days_ago, hours=random.randint(1, 10)),
                 entries=(
-                    JournalEntrySpec(checking_acc.id, etype, amount),
-                    JournalEntrySpec(seed_clearing.id, counter_direction, amount),
+                    JournalEntrySpec(checking_acc.id, etype, Money(amount_minor=amount, currency_code=checking_acc.currency)),
+                    JournalEntrySpec(seed_clearing.id, counter_direction, Money(amount_minor=amount, currency_code=checking_acc.currency)),
                 ),
             )
 
     # 3. Savings Account Seeding (Posted)
     if savings_acc:
+        seed_clearing = ensure_system_journal_account(
+            db, "SYSTEM_DEMO_SEED_CLEARING", "Synthetic demo history clearing",
+            currency=savings_acc.currency,
+        )
         sav_items = [
             ("Monthly Interest Paid", 4512, "CREDIT", 14),
             ("Automated Transfer from Checking", 50000, "CREDIT", 7),
@@ -929,8 +935,8 @@ def _seed_user_transactions(
                 currency=savings_acc.currency or "USD",
                 posted_at=now - datetime.timedelta(days=days_ago, hours=random.randint(1, 10)),
                 entries=(
-                    JournalEntrySpec(savings_acc.id, etype, amount),
-                    JournalEntrySpec(seed_clearing.id, counter_direction, amount),
+                    JournalEntrySpec(savings_acc.id, etype, Money(amount_minor=amount, currency_code=savings_acc.currency)),
+                    JournalEntrySpec(seed_clearing.id, counter_direction, Money(amount_minor=amount, currency_code=savings_acc.currency)),
                 ),
             )
 
@@ -941,6 +947,7 @@ def _seed_user_transactions(
             db,
             "SYSTEM_CARD_MERCHANT_CLEARING",
             "Card network merchant settlement clearing",
+            currency=cred_acc.currency,
         )
         # Assign a consistent geographical home metro and international travel trip for this customer's demo card
         from models.identity import User
@@ -992,8 +999,8 @@ def _seed_user_transactions(
                 currency=cred_acc.currency or "USD",
                 posted_at=ovr_posted_at,
                 entries=(
-                    JournalEntrySpec(credit_journal_account.id, "DEBIT", 3500),
-                    JournalEntrySpec(card_clearing.id, "CREDIT", 3500),
+                    JournalEntrySpec(credit_journal_account.id, "DEBIT", Money(amount_minor=3500, currency_code=cred_acc.currency)),
+                    JournalEntrySpec(card_clearing.id, "CREDIT", Money(amount_minor=3500, currency_code=cred_acc.currency)),
                 ),
             )
             db.add(PostedTransaction(
@@ -1126,8 +1133,8 @@ def _seed_user_transactions(
                 currency=cred_acc.currency or "USD",
                 posted_at=posted_date,
                 entries=(
-                    JournalEntrySpec(credit_journal_account.id, "DEBIT", amount_cents),
-                    JournalEntrySpec(card_clearing.id, "CREDIT", amount_cents),
+                    JournalEntrySpec(credit_journal_account.id, "DEBIT", Money(amount_minor=amount_cents, currency_code=cred_acc.currency)),
+                    JournalEntrySpec(card_clearing.id, "CREDIT", Money(amount_minor=amount_cents, currency_code=cred_acc.currency)),
                 ),
             )
             db.add(PostedTransaction(
