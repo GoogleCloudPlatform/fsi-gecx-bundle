@@ -154,3 +154,19 @@ def test_bigquery_views_are_reconciled_after_catalog_tables():
         "demo-project.nova-audit-lakehouse.compliance_audit.audit_events" in audit_query
     )
     assert "PARTITION BY event_id" in audit_query
+
+
+def test_money_views_dedupe_history_and_balance_each_currency():
+    client = MagicMock()
+    reconcile_bigquery_views(client, project_id="demo-project", catalog_id="nova-audit-lakehouse")
+    queries = [call.args[0] for call in client.query.call_args_list]
+    ledger, balance, financial = queries[1], queries[2], queries[4]
+    assert "PARTITION BY entry_id" in ledger
+    assert "amount_cents AS amount_minor" in ledger  # immutable physical schema adapter
+    assert "currency AS currency_code" in ledger
+    assert "GROUP BY transaction_id, currency_code" in balance
+    assert "SUM(IF(direction = 'DEBIT', amount_minor, -amount_minor)) AS imbalance_minor" in balance
+    assert "GROUP BY event_id, currency_code" in financial
+    assert "$.amount_cents" not in financial  # v1 translation is owned by the Java parser
+    assert "payload, created_at" in financial
+    assert all("DROP TABLE" not in query for query in queries)

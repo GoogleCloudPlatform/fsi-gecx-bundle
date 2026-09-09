@@ -67,7 +67,14 @@ connections and avoid backend startup and cloud credentials.
   currency formatting, and visual qualification implemented. UI suite: 31
   passed, including en-US/USD, es-MX/USD, es-MX/MXN, ja-JP/JPY and ar-BH/BHD.
   UI build and focused ESLint passed.
-- Packets 05–07 and deployed environment qualification: pending.
+- Packet 05 implementation: financial event v2, strict versioned Java reader,
+  immutable raw history and physical Iceberg schema, normalized logical views,
+  and per-currency customer balances/spend metrics. Active CI includes parser
+  replay and logical-view regressions. 87 Money tests, 48 backend regressions,
+  and 8 Java parser tests passed. BigQuery dry runs of both curated views passed
+  in `evo-genai-workspace` on 2026-09-08. Integrated CDC/outbox/Iceberg runtime
+  reconciliation remains pending; dry runs do not establish runtime qualification.
+- Packets 06–07 and deployed environment qualification: pending.
 
 Deployment qualification will use `evo-genai-workspace`. Preserve its existing
 database; use focused checks and additive migration. A full refresh is reserved
@@ -149,3 +156,27 @@ real PostgreSQL posting tests and are not deployed-environment qualification.
 Locale only changes presentation. English is the UI-copy fallback for Japanese
 and Arabic projection fixtures. Spanish consequential content still needs human
 review before the later live multilingual qualification.
+
+
+## Event and analytical Money
+
+New `FINANCIAL_TRANSACTION_POSTED` events use schema version 2, top-level
+`currency_code`, and entry `money` objects. The Dataflow reader accepts v1 and
+v2 together, rejects conflicting event identities, duplicate entry IDs,
+malformed integers, unsafe v2 amounts, currency mismatches and imbalance.
+Transport redelivery preserves immutable IDs; logical views deduplicate audit
+records by event ID and postings by entry ID.
+
+The existing physical Iceberg `amount_cents`/`currency` columns remain intact
+for snapshot compatibility. Their logical aliases are `amount_minor` and
+`currency_code`. All selected active queries use those normalized columns.
+The one v1 event adapter is the Java ingestion reader; historical payloads are
+never rewritten. Non-journal historical side events lacking a denomination
+retain their raw payload but have no inferred normalized amount.
+
+Posted-card analytics exposes exact NUMERIC unit projections and integer
+minor-unit facts. Customer balances are an array grouped by denomination,
+which prevents a customer with USD and MXN accounts from silently combining
+those balances. Legacy dollar aliases cover USD alone. The data agent is
+restricted to normalized sources for monetary questions; unrelated curated
+views remain available for non-monetary facts only.

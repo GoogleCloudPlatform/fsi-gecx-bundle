@@ -33,7 +33,7 @@ from utils.audit import record_audit_event
 
 
 FINANCIAL_EVENT_TYPE = "FINANCIAL_TRANSACTION_POSTED"
-FINANCIAL_EVENT_SCHEMA_VERSION = 1
+FINANCIAL_EVENT_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -223,7 +223,7 @@ def post_financial_transaction(
         "transaction_id": str(transaction.id),
         "event_time": timestamp.isoformat(),
         "posted_at": timestamp.isoformat(),
-        "currency": currency.upper(),
+        "currency_code": currency,
         "source_type": source_type,
         "source_references": source_references or {},
         "description": description,
@@ -232,7 +232,7 @@ def post_financial_transaction(
                 "entry_id": str(entry.entry_id),
                 "account_id": str(entry.account_id),
                 "direction": entry.entry_type,
-                "amount_cents": entry.amount_minor,
+                "money": Money(amount_minor=entry.amount_minor, currency_code=currency).model_dump(),
             }
             for entry in journal_entries
         ],

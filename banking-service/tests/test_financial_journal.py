@@ -59,7 +59,7 @@ def _account(db_session, number: str) -> Account:
     return account
 
 
-def test_post_financial_transaction_is_balanced_and_emits_v1_contract(db_session):
+def test_post_financial_transaction_is_balanced_and_emits_v2_contract(db_session):
     debit = _account(db_session, "TEST-DEBIT")
     credit = _account(db_session, "TEST-CREDIT")
     historical_posted_at = datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc)
@@ -79,11 +79,11 @@ def test_post_financial_transaction_is_balanced_and_emits_v1_contract(db_session
 
     event = db_session.query(AuditOutbox).filter_by(event_id=posting.event_id).one()
     payload = json.loads(event.payload)
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["transaction_id"] == str(posting.transaction.id)
     assert payload["source_references"] == {"case_id": "case-1"}
-    assert sum(e["amount_cents"] for e in payload["entries"] if e["direction"] == "DEBIT") == 1250
-    assert sum(e["amount_cents"] for e in payload["entries"] if e["direction"] == "CREDIT") == 1250
+    assert sum(e["money"]["amount_minor"] for e in payload["entries"] if e["direction"] == "DEBIT") == 1250
+    assert sum(e["money"]["amount_minor"] for e in payload["entries"] if e["direction"] == "CREDIT") == 1250
     assert event.created_at.year > historical_posted_at.year
 
     retry = post_financial_transaction(

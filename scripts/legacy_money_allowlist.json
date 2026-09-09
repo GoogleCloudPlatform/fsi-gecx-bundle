@@ -473,13 +473,14 @@
     },
     "banking-service/scripts/bootstrap_iceberg_catalog.py": {
       "lines": {
-        "1c9ffa9689ac3acbb2792a46499a487966a31e412c1fdc467cb47a2fc46c6778": 1,
-        "36add67648ee9d35fbdcec6e59946d1c1e4e22ed5e80bde3337d6647cf8f43b0": 1,
-        "3704469a8d803acb7dcbd24229a4cef687e05d0e90f3ef1e6667b20bd5dbe930": 1,
-        "37929bf39ce84a774089a63eef623653f11bcf7ca530d85bc8cb3480ad5c1988": 1,
-        "a88d227fcd933c27922a1f05503e1b8de69cc08d3509ec55a70bf4e81f9c99a2": 1,
-        "b03972c27390a999298dab78b72793eb7ef84015b1c956f45f97abc7a7235750": 1,
-        "b447675b5074db5b455f4825c0904a94dbc6148b20ccd10789060232a1afa639": 1
+        "02b0cd84345d6bf7349a3700407da76a1169995cd7d88bb07b4771efb65eab81": 1,
+        "1a8254e8295a3f5378a6d88a0616c8376907b0f1ad068abbf4eb00493aafbc1f": 1,
+        "1b2979a2064cd6299050f19affe210a02a69c5d3aeaacd65ab87ba3840263a8e": 1,
+        "3003abab29100f4e4757b3c9d847fa25dd46f313d525065c14b051d25eb636be": 1,
+        "46d62b2f829777b710a9e451de86a30bc3f883e3b483a4fd9109ac074efe79f8": 1,
+        "b447675b5074db5b455f4825c0904a94dbc6148b20ccd10789060232a1afa639": 1,
+        "d3f8cdffcb55657b8b69b0010ea8ad588ceedfdcb9b30ace48db986ac11676f4": 1,
+        "fc50c6f1a8950f41f6f76e4a388200a385b03d9616a6c361a5767373694b7e7a": 1
       },
       "symbols": [
         "amount_cents",
@@ -487,8 +488,8 @@
         "debit_cents",
         "imbalance_cents"
       ],
-      "owner": "packet-05",
-      "rationale": "Existing legacy financial projection; normalize currency-aware selected event and retain immutable v1 replay only."
+      "owner": "money-foundation",
+      "rationale": "Immutable physical Iceberg schema adapter and temporary USD-only external view projections; remove public aliases in packet 07."
     },
     "banking-service/services/accounts.py": {
       "lines": {
@@ -678,19 +679,17 @@
         "7103953d38b8a333c1ab3d4e244f25c237d604306d60689d7f49ef6db4466419": 1,
         "78cf061c32972045d22c17c64d6d0537d4d8afc6f9ffd92b838f8c1d8bc1d46b": 1,
         "d416b335ec9799d109a9f2d7c405959683904be3ceda7de4be82945326c41dd2": 1,
-        "d6c4e78294ba834dd5db026815e89c0eb75c9b9103f821cd3f44e2e45334d916": 1,
         "e8c474bf558820e7264d9da524157de2404d21c3551990d7d64ae24d413a27ab": 1,
         "fc96abf933bb04fb6fb5f6ea52c4b287ddba052702dcc277258e09a6d4733da8": 1,
         "fcc7689011fe207e0c1d7b3010e76a6feacc1de0d2a92722dcd1677cfc4cd8cd": 1
       },
       "symbols": [
-        "amount_cents",
         "available_credit_cents",
         "cleared_balance_cents",
         "credit_limit_cents"
       ],
-      "owner": "packet-02",
-      "rationale": "Existing USD journal/seed caller or persistence projection; migrate active posting inputs, preserve storage naming."
+      "owner": "money-foundation",
+      "rationale": "Journal storage and existing USD source consumers only; emitted event v2 is canonical Money."
     },
     "banking-service/services/fraud_alerts.py": {
       "lines": {
@@ -1107,17 +1106,6 @@
       ],
       "owner": "packet-03",
       "rationale": "Existing USD account/payment consumer or fixture; migrate delivered contracts and classify unrelated USD remainder."
-    },
-    "banking-service/tests/test_financial_journal.py": {
-      "lines": {
-        "05581bda6872e17f6355e15cbef3998c5a76ab76f46d3bc1a803f24eeee8427d": 1,
-        "45edce6e35795460a3f67d0b2118ec0ae7b0866ada5c77513edbabeae104ffa0": 1
-      },
-      "symbols": [
-        "amount_cents"
-      ],
-      "owner": "packet-02",
-      "rationale": "Existing USD journal/seed caller or persistence projection; migrate active posting inputs, preserve storage naming."
     },
     "banking-service/tests/test_fraud_repository.py": {
       "lines": {
@@ -1610,38 +1598,40 @@
     "deployment/bigquery/analytics_curated/view/customer_analytics_profiles.sql": {
       "lines": {
         "1869d94c6bc55f8f567cfae364f4a9b4207ce2b4e24d02ebe829637ec1fed5b7": 1,
-        "21a3743c061f404d7fc528f4687b830eb0429d5f04b15c59e89c9cadfd0faf48": 1,
+        "2915bbbb6ae5548457dc7055923347cf8a645001b3671d1a02af28a8441c3440": 1,
         "7e911f2044ef3f104c7d9ca2ba919a14231b2cf05d301ce1870fd35b948393b9": 1,
-        "b938a871344fdd288962b21e43b57a4c59f1c505c9bb682ea16469cd70beac31": 1,
-        "e57f13f37d1260b3ce209820df9f566294870f15afac02a3c2f050477cfcbd0e": 1,
-        "e9effda99d090b822e3254c05799fee2c741c4c19828f8505dd8f236de02c981": 1,
-        "f54cf670348b3b9428e2208209dfcd0611ba2025dfe3f93799e82a67314eedfa": 1,
-        "fa6601bf8adf3dd4c5497a13abb339a0f90522da2f261497f6e2a3f7454beb58": 1
+        "b08cbf259bc2bbe1476f4dc6eb56148bf100cfa9085f9a7aadacbb5c3ec53612": 1,
+        "dccd8bf5d70be6823dc605f60d415bb024113a63a0f65ef3441cf1e1ce70aa49": 1
       },
       "symbols": [
         "available_credit_cents",
         "cleared_balance_cents",
         "credit_limit_cents",
-        "stated_annual_income_cents",
-        "total_available_credit_cents",
-        "total_cleared_balance_cents",
-        "total_credit_limit_cents"
+        "stated_annual_income_cents"
       ],
-      "owner": "packet-05",
-      "rationale": "Existing legacy financial projection; normalize currency-aware selected event and retain immutable v1 replay only."
+      "owner": "money-foundation",
+      "rationale": "Explicit physical CDC mapping to per-currency metrics; unrelated stated income remains USD."
     },
     "deployment/bigquery/analytics_curated/view/enriched_posted_transactions.sql": {
       "lines": {
-        "0b8b8febb9e5fec81c934b931bebea55d8276b6e54c2598ae0502866d9478a7f": 1,
-        "33e84abcdb17fe6a683e753e0988f4bb6a995849df94bc571ba37dbd4e1322fe": 1,
+        "42e532e820c63a43e52f466bfddab10bca425f481cdbfa48950051a2dba975a5": 1,
+        "48d45e442e9ef9313256926d129e5ff8d8e91216e61310c803f72265b5af9238": 1,
         "6ddb2383043b98c2958ece63f96c0be71f22e744c88095379d07c08b425bd865": 1,
-        "e344c8c27080d28e8dd9ad629a38958a0a4bd50b6630144f7bf8efffca87c9e6": 1
+        "7c5f2eb6a88123054b9afbf23685303c0afb1edb21459eba808abb9b9886a4ef": 1,
+        "a6b09062999fafdfe133bcb99846ec81c26ea15b85ecd455df203212e5353225": 1,
+        "c114bc5402ed625c504ddad591853fc7189769bd3fc5c952b837bb106d55c000": 1,
+        "cd7291224999e939487607047cf7af8b1f58d4cbdf6621a254934ccf866f1af1": 1,
+        "d186f1a022c9ec58b0b6b723b704ef445c69fb635f3b4f6c1cb70e86ffe562a5": 1,
+        "dc5bbaa13471030753d5a90f419b916790047bfc577c43a89c7f1556c2baf8f7": 1,
+        "e8130b7684c54a6d7de732a2a009c506a2554fa4571948d34ccc539d4a813579": 1
       },
       "symbols": [
-        "amount_cents"
+        "amount_cents",
+        "billing_amount_cents",
+        "transaction_amount_cents"
       ],
-      "owner": "packet-05",
-      "rationale": "Existing legacy financial projection; normalize currency-aware selected event and retain immutable v1 replay only."
+      "owner": "money-foundation",
+      "rationale": "CDC physical column normalization and temporary USD-only external projection; public aliases removed in packet 07."
     },
     "deployment/bigquery/analytics_curated/view/fraud_model_decision_history.sql": {
       "lines": {
@@ -1712,27 +1702,30 @@
     },
     "deployment/dataflow-audit-iceberg/src/main/java/com/google/cloud/fsi/audit/AuditIcebergPipeline.java": {
       "lines": {
-        "766cadb265310ee92c712e0cdb262ff598ee974bb5c8f73402f10479a39408db": 1,
+        "5129296d2cdcd16af95028c0436592aa0316acdfb45b0b1e7effef43a2b42392": 1,
         "f4f1d4a76c8b68a2e1aa6c99a2ffb626b209eab62f59cf8c9a14876e4d0167aa": 1
       },
       "symbols": [
         "amount_cents"
       ],
-      "owner": "packet-05",
-      "rationale": "Existing legacy financial projection; normalize currency-aware selected event and retain immutable v1 replay only."
+      "owner": "money-foundation",
+      "rationale": "Central historical v1 event reader and immutable physical storage name; retain for replay."
     },
     "deployment/dataflow-audit-iceberg/src/test/java/com/google/cloud/fsi/audit/AuditIcebergPipelineTest.java": {
       "lines": {
+        "19479136530a34e1956ba5bef63b85bb63d03bb09debe827a270697228e71d00": 1,
         "373c417036d547985acd29cd87425dfa9cb8c10ed1081f3024c6fe9289d604fd": 2,
+        "5f8f959b8261fb8ca9214d445310763d0298eb52acb4ed5cc069d5fedfd1af1c": 1,
         "bac118b95cbebdd3e7ecc24c844d85b18c50142cda86b812f1fa3bc390799d6a": 1,
         "c0325b96e53a288d9190dd6491a5b41a9f8cfaee097e8fa93d65a82577d01ead": 1,
-        "c5a7beafcc17d9a0145c250a14d067b5f57e1012e74cf0242c070f2bd12cc6dc": 1
+        "c5a7beafcc17d9a0145c250a14d067b5f57e1012e74cf0242c070f2bd12cc6dc": 1,
+        "e8f7b98a6ce94c88232260a64c5463f23c98b4835df6c7954f09ce440c1b08dd": 1
       },
       "symbols": [
         "amount_cents"
       ],
-      "owner": "packet-05",
-      "rationale": "Existing legacy financial projection; normalize currency-aware selected event and retain immutable v1 replay only."
+      "owner": "money-foundation",
+      "rationale": "Tests of historical v1 replay and retained physical storage schema."
     },
     "gecx/Credit_Support_Voice_Agent/toolsets/banking_service_mcp_toolset/evaluation_fake_tools.py": {
       "lines": {
@@ -1780,6 +1773,17 @@
       ],
       "owner": "packet-07",
       "rationale": "Temporary external USD bill-payment request/response compatibility only; internal payment service uses structured Money."
+    },
+    "banking-service/tests/test_bootstrap_iceberg_catalog.py": {
+      "lines": {
+        "4a9c2ea5196db1f8202c418b8d27e7bd1d91ad311794c3a025607e8a0e474f3a": 1,
+        "9bed411550a894f4fc7abbdb722308dc70407eb142ad1644fb1c10e13a4510b7": 1
+      },
+      "symbols": [
+        "amount_cents"
+      ],
+      "owner": "money-foundation",
+      "rationale": "Regression assertions for retained immutable storage translation and no direct historical payload field consumers."
     }
   }
 }

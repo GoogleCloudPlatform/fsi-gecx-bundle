@@ -62,3 +62,12 @@ jobs:
         working-directory: banking-ui
       - run: npm test && npm run build
         working-directory: banking-ui
+
+  money-events:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - run: |
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          mvn --batch-mode -q -f deployment/dataflow-audit-iceberg/pom.xml test
