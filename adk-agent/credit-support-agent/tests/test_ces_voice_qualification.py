@@ -128,7 +128,7 @@ def test_evaluation_fake_tools_are_synthetic_and_tool_specific() -> None:
 
     assert "secret" not in repr(response)
     assert response["fraud_alert"]["fraud_alert_id"] == "eval-alert-1"
-    assert "$1,499.00" in fake_tools.fake_propose_fraud_triage(
+    assert "USD 1,499.00" in fake_tools.fake_propose_fraud_triage(
         None, {}, None
     )["customer_safe_summary"]
     assert (
