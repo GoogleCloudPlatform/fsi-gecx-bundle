@@ -510,9 +510,9 @@ def void_fraud_authorization_hold(
             "account_id": str(account.id),
             "authorization_id": str(auth.id),
             "fraud_alert_id": fraud_alert_id,
-            **money_fields("voided_amount", release_money, legacy=True),
+            **money_fields("voided_amount", release_money),
             "authorization_status": auth.status,
-            **money_fields("available_credit", Money(amount_minor=account.available_credit_cents, currency_code=account.currency), legacy=True),
+            **money_fields("available_credit", Money(amount_minor=account.available_credit_cents, currency_code=account.currency)),
             "message": "Pending fraud authorization reversed.",
         }
         record_audit_event(
@@ -653,10 +653,10 @@ def apply_fraud_provisional_credit(
             "transaction_id": str(original_tx.id),
             "provisional_credit_transaction_id": str(credit_entry.id),
             "fraud_alert_id": fraud_alert_id,
-            **money_fields("credited_amount", Money(amount_minor=credit_amount, currency_code=account.currency), legacy=True),
+            **money_fields("credited_amount", Money(amount_minor=credit_amount, currency_code=account.currency)),
             "journal_transaction_id": str(posting.transaction.id),
-            **money_fields("cleared_balance", Money(amount_minor=account.cleared_balance_cents, currency_code=account.currency), legacy=True),
-            **money_fields("available_credit", Money(amount_minor=account.available_credit_cents, currency_code=account.currency), legacy=True),
+            **money_fields("cleared_balance", Money(amount_minor=account.cleared_balance_cents, currency_code=account.currency)),
+            **money_fields("available_credit", Money(amount_minor=account.available_credit_cents, currency_code=account.currency)),
             "message": "Provisional fraud credit applied pending investigation.",
         }
         record_audit_event(
@@ -830,9 +830,9 @@ def get_account_summary_dto(repo: Any, customer_id: str) -> Optional[Dict[str, A
     return {
         "account_id": account.id,
         "currency_code": account.currency,
-        **money_fields("credit_limit", Money(amount_minor=account.credit_limit_cents, currency_code=account.currency), legacy=True),
-        **money_fields("cleared_balance", Money(amount_minor=account.cleared_balance_cents, currency_code=account.currency), legacy=True),
-        **money_fields("available_credit", Money(amount_minor=account.available_credit_cents, currency_code=account.currency), legacy=True),
+        **money_fields("credit_limit", Money(amount_minor=account.credit_limit_cents, currency_code=account.currency)),
+        **money_fields("cleared_balance", Money(amount_minor=account.cleared_balance_cents, currency_code=account.currency)),
+        **money_fields("available_credit", Money(amount_minor=account.available_credit_cents, currency_code=account.currency)),
         "payment_due_date": account.payment_due_date,
         "status": account.status,
         "cards": [
@@ -891,9 +891,6 @@ def get_transaction_history_dto(repo: Any, customer_id: str) -> Optional[List[Di
             "cardholder_name": auth.card.cardholder_name if auth.card else "Cardholder",
             "last_four": auth.card.last_four if auth.card else None,
         }
-        if billing_money.currency_code == "USD":
-            item["amount_cents"] = billing_money.amount_minor
-            item["amount"] = billing_money.amount_minor / 100.0
         results.append(item)
         
     for entry in ledger:
@@ -928,9 +925,6 @@ def get_transaction_history_dto(repo: Any, customer_id: str) -> Optional[List[Di
                 amount_minor=entry.authorization.billing_amount_cents,
                 currency_code=entry.authorization.billing_currency,
             ).model_dump()
-        if money.currency_code == "USD":
-            item["amount_cents"] = money.amount_minor
-            item["amount"] = abs(money.amount_minor) / 100.0
         results.append(item)
         
     return results

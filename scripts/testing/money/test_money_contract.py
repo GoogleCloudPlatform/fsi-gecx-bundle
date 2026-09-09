@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "banking-service"))
 sys.path.insert(0, str(ROOT / "scripts"))
 from models.money import (  # noqa: E402
-    CURRENCY_EXPONENTS, MAX_MINOR, Money, from_legacy_usd, money_fields, to_legacy_usd,
+    CURRENCY_EXPONENTS, MAX_MINOR, Money, from_legacy_usd, money_fields,
 )
 from check_legacy_money import inventory, violations  # noqa: E402
 
@@ -63,23 +63,16 @@ def test_required_currency_extra_fields_and_immutability():
         CURRENCY_EXPONENTS["USD"] = 3
 
 
-def test_usd_compatibility():
-    value = from_legacy_usd(125)
-    assert to_legacy_usd(value) == 125
-    assert money_fields("balance", value, legacy=True) == {
-        "balance": {"amount_minor": 125, "currency_code": "USD"}, "balance_cents": 125,
-    }
-    assert "balance_cents" not in money_fields("balance", value)
+def test_historical_usd_reader_is_strict():
+    assert from_legacy_usd(125) == Money(amount_minor=125, currency_code="USD")
     with pytest.raises(ValidationError):
         from_legacy_usd(1.25)
 
 
-@pytest.mark.parametrize("code", ["MXN", "JPY", "BHD"])
-def test_non_usd_omits_legacy_projection(code):
+@pytest.mark.parametrize("code", ["USD", "MXN", "JPY", "BHD"])
+def test_named_projection_is_money_only(code):
     value = Money(amount_minor=125, currency_code=code)
-    assert money_fields("balance", value, legacy=True) == {"balance": value.model_dump()}
-    with pytest.raises(ValueError, match="USD"):
-        to_legacy_usd(value)
+    assert money_fields("balance", value) == {"balance": value.model_dump()}
 
 
 def test_openapi_and_http_serialization():

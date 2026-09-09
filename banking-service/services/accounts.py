@@ -354,7 +354,7 @@ class AccountsService:
                     "product_name": acc.product_name,
                     "product_code": acc.product_code,
                     "currency_code": acc.currency,
-                    **money_fields("cleared_balance", Money(amount_minor=acc.cleared_balance_cents, currency_code=acc.currency), legacy=True),
+                    **money_fields("cleared_balance", Money(amount_minor=acc.cleared_balance_cents, currency_code=acc.currency)),
                     "routing_number": acc.routing_number,
                     "status": acc.status
                 } for acc in deposit_accounts
@@ -365,11 +365,11 @@ class AccountsService:
                     "product_code": cred_acc.product_code,
                     "currency_code": cred_acc.currency,
                     "status": cred_acc.status,
-                    **money_fields("credit_limit", Money(amount_minor=cred_acc.credit_limit_cents, currency_code=cred_acc.currency), legacy=True),
-                    **money_fields("cleared_balance", Money(amount_minor=cred_acc.cleared_balance_cents, currency_code=cred_acc.currency), legacy=True),
-                    **money_fields("statement_balance", Money(amount_minor=max(0, cred_acc.cleared_balance_cents), currency_code=cred_acc.currency), legacy=True),
-                    **money_fields("minimum_due", Money(amount_minor=min(3500, max(0, cred_acc.cleared_balance_cents)), currency_code=cred_acc.currency), legacy=True),
-                    **money_fields("available_credit", Money(amount_minor=cred_acc.available_credit_cents, currency_code=cred_acc.currency), legacy=True),
+                    **money_fields("credit_limit", Money(amount_minor=cred_acc.credit_limit_cents, currency_code=cred_acc.currency)),
+                    **money_fields("cleared_balance", Money(amount_minor=cred_acc.cleared_balance_cents, currency_code=cred_acc.currency)),
+                    **money_fields("statement_balance", Money(amount_minor=max(0, cred_acc.cleared_balance_cents), currency_code=cred_acc.currency)),
+                    **money_fields("minimum_due", Money(amount_minor=min(3500, max(0, cred_acc.cleared_balance_cents)), currency_code=cred_acc.currency)),
+                    **money_fields("available_credit", Money(amount_minor=cred_acc.available_credit_cents, currency_code=cred_acc.currency)),
                     "payment_due_date": (cred_acc.payment_due_date or (now + datetime.timedelta(days=15))).isoformat(),
                     "statement_close_date": (cred_acc.statement_close_date or (now - datetime.timedelta(days=15))).isoformat(),
                     "cards": [
@@ -439,15 +439,15 @@ class AccountsService:
             results.append({
                 "entry_id": str(entry.entry_id),
                 "transaction_id": str(entry.transaction_id),
-                "amount_cents": entry.amount_cents,
-                "amount": abs(entry.amount_cents) / 100.0,
+                "money": Money(amount_minor=entry.amount_minor, currency_code=account.currency).model_dump(),
                 "entry_type": entry.entry_type, # 'DEBIT', 'CREDIT'
                 "description": entry.transaction.description if entry.transaction else "Posted Transaction",
                 "posted_at": entry.posted_at.isoformat() if entry.posted_at else "",
-                "running_balance_cents": running_bal,
+                "running_balance": Money(amount_minor=running_bal, currency_code=account.currency).model_dump(),
                 "pending": is_pending
             })
             if not is_pending:
-                running_bal -= entry.amount_cents # Move balance backward
+                signed_minor = entry.amount_minor if entry.entry_type == "CREDIT" else -entry.amount_minor
+                running_bal -= signed_minor  # Undo this posting to recover the prior balance.
             
         return results

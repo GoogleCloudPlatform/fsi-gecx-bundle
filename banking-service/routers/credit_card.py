@@ -18,7 +18,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from fastapi import (
     APIRouter,
@@ -32,7 +32,6 @@ from fastapi import (
 from fastapi.security import HTTPAuthorizationCredentials
 from livekit import api as lk_api
 from models.payment import BillPaymentRequest, BillPaymentResponse
-from models.money import Money, money_fields
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -721,17 +720,15 @@ def pay_credit_card(
     from services.accounts import AccountsService
 
     service = AccountsService(db)
-    if request.money is not None and not idempotency_key:
+    if not idempotency_key:
         raise HTTPException(status_code=400, detail="Idempotency-Key is required for structured payments.")
     result = service.execute_bill_payment(
         token=token,
         source_account_id=request.source_account_id,
         credit_account_id=request.credit_account_id,
-        money=request.payment_money(),
-        idempotency_key=idempotency_key or str(uuid4()),
+        money=request.money,
+        idempotency_key=idempotency_key,
     )
-    for field in ("source_cleared_balance", "credit_cleared_balance", "credit_available_credit"):
-        result.update(money_fields(field, Money.model_validate(result[field]), legacy=True))
     return result
 
 

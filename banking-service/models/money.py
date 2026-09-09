@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Canonical integer Money and bounded USD compatibility at external edges."""
+"""Canonical integer Money with a bounded historical USD reader."""
 
 from types import MappingProxyType
 from typing import Annotated, Literal
@@ -47,20 +47,10 @@ class Money(BaseModel):
 
 
 def from_legacy_usd(amount_cents: int) -> Money:
-    """Interpret legacy ingress exclusively as USD, without numeric coercion."""
+    """Read immutable historical USD values without numeric coercion."""
     return Money(amount_minor=amount_cents, currency_code="USD")
 
 
-def to_legacy_usd(money: Money) -> int:
-    """Project USD only; a non-USD amount must never be called USD cents."""
-    if money.currency_code != "USD":
-        raise ValueError("Legacy cents compatibility is restricted to USD")
-    return money.amount_minor
-
-
-def money_fields(name: str, money: Money, *, legacy: bool = False) -> dict:
-    """Serialize a named Money field, optionally adding a USD-only projection."""
-    result = {name: money.model_dump(mode="json")}
-    if legacy and money.currency_code == "USD":
-        result[f"{name}_cents"] = to_legacy_usd(money)
-    return result
+def money_fields(name: str, money: Money) -> dict:
+    """Serialize only the canonical named Money field."""
+    return {name: money.model_dump(mode="json")}

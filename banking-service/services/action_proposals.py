@@ -35,7 +35,8 @@ from repositories.credit_card import CreditCardRepository
 from repositories.fraud import FraudAlertRepository
 from services.action_proposal_context import ProposalRuntimeContext, RuntimeContextError
 from services.credit_card import issue_replacement_card, queue_wallet_provisioning
-from services.fraud_money import fraud_money_facts
+from services.fraud_money import (fraud_money_facts, has_legacy_fraud_amounts,
+                                  normalize_historical_fraud_workflow)
 from services.fraud_presentation import fraud_proposal_presentations
 from services.proposal_lifecycle import (
     ActionPreconditionError,
@@ -963,6 +964,19 @@ class ActionProposalService(ProposalLifecycleEngine):
                 "Authenticated customer identity does not resolve to a banking customer."
             )
         return user.id
+
+    def proposal_result(self, proposal: ActionProposal, *, idempotent_replay: bool) -> dict[str, Any]:
+        result = super().proposal_result(proposal, idempotent_replay=idempotent_replay)
+        if proposal.action_type == TRIAGE_FRAUD_CASE and has_legacy_fraud_amounts(result):
+            alert = FraudAlertRepository(self.db).get_alert_by_id(
+                fraud_alert_id=(proposal.action_payload or {}).get("fraud_alert_id"))
+            if alert is None or str(alert.customer_id) != str(proposal.customer_id):
+                raise ValueError("Historical fraud proposal account ownership cannot be verified")
+            account = CreditCardRepository(self.db).get_account_by_id(str(alert.credit_account_id))
+            if account is None:
+                raise ValueError("Historical fraud proposal account is unavailable")
+            result = normalize_historical_fraud_workflow(result, account.currency)
+        return result
 
     def proposal_view(self, proposal: ActionProposal) -> dict[str, Any]:
         view = super().proposal_view(proposal)

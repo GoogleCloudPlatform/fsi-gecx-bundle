@@ -20,13 +20,18 @@ live demo currencies; JPY and BHD prevent two-decimal assumptions in tests.
 Negative Money is valid when its enclosing contract uses signs. Journal entries
 require positive amounts with a separate DEBIT/CREDIT direction.
 
-## Temporary external USD compatibility
+## Canonical external contracts
 
-`from_legacy_usd` validates legacy input without coercion. `to_legacy_usd`
-rejects non-USD values. `money_fields("balance", money, legacy=True)` emits
-`balance` plus `balance_cents` only for USD; other currencies omit the legacy
-field entirely. The default emits structured Money alone. Endpoint adoption
-occurs with each delivering packet; new internal consumers must use Money.
+Delivered payment, account summary, transaction history and fraud-result
+boundaries expose structured Money only. Bill payment requires `money` and an
+`Idempotency-Key`; legacy amount fields are rejected. `money_fields` emits only
+the named Money object, including for USD. Deposit history carries unsigned
+entry Money with explicit DEBIT/CREDIT direction and a Money running balance.
+
+`from_legacy_usd` is retained solely for immutable historical USD fraud results.
+That reader returns canonical Money without rewriting stored payloads. Physical
+ledger and Iceberg storage columns and the centralized financial-event v1 reader
+remain intact; they are not active request or response aliases.
 
 The standalone OpenAPI contract test checks integer bounds, required fields,
 currency enum, and HTTP round trips against a minimal FastAPI app. It does not
@@ -128,9 +133,9 @@ atomically. Insufficient funds, overpayment and denomination mismatch return
 422; contention returns 409 with same-key retry guidance. Malformed or unsupported
 currency returns 400. Ownership and source account type are validated.
 
-External legacy USD requests may temporarily omit a key and have no retry
-protection. They cannot pay a non-USD account. Non-USD summaries and payment
-responses omit legacy cents fields. Checked-in payment/UI consumers use Money.
+All payment requests require a stable key and structured Money. Summaries and
+payment responses expose no legacy cents fields for any currency. Checked-in
+payment/UI consumers use Money.
 Simulation auto-paydown returns structured target/paid/remaining amounts.
 
 The browser parses decimal strings with integer arithmetic, uses currency
@@ -231,7 +236,7 @@ billing Money for PENDING and FLAGGED holds. A flagged MXN purchase billed in
 USD is released by its USD billed amount; mismatched billing currency rolls
 back. Fraud authorization releases, provisional credits, alert snapshots,
 secure-message amounts and aggregate audit facts now carry/use currency-aware
-Money. Temporary external legacy aliases are USD-only. One reader normalizes
+Money. External projections now contain only Money. One reader normalizes
 immutable pre-Money USD action results without rewriting their stored payloads.
 Checks after this increment: 105 focused Money tests and 108 backend regressions
 passed, including cross-currency billed holds and MXN provisional credits.

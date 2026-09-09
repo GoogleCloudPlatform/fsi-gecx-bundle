@@ -323,18 +323,19 @@ def test_account_summary_surfaces_virtual_card_and_wallet_status(db_session):
     assert summary["credit_limit"] == {"amount_minor": 500000, "currency_code": "USD"}
     assert summary["cleared_balance"] == {"amount_minor": 3500, "currency_code": "USD"}
     assert summary["available_credit"] == {"amount_minor": 496500, "currency_code": "USD"}
-    assert summary["credit_limit_cents"] == 500000
+    assert not any(key.endswith("_cents") for key in summary)
     assert virtual_card["is_virtual"] is True
     assert virtual_card["status"] == "ACTIVE"
     assert virtual_card["wallet_provider"] == "GOOGLE_WALLET"
     assert virtual_card["wallet_provisioning_status"] == "QUEUED"
 
 
-def test_transaction_history_uses_money_and_limits_legacy_adapter_to_usd(db_session):
+def test_transaction_history_uses_only_money_for_every_currency(db_session):
     repo = CreditCardRepository(db_session)
     usd_history = get_transaction_history_dto(repo, "cust-test-xyz")
     assert usd_history[0]["money"] == {"amount_minor": -3500, "currency_code": "USD"}
-    assert usd_history[0]["amount_cents"] == -3500
+    assert "amount_cents" not in usd_history[0]
+    assert "amount" not in usd_history[0]
 
     account = repo.get_account_by_customer("cust-test-xyz")
     account.currency = "MXN"

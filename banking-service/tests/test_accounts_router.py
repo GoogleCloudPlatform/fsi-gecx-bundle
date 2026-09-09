@@ -147,8 +147,8 @@ async def test_get_deposit_transactions(async_client):
     assert tx_res.status_code == 200
     tx_data = tx_res.json()
     assert len(tx_data) >= 1
-    assert tx_data[0]["amount_cents"] == 25000
+    assert tx_data[0]["money"] == {"amount_minor": 25000, "currency_code": "USD"}
     # A deposit increases the bank's liability to the customer, so the
     # customer account receives the credit side of the balanced journal.
     assert tx_data[0]["entry_type"] == "CREDIT"
-    assert "running_balance_cents" in tx_data[0]
+    assert "running_balance" in tx_data[0]

@@ -462,11 +462,11 @@ async def test_accounts_summary_and_pay_success(async_client, db_session):
     assert summary_resp.status_code == status.HTTP_200_OK
     summary_data = summary_resp.json()
     assert len(summary_data["deposit_accounts"]) == 1
-    assert summary_data["deposit_accounts"][0]["cleared_balance_cents"] == 50000
+    assert summary_data["deposit_accounts"][0]["cleared_balance"] == {"amount_minor": 50000, "currency_code": "USD"}
     assert len(summary_data["credit_accounts"]) == 1
-    assert summary_data["credit_accounts"][0]["cleared_balance_cents"] == 15000
-    assert summary_data["credit_accounts"][0]["statement_balance_cents"] == 15000
-    assert summary_data["credit_accounts"][0]["minimum_due_cents"] == 3500
+    assert summary_data["credit_accounts"][0]["cleared_balance"] == {"amount_minor": 15000, "currency_code": "USD"}
+    assert summary_data["credit_accounts"][0]["statement_balance"] == {"amount_minor": 15000, "currency_code": "USD"}
+    assert summary_data["credit_accounts"][0]["minimum_due"] == {"amount_minor": 3500, "currency_code": "USD"}
     assert summary_data["credit_accounts"][0]["payment_due_date"] is not None
     assert summary_data["credit_accounts"][0]["statement_close_date"] is not None
     summary_card = summary_data["credit_accounts"][0]["cards"][0]
@@ -478,15 +478,15 @@ async def test_accounts_summary_and_pay_success(async_client, db_session):
     pay_payload = {
         "source_account_id": str(checking.id),
         "credit_account_id": str(credit_acc.id),
-        "amount_cents": 5000
+        "money": {"amount_minor": 5000, "currency_code": "USD"}
     }
-    pay_resp = await async_client.post("/api/v1/credit-card/pay", json=pay_payload)
+    pay_resp = await async_client.post("/api/v1/credit-card/pay", json=pay_payload, headers={"Idempotency-Key": "billpay-qualification"})
     assert pay_resp.status_code == status.HTTP_200_OK
     pay_data = pay_resp.json()
     assert pay_data["status"] == "SUCCESS"
-    assert pay_data["source_cleared_balance_cents"] == 45000 # checking balance: $450.00
-    assert pay_data["credit_cleared_balance_cents"] == 10000 # outstanding card debt: $100.00
-    assert pay_data["credit_available_credit_cents"] == 90000 # available card limit: $900.00
+    assert pay_data["source_cleared_balance"] == {"amount_minor": 45000, "currency_code": "USD"} # checking balance: $450.00
+    assert pay_data["credit_cleared_balance"] == {"amount_minor": 10000, "currency_code": "USD"} # outstanding card debt: $100.00
+    assert pay_data["credit_available_credit"] == {"amount_minor": 90000, "currency_code": "USD"} # available card limit: $900.00
     
     # Verify DB updates
     db_session.refresh(checking)

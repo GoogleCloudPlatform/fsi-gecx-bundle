@@ -110,7 +110,7 @@ def test_changed_retry_conflicts(db_session, payment_suite, changed):
     assert snapshot(db_session, payment_suite) == before
 
 
-def test_http_contract_legacy_and_structured(db_session, payment_suite):
+def test_http_contract_requires_money(db_session, payment_suite):
     from routers.credit_card import pay_credit_card
     from utils.database import get_db
     from utils.auth import get_current_user
@@ -122,9 +122,7 @@ def test_http_contract_legacy_and_structured(db_session, payment_suite):
     data = {"source_account_id": str(payment_suite[1].id), "credit_account_id": str(payment_suite[2].id)}
     with TestClient(app) as client:
         result = client.post("/pay", json={**data, "amount_cents": 125})
-        assert result.status_code == 200, result.text
-        assert result.json()["money"] == {"amount_minor": 125, "currency_code": "USD"}
-        assert result.json()["source_cleared_balance_cents"] == 9875
+        assert result.status_code == 422, result.text
         money = {"amount_minor": 125, "currency_code": "USD"}
         assert client.post("/pay", json={**data, "money": money}).status_code == 400
         assert client.post("/pay", json={**data, "money": money, "amount_cents": 125}).status_code == 422
@@ -134,9 +132,12 @@ def test_http_contract_legacy_and_structured(db_session, payment_suite):
     assert app.openapi()["components"]["schemas"]["BillPaymentRequest"]["properties"]["money"]
 
 
-def test_legacy_request_is_usd_only():
-    request = BillPaymentRequest(source_account_id="source", credit_account_id="card", amount_cents=125)
-    assert request.payment_money() == Money(amount_minor=125, currency_code="USD")
+def test_payment_schemas_are_money_only():
+    from models.payment import BillPaymentResponse
+    request = BillPaymentRequest.model_json_schema()
+    assert set(request["required"]) == {"source_account_id", "credit_account_id", "money"}
+    assert set(request["properties"]) == set(request["required"])
+    assert not any(name.endswith("_cents") for name in BillPaymentResponse.model_json_schema()["properties"])
 
 
 @pytest.fixture
@@ -258,3 +259,25 @@ def test_mxn_http_omits_legacy_fields_and_rejects_legacy_writes(db_session, paym
         for account in summary["deposit_accounts"] + summary["credit_accounts"]:
             assert account["cleared_balance"]["currency_code"] == "MXN"
             assert not any(key.endswith("_cents") for key in account)
+
+
+@pytest.mark.parametrize("code", ["USD", "MXN", "JPY", "BHD"])
+def test_deposit_history_money_and_running_balance_follow_journal_direction(db_session, payment_suite, code):
+    from datetime import datetime, timezone, timedelta
+    from models.authentication import ValidatedToken
+    user, source, card = payment_suite
+    source.currency = card.currency = code
+    db_session.commit()
+    execute(db_session, payment_suite, code, amount=125, key="first-history")
+    entry = db_session.query(AccountLedgerEntry).filter_by(account_id=source.id).one()
+    entry.posted_at = datetime.now(timezone.utc) - timedelta(days=1)
+    db_session.commit()
+    execute(db_session, payment_suite, code, amount=75, key="second-history")
+    history = AccountsService(db_session).get_deposit_transactions(
+        ValidatedToken(claims={"sub": user.auth_provider_uid}), str(source.id))
+    assert [row["money"] for row in history] == [
+        {"amount_minor": 75, "currency_code": code},
+        {"amount_minor": 125, "currency_code": code}]
+    assert [row["running_balance"]["amount_minor"] for row in history] == [9800, 9875]
+    assert all(row["entry_type"] == "DEBIT" for row in history)
+    assert all(not key.endswith("_cents") for row in history for key in row)

@@ -63,5 +63,24 @@ def test_historical_usd_action_replay_is_centralized_and_does_not_mutate_history
     projected = normalize_historical_fraud_action(old, "USD")
     assert projected["voided_amount"] == {"amount_minor": 1053, "currency_code": "USD"}
     assert "voided_amount" not in old
+    assert set(projected) == {"voided_amount", "available_credit"}
     with pytest.raises(ValueError, match="non-USD"):
         normalize_historical_fraud_action(old, "MXN")
+
+
+def test_historical_workflow_replay_projects_nested_money_without_rewriting_outcome():
+    from copy import deepcopy
+    from services.fraud_money import has_legacy_fraud_amounts, normalize_historical_fraud_workflow
+    stored = {"outcome": "PENDING_SPECIALIST_REVIEW", "voided_authorizations": [
+        {"authorization_id": "auth", "voided_amount_cents": 1053}],
+        "provisional_credits": [{"transaction_id": "posted", "credited_amount_cents": 250}]}
+    original = deepcopy(stored)
+    assert has_legacy_fraud_amounts(stored)
+    replay = normalize_historical_fraud_workflow(stored, "USD")
+    assert replay["voided_authorizations"][0] == {
+        "authorization_id": "auth", "voided_amount": {"amount_minor": 1053, "currency_code": "USD"}}
+    assert replay["provisional_credits"][0]["credited_amount"] == {"amount_minor": 250, "currency_code": "USD"}
+    assert not has_legacy_fraud_amounts(replay)
+    assert stored == original
+    with pytest.raises(ValueError, match="non-USD"):
+        normalize_historical_fraud_workflow(stored, "MXN")

@@ -40,10 +40,7 @@ credit_account_summary AS (
     SUM(account_count) AS credit_account_count,
     SUM(account_count) AS active_credit_account_count,
     ARRAY_AGG(STRUCT(currency_code, credit_limit_minor, cleared_balance_minor,
-                     available_credit_minor)) AS balances_by_currency,
-    SUM(IF(currency_code = 'USD', credit_limit_minor, 0)) AS usd_credit_limit_minor,
-    SUM(IF(currency_code = 'USD', cleared_balance_minor, 0)) AS usd_cleared_balance_minor,
-    SUM(IF(currency_code = 'USD', available_credit_minor, 0)) AS usd_available_credit_minor
+                     available_credit_minor)) AS balances_by_currency
   FROM (
     SELECT customer_id, currency AS currency_code, COUNT(*) AS account_count,
            SUM(credit_limit_cents) AS credit_limit_minor,
@@ -120,10 +117,7 @@ SELECT
   credit.stated_annual_income_cents / 100.0 AS stated_annual_income_dollars,
   COALESCE(accounts.credit_account_count, 0) AS credit_account_count,
   COALESCE(accounts.active_credit_account_count, 0) AS active_credit_account_count,
-  accounts.balances_by_currency,
-  CAST(COALESCE(accounts.usd_credit_limit_minor, 0) AS NUMERIC) / 100 AS total_credit_limit_dollars,
-  CAST(COALESCE(accounts.usd_cleared_balance_minor, 0) AS NUMERIC) / 100 AS total_cleared_balance_dollars,
-  CAST(COALESCE(accounts.usd_available_credit_minor, 0) AS NUMERIC) / 100 AS total_available_credit_dollars
+  accounts.balances_by_currency
 FROM `__PROJECT_ID__.oltp_cdc.identity_users` user
 LEFT JOIN primary_address address
   ON user.id = address.user_id

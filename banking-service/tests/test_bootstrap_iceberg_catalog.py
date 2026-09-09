@@ -169,4 +169,6 @@ def test_money_views_dedupe_history_and_balance_each_currency():
     assert "GROUP BY event_id, currency_code" in financial
     assert "$.amount_cents" not in financial  # v1 translation is owned by the Java parser
     assert "payload, created_at" in financial
+    assert " AS amount_cents" not in ledger + financial
+    assert not any(alias in balance for alias in (" AS debit_cents", " AS credit_cents", " AS imbalance_cents"))
     assert all("DROP TABLE" not in query for query in queries)

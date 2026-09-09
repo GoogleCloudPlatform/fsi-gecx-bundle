@@ -83,5 +83,21 @@ def normalize_historical_fraud_action(result: dict, currency_code: str) -> dict:
         if money.currency_code != currency_code:
             raise ValueError("Fraud result denomination does not match the account")
         normalized.pop(legacy_field, None)
-        normalized.update(money_fields(field, money, legacy=True))
+        normalized.update(money_fields(field, money))
+    return normalized
+
+
+def has_legacy_fraud_amounts(result: dict) -> bool:
+    return any(key.endswith("_cents")
+               for field in ("voided_authorizations", "provisional_credits")
+               for item in result.get(field, []) for key in item)
+
+
+def normalize_historical_fraud_workflow(result: dict, currency_code: str) -> dict:
+    """Project stored workflow outcomes without altering their immutable payloads."""
+    normalized = dict(result)
+    for field in ("voided_authorizations", "provisional_credits"):
+        if field in result:
+            normalized[field] = [normalize_historical_fraud_action(item, currency_code)
+                                 for item in result[field]]
     return normalized

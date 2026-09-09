@@ -20,7 +20,6 @@ SELECT
   c.id AS card_id,
   c.last_four AS card_last_four,
   c.is_active AS card_is_active,
-  IF(account.currency = 'USD', pt.amount_cents, NULL) AS amount_cents,
   pt.amount_cents AS amount_minor,
   account.currency AS currency_code,
   IF(pt.amount_cents < 0, ABS(pt.amount_cents), 0) AS spend_amount_minor,
@@ -29,9 +28,6 @@ SELECT
     WHEN 'JPY' THEN 1 WHEN 'BHD' THEN 1000 ELSE 100 END AS signed_amount_units,
   CAST(IF(pt.amount_cents < 0, ABS(pt.amount_cents), 0) AS NUMERIC) / CASE account.currency
     WHEN 'JPY' THEN 1 WHEN 'BHD' THEN 1000 ELSE 100 END AS spend_amount_units,
-  -- Temporary explicitly USD projections for unrelated existing USD offer views.
-  IF(account.currency = 'USD', CAST(pt.amount_cents AS NUMERIC) / 100, NULL) AS signed_amount_dollars,
-  IF(account.currency = 'USD', CAST(IF(pt.amount_cents < 0, ABS(pt.amount_cents), 0) AS NUMERIC) / 100, NULL) AS spend_amount_dollars,
   pt.amount_cents < 0 AS is_spend,
   auth.merchant_name,
   auth.merchant_category_code,

@@ -195,7 +195,7 @@
         "amount_cents"
       ],
       "owner": "packet-07",
-      "rationale": "USD-only external compatibility helper; remove delivered adapters after qualification."
+      "rationale": "Strict USD-only reader for immutable pre-Money fraud outcomes; no active request or response aliases."
     },
     "banking-service/models/origination.py": {
       "lines": {
@@ -469,19 +469,11 @@
     "banking-service/scripts/bootstrap_iceberg_catalog.py": {
       "lines": {
         "02b0cd84345d6bf7349a3700407da76a1169995cd7d88bb07b4771efb65eab81": 1,
-        "1a8254e8295a3f5378a6d88a0616c8376907b0f1ad068abbf4eb00493aafbc1f": 1,
-        "1b2979a2064cd6299050f19affe210a02a69c5d3aeaacd65ab87ba3840263a8e": 1,
-        "3003abab29100f4e4757b3c9d847fa25dd46f313d525065c14b051d25eb636be": 1,
-        "46d62b2f829777b710a9e451de86a30bc3f883e3b483a4fd9109ac074efe79f8": 1,
         "b447675b5074db5b455f4825c0904a94dbc6148b20ccd10789060232a1afa639": 1,
-        "d3f8cdffcb55657b8b69b0010ea8ad588ceedfdcb9b30ace48db986ac11676f4": 1,
-        "fc50c6f1a8950f41f6f76e4a388200a385b03d9616a6c361a5767373694b7e7a": 1
+        "d3f8cdffcb55657b8b69b0010ea8ad588ceedfdcb9b30ace48db986ac11676f4": 1
       },
       "symbols": [
-        "amount_cents",
-        "credit_cents",
-        "debit_cents",
-        "imbalance_cents"
+        "amount_cents"
       ],
       "owner": "money-foundation",
       "rationale": "Immutable physical Iceberg schema adapter and temporary USD-only external view projections; remove public aliases in packet 07."
@@ -490,34 +482,30 @@
       "lines": {
         "00e7938101512d69c07f9108725be96c70a3138730caac893b5f01ffb918967f": 1,
         "0df5b2983f9a6fe4bb07089e7021ec5d20782298c1e83fcb1ddf10a6ee870276": 1,
-        "10b7d28a588559a177819696baa57b5332d2c27aba6bdebb16f4dbecd1d49a36": 1,
-        "2ca95ba4f5d0b9f4db67c7fcd817a6517f5321e42e7a4bbe8cdb98f1e68e4a71": 1,
-        "2df1847637dfc1d46afe3bccf4c505979cf0727ff8444606d941f8c965dc9754": 1,
         "363b4e062c88b2b9c9ebcd765fa1b4de954a2117b93eee0ee9ef3dd90b96edcf": 1,
         "37573adc44cc59c3a9103dc87c18a7508d41da41031e819bbd385e217f3607d6": 1,
         "37abd2b1ee45006e8b596fd45eafb96e80c7167860453b7f1b68ce9f129bd742": 1,
+        "3cc51735f19891ecd00b935bcad645ac112e9511e0d3eee8ce2a122f67e7899c": 1,
         "43c4387f539ba88aff54d86264f7ea45986c5a85436e3ee69dc6554081c57ee3": 1,
+        "4706edcbb0e85f9aca0c93849863b4762562a7122def841b1f267c9453f8988a": 1,
         "486770aeb502553674da081cba7c1d802b73ee25b27e4b93b15b952f91375e51": 1,
         "59bfbc46b4912902743a461d178656fb79f1d3dbd0934f59d94d221a42f41012": 1,
         "761377e48a0c11a8a898a25e2cf30cced3f203d1afd3f2b59bf156542952132b": 1,
-        "7da999c3a0553c0a8d9a056f132d2270688f7ded7988f9b655aafc74504c76cc": 1,
         "7fc9360c67cd6627c2077b9cda96169d8419c91712068341152a5c14b28495ed": 1,
-        "8bd7395dfb84de9a3588cb734f104d89bb6874bd65e020f34f2150363ce4d0f0": 1,
+        "944b3b4b0b7d9a7e54f180ef647038ad2add344acd847eb357b910add21e933f": 1,
+        "a92a712504ad1423d3242267cfa3ca37bba19871f3e9a7351f739fec66f56809": 1,
         "af05dc5e596a76c26c063cd7e23315962b14fd34178f523bf1b04ec6e7045b4e": 1,
-        "b04691c5d1af599df7f5f64d28981e00b8376910c9093df51b077b2fb8e74bbf": 1,
-        "b0fa01dd1bfaad578c2d3ce170dfcb380c1254ee0983120c4bd7949e1628eecb": 1,
         "b2473e1944f1119755189a19c684223c02696dbdf4cbab1a364b986d08fd2046": 1,
         "b30f1fc8d494ffd34b0ba5258e414d5d9f8ab438bb648e1a94925fdc5981ed74": 1,
         "ba3b93bba353788cbeb8d02e8aaa25d11ce73025688659f9ccbd686953a496fb": 1,
+        "c588a2a778140c52aa1b1cc47c0e19590cf24f0c85d59dfab34c21701fea728a": 1,
         "c829831b60111b8dff6e0f5cc23f3486969d726efee945b8f6a4a870bde7b233": 1,
-        "cd84239590e7bf551e8cac21a31952ba371c638495073a37b1ce97e8e82064bc": 1,
         "d19474f5ace20131308c51a70eb5bf303e5225b7facee6b0ca476fd2a9936094": 1,
-        "d828e7844a9f310ea1f8c23ac2b222ab5c50824ea152f7a6ca77163a144ea280": 1,
         "dee072f2869ba6ef64bb19766f4353892d83bc5687e9a46294e44f98bf70efa5": 1,
         "e2aed06ab5020e5341aad25fe2c775ccb883c6bba47575ed1e8d941acfb9ef42": 1,
-        "e3edb47a284f2f8855c75a2fc85030915113b15173e64ac1686e09246f48b5d6": 1,
         "e973d26934eb0017165249ed78f9d9860e341138a4b8c9db2cd6a174bb5ecab2": 1,
-        "f369f6a2e90e483108fda077e26744ded93bb1a18f720deb113424a570953d3c": 1
+        "f369f6a2e90e483108fda077e26744ded93bb1a18f720deb113424a570953d3c": 1,
+        "ffc162c7d5e30cc9fdef1a8aefc5c93072eff01bdb6e6cdb58fbc6d6d5cb39c9": 1
       },
       "symbols": [
         "amount_cents",
@@ -525,11 +513,10 @@
         "cleared_balance_cents",
         "credit_limit_cents",
         "initial_deposit_cents",
-        "requested_amount_cents",
-        "running_balance_cents"
+        "requested_amount_cents"
       ],
       "owner": "packet-03",
-      "rationale": "Existing USD account/payment consumer or fixture; migrate delivered contracts and classify unrelated USD remainder."
+      "rationale": "Physical storage access is converted to canonical Money for delivered summaries, payments and fraud/history. Remaining separate FDX, fee and limit operations are outside this packet."
     },
     "banking-service/services/card_network.py": {
       "lines": {
@@ -589,21 +576,19 @@
         "0a1b9b9753b8bbdc41c98376fa24c0dea279d8f9345fceba5c42726cd7e6411f": 1,
         "17bb21cb49f4f22a7f07eb5f3c330bc92bf7efbd09d6287fdb9d22439e47e599": 1,
         "1b06ecd4cb9c9fb4948f2687aeed9c7f68d4b6f047b891d95b3c9c1edfea94bb": 1,
-        "25eee28514ba0242c544753bcb4c29e43179045257c8d4abc5335209bdab98f2": 1,
+        "22f7fcfe7350ff0c66f19163a5435c8422e53e59a9fa7fc504cd1e7be72298e7": 2,
         "284122060f67f00c97d7f34d75bcfef203674ca3946f104f54f2bbfa6e75be72": 1,
-        "292bd56fd79e0fe0571972b5baf497c6fc1066a87425dc8f9e6412ca186322e4": 3,
         "2ac1515e4cadf7b1b44b93cb1fe5fdef3f801b163b759326a78f1d277e1be65a": 1,
         "3069bc077e9fcfa5b7e728b0a8bb07214f683ce765204e77c5bf442ceecbde22": 1,
         "3a09562cfd0b880de4d78d1b20fc011f557fe9558b5d14eab2a0ffc87cad6e68": 1,
         "3ee81bd9b7a3634e9376560bb6e6628887bfeecb2355abea930eea29c440f240": 1,
-        "43218f15019cfa46743e754f46665ddd13de5f5cbf2d2bb7815f90ebcefe8b9d": 1,
         "4576624dca645f91dad68f4465ddad4b65508391e2adbbd2346db1f96941e64e": 2,
+        "47299c125ae48efcff1dda21c483691259526941d14a09c4d19aee2cffd4be42": 3,
         "4a05b5fc0c2017ae9f971c445f5efccc42924d5c1bded48cffe7ab203ff42e77": 1,
         "58225a943741c1dafe5c7efb40f2f0f64d4d27620de9bcabf41cfeccf5fe33b8": 1,
+        "593b755309cd94af7c8d202d3d2547ca113422e11aea22bdbd7cea420d60742e": 1,
         "5e69f86ea75b543874a971ff14db92da3d9faee946f39dc435e7b66c255df23d": 1,
-        "6c3efe97fa54de1e9ba8eafb7c995b452847e1636c05bb4fe3ff6deb3a2ce8ae": 2,
-        "7b10c987a2952bb80e3dce41262dc7fe0f7ea5469e71f528e14bf5368ef42099": 1,
-        "7844fd63ea3831b4b2fd6233cb473e4b1947ede2b4747fad4e31c5ccdc8983d6": 1,
+        "6c3efe97fa54de1e9ba8eafb7c995b452847e1636c05bb4fe3ff6deb3a2ce8ae": 1,
         "7bf8a398adb230cc25038e2072f6731dbd553e1d1d0307e95db211686f02201b": 1,
         "8433ba1b3688b5c712f4bb143c4324d4c7dbdce7004d5ff2b573d52e076aa8b9": 1,
         "889924070dcabd43390fb9c395b63df4ec398c4cb8ddf681b21783e3883fc1e3": 1,
@@ -612,14 +597,10 @@
         "9935cbd5ec8acdef6c61e26897f9cd589656b134d3c0687edbc76913d98004a9": 1,
         "9dc3d2b891bf60b837f90210dd1a4ace177a67a2b19c6054abdca9eccb6ca6d3": 1,
         "9e4211d382cbaa4c3d722d6e53d0d2c0127a059fb40cd92d636e755904c8a3af": 1,
-        "a025a44ed2bd35aa3f4a0f12bd4331b73fe4648fb4db5ca38abb175fdc424065": 2,
         "a0611b65cf5c19a378622da0461fbc64f921c250fb11865d4b153aaf9c4fd1c1": 1,
         "a0b1496014868164d2bf0d7b21f1e26d77c22e08e0a12ef2509f3dfee251b595": 1,
-        "b0fa01dd1bfaad578c2d3ce170dfcb380c1254ee0983120c4bd7949e1628eecb": 1,
         "b2842b52cd5cec31acd45fa5fe85a6bc0109dae96b41730515a5a9b28df11aea": 1,
         "b6d8c37acb575a30b199ea068e429ff41613cc012b1c5d80c373460a2150cbf0": 1,
-        "b95e60a460fe00ba51dbcf1db228a39029ad9df3004c5ac8dfce3d057c9732fa": 1,
-        "c0f129c504e35faf383f32c01c3cbe4062270af6970093aea3b92f5095c90d95": 1,
         "c96e10b792cf03a9a086e6a44c5f98455bb114b4e1a1583448302b2266f5d7a9": 1,
         "ce7edf94d2c6bfb0617c4af371fb952c5682730001c095d4c4bf0f4185dfe467": 1,
         "d3ad568851d4ded60be24658a93d0c1a7381d34a37149d221ec9c2afac30412f": 1,
@@ -627,10 +608,8 @@
         "d552a420707bc94a8fc7bf3a459d1e03097dcdf7abe0db011e5cf905ad675d4d": 1,
         "d748c31c4ef23f32695c0145b340d4e2f293f2160700ac1c30a03a7bd70bb5de": 1,
         "d975a881dfbeb8daf762c7d88edf522b590102a9248855b8aab27fe301fb96ad": 1,
-        "dbbfe56df92769f7ff9596daa1a52207dc1bab766192908caa875d67d27e81f3": 1,
         "e1c95f49b1cae59068bb1d73988d78d259a543f041bdb5638939843557778b46": 2,
         "e36bf5621f04f99ba76ac843d00da8ce1f9a6c8bdfe8c81c51679aa07e6120c0": 1,
-        "e3edb47a284f2f8855c75a2fc85030915113b15173e64ac1686e09246f48b5d6": 1,
         "e5d288162f9bf8b059429e1c2157b3e822e5f9494acfe64604613e432794e39b": 1,
         "e69b784ca8650307d8abdf9ff38611fd16d9303b080252ed932c5257aade584c": 1,
         "ece3586ebba1a45ccc76d2128bd134ad65739214bcb2b834f67065ac9e33d2a6": 1,
@@ -657,7 +636,7 @@
         "transaction_amount_cents"
       ],
       "owner": "money-foundation",
-      "rationale": "Physical account/posting storage and unrelated USD contracts; delivered fraud results expose Money with temporary USD-only aliases."
+      "rationale": "Physical storage access is converted to canonical Money for delivered summaries, payments and fraud/history. Remaining separate FDX, fee and limit operations are outside this packet."
     },
     "banking-service/services/financial_journal.py": {
       "lines": {
@@ -888,8 +867,6 @@
         "0c8409fe3409349f387896df5d85d6f3aad8f97ea25c12ad3e3cbb324d1f81af": 1,
         "18401884f7c7f462079077ac72e614f4a1b93ab1973ce47e5651b9742b42c25f": 1,
         "1eaaa9210c017ae927a56f48a3bb6c5fa6055332fa8844a1ccabeb2ac2b6a8a5": 1,
-        "22137dd5847e7fae77d49e5d4f14e52654439483cfb4bc6907468f6924d45c47": 1,
-        "3692540f07332ec2a2f40739c41077a1fb4049b7396606a5beaaf901be238010": 1,
         "543c3c9f7c1433ab5ac55d1bb65626530eb0fe6742ddf6c8994d20668f354111": 1,
         "761464f8faa0c4ff00f98e9b303fba9e9e1afe79fb773b06805d534130cd40ab": 1,
         "775ded208dda420db873e83975b01426f90f2c919903fa42cebf84b9752c584a": 1,
@@ -898,8 +875,7 @@
       "symbols": [
         "amount_cents",
         "cleared_balance_cents",
-        "initial_deposit_cents",
-        "running_balance_cents"
+        "initial_deposit_cents"
       ],
       "owner": "packet-03",
       "rationale": "Existing USD account/payment consumer or fixture; migrate delivered contracts and classify unrelated USD remainder."
@@ -910,7 +886,6 @@
         "1746080e0ee7219176e6358313f29c0f5177458bfc017fc14b88af7cb3a212fa": 1,
         "195fc1824fdbf2b5e79b96906c7998b7d9d524e2bd68a224748a82427925e175": 1,
         "1dfb10d46d3a09ff455fb5d55406552733420cc056e155c2fc0e404d15b32e69": 2,
-        "201695d4e1dfa34cfef3e22a0898e47a617a00b6a934b0baabbdc788ea7a0d01": 1,
         "212d834f97ea6630e79b7a0197260664df0c0800816632ab1813dbdd5d2d9b4f": 1,
         "217664a105481b2ee29ac4d79ad1c541ff089713d270a52964fceb89b4bf3b61": 1,
         "24fdd09b4d5cfbeb8ef404a0e8a470fbc35f272781dc1c6c885c589afcded1c9": 1,
@@ -921,18 +896,14 @@
         "33919621e988b713cdd0d1463608a9c1ac4d41c5137c3efc6ff703bf1256c36c": 1,
         "377eee61537fb11ce2c650ac6db53043bc1b742b7e91e8c8f1237cfbbe2bb42c": 1,
         "3eb0265a0e56037d35da8427bfb64028f4929831fbbd6cdba3e3399f9c2ef551": 1,
-        "4135b1152486fd6dd31d08958ba4e508f51c2e774c7874b73f176e91aee13c98": 1,
         "4ae7641a67209f8104c24b854be5871b2275c6259925ab6c6445f695bd39e356": 1,
         "5a40be07c65786643bff36e26ebaa846292ff1188df3b53a0be95ecee8f5e534": 1,
         "65fe85790891514531d1a0b5b75cae7614063233cfcf902813bdaaee8dc21900": 1,
         "6b001e16c76e225dc921ae9d9f12c7104e9d6d008696a2c04b1bbc15a2b46067": 1,
         "7bb6ff57b35ec2b32c385c3fc0aa90a138a09a390e741cf5b7430f29691aa320": 1,
-        "87c7d1436a0b7c43d6935dce14f267af2c062f175ead9284983ab174ea92d81f": 1,
         "8dc44b4a164d598a3a211b8f8bbef8057f51b1ecaec7166abcc16a3f01b7b88a": 1,
         "8e0432aa9dfe7dc7170bdc87b12f0c83174f89ce846e2639c1553df581815d58": 2,
-        "8e0d437ce414ccc2c35fb60362c43f6b1a0fcd045dbc47d5f48d3d8710e405be": 1,
         "8e67b8e85b5365e70ee3a157e2bc2a3b746330d926a1bdbb8f31d9fd4c942a5d": 1,
-        "90179a798383a5900772abcc55f612fd07cac1f592ac2c2e0a99426e8cb232e9": 1,
         "90261d2550c96fe172ac47e7ff59b1a4515437cf5e7f68af5408ebd0abb0c01a": 1,
         "98d487d9dcf8bbef9e08af85788680141562d4373d0636058f1d1c0ac618f0f8": 1,
         "9a41ab13e7a30dcacef10b472842e4a6ad1eb0d11bdcc5cd486f2b6fa63d5812": 1,
@@ -943,9 +914,6 @@
         "d899c3442af7ed08de86693b8c94bf75f40347da8d03b391b6e78d4c2b7a451a": 1,
         "da3bbcddcc92df5a6710b94d0a1b100ed8fef4552fec2cff86bf906c5273cddd": 1,
         "dfc45c872245180601a81450738635f38519097c7cb8a51926aa92c3ab95aceb": 1,
-        "e0da812cd2861022f71f2bc26d7a72d6342b7e04ac1ad22784a6b00b8a66445f": 1,
-        "e212eb1a31ed3ecf1eea3dbf1019bba505be1867b5c8410bfc4e4181b1426990": 1,
-        "e9f3866eaed8e3f92cc9a4308f1c132bb29e972c6d63abb9b71fcee9b460a67a": 1,
         "f17d2713f4376453996bf5079e15acbdc72e037aa7e731511ebd981a89dbc2d0": 1
       },
       "symbols": [
@@ -953,12 +921,7 @@
         "available_credit_cents",
         "billing_amount_cents",
         "cleared_balance_cents",
-        "credit_available_credit_cents",
-        "credit_cleared_balance_cents",
         "credit_limit_cents",
-        "minimum_due_cents",
-        "source_cleared_balance_cents",
-        "statement_balance_cents",
         "transaction_amount_cents"
       ],
       "owner": "packet-02 / packet-06",
@@ -1021,7 +984,6 @@
         "357e2af106cf32ef5ebc4bc81d2f9b0cb449cc4492079b086671d2fbe83a2039": 1,
         "37182d48940b727b2771b1caf23ef2fe96cc2f358e4e2258982badd676277c28": 2,
         "460cda189ed8eb17b025d98224d1bd12c08bf22f7aed4b27596ac2c25590b47b": 1,
-        "5557dba6443f791e83bf19aebbc2be3270e14534c7d20c391f73bbd930efdbfe": 1,
         "5a1b5465e28b4948973b494c34f5b5a37ae941304c46027c57098b23ce099a87": 1,
         "5a5cb0210fad50270799fa2e64d2101513670f0c40b7b37985aa6da6951fad97": 1,
         "5c1e00114f2125423c1ca80d1c88a3807d49f5ecb50418c00b36b5fbb7a066cd": 1,
@@ -1031,13 +993,13 @@
         "76262e86bf8e608e74aa63607f6306fef973b675e21666fc72359ca673b7c170": 1,
         "8937c89fe8e6c32edccb3b30ae5ef2d985a4d724e67211c6798afa0ee8962c94": 1,
         "961ca44a65cdfc3805925d367e1a77e570b0af91d8b0251bc39c692cd0f2f769": 2,
-        "9f503d210d789c986f249b3257b8503502e9ec228017c0aaa18989dc9444bcbd": 1,
         "9fb007c73bb3c4c5d061c4e7c13e4799b6c79b5b8c47095ca952e0bd9d2f8b69": 1,
         "a8be5aef0779d9b951a277d8f37546f463081b88cdf342820730dac9ef8c0ed3": 1,
         "aaf7871b3b0903b3cd152ac01076c1d82c08c058487f98d46e4fe424125e0a98": 1,
         "af2e7d5f04ba90579af6b54837f451bf97f195f7249abcf729f1459ce91a2024": 1,
         "b4c2a381463ca8e69c2d4dc62239ea279d7fae2f5d48f97cf1f79ad03273f36d": 1,
         "b74a7c95152198a846461befb574d8426dd774c7865500a6527ce01f6aa3b86c": 1,
+        "c0d97fb96c47cebe9dfc65ea9487fc66a0656b08ae6701745cad011ce2aef065": 1,
         "c0f72604c3ae2020298df1874a4b6d1f0b14630913371fd81f59e49ccb50b496": 3,
         "c2a003466e8cb479c68bfd6177bb51a5a27be77f3c65aa3eede8dff1760dab28": 1,
         "cf92317fc4fe6905ae3671a6b4c2e8f92ebaad6e8ae546050c21a289aaafddfd": 1,
@@ -1275,21 +1237,6 @@
       ],
       "owner": "backlog:usd-origination",
       "rationale": "Existing explicitly USD product/origination fixture or behavior outside reference journey."
-    },
-    "banking-ui/src/components/AccountsView.jsx": {
-      "lines": {
-        "02721411b5bfa59b1c67adc84204b83eec5d6ed027e994bb023322d92c02d650": 1,
-        "2230503e502112c45ad2a779d43953e4a238a86319f5f9463b75c3fc9d021ac1": 2,
-        "aab9a697827fc0b26ea3ff76453cd1fdbf65583ec6fb4f660acb5497dfc8bdad": 1,
-        "b524e60540d5620c7f6bb41abb01efdbf484b3b6419ba901c8be60351b9c8db5": 1,
-        "d6b2b7ab120c97136afb4e29f9f26d9879ee52e75342e2a6ad2f05414a90ead2": 1
-      },
-      "symbols": [
-        "amount_cents",
-        "running_balance_cents"
-      ],
-      "owner": "packet-03",
-      "rationale": "Existing USD account/payment consumer or fixture; migrate delivered contracts and classify unrelated USD remainder."
     },
     "banking-ui/src/components/AdminSimulationView.jsx": {
       "lines": {
@@ -1577,12 +1524,9 @@
         "48d45e442e9ef9313256926d129e5ff8d8e91216e61310c803f72265b5af9238": 1,
         "6ddb2383043b98c2958ece63f96c0be71f22e744c88095379d07c08b425bd865": 1,
         "7c5f2eb6a88123054b9afbf23685303c0afb1edb21459eba808abb9b9886a4ef": 1,
-        "a6b09062999fafdfe133bcb99846ec81c26ea15b85ecd455df203212e5353225": 1,
         "c114bc5402ed625c504ddad591853fc7189769bd3fc5c952b837bb106d55c000": 1,
-        "cd7291224999e939487607047cf7af8b1f58d4cbdf6621a254934ccf866f1af1": 1,
         "d186f1a022c9ec58b0b6b723b704ef445c69fb635f3b4f6c1cb70e86ffe562a5": 1,
-        "dc5bbaa13471030753d5a90f419b916790047bfc577c43a89c7f1556c2baf8f7": 1,
-        "e8130b7684c54a6d7de732a2a009c506a2554fa4571948d34ccc539d4a813579": 1
+        "dc5bbaa13471030753d5a90f419b916790047bfc577c43a89c7f1556c2baf8f7": 1
       },
       "symbols": [
         "amount_cents",
@@ -1714,32 +1658,18 @@
       "owner": "packet-02:legacy-storage-reconciliation",
       "rationale": "Read-only reflection of retained BIGINT storage columns to reconcile and migrate legacy rows; output uses minor-unit names."
     },
-    "banking-service/models/payment.py": {
-      "lines": {
-        "1ad74be0fa060874ea2a02ad8e5b5c2d7fc49e376c7a5c89c5545336ac1a7f21": 1,
-        "372bb28c69b3b77d085e7d4360c981bedc34871435330db6231d8fb18dbeb30f": 1,
-        "497409676f98e332ed9d339fb1572de4cde15e401b4b5450c906b494cd5247a0": 1,
-        "7d86bff54a4328d3508a2072f3eb5d45606c91949ba77e2eddb154235a4cb1c9": 1,
-        "7ff46424f2109793f76b049761815d13f8c88d49c9171957d21c7edb704d0d08": 1,
-        "a076e4ad97ade9d2c8bf513245d01c88f9793f4b6b37f45dae4d954f23a63454": 1,
-        "d9c3c350b300c3295d8cac09e9f59b1e66023f28970d26e8046c8db7a2045a31": 1
-      },
-      "symbols": [
-        "amount_cents",
-        "credit_available_credit_cents",
-        "credit_cleared_balance_cents",
-        "source_cleared_balance_cents"
-      ],
-      "owner": "packet-07",
-      "rationale": "Temporary external USD bill-payment request/response compatibility only; internal payment service uses structured Money."
-    },
     "banking-service/tests/test_bootstrap_iceberg_catalog.py": {
       "lines": {
+        "36d465e5b396b71e3dd0f3dc7eef082c3e9d9bc30de8ecf5e7f8ca96e2fce355": 1,
         "4a9c2ea5196db1f8202c418b8d27e7bd1d91ad311794c3a025607e8a0e474f3a": 1,
+        "620214c07be505d7383bccaa3df634e45abaa86cb15a50aeebbd1e9878a5192b": 1,
         "9bed411550a894f4fc7abbdb722308dc70407eb142ad1644fb1c10e13a4510b7": 1
       },
       "symbols": [
-        "amount_cents"
+        "amount_cents",
+        "credit_cents",
+        "debit_cents",
+        "imbalance_cents"
       ],
       "owner": "money-foundation",
       "rationale": "Regression assertions for retained immutable storage translation and no direct historical payload field consumers."

@@ -25,7 +25,7 @@ from repositories.credit_card import CreditCardRepository
 from models.secure_messaging import SecureMessageCreateRequest, SENDER_TYPE_BANK
 from repositories.fraud import FraudAlertRepository, ScenarioOutcomeRepository
 from services.knowledge_catalog import KnowledgeCatalogService
-from services.fraud_money import fraud_money_facts, authorization_money_facts
+from services.fraud_money import fraud_money_facts, authorization_money_facts, normalize_historical_fraud_workflow
 from models.money import Money
 from services.money_presentation import project_money, project_transaction_money
 from services.fraud_presentation import CONTENT as MONEY_VOICE_CONTENT
@@ -521,7 +521,7 @@ class FraudAlertService:
                     raise ValueError(
                         "The existing customer-reported case has no completed triage result."
                     )
-                replay = dict(completed_action.result_payload or {})
+                replay = normalize_historical_fraud_workflow(completed_action.result_payload or {}, account.currency)
                 replay["idempotent_replay"] = True
                 replay["intake_source"] = "CUSTOMER_REPORTED"
                 return replay
@@ -789,7 +789,9 @@ class FraudAlertService:
             idempotency_key=workflow_key,
         )
         if workflow_action and workflow_action.status == "SUCCEEDED":
-            result = dict(workflow_action.result_payload or {})
+            result = normalize_historical_fraud_workflow(
+                workflow_action.result_payload or {},
+                CreditCardRepository(self.db).get_account_by_id(str(alert.credit_account_id)).currency)
             result["idempotent_replay"] = True
             return result
         if not workflow_action:

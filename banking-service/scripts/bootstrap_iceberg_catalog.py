@@ -94,7 +94,6 @@ def _view_queries(project_id: str, catalog_id: str) -> dict[str, str]:
           SELECT * EXCEPT (dedupe_ordinal)
           FROM (
             SELECT * EXCEPT (amount_cents),
-                   IF(currency = 'USD', amount_cents, NULL) AS amount_cents,
                    amount_cents AS amount_minor, currency AS currency_code, ROW_NUMBER() OVER (
               PARTITION BY entry_id ORDER BY ingested_at DESC, published_at DESC
             ) AS dedupe_ordinal
@@ -105,9 +104,6 @@ def _view_queries(project_id: str, catalog_id: str) -> dict[str, str]:
         "account_ledger_balance": f"""
           CREATE OR REPLACE VIEW {dataset}.account_ledger_balance` AS
           SELECT transaction_id, currency_code, currency_code AS currency,
-                 IF(currency_code = 'USD', SUM(IF(direction = 'DEBIT', amount_minor, 0)), NULL) AS debit_cents,
-                 IF(currency_code = 'USD', SUM(IF(direction = 'CREDIT', amount_minor, 0)), NULL) AS credit_cents,
-                 IF(currency_code = 'USD', SUM(IF(direction = 'DEBIT', amount_minor, -amount_minor)), NULL) AS imbalance_cents,
                  SUM(IF(direction = 'DEBIT', amount_minor, 0)) AS debit_minor,
                  SUM(IF(direction = 'CREDIT', amount_minor, 0)) AS credit_minor,
                  SUM(IF(direction = 'DEBIT', amount_minor, -amount_minor)) AS imbalance_minor,
@@ -133,8 +129,6 @@ def _view_queries(project_id: str, catalog_id: str) -> dict[str, str]:
           SELECT event_id, event_type,
                  JSON_VALUE(payload, '$.account_id') AS account_id,
                  JSON_VALUE(payload, '$.transaction_id') AS transaction_id,
-                 IF(COALESCE(posting.currency_code, JSON_VALUE(payload, '$.money.currency_code')) = 'USD',
-                    COALESCE(posting.amount_minor, CAST(JSON_VALUE(payload, '$.money.amount_minor') AS INT64)), NULL) AS amount_cents,
                  COALESCE(posting.amount_minor,
                           CAST(JSON_VALUE(payload, '$.money.amount_minor') AS INT64)) AS amount_minor,
                  COALESCE(posting.currency_code,
