@@ -63,6 +63,7 @@ import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
+import { SUPPORT_LOCALES, getSupportLocale } from '../utils/supportLocales.js';
 import ProposalProtocolTrace from './ProposalProtocolTrace.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
@@ -298,7 +299,7 @@ function MicTester({ deviceId, onError }) {
 
 export default function VoiceSupportView({ customerProfile }) {
   const [consultationLocale, setConsultationLocale] = useState('');
-  const profileLocale = customerProfile?.preferred_support_locale === 'es-MX' ? 'es-MX' : 'en-US';
+  const profileLocale = getSupportLocale(customerProfile?.preferred_support_locale).code;
   const consultationOverride = consultationLocale === profileLocale ? '' : consultationLocale;
   const voiceLocale = consultationOverride || profileLocale;
   const { brandColorFrom, resolvedTheme } = useSettings();
@@ -2415,9 +2416,10 @@ export default function VoiceSupportView({ customerProfile }) {
                     disabled={isConnecting || isConnected}
                     aria-describedby="voice-support-language-help"
                     className="appearance-none h-11 w-full rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-10 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200">
-                    <option value="">Profile default: {profileLocale === 'es-MX' ? 'Español' : 'English'}</option>
-                    {profileLocale !== 'en-US' && <option value="en-US">English</option>}
-                    {profileLocale !== 'es-MX' && <option value="es-MX">Español (México)</option>}
+                    <option value="">Profile default: {getSupportLocale(profileLocale).label}</option>
+                    {SUPPORT_LOCALES.filter(({ code }) => code !== profileLocale).map(({ code, label }) => (
+                      <option key={code} value={code}>{label}</option>
+                    ))}
                   </select>
                 </div>
                 <p id="voice-support-language-help" className="text-xs leading-5 text-slate-500 dark:text-slate-400">

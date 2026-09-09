@@ -21,6 +21,9 @@ languageSettings:
   defaultLanguageCode: en
   supportedLanguageCodes:
   - es
+  - fr
+  - de
+  - pt
   enableMultilingualSupport: true
 loggingSettings:
   conversationLoggingSettings:

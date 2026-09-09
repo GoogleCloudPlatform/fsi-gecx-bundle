@@ -22,7 +22,7 @@ from models.identity import User
 from models.profile import CustomerProfileUpdateRequest
 from repositories.identity import get_customer, update_customer
 from utils.database import Base
-from utils.support_locale import resolve_support_locale
+from utils.support_locale import resolve_support_locale, SUPPORTED_SUPPORT_LOCALES
 
 
 @pytest.fixture
@@ -38,20 +38,21 @@ def profile_db():
         engine.dispose()
 
 
-def test_profile_language_persistence_preservation_and_customer_isolation(profile_db):
+@pytest.mark.parametrize("locale", SUPPORTED_SUPPORT_LOCALES)
+def test_profile_language_persistence_preservation_and_customer_isolation(profile_db, locale):
     db = profile_db
     db.add_all([User(auth_provider_uid="alice"), User(auth_provider_uid="bob")])
     db.commit()
     assert get_customer(db, "alice")["preferred_support_locale"] == "en-US"
-    update_customer(db, "alice", None, None, None, "es-MX")
+    update_customer(db, "alice", None, None, None, locale)
     db.expire_all()
-    assert get_customer(db, "alice")["preferred_support_locale"] == "es-MX"
+    assert get_customer(db, "alice")["preferred_support_locale"] == locale
     assert get_customer(db, "bob")["preferred_support_locale"] == "en-US"
     update_customer(db, "alice", "Alice", None, None)
-    assert get_customer(db, "alice")["preferred_support_locale"] == "es-MX"
+    assert get_customer(db, "alice")["preferred_support_locale"] == locale
 
 
-@pytest.mark.parametrize("value", ["es", "fr-FR", "", 42])
+@pytest.mark.parametrize("value", ["es", "ja-JP", "", 42])
 def test_profile_rejects_unsupported_locales(value):
     with pytest.raises(ValidationError):
         CustomerProfileUpdateRequest(preferred_support_locale=value)
@@ -81,3 +82,10 @@ def test_adk_dispatch_uses_profile_default_or_explicit_override(override, expect
     profile.assert_called_once()
     assert profile.call_args.args[1] == "alice"
     assert tasks.tasks[0].args[-1] == expected
+
+
+@pytest.mark.parametrize("locale", SUPPORTED_SUPPORT_LOCALES)
+def test_all_support_locales_validate_and_resolve(locale):
+    assert CustomerProfileUpdateRequest(preferred_support_locale=locale).preferred_support_locale == locale
+    assert resolve_support_locale(locale) == locale
+    assert resolve_support_locale("en-US", locale) == locale

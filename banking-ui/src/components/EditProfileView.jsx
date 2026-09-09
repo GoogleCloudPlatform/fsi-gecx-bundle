@@ -21,6 +21,7 @@ import { useSettings } from '../context/SettingsContext.jsx';
 import { updateCustomerProfile } from '../utils/api.js';
 import { formatPhoneNumber, getPhonePlaceholder } from '../utils/formatters.js';
 import AnalyticsButton from './AnalyticsButton.jsx';
+import { SUPPORT_LOCALES, getSupportLocale } from '../utils/supportLocales.js';
 
 
 
@@ -41,7 +42,7 @@ function EditProfileView({ customerProfile, setCustomerProfile, fbUser }) {
 
   useEffect(() => {
     if (customerProfile) {
-      setSupportLocale(customerProfile.preferred_support_locale === 'es-MX' ? 'es-MX' : 'en-US');
+      setSupportLocale(getSupportLocale(customerProfile.preferred_support_locale).code);
       setFirstName(customerProfile.first_name || '');
       setLastName(customerProfile.last_name || '');
       setPhoneNumber(formatPhoneNumber(customerProfile.phone_number || ''));
@@ -210,8 +211,7 @@ function EditProfileView({ customerProfile, setCustomerProfile, fbUser }) {
               <Languages className="absolute left-3 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
               <select id="preferred_support_locale" value={supportLocale} onChange={(e) => setSupportLocale(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 text-sm rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all">
-                <option value="en-US">English</option>
-                <option value="es-MX">Español (México)</option>
+                {SUPPORT_LOCALES.map(({ code, label }) => <option key={code} value={code}>{label}</option>)}
               </select>
             </div>
             <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">The default for support consultations. You can choose another language in consultation Options.</p>

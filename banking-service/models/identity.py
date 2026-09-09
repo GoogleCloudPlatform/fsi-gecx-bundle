@@ -26,7 +26,7 @@ class User(Base):
     """
     __tablename__ = "users"
     __table_args__ = (
-        CheckConstraint("preferred_support_locale IN ('en-US', 'es-MX')",
+        CheckConstraint("preferred_support_locale IN ('en-US', 'es-MX', 'es-ES', 'es-US', 'fr-CA', 'fr-FR', 'de-DE', 'pt-BR')",
                         name="ck_users_preferred_support_locale"),
         {'schema': 'identity'},
     )

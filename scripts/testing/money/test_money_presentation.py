@@ -51,4 +51,45 @@ def test_no_unvalidated_money_or_implicit_language_fallback():
     with pytest.raises(TypeError):
         project_money({"amount_minor": 100, "currency_code": "USD"})
     with pytest.raises(ValueError):
-        project_money(Money(amount_minor=100, currency_code="USD"), "fr-FR")
+        project_money(Money(amount_minor=100, currency_code="USD"), "ja-JP")
+
+
+@pytest.mark.parametrize("locale,expected", [
+    ("fr-CA", "12 dollars américains et 99 cents"),
+    ("fr-FR", "12 dollars américains et 99 cents"),
+    ("de-DE", "12 US-Dollar und 99 Cent"),
+    ("pt-BR", "12 dólares americanos e 99 centavos"),
+    ("es-ES", "12 dólares estadounidenses con 99 centavos"),
+    ("es-US", "12 dólares estadounidenses con 99 centavos"),
+])
+def test_expanded_languages_keep_usd_denomination(locale, expected):
+    money = Money(amount_minor=1299, currency_code="USD")
+    result = project_money(money, locale)
+    assert result["money"] == money.model_dump()
+    assert result["speech_text"] == expected
+    assert result["display_text"] == "USD 12.99"
+
+
+@pytest.mark.parametrize("currency,amount", [("USD", -101), ("MXN", 19900), ("JPY", 123), ("BHD", 1234), ("BHD", 9007199254740991)])
+def test_all_languages_preserve_exact_original_and_billing_money(currency, amount):
+    from utils.support_locale import SUPPORTED_SUPPORT_LOCALES
+    original = Money(amount_minor=amount, currency_code=currency)
+    billing = Money(amount_minor=1053, currency_code="USD")
+    result = project_transaction_money(original, billing)
+    assert set(result["presentations"]) == set(SUPPORTED_SUPPORT_LOCALES)
+    for locale, presentation in result["presentations"].items():
+        assert presentation["transaction"]["money"] == original.model_dump()
+        assert presentation["billing"]["money"] == billing.model_dump()
+        assert presentation["transaction"]["locale"] == locale
+
+
+def test_all_localized_banking_templates_preserve_placeholders():
+    from string import Formatter
+    from services.fraud_presentation import CONTENT
+    from utils.support_locale import SUPPORTED_SUPPORT_LOCALES
+    def fields(text):
+        return {field for _, field, _, _ in Formatter().parse(text) if field}
+    for locale in SUPPORTED_SUPPORT_LOCALES:
+        assert CONTENT[locale].keys() == CONTENT["en-US"].keys()
+        for key, template in CONTENT["en-US"].items():
+            assert fields(CONTENT[locale][key]) == fields(template)

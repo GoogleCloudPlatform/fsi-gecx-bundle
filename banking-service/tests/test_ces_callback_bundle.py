@@ -921,13 +921,13 @@ def _language_tool(context):
     return module.set_conversation_language
 
 
-@pytest.mark.parametrize("locale", ["en-US", "es-MX"])
+@pytest.mark.parametrize("locale", ["en-US", "es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR"])
 def test_language_switch_preserves_proposal_and_demands_later_confirmation(locale):
     capture = _load("after_tool_callbacks/capture_proposal.py")
     guard = _load("before_tool_callbacks/enforce_proposal_context.py")
     variables = {"runtime_language_code": "en-US"}
-    presentations = {"en-US": {"speech_text": "Dispute twelve US dollars."},
-                     "es-MX": {"speech_text": "Disputar doce dólares estadounidenses."}}
+    from services.fraud_presentation import fraud_proposal_presentations
+    presentations = fraud_proposal_presentations(card_last_four="1234", facts=[], issue_replacement=False, escalate=False)
     capture.after_tool_callback(SimpleNamespace(name="propose_fraud_triage"), {},
         Context(invocation_id="turn-1", variables=variables),
         {"success": True, "proposal_id": "proposal-1", "customer_safe_summary": "English summary",
@@ -944,7 +944,7 @@ def test_language_switch_preserves_proposal_and_demands_later_confirmation(local
 
 
 @pytest.mark.parametrize("locale,variables,error", [
-    ("fr-FR", {}, "UNSUPPORTED_LANGUAGE"),
+    ("ja-JP", {}, "UNSUPPORTED_LANGUAGE"),
     ("es-MX", {"proposal_commit_attempted": True}, "COMMIT_RESULT_PENDING"),
     ("es-MX", {"proposal_id": "p", "proposal_action_type": "TRIAGE_FRAUD_CASE"}, "LOCALIZED_PRESENTATION_REQUIRED"),
 ])

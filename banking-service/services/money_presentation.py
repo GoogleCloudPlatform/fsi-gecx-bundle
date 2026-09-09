@@ -15,9 +15,10 @@
 """Deterministic presentation of validated banking Money facts."""
 
 from models.money import Money
+from utils.support_locale import SUPPORTED_SUPPORT_LOCALES
 
 
-SUPPORTED_VOICE_LOCALES = ("en-US", "es-MX")
+SUPPORTED_VOICE_LOCALES = SUPPORTED_SUPPORT_LOCALES
 # Both code and full currency name are intentional: language does not select
 # denomination, and a bare dollar sign is ambiguous in the reference journey.
 _NAMES = {
@@ -36,6 +37,31 @@ _NAMES = {
 }
 
 
+# Regional variants share explicit banking terminology; neither locale nor
+# language can change the denomination of a validated Money value.
+_NAMES["es-ES"] = _NAMES["es-US"] = _NAMES["es-MX"]
+_NAMES["fr-FR"] = _NAMES["fr-CA"] = {
+    "USD": ("dollar américain", "dollars américains", "cent", "cents"),
+    "MXN": ("peso mexicain", "pesos mexicains", "centavo", "centavos"),
+    "JPY": ("yen japonais", "yens japonais", "", ""),
+    "BHD": ("dinar bahreïni", "dinars bahreïnis", "fils", "fils"),
+}
+_NAMES["de-DE"] = {
+    "USD": ("US-Dollar", "US-Dollar", "Cent", "Cent"),
+    "MXN": ("mexikanischer Peso", "mexikanische Pesos", "Centavo", "Centavos"),
+    "JPY": ("japanischer Yen", "japanische Yen", "", ""),
+    "BHD": ("Bahrain-Dinar", "Bahrain-Dinar", "Fils", "Fils"),
+}
+_NAMES["pt-BR"] = {
+    "USD": ("dólar americano", "dólares americanos", "centavo", "centavos"),
+    "MXN": ("peso mexicano", "pesos mexicanos", "centavo", "centavos"),
+    "JPY": ("iene japonês", "ienes japoneses", "", ""),
+    "BHD": ("dinar bareinita", "dinares bareinitas", "fils", "fils"),
+}
+_CONJUNCTION = {"en": "and", "es": "con", "fr": "et", "de": "und", "pt": "e"}
+_MINUS = {"en": "minus", "es": "menos", "fr": "moins", "de": "minus", "pt": "menos"}
+
+
 def project_money(money: Money, locale: str = "en-US") -> dict:
     """Lossless display/speech facts. No float, locale inference, or FX."""
     if not isinstance(money, Money):
@@ -49,11 +75,11 @@ def project_money(money: Money, locale: str = "en-US") -> dict:
     singular, plural, minor_singular, minor_plural = _NAMES[locale][money.currency_code]
     speech = f"{whole} {singular if whole == 1 else plural}"
     if money.exponent:
-        conjunction = "con" if locale == "es-MX" else "and"
+        conjunction = _CONJUNCTION[locale.split("-")[0]]
         speech += f" {conjunction} {fraction} {minor_singular if fraction == 1 else minor_plural}"
     if money.amount_minor < 0:
         digits = "-" + digits
-        speech = ("menos " if locale == "es-MX" else "minus ") + speech
+        speech = (_MINUS[locale.split("-")[0]] + " ") + speech
     return {
         "money": money.model_dump(),
         "locale": locale,

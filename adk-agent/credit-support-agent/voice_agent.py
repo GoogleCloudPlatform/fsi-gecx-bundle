@@ -61,7 +61,7 @@ from agent.session_store import (
 from agent.workflow_plugin import FraudWorkflowStatePlugin
 from agent.version import BUILD_VERSION, BUILD_COMMIT_ID, BUILD_TIME
 from agent.events import DataChannelEvent, INTERNAL_TOOL_RUNTIME_STATUS
-from agent.money_locale import change_voice_language, effective_voice_locale, stream_with_language_changes
+from agent.money_locale import change_voice_language, effective_voice_locale, stream_with_language_changes, LIVE_LANGUAGE_CODES
 from agent.typed_input import (
     TypedInputError,
     parse_customer_text_packet,
@@ -296,7 +296,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         guidance_summary=guidance_summary,
     )
     session_instruction += f"\nStart this conversation in {voice_locale}."
-    session_instruction += "\nUse set_conversation_language when the customer requests English or Spanish. Use banking-provided speech_text verbatim for Money and consequential proposals; never translate or calculate amounts. A language change requires complete re-presentation and a later customer confirmation."
+    session_instruction += "\nSupported locales: en-US: English (US); es-MX: Spanish (Mexico); es-ES: Spanish (Spain); es-US: Spanish (US); fr-CA: French (Canada); fr-FR: French (France); de-DE: German (Germany); pt-BR: Portuguese (Brazil). Keep the selected language unless the customer explicitly requests a change. Use set_conversation_language before switching. Do not switch for foreign greetings, borrowed words, merchant names, accents, background speech, or sentences in another language. If intent is unclear, ask whether they want to switch and wait. For unspecified Spanish use es-MX; for unspecified French use fr-FR. Keep the regional locale if already speaking the requested language. Use banking-provided speech_text verbatim for Money and consequential proposals; never translate or calculate amounts. A language change requires complete re-presentation and a later customer confirmation."
     session_agent = create_voice_agent(instruction=session_instruction)
     if mode == "video":
         model_name = os.getenv("VOICE_AGENT_VIDEO_MODEL")
@@ -434,8 +434,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             else:
                 voice_name = 'Aoede'
 
-    if voice_locale == "es-MX":
-        lang_code = "es-MX"
+    lang_code = LIVE_LANGUAGE_CODES[voice_locale]
 
     run_config = build_live_run_config(
         mode=mode,
@@ -899,7 +898,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
         if session is None:
             return False
         updated = deepcopy(session.state)
-        result = change_voice_language(updated, "es-MX", runtime_unavailable=True)
+        result = change_voice_language(updated, voice_locale, runtime_unavailable=True)
         if not result["success"]:
             return False
         # Persist invalidated evidence before opening another Live connection.
@@ -920,7 +919,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             live_queue.close()
             playout_bridge.clear()
             voice_locale = selected_locale
-            lang_code = selected_locale
+            lang_code = LIVE_LANGUAGE_CODES[selected_locale]
             live_queue = LiveRequestQueue()
             run_config = build_live_run_config(
                 mode=mode, avatar_name=avatar_name, voice_name=voice_name,

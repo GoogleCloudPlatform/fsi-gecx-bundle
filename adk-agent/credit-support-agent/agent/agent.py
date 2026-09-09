@@ -574,7 +574,10 @@ def create_mcp_toolset() -> LiveMcpToolset:
 
 
 def set_conversation_language(locale: str, tool_context: ToolContext) -> dict:
-    """Select en-US or es-MX when the customer requests a language change.
+    """Select a locale only when the customer explicitly requests a language change.
+
+    Supported locales: en-US, es-MX, es-ES, es-US, fr-CA, fr-FR, de-DE, pt-BR.
+    Do not switch for borrowed words, merchant names, or detected speech alone.
 
     Language never selects currency. A change requires a full new presentation
     and later confirmation of the same proposal before an action can run.

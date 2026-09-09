@@ -317,7 +317,7 @@ def test_ces_auth_passes_only_supported_consultation_override(validate, session,
 def test_ces_auth_rejects_unsupported_language(validate, session, mock_firebase_app):
     validate.return_value = SimpleNamespace(claims={"sub": "customer"})
     with client.websocket_connect("/voice/gecx-stream") as ws:
-        ws.send_text(json.dumps({"type": "AUTH", "token": "valid-token", "locale": "fr-FR"}))
+        ws.send_text(json.dumps({"type": "AUTH", "token": "valid-token", "locale": "ja-JP"}))
         with pytest.raises(WebSocketDisconnect) as rejected:
             ws.receive_json()
     assert rejected.value.code == 1008

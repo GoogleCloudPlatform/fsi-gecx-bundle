@@ -13,14 +13,15 @@
 # limitations under the License.
 
 """Supported voice locales, independent of currency and display preferences."""
-from typing import Literal
+from typing import Literal, get_args
 
-SupportLocale = Literal["en-US", "es-MX"]
+SupportLocale = Literal["en-US", "es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR"]
+SUPPORTED_SUPPORT_LOCALES = get_args(SupportLocale)
 
 
 def resolve_support_locale(profile_locale, override=None):
     if override is not None:
-        if override not in ("en-US", "es-MX"):
-            raise ValueError("Support language must be en-US or es-MX.")
+        if override not in SUPPORTED_SUPPORT_LOCALES:
+            raise ValueError("Unsupported support language.")
         return override
-    return profile_locale if profile_locale in ("en-US", "es-MX") else "en-US"
+    return profile_locale if profile_locale in SUPPORTED_SUPPORT_LOCALES else "en-US"

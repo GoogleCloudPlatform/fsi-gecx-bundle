@@ -19,10 +19,17 @@ from agent.proposal_evidence import COMMIT_IN_FLIGHT, COMMIT_RETRY, require_re_p
 from agent.workflow_authorization import invalidate_workflow_authorization
 
 
+SUPPORTED_SUPPORT_LOCALES = ("en-US", "es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR")
+# Live documents a smaller regional inventory than CES. Preserve the customer
+# locale in state/instructions and map only the speech configuration code.
+LIVE_LANGUAGE_CODES = {locale: locale for locale in SUPPORTED_SUPPORT_LOCALES}
+LIVE_LANGUAGE_CODES.update({"fr-CA": "fr-FR", "es-MX": "es-US", "es-ES": "es-US"})
+
+
 def effective_voice_locale(requested: str, content: dict) -> str:
-    if (requested == "es-MX" and content.get("review_status") == "APPROVED"
-            and content.get("es-MX")):
-        return "es-MX"
+    if (requested in SUPPORTED_SUPPORT_LOCALES and content.get("review_status") == "APPROVED"
+            and content.get(requested)):
+        return requested
     return "en-US"
 
 
@@ -43,6 +50,9 @@ def select_banking_presentation(value, locale: str):
 
 
 def change_voice_language(state, requested_locale: str, *, runtime_unavailable=False) -> dict:
+    if requested_locale not in SUPPORTED_SUPPORT_LOCALES:
+        return {"success": False, "error": "UNSUPPORTED_LANGUAGE",
+                "effective_locale": state.get("voice_locale", "en-US")}
     content = state.get("money_voice_content") or {}
     selected = "en-US" if runtime_unavailable else effective_voice_locale(requested_locale, content)
     playbook = dict(state.get("fraud_playbook") or {})
@@ -50,6 +60,14 @@ def change_voice_language(state, requested_locale: str, *, runtime_unavailable=F
     if pending.get("evidence_state") in {COMMIT_IN_FLIGHT, COMMIT_RETRY}:
         return {"success": False, "effective_locale": state.get("voice_locale", "en-US"),
                 "message": "Resolve the pending action result before changing language."}
+    cached = state.get("banking_proposal_presentation") or {}
+    selected_proposal = None
+    if pending and cached.get("proposal_id") == pending.get("proposal_id"):
+        try:
+            selected_proposal = select_banking_presentation(cached, selected)
+        except ValueError:
+            return {"success": False, "error": "LOCALIZED_PRESENTATION_REQUIRED",
+                    "effective_locale": state.get("voice_locale", "en-US")}
     changed = selected != state.get("voice_locale", "en-US")
     fallback = selected != requested_locale
     if changed or fallback:
@@ -64,16 +82,15 @@ def change_voice_language(state, requested_locale: str, *, runtime_unavailable=F
               "requires_fresh_confirmation": bool(pending and (changed or fallback)),
               "message": copy.get("fallback" if fallback else "language_changed") if changed or fallback else "Language unchanged.",
               "model_instruction": f"Continue in {selected}. Use banking speech_text exactly. Never translate amounts or infer currency. Present the complete proposal and wait for a later customer turn before committing."}
-    cached = state.get("banking_proposal_presentation") or {}
-    if pending and cached.get("proposal_id") == pending.get("proposal_id"):
-        result["proposal"] = select_banking_presentation(cached, selected)
+    if selected_proposal is not None:
+        result["proposal"] = selected_proposal
     return result
 
 
-def is_spanish_runtime_rejection(error: Exception) -> bool:
+def is_language_runtime_rejection(error: Exception) -> bool:
     """Only explicit language-support errors warrant changing locale."""
     message = str(error).lower()
-    return (any(term in message for term in ("language", "es-mx", "spanish"))
+    return (any(term in message for term in ("language", *[locale.lower() for locale in SUPPORTED_SUPPORT_LOCALES]))
             and any(term in message for term in ("unsupported", "not supported", "unavailable")))
 
 
@@ -89,13 +106,13 @@ async def stream_with_language_changes(*, stream_factory, current_locale, restar
                     actions = getattr(event, "actions", None)
                     delta = getattr(actions, "state_delta", None) or {}
                     requested = delta.get("voice_locale")
-                    if requested in {"en-US", "es-MX"} and requested != current_locale():
+                    if requested in SUPPORTED_SUPPORT_LOCALES and requested != current_locale():
                         selected = requested
                         break
                     yield event
         except Exception as error:
-            if (current_locale() != "es-MX" or runtime_fallback is None
-                    or not is_spanish_runtime_rejection(error)
+            if (current_locale() == "en-US" or runtime_fallback is None
+                    or not is_language_runtime_rejection(error)
                     or not await runtime_fallback()):
                 raise
             selected = "en-US"

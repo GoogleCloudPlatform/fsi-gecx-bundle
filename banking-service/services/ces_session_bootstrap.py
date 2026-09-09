@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from repositories.accounts import AccountsRepository
 from services.fraud_alerts import FraudAlertService
 from utils.log_safety import stable_log_reference
-from utils.support_locale import resolve_support_locale
+from utils.support_locale import resolve_support_locale, SUPPORTED_SUPPORT_LOCALES
 
 
 CES_RUNTIME_NAME = "CES_GEMINI_LIVE"
@@ -139,7 +139,7 @@ def build_ces_session_bootstrap(
     profile_locale = getattr(user, "preferred_support_locale", None)
     selected_locale = resolve_support_locale(profile_locale, locale)
     selection_source = "default"
-    if profile_locale in ("en-US", "es-MX"):
+    if profile_locale in SUPPORTED_SUPPORT_LOCALES:
         selection_source = "profile"
     if locale is not None:
         selection_source = "consultation"

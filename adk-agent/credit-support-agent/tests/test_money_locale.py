@@ -78,7 +78,8 @@ def test_no_missing_presentation_translation_or_fallback_guess():
 
 
 @pytest.mark.asyncio
-async def test_live_language_change_closes_old_stream_before_restart():
+@pytest.mark.parametrize("target", ["es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR"])
+async def test_live_language_change_closes_old_stream_before_restart(target):
     from types import SimpleNamespace
     from agent.money_locale import stream_with_language_changes
     locale = "en-US"
@@ -88,7 +89,7 @@ async def test_live_language_change_closes_old_stream_before_restart():
         selected = locale
         try:
             if selected == "en-US":
-                yield SimpleNamespace(actions=SimpleNamespace(state_delta={"voice_locale": "es-MX"}))
+                yield SimpleNamespace(actions=SimpleNamespace(state_delta={"voice_locale": target}))
                 raise AssertionError("Old-language stream must stop immediately")
             yield SimpleNamespace(actions=SimpleNamespace(state_delta={}), output="Spanish output")
         finally:
@@ -101,8 +102,8 @@ async def test_live_language_change_closes_old_stream_before_restart():
     outputs = [event async for event in stream_with_language_changes(
         stream_factory=stream, current_locale=lambda: locale, restart=restart)]
     assert [event.output for event in outputs] == ["Spanish output"]
-    assert restarts == ["es-MX"]
-    assert closed == ["en-US", "es-MX"]
+    assert restarts == [target]
+    assert closed == ["en-US", target]
 
 
 def test_runtime_fallback_preserves_banking_facts_and_invalidates_confirmation():
@@ -160,3 +161,37 @@ async def test_live_fallback_does_not_hide_unrelated_errors_or_uncertain_commits
         async for _ in stream_with_language_changes(stream_factory=stream,
             current_locale=lambda: locale, restart=restart, runtime_fallback=fallback):
             pass
+
+
+@pytest.mark.parametrize("locale", ["es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR"])
+def test_expanded_locale_preserves_proposal_and_requires_fresh_confirmation(locale):
+    current = state()
+    current["banking_proposal_presentation"]["presentations"][locale] = {"speech_text": CONTENT[locale]["recognized_proposal"].format(card_last_four="1234")}
+    before = deepcopy(current["banking_proposal_presentation"])
+    result = change_voice_language(current, locale)
+    assert result["success"] and result["effective_locale"] == locale
+    assert result["requires_fresh_confirmation"]
+    assert current["banking_proposal_presentation"] == before
+    assert current["fraud_playbook"]["pending_proposal"]["evidence_state"] == AWAITING_PRESENTATION
+
+
+def test_missing_new_language_in_old_immutable_proposal_does_not_mutate_state():
+    current = state()
+    before = deepcopy(current)
+    assert change_voice_language(current, "fr-FR")["error"] == "LOCALIZED_PRESENTATION_REQUIRED"
+    assert current == before
+
+
+def test_unknown_language_is_rejected_without_switching_to_english():
+    current = state()
+    current["voice_locale"] = "es-MX"
+    before = deepcopy(current)
+    assert change_voice_language(current, "ja-JP")["error"] == "UNSUPPORTED_LANGUAGE"
+    assert current == before
+
+
+@pytest.mark.parametrize("locale,code", [("fr-CA", "fr-FR"), ("es-ES", "es-US"), ("es-MX", "es-US"), ("de-DE", "de-DE")])
+def test_live_transport_mapping_does_not_change_customer_locale(locale, code):
+    from agent.money_locale import LIVE_LANGUAGE_CODES, effective_voice_locale
+    assert effective_voice_locale(locale, CONTENT) == locale
+    assert LIVE_LANGUAGE_CODES[locale] == code

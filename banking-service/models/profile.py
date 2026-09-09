@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Literal, Optional
+from typing import Optional
+from utils.support_locale import SupportLocale
 
 from pydantic import BaseModel
 
@@ -24,14 +25,14 @@ class CustomerProfileCreateRequest(BaseModel):
 
 
 class CustomerProfileUpdateRequest(BaseModel):
-    preferred_support_locale: Optional[Literal["en-US", "es-MX"]] = None
+    preferred_support_locale: Optional[SupportLocale] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone_number: Optional[str] = None
 
 
 class CustomerProfile(BaseModel):
-    preferred_support_locale: Literal["en-US", "es-MX"] = "en-US"
+    preferred_support_locale: SupportLocale = "en-US"
     user_id: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
