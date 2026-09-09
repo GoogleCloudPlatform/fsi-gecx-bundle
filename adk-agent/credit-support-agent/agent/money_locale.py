@@ -42,9 +42,9 @@ def select_banking_presentation(value, locale: str):
     return result
 
 
-def change_voice_language(state, requested_locale: str) -> dict:
+def change_voice_language(state, requested_locale: str, *, runtime_unavailable=False) -> dict:
     content = state.get("money_voice_content") or {}
-    selected = effective_voice_locale(requested_locale, content)
+    selected = "en-US" if runtime_unavailable else effective_voice_locale(requested_locale, content)
     playbook = dict(state.get("fraud_playbook") or {})
     pending = playbook.get("pending_proposal") or {}
     if pending.get("evidence_state") in {COMMIT_IN_FLIGHT, COMMIT_RETRY}:
@@ -70,20 +70,35 @@ def change_voice_language(state, requested_locale: str) -> dict:
     return result
 
 
-async def stream_with_language_changes(*, stream_factory, current_locale, restart):
+def is_spanish_runtime_rejection(error: Exception) -> bool:
+    """Only explicit language-support errors warrant changing locale."""
+    message = str(error).lower()
+    return (any(term in message for term in ("language", "es-mx", "spanish"))
+            and any(term in message for term in ("unsupported", "not supported", "unavailable")))
+
+
+async def stream_with_language_changes(*, stream_factory, current_locale, restart,
+                                       runtime_fallback=None):
     """Restart Live only after ADK has persisted a trusted locale state delta."""
     from contextlib import aclosing
     while True:
         selected = None
-        async with aclosing(stream_factory()) as stream:
-            async for event in stream:
-                actions = getattr(event, "actions", None)
-                delta = getattr(actions, "state_delta", None) or {}
-                requested = delta.get("voice_locale")
-                if requested in {"en-US", "es-MX"} and requested != current_locale():
-                    selected = requested
-                    break
-                yield event
+        try:
+            async with aclosing(stream_factory()) as stream:
+                async for event in stream:
+                    actions = getattr(event, "actions", None)
+                    delta = getattr(actions, "state_delta", None) or {}
+                    requested = delta.get("voice_locale")
+                    if requested in {"en-US", "es-MX"} and requested != current_locale():
+                        selected = requested
+                        break
+                    yield event
+        except Exception as error:
+            if (current_locale() != "es-MX" or runtime_fallback is None
+                    or not is_spanish_runtime_rejection(error)
+                    or not await runtime_fallback()):
+                raise
+            selected = "en-US"
         if selected is None:
             return
         await restart(selected)

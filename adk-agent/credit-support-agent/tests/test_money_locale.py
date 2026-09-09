@@ -103,3 +103,60 @@ async def test_live_language_change_closes_old_stream_before_restart():
     assert [event.output for event in outputs] == ["Spanish output"]
     assert restarts == ["es-MX"]
     assert closed == ["en-US", "es-MX"]
+
+
+def test_runtime_fallback_preserves_banking_facts_and_invalidates_confirmation():
+    current = state()
+    current['voice_locale'] = 'es-MX'
+    before = deepcopy(current['banking_proposal_presentation'])
+    result = change_voice_language(current, 'es-MX', runtime_unavailable=True)
+    assert result['effective_locale'] == 'en-US'
+    assert result['message'] == CONTENT['en-US']['fallback']
+    assert result['requires_fresh_confirmation']
+    assert current['banking_proposal_presentation'] == before
+    assert current['fraud_playbook']['pending_proposal']['evidence_state'] == AWAITING_PRESENTATION
+
+
+@pytest.mark.asyncio
+async def test_live_runtime_rejection_falls_back_once_after_persisting_evidence():
+    from agent.money_locale import stream_with_language_changes
+    locale = 'es-MX'
+    calls = []
+    async def stream():
+        if locale == 'es-MX':
+            raise RuntimeError('Language es-MX is not supported')
+        yield 'English output'
+    async def fallback():
+        calls.append('persist')
+        return True
+    async def restart(selected):
+        nonlocal locale
+        assert calls == ['persist']
+        locale = selected
+        calls.append(selected)
+    output = [event async for event in stream_with_language_changes(
+        stream_factory=stream, current_locale=lambda: locale,
+        restart=restart, runtime_fallback=fallback)]
+    assert output == ['English output']
+    assert calls == ['persist', 'en-US']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('error,locale,allowed', [
+    ('Connection timeout', 'es-MX', True),
+    ('Language not supported', 'en-US', True),
+    ('Language not supported', 'es-MX', False),
+])
+async def test_live_fallback_does_not_hide_unrelated_errors_or_uncertain_commits(error, locale, allowed):
+    from agent.money_locale import stream_with_language_changes
+    async def stream():
+        raise RuntimeError(error)
+        yield
+    async def fallback():
+        return allowed
+    async def restart(selected):
+        pytest.fail('Must not restart')
+    with pytest.raises(RuntimeError, match=error):
+        async for _ in stream_with_language_changes(stream_factory=stream,
+            current_locale=lambda: locale, restart=restart, runtime_fallback=fallback):
+            pass

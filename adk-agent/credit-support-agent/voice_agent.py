@@ -61,7 +61,7 @@ from agent.session_store import (
 from agent.workflow_plugin import FraudWorkflowStatePlugin
 from agent.version import BUILD_VERSION, BUILD_COMMIT_ID, BUILD_TIME
 from agent.events import DataChannelEvent, INTERNAL_TOOL_RUNTIME_STATUS
-from agent.money_locale import effective_voice_locale, stream_with_language_changes
+from agent.money_locale import change_voice_language, effective_voice_locale, stream_with_language_changes
 from agent.typed_input import (
     TypedInputError,
     parse_customer_text_packet,
@@ -887,8 +887,34 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
 
         session_end_disconnect_task = asyncio.create_task(delayed_disconnect())
 
+    runtime_fallback_notice = ""
+
+    async def persist_english_runtime_fallback():
+        nonlocal runtime_fallback_notice
+        from copy import deepcopy
+        from google.adk.events import Event, EventActions
+        from agent.session_store import APP_NAME
+        session = await session_service.get_session(
+            app_name=APP_NAME, user_id=user_id, session_id=session_id)
+        if session is None:
+            return False
+        updated = deepcopy(session.state)
+        result = change_voice_language(updated, "es-MX", runtime_unavailable=True)
+        if not result["success"]:
+            return False
+        # Persist invalidated evidence before opening another Live connection.
+        await session_service.append_event(session=session, event=Event(
+            author="system", actions=EventActions(state_delta={
+                "voice_locale": updated["voice_locale"],
+                "fraud_playbook": updated["fraud_playbook"],
+            })))
+        runtime_fallback_notice = result["message"]
+        on_agent_event({"type": "VOICE_LANGUAGE_FALLBACK", "locale": "en-US",
+                        "message": runtime_fallback_notice})
+        return True
+
     async def restart_live_language(selected_locale: str):
-        nonlocal live_queue, run_config, lang_code, voice_locale
+        nonlocal live_queue, run_config, lang_code, voice_locale, runtime_fallback_notice
         runtime_transition_active.set()
         try:
             live_queue.close()
@@ -905,10 +931,11 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             # Keep the same support session and opaque proposal, with a fresh Live
             # connection so speech configuration cannot retain the prior language.
             live_queue.send_content(types.Content(parts=[types.Part(text=(
-                f"Continue in {selected_locale}. Read the banking proposal speech_text "
+                f"{runtime_fallback_notice} Continue in {selected_locale}. Read the banking proposal speech_text "
                 "in this language completely, then wait for a new customer confirmation. "
                 "The language-change request is not confirmation of the action."
             ))]))
+            runtime_fallback_notice = ""
             on_agent_event({"type": "VOICE_LANGUAGE_CHANGED", "locale": selected_locale})
         finally:
             runtime_transition_active.clear()
@@ -922,6 +949,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                     live_request_queue=live_queue, run_config=run_config),
                 current_locale=lambda: voice_locale,
                 restart=restart_live_language,
+                runtime_fallback=persist_english_runtime_fallback,
             ):
                 live_event = normalize_live_event(event)
                 if event.content and event.content.parts:
