@@ -243,3 +243,29 @@ The additional MCP/simulation regression run passed 35 checks and exposed four
 fraud fixtures that omitted currency facts. Replacing those mocks with persisted
 USD authorizations made all four targeted reruns pass. Their physical storage
 columns are explicitly covered by the reviewed legacy allowlist.
+
+### Snapshot reconciliation and runtime fallback
+
+The first read-only deployed preflight (`money-foundation-preflight-vz68t`)
+archived 6,063 ledger accounts, 2,021 card accounts, 195,082 transaction headers
+and 390,166 entries. It reported two apparent orphan entries while demo traffic
+continued. Because the old preflight used separate READ COMMITTED reads, that
+report does not establish an actual orphan: a transaction can commit between
+header and entry scans. A second execution, `money-foundation-preflight-g8tt9`,
+uses the same built image with an explicit REPEATABLE READ engine override and
+archives to `money-foundation/preflight-f8bec0b-snapshot-20260909.json.gz` in the
+interaction-artifacts bucket. Its result is pending. No migration or reset has
+run and writes remain enabled.
+
+Both standalone reconciliation scripts now use a consistent PostgreSQL snapshot.
+The migration locks its four source tables against concurrent writes and uses a
+set-based denomination backfill. All 20 actual migration checks pass on SQLite
+and PostgreSQL, including preservation of USD, MXN, JPY and BHD records.
+
+Explicit Spanish runtime language rejection now persists English locale and
+invalidated proposal evidence before reconnecting. It preserves Money and opaque
+proposal identity, surfaces reviewed fallback wording, and requires another
+presentation and confirmation. Unrelated runtime errors and uncertain commits do
+not trigger this fallback. The full ADK suite passes (201 tests). CES fake fraud
+responses now include canonical purchase/billing Money and deterministic
+projections; all 27 CES callback checks pass and are included in Money CI.

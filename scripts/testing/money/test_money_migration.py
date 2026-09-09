@@ -97,19 +97,23 @@ def upgrade(connection):
         module.upgrade()
 
 
-def test_backfill_preserves_history_and_reconciles(legacy_db):
+@pytest.mark.parametrize("currency", ["USD", "MXN", "JPY", "BHD"])
+def test_backfill_preserves_history_and_reconciles(legacy_db, currency):
     connection, ids, report_path = legacy_db
+    if currency != "USD":
+        connection.execute(sa.text("UPDATE ledger.accounts SET currency=:currency"), {"currency": currency})
     before_entries = connection.exec_driver_sql("SELECT * FROM ledger.account_ledger ORDER BY entry_id").all()
     before = reconcile_money(connection)
     upgrade(connection)
     after = reconcile_money(connection)
-    assert json.loads(report_path.read_text())["null_accounts"][0]["id"] == ids["debit"]
-    assert len(json.loads(report_path.read_text())["null_accounts"][0]["entry_ids"]) == 1
+    if currency == "USD":
+        assert json.loads(report_path.read_text())["null_accounts"][0]["id"] == ids["debit"]
+        assert len(json.loads(report_path.read_text())["null_accounts"][0]["entry_ids"]) == 1
     assert not migration_blockers(after)
     assert not after["null_accounts"]
     assert before["balance_differences"] == after["balance_differences"] == []
     assert connection.exec_driver_sql("SELECT * FROM ledger.account_ledger ORDER BY entry_id").all() == before_entries
-    assert connection.exec_driver_sql("SELECT currency_code FROM ledger.transactions").scalar_one() == "USD"
+    assert connection.exec_driver_sql("SELECT currency_code FROM ledger.transactions").scalar_one() == currency
     connection.commit()
     with pytest.raises(sa.exc.IntegrityError):
         connection.execute(sa.text("UPDATE ledger.accounts SET currency=NULL WHERE id=:id"), {"id": ids["debit"]})

@@ -32,6 +32,8 @@ def main():
     # Use the application's connector for IAM and attached SQLite schemas.
     from utils.database import create_db_engine
     engine = create_db_engine(os.environ["DATABASE_URL"])
+    if engine.dialect.name == "postgresql":
+        engine = engine.execution_options(isolation_level="REPEATABLE READ")
     with engine.connect() as connection:
         report = reconcile_money(connection)
     args.output.parent.mkdir(parents=True, exist_ok=True)

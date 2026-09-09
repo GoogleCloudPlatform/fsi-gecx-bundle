@@ -50,6 +50,8 @@ def main():
     from utils.database import create_db_engine
     from services.money_reconciliation import reconcile_money, migration_blockers
     engine = create_db_engine(os.environ["DATABASE_URL"])
+    if engine.dialect.name == "postgresql":
+        engine = engine.execution_options(isolation_level="REPEATABLE READ")
     with engine.connect() as connection:
         connection.info["_ignore_rbac"] = True
         report = reconcile_money(connection)

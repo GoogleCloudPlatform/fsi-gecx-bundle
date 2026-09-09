@@ -29,6 +29,12 @@ depends_on = None
 def upgrade():
     from services.money_reconciliation import reconcile_money, migration_blockers
     connection = op.get_bind()
+    if connection.dialect.name == "postgresql":
+        # Keep headers, entries and account denominations stable until backfill
+        # and constraints commit. Readers can continue during reconciliation.
+        connection.execute(sa.text(
+            "LOCK TABLE ledger.accounts, cards.credit_accounts, "
+            "ledger.transactions, ledger.account_ledger IN SHARE ROW EXCLUSIVE MODE"))
     report = reconcile_money(connection)
     # Archive before any backfill, including reports that stop migration.
     report_path = Path(os.environ.get("MONEY_RECONCILIATION_REPORT", "money-reconciliation-before.json"))
@@ -47,10 +53,18 @@ def upgrade():
         with op.batch_alter_table(table, schema=schema) as batch:
             batch.alter_column("currency", existing_type=sa.String(3), nullable=False)
             batch.create_check_constraint(check_name, "currency IN ('USD', 'MXN', 'JPY', 'BHD')")
-    for tid, code in report["inferred_transaction_currencies"].items():
+    if connection.dialect.name == "postgresql":
+        # Reconciliation proved every transaction has one denomination. A
+        # set-based update avoids a database round trip for every historical ID.
         connection.execute(sa.text(
-            "UPDATE ledger.transactions SET currency_code=:currency WHERE CAST(id AS TEXT)=:id"
-        ), {"currency": code, "id": tid})
+            "UPDATE ledger.transactions AS t SET currency_code=a.currency "
+            "FROM ledger.account_ledger AS e JOIN ledger.accounts AS a "
+            "ON a.id=e.account_id WHERE t.id=e.transaction_id"))
+    else:
+        for tid, code in report["inferred_transaction_currencies"].items():
+            connection.execute(sa.text(
+                "UPDATE ledger.transactions SET currency_code=:currency WHERE CAST(id AS TEXT)=:id"
+            ), {"currency": code, "id": tid})
     with op.batch_alter_table("transactions", schema="ledger") as batch:
         batch.alter_column("currency_code", existing_type=sa.String(3), nullable=False)
         batch.create_check_constraint("ck_transactions_currency", "currency_code IN ('USD', 'MXN', 'JPY', 'BHD')")
