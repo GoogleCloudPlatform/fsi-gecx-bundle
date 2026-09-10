@@ -130,7 +130,9 @@ async def test_no_alert_result_activates_catalog_guidance_and_intake_state(
 
     assert state["fraud_playbook"]["open_alert_inspected"] is True
     assert state["support_guidance"]["snapshot_id"] == "snapshot-1"
-    assert events[0]["type"] == "GUIDANCE_SNAPSHOT"
+    snapshots = [event for event in events if event["type"] == "GUIDANCE_SNAPSHOT"]
+    assert len(snapshots) == 1
+    assert snapshots[0]["snapshot_id"] == "snapshot-1"
 
 
 @pytest.mark.asyncio

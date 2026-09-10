@@ -31,6 +31,8 @@ run_banking_contract() {
     tests/test_support_locale.py \
     tests/test_ces_callback_bundle.py \
     tests/test_voice_bidi.py \
+    tests/test_voice_diagnostics.py \
+    tests/test_voice_language.py \
     tests/test_voice_deployment_contract.py \
     tests/test_database_schema_contract.py
 }
