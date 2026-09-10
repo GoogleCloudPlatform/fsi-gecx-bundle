@@ -124,6 +124,10 @@ def test_gecx_voice_stream_success(
                     "diagnosticInfo": {
                         "rootSpan": {
                             "childSpans": [
+                                {"name": "Tool", "attributes": {
+                                    "name": "set_conversation_language",
+                                    "response": {"result": {"success": True, "locale": "it-IT"}},
+                                }},
                                 {
                                     "attributes": {
                                         "agent": "Session Closeout Agent"
@@ -190,6 +194,14 @@ def test_gecx_voice_stream_success(
             "transcript_id": response["transcript_id"],
             "replace_previous": True,
         }
+
+        assert websocket.receive_json() == {
+            "type": "VOICE_DIAGNOSTICS",
+            "tool_ms": None,
+            "provider_first_chunk_ms": None,
+        }
+
+        assert websocket.receive_json() == {"type": "VOICE_LANGUAGE_CHANGED", "locale": "it-IT"}
 
         # EndSession stops further input but does not truncate provider output.
         assert websocket.receive_bytes() == trailing_audio
@@ -296,3 +308,29 @@ def test_gecx_voice_stream_fails_closed_when_bootstrap_rejects_session(
             websocket.receive_json()
 
     assert disconnect.value.code == 1011
+
+
+@pytest.mark.parametrize("locale", ["en-US", "es-MX", None])
+@patch("routers.voice_bidi.VoiceBidiSession")
+@patch("routers.voice_bidi.validate_firebase_token")
+def test_ces_auth_passes_only_supported_consultation_override(validate, session, mock_firebase_app, monkeypatch, locale):
+    monkeypatch.setenv("GECX_APP_ID", "app-1")
+    validate.return_value = SimpleNamespace(claims={"sub": "customer"})
+    session.return_value.start = AsyncMock(side_effect=ValueError("stop before provider"))
+    with client.websocket_connect("/voice/gecx-stream") as ws:
+        ws.send_text(json.dumps({"type": "AUTH", "token": "valid-token", "locale": locale}))
+        ws.receive_json()
+    assert session.call_args.kwargs["locale"] == locale
+    assert session.call_args.kwargs["user_id"] == "customer"
+
+
+@patch("routers.voice_bidi.VoiceBidiSession")
+@patch("routers.voice_bidi.validate_firebase_token")
+def test_ces_auth_rejects_unsupported_language(validate, session, mock_firebase_app):
+    validate.return_value = SimpleNamespace(claims={"sub": "customer"})
+    with client.websocket_connect("/voice/gecx-stream") as ws:
+        ws.send_text(json.dumps({"type": "AUTH", "token": "valid-token", "locale": "ja-JP"}))
+        with pytest.raises(WebSocketDisconnect) as rejected:
+            ws.receive_json()
+    assert rejected.value.code == 1008
+    session.assert_not_called()

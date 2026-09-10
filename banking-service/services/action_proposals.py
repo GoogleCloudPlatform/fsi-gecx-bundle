@@ -37,7 +37,7 @@ from services.action_proposal_context import ProposalRuntimeContext, RuntimeCont
 from services.credit_card import issue_replacement_card, queue_wallet_provisioning
 from services.fraud_money import (fraud_money_facts, has_legacy_fraud_amounts,
                                   normalize_historical_fraud_workflow)
-from services.fraud_presentation import fraud_proposal_presentations
+from services.fraud_presentation import fraud_proposal_summary
 from services.proposal_lifecycle import (
     ActionPreconditionError,
     ActiveProposalExistsError as ActiveProposalExistsError,
@@ -459,12 +459,12 @@ class ActionProposalService(ProposalLifecycleEngine):
         facts = [fact for fact in fraud_money_facts(CreditCardRepository(self.db), alert)
                  if str(fact.get("authorization_id")) in set(authorization_ids)
                  or str(fact.get("transaction_id")) in set(transaction_ids)]
-        presentations = fraud_proposal_presentations(
+        summary = fraud_proposal_summary(
             card_last_four=alert.card_last_four, facts=facts,
             issue_replacement=bool(issue_replacement), escalate=bool(escalate))
         payload = {
             "money_facts": facts,
-            "presentations": presentations,
+            "card_last_four": alert.card_last_four,
             "fraud_alert_id": str(alert.id),
             "disputed_authorization_ids": authorization_ids,
             "disputed_transaction_ids": transaction_ids,
@@ -483,7 +483,7 @@ class ActionProposalService(ProposalLifecycleEngine):
             reset_generation=reset_generation,
             confirmation_policy="EXPLICIT_VERBAL",
             action_payload=payload,
-            customer_safe_summary=presentations["en-US"]["display_text"],
+            customer_safe_summary=summary,
             catalog_snapshot_id=catalog_snapshot_id,
             idempotency_key=idempotency_key,
             expires_at=expires_at,
@@ -981,9 +981,11 @@ class ActionProposalService(ProposalLifecycleEngine):
     def proposal_view(self, proposal: ActionProposal) -> dict[str, Any]:
         view = super().proposal_view(proposal)
         payload = proposal.action_payload or {}
-        if proposal.action_type == TRIAGE_FRAUD_CASE and "presentations" in payload:
-            # Presentation content and Money are frozen inside the same fingerprint
-            # as the action. A language change never mutates proposal identity.
-            view["presentations"] = payload["presentations"]
+        if proposal.action_type == TRIAGE_FRAUD_CASE and "money_facts" in payload:
+            # Read immutable history without replacing its stored text or fingerprint.
+            # Models receive exact facts and consequences, not historical speech scripts.
             view["money_facts"] = payload["money_facts"]
+            view["card_last_four"] = payload.get("card_last_four")
+            view["issue_replacement"] = payload.get("issue_replacement", False)
+            view["escalate"] = payload.get("escalate", False)
         return view

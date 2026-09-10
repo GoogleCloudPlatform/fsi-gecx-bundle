@@ -25,6 +25,8 @@ from fastapi import WebSocket, WebSocketDisconnect
 from utils.gcp import get_project_id
 from utils.log_safety import stable_log_reference
 from services.ces_session_bootstrap import build_ces_session_bootstrap
+from services.voice_diagnostics import ces_diagnostics
+from services.voice_language import ces_language_event
 from services.ces_session_capability import mint_ces_session_capability
 import google.auth
 import google.auth.transport.requests
@@ -134,7 +136,9 @@ class VoiceBidiSession:
         gecx_app_id: str,
         location: str,
         proposal_trace_allowed: bool = False,
+        locale: str | None = None,
     ):
+        self.locale = locale
         self.user_id = user_id
         self.session_id = session_id
         self.client_ws = websocket
@@ -158,6 +162,7 @@ class VoiceBidiSession:
                     auth_provider_uid=self.user_id,
                     runtime_session_id=self.session_id,
                     gecx_app_id=self.gecx_app_id,
+                    locale=self.locale,
                 )
             finally:
                 db.close()
@@ -474,6 +479,10 @@ class VoiceBidiSession:
                                 or session_output.get("turn_completed")
                             )
                             if turn_completed:
+                                await self.gecx_to_client_queue.put(ces_diagnostics(session_output.get("diagnosticInfo")))
+                                language_event = ces_language_event(session_output.get("diagnosticInfo"))
+                                if language_event:
+                                    await self.gecx_to_client_queue.put(language_event)
                                 transport_stats["completed_turns"] += 1
                                 agent_transcript = ""
                                 agent_transcript_id = None

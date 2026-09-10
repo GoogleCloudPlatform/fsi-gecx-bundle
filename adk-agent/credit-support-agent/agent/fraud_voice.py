@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-def build_triage_model_result(tool_response: dict | None, *, locale: str = "en-US", content: dict | None = None) -> dict:
+def build_triage_model_result(tool_response: dict | None, *, locale: str = "en-US") -> dict:
     """Return a compact, factual triage result for the model to summarize."""
     response = tool_response or {}
     replacement = response.get("replacement_card") or {}
@@ -36,24 +36,7 @@ def build_triage_model_result(tool_response: dict | None, *, locale: str = "en-U
         ),
     }
 
-    copy = (content or {}).get(locale) or {}
-    if copy:
-        if response.get("outcome") == "CUSTOMER_RECOGNIZED":
-            text = copy["recognized_closeout"]
-        elif response.get("outcome") in {"PENDING_SPECIALIST_REVIEW", "ESCALATED"}:
-            parts = [copy["disputed_closeout"]]
-            if result["pending_holds_released"]:
-                parts.append(copy["released_holds"].format(count=result["pending_holds_released"]))
-            if result["provisional_credits_applied"]:
-                parts.append(copy["provisional_credits"].format(count=result["provisional_credits_applied"]))
-            if replacement.get("is_virtual") and replacement.get("new_last_four"):
-                parts.append(copy["replacement_issued"].format(last_four=replacement["new_last_four"]))
-            if result["secure_message_sent"]: parts.append(copy["secure_message_sent"])
-            text = " ".join(parts)
-        else:
-            text = copy["failed"]
-        result["presentation"] = {"locale": locale, "display_text": text, "speech_text": text}
-        result["model_instruction"] = "Speak the selected closeout speech_text exactly. Only the returned banking fields establish completion. Do not add monetary, mailing, or Wallet claims."
+    result["model_instruction"] += f" Explain these facts naturally in {locale}."
     return result
 
 

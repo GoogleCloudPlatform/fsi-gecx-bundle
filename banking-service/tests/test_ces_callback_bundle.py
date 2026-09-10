@@ -697,7 +697,7 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
 
     agent = yaml.safe_load((AGENT_DIR / "Credit_Card_Support_Agent.yaml").read_text())
     assert agent["modelSettings"]["model"] == "gemini-3.1-flash-live"
-    assert agent.get("tools", []) == []
+    assert agent.get("tools", []) == ["set_conversation_language"]
     assert agent["childAgents"] == ["Session Closeout Agent"]
     assert "beforeModelCallbacks" not in agent
     assert set(agent["toolsets"][0]["toolIds"]) == {
@@ -911,3 +911,53 @@ def test_ces_fake_fraud_facts_match_canonical_banking_projection():
         for key, expected in project_transaction_money(money, money).items():
             assert fact[key] == expected
         assert set(fact) == {'authorization_id', 'merchant_name', 'money', 'billing_money', 'presentations'}
+
+
+def _language_tool(context):
+    spec = importlib.util.spec_from_file_location("language_tool", APP_DIR / "tools/set_conversation_language/python_code.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.context = context
+    return module.set_conversation_language
+
+
+@pytest.mark.parametrize("locale", ["en-US", "es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR", "it-IT"])
+def test_language_switch_preserves_proposal_and_demands_later_confirmation(locale):
+    capture = _load("after_tool_callbacks/capture_proposal.py")
+    guard = _load("before_tool_callbacks/enforce_proposal_context.py")
+    variables = {"runtime_language_code": "en-US"}
+    money_facts = [{"money": {"amount_minor": 19900, "currency_code": "MXN"},
+                    "billing_money": {"amount_minor": 1053, "currency_code": "USD"}}]
+    capture.after_tool_callback(SimpleNamespace(name="propose_fraud_triage"), {},
+        Context(invocation_id="turn-1", variables=variables),
+        {"success": True, "proposal_id": "proposal-1", "customer_safe_summary": "English summary",
+         "money_facts": money_facts})
+    context = Context(invocation_id="turn-2", variables=variables, user_text="Sí, en español")
+    result = _language_tool(context)(locale)
+    assert result["success"] and result["requires_reconfirmation"]
+    assert result["customer_safe_summary"] == "English summary"
+    assert result["proposal_facts"]["money_facts"] == money_facts
+    assert variables["proposal_id"] == "proposal-1"
+    assert variables["runtime_language_code"] == locale
+    commit = SimpleNamespace(name="commit_fraud_triage")
+    assert guard.before_tool_callback(commit, {}, context)["error"] == "PROTECTED_CONFIRMATION_REQUIRED"
+    assert guard.before_tool_callback(commit, {}, Context(invocation_id="turn-3", variables=variables)) is None
+
+
+@pytest.mark.parametrize("locale,variables,error", [
+    ("ja-JP", {}, "UNSUPPORTED_LANGUAGE"),
+    ("es-MX", {"proposal_commit_attempted": True}, "COMMIT_RESULT_PENDING"),
+])
+def test_language_switch_rejections_do_not_mutate_protected_state(locale, variables, error):
+    before = variables.copy()
+    assert _language_tool(Context(variables=variables))(locale)["error"] == error
+    assert variables == before
+
+
+def test_historical_speech_is_not_a_required_script_for_new_conversations():
+    capture = _load("after_tool_callbacks/capture_proposal.py")
+    variables = {"runtime_language_code": "es-MX"}
+    capture.after_tool_callback(SimpleNamespace(name="propose_fraud_triage"), {}, Context(variables=variables),
+        {"success": True, "proposal_id": "p", "customer_safe_summary": "English",
+         "presentations": {"es-MX": {"speech_text": "Texto bancario exacto."}}})
+    assert variables["proposal_customer_safe_summary"] == "English"

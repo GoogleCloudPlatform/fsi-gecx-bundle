@@ -12,40 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Banking-owned consequential text built from immutable proposal facts."""
-
-import json
-from pathlib import Path
-
+"""Reference summary of immutable facts, not a mandatory spoken script."""
 from models.money import Money
-from services.money_presentation import project_money, SUPPORTED_VOICE_LOCALES
-
-CONTENT = json.loads((Path(__file__).resolve().parents[1] / "resources/data/money_fraud_voice_content.json").read_text())
+from services.money_presentation import project_money
 
 
-def fraud_proposal_presentations(*, card_last_four: str, facts: list[dict], issue_replacement: bool, escalate: bool) -> dict:
-    result = {}
-    for locale in SUPPORTED_VOICE_LOCALES:
-        copy = CONTENT[locale]
-        projections = {}
-        for kind in ("display_text", "speech_text"):
-            if not facts:
-                text = copy["recognized_proposal"].format(card_last_four=card_last_four)
-            else:
-                descriptions = []
-                for fact in facts:
-                    transaction = Money.model_validate(fact["money"])
-                    billing = Money.model_validate(fact["billing_money"])
-                    template = copy["same_currency_fact"] if transaction == billing else copy["billing_fact"]
-                    descriptions.append(template.format(
-                        transaction=project_money(transaction, locale)[kind],
-                        billing=project_money(billing, locale)[kind],
-                        merchant=fact["merchant_name"]))
-                text = copy["dispute_proposal"].format(selection="; ".join(descriptions).rstrip("."), card_last_four=card_last_four)
-                if issue_replacement:
-                    text += " " + copy["replacement_consequence"]
-                if escalate:
-                    text += " " + copy["escalation_consequence"]
-            projections[kind] = text
-        result[locale] = {"locale": locale, "content_version": CONTENT["version"], **projections}
-    return result
+def fraud_proposal_summary(*, card_last_four: str, facts: list[dict], issue_replacement: bool, escalate: bool) -> str:
+    if not facts:
+        return (f"Recognize all reviewed activity on card ending in {card_last_four}. "
+                "No fraud dispute or replacement card will be opened.")
+    descriptions = []
+    for fact in facts:
+        transaction = Money.model_validate(fact["money"])
+        billing = Money.model_validate(fact["billing_money"])
+        text = f"{project_money(transaction)['display_text']} at {fact['merchant_name']}"
+        if transaction != billing:
+            text += f"; billed to your account as {project_money(billing)['display_text']}"
+        descriptions.append(text)
+    summary = f"Dispute {'; '.join(descriptions)} on card ending in {card_last_four}."
+    if issue_replacement:
+        summary += " Block the current card and issue a replacement virtual card."
+    if escalate:
+        summary += " Request specialist review."
+    return summary

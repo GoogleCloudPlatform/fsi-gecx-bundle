@@ -50,7 +50,7 @@ from agent.fraud_voice import (
     validate_fraud_tool_sequence,
 )
 from agent.instructions import INSTRUCTION_TEXT
-from agent.money_locale import change_voice_language, select_banking_presentation
+from agent.money_locale import change_voice_language, select_banking_presentation, MONEY_LANGUAGE_INSTRUCTION
 from agent.reset_guard import validate_reset_generation
 from agent.tooling import RETIRED_MCP_TOOLS, LiveMcpToolset
 from agent.proposal_evidence import (
@@ -574,7 +574,10 @@ def create_mcp_toolset() -> LiveMcpToolset:
 
 
 def set_conversation_language(locale: str, tool_context: ToolContext) -> dict:
-    """Select en-US or es-MX when the customer requests a language change.
+    """Select a locale only when the customer explicitly requests a language change.
+
+    Supported locales: en-US, es-MX, es-ES, es-US, fr-CA, fr-FR, de-DE, pt-BR, it-IT.
+    Do not switch for borrowed words, merchant names, or detected speech alone.
 
     Language never selects currency. A change requires a full new presentation
     and later confirmation of the same proposal before an action can run.
@@ -1065,10 +1068,14 @@ async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> N
     set_tool_processing(False)
     tool_context.state["is_processing_tool"] = False
     tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
-    started_at = tool_started.pop(tool_name, time.monotonic())
+    started_at = tool_started.pop(tool_name, None)
     tool_context.state["_voice_tool_started_at"] = tool_started
-    duration_seconds = time.monotonic() - started_at
+    duration_seconds = time.monotonic() - started_at if started_at is not None else 0.0
     record_tool_completed(tool_name, "error", duration_seconds)
+    notify_event({
+        "type": "VOICE_DIAGNOSTICS",
+        "tool_ms": round(duration_seconds * 1000, 3) if started_at is not None else None,
+    })
     if tool_name in PROPOSAL_DECISION_TOOLS:
         _record_commit_proposal_event(
             state=tool_context.state,
@@ -1144,14 +1151,18 @@ async def after_tool_callback(
         "checkpoint" if expected_checkpoint else ("success" if success else "failure")
     )
     tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
-    started_at = tool_started.pop(tool_name, time.monotonic())
+    started_at = tool_started.pop(tool_name, None)
     tool_context.state["_voice_tool_started_at"] = tool_started
-    duration_seconds = time.monotonic() - started_at
+    duration_seconds = time.monotonic() - started_at if started_at is not None else 0.0
     record_tool_completed(
         tool_name,
         outcome,
         duration_seconds,
     )
+    notify_event({
+        "type": "VOICE_DIAGNOSTICS",
+        "tool_ms": round(duration_seconds * 1000, 3) if started_at is not None else None,
+    })
     if tool_name in PROPOSAL_DECISION_TOOLS:
         _record_commit_proposal_event(
             state=tool_context.state,
@@ -1180,11 +1191,11 @@ async def after_tool_callback(
             )
         proposal_action = PROPOSAL_ACTION_BY_TOOL.get(tool_name)
         if proposal_action and structured.get("success") is True:
-            if "presentations" in structured:
+            if "money_facts" in structured or "presentations" in structured:
                 from copy import deepcopy
                 tool_context.state["banking_proposal_presentation"] = deepcopy(structured)
                 selected = select_banking_presentation(structured, tool_context.state.get("voice_locale", "en-US"))
-                selected["model_instruction"] = "Speak the selected banking presentation speech_text exactly. Do not translate or calculate monetary facts. Wait for a later customer confirmation."
+                selected["model_instruction"] = MONEY_LANGUAGE_INSTRUCTION + " Explain every proposed consequence and wait for a later customer confirmation."
                 tool_response["structuredContent"] = selected
             playbook = dict(tool_context.state.get("fraud_playbook") or {})
             proposal = create_pending_proposal(
@@ -1335,7 +1346,7 @@ async def after_tool_callback(
         if tool_name == "get_open_fraud_alert":
             locale = tool_context.state.get("voice_locale", "en-US")
             selected = select_banking_presentation(structured, locale)
-            selected["model_instruction"] = f"Continue in {locale}. State transaction and billing speech_text exactly as provided. Never calculate, translate amounts, or infer currency."
+            selected["model_instruction"] = f"Continue in {locale}. {MONEY_LANGUAGE_INSTRUCTION}"
             tool_response["structuredContent"] = selected
             fraud_alert = structured.get("fraud_alert") or {}
             logger.info(
@@ -1417,8 +1428,7 @@ async def after_tool_callback(
                 }
             )
             return build_triage_model_result(
-                structured, locale=tool_context.state.get("voice_locale", "en-US"),
-                content=tool_context.state.get("money_voice_content"))
+                structured, locale=tool_context.state.get("voice_locale", "en-US"))
 
         if tool_name == "commit_card_reissue":
             replacement = structured.get("replacement_card") or {}

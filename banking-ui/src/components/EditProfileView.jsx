@@ -16,11 +16,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, User, Phone, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, User, Phone, AlertCircle, CheckCircle2, Loader2, Languages } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { updateCustomerProfile } from '../utils/api.js';
 import { formatPhoneNumber, getPhonePlaceholder } from '../utils/formatters.js';
 import AnalyticsButton from './AnalyticsButton.jsx';
+import { SUPPORT_LOCALES, getSupportLocale } from '../utils/supportLocales.js';
 
 
 
@@ -33,6 +34,7 @@ function EditProfileView({ customerProfile, setCustomerProfile, fbUser }) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [supportLocale, setSupportLocale] = useState('en-US');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -40,6 +42,7 @@ function EditProfileView({ customerProfile, setCustomerProfile, fbUser }) {
 
   useEffect(() => {
     if (customerProfile) {
+      setSupportLocale(getSupportLocale(customerProfile.preferred_support_locale).code);
       setFirstName(customerProfile.first_name || '');
       setLastName(customerProfile.last_name || '');
       setPhoneNumber(formatPhoneNumber(customerProfile.phone_number || ''));
@@ -66,7 +69,8 @@ function EditProfileView({ customerProfile, setCustomerProfile, fbUser }) {
       await updateCustomerProfile({
         first_name: firstName.trim(),
         last_name: lastName.trim(),
-        phone_number: phoneNumber.trim() || null
+        phone_number: phoneNumber.trim() || null,
+        preferred_support_locale: supportLocale
       });
 
       // Update the parent state
@@ -74,7 +78,8 @@ function EditProfileView({ customerProfile, setCustomerProfile, fbUser }) {
         ...customerProfile,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
-        phone_number: phoneNumber.trim() || null
+        phone_number: phoneNumber.trim() || null,
+        preferred_support_locale: supportLocale
       });
 
       setSuccessMsg('Profile updated successfully!');
@@ -196,6 +201,20 @@ function EditProfileView({ customerProfile, setCustomerProfile, fbUser }) {
                 className="w-full pl-10 pr-4 py-2 text-sm rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
               />
             </div>
+          </div>
+
+          <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800/50">
+            <label htmlFor="preferred_support_locale" className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+              Preferred support language
+            </label>
+            <div className="relative">
+              <Languages className="absolute left-3 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
+              <select id="preferred_support_locale" value={supportLocale} onChange={(e) => setSupportLocale(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 text-sm rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all">
+                {SUPPORT_LOCALES.map(({ code, label }) => <option key={code} value={code}>{label}</option>)}
+              </select>
+            </div>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">The default for support consultations. You can choose another language in consultation Options.</p>
           </div>
 
           {/* Form Actions */}

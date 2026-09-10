@@ -12,32 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Deterministic presentation of validated banking Money facts."""
-
+"""Exact decimal presentation facts; agents own spoken language."""
 from models.money import Money
+from utils.support_locale import SUPPORTED_SUPPORT_LOCALES
 
-
-SUPPORTED_VOICE_LOCALES = ("en-US", "es-MX")
-# Both code and full currency name are intentional: language does not select
-# denomination, and a bare dollar sign is ambiguous in the reference journey.
-_NAMES = {
-    "en-US": {
-        "USD": ("US dollar", "US dollars", "cent", "cents"),
-        "MXN": ("Mexican peso", "Mexican pesos", "centavo", "centavos"),
-        "JPY": ("Japanese yen", "Japanese yen", "", ""),
-        "BHD": ("Bahraini dinar", "Bahraini dinars", "fils", "fils"),
-    },
-    "es-MX": {
-        "USD": ("dólar estadounidense", "dólares estadounidenses", "centavo", "centavos"),
-        "MXN": ("peso mexicano", "pesos mexicanos", "centavo", "centavos"),
-        "JPY": ("yen japonés", "yenes japoneses", "", ""),
-        "BHD": ("dinar bareiní", "dinares bareiníes", "fils", "fils"),
-    },
-}
+SUPPORTED_VOICE_LOCALES = SUPPORTED_SUPPORT_LOCALES
 
 
 def project_money(money: Money, locale: str = "en-US") -> dict:
-    """Lossless display/speech facts. No float, locale inference, or FX."""
     if not isinstance(money, Money):
         raise TypeError("A validated Money value is required")
     if locale not in SUPPORTED_VOICE_LOCALES:
@@ -46,32 +28,19 @@ def project_money(money: Money, locale: str = "en-US") -> dict:
     digits = f"{whole:,}"
     if money.exponent:
         digits += f".{fraction:0{money.exponent}d}"
-    singular, plural, minor_singular, minor_plural = _NAMES[locale][money.currency_code]
-    speech = f"{whole} {singular if whole == 1 else plural}"
-    if money.exponent:
-        conjunction = "con" if locale == "es-MX" else "and"
-        speech += f" {conjunction} {fraction} {minor_singular if fraction == 1 else minor_plural}"
     if money.amount_minor < 0:
         digits = "-" + digits
-        speech = ("menos " if locale == "es-MX" else "minus ") + speech
-    return {
-        "money": money.model_dump(),
-        "locale": locale,
-        "display_text": f"{money.currency_code} {digits}",
-        "speech_text": speech,
-    }
+    return {"money": money.model_dump(), "locale": locale,
+            "display_text": f"{money.currency_code} {digits}"}
 
 
 def project_transaction_money(transaction: Money, billing: Money) -> dict:
-    """Keep original purchase and the already-authorized billing fact distinct."""
+    """No FX: original purchase and authorized billing remain independent facts."""
     return {
-        "money": transaction.model_dump(),
-        "billing_money": billing.model_dump(),
+        "money": transaction.model_dump(), "billing_money": billing.model_dump(),
         "presentations": {
-            locale: {
-                "transaction": project_money(transaction, locale),
-                "billing": project_money(billing, locale),
-            }
+            locale: {"transaction": project_money(transaction, locale),
+                     "billing": project_money(billing, locale)}
             for locale in SUPPORTED_VOICE_LOCALES
         },
     }

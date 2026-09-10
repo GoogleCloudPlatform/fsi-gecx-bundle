@@ -139,13 +139,17 @@ restricted to normalized sources for monetary questions; unrelated curated
 views remain available for non-monetary facts only.
 
 
-## Spanish fraud voice contracts
+## Multilingual fraud voice contracts
 
 Fraud context resolves account-scoped authoritative transaction and billing
 Money; an ambiguous historical alert snapshot cannot select currency or override
-the posting. English/Spanish display and speech use integer arithmetic. Proposal
-Money and both deterministic presentations are frozen inside its payload
-fingerprint. A language change retains the opaque proposal and clears prior
+the posting. Decimal display uses integer arithmetic. Banking owns immutable
+Money and action consequences; agents explain those facts naturally in the selected
+language. Reference summaries are not mandatory spoken scripts. Use concise spoken
+amounts when currency is established, and identify currencies explicitly for
+ambiguous or mixed-currency facts. Agents must not convert or recalculate amounts.
+New proposals do not contain translated speech catalogs; historical payloads and
+fingerprints remain unchanged. A language change retains the opaque proposal and clears prior
 presentation/confirmation evidence. An uncertain commit must finish recovery
 before the language changes. Live reconnect uses a fresh speech configuration
 without changing the support session or currency.
@@ -157,9 +161,9 @@ credits, alert snapshots, secure-message amounts and aggregate audit facts use
 currency-aware Money. One reader normalizes immutable pre-Money USD action
 results without rewriting stored payloads.
 
-Explicit Spanish runtime language rejection persists English locale and
+Explicit non-English runtime language rejection persists English locale and
 invalidated proposal evidence before reconnecting. It preserves Money and opaque
-proposal identity, surfaces reviewed fallback wording, and requires another
+proposal identity, asks the agent to explain the fallback, and requires another
 presentation and confirmation. Unrelated runtime errors and uncertain commits
 do not trigger this fallback.
 

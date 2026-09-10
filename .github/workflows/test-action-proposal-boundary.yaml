@@ -172,6 +172,8 @@ jobs:
           uv run alembic upgrade c3a91f2b7d44
           uv run alembic downgrade base
           uv run alembic upgrade head
+          # The profile preference is reversible above the Money boundary.
+          uv run alembic downgrade d8e2f6a910bc
           uv run python - <<'PYTEST'
           import os
           import subprocess

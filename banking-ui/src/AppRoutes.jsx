@@ -220,7 +220,7 @@ export default function AppRoutes({
       } />
       <Route path="/support/voice" element={
         <ProtectedRoute isReady={isReady} fbUser={fbUser}>
-          <VoiceSupportView />
+          <VoiceSupportView key={customerProfile?.user_id} customerProfile={customerProfile} />
         </ProtectedRoute>
       } />
       <Route path="/admin/support" element={

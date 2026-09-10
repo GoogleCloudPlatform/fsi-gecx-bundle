@@ -17,6 +17,15 @@ displayName: Credit_Support_Voice_Agent
 rootAgent: Credit Card Support Agent
 modelSettings:
   model: gemini-3.1-flash-live
+languageSettings:
+  defaultLanguageCode: en
+  supportedLanguageCodes:
+  - es
+  - fr
+  - de
+  - pt
+  - it
+  enableMultilingualSupport: true
 loggingSettings:
   conversationLoggingSettings:
     retentionWindow: 31536000s
@@ -28,6 +37,10 @@ guardrails:
 - Default Safety Guardrail
 - Default Prompt Guardrail
 variableDeclarations:
+- name: proposal_facts_json
+  description: Callback-owned frozen banking proposal facts for natural language re-presentation.
+  schema:
+    type: STRING
 - name: user_id
   description: Variable "user_id".
   schema:
@@ -85,7 +98,7 @@ variableDeclarations:
   schema:
     type: STRING
 - name: language_code
-  description: Product language code, initially English.
+  description: Product language code, from the customer profile or consultation override.
   schema:
     type: STRING
 - name: runtime_language_code

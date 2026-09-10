@@ -28,7 +28,6 @@ from services.knowledge_catalog import KnowledgeCatalogService
 from services.fraud_money import require_fraud_account, fraud_money_facts, authorization_money_facts, normalize_historical_fraud_workflow
 from models.money import Money
 from services.money_presentation import project_money, project_transaction_money
-from services.fraud_presentation import CONTENT as MONEY_VOICE_CONTENT
 from services.messaging import MessagingService
 from utils.audit import record_audit_event
 
@@ -247,7 +246,6 @@ class FraudAlertService:
         if not alert:
             return {
                 "entry_reason": "general_support",
-                "money_voice_content": MONEY_VOICE_CONTENT,
                 "has_active_fraud_alert": False,
                 "fraud_alert": None,
                 "reset_generation": reset_generation,
@@ -263,7 +261,6 @@ class FraudAlertService:
         guidance = KnowledgeCatalogService().get_guidance_bundle_for_voice_fraud()
         return {
             "entry_reason": "fraud_alert",
-            "money_voice_content": MONEY_VOICE_CONTENT,
             "has_active_fraud_alert": True,
             "reset_generation": reset_generation,
             "fraud_alert": {

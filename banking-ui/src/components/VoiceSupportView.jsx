@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { useMoneyLocale } from '../utils/moneyLocale';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Room, RoomEvent, Track } from 'livekit-client';
+import useVoiceDiagnostics from '../hooks/useVoiceDiagnostics.js';
 import { useLocation } from 'react-router-dom';
 import {
   Phone,
@@ -39,7 +39,8 @@ import {
   Activity,
   Volume2,
   Send,
-  ChevronDown
+  ChevronDown,
+  Languages
 } from 'lucide-react';
 import {
   getCreditCardAccount,
@@ -63,6 +64,7 @@ import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
+import { SUPPORT_LOCALES, getSupportLocale, confirmedVoiceLocale } from '../utils/supportLocales.js';
 import ProposalProtocolTrace from './ProposalProtocolTrace.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
@@ -296,9 +298,13 @@ function MicTester({ deviceId, onError }) {
   );
 }
 
-export default function VoiceSupportView() {
-  const [presentationLocale, setPresentationLocale] = useMoneyLocale();
-  const voiceLocale = presentationLocale === 'es-MX' ? 'es-MX' : 'en-US';
+export default function VoiceSupportView({ customerProfile }) {
+  const [consultationLocale, setConsultationLocale] = useState('');
+  const profileLocale = getSupportLocale(customerProfile?.preferred_support_locale).code;
+  const consultationOverride = consultationLocale === profileLocale ? '' : consultationLocale;
+  const voiceLocale = consultationOverride || profileLocale;
+  const voiceLocaleRef = useRef(voiceLocale);
+  useEffect(() => { voiceLocaleRef.current = voiceLocale; }, [voiceLocale]);
   const { brandColorFrom, resolvedTheme } = useSettings();
   const location = useLocation();
   const projectId = window.firebaseConfig?.projectId;
@@ -353,7 +359,7 @@ export default function VoiceSupportView() {
   // New engine-specific configuration states
   const [engine, setEngine] = useState('livekit'); // 'livekit' | 'gecx'
   const [volume, setVolume] = useState(0.8);
-  const [latency, setLatency] = useState(0);
+  const [latency, setLatency] = useState(null);
   const [audioInputs, setAudioInputs] = useState([]);
   const [audioOutputs, setAudioOutputs] = useState([]);
   const [selectedAudioInputId, setSelectedAudioInputId] = useState(
@@ -467,6 +473,12 @@ export default function VoiceSupportView() {
   const wsRef = useRef(null);
   const audioContextRef = useRef(null);
   const micStreamRef = useRef(null);
+  const cesOutputStreamRef = useRef(null);
+  const cesDiagnosticsOutputRef = useRef(null);
+  const { metrics: voiceMetrics, event: recordDiagnosticEvent } = useVoiceDiagnostics({
+    connected: isConnected, engine, roomRef, micStreamRef, cesOutputStreamRef, muted: !micEnabled,
+  });
+  const diagnosticMs = value => Number.isFinite(value) ? `${Math.round(value)} ms` : '—';
   const workletNodeRef = useRef(null);
   const captureSinkNodeRef = useRef(null);
   const sourceNodeRef = useRef(null);
@@ -619,6 +631,9 @@ export default function VoiceSupportView() {
       }
       sourceNodeRef.current = null;
     }
+    cesOutputStreamRef.current?.getTracks().forEach(track => track.stop());
+    cesOutputStreamRef.current = null;
+    cesDiagnosticsOutputRef.current = null;
     if (micStreamRef.current) {
       try {
         micStreamRef.current.getTracks().forEach(track => track.stop());
@@ -645,7 +660,8 @@ export default function VoiceSupportView() {
       gecxOutputSampleRateRef.current = null;
       playoutDrainTimerRef.current = null;
       setIsConnected(false);
-      setLatency(0);
+      setConsultationLocale('');
+      setLatency(null);
       setProposalTraceAllowed(false);
       setProposalTraceSessionId(null);
       setProposalTraces([]);
@@ -690,6 +706,7 @@ export default function VoiceSupportView() {
       container.innerHTML = "";
     }
     setIsConnected(false);
+    setConsultationLocale('');
     setIsHumanAgentActive(false);
     setWarningMessage('');
     setAgentVideoTrack(null);
@@ -997,6 +1014,12 @@ export default function VoiceSupportView() {
   };
 
   const handleOperationalVoiceEvent = useCallback((event) => {
+    const confirmedLocale = confirmedVoiceLocale(event);
+    if (confirmedLocale) {
+      voiceLocaleRef.current = confirmedLocale;
+      setConsultationLocale(confirmedLocale);
+      return true;
+    }
     if (event.type === DataChannelEvent.FRAUD_ALERT_INSPECTED) {
       setFraudContext(prev => prev ? {
         ...prev,
@@ -1136,6 +1159,11 @@ export default function VoiceSupportView() {
 
     sourceNode.connect(gainNode);
     gainNode.connect(audioCtx.destination);
+    if (!cesDiagnosticsOutputRef.current) {
+      cesDiagnosticsOutputRef.current = audioCtx.createMediaStreamDestination();
+      cesOutputStreamRef.current = cesDiagnosticsOutputRef.current.stream;
+    }
+    gainNode.connect(cesDiagnosticsOutputRef.current);
 
     activeSourcesRef.current.push(sourceNode);
     sourceNode.onended = () => {
@@ -1147,6 +1175,7 @@ export default function VoiceSupportView() {
   };
 
   const handleGecxControlMessage = useCallback((payload) => {
+    recordDiagnosticEvent(payload);
     if (handleOperationalVoiceEvent(payload)) return;
     if (payload.type === 'TRANSCRIPT') {
       setTranscripts(prev => mergeGecxTranscript(prev, payload));
@@ -1164,7 +1193,7 @@ export default function VoiceSupportView() {
     } else if (payload.type === 'LIMIT_UPDATED') {
       setCreditLimit(payload.credit_limit);
       setAvailableCredit(payload.available_credit);
-      setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to ${formatMoney(payload.credit_limit, voiceLocale)}.` }]);
+      setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to ${formatMoney(payload.credit_limit, voiceLocaleRef.current)}.` }]);
     } else if (payload.type === 'FEE_REVERSED') {
       setClearedBalance(payload.cleared_balance);
       setAvailableCredit(payload.available_credit);
@@ -1189,9 +1218,9 @@ export default function VoiceSupportView() {
     }
   }, [
     handleOperationalVoiceEvent,
+    recordDiagnosticEvent,
     startDisconnectCountdown,
     stopPlayoutQueue,
-    voiceLocale,
   ]);
 
   const startGecxConsultation = async () => {
@@ -1245,7 +1274,8 @@ export default function VoiceSupportView() {
         setTranscripts(prev => [...prev, { author: 'system', text: 'Securing streaming session...' }]);
         ws.send(JSON.stringify({
           type: "AUTH",
-          token: fbToken
+          token: fbToken,
+          ...(consultationOverride ? { locale: consultationOverride } : {}),
         }));
         const micSettings = micStream.getAudioTracks()[0]?.getSettings?.() || {};
         ws.send(JSON.stringify({
@@ -1270,6 +1300,7 @@ export default function VoiceSupportView() {
       };
 
       ws.onmessage = async (event) => {
+        if (wsRef.current !== ws) return;
         if (typeof event.data === 'string') {
           const payload = JSON.parse(event.data);
           handleGecxControlMessage(payload);
@@ -1332,6 +1363,8 @@ export default function VoiceSupportView() {
         sampleRate: inputSampleRate,
       });
       audioContextRef.current = audioCtx;
+      cesDiagnosticsOutputRef.current = audioCtx.createMediaStreamDestination();
+      cesOutputStreamRef.current = cesDiagnosticsOutputRef.current.stream;
       if (audioCtx.sampleRate !== inputSampleRate) {
         throw new Error(
           `Browser audio rate ${audioCtx.sampleRate} does not match CES input rate ${inputSampleRate}.`,
@@ -1464,7 +1497,7 @@ export default function VoiceSupportView() {
       }
 
       // 1. Fetch token and room name from server
-      const { token, room_name, session_id, proposal_trace_allowed, fraud_context } = await getCreditCardVoiceToken(mode, voiceLocale);
+      const { token, room_name, session_id, proposal_trace_allowed, fraud_context } = await getCreditCardVoiceToken(mode, consultationOverride || undefined);
       console.log(`LiveKit token received. Room: ${room_name}`);
       setFraudContext(fraud_context || null);
       setProposalTraceSessionId(session_id || null);
@@ -1514,9 +1547,11 @@ export default function VoiceSupportView() {
       });
 
       room.on(RoomEvent.DataReceived, (payload) => {
+        if (roomRef.current !== room) return;
         try {
           const decoder = new TextDecoder();
           const event = JSON.parse(decoder.decode(payload));
+          recordDiagnosticEvent(event);
           console.log('Received data channel event:', event);
 
           if (handleOperationalVoiceEvent(event)) return;
@@ -1572,7 +1607,7 @@ export default function VoiceSupportView() {
           } else if (event.type === DataChannelEvent.LIMIT_UPDATED) {
             setCreditLimit(event.credit_limit);
             setAvailableCredit(event.available_credit);
-            setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to ${formatMoney(event.credit_limit, voiceLocale)}.` }]);
+            setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to ${formatMoney(event.credit_limit, voiceLocaleRef.current)}.` }]);
           } else if (event.type === DataChannelEvent.FEE_REVERSED) {
             setClearedBalance(event.cleared_balance);
             setAvailableCredit(event.available_credit);
@@ -1610,6 +1645,7 @@ export default function VoiceSupportView() {
 
       room.on(RoomEvent.Disconnected, () => {
         setIsConnected(false);
+        setConsultationLocale('');
         setIsHumanAgentActive(false);
         setWarningMessage('');
         setAgentVideoTrack(null);
@@ -1758,17 +1794,6 @@ export default function VoiceSupportView() {
           </AnalyticsButton>
         </div>
 
-        {!isConnected && !isConnecting && engine === 'livekit' && (
-          <label className="mt-4 flex items-center gap-2 text-sm">
-            Voice language / Idioma
-            <select aria-label="Voice language" value={voiceLocale}
-              onChange={(event) => setPresentationLocale(event.target.value)}
-              className="rounded border border-slate-300 bg-white px-2 py-1 dark:bg-slate-900">
-              <option value="en-US">English</option>
-              <option value="es-MX">Español (México)</option>
-            </select>
-          </label>
-        )}
         {/* Engine Selection Toggle */}
         {!isConnected && !isConnecting && (
           <div id="voice-engine-select" className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-950/60 rounded-full border border-slate-200 dark:border-slate-800/80 mt-4">
@@ -1966,23 +1991,21 @@ export default function VoiceSupportView() {
             </div>
           )}
 
-          {/* Account Balances Grid */}
-          <div id="voice-balances-ledger" className="grid grid-cols-3 gap-4">
-            <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Available Credit</span>
-              <p className="text-xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">{formatMoney(availableCredit, voiceLocale)}</p>
-            </div>
-
-            <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Credit Limit</span>
-              <p className="text-xl font-bold mt-1 text-slate-800 dark:text-slate-200">{formatMoney(creditLimit, voiceLocale)}</p>
-            </div>
-
-            <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Current Balance</span>
-              <p className="text-xl font-bold mt-1 text-indigo-600 dark:text-indigo-400">{formatMoney(clearedBalance, voiceLocale)}</p>
-            </div>
-          </div>
+          {/* Full-width balance rows accommodate localized currency labels. */}
+          <dl id="voice-balances-ledger" className="grid min-w-0 grid-cols-1 gap-2">
+            {[
+              { label: 'Available Credit', money: availableCredit, color: 'text-emerald-600 dark:text-emerald-400' },
+              { label: 'Credit Limit', money: creditLimit, color: 'text-slate-800 dark:text-slate-200' },
+              { label: 'Current Balance', money: clearedBalance, color: 'text-indigo-600 dark:text-indigo-400' },
+            ].map(({ label, money, color }) => (
+              <div key={label} className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800/80 dark:bg-slate-950/40">
+                <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</dt>
+                <dd className={`ml-auto min-w-0 max-w-full text-right text-base font-bold tabular-nums [overflow-wrap:anywhere] sm:text-lg ${color}`}>
+                  {formatMoney(money, voiceLocale)}
+                </dd>
+              </div>
+            ))}
+          </dl>
 
           {/* Transaction Ledger List */}
           <div className="bg-slate-50/50 dark:bg-slate-950/30 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80 flex-grow max-h-[200px] overflow-y-auto">
@@ -2191,17 +2214,53 @@ export default function VoiceSupportView() {
               <div>Codec: <span className="text-indigo-650 dark:text-indigo-400">{engine === 'gecx' ? 'PCM (16kHz 16-bit)' : 'Opus (48kHz)'}</span></div>
               {engine === 'gecx' && (
                 <>
-                  <div>RTT Latency: <span className="text-yellow-650 dark:text-yellow-400">{latency} ms</span></div>
+                  <div title="Browser-to-banking-service round trip. Excludes CES and model response time.">App RTT: <span className="text-yellow-650 dark:text-yellow-400">{diagnosticMs(latency)}</span></div>
                   <div>Transport: <span className="text-slate-500 dark:text-slate-400">Stateless Proxy</span></div>
                 </>
               )}
+              <div title="Estimated last speech end to first browser audio playout. Energy detection and device buffering affect accuracy; not a server or token timing.">Response (est.): <span className="font-bold">{diagnosticMs(voiceMetrics.responseMs)}</span></div>
+              {engine !== 'gecx' && <div title="Selected WebRTC candidate-pair round trip between this browser and LiveKit. Excludes model processing.">LiveKit RTT: <span className="font-bold">{diagnosticMs(voiceMetrics.rttMs)}</span></div>}
               {guidanceSnapshot && (
-                <>
-                  <div>Guidance: <span className="font-bold text-violet-600 dark:text-violet-400">{guidanceSnapshot.source === 'knowledge_catalog' ? 'Knowledge Catalog' : 'Fallback'}</span></div>
-                  <div>Policy: <span className={guidanceSnapshot.freshness_status === 'STALE' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}>v{guidanceSnapshot.content_version || 'unknown'} · {guidanceSnapshot.freshness_status || 'UNKNOWN'}</span></div>
-                </>
+                guidanceSnapshot.source === 'not_applicable' ? (
+                  <div className="col-span-2 text-slate-500 dark:text-slate-400">Knowledge Catalog: No policy loaded</div>
+                ) : (
+                  <>
+                    <div>Guidance: <span className="font-bold text-violet-600 dark:text-violet-400">{{
+                      knowledge_catalog: 'Knowledge Catalog',
+                      knowledge_catalog_with_local_fallback: 'Knowledge Catalog + local fallback',
+                      local_file: 'Local policy',
+                      local_file_fallback: 'Local fallback',
+                    }[guidanceSnapshot.source] || 'Unavailable'}</span></div>
+                    {(guidanceSnapshot.content_version || guidanceSnapshot.freshness_status) && (
+                      <div>Policy: <span className={
+                        guidanceSnapshot.freshness_status === 'STALE' ? 'text-amber-600 dark:text-amber-400'
+                          : guidanceSnapshot.freshness_status === 'FRESH' ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-slate-500 dark:text-slate-400'
+                      }>{[
+                        guidanceSnapshot.content_version && `v${guidanceSnapshot.content_version}`,
+                        guidanceSnapshot.freshness_status,
+                      ].filter(Boolean).join(' · ')}</span></div>
+                    )}
+                  </>
+                )
               )}
             </div>
+
+            <details className="mt-2 text-[11px] text-slate-600 dark:text-slate-400">
+              <summary className="cursor-pointer font-semibold">More diagnostics</summary>
+              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 font-mono">
+                <div title="Estimated last speech end to first agent transcript received by the browser. This is not model TTFT.">First transcript (est.): {diagnosticMs(voiceMetrics.transcriptMs)}</div>
+                <div title="True first-token timing is not exposed consistently by these voice transports.">Model TTFT: unavailable</div>
+                <div title="Duration of the latest completed tool execution; excludes time deciding to call it.">Last tool: {diagnosticMs(voiceMetrics.toolMs)}</div>
+                {engine === 'gecx' ? (
+                  <div title="CES-reported LLM start to first output chunk, from the latest completed turn. May be text or audio; excludes browser playout.">Provider first chunk: {diagnosticMs(voiceMetrics.providerFirstChunkMs)}</div>
+                ) : (<>
+                  <div title="Inbound audio interarrival jitter reported by WebRTC.">Audio jitter: {diagnosticMs(voiceMetrics.jitterMs)}</div>
+                  <div title="Inbound audio packets lost over the latest sampling interval. A dash means no comparable packet sample.">Packet loss: {Number.isFinite(voiceMetrics.lossPercent) ? `${voiceMetrics.lossPercent.toFixed(1)}%` : '—'}</div>
+                </>)}
+              </div>
+              <p className="mt-2">Last observed values. — means no measurement yet. Speech timing is estimated and pauses while this tab is hidden.</p>
+            </details>
 
             {/* Volume Playout slider control */}
             {engine === 'gecx' && (
@@ -2309,19 +2368,36 @@ export default function VoiceSupportView() {
                 <Settings className="w-5 h-5 text-emerald-500" />
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">Options</h3>
               </div>
-              <AnalyticsButton
-                analyticsId="voice_support_view_refresh_audio_devices"
-                type="button"
-                onClick={() => refreshAudioDevices(true)}
-                disabled={isConnecting || isRefreshingAudioDevices}
-                className="flex items-center gap-2 rounded-lg px-3 py-1.5 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-xs font-bold text-slate-600 transition hover:border-blue-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-blue-400"
-              >
-                <RefreshCw size={14} className={isRefreshingAudioDevices ? 'animate-spin' : ''} />
-                Refresh Audio Devices
-              </AnalyticsButton>
+              <div className="flex flex-wrap items-center gap-2">
+                <AnalyticsButton
+                  analyticsId="voice_support_view_13"
+                  type="button"
+                  onClick={() => setIsTestingMic(!isTestingMic)}
+                  disabled={isConnecting || isConnected || micPermissionState === 'denied'}
+                  aria-pressed={isTestingMic}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                    isTestingMic
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-600 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-400'
+                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-400 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-blue-400'
+                  }`}
+                >
+                  <Mic size={14} className={isTestingMic ? 'animate-pulse' : ''} />
+                  {isTestingMic ? 'Stop Testing' : 'Test Microphone'}
+                </AnalyticsButton>
+                <AnalyticsButton
+                  analyticsId="voice_support_view_refresh_audio_devices"
+                  type="button"
+                  onClick={() => refreshAudioDevices(true)}
+                  disabled={isConnecting || isRefreshingAudioDevices}
+                  className="flex items-center gap-2 rounded-lg px-3 py-1.5 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-xs font-bold text-slate-600 transition hover:border-blue-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-blue-400"
+                >
+                  <RefreshCw size={14} className={isRefreshingAudioDevices ? 'animate-spin' : ''} />
+                  Refresh Audio Devices
+                </AnalyticsButton>
+              </div>
             </div>
 
-            <div className="grid w-full min-w-0 grid-cols-1 gap-6 sm:grid-cols-2">
+            <div className="grid w-full min-w-0 grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {/* Left Column: Input */}
               <div className="flex min-w-0 flex-col space-y-2 text-left">
                 <label htmlFor="voice-audio-input" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
@@ -2359,23 +2435,7 @@ export default function VoiceSupportView() {
                   </div>
                 </div>
 
-                {/* Test Microphone Button */}
-                <div className="pt-3">
-                  <AnalyticsButton
-                    analyticsId="voice_support_view_13"
-                    type="button"
-                    onClick={() => setIsTestingMic(!isTestingMic)}
-                    disabled={isConnecting || isConnected || micPermissionState === 'denied'}
-                    className={`flex w-full h-11 items-center justify-center gap-2 rounded-xl border text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                      isTestingMic
-                        ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:border-emerald-800 dark:text-emerald-400'
-                        : 'border-slate-300 bg-slate-50 dark:bg-slate-950/20 text-slate-600 hover:border-blue-400 hover:text-blue-600 dark:border-slate-800 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:text-blue-400'
-                    }`}
-                  >
-                    <Mic size={16} className={isTestingMic ? 'animate-pulse' : ''} />
-                    {isTestingMic ? 'Stop Testing' : 'Test Microphone'}
-                  </AnalyticsButton>
-                </div>
+
               </div>
 
               {/* Right Column: Output */}
@@ -2408,6 +2468,26 @@ export default function VoiceSupportView() {
                     </select>
                   </div>
                 </div>
+              </div>
+              <div className="flex min-w-0 flex-col space-y-2 text-left">
+                <label htmlFor="voice-support-language" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Language</label>
+                <div className="relative w-full">
+                  <Languages className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                  <select id="voice-support-language" value={consultationOverride}
+                    onChange={(event) => setConsultationLocale(event.target.value)}
+                    disabled={isConnecting || isConnected}
+                    aria-describedby="voice-support-language-help"
+                    className="appearance-none h-11 w-full rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-10 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200">
+                    <option value="">Profile default: {getSupportLocale(profileLocale).label}</option>
+                    {SUPPORT_LOCALES.filter(({ code }) => code !== profileLocale).map(({ code, label }) => (
+                      <option key={code} value={code}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                <p id="voice-support-language-help" className="text-xs leading-5 text-slate-500 dark:text-slate-400">
+                  {isConnected ? 'Current language shown. Ask the agent to switch during your consultation.' : 'Applies to this consultation. Change your default in your profile.'}
+                </p>
               </div>
             </div>
 
