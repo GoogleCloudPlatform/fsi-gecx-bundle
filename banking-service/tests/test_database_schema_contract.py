@@ -77,6 +77,7 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
         "d8e2f6a910bc_money_currency_invariants.py",
         "e4b7c9a12f63_preferred_support_locale.py",
         "f5c8d2e7a104_expand_support_locales.py",
+        "f6d9e3f8b205_italian_support_locale.py",
     ]
     baseline = versions[0].read_text()
     assert "down_revision: Union[str, Sequence[str], None] = None" in baseline

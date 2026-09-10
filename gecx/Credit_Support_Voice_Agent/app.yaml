@@ -24,6 +24,7 @@ languageSettings:
   - fr
   - de
   - pt
+  - it
   enableMultilingualSupport: true
 loggingSettings:
   conversationLoggingSettings:

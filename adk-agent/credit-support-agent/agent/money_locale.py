@@ -18,7 +18,7 @@ from agent.proposal_evidence import COMMIT_IN_FLIGHT, COMMIT_RETRY, require_re_p
 from agent.workflow_authorization import invalidate_workflow_authorization
 
 
-SUPPORTED_SUPPORT_LOCALES = ("en-US", "es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR")
+SUPPORTED_SUPPORT_LOCALES = ("en-US", "es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR", "it-IT")
 # Live documents a smaller regional inventory than CES. Preserve the customer
 # locale in state/instructions and map only the speech configuration code.
 LIVE_LANGUAGE_CODES = {locale: locale for locale in SUPPORTED_SUPPORT_LOCALES}

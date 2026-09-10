@@ -15,7 +15,7 @@
 """Supported voice locales, independent of currency and display preferences."""
 from typing import Literal, get_args
 
-SupportLocale = Literal["en-US", "es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR"]
+SupportLocale = Literal["en-US", "es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR", "it-IT"]
 SUPPORTED_SUPPORT_LOCALES = get_args(SupportLocale)
 
 

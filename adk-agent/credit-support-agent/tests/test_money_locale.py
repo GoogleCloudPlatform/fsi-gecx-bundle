@@ -32,11 +32,12 @@ def state():
               "presentations": {"en-US": {"speech_text": "English"}, "es-MX": {"speech_text": "Español"}}}}
 
 
-def test_language_switch_preserves_identity_and_money_but_rejects_stale_confirmation():
+@pytest.mark.parametrize("locale", ["es-MX", "it-IT"])
+def test_language_switch_preserves_identity_and_money_but_rejects_stale_confirmation(locale):
     current = state()
     before = deepcopy(current["banking_proposal_presentation"])
-    result = change_voice_language(current, "es-MX")
-    assert result["effective_locale"] == "es-MX"
+    result = change_voice_language(current, locale)
+    assert result["effective_locale"] == locale
     assert result["requires_fresh_confirmation"] is True
     assert "speech_text" not in result["proposal"]["presentation"]
     assert result["proposal"]["money_facts"] == before["money_facts"]
@@ -80,7 +81,7 @@ def test_legacy_speech_is_discarded_without_mutating_immutable_facts():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("target", ["es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR"])
+@pytest.mark.parametrize("target", ["es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR", "it-IT"])
 async def test_live_language_change_closes_old_stream_before_restart(target):
     from types import SimpleNamespace
     from agent.money_locale import stream_with_language_changes
@@ -165,7 +166,7 @@ async def test_live_fallback_does_not_hide_unrelated_errors_or_uncertain_commits
             pass
 
 
-@pytest.mark.parametrize("locale", ["es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR"])
+@pytest.mark.parametrize("locale", ["es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR", "it-IT"])
 def test_expanded_locale_preserves_proposal_and_requires_fresh_confirmation(locale):
     current = state()
     before = deepcopy(current["banking_proposal_presentation"])

@@ -20,9 +20,9 @@ def set_conversation_language(locale: str) -> dict:
     """Switch session language only on an explicit customer request, never on language detection alone.
 
     Args:
-        locale: The explicitly requested locale: en-US, es-MX, es-ES, es-US, fr-CA, fr-FR, de-DE, pt-BR.
+        locale: The explicitly requested locale: en-US, es-MX, es-ES, es-US, fr-CA, fr-FR, de-DE, pt-BR, it-IT.
     """
-    if locale not in ("en-US", "es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR"):
+    if locale not in ("en-US", "es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR", "it-IT"):
         return {"success": False, "error": "UNSUPPORTED_LANGUAGE"}
     variables = context.variables
     if variables.get("proposal_commit_attempted"):

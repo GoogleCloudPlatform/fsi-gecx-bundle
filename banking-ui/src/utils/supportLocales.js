@@ -17,6 +17,7 @@ export const SUPPORT_LOCALES = [
   { code: 'fr-CA', label: 'Français (Canada)' },
   { code: 'fr-FR', label: 'Français (France)' },
   { code: 'de-DE', label: 'Deutsch (Deutschland)' },
+  { code: 'it-IT', label: 'Italiano (Italia)' },
   { code: 'pt-BR', label: 'Português (Brasil)' },
   { code: 'es-MX', label: 'Español (México)' },
   { code: 'es-ES', label: 'Español (España)' },

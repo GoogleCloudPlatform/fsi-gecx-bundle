@@ -921,7 +921,7 @@ def _language_tool(context):
     return module.set_conversation_language
 
 
-@pytest.mark.parametrize("locale", ["en-US", "es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR"])
+@pytest.mark.parametrize("locale", ["en-US", "es-MX", "es-ES", "es-US", "fr-CA", "fr-FR", "de-DE", "pt-BR", "it-IT"])
 def test_language_switch_preserves_proposal_and_demands_later_confirmation(locale):
     capture = _load("after_tool_callbacks/capture_proposal.py")
     guard = _load("before_tool_callbacks/enforce_proposal_context.py")
