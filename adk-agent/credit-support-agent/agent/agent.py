@@ -1068,10 +1068,14 @@ async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> N
     set_tool_processing(False)
     tool_context.state["is_processing_tool"] = False
     tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
-    started_at = tool_started.pop(tool_name, time.monotonic())
+    started_at = tool_started.pop(tool_name, None)
     tool_context.state["_voice_tool_started_at"] = tool_started
-    duration_seconds = time.monotonic() - started_at
+    duration_seconds = time.monotonic() - started_at if started_at is not None else 0.0
     record_tool_completed(tool_name, "error", duration_seconds)
+    notify_event({
+        "type": "VOICE_DIAGNOSTICS",
+        "tool_ms": round(duration_seconds * 1000, 3) if started_at is not None else None,
+    })
     if tool_name in PROPOSAL_DECISION_TOOLS:
         _record_commit_proposal_event(
             state=tool_context.state,
@@ -1147,14 +1151,18 @@ async def after_tool_callback(
         "checkpoint" if expected_checkpoint else ("success" if success else "failure")
     )
     tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
-    started_at = tool_started.pop(tool_name, time.monotonic())
+    started_at = tool_started.pop(tool_name, None)
     tool_context.state["_voice_tool_started_at"] = tool_started
-    duration_seconds = time.monotonic() - started_at
+    duration_seconds = time.monotonic() - started_at if started_at is not None else 0.0
     record_tool_completed(
         tool_name,
         outcome,
         duration_seconds,
     )
+    notify_event({
+        "type": "VOICE_DIAGNOSTICS",
+        "tool_ms": round(duration_seconds * 1000, 3) if started_at is not None else None,
+    })
     if tool_name in PROPOSAL_DECISION_TOOLS:
         _record_commit_proposal_event(
             state=tool_context.state,

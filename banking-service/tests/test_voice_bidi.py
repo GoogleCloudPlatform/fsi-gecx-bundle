@@ -191,6 +191,12 @@ def test_gecx_voice_stream_success(
             "replace_previous": True,
         }
 
+        assert websocket.receive_json() == {
+            "type": "VOICE_DIAGNOSTICS",
+            "tool_ms": None,
+            "provider_first_chunk_ms": None,
+        }
+
         # EndSession stops further input but does not truncate provider output.
         assert websocket.receive_bytes() == trailing_audio
 

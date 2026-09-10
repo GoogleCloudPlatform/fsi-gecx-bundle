@@ -16,6 +16,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Room, RoomEvent, Track } from 'livekit-client';
+import useVoiceDiagnostics from '../hooks/useVoiceDiagnostics.js';
 import { useLocation } from 'react-router-dom';
 import {
   Phone,
@@ -356,7 +357,7 @@ export default function VoiceSupportView({ customerProfile }) {
   // New engine-specific configuration states
   const [engine, setEngine] = useState('livekit'); // 'livekit' | 'gecx'
   const [volume, setVolume] = useState(0.8);
-  const [latency, setLatency] = useState(0);
+  const [latency, setLatency] = useState(null);
   const [audioInputs, setAudioInputs] = useState([]);
   const [audioOutputs, setAudioOutputs] = useState([]);
   const [selectedAudioInputId, setSelectedAudioInputId] = useState(
@@ -470,6 +471,12 @@ export default function VoiceSupportView({ customerProfile }) {
   const wsRef = useRef(null);
   const audioContextRef = useRef(null);
   const micStreamRef = useRef(null);
+  const cesOutputStreamRef = useRef(null);
+  const cesDiagnosticsOutputRef = useRef(null);
+  const { metrics: voiceMetrics, event: recordDiagnosticEvent } = useVoiceDiagnostics({
+    connected: isConnected, engine, roomRef, micStreamRef, cesOutputStreamRef, muted: !micEnabled,
+  });
+  const diagnosticMs = value => Number.isFinite(value) ? `${Math.round(value)} ms` : '—';
   const workletNodeRef = useRef(null);
   const captureSinkNodeRef = useRef(null);
   const sourceNodeRef = useRef(null);
@@ -622,6 +629,9 @@ export default function VoiceSupportView({ customerProfile }) {
       }
       sourceNodeRef.current = null;
     }
+    cesOutputStreamRef.current?.getTracks().forEach(track => track.stop());
+    cesOutputStreamRef.current = null;
+    cesDiagnosticsOutputRef.current = null;
     if (micStreamRef.current) {
       try {
         micStreamRef.current.getTracks().forEach(track => track.stop());
@@ -649,7 +659,7 @@ export default function VoiceSupportView({ customerProfile }) {
       playoutDrainTimerRef.current = null;
       setIsConnected(false);
       setConsultationLocale('');
-      setLatency(0);
+      setLatency(null);
       setProposalTraceAllowed(false);
       setProposalTraceSessionId(null);
       setProposalTraces([]);
@@ -1141,6 +1151,11 @@ export default function VoiceSupportView({ customerProfile }) {
 
     sourceNode.connect(gainNode);
     gainNode.connect(audioCtx.destination);
+    if (!cesDiagnosticsOutputRef.current) {
+      cesDiagnosticsOutputRef.current = audioCtx.createMediaStreamDestination();
+      cesOutputStreamRef.current = cesDiagnosticsOutputRef.current.stream;
+    }
+    gainNode.connect(cesDiagnosticsOutputRef.current);
 
     activeSourcesRef.current.push(sourceNode);
     sourceNode.onended = () => {
@@ -1152,6 +1167,7 @@ export default function VoiceSupportView({ customerProfile }) {
   };
 
   const handleGecxControlMessage = useCallback((payload) => {
+    recordDiagnosticEvent(payload);
     if (handleOperationalVoiceEvent(payload)) return;
     if (payload.type === 'TRANSCRIPT') {
       setTranscripts(prev => mergeGecxTranscript(prev, payload));
@@ -1194,6 +1210,7 @@ export default function VoiceSupportView({ customerProfile }) {
     }
   }, [
     handleOperationalVoiceEvent,
+    recordDiagnosticEvent,
     startDisconnectCountdown,
     stopPlayoutQueue,
     voiceLocale,
@@ -1338,6 +1355,8 @@ export default function VoiceSupportView({ customerProfile }) {
         sampleRate: inputSampleRate,
       });
       audioContextRef.current = audioCtx;
+      cesDiagnosticsOutputRef.current = audioCtx.createMediaStreamDestination();
+      cesOutputStreamRef.current = cesDiagnosticsOutputRef.current.stream;
       if (audioCtx.sampleRate !== inputSampleRate) {
         throw new Error(
           `Browser audio rate ${audioCtx.sampleRate} does not match CES input rate ${inputSampleRate}.`,
@@ -1523,6 +1542,7 @@ export default function VoiceSupportView({ customerProfile }) {
         try {
           const decoder = new TextDecoder();
           const event = JSON.parse(decoder.decode(payload));
+          recordDiagnosticEvent(event);
           console.log('Received data channel event:', event);
 
           if (handleOperationalVoiceEvent(event)) return;
@@ -2187,10 +2207,12 @@ export default function VoiceSupportView({ customerProfile }) {
               <div>Codec: <span className="text-indigo-650 dark:text-indigo-400">{engine === 'gecx' ? 'PCM (16kHz 16-bit)' : 'Opus (48kHz)'}</span></div>
               {engine === 'gecx' && (
                 <>
-                  <div title="Browser-to-banking-service round trip. Excludes CES and model response time.">App RTT: <span className="text-yellow-650 dark:text-yellow-400">{latency} ms</span></div>
+                  <div title="Browser-to-banking-service round trip. Excludes CES and model response time.">App RTT: <span className="text-yellow-650 dark:text-yellow-400">{diagnosticMs(latency)}</span></div>
                   <div>Transport: <span className="text-slate-500 dark:text-slate-400">Stateless Proxy</span></div>
                 </>
               )}
+              <div title="Estimated last speech end to first browser audio playout. Energy detection and device buffering affect accuracy; not a server or token timing.">Response (est.): <span className="font-bold">{diagnosticMs(voiceMetrics.responseMs)}</span></div>
+              {engine !== 'gecx' && <div title="Selected WebRTC candidate-pair round trip between this browser and LiveKit. Excludes model processing.">LiveKit RTT: <span className="font-bold">{diagnosticMs(voiceMetrics.rttMs)}</span></div>}
               {guidanceSnapshot && (
                 guidanceSnapshot.source === 'not_applicable' ? (
                   <div className="col-span-2 text-slate-500 dark:text-slate-400">Knowledge Catalog: No policy loaded</div>
@@ -2216,6 +2238,22 @@ export default function VoiceSupportView({ customerProfile }) {
                 )
               )}
             </div>
+
+            <details className="mt-2 text-[11px] text-slate-600 dark:text-slate-400">
+              <summary className="cursor-pointer font-semibold">More diagnostics</summary>
+              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 font-mono">
+                <div title="Estimated last speech end to first agent transcript received by the browser. This is not model TTFT.">First transcript (est.): {diagnosticMs(voiceMetrics.transcriptMs)}</div>
+                <div title="True first-token timing is not exposed consistently by these voice transports.">Model TTFT: unavailable</div>
+                <div title="Duration of the latest completed tool execution; excludes time deciding to call it.">Last tool: {diagnosticMs(voiceMetrics.toolMs)}</div>
+                {engine === 'gecx' ? (
+                  <div title="CES-reported LLM start to first output chunk, from the latest completed turn. May be text or audio; excludes browser playout.">Provider first chunk: {diagnosticMs(voiceMetrics.providerFirstChunkMs)}</div>
+                ) : (<>
+                  <div title="Inbound audio interarrival jitter reported by WebRTC.">Audio jitter: {diagnosticMs(voiceMetrics.jitterMs)}</div>
+                  <div title="Inbound audio packets lost over the latest sampling interval. A dash means no comparable packet sample.">Packet loss: {Number.isFinite(voiceMetrics.lossPercent) ? `${voiceMetrics.lossPercent.toFixed(1)}%` : '—'}</div>
+                </>)}
+              </div>
+              <p className="mt-2">Last observed values. — means no measurement yet. Speech timing is estimated and pauses while this tab is hidden.</p>
+            </details>
 
             {/* Volume Playout slider control */}
             {engine === 'gecx' && (
