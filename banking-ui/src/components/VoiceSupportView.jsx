@@ -2192,10 +2192,28 @@ export default function VoiceSupportView({ customerProfile }) {
                 </>
               )}
               {guidanceSnapshot && (
-                <>
-                  <div>Guidance: <span className="font-bold text-violet-600 dark:text-violet-400">{guidanceSnapshot.source === 'knowledge_catalog' ? 'Knowledge Catalog' : 'Fallback'}</span></div>
-                  <div>Policy: <span className={guidanceSnapshot.freshness_status === 'STALE' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}>v{guidanceSnapshot.content_version || 'unknown'} · {guidanceSnapshot.freshness_status || 'UNKNOWN'}</span></div>
-                </>
+                guidanceSnapshot.source === 'not_applicable' ? (
+                  <div className="col-span-2 text-slate-500 dark:text-slate-400">No policy loaded — general support</div>
+                ) : (
+                  <>
+                    <div>Guidance: <span className="font-bold text-violet-600 dark:text-violet-400">{{
+                      knowledge_catalog: 'Knowledge Catalog',
+                      knowledge_catalog_with_local_fallback: 'Knowledge Catalog + local fallback',
+                      local_file: 'Local policy',
+                      local_file_fallback: 'Local fallback',
+                    }[guidanceSnapshot.source] || 'Unavailable'}</span></div>
+                    {(guidanceSnapshot.content_version || guidanceSnapshot.freshness_status) && (
+                      <div>Policy: <span className={
+                        guidanceSnapshot.freshness_status === 'STALE' ? 'text-amber-600 dark:text-amber-400'
+                          : guidanceSnapshot.freshness_status === 'FRESH' ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-slate-500 dark:text-slate-400'
+                      }>{[
+                        guidanceSnapshot.content_version && `v${guidanceSnapshot.content_version}`,
+                        guidanceSnapshot.freshness_status,
+                      ].filter(Boolean).join(' · ')}</span></div>
+                    )}
+                  </>
+                )
               )}
             </div>
 
