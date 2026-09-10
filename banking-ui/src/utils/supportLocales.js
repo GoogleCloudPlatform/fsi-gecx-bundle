@@ -27,3 +27,9 @@ export const SUPPORT_LOCALES = [
 export function getSupportLocale(value) {
   return SUPPORT_LOCALES.find(({ code }) => code === value) || SUPPORT_LOCALES[0];
 }
+
+// Only runtime-confirmed changes affect display; transcript language is not evidence.
+export function confirmedVoiceLocale(event) {
+  if (!['VOICE_LANGUAGE_CHANGED', 'VOICE_LANGUAGE_FALLBACK'].includes(event?.type)) return null;
+  return SUPPORT_LOCALES.some(({ code }) => code === event.locale) ? event.locale : null;
+}

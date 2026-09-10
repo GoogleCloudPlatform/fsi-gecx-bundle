@@ -26,6 +26,7 @@ from utils.gcp import get_project_id
 from utils.log_safety import stable_log_reference
 from services.ces_session_bootstrap import build_ces_session_bootstrap
 from services.voice_diagnostics import ces_diagnostics
+from services.voice_language import ces_language_event
 from services.ces_session_capability import mint_ces_session_capability
 import google.auth
 import google.auth.transport.requests
@@ -479,6 +480,9 @@ class VoiceBidiSession:
                             )
                             if turn_completed:
                                 await self.gecx_to_client_queue.put(ces_diagnostics(session_output.get("diagnosticInfo")))
+                                language_event = ces_language_event(session_output.get("diagnosticInfo"))
+                                if language_event:
+                                    await self.gecx_to_client_queue.put(language_event)
                                 transport_stats["completed_turns"] += 1
                                 agent_transcript = ""
                                 agent_transcript_id = None

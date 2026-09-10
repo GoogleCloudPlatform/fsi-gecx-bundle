@@ -124,6 +124,10 @@ def test_gecx_voice_stream_success(
                     "diagnosticInfo": {
                         "rootSpan": {
                             "childSpans": [
+                                {"name": "Tool", "attributes": {
+                                    "name": "set_conversation_language",
+                                    "response": {"result": {"success": True, "locale": "it-IT"}},
+                                }},
                                 {
                                     "attributes": {
                                         "agent": "Session Closeout Agent"
@@ -196,6 +200,8 @@ def test_gecx_voice_stream_success(
             "tool_ms": None,
             "provider_first_chunk_ms": None,
         }
+
+        assert websocket.receive_json() == {"type": "VOICE_LANGUAGE_CHANGED", "locale": "it-IT"}
 
         # EndSession stops further input but does not truncate provider output.
         assert websocket.receive_bytes() == trailing_audio

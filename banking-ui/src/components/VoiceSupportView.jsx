@@ -64,7 +64,7 @@ import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import GoogleCompassIcon from './icons/GoogleCompassIcon.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
-import { SUPPORT_LOCALES, getSupportLocale } from '../utils/supportLocales.js';
+import { SUPPORT_LOCALES, getSupportLocale, confirmedVoiceLocale } from '../utils/supportLocales.js';
 import ProposalProtocolTrace from './ProposalProtocolTrace.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
@@ -303,6 +303,8 @@ export default function VoiceSupportView({ customerProfile }) {
   const profileLocale = getSupportLocale(customerProfile?.preferred_support_locale).code;
   const consultationOverride = consultationLocale === profileLocale ? '' : consultationLocale;
   const voiceLocale = consultationOverride || profileLocale;
+  const voiceLocaleRef = useRef(voiceLocale);
+  useEffect(() => { voiceLocaleRef.current = voiceLocale; }, [voiceLocale]);
   const { brandColorFrom, resolvedTheme } = useSettings();
   const location = useLocation();
   const projectId = window.firebaseConfig?.projectId;
@@ -1012,6 +1014,12 @@ export default function VoiceSupportView({ customerProfile }) {
   };
 
   const handleOperationalVoiceEvent = useCallback((event) => {
+    const confirmedLocale = confirmedVoiceLocale(event);
+    if (confirmedLocale) {
+      voiceLocaleRef.current = confirmedLocale;
+      setConsultationLocale(confirmedLocale);
+      return true;
+    }
     if (event.type === DataChannelEvent.FRAUD_ALERT_INSPECTED) {
       setFraudContext(prev => prev ? {
         ...prev,
@@ -1185,7 +1193,7 @@ export default function VoiceSupportView({ customerProfile }) {
     } else if (payload.type === 'LIMIT_UPDATED') {
       setCreditLimit(payload.credit_limit);
       setAvailableCredit(payload.available_credit);
-      setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to ${formatMoney(payload.credit_limit, voiceLocale)}.` }]);
+      setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to ${formatMoney(payload.credit_limit, voiceLocaleRef.current)}.` }]);
     } else if (payload.type === 'FEE_REVERSED') {
       setClearedBalance(payload.cleared_balance);
       setAvailableCredit(payload.available_credit);
@@ -1293,6 +1301,7 @@ export default function VoiceSupportView({ customerProfile }) {
       };
 
       ws.onmessage = async (event) => {
+        if (wsRef.current !== ws) return;
         if (typeof event.data === 'string') {
           const payload = JSON.parse(event.data);
           handleGecxControlMessage(payload);
@@ -1539,6 +1548,7 @@ export default function VoiceSupportView({ customerProfile }) {
       });
 
       room.on(RoomEvent.DataReceived, (payload) => {
+        if (roomRef.current !== room) return;
         try {
           const decoder = new TextDecoder();
           const event = JSON.parse(decoder.decode(payload));
@@ -1598,7 +1608,7 @@ export default function VoiceSupportView({ customerProfile }) {
           } else if (event.type === DataChannelEvent.LIMIT_UPDATED) {
             setCreditLimit(event.credit_limit);
             setAvailableCredit(event.available_credit);
-            setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to ${formatMoney(event.credit_limit, voiceLocale)}.` }]);
+            setTranscripts(prev => [...prev, { author: 'system', text: `ACCOUNT UPDATE: Credit limit increased to ${formatMoney(event.credit_limit, voiceLocaleRef.current)}.` }]);
           } else if (event.type === DataChannelEvent.FEE_REVERSED) {
             setClearedBalance(event.cleared_balance);
             setAvailableCredit(event.available_credit);
@@ -2479,7 +2489,7 @@ export default function VoiceSupportView({ customerProfile }) {
                   </select>
                 </div>
                 <p id="voice-support-language-help" className="text-xs leading-5 text-slate-500 dark:text-slate-400">
-                  {isConnected ? 'Starting language shown. Ask the agent to switch during your consultation.' : 'Applies to this consultation. Change your default in your profile.'}
+                  {isConnected ? 'Current language shown. Ask the agent to switch during your consultation.' : 'Applies to this consultation. Change your default in your profile.'}
                 </p>
               </div>
             </div>
