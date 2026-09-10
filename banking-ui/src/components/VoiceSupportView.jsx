@@ -2187,13 +2187,13 @@ export default function VoiceSupportView({ customerProfile }) {
               <div>Codec: <span className="text-indigo-650 dark:text-indigo-400">{engine === 'gecx' ? 'PCM (16kHz 16-bit)' : 'Opus (48kHz)'}</span></div>
               {engine === 'gecx' && (
                 <>
-                  <div>RTT Latency: <span className="text-yellow-650 dark:text-yellow-400">{latency} ms</span></div>
+                  <div title="Browser-to-banking-service round trip. Excludes CES and model response time.">App RTT: <span className="text-yellow-650 dark:text-yellow-400">{latency} ms</span></div>
                   <div>Transport: <span className="text-slate-500 dark:text-slate-400">Stateless Proxy</span></div>
                 </>
               )}
               {guidanceSnapshot && (
                 guidanceSnapshot.source === 'not_applicable' ? (
-                  <div className="col-span-2 text-slate-500 dark:text-slate-400">No policy loaded — general support</div>
+                  <div className="col-span-2 text-slate-500 dark:text-slate-400">Knowledge Catalog: No policy loaded</div>
                 ) : (
                   <>
                     <div>Guidance: <span className="font-bold text-violet-600 dark:text-violet-400">{{
