@@ -1221,7 +1221,6 @@ export default function VoiceSupportView({ customerProfile }) {
     recordDiagnosticEvent,
     startDisconnectCountdown,
     stopPlayoutQueue,
-    voiceLocale,
   ]);
 
   const startGecxConsultation = async () => {
@@ -1992,23 +1991,21 @@ export default function VoiceSupportView({ customerProfile }) {
             </div>
           )}
 
-          {/* Account Balances Grid */}
-          <div id="voice-balances-ledger" className="grid grid-cols-3 gap-4">
-            <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Available Credit</span>
-              <p className="text-xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">{formatMoney(availableCredit, voiceLocale)}</p>
-            </div>
-
-            <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Credit Limit</span>
-              <p className="text-xl font-bold mt-1 text-slate-800 dark:text-slate-200">{formatMoney(creditLimit, voiceLocale)}</p>
-            </div>
-
-            <div className="bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80">
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Current Balance</span>
-              <p className="text-xl font-bold mt-1 text-indigo-600 dark:text-indigo-400">{formatMoney(clearedBalance, voiceLocale)}</p>
-            </div>
-          </div>
+          {/* Full-width balance rows accommodate localized currency labels. */}
+          <dl id="voice-balances-ledger" className="grid min-w-0 grid-cols-1 gap-2">
+            {[
+              { label: 'Available Credit', money: availableCredit, color: 'text-emerald-600 dark:text-emerald-400' },
+              { label: 'Credit Limit', money: creditLimit, color: 'text-slate-800 dark:text-slate-200' },
+              { label: 'Current Balance', money: clearedBalance, color: 'text-indigo-600 dark:text-indigo-400' },
+            ].map(({ label, money, color }) => (
+              <div key={label} className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800/80 dark:bg-slate-950/40">
+                <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</dt>
+                <dd className={`ml-auto min-w-0 max-w-full text-right text-base font-bold tabular-nums [overflow-wrap:anywhere] sm:text-lg ${color}`}>
+                  {formatMoney(money, voiceLocale)}
+                </dd>
+              </div>
+            ))}
+          </dl>
 
           {/* Transaction Ledger List */}
           <div className="bg-slate-50/50 dark:bg-slate-950/30 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80 flex-grow max-h-[200px] overflow-y-auto">
