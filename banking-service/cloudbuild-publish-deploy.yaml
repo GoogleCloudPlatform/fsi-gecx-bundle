@@ -133,10 +133,10 @@ steps:
         trap "docker rm -f pg-validate || true" EXIT
         echo "Waiting for PostgreSQL container to accept connections..."
         until docker exec pg-validate pg_isready -U postgres; do sleep 1; done
-        echo "Executing Alembic upgrade head, downgrade base, and upgrade head against PostgreSQL..."
+        echo "Executing Alembic upgrade head, downgrade one revision, and upgrade head against PostgreSQL..."
         docker run --rm --network container:pg-validate -e SKIP_IAM_GRANTS=true -e DATABASE_URL="postgresql://postgres:secret@127.0.0.1:5432/banking" \
           "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${IMAGE_TAG}" \
-          bash -c "alembic upgrade head && alembic downgrade base && alembic upgrade head"
+          bash -c "alembic upgrade head && alembic downgrade -1 && alembic upgrade head"
 
   - name: "gcr.io/cloud-builders/docker"
     id: "push-image"
