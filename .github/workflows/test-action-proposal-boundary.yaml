@@ -170,7 +170,7 @@ jobs:
         run: |
           # Preserve round-trip coverage below the irreversible Money boundary.
           uv run alembic upgrade c3a91f2b7d44
-          uv run alembic downgrade -1
+          uv run alembic downgrade base
           uv run alembic upgrade head
           # The profile preference is reversible above the Money boundary.
           uv run alembic downgrade d8e2f6a910bc
