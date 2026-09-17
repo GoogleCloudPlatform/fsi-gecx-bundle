@@ -22,6 +22,7 @@ run_banking_contract() {
   cd "${REPOSITORY_ROOT}/banking-service"
   uv run --frozen pytest -q \
     tests/test_proposal_protocol_kernel.py \
+    tests/test_proposal_definitions.py \
     tests/test_action_proposals.py \
     tests/test_action_proposal_context.py \
     tests/test_mcp_tool_surface.py \

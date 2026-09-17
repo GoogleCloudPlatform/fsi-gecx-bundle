@@ -135,13 +135,8 @@ class AuthorizationPolicy:
             PresentationPolicy.DETERMINISTIC_UI,
             PresentationPolicy.TRUSTED_RENDER_ACKNOWLEDGMENT,
         }
-        required_ack = (
-            self.evidence_policy.required_presentation_acknowledgment
-        )
-        if (
-            self.presentation_policy in deterministic_presentations
-            and not required_ack
-        ):
+        required_ack = self.evidence_policy.required_presentation_acknowledgment
+        if self.presentation_policy in deterministic_presentations and not required_ack:
             raise ValueError(
                 "Deterministic presentation policies require typed acknowledgment."
             )
@@ -164,7 +159,10 @@ class AuthorizationPolicy:
             DecisionPolicy.HUMAN_APPROVAL: "TRUSTED_HUMAN_APPROVAL",
         }
         required_source = required_sources.get(self.decision_policy)
-        if required_source and required_source not in self.evidence_policy.accepted_sources:
+        if (
+            required_source
+            and required_source not in self.evidence_policy.accepted_sources
+        ):
             raise ValueError(
                 f"{self.decision_policy.value} requires {required_source} evidence."
             )
@@ -205,9 +203,7 @@ REQUIRED_RESTATEMENT_POLICY = AuthorizationPolicy(
     evidence_policy=EvidencePolicy(
         accepted_sources=frozenset({"MODEL_TOOL_INTENT"}),
         required_presentation_acknowledgment="DETERMINISTIC_REQUIRED_FACTS_RENDERED",
-        accepted_presentation_acknowledgment_sources=frozenset(
-            {"TRUSTED_RENDERER"}
-        ),
+        accepted_presentation_acknowledgment_sources=frozenset({"TRUSTED_RENDERER"}),
     ),
     recovery_policy=RecoveryPolicy.REPRESENT_AND_RECONFIRM,
 )
@@ -350,6 +346,9 @@ class ActionSpecification:
     authorization_policy: AuthorizationPolicy
     presentation_requirement: PresentationRequirement
     handler: TypedActionHandler
+    definition_id: str
+    definition_revision: int
+    definition_digest: str
     result_schema: Mapping[str, type | tuple[type, ...]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -410,15 +409,46 @@ class ActionRegistry:
     """Explicit process-local registry for banking action specifications."""
 
     def __init__(self, specifications: tuple[ActionSpecification, ...]):
-        self._specifications = {item.action_type: item for item in specifications}
-        if len(self._specifications) != len(specifications):
-            raise ValueError("Action types must be registered exactly once.")
+        self._versions = {}
+        self._specifications = {}
+        for item in specifications:
+            key = (item.definition_id, item.definition_revision)
+            if key in self._versions:
+                raise ValueError("Definition revision must be registered exactly once.")
+            self._versions[key] = item
+            current = self._specifications.get(item.action_type)
+            if current and current.definition_id != item.definition_id:
+                raise ValueError("Action type cannot refer to multiple definition IDs.")
+            if (
+                current is None
+                or current.definition_revision < item.definition_revision
+            ):
+                self._specifications[item.action_type] = item
 
     def require(self, action_type: str) -> ActionSpecification:
         try:
             return self._specifications[action_type]
         except KeyError as exc:
             raise ValueError(f"Action type is not registered: {action_type}.") from exc
+
+    def resolve(self, definition_id, revision, digest):
+        specification = self._versions.get((definition_id, revision))
+        if specification is None or specification.definition_digest != digest:
+            raise ValueError("Unknown or changed action definition revision.")
+        return specification
+
+    def for_proposal(self, proposal):
+        specification = self.resolve(
+            proposal.definition_id,
+            proposal.definition_revision,
+            proposal.definition_digest,
+        )
+        if (
+            specification.action_type != proposal.action_type
+            or specification.contract_version != proposal.contract_version
+        ):
+            raise ValueError("Proposal definition does not match its action contract.")
+        return specification
 
     @property
     def action_types(self) -> frozenset[str]:

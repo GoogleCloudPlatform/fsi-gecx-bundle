@@ -196,7 +196,21 @@ class ProposalLifecycleEngine:
             if not str(values.get(field) or "").strip():
                 raise ProposalError(f"{field} is required.")
 
-        specification = self.registry.require(values["action_type"])
+        if "definition_id" in values:
+            specification = self.registry.resolve(
+                values["definition_id"],
+                values["definition_revision"],
+                values["definition_digest"],
+            )
+        else:
+            specification = self.registry.require(values["action_type"])
+            values.update(
+                definition_id=specification.definition_id,
+                definition_revision=specification.definition_revision,
+                definition_digest=specification.definition_digest,
+            )
+        if values["action_type"] != specification.action_type:
+            raise ProposalError("Action type does not match definition.")
         if values["contract_version"] != specification.contract_version:
             raise ProposalError("Action contract version does not match registration.")
         if (
@@ -298,7 +312,7 @@ class ProposalLifecycleEngine:
         *,
         runtime_context: ProposalRuntimeContext,
     ) -> ValidatedRuntimeEvidence:
-        specification = self.registry.require(proposal.action_type)
+        specification = self.registry.for_proposal(proposal)
         try:
             return self.evidence_validator.validate_decision(
                 runtime_context,
@@ -331,7 +345,7 @@ class ProposalLifecycleEngine:
     ) -> dict[str, Any]:
         """Execute any registered action through one transaction pipeline."""
         proposal = self._get_locked(proposal_id)
-        specification = self.registry.require(expected_action_type)
+        specification = self.registry.for_proposal(proposal)
         try:
             claim = self.claim_commit(
                 proposal.id,
@@ -467,7 +481,10 @@ class ProposalLifecycleEngine:
                 )
             return proposal
         self._require_status(proposal, "PRESENTED", transition="confirm")
-        if not customer_turn_id or customer_turn_id == proposal.originating_customer_turn_id:
+        if (
+            not customer_turn_id
+            or customer_turn_id == proposal.originating_customer_turn_id
+        ):
             raise ProposalTransitionError(
                 "Confirmation must come from a later real customer turn.",
                 code="PRESENTATION_EVIDENCE_REQUIRED",
@@ -607,7 +624,7 @@ class ProposalLifecycleEngine:
         return proposal
 
     def proposal_view(self, proposal: ActionProposal) -> dict[str, Any]:
-        specification = self.registry.require(proposal.action_type)
+        specification = self.registry.for_proposal(proposal)
         return {
             "success": True,
             "proposal_id": str(proposal.id),
@@ -714,6 +731,9 @@ class ProposalLifecycleEngine:
     ) -> ActionProposal:
         immutable_match = (
             existing.payload_fingerprint == fingerprint
+            and existing.definition_id == values["definition_id"]
+            and existing.definition_revision == values["definition_revision"]
+            and existing.definition_digest == values["definition_digest"]
             and str(existing.account_id or "") == str(values.get("account_id") or "")
             and existing.contract_version == values["contract_version"]
             and existing.runtime_name == values["runtime_name"]
@@ -770,7 +790,10 @@ class ProposalLifecycleEngine:
     def _expire_if_needed(
         self, proposal: ActionProposal, now: datetime.datetime
     ) -> None:
-        if proposal.status not in TERMINAL_STATUSES and as_utc(proposal.expires_at) <= now:
+        if (
+            proposal.status not in TERMINAL_STATUSES
+            and as_utc(proposal.expires_at) <= now
+        ):
             proposal.status = "EXPIRED"
             proposal.invalidation_reason = "PROPOSAL_EXPIRED"
             proposal.completed_at = now

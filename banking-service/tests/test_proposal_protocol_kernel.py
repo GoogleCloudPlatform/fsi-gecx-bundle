@@ -138,7 +138,7 @@ def test_current_actions_are_explicitly_registered_on_one_policy() -> None:
         and item.presentation_requirement.required_fact_keys
         for item in specifications
     )
-    assert len({type(item.handler) for item in specifications}) == 3
+    assert len({type(item.handler) for item in specifications}) == 1
     assert all(item.payload_schema for item in specifications)
     assert all(item.result_schema for item in specifications)
     assert all(callable(item.scope_resolver) for item in specifications)

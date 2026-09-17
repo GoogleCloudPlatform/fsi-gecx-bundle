@@ -29,17 +29,10 @@ from typing import Any
 from sqlalchemy import or_
 
 from models.action_proposal import ActionProposal
-from models.fraud import FraudAlert
 from models.identity import User
-from repositories.credit_card import CreditCardRepository
-from repositories.fraud import FraudAlertRepository
 from services.action_proposal_context import ProposalRuntimeContext, RuntimeContextError
-from services.credit_card import issue_replacement_card, queue_wallet_provisioning
-from services.fraud_money import (fraud_money_facts, has_legacy_fraud_amounts,
-                                  normalize_historical_fraud_workflow)
-from services.fraud_presentation import fraud_proposal_summary
+from services.proposal_definitions import action_contract, load_action_registry
 from services.proposal_lifecycle import (
-    ActionPreconditionError,
     ActiveProposalExistsError as ActiveProposalExistsError,
     ProposalConflictError as ProposalConflictError,
     ProposalError,
@@ -49,352 +42,26 @@ from services.proposal_lifecycle import (
     TERMINAL_STATUSES,
 )
 from services.proposal_protocol import (
-    ActionRegistry,
-    ActionSpecification,
-    GENERAL_ACKNOWLEDGMENT_POLICY,
-    PresentationQualityGate,
-    PresentationRequirement,
     RecoveryClass,
 )
 from utils.audit import record_audit_event
 from utils.log_safety import stable_log_reference
 
 
-TRIAGE_FRAUD_CASE = "TRIAGE_FRAUD_CASE"
-FRAUD_TRIAGE_CONTRACT_VERSION = "fraud-triage.v1"
-REISSUE_CARD = "REISSUE_CARD"
-CARD_REISSUE_CONTRACT_VERSION = "card-reissue.v1"
-PROVISION_GOOGLE_WALLET = "PROVISION_GOOGLE_WALLET"
-WALLET_PROVISIONING_CONTRACT_VERSION = "wallet-provisioning.v1"
+TRIAGE_FRAUD_CASE, FRAUD_TRIAGE_CONTRACT_VERSION = action_contract("fraud-triage")
+REISSUE_CARD, CARD_REISSUE_CONTRACT_VERSION = action_contract("card-reissue")
+PROVISION_GOOGLE_WALLET, WALLET_PROVISIONING_CONTRACT_VERSION = action_contract(
+    "google-wallet-provisioning"
+)
 NON_COMMIT_DECISIONS = {"DECLINE", "REVISE", "CANCEL"}
 logger = logging.getLogger(__name__)
-
-
-def _normalized_ids(values: list[str] | None) -> list[str]:
-    return sorted(
-        {str(value).strip() for value in (values or []) if str(value).strip()}
-    )
-
-
-class _DomainActionHandler:
-    """Default hooks shared by the first banking action handlers."""
-
-    def __init__(self, db):
-        self.db = db
-
-    def reconcile(self, proposal: ActionProposal) -> dict[str, Any] | None:
-        return None
-
-    def commit_pending_message(self, proposal: ActionProposal) -> str:
-        return "Action proposal commit is already in progress."
-
-    def validate_current_preconditions(self, proposal: ActionProposal) -> None:
-        return None
-
-    def record_commit_started(self, proposal: ActionProposal) -> None:
-        return None
-
-    def record_reconciled(
-        self, proposal: ActionProposal, result: dict[str, Any]
-    ) -> None:
-        return None
-
-    def record_committed(
-        self, proposal: ActionProposal, result: dict[str, Any]
-    ) -> None:
-        record_audit_event(
-            self.db,
-            "ACTION_PROPOSAL_COMMITTED",
-            {
-                "proposal_id": str(proposal.id),
-                "correlation_id": str(proposal.id),
-                "action_type": proposal.action_type,
-                "contract_version": proposal.contract_version,
-                "customer_id": str(proposal.customer_id),
-                "account_id": str(proposal.account_id or "") or None,
-                "support_session_id": proposal.support_session_id,
-                "runtime_name": proposal.runtime_name,
-                "result_status": result.get("status"),
-            },
-        )
-
-
-class _CardReissueHandler(_DomainActionHandler):
-    def display_selection(self, proposal: ActionProposal) -> dict[str, Any]:
-        payload = dict(proposal.action_payload or {})
-        return {
-            "reason": payload.get("reason"),
-            "issue_virtual_card": bool(payload.get("issue_virtual_card")),
-        }
-
-    def execute(self, proposal: ActionProposal) -> dict[str, Any]:
-        payload = dict(proposal.action_payload or {})
-        replacement = issue_replacement_card(
-            self.db,
-            account_id=str(proposal.account_id),
-            reason=f"CUSTOMER_REPORTED_{payload.get('reason')}",
-            issue_virtual_card=bool(payload.get("issue_virtual_card", True)),
-            compromised_card_id=str(payload.get("compromised_card_id") or ""),
-            commit_transaction=False,
-        )
-        return {
-            "success": True,
-            "message": replacement.get("message"),
-            "replacement_card": replacement,
-            "card_status": "BLOCKED",
-        }
-
-
-class _WalletProvisioningHandler(_DomainActionHandler):
-    def display_selection(self, proposal: ActionProposal) -> dict[str, Any]:
-        payload = dict(proposal.action_payload or {})
-        return {"wallet_provider": payload.get("wallet_provider")}
-
-    def execute(self, proposal: ActionProposal) -> dict[str, Any]:
-        payload = dict(proposal.action_payload or {})
-        wallet = queue_wallet_provisioning(
-            self.db,
-            account_id=str(proposal.account_id),
-            card_token=str(payload.get("card_token") or ""),
-            wallet_provider="GOOGLE_WALLET",
-            initiated_by="CUSTOMER_VOICE_SUPPORT",
-            commit_transaction=False,
-        )
-        return {
-            "success": True,
-            "message": wallet.get("message"),
-            **wallet,
-        }
-
-
-class _FraudTriageHandler(_DomainActionHandler):
-    def commit_pending_message(self, proposal: ActionProposal) -> str:
-        return "Fraud proposal commit is already in progress."
-
-    def display_selection(self, proposal: ActionProposal) -> dict[str, Any]:
-        payload = dict(proposal.action_payload or {})
-        return {
-            "fraud_alert_id": payload.get("fraud_alert_id"),
-            "disputed_authorization_ids": payload.get(
-                "disputed_authorization_ids", []
-            ),
-            "disputed_transaction_ids": payload.get("disputed_transaction_ids", []),
-            "issue_replacement": bool(payload.get("issue_replacement")),
-            "escalate": bool(payload.get("escalate")),
-        }
-
-    def _workflow_key(self, proposal: ActionProposal) -> str:
-        return f"proposal:{proposal.id}:{proposal.payload_fingerprint[:48]}"
-
-    def _locked_alert(self, proposal: ActionProposal):
-        payload = dict(proposal.action_payload or {})
-        return (
-            self.db.query(FraudAlert)
-            .filter(
-                FraudAlert.id == payload.get("fraud_alert_id"),
-                FraudAlert.customer_id == proposal.customer_id,
-                FraudAlert.credit_account_id == proposal.account_id,
-            )
-            .with_for_update()
-            .first()
-        )
-
-    def validate_current_preconditions(self, proposal: ActionProposal) -> None:
-        alert = self._locked_alert(proposal)
-        if not alert or alert.status != "OPEN":
-            raise ActionPreconditionError(
-                "Fraud alert is no longer open; create a new proposal from current state.",
-                reason="FRAUD_ALERT_NO_LONGER_OPEN",
-            )
-
-    def execute(self, proposal: ActionProposal) -> dict[str, Any]:
-        from services.fraud_alerts import FraudAlertService
-
-        payload = dict(proposal.action_payload or {})
-        alert = self._locked_alert(proposal)
-        return FraudAlertService(self.db)._triage_fraud_case_in_transaction(
-            auth_provider_uid=alert.auth_provider_uid,
-            fraud_alert_id=str(alert.id),
-            disputed_authorization_ids=payload.get("disputed_authorization_ids"),
-            disputed_transaction_ids=payload.get("disputed_transaction_ids"),
-            issue_replacement=bool(payload.get("issue_replacement")),
-            escalate=bool(payload.get("escalate")),
-            idempotency_key=self._workflow_key(proposal),
-        )
-
-    def reconcile(self, proposal: ActionProposal) -> dict[str, Any] | None:
-        fraud_alert_id = (proposal.action_payload or {}).get("fraud_alert_id")
-        if not fraud_alert_id:
-            return None
-        action = FraudAlertRepository(self.db).get_case_action_by_idempotency_key(
-            fraud_alert_id=fraud_alert_id,
-            idempotency_key=self._workflow_key(proposal),
-        )
-        if not action or action.status != "SUCCEEDED":
-            return None
-        return dict(action.result_payload or {})
-
-    def record_commit_started(self, proposal: ActionProposal) -> None:
-        payload = dict(proposal.action_payload or {})
-        record_audit_event(
-            self.db,
-            "ACTION_PROPOSAL_COMMIT_STARTED",
-            {
-                "proposal_id": str(proposal.id),
-                "correlation_id": str(proposal.id),
-                "action_type": proposal.action_type,
-                "contract_version": proposal.contract_version,
-                "customer_id": str(proposal.customer_id),
-                "account_id": str(proposal.account_id),
-                "support_session_id": proposal.support_session_id,
-                "runtime_name": proposal.runtime_name,
-                "fraud_alert_id": str(payload.get("fraud_alert_id")),
-                "payload_fingerprint": proposal.payload_fingerprint,
-            },
-        )
-
-    def record_committed(
-        self, proposal: ActionProposal, result: dict[str, Any]
-    ) -> None:
-        payload = dict(proposal.action_payload or {})
-        record_audit_event(
-            self.db,
-            "ACTION_PROPOSAL_COMMITTED",
-            {
-                "proposal_id": str(proposal.id),
-                "correlation_id": str(proposal.id),
-                "action_type": proposal.action_type,
-                "contract_version": proposal.contract_version,
-                "customer_id": str(proposal.customer_id),
-                "account_id": str(proposal.account_id),
-                "support_session_id": proposal.support_session_id,
-                "runtime_name": proposal.runtime_name,
-                "fraud_alert_id": str(payload.get("fraud_alert_id")),
-                "outcome": result.get("outcome"),
-                "payload_fingerprint": proposal.payload_fingerprint,
-            },
-        )
-
-    def record_reconciled(
-        self, proposal: ActionProposal, result: dict[str, Any]
-    ) -> None:
-        fraud_alert_id = (proposal.action_payload or {}).get("fraud_alert_id")
-        action = FraudAlertRepository(self.db).get_case_action_by_idempotency_key(
-            fraud_alert_id=fraud_alert_id,
-            idempotency_key=self._workflow_key(proposal),
-        )
-        record_audit_event(
-            self.db,
-            "ACTION_PROPOSAL_COMMIT_RECONCILED",
-            {
-                "proposal_id": str(proposal.id),
-                "correlation_id": str(proposal.id),
-                "action_type": proposal.action_type,
-                "customer_id": str(proposal.customer_id),
-                "fraud_alert_id": str(fraud_alert_id),
-                "domain_action_id": str(action.id) if action else None,
-                "outcome": result.get("outcome"),
-            },
-        )
-
-
-def _customer_account_scope(proposal: ActionProposal) -> tuple[str, str | None]:
-    return (
-        str(proposal.customer_id),
-        str(proposal.account_id) if proposal.account_id else None,
-    )
-
-
-def _action_registry(db) -> ActionRegistry:
-    """Register the three current actions explicitly at service construction."""
-    return ActionRegistry(
-        (
-            ActionSpecification(
-                action_type=TRIAGE_FRAUD_CASE,
-                contract_version=FRAUD_TRIAGE_CONTRACT_VERSION,
-                payload_schema={
-                    "fraud_alert_id": str,
-                    "disputed_authorization_ids": list,
-                    "disputed_transaction_ids": list,
-                    "issue_replacement": bool,
-                    "escalate": bool,
-                },
-                scope_resolver=_customer_account_scope,
-                authorization_policy=GENERAL_ACKNOWLEDGMENT_POLICY,
-                presentation_requirement=PresentationRequirement(
-                    required_fact_keys=frozenset(
-                        {
-                            "reviewed_activity_selection",
-                            "card_last_four",
-                            "proposed_disposition",
-                            "replacement_and_escalation_consequences",
-                        }
-                    ),
-                    quality_gate=PresentationQualityGate.RELEASE_EVALUATION,
-                    natural_language_allowed=True,
-                ),
-                handler=_FraudTriageHandler(db),
-                result_schema={"success": bool},
-            ),
-            ActionSpecification(
-                action_type=REISSUE_CARD,
-                contract_version=CARD_REISSUE_CONTRACT_VERSION,
-                payload_schema={
-                    "account_id": str,
-                    "compromised_card_id": str,
-                    "reason": str,
-                    "issue_virtual_card": bool,
-                },
-                scope_resolver=_customer_account_scope,
-                authorization_policy=GENERAL_ACKNOWLEDGMENT_POLICY,
-                presentation_requirement=PresentationRequirement(
-                    required_fact_keys=frozenset(
-                        {
-                            "card_last_four",
-                            "current_card_blocking",
-                            "replacement_card_form",
-                        }
-                    ),
-                    quality_gate=PresentationQualityGate.RELEASE_EVALUATION,
-                    natural_language_allowed=True,
-                ),
-                handler=_CardReissueHandler(db),
-                result_schema={"success": bool},
-            ),
-            ActionSpecification(
-                action_type=PROVISION_GOOGLE_WALLET,
-                contract_version=WALLET_PROVISIONING_CONTRACT_VERSION,
-                payload_schema={
-                    "account_id": str,
-                    "card_id": str,
-                    "card_token": str,
-                    "wallet_provider": str,
-                },
-                scope_resolver=_customer_account_scope,
-                authorization_policy=GENERAL_ACKNOWLEDGMENT_POLICY,
-                presentation_requirement=PresentationRequirement(
-                    required_fact_keys=frozenset(
-                        {
-                            "card_last_four",
-                            "wallet_provider",
-                            "provisioning_is_queued",
-                        }
-                    ),
-                    quality_gate=PresentationQualityGate.RELEASE_EVALUATION,
-                    natural_language_allowed=True,
-                ),
-                handler=_WalletProvisioningHandler(db),
-                result_schema={"success": bool},
-            ),
-        )
-    )
 
 
 class ActionProposalService(ProposalLifecycleEngine):
     def __init__(self, db):
         super().__init__(
             db,
-            registry=_action_registry(db),
+            registry=load_action_registry(db),
             audit_recorder=record_audit_event,
         )
 
@@ -417,75 +84,23 @@ class ActionProposalService(ProposalLifecycleEngine):
         expires_at: datetime.datetime | None = None,
     ) -> ActionProposal:
         """Create an immutable proposal for an existing active fraud alert."""
-        alert = (
-            self.db.query(FraudAlert)
-            .filter(
-                FraudAlert.id == fraud_alert_id,
-                FraudAlert.customer_id == customer_id,
-            )
-            .first()
-        )
-        if not alert:
-            raise ProposalScopeError("Fraud alert was not found for this customer.")
-        if alert.status != "OPEN":
-            raise ProposalError("Fraud alert is no longer open.")
-
-        authorization_ids = _normalized_ids(disputed_authorization_ids)
-        transaction_ids = _normalized_ids(disputed_transaction_ids)
-        allowed_authorization_ids = {
-            str(value) for value in (alert.suspicious_authorization_ids or [])
-        }
-        unexpected_authorizations = sorted(
-            set(authorization_ids) - allowed_authorization_ids
-        )
-        if unexpected_authorizations:
-            raise ProposalScopeError(
-                "Authorization ids are not part of this fraud alert: "
-                + ", ".join(unexpected_authorizations)
-            )
-
-        allowed_transaction_ids = {
-            str(item.get("transaction_id"))
-            for item in (alert.suspicious_transactions or [])
-            if item.get("transaction_id")
-        }
-        unexpected_transactions = sorted(set(transaction_ids) - allowed_transaction_ids)
-        if unexpected_transactions:
-            raise ProposalScopeError(
-                "Transaction ids are not part of this fraud alert: "
-                + ", ".join(unexpected_transactions)
-            )
-
-        facts = [fact for fact in fraud_money_facts(CreditCardRepository(self.db), alert)
-                 if str(fact.get("authorization_id")) in set(authorization_ids)
-                 or str(fact.get("transaction_id")) in set(transaction_ids)]
-        summary = fraud_proposal_summary(
-            card_last_four=alert.card_last_four, facts=facts,
-            issue_replacement=bool(issue_replacement), escalate=bool(escalate))
-        payload = {
-            "money_facts": facts,
-            "card_last_four": alert.card_last_four,
-            "fraud_alert_id": str(alert.id),
-            "disputed_authorization_ids": authorization_ids,
-            "disputed_transaction_ids": transaction_ids,
-            "issue_replacement": bool(issue_replacement),
-            "escalate": bool(escalate),
-        }
-        return self._create(
-            contract_version=FRAUD_TRIAGE_CONTRACT_VERSION,
+        return self.propose_action(
             action_type=TRIAGE_FRAUD_CASE,
             customer_id=customer_id,
-            account_id=alert.credit_account_id,
+            inputs=dict(
+                fraud_alert_id=str(fraud_alert_id),
+                disputed_authorization_ids=disputed_authorization_ids,
+                disputed_transaction_ids=disputed_transaction_ids,
+                issue_replacement=issue_replacement,
+                escalate=escalate,
+            ),
             support_session_id=support_session_id,
             runtime_name=runtime_name,
             runtime_session_id=runtime_session_id,
             originating_customer_turn_id=originating_customer_turn_id,
             reset_generation=reset_generation,
-            confirmation_policy="EXPLICIT_VERBAL",
-            action_payload=payload,
-            customer_safe_summary=summary,
-            catalog_snapshot_id=catalog_snapshot_id,
             idempotency_key=idempotency_key,
+            catalog_snapshot_id=catalog_snapshot_id,
             expires_at=expires_at,
         )
 
@@ -531,54 +146,13 @@ class ActionProposalService(ProposalLifecycleEngine):
         idempotency_key: str,
     ) -> dict[str, Any]:
         """Create a card-reissue proposal without exposing mutable card details."""
-        runtime_context.require_customer_turn()
-        customer_id = self._resolve_customer_id(customer_identity)
-        account = CreditCardRepository(self.db).get_account_by_customer(
-            str(customer_id)
+        return self._propose_for_identity(
+            REISSUE_CARD,
+            customer_identity,
+            runtime_context,
+            {"reason": reason},
+            idempotency_key,
         )
-        if not account:
-            raise ProposalScopeError("Active credit-card account was not found.")
-        cards = CreditCardRepository(self.db).list_cards_by_account(account.id)
-        card = next(
-            (
-                item
-                for item in cards
-                if item.is_active and item.status == "ACTIVE"
-            ),
-            None,
-        )
-        if not card:
-            raise ProposalError("No active card is eligible for reissue.")
-        normalized_reason = str(reason or "").strip().upper()
-        if normalized_reason not in {"LOST", "STOLEN", "DAMAGED"}:
-            raise ProposalError("Card reissue reason must be LOST, STOLEN, or DAMAGED.")
-
-        proposal = self._create(
-            contract_version=CARD_REISSUE_CONTRACT_VERSION,
-            action_type=REISSUE_CARD,
-            customer_id=customer_id,
-            account_id=account.id,
-            support_session_id=runtime_context.support_session_id,
-            runtime_name=runtime_context.runtime_name,
-            runtime_session_id=runtime_context.runtime_session_id,
-            originating_customer_turn_id=runtime_context.customer_turn_id,
-            reset_generation=runtime_context.reset_generation,
-            confirmation_policy="EXPLICIT_VERBAL",
-            action_payload={
-                "account_id": str(account.id),
-                "compromised_card_id": str(card.id),
-                "reason": normalized_reason,
-                "issue_virtual_card": True,
-            },
-            customer_safe_summary=(
-                f"Confirm that you want to block the card ending {card.last_four} "
-                "and issue a replacement virtual card."
-            ),
-            catalog_snapshot_id=runtime_context.catalog_snapshot_id,
-            idempotency_key=idempotency_key,
-        )
-        self.db.commit()
-        return self.proposal_view(proposal)
 
     def propose_wallet_provisioning_for_identity(
         self,
@@ -588,52 +162,13 @@ class ActionProposalService(ProposalLifecycleEngine):
         idempotency_key: str,
     ) -> dict[str, Any]:
         """Create a Wallet proposal bound to the customer's active virtual card."""
-        runtime_context.require_customer_turn()
-        customer_id = self._resolve_customer_id(customer_identity)
-        repo = CreditCardRepository(self.db)
-        account = repo.get_account_by_customer(str(customer_id))
-        if not account:
-            raise ProposalScopeError("Active credit-card account was not found.")
-        cards = repo.list_cards_by_account(account.id)
-        card = next(
-            (
-                item
-                for item in cards
-                if item.is_active and item.status == "ACTIVE" and item.is_virtual
-            ),
-            None,
+        return self._propose_for_identity(
+            PROVISION_GOOGLE_WALLET,
+            customer_identity,
+            runtime_context,
+            {},
+            idempotency_key,
         )
-        if not card:
-            raise ProposalError(
-                "No active virtual card is eligible for Wallet provisioning."
-            )
-
-        proposal = self._create(
-            contract_version=WALLET_PROVISIONING_CONTRACT_VERSION,
-            action_type=PROVISION_GOOGLE_WALLET,
-            customer_id=customer_id,
-            account_id=account.id,
-            support_session_id=runtime_context.support_session_id,
-            runtime_name=runtime_context.runtime_name,
-            runtime_session_id=runtime_context.runtime_session_id,
-            originating_customer_turn_id=runtime_context.customer_turn_id,
-            reset_generation=runtime_context.reset_generation,
-            confirmation_policy="EXPLICIT_VERBAL",
-            action_payload={
-                "account_id": str(account.id),
-                "card_id": str(card.id),
-                "card_token": card.card_token,
-                "wallet_provider": "GOOGLE_WALLET",
-            },
-            customer_safe_summary=(
-                f"Confirm that you want to queue the virtual card ending "
-                f"{card.last_four} for Google Wallet."
-            ),
-            catalog_snapshot_id=runtime_context.catalog_snapshot_id,
-            idempotency_key=idempotency_key,
-        )
-        self.db.commit()
-        return self.proposal_view(proposal)
 
     def commit_card_reissue_for_identity(
         self,
@@ -674,9 +209,7 @@ class ActionProposalService(ProposalLifecycleEngine):
         """Apply a typed non-commit customer decision to one current proposal."""
         normalized_decision = str(decision or "").strip().upper()
         if normalized_decision not in NON_COMMIT_DECISIONS:
-            raise ProposalError(
-                "Proposal decision must be DECLINE, REVISE, or CANCEL."
-            )
+            raise ProposalError("Proposal decision must be DECLINE, REVISE, or CANCEL.")
         customer_id = self._resolve_customer_id(customer_identity)
         proposal = self._get_locked(proposal_id)
         self._validate_scope(
@@ -742,7 +275,8 @@ class ActionProposalService(ProposalLifecycleEngine):
                 "CANCEL": "CUSTOMER_CANCELLED",
             }[normalized_decision]
             if (
-                proposal.status == ("DECLINED" if normalized_decision == "DECLINE" else "INVALIDATED")
+                proposal.status
+                == ("DECLINED" if normalized_decision == "DECLINE" else "INVALIDATED")
                 and proposal.invalidation_reason == expected_reason
             ):
                 return {
@@ -930,9 +464,7 @@ class ActionProposalService(ProposalLifecycleEngine):
             "status": proposal.status,
             "customer_safe_summary": proposal.customer_safe_summary,
             "catalog_snapshot_ref": (
-                stable_log_reference(
-                    proposal.catalog_snapshot_id, "catalog-snapshot"
-                )
+                stable_log_reference(proposal.catalog_snapshot_id, "catalog-snapshot")
                 if proposal.catalog_snapshot_id
                 else None
             ),
@@ -965,27 +497,51 @@ class ActionProposalService(ProposalLifecycleEngine):
             )
         return user.id
 
-    def proposal_result(self, proposal: ActionProposal, *, idempotent_replay: bool) -> dict[str, Any]:
-        result = super().proposal_result(proposal, idempotent_replay=idempotent_replay)
-        if proposal.action_type == TRIAGE_FRAUD_CASE and has_legacy_fraud_amounts(result):
-            alert = FraudAlertRepository(self.db).get_alert_by_id(
-                fraud_alert_id=(proposal.action_payload or {}).get("fraud_alert_id"))
-            if alert is None or str(alert.customer_id) != str(proposal.customer_id):
-                raise ValueError("Historical fraud proposal account ownership cannot be verified")
-            account = CreditCardRepository(self.db).get_account_by_id(str(alert.credit_account_id))
-            if account is None:
-                raise ValueError("Historical fraud proposal account is unavailable")
-            result = normalize_historical_fraud_workflow(result, account.currency)
-        return result
+    def _propose_for_identity(self, action_type, identity, context, inputs, key):
+        context.require_customer_turn()
+        proposal = self.propose_action(
+            action_type=action_type,
+            customer_id=self._resolve_customer_id(identity),
+            inputs=inputs,
+            support_session_id=context.support_session_id,
+            runtime_name=context.runtime_name,
+            runtime_session_id=context.runtime_session_id,
+            originating_customer_turn_id=context.customer_turn_id,
+            reset_generation=context.reset_generation,
+            catalog_snapshot_id=context.catalog_snapshot_id,
+            idempotency_key=key,
+        )
+        self.db.commit()
+        return self.proposal_view(proposal)
 
-    def proposal_view(self, proposal: ActionProposal) -> dict[str, Any]:
+    def propose_action(self, *, action_type, customer_id, inputs, **context):
+        existing = self._find_idempotent_proposal(
+            dict(action_type=action_type, customer_id=customer_id, **context)
+        )
+        specification = (
+            self.registry.for_proposal(existing)
+            if existing
+            else self.registry.require(action_type)
+        )
+        account_id, payload, summary = specification.handler.prepare(
+            customer_id, inputs
+        )
+        return self._create(
+            action_type=action_type,
+            contract_version=specification.contract_version,
+            definition_id=specification.definition_id,
+            definition_revision=specification.definition_revision,
+            definition_digest=specification.definition_digest,
+            customer_id=customer_id,
+            account_id=account_id,
+            confirmation_policy=specification.authorization_policy.durable_confirmation_policy,
+            action_payload=payload,
+            customer_safe_summary=summary,
+            **context,
+        )
+
+    def proposal_view(self, proposal):
         view = super().proposal_view(proposal)
-        payload = proposal.action_payload or {}
-        if proposal.action_type == TRIAGE_FRAUD_CASE and "money_facts" in payload:
-            # Read immutable history without replacing its stored text or fingerprint.
-            # Models receive exact facts and consequences, not historical speech scripts.
-            view["money_facts"] = payload["money_facts"]
-            view["card_last_four"] = payload.get("card_last_four")
-            view["issue_replacement"] = payload.get("issue_replacement", False)
-            view["escalate"] = payload.get("escalate", False)
+        handler = self.registry.for_proposal(proposal).handler
+        view.update(handler.public_projection(proposal))
         return view

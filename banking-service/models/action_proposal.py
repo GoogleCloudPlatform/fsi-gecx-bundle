@@ -21,6 +21,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Index,
+    Integer,
     JSON,
     String,
     text,
@@ -107,6 +108,9 @@ class ActionProposal(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    definition_id = Column(String(128), nullable=False)
+    definition_revision = Column(Integer, nullable=False)
+    definition_digest = Column(String(64), nullable=False)
     contract_version = Column(String(32), nullable=False)
     action_type = Column(String(64), nullable=False)
     status = Column(String(24), nullable=False, default="PROPOSED")

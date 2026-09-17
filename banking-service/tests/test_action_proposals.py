@@ -54,6 +54,8 @@ CURRENT_ACTION_CONTRACTS = (
 CONTRACT_PAYLOADS = {
     TRIAGE_FRAUD_CASE: {
         "fraud_alert_id": "fixture-alert",
+        "money_facts": [],
+        "card_last_four": "4242",
         "disputed_authorization_ids": [],
         "disputed_transaction_ids": [],
         "issue_replacement": False,
@@ -75,6 +77,9 @@ CONTRACT_PAYLOADS = {
 
 FROZEN_PROPOSAL_COLUMNS = {
     "id",
+    "definition_id",
+    "definition_revision",
+    "definition_digest",
     "contract_version",
     "action_type",
     "status",
@@ -111,8 +116,11 @@ def isolated_banking_money(monkeypatch):
     # Lifecycle tests use opaque fake transaction IDs. Real scoped resolution is
     # exercised by fraud workflow and Money tests, including denomination errors.
     from copy import deepcopy
-    monkeypatch.setattr("services.action_proposals.fraud_money_facts",
-                        lambda repository, alert: deepcopy(alert.suspicious_transactions or []))
+
+    monkeypatch.setattr(
+        "services.proposal_capabilities.fraud_money_facts",
+        lambda repository, alert: deepcopy(alert.suspicious_transactions or []),
+    )
 
 
 @pytest.fixture(name="db_session")
@@ -355,10 +363,13 @@ def test_proposal_trace_is_session_scoped_and_presenter_safe(
     assert trace[0]["proposal_ref"] != str(proposal.id)
     assert trace[0]["catalog_snapshot_ref"] != proposal.catalog_snapshot_id
     assert str(proposal.id) not in str(trace[0])
-    assert service.proposal_trace_for_identity(
-        customer_identity="proposal-customer",
-        support_session_id="another-session",
-    ) == []
+    assert (
+        service.proposal_trace_for_identity(
+            customer_identity="proposal-customer",
+            support_session_id="another-session",
+        )
+        == []
+    )
 
 
 @pytest.mark.parametrize(("action_type", "contract_version"), CURRENT_ACTION_CONTRACTS)
@@ -419,9 +430,7 @@ def test_current_actions_share_expiry_and_reset_invalidation(
     assert reset.status == "INVALIDATED"
     assert reset.invalidation_reason == "RESET_GENERATION_CHANGED"
     assert reset_error.value.safe_result()["error"] == "RESET_GENERATION_CHANGED"
-    assert reset_error.value.safe_result()["recovery_class"] == (
-        "CREATE_NEW_PROPOSAL"
-    )
+    assert reset_error.value.safe_result()["recovery_class"] == ("CREATE_NEW_PROPOSAL")
 
 
 def test_fraud_triage_proposal_normalizes_and_binds_immutable_payload(
@@ -432,8 +441,11 @@ def test_fraud_triage_proposal_normalizes_and_binds_immutable_payload(
     assert proposal.status == "PROPOSED"
     assert proposal.contract_version == "fraud-triage.v1"
     assert proposal.action_type == TRIAGE_FRAUD_CASE
-    assert {key: value for key, value in proposal.action_payload.items()
-            if key not in {"money_facts", "presentations", "card_last_four"}} == {
+    assert {
+        key: value
+        for key, value in proposal.action_payload.items()
+        if key not in {"money_facts", "presentations", "card_last_four"}
+    } == {
         "disputed_authorization_ids": ["auth-1", "auth-2"],
         "disputed_transaction_ids": [],
         "escalate": False,
@@ -450,7 +462,9 @@ def test_fraud_triage_proposal_normalizes_and_binds_immutable_payload(
     assert proposal.catalog_snapshot_id == "fraud-guidance-v7"
     assert "USD 12.99 at Corner Market" in proposal.customer_safe_summary
     assert "USD 45.00 at Transit Pass" in proposal.customer_safe_summary
-    assert f"card ending in {fraud_alert.card_last_four}" in proposal.customer_safe_summary
+    assert (
+        f"card ending in {fraud_alert.card_last_four}" in proposal.customer_safe_summary
+    )
     assert "dispute" in proposal.customer_safe_summary.lower()
     assert "block the current card and issue a replacement" in (
         proposal.customer_safe_summary.lower()
@@ -534,6 +548,9 @@ def test_database_index_rejects_active_scope_bypass(db_session, fraud_alert):
     )
     db_session.add(
         ActionProposal(
+            definition_id="card-reissue",
+            definition_revision=1,
+            definition_digest=service.registry.require(REISSUE_CARD).definition_digest,
             contract_version=CARD_REISSUE_CONTRACT_VERSION,
             action_type=REISSUE_CARD,
             status="PROPOSED",
@@ -921,9 +938,7 @@ def test_authenticated_commit_adapter_records_protected_later_turn_evidence(
     assert proposal.confirmation_evidence["method"] == "EXPLICIT_VERBAL"
 
 
-def test_missing_presentation_evidence_returns_typed_recovery(
-    db_session, fraud_alert
-):
+def test_missing_presentation_evidence_returns_typed_recovery(db_session, fraud_alert):
     service = ActionProposalService(db_session)
     proposal = _propose(service, fraud_alert)
     context = ProposalRuntimeContext(
@@ -1034,7 +1049,7 @@ def _mock_card_repository(monkeypatch, fraud_alert):
         list_cards_by_account=lambda _account_id: [card],
     )
     monkeypatch.setattr(
-        "services.action_proposals.CreditCardRepository",
+        "services.proposal_capabilities.CreditCardRepository",
         lambda _db: repository,
     )
     return account, card
@@ -1045,11 +1060,11 @@ def test_card_reissue_uses_generic_proposal_commit_protocol(
 ):
     _, card = _mock_card_repository(monkeypatch, fraud_alert)
     monkeypatch.setattr(
-        "services.action_proposals.record_audit_event",
+        "services.proposal_capabilities.record_audit_event",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "services.action_proposals.issue_replacement_card",
+        "services.proposal_capabilities.issue_replacement_card",
         lambda *_args, **_kwargs: {
             "success": True,
             "message": "Replacement virtual card issued.",
@@ -1097,7 +1112,7 @@ def test_wallet_provisioning_uses_generic_proposal_commit_protocol(
 ):
     _mock_card_repository(monkeypatch, fraud_alert)
     monkeypatch.setattr(
-        "services.action_proposals.record_audit_event",
+        "services.proposal_capabilities.record_audit_event",
         lambda *_args, **_kwargs: None,
     )
     observed = {}
@@ -1112,7 +1127,7 @@ def test_wallet_provisioning_uses_generic_proposal_commit_protocol(
         }
 
     monkeypatch.setattr(
-        "services.action_proposals.queue_wallet_provisioning", fake_queue
+        "services.proposal_capabilities.queue_wallet_provisioning", fake_queue
     )
     service = ActionProposalService(db_session)
     proposed = service.propose_wallet_provisioning_for_identity(
@@ -1238,3 +1253,76 @@ def test_non_commit_decision_requires_current_scope_and_later_turn(
                 confirmation_source="MODEL_TOOL_INTENT",
             ),
         )
+
+
+def test_new_definition_executes_and_replays_through_pinned_revision(
+    db_session, fraud_alert, monkeypatch
+):
+    import json
+    from copy import deepcopy
+    from services.proposal_definitions import CATALOG_PATH, load_action_registry
+
+    _mock_card_repository(monkeypatch, fraud_alert)
+    monkeypatch.setattr(
+        "services.proposal_capabilities.record_audit_event", lambda *a, **k: None
+    )
+    calls = []
+
+    def replace(*args, **kwargs):
+        calls.append(kwargs)
+        return {"message": "Issued", "success": True}
+
+    monkeypatch.setattr(
+        "services.proposal_capabilities.issue_replacement_card", replace
+    )
+    first = json.loads((CATALOG_PATH / "card-reissue.v1.json").read_text())
+    first.update(id="replacement-followup", action_type="REPLACEMENT_FOLLOWUP")
+    service = ActionProposalService(db_session)
+    service.registry = load_action_registry(db_session, [first])
+    context = dict(
+        support_session_id="new-definition",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="runtime",
+        originating_customer_turn_id="origin",
+        reset_generation="1",
+        idempotency_key="request",
+    )
+    proposal = service.propose_action(
+        action_type=first["action_type"],
+        customer_id=fraud_alert.customer_id,
+        inputs={"reason": "LOST"},
+        **context,
+    )
+    second = deepcopy(first)
+    second["revision"] = 2
+    second["presentation"]["template"] += " Please confirm."
+    service.registry = load_action_registry(db_session, [first, second])
+    replay = service.propose_action(
+        action_type=first["action_type"],
+        customer_id=fraud_alert.customer_id,
+        inputs={"reason": "LOST"},
+        **context,
+    )
+    assert replay.id == proposal.id
+    assert replay.definition_revision == 1
+    service.mark_presented(proposal.id, assistant_turn_id="presentation")
+    service.confirm(
+        proposal.id,
+        customer_turn_id="decision",
+        protected_evidence={"method": "EXPLICIT_VERBAL", "source": "MODEL_TOOL_INTENT"},
+    )
+    commit = dict(
+        customer_id=fraud_alert.customer_id,
+        support_session_id="new-definition",
+        runtime_name="ADK_GEMINI_LIVE",
+        runtime_session_id="runtime",
+        reset_generation="1",
+        expected_action_type=first["action_type"],
+    )
+    assert (
+        service.execute_registered_commit(proposal.id, **commit)["status"]
+        == "COMMITTED"
+    )
+    assert service.execute_registered_commit(proposal.id, **commit)["idempotent_replay"]
+    assert len(calls) == 1
+    assert calls[0]["commit_transaction"] is False
