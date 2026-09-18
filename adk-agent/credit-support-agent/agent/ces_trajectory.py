@@ -21,11 +21,13 @@ import json
 from typing import Any, Iterable
 
 PROPOSAL_TOOLS = {
+    "prepare_action_proposal",
     "propose_fraud_triage",
     "propose_card_reissue",
     "propose_wallet_provisioning",
 }
 COMMIT_TOOLS = {
+    "commit_action_proposal",
     "commit_fraud_triage",
     "commit_card_reissue",
     "commit_wallet_provisioning",
@@ -246,6 +248,7 @@ def normalize_ces_conversation(
                     "type": "TOOL_RESULT",
                     "tool": tool,
                     "success": success,
+                    "action_type": output.get("action_type") or active_action_type,
                     "elapsed_ms": elapsed_ms,
                 }
             )
@@ -268,7 +271,7 @@ def normalize_ces_conversation(
             contract_version = output.get("contract_version")
             if tool in PROPOSAL_TOOLS and success:
                 active_action_type = str(
-                    output.get("action_type") or ACTION_BY_PROPOSAL_TOOL[tool]
+                    output.get("action_type") or ACTION_BY_PROPOSAL_TOOL.get(tool, "")
                 )
                 events.append(
                     {
@@ -286,7 +289,7 @@ def normalize_ces_conversation(
                             "type": "ACTION_PROPOSAL",
                             "outcome": status or "COMMITTED",
                             "action_type": output.get("action_type")
-                            or ACTION_BY_COMMIT_TOOL[tool],
+                            or ACTION_BY_COMMIT_TOOL.get(tool, active_action_type),
                             "contract_version": contract_version,
                             "banking_outcome": output.get("outcome"),
                             "elapsed_ms": elapsed_ms,
@@ -302,7 +305,7 @@ def normalize_ces_conversation(
                             "type": "ACTION_PROPOSAL",
                             "outcome": error_outcome,
                             "action_type": output.get("action_type")
-                            or ACTION_BY_COMMIT_TOOL[tool],
+                            or ACTION_BY_COMMIT_TOOL.get(tool, active_action_type),
                             "contract_version": contract_version,
                             "elapsed_ms": elapsed_ms,
                         }

@@ -14,9 +14,9 @@
 
 """Lifecycle primitives for banking-owned consequential-action proposals.
 
-This module is intentionally not exposed as a generic MCP surface. Domain
-services create typed proposals; trusted runtime adapters advance presentation
-and confirmation state; domain commit services claim and complete execution.
+Catalog-backed and typed entry points create proposals; trusted runtime adapters
+advance presentation and confirmation state. Registered banking capabilities
+execute under the shared lifecycle and authorization protocol.
 """
 
 from __future__ import annotations
@@ -63,6 +63,67 @@ class ActionProposalService(ProposalLifecycleEngine):
             db,
             registry=load_action_registry(db),
             audit_recorder=record_audit_event,
+        )
+
+    def prepare_playbook_for_identity(
+        self,
+        *,
+        playbook_id,
+        revision,
+        digest,
+        inputs,
+        customer_identity,
+        runtime_context,
+        idempotency_key,
+    ):
+        from services.proposal_capabilities import validate_inputs
+
+        runtime_context.require_customer_turn()
+        customer_id = self._resolve_customer_id(customer_identity)
+        try:
+            specification = self.registry.resolve(playbook_id, revision, digest)
+        except ValueError as exc:
+            raise ProposalError(
+                "The discovered playbook revision is unavailable; discover again."
+            ) from exc
+        context = dict(
+            customer_id=customer_id,
+            action_type=specification.action_type,
+            support_session_id=runtime_context.support_session_id,
+            runtime_name=runtime_context.runtime_name,
+            runtime_session_id=runtime_context.runtime_session_id,
+            originating_customer_turn_id=runtime_context.customer_turn_id,
+            reset_generation=runtime_context.reset_generation,
+            catalog_snapshot_id=runtime_context.catalog_snapshot_id,
+            idempotency_key=idempotency_key,
+        )
+        existing = self._find_idempotent_proposal(context)
+        if existing:
+            pinned = self.registry.for_proposal(existing)
+            if pinned.definition_digest != digest:
+                raise ProposalError("Retry the original proposal revision.")
+        elif self.registry.published(playbook_id).definition_digest != digest:
+            raise ProposalError("The published playbook changed; discover again.")
+        operation = specification.handler.operation
+        validate_inputs(inputs, operation.public_input_schema or operation.input_schema)
+        normalized = operation.normalize_public_inputs(
+            self.db, customer_identity, inputs
+        )
+        proposal = self.propose_action(
+            **context,
+            inputs=normalized,
+            specification=specification,
+        )
+        self.db.commit()
+        return self.proposal_view(proposal)
+
+    def commit_action_for_identity(
+        self, proposal_id, *, customer_identity, runtime_context
+    ):
+        return self._commit_for_identity(
+            proposal_id,
+            customer_identity=customer_identity,
+            runtime_context=runtime_context,
         )
 
     def propose_fraud_triage(
@@ -411,11 +472,12 @@ class ActionProposalService(ProposalLifecycleEngine):
         *,
         customer_identity: str,
         runtime_context: ProposalRuntimeContext,
-        expected_action_type: str,
+        expected_action_type: str | None = None,
     ) -> dict[str, Any]:
         """Attest and execute any action through the registered pipeline."""
         customer_id = self._resolve_customer_id(customer_identity)
         proposal = self._get_locked(proposal_id)
+        expected_action_type = expected_action_type or proposal.action_type
         self._validate_scope(
             proposal,
             customer_id=customer_id,
@@ -514,14 +576,16 @@ class ActionProposalService(ProposalLifecycleEngine):
         self.db.commit()
         return self.proposal_view(proposal)
 
-    def propose_action(self, *, action_type, customer_id, inputs, **context):
+    def propose_action(
+        self, *, action_type, customer_id, inputs, specification=None, **context
+    ):
         existing = self._find_idempotent_proposal(
             dict(action_type=action_type, customer_id=customer_id, **context)
         )
         specification = (
             self.registry.for_proposal(existing)
             if existing
-            else self.registry.require(action_type)
+            else specification or self.registry.require(action_type)
         )
         account_id, payload, summary = specification.handler.prepare(
             customer_id, inputs

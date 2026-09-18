@@ -55,11 +55,12 @@ def validate_definition(document):
             "parameters",
             "payload",
             "presentation",
+            *(("discovery",) if d.get("schema_version") == 2 else ()),
         ),
     )
     if (
         type(d["schema_version"]) is not int
-        or d["schema_version"] != 1
+        or d["schema_version"] not in {1, 2}
         or d["type"] != "service_action"
     ):
         raise ValueError("Unsupported definition schema or execution type.")
@@ -126,6 +127,38 @@ def validate_definition(document):
             raise ValueError("Template must include all required template facts.")
     elif p["template"] is not None:
         raise ValueError("This operation uses its registered money renderer.")
+    if d["schema_version"] == 2:
+        discovery = d["discovery"]
+        _keys(
+            discovery,
+            (
+                "title",
+                "purpose",
+                "when_to_use",
+                "when_not_to_use",
+                "prerequisites",
+                "input_guidance",
+                "examples",
+            ),
+        )
+        for key in ("title", "purpose", "input_guidance"):
+            if (
+                not isinstance(discovery[key], str)
+                or not discovery[key].strip()
+                or len(discovery[key]) > 2000
+            ):
+                raise ValueError("Discovery text must be nonempty and bounded.")
+        for key in ("when_to_use", "when_not_to_use", "prerequisites", "examples"):
+            values = discovery[key]
+            if (
+                not isinstance(values, list)
+                or not 1 <= len(values) <= 12
+                or any(
+                    not isinstance(value, str) or not value.strip() or len(value) > 1000
+                    for value in values
+                )
+            ):
+                raise ValueError("Discovery lists must contain bounded nonempty text.")
     return d
 
 
@@ -134,6 +167,13 @@ class ServiceActionHandler:
         self.db = db
         self._definition = deepcopy(definition)
         self.operation = OPERATIONS[definition["operation"]]
+
+    def discovery_view(self):
+        """Public catalog metadata only; never payload bindings or private facts."""
+        d = self._definition
+        if "discovery" not in d:
+            return None
+        return deepcopy(d["discovery"])
 
     def prepare(self, customer_id, inputs):
         inputs = deepcopy(inputs)
@@ -189,6 +229,7 @@ class ServiceActionHandler:
 
 
 def load_action_registry(db, documents=None):
+    repository_catalog = documents is None
     if documents is None:
         documents = [
             json.loads(path.read_text()) for path in sorted(CATALOG_PATH.glob("*.json"))
@@ -223,7 +264,15 @@ def load_action_registry(db, documents=None):
         )
     if not specifications:
         raise ValueError("Action catalog is empty.")
-    return ActionRegistry(tuple(specifications))
+    registry = ActionRegistry(tuple(specifications))
+    if repository_catalog and any(
+        registry.require(key).handler.discovery_view() is None
+        for key in registry.action_types
+    ):
+        raise ValueError(
+            "Every published repository playbook requires discovery metadata."
+        )
+    return registry
 
 
 def action_contract(definition_id):

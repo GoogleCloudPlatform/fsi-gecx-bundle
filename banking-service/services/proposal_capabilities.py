@@ -353,6 +353,40 @@ def validate_inputs(inputs, schema):
             raise ProposalError("Selection IDs must be lists of strings.")
 
 
+def public_fraud_inputs(db, identity, inputs):
+    from services.fraud_alerts import FraudAlertService
+
+    review_keys = (
+        "fraud_alert_id",
+        "selection_status",
+        "disputed_authorization_ids",
+        "disputed_transaction_ids",
+        "recognized_authorization_ids",
+        "recognized_transaction_ids",
+    )
+    review = FraudAlertService(db).review_open_alert_selection(
+        auth_provider_uid=identity, **{key: inputs[key] for key in review_keys}
+    )
+    if review.get("success") is not True or review.get("ready_to_propose") is not True:
+        raise ProposalError(
+            review.get("message") or "Complete the fraud selection first."
+        )
+    return {
+        key: value
+        for key, value in inputs.items()
+        if key
+        not in {
+            "selection_status",
+            "recognized_authorization_ids",
+            "recognized_transaction_ids",
+        }
+    }
+
+
+def public_inputs_unchanged(db, identity, inputs):
+    return inputs
+
+
 @dataclass(frozen=True)
 class Operation:
     execute: Callable
@@ -364,6 +398,8 @@ class Operation:
     template_fields: frozenset
     public_fields: frozenset
     required_facts: frozenset
+    public_input_schema: dict | None = None
+    normalize_public_inputs: Callable = public_inputs_unchanged
     validate: Callable = default_validate_current_preconditions
     reconcile: Callable = default_reconcile
     started: Callable = default_record_commit_started
@@ -376,6 +412,17 @@ OPERATIONS = {
     "fraud.triage.v1": Operation(
         execute=fraud_execute,
         prepare=prepare_fraud,
+        public_input_schema={
+            "fraud_alert_id": str,
+            "selection_status": str,
+            "disputed_authorization_ids": list,
+            "disputed_transaction_ids": list,
+            "recognized_authorization_ids": list,
+            "recognized_transaction_ids": list,
+            "issue_replacement": bool,
+            "escalate": bool,
+        },
+        normalize_public_inputs=public_fraud_inputs,
         input_schema={
             "fraud_alert_id": str,
             "issue_replacement": bool,

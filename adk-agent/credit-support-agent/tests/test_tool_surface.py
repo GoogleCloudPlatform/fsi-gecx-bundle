@@ -40,3 +40,11 @@ def test_adk_banking_and_runtime_tool_names_are_unique() -> None:
     assert "end_consultation" in ADK_RUNTIME_TOOL_NAMES
     assert "offer_session_closeout" not in ADK_RUNTIME_TOOL_NAMES
     assert ADK_BANKING_MCP_TOOL_ALLOWLIST.isdisjoint(RETIRED_MCP_TOOLS)
+
+
+def test_catalog_actions_share_one_model_visible_discovery_and_lifecycle_surface():
+    assert {"discover_playbooks", "prepare_action_proposal", "commit_action_proposal"} <= ADK_BANKING_MCP_TOOL_ALLOWLIST
+    assert ADK_BANKING_MCP_TOOL_ALLOWLIST.isdisjoint({
+        "propose_fraud_triage", "commit_fraud_triage", "propose_card_reissue",
+        "commit_card_reissue", "propose_wallet_provisioning", "commit_wallet_provisioning",
+    })

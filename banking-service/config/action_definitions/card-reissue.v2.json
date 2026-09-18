@@ -1,0 +1,59 @@
+{
+  "schema_version": 2,
+  "id": "card-reissue",
+  "revision": 2,
+  "action_type": "REISSUE_CARD",
+  "contract_version": "card-reissue.v1",
+  "type": "service_action",
+  "operation": "cards.issue_replacement.v1",
+  "authorization_policy": "general_acknowledgment.v1",
+  "parameters": {
+    "require_virtual": false
+  },
+  "payload": {
+    "account_id": {
+      "from": "account_id"
+    },
+    "compromised_card_id": {
+      "from": "compromised_card_id"
+    },
+    "reason": {
+      "from": "reason"
+    },
+    "issue_virtual_card": {
+      "literal": true
+    }
+  },
+  "presentation": {
+    "required_facts": [
+      "card_last_four",
+      "current_card_blocking",
+      "replacement_card_form"
+    ],
+    "display_selection": [
+      "reason",
+      "issue_virtual_card"
+    ],
+    "public_payload_fields": [],
+    "template": "Confirm that you want to block the card ending {card_last_four} and issue a replacement virtual card."
+  },
+  "discovery": {
+    "title": "Replace a lost, stolen, or damaged card",
+    "purpose": "Block the affected active card and issue a virtual replacement.",
+    "when_to_use": [
+      "The customer reports a lost, stolen, or damaged card and needs a replacement."
+    ],
+    "when_not_to_use": [
+      "A replacement already exists and the customer needs help using it.",
+      "An open fraud alert needs review and triage first."
+    ],
+    "prerequisites": [
+      "An owned active card eligible for replacement."
+    ],
+    "input_guidance": "Provide reason LOST, STOLEN, or DAMAGED based on the customer request.",
+    "examples": [
+      "My card went missing.",
+      "The chip on my card is damaged."
+    ]
+  }
+}

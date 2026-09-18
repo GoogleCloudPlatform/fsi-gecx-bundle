@@ -21,7 +21,7 @@ def test_local_guidance_bundle_for_voice_fraud_returns_expected_topics():
 
     assert bundle["source"] == "local_file"
     assert bundle["schema_version"] == 1
-    assert bundle["content_version"] == "2.2+2.4+2.6"
+    assert bundle["content_version"] == "2.7"
     assert bundle["snapshot_id"]
     assert bundle["retrieved_at"].endswith("Z")
     assert bundle["fallback_reason"] == "KNOWLEDGE_CATALOG_DISABLED"
@@ -35,8 +35,8 @@ def test_local_guidance_bundle_for_voice_fraud_returns_expected_topics():
     ]
     assert "Fraud Golden Path" in bundle["agent_guidance_summary"]
     assert "get_open_fraud_alert" in bundle["agent_guidance_summary"]
-    assert "propose_fraud_triage" in bundle["agent_guidance_summary"]
-    assert "commit_fraud_triage" in bundle["agent_guidance_summary"]
+    assert "prepare_action_proposal" in bundle["agent_guidance_summary"]
+    assert "commit_action_proposal" in bundle["agent_guidance_summary"]
     assert "ask whether the customer recognizes the suspicious charges" in bundle["agent_guidance_summary"]
     assert "Enumerate every flagged transaction" in bundle["agent_guidance_summary"]
     assert "other charges" in bundle["agent_guidance_summary"]
@@ -128,7 +128,7 @@ def test_local_guidance_release_validation_passes_current_bundle():
     result = KnowledgeCatalogService().validate_local_guidance(strict_freshness=True)
 
     assert result["schema_version"] == 1
-    assert result["bundle_version"] == "2.6"
+    assert result["bundle_version"] == "2.7"
     assert result["topic_count"] == 6
 
 

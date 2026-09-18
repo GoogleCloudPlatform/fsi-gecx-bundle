@@ -95,11 +95,13 @@ def before_tool_callback(tool, input, callback_context):
         return None
 
     proposal_action = _matching_action(tool_name, _PROPOSAL_ACTIONS)
-    if proposal_action:
+    if proposal_action or tool_name.endswith(("discover_playbooks", "prepare_action_proposal")):
         callback_context.variables["customer_turn_id"] = invocation_id
         return None
 
     commit_action = _matching_action(tool_name, _COMMIT_ACTIONS)
+    if tool_name.endswith("commit_action_proposal"):
+        commit_action = callback_context.variables.get("proposal_action_type") or "MISSING"
     if not commit_action:
         return None
 

@@ -23,6 +23,7 @@ mcp_app = mcp.http_app(path="/", transport="http")
 # Import sub-routers so their tool decorators register with the mcp instance
 from . import loan as loan  # noqa: E402
 from . import credit_card as credit_card  # noqa: E402
+from . import playbooks as playbooks  # noqa: E402
 
 # Re-export tools and utility helpers for backward compatibility with existing tests and imports
 from .loan import (  # noqa: E402

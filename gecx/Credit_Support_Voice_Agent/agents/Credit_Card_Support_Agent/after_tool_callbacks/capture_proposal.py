@@ -23,6 +23,7 @@ _PROPOSAL_ACTIONS = {
     "propose_wallet_provisioning": "PROVISION_GOOGLE_WALLET",
 }
 _COMMIT_TOOLS = {
+    "commit_action_proposal",
     "commit_fraud_triage",
     "commit_card_reissue",
     "commit_wallet_provisioning",
@@ -189,7 +190,7 @@ def after_tool_callback(tool, input, callback_context, tool_response):
         if payload.get("success") is True:
             _record_completed_proposal_evidence(callback_context)
             _clear_current_proposal(callback_context)
-            if commit_tool == "commit_fraud_triage":
+            if commit_tool == "commit_fraud_triage" or payload.get("fraud_alert"):
                 callback_context.variables["fraud_review_stage"] = "COMMITTED"
             _mark_closeout_pending(callback_context)
         else:
@@ -224,6 +225,8 @@ def after_tool_callback(tool, input, callback_context, tool_response):
         ),
         None,
     )
+    if tool_name.endswith("prepare_action_proposal"):
+        proposal_action = payload.get("action_type")
     if proposal_action is None:
         return None
 
@@ -246,7 +249,7 @@ def after_tool_callback(tool, input, callback_context, tool_response):
         # arrive from a different, later customer invocation. Presentation
         # quality is evaluated externally and generated text is never reparsed.
         callback_context.variables["proposal_presentation_turn_id"] = invocation_id
-        if tool_name.endswith("propose_fraud_triage"):
+        if "money_facts" in payload:
             callback_context.variables["fraud_review_stage"] = (
                 "AWAITING_ACTION_CONFIRMATION"
             )

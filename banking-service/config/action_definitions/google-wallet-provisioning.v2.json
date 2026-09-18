@@ -1,0 +1,62 @@
+{
+  "schema_version": 2,
+  "id": "google-wallet-provisioning",
+  "revision": 2,
+  "action_type": "PROVISION_GOOGLE_WALLET",
+  "contract_version": "wallet-provisioning.v1",
+  "type": "service_action",
+  "operation": "cards.queue_wallet.v1",
+  "authorization_policy": "general_acknowledgment.v1",
+  "parameters": {
+    "require_virtual": true
+  },
+  "payload": {
+    "account_id": {
+      "from": "account_id"
+    },
+    "card_id": {
+      "from": "card_id"
+    },
+    "card_token": {
+      "from": "card_token"
+    },
+    "wallet_provider": {
+      "literal": "GOOGLE_WALLET"
+    }
+  },
+  "presentation": {
+    "required_facts": [
+      "card_last_four",
+      "provisioning_is_queued",
+      "wallet_provider"
+    ],
+    "display_selection": [
+      "wallet_provider"
+    ],
+    "public_payload_fields": [],
+    "template": "Confirm that you want to queue the virtual card ending {card_last_four} for Google Wallet."
+  },
+  "discovery": {
+    "title": "Enable replacement-card access through Google Wallet",
+    "purpose": "Queue an eligible active virtual card for Google Wallet so the customer can continue using their card.",
+    "when_to_use": [
+      "The customer needs to pay with a replacement virtual card, including an upcoming in-person expense, without needing to name a wallet.",
+      "The customer asks to add their eligible virtual card to Google Wallet."
+    ],
+    "when_not_to_use": [
+      "Provisioning is already pending or completed for this card.",
+      "The customer is only asking about existing wallet status.",
+      "A replacement exists but the customer has expressed no payment or wallet need.",
+      "The customer needs an unsupported wallet provider."
+    ],
+    "prerequisites": [
+      "An owned active virtual card.",
+      "Google Wallet is appropriate for the customer; clarify the provider if uncertain."
+    ],
+    "input_guidance": "No business inputs: use an empty object. Preparing checks card eligibility and creates an offer; it does not queue provisioning. Present the offer before seeking later confirmation. Queued does not mean installed or ready for contactless payment.",
+    "examples": [
+      "I have an important client dinner tonight. How am I going to pay now?",
+      "Can you add the new card to Google Wallet?"
+    ]
+  }
+}

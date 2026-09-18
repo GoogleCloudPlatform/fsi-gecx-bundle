@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "bundle_version": "2.6",
-  "published_at": "2026-09-17T00:00:00Z",
+  "bundle_version": "2.7",
+  "published_at": "2026-09-18T00:00:00Z",
   "max_age_days": 90,
   "topics": [
     {
@@ -38,13 +38,14 @@
       "tool_dependencies": [
         "get_open_fraud_alert",
         "review_fraud_selection",
-        "propose_fraud_triage",
-        "commit_fraud_triage"
+        "discover_playbooks",
+        "prepare_action_proposal",
+        "commit_action_proposal"
       ],
       "customer_safe_summary": "Review the suspicious charges, treat an unambiguous categorical response as the complete selection, then use one banking-authored proposal confirmation before committing fraud remediation.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.6",
-      "last_reviewed": "2026-09-17"
+      "version": "2.7",
+      "last_reviewed": "2026-09-18"
     },
     {
       "topic_id": "customer_reported_fraud",
@@ -91,13 +92,14 @@
       ],
       "tool_dependencies": [
         "review_fraud_selection",
-        "propose_fraud_triage",
-        "commit_fraud_triage"
+        "discover_playbooks",
+        "prepare_action_proposal",
+        "commit_action_proposal"
       ],
       "customer_safe_summary": "If the charges are legitimate, close the alert through the fraud triage workflow and reassure the customer that no card action is required.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.4",
-      "last_reviewed": "2026-07-26"
+      "version": "2.7",
+      "last_reviewed": "2026-09-18"
     },
     {
       "topic_id": "replacement_card",
@@ -115,12 +117,12 @@
         "Do not imply that digital wallet provisioning has already happened when only the replacement card has been issued."
       ],
       "tool_dependencies": [
-        "commit_fraud_triage"
+        "commit_action_proposal"
       ],
       "customer_safe_summary": "When fraud is confirmed, the fraud triage workflow blocks the compromised card and may issue a replacement card as part of the case remediation.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.2",
-      "last_reviewed": "2026-07-22"
+      "version": "2.7",
+      "last_reviewed": "2026-09-18"
     },
     {
       "topic_id": "wallet_provisioning",
@@ -131,7 +133,7 @@
       "must_do": [
         "Treat wallet provisioning as optional recovery help after fraud triage succeeds.",
         "Offer wallet provisioning only after a replacement card exists and the customer asks for continued card access or explicitly agrees when offered.",
-        "After a replacement exists, use the meaning of the customer's request to recognize a need for continued card access, including concern about paying for an upcoming expense. They need not name a wallet or tool. When that need is clear, first call propose_wallet_provisioning to check eligibility and prepare a grounded offer. This read-only proposal does not queue provisioning and needs no preliminary permission question. Present the returned proposal and wait for later confirmation before commit_wallet_provisioning. If the need or supported wallet is unclear, ask one focused question. Do not merely advise using the virtual card, claim it is ready for in-person payment, or repeat closeout while the payment concern remains unresolved. Do not prepare a wallet proposal just because a replacement exists, or commit from an informational question.",
+        "When a customer expresses a new payment or card-access need, discover published playbooks and use their intent, exclusions, prerequisites, and input contracts to select an appropriate offer. Do not require the customer to name a wallet or tool. If the need is clear, prepare the selected proposal without a preliminary permission question; otherwise ask a focused clarification. Present the offer and wait for later confirmation before commit.",
         "Describe wallet provisioning as a queued follow-up step.",
         "Keep wallet language separate from replacement issuance language."
       ],
@@ -140,13 +142,14 @@
         "Do not say the card is already in the wallet or ready for contactless payment when the tool only confirms provisioning is QUEUED."
       ],
       "tool_dependencies": [
-        "propose_wallet_provisioning",
-        "commit_wallet_provisioning"
+        "discover_playbooks",
+        "prepare_action_proposal",
+        "commit_action_proposal"
       ],
       "customer_safe_summary": "After a replacement card is issued, offer to queue it for Google Wallet only if the customer wants immediate card access, and describe the queue as pending until the tool succeeds.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.6",
-      "last_reviewed": "2026-09-17"
+      "version": "2.7",
+      "last_reviewed": "2026-09-18"
     },
     {
       "topic_id": "human_escalation",
@@ -157,7 +160,7 @@
       "must_do": [
         "Offer a human handoff when the customer requests a supervisor or the request exceeds tool capabilities.",
         "Preserve the current fraud context for the handoff.",
-        "If commit_fraud_triage fails after one retry for a transient technical issue, summarize the problem briefly and offer human escalation."
+        "If commit_action_proposal fails after one retry for a transient technical issue, summarize the problem briefly and offer human escalation."
       ],
       "must_not_do": [
         "Do not improvise unsupported dispute or card-operations actions.",
@@ -168,8 +171,8 @@
       ],
       "customer_safe_summary": "If the customer wants a human representative, transfer the conversation without losing the fraud case context.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.2",
-      "last_reviewed": "2026-07-22"
+      "version": "2.7",
+      "last_reviewed": "2026-09-18"
     }
   ]
 }

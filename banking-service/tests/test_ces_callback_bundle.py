@@ -703,12 +703,9 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
     assert set(agent["toolsets"][0]["toolIds"]) == {
         "get_open_fraud_alert",
         "review_fraud_selection",
-        "propose_fraud_triage",
-        "commit_fraud_triage",
-        "propose_card_reissue",
-        "commit_card_reissue",
-        "propose_wallet_provisioning",
-        "commit_wallet_provisioning",
+        "discover_playbooks",
+        "prepare_action_proposal",
+        "commit_action_proposal",
         "decide_action_proposal",
         "request_credit_limit_increase",
         "reverse_overdraft_fee",
@@ -961,3 +958,21 @@ def test_historical_speech_is_not_a_required_script_for_new_conversations():
         {"success": True, "proposal_id": "p", "customer_safe_summary": "English",
          "presentations": {"es-MX": {"speech_text": "Texto bancario exacto."}}})
     assert variables["proposal_customer_safe_summary"] == "English"
+
+
+def test_generic_ces_proposal_preserves_later_turn_evidence_for_new_action():
+    capture = _load("after_tool_callbacks/capture_proposal.py")
+    before = _load("before_tool_callbacks/enforce_proposal_context.py")
+    variables = {}
+    context = Context(invocation_id="turn-1", variables=variables)
+    capture.after_tool_callback(SimpleNamespace(name="prepare_action_proposal"), {}, context, {
+        "output": {"success": True, "proposal_id": "proposal-1",
+                   "action_type": "NEW_CONFIG_ACTION", "customer_safe_summary": "Confirm replacement."}})
+    assert variables["proposal_action_type"] == "NEW_CONFIG_ACTION"
+    tool = SimpleNamespace(name="commit_action_proposal")
+    assert before.before_tool_callback(tool, {"proposal_id": "proposal-1"}, context)["error"] == "PROTECTED_CONFIRMATION_REQUIRED"
+    context.invocation_id = "turn-2"
+    assert before.before_tool_callback(tool, {"proposal_id": "other"}, context)["error"] == "PROTECTED_CONFIRMATION_REQUIRED"
+    assert before.before_tool_callback(tool, {"proposal_id": "proposal-1"}, context) is None
+    capture.after_tool_callback(tool, {}, context, {"output": {"success": True}})
+    assert not variables.get("proposal_id")

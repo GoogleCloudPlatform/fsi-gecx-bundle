@@ -44,12 +44,9 @@ toolsets:
   toolIds:
   - get_open_fraud_alert
   - review_fraud_selection
-  - propose_fraud_triage
-  - commit_fraud_triage
-  - propose_card_reissue
-  - commit_card_reissue
-  - propose_wallet_provisioning
-  - commit_wallet_provisioning
+  - discover_playbooks
+  - prepare_action_proposal
+  - commit_action_proposal
   - decide_action_proposal
   - request_credit_limit_increase
   - reverse_overdraft_fee

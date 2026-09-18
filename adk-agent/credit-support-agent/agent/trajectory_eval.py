@@ -22,6 +22,7 @@ from typing import Any, Iterable
 
 
 CONSEQUENTIAL_TOOLS = {
+    "commit_action_proposal",
     "decide_action_proposal",
     "commit_fraud_triage",
     "commit_card_reissue",
@@ -31,6 +32,7 @@ CONSEQUENTIAL_TOOLS = {
     "transfer_to_human",
 }
 PROPOSAL_COMMIT_TOOLS = {
+    "commit_action_proposal",
     "commit_fraud_triage",
     "commit_card_reissue",
     "commit_wallet_provisioning",
@@ -257,7 +259,10 @@ def evaluate_trajectory(
                 and event.get("success") is True
             ):
                 continue
-            action_type = ACTION_TYPE_BY_COMMIT_TOOL[tool_name]
+            action_type = ACTION_TYPE_BY_COMMIT_TOOL.get(tool_name) or event.get("action_type")
+            if not action_type:
+                action_type = next((candidate.get("action_type") for candidate in reversed(events[:index])
+                                    if candidate.get("type") == "ACTION_PROPOSAL"), None)
             has_matching_confirmation = any(
                 position < index
                 and candidate.get("type") == "ACTION_PROPOSAL"

@@ -120,6 +120,9 @@ proposal_runtime_context_var: ContextVar[ProposalRuntimeContext | None] = Contex
 )
 PROPOSAL_CONTEXT_TOOL_NAMES = frozenset(
     {
+        "discover_playbooks",
+        "prepare_action_proposal",
+        "commit_action_proposal",
         "review_fraud_selection",
         "propose_fraud_triage",
         "commit_fraud_triage",

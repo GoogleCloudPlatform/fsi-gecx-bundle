@@ -27,6 +27,12 @@ RETIRED_TOOLS = {
 }
 
 PROPOSAL_TOOL_SCHEMAS = {
+    "discover_playbooks": {"properties": {"customer_need"}, "required": {"customer_need"}},
+    "prepare_action_proposal": {
+        "properties": {"playbook_id", "revision", "digest", "inputs_json"},
+        "required": {"playbook_id", "revision", "digest", "inputs_json"},
+    },
+    "commit_action_proposal": {"properties": {"proposal_id"}, "required": {"proposal_id"}},
     "propose_fraud_triage": {
         "properties": {
             "fraud_alert_id",

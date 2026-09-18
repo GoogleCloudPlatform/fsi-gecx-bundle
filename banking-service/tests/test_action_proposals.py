@@ -1326,3 +1326,168 @@ def test_new_definition_executes_and_replays_through_pinned_revision(
     assert service.execute_registered_commit(proposal.id, **commit)["idempotent_replay"]
     assert len(calls) == 1
     assert calls[0]["commit_transaction"] is False
+
+
+def test_discovered_fourth_playbook_prepares_commits_and_replays_with_generic_tools(
+    db_session, fraud_alert, monkeypatch
+):
+    import json
+    from services.proposal_definitions import CATALOG_PATH, load_action_registry
+    from services.playbook_discovery import discover_playbooks
+
+    _mock_card_repository(monkeypatch, fraud_alert)
+    monkeypatch.setattr(
+        "services.proposal_capabilities.record_audit_event", lambda *a, **k: None
+    )
+    calls = []
+
+    def replace(*args, **kwargs):
+        calls.append(kwargs)
+        return {"message": "Issued", "success": True}
+
+    monkeypatch.setattr(
+        "services.proposal_capabilities.issue_replacement_card", replace
+    )
+    document = json.loads((CATALOG_PATH / "card-reissue.v2.json").read_text())
+    document.update(id="new-replacement", action_type="NEW_REPLACEMENT")
+    service = ActionProposalService(db_session)
+    service.registry = load_action_registry(db_session, [document])
+    found = discover_playbooks(service.registry, "My card is damaged")["playbooks"][0]
+    request = dict(
+        playbook_id=found["playbook_id"],
+        revision=found["revision"],
+        digest=found["digest"],
+        inputs={"reason": "DAMAGED"},
+        customer_identity="proposal-customer",
+        runtime_context=_runtime_context(),
+        idempotency_key="generic-1",
+    )
+    proposed = service.prepare_playbook_for_identity(**request)
+    assert proposed["action_type"] == "NEW_REPLACEMENT"
+    assert not calls
+    with pytest.raises(ProposalTransitionError):
+        service.commit_action_for_identity(
+            proposed["proposal_id"],
+            customer_identity="proposal-customer",
+            runtime_context=_runtime_context(),
+        )
+    with pytest.raises(ProposalScopeError):
+        service.commit_action_for_identity(
+            proposed["proposal_id"],
+            customer_identity="someone-else",
+            runtime_context=_runtime_context(
+                customer_turn_id="customer-turn-11", confirming=True
+            ),
+        )
+    newer = dict(document, revision=3)
+    service.registry = load_action_registry(db_session, [document, newer])
+    assert (
+        service.prepare_playbook_for_identity(**request)["proposal_id"]
+        == proposed["proposal_id"]
+    )
+    from services.action_proposals import ProposalError
+
+    with pytest.raises(ProposalError, match="published playbook changed"):
+        service.prepare_playbook_for_identity(
+            **dict(request, idempotency_key="new-request")
+        )
+    commit = dict(
+        customer_identity="proposal-customer",
+        runtime_context=_runtime_context(
+            customer_turn_id="customer-turn-11", confirming=True
+        ),
+    )
+    assert (
+        service.commit_action_for_identity(proposed["proposal_id"], **commit)["status"]
+        == "COMMITTED"
+    )
+    assert service.commit_action_for_identity(proposed["proposal_id"], **commit)[
+        "idempotent_replay"
+    ]
+    assert len(calls) == 1
+
+
+def test_generic_fraud_preparation_rejects_incomplete_review(
+    db_session, fraud_alert, monkeypatch
+):
+    from services.action_proposals import ProposalError
+
+    service = ActionProposalService(db_session)
+    spec = service.registry.published("fraud-triage")
+    monkeypatch.setattr(
+        "services.fraud_alerts.FraudAlertService.review_open_alert_selection",
+        lambda *a, **k: {"success": True, "ready_to_propose": False},
+    )
+    with pytest.raises(ProposalError, match="Complete the fraud selection"):
+        service.prepare_playbook_for_identity(
+            playbook_id=spec.definition_id,
+            revision=spec.definition_revision,
+            digest=spec.definition_digest,
+            inputs={
+                "fraud_alert_id": str(fraud_alert.id),
+                "selection_status": "PARTIAL",
+                "disputed_authorization_ids": ["auth-1"],
+                "disputed_transaction_ids": [],
+                "recognized_authorization_ids": [],
+                "recognized_transaction_ids": [],
+                "issue_replacement": True,
+                "escalate": False,
+            },
+            customer_identity="proposal-customer",
+            runtime_context=_runtime_context(),
+            idempotency_key="partial",
+        )
+    assert db_session.query(ActionProposal).count() == 0
+
+
+def test_generic_fraud_preparation_accepts_complete_recognized_activity(
+    db_session, fraud_alert
+):
+    service = ActionProposalService(db_session)
+    spec = service.registry.published("fraud-triage")
+    result = service.prepare_playbook_for_identity(
+        playbook_id=spec.definition_id,
+        revision=spec.definition_revision,
+        digest=spec.definition_digest,
+        inputs={
+            "fraud_alert_id": str(fraud_alert.id),
+            "selection_status": "COMPLETE",
+            "disputed_authorization_ids": [],
+            "disputed_transaction_ids": [],
+            "recognized_authorization_ids": ["auth-1", "auth-2"],
+            "recognized_transaction_ids": ["txn-2"],
+            "issue_replacement": False,
+            "escalate": False,
+        },
+        customer_identity="proposal-customer",
+        runtime_context=_runtime_context(),
+        idempotency_key="recognized",
+    )
+    assert result["status"] == "PROPOSED"
+    assert result["display_selection"]["disputed_authorization_ids"] == []
+    assert result["display_selection"]["issue_replacement"] is False
+    assert fraud_alert.status == "OPEN"
+
+
+@pytest.mark.parametrize(
+    "extra", [{"customer_id": "other"}, {"card_token": "injected"}]
+)
+def test_generic_prepare_rejects_scope_and_private_business_input(
+    db_session, fraud_alert, monkeypatch, extra
+):
+    from services.action_proposals import ProposalError
+
+    _mock_card_repository(monkeypatch, fraud_alert)
+    service = ActionProposalService(db_session)
+    spec = service.registry.published("google-wallet-provisioning")
+    with pytest.raises(ProposalError, match="Business inputs"):
+        service.prepare_playbook_for_identity(
+            playbook_id=spec.definition_id,
+            revision=spec.definition_revision,
+            digest=spec.definition_digest,
+            inputs=extra,
+            customer_identity="proposal-customer",
+            runtime_context=_runtime_context(),
+            idempotency_key="injection",
+        )
+    assert db_session.query(ActionProposal).count() == 0

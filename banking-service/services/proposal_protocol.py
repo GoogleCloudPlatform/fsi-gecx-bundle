@@ -431,6 +431,16 @@ class ActionRegistry:
         except KeyError as exc:
             raise ValueError(f"Action type is not registered: {action_type}.") from exc
 
+    def published(self, definition_id):
+        matches = [
+            item
+            for item in self._specifications.values()
+            if item.definition_id == definition_id
+        ]
+        if len(matches) != 1:
+            raise ValueError("Unknown published playbook.")
+        return matches[0]
+
     def resolve(self, definition_id, revision, digest):
         specification = self._versions.get((definition_id, revision))
         if specification is None or specification.definition_digest != digest:

@@ -147,3 +147,61 @@ def test_reset_migration_requires_definition_identity_and_preserves_other_data()
             not columns[key]["nullable"]
             for key in ("definition_id", "definition_revision", "definition_digest")
         )
+
+
+def test_discovery_uses_only_published_revisions_and_excludes_private_bindings():
+    from services.playbook_discovery import discover_playbooks
+
+    result = discover_playbooks(
+        load_action_registry(None), "How will I pay for dinner?"
+    )
+    assert result["retrieval_mode"] == "FULL_PUBLISHED_CATALOG"
+    assert len(result["playbooks"]) == 3
+    assert all(
+        p["revision"] == 2 and p["eligibility"] == "NOT_CHECKED"
+        for p in result["playbooks"]
+    )
+    assert "card_token" not in json.dumps(result)
+    assert "authorization_policy" not in json.dumps(result)
+    for candidate in result["playbooks"]:
+        spec = load_action_registry(None).resolve(
+            candidate["playbook_id"], candidate["revision"], candidate["digest"]
+        )
+        assert spec.handler.discovery_view()["purpose"] == candidate["purpose"]
+
+
+def test_fourth_definition_is_discoverable_without_tool_or_engine_changes():
+    from services.playbook_discovery import discover_playbooks
+
+    docs = documents()
+    fourth = deepcopy(
+        next(d for d in docs if d["id"] == "card-reissue" and d["revision"] == 2)
+    )
+    fourth.update(id="new-replacement", action_type="NEW_REPLACEMENT")
+    result = discover_playbooks(
+        load_action_registry(None, [*docs, fourth]), "Replace my card"
+    )
+    assert len(result["playbooks"]) == 4
+    assert next(
+        p for p in result["playbooks"] if p["playbook_id"] == "new-replacement"
+    )["input_schema"]["required"] == ["reason"]
+
+
+@pytest.mark.parametrize(
+    "field,value", [("purpose", ""), ("examples", []), ("prerequisites", "text")]
+)
+def test_discovery_metadata_is_validated_with_executable_definition(field, value):
+    d = next(d for d in documents() if d["revision"] == 2)
+    d["discovery"][field] = value
+    with pytest.raises(ValueError, match="Discovery"):
+        load_action_registry(None, [d])
+
+
+def test_repository_publication_rejects_executable_without_discovery(
+    tmp_path, monkeypatch
+):
+    first = next(d for d in documents() if d["revision"] == 1)
+    (tmp_path / "incomplete.json").write_text(json.dumps(first))
+    monkeypatch.setattr("services.proposal_definitions.CATALOG_PATH", tmp_path)
+    with pytest.raises(ValueError, match="requires discovery metadata"):
+        load_action_registry(None)
