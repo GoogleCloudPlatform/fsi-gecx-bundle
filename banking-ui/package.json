@@ -14,7 +14,7 @@
     "@microsoft/fetch-event-source": "^2.0.1",
     "@tailwindcss/vite": "^4.2.2",
     "axios": "^1.18.0",
-    "js-yaml": "^5.2.2",
+    "js-yaml": "^5.4.1",
     "livekit-client": "^2.19.1",
     "lucide-react": "^1.8.0",
     "react": "^19.2.4",
