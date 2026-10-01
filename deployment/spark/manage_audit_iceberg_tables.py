@@ -26,6 +26,7 @@ from pyspark.sql import SparkSession
 TABLES = (
     "compliance_audit.audit_events",
     "financial_ledger.account_ledger_entries",
+    "proposal_evidence.snapshots",
 )
 
 

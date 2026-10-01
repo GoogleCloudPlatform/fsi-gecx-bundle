@@ -30,7 +30,7 @@ def _response(status_code: int, text: str = ""):
     return response
 
 
-def test_catalog_bootstrap_creates_two_namespaces_and_tables():
+def test_catalog_bootstrap_creates_audit_ledger_and_evidence_tables():
     session = MagicMock()
     session.post.return_value = _response(200)
 
@@ -46,8 +46,10 @@ def test_catalog_bootstrap_creates_two_namespaces_and_tables():
         "financial_ledger_namespace",
         "audit_events_table",
         "account_ledger_entries_table",
+        "proposal_evidence_namespace",
+        "proposal_evidence_table",
     }
-    assert session.post.call_count == 4
+    assert session.post.call_count == 6
     audit_table_request = session.post.call_args_list[2]
     assert audit_table_request.kwargs["json"]["properties"]["format-version"] == "2"
     assert (
@@ -89,6 +91,8 @@ def test_catalog_bootstrap_reconciles_management_on_existing_tables():
         _response(409),
         _response(200),
         _response(409),
+        _response(200),
+        _response(200),
         _response(200),
     ]
     session.get.return_value = _response(200)
@@ -141,14 +145,16 @@ def test_bigquery_views_are_reconciled_after_catalog_tables():
     )
     assert names == [
         "audit_events",
+        "proposal_audit_log",
         "account_ledger_entries",
         "account_ledger_balance",
         "origination_audit_log",
         "financial_ledger_audit_log",
         "identity_access_audit_log",
         "system_config_audit_log",
+        "proposal_evidence_snapshots",
     ]
-    assert client.query.call_count == 7
+    assert client.query.call_count == 9
     audit_query = client.query.call_args_list[0].args[0]
     assert (
         "demo-project.nova-audit-lakehouse.compliance_audit.audit_events" in audit_query
@@ -158,17 +164,67 @@ def test_bigquery_views_are_reconciled_after_catalog_tables():
 
 def test_money_views_dedupe_history_and_balance_each_currency():
     client = MagicMock()
-    reconcile_bigquery_views(client, project_id="demo-project", catalog_id="nova-audit-lakehouse")
+    reconcile_bigquery_views(
+        client, project_id="demo-project", catalog_id="nova-audit-lakehouse"
+    )
     queries = [call.args[0] for call in client.query.call_args_list]
-    ledger, balance, financial = queries[1], queries[2], queries[4]
+    ledger, balance, financial = queries[2], queries[3], queries[5]
     assert "PARTITION BY entry_id" in ledger
     assert "amount_cents AS amount_minor" in ledger  # immutable physical schema adapter
     assert "currency AS currency_code" in ledger
     assert "GROUP BY transaction_id, currency_code" in balance
-    assert "SUM(IF(direction = 'DEBIT', amount_minor, -amount_minor)) AS imbalance_minor" in balance
+    assert (
+        "SUM(IF(direction = 'DEBIT', amount_minor, -amount_minor)) AS imbalance_minor"
+        in balance
+    )
     assert "GROUP BY event_id, currency_code" in financial
-    assert "$.amount_cents" not in financial  # v1 translation is owned by the Java parser
+    assert (
+        "$.amount_cents" not in financial
+    )  # v1 translation is owned by the Java parser
     assert "payload, created_at" in financial
     assert " AS amount_cents" not in ledger + financial
-    assert not any(alias in balance for alias in (" AS debit_cents", " AS credit_cents", " AS imbalance_cents"))
+    assert not any(
+        alias in balance
+        for alias in (" AS debit_cents", " AS credit_cents", " AS imbalance_cents")
+    )
     assert all("DROP TABLE" not in query for query in queries)
+
+
+def test_proposal_audit_view_exposes_pins_and_scoped_decisions_from_deduplicated_events():
+    client = MagicMock()
+    reconcile_bigquery_views(
+        client, project_id="demo-project", catalog_id="nova-audit-lakehouse"
+    )
+    query = client.query.call_args_list[1].args[0]
+    assert "FROM `demo-project.compliance_audit.audit_events`" in query
+    for field in (
+        "definition.id",
+        "definition.revision",
+        "definition.digest",
+        "reason_code",
+        "customer_ref",
+        "support_session_ref",
+        "decision",
+    ):
+        assert "$." + field in query
+    assert "proposal-audit.v2" in query
+
+
+def test_evidence_view_uses_separate_namespace_and_preserves_exact_snapshot_bytes():
+    client = MagicMock()
+    reconcile_bigquery_views(
+        client, project_id="demo-project", catalog_id="nova-audit-lakehouse"
+    )
+    queries = [call.args[0] for call in client.query.call_args_list]
+    evidence = queries[-1]
+    assert (
+        "CREATE OR REPLACE VIEW `demo-project.proposal_evidence.snapshots`" in evidence
+    )
+    assert (
+        "FROM `demo-project.nova-audit-lakehouse.proposal_evidence.snapshots`"
+        in evidence
+    )
+    assert "$.snapshot_json" in evidence and "$.snapshot_digest" in evidence
+    assert "PARTITION BY event_id" in evidence
+    assert "$.evidence_artifact.id" in queries[1]
+    assert "$.evidence_artifact.digest" in queries[1]

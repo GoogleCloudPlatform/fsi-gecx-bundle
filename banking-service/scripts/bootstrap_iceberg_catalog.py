@@ -89,6 +89,28 @@ def _view_queries(project_id: str, catalog_id: str) -> dict[str, str]:
           )
           WHERE dedupe_ordinal = 1
         """,
+        "proposal_audit_log": f"""
+          CREATE OR REPLACE VIEW {dataset}.proposal_audit_log` AS
+          SELECT event_id, event_type, schema_version, created_at,
+                 JSON_VALUE(payload, '$.proposal_id') AS proposal_id,
+                 COALESCE(JSON_VALUE(payload, '$.proposal_ref'), JSON_VALUE(payload, '$.attempted_proposal_ref')) AS proposal_ref,
+                 JSON_VALUE(payload, '$.discovery_id') AS discovery_id,
+                 JSON_VALUE(payload, '$.customer_ref') AS customer_ref,
+                 JSON_VALUE(payload, '$.support_session_ref') AS support_session_ref,
+                 JSON_VALUE(payload, '$.runtime_name') AS runtime_name,
+                 JSON_VALUE(payload, '$.definition.id') AS definition_id,
+                 SAFE_CAST(JSON_VALUE(payload, '$.definition.revision') AS INT64) AS definition_revision,
+                 JSON_VALUE(payload, '$.definition.digest') AS definition_digest,
+                 JSON_VALUE(payload, '$.state') AS state,
+                 JSON_VALUE(payload, '$.decision') AS decision,
+                 JSON_VALUE(payload, '$.reason_code') AS reason_code,
+                 JSON_VALUE(payload, '$.banking_outcome') AS banking_outcome,
+                 JSON_VALUE(payload, '$.evidence_artifact.id') AS evidence_artifact_id,
+                 JSON_VALUE(payload, '$.evidence_artifact.digest') AS evidence_artifact_digest,
+                 payload
+          FROM {dataset}.audit_events`
+          WHERE JSON_VALUE(payload, '$.audit_contract') = 'proposal-audit.v2'
+        """,
         "account_ledger_entries": f"""
           CREATE OR REPLACE VIEW {dataset}.account_ledger_entries` AS
           SELECT * EXCEPT (dedupe_ordinal)
@@ -169,6 +191,19 @@ def _view_queries(project_id: str, catalog_id: str) -> dict[str, str]:
             'CREDIT_PRODUCT_CATALOG_UPDATED', 'DEPOSIT_PRODUCT_CATALOG_UPDATED',
             'SYSTEM_FEATURE_FLAG_MODIFIED'
           )
+        """,
+        "proposal_evidence_snapshots": f"""
+          CREATE OR REPLACE VIEW `{project_id}.proposal_evidence.snapshots` AS
+          SELECT event_id AS artifact_id,
+                 JSON_VALUE(payload, '$.audit_event_id') AS audit_event_id,
+                 JSON_VALUE(payload, '$.snapshot_digest') AS snapshot_digest,
+                 JSON_VALUE(payload, '$.snapshot_json') AS snapshot_json,
+                 source_created_at AS created_at
+          FROM `{project_id}.{catalog_id}.proposal_evidence.snapshots`
+          QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY event_id
+            ORDER BY ingested_at DESC, published_at DESC, transport_message_id DESC
+          ) = 1
         """,
     }
 
@@ -308,6 +343,10 @@ class CatalogBootstrap:
         )
         result["account_ledger_entries_table"] = self.ensure_table(
             "financial_ledger", "account_ledger_entries", LEDGER_FIELDS
+        )
+        result["proposal_evidence_namespace"] = self.ensure_namespace("proposal_evidence")
+        result["proposal_evidence_table"] = self.ensure_table(
+            "proposal_evidence", "snapshots", AUDIT_FIELDS
         )
         return result
 

@@ -95,7 +95,7 @@ def before_tool_callback(tool, input, callback_context):
         return None
 
     proposal_action = _matching_action(tool_name, _PROPOSAL_ACTIONS)
-    if proposal_action or tool_name.endswith(("discover_playbooks", "prepare_action_proposal")):
+    if proposal_action or tool_name.endswith(("discover_playbooks", "record_playbook_decision", "prepare_action_proposal")):
         callback_context.variables["customer_turn_id"] = invocation_id
         return None
 

@@ -37,6 +37,7 @@ ADK_BANKING_MCP_TOOL_ALLOWLIST = frozenset(
         "get_open_fraud_alert",
         "review_fraud_selection",
         "discover_playbooks",
+        "record_playbook_decision",
         "prepare_action_proposal",
         "commit_action_proposal",
         "decide_action_proposal",

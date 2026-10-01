@@ -28,6 +28,7 @@ from models.action_proposal import (
     PROPOSAL_STATUSES,
 )
 from models.fraud import FraudAlert
+from models.audit import AuditOutbox
 from models.identity import User
 from services.action_proposal_context import ProposalRuntimeContext
 from services.action_proposals import (
@@ -129,11 +130,13 @@ def fixture_db_session():
     User.__table__.create(bind=engine, checkfirst=True)
     FraudAlert.__table__.create(bind=engine, checkfirst=True)
     ActionProposal.__table__.create(bind=engine, checkfirst=True)
+    AuditOutbox.__table__.create(bind=engine, checkfirst=True)
     with Session(engine) as session:
         try:
             yield session
         finally:
             session.rollback()
+    AuditOutbox.__table__.drop(bind=engine)
     ActionProposal.__table__.drop(bind=engine)
     FraudAlert.__table__.drop(bind=engine)
     User.__table__.drop(bind=engine)
@@ -645,6 +648,7 @@ def test_concurrent_proposal_creation_returns_the_same_idempotent_row(tmp_path):
     User.__table__.create(bind=engine, checkfirst=True)
     FraudAlert.__table__.create(bind=engine, checkfirst=True)
     ActionProposal.__table__.create(bind=engine, checkfirst=True)
+    AuditOutbox.__table__.create(bind=engine, checkfirst=True)
     session_factory = sessionmaker(bind=engine)
     with session_factory() as seed_session:
         alert = _add_fraud_alert(seed_session)
@@ -1060,10 +1064,6 @@ def test_card_reissue_uses_generic_proposal_commit_protocol(
 ):
     _, card = _mock_card_repository(monkeypatch, fraud_alert)
     monkeypatch.setattr(
-        "services.proposal_capabilities.record_audit_event",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
         "services.proposal_capabilities.issue_replacement_card",
         lambda *_args, **_kwargs: {
             "success": True,
@@ -1111,10 +1111,6 @@ def test_wallet_provisioning_uses_generic_proposal_commit_protocol(
     db_session, fraud_alert, monkeypatch
 ):
     _mock_card_repository(monkeypatch, fraud_alert)
-    monkeypatch.setattr(
-        "services.proposal_capabilities.record_audit_event",
-        lambda *_args, **_kwargs: None,
-    )
     observed = {}
 
     def fake_queue(*_args, **kwargs):
@@ -1217,6 +1213,7 @@ def test_non_commit_decision_requires_current_scope_and_later_turn(
 ):
     service = ActionProposalService(db_session)
     proposal = _propose(service, fraud_alert)
+    db_session.commit()
 
     with pytest.raises(ProposalScopeError):
         service.decide_for_identity(
@@ -1263,9 +1260,6 @@ def test_new_definition_executes_and_replays_through_pinned_revision(
     from services.proposal_definitions import CATALOG_PATH, load_action_registry
 
     _mock_card_repository(monkeypatch, fraud_alert)
-    monkeypatch.setattr(
-        "services.proposal_capabilities.record_audit_event", lambda *a, **k: None
-    )
     calls = []
 
     def replace(*args, **kwargs):
@@ -1336,9 +1330,6 @@ def test_discovered_fourth_playbook_prepares_commits_and_replays_with_generic_to
     from services.playbook_discovery import discover_playbooks
 
     _mock_card_repository(monkeypatch, fraud_alert)
-    monkeypatch.setattr(
-        "services.proposal_capabilities.record_audit_event", lambda *a, **k: None
-    )
     calls = []
 
     def replace(*args, **kwargs):

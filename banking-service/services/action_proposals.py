@@ -45,6 +45,8 @@ from services.proposal_protocol import (
     RecoveryClass,
 )
 from utils.audit import record_audit_event
+from services.proposal_audit import audited_request, record_rejection
+from services.proposal_lifecycle import as_utc, utcnow
 from utils.log_safety import stable_log_reference
 
 
@@ -65,6 +67,39 @@ class ActionProposalService(ProposalLifecycleEngine):
             audit_recorder=record_audit_event,
         )
 
+    def record_request_rejection(self, identity, context, operation, exc, request):
+        try:
+            customer_id = self._resolve_customer_id(identity)
+        except ProposalScopeError:
+            customer_id = None
+        # Retain a real expiry only within the authenticated matching scope.
+        # The failed transaction has already been rolled back; this cleanup and
+        # its rejection record commit together without any banking mutation.
+        if (
+            customer_id
+            and getattr(exc, "code", None) == "PROPOSAL_EXPIRED"
+            and request.get("proposal_id")
+        ):
+            proposal = self.db.query(ActionProposal).filter(
+                ActionProposal.id == request["proposal_id"],
+                ActionProposal.customer_id == customer_id,
+                ActionProposal.support_session_id == context.support_session_id,
+                ActionProposal.runtime_name == context.runtime_name,
+                ActionProposal.runtime_session_id == context.runtime_session_id,
+            ).with_for_update().first()
+            if (
+                proposal
+                and proposal.status not in TERMINAL_STATUSES
+                and proposal.status != "COMMITTING"
+                and as_utc(proposal.expires_at) <= utcnow()
+            ):
+                proposal.status = "EXPIRED"
+                proposal.invalidation_reason = "PROPOSAL_EXPIRED"
+                proposal.completed_at = utcnow()
+                self._record_disposition_event(proposal)
+        record_rejection(self.db, identity, context, operation, exc, request, customer_id=customer_id)
+
+    @audited_request("PREPARE")
     def prepare_playbook_for_identity(
         self,
         *,
@@ -165,6 +200,7 @@ class ActionProposalService(ProposalLifecycleEngine):
             expires_at=expires_at,
         )
 
+    @audited_request("PREPARE")
     def propose_fraud_triage_for_identity(
         self,
         *,
@@ -259,6 +295,7 @@ class ActionProposalService(ProposalLifecycleEngine):
             expected_action_type=PROVISION_GOOGLE_WALLET,
         )
 
+    @audited_request("DECIDE")
     def decide_for_identity(
         self,
         proposal_id,
@@ -288,7 +325,6 @@ class ActionProposalService(ProposalLifecycleEngine):
         if proposal.reset_generation != runtime_context.reset_generation:
             if proposal.status not in TERMINAL_STATUSES:
                 self.invalidate(proposal.id, reason="RESET_GENERATION_CHANGED")
-                self._record_disposition_event(proposal)
                 self.db.commit()
             raise ProposalScopeError(
                 "Proposal was invalidated by a session reset.",
@@ -349,6 +385,8 @@ class ActionProposalService(ProposalLifecycleEngine):
                 f"Proposal is already terminal in {proposal.status} state."
             )
 
+        proposal.confirmation_evidence = evidence.protected_evidence
+        proposal.confirmation_customer_turn_id = customer_turn_id
         if normalized_decision == "DECLINE":
             self.decline(
                 proposal.id,
@@ -364,7 +402,6 @@ class ActionProposalService(ProposalLifecycleEngine):
                 ),
             )
             proposal.confirmation_customer_turn_id = customer_turn_id
-        self._record_disposition_event(proposal)
         self.db.commit()
         return {
             **self.proposal_view(proposal),
@@ -395,6 +432,7 @@ class ActionProposalService(ProposalLifecycleEngine):
             now=now,
         )
 
+    @audited_request("COMMIT")
     def commit_fraud_triage_for_identity(
         self,
         proposal_id,
@@ -466,6 +504,7 @@ class ActionProposalService(ProposalLifecycleEngine):
             "invalidation_reason": proposal.invalidation_reason,
         }
 
+    @audited_request("COMMIT")
     def _commit_for_identity(
         self,
         proposal_id,
@@ -559,6 +598,7 @@ class ActionProposalService(ProposalLifecycleEngine):
             )
         return user.id
 
+    @audited_request("PREPARE")
     def _propose_for_identity(self, action_type, identity, context, inputs, key):
         context.require_customer_turn()
         proposal = self.propose_action(

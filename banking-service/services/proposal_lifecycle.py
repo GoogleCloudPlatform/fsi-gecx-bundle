@@ -34,6 +34,7 @@ from services.proposal_protocol import (
     ValidatedRuntimeEvidence,
 )
 from utils.audit import record_audit_event
+from services.proposal_audit import record_transition
 
 
 DEFAULT_PROPOSAL_TTL_SECONDS = 180
@@ -259,6 +260,7 @@ class ProposalLifecycleEngine:
             with self.db.begin_nested():
                 self.db.add(proposal)
                 self.db.flush()
+                self._record_transition(proposal, "PROPOSED")
         except IntegrityError:
             existing = self._find_idempotent_proposal(values)
             if existing is not None:
@@ -378,6 +380,7 @@ class ProposalLifecycleEngine:
                 if result is not None:
                     specification.validate_result(result)
                     self.mark_committed(proposal.id, result_payload=result, now=now)
+                    self._record_transition(proposal, "COMMIT_RECONCILED")
                     handler.record_reconciled(proposal, result)
                     self.db.commit()
                     return self.proposal_result(proposal, idempotent_replay=True)
@@ -454,6 +457,7 @@ class ProposalLifecycleEngine:
         proposal.presented_assistant_turn_id = assistant_turn_id
         proposal.presented_at = now
         self.db.flush()
+        self._record_transition(proposal, "PRESENTED")
         return proposal
 
     def confirm(
@@ -512,6 +516,7 @@ class ProposalLifecycleEngine:
         proposal.confirmation_evidence = evidence
         proposal.confirmed_at = now
         self.db.flush()
+        self._record_transition(proposal, "CONFIRMED")
         return proposal
 
     def decline(
@@ -532,6 +537,7 @@ class ProposalLifecycleEngine:
         proposal.invalidation_reason = "CUSTOMER_DECLINED"
         proposal.completed_at = now
         self.db.flush()
+        self._record_disposition_event(proposal)
         return proposal
 
     def invalidate(
@@ -552,6 +558,7 @@ class ProposalLifecycleEngine:
         proposal.invalidation_reason = reason
         proposal.completed_at = as_utc(now or utcnow())
         self.db.flush()
+        self._record_disposition_event(proposal)
         return proposal
 
     def claim_commit(
@@ -599,6 +606,7 @@ class ProposalLifecycleEngine:
         proposal.status = "COMMITTING"
         proposal.commit_started_at = now
         self.db.flush()
+        self._record_transition(proposal, "COMMIT_STARTED")
         return CommitClaim(proposal=proposal, should_execute=True)
 
     def mark_committed(
@@ -621,6 +629,7 @@ class ProposalLifecycleEngine:
         proposal.result_payload = result
         proposal.completed_at = as_utc(now or utcnow())
         self.db.flush()
+        self._record_transition(proposal, "COMMITTED")
         return proposal
 
     def proposal_view(self, proposal: ActionProposal) -> dict[str, Any]:
@@ -751,22 +760,14 @@ class ProposalLifecycleEngine:
             )
         return existing
 
-    def _record_disposition_event(self, proposal: ActionProposal) -> None:
-        self.audit_recorder(
-            self.db,
-            f"ACTION_PROPOSAL_{proposal.status}",
-            {
-                "proposal_id": str(proposal.id),
-                "correlation_id": str(proposal.id),
-                "action_type": proposal.action_type,
-                "contract_version": proposal.contract_version,
-                "customer_id": str(proposal.customer_id),
-                "account_id": str(proposal.account_id or "") or None,
-                "support_session_id": proposal.support_session_id,
-                "runtime_name": proposal.runtime_name,
-                "reason": proposal.invalidation_reason,
-            },
+    def _record_transition(self, proposal, stage):
+        record_transition(
+            self.db, proposal, self.registry.for_proposal(proposal),
+            stage, recorder=self.audit_recorder,
         )
+
+    def _record_disposition_event(self, proposal):
+        self._record_transition(proposal, proposal.status)
 
     def _get_locked(self, proposal_id) -> ActionProposal:
         proposal = (

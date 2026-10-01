@@ -28,7 +28,6 @@ from services.proposal_lifecycle import (
     ProposalScopeError,
     ProposalError,
 )
-from utils.audit import record_audit_event
 
 
 def default_reconcile(db, proposal: ActionProposal) -> dict[str, Any] | None:
@@ -56,21 +55,8 @@ def default_record_reconciled(
 def default_record_committed(
     db, proposal: ActionProposal, result: dict[str, Any]
 ) -> None:
-    record_audit_event(
-        db,
-        "ACTION_PROPOSAL_COMMITTED",
-        {
-            "proposal_id": str(proposal.id),
-            "correlation_id": str(proposal.id),
-            "action_type": proposal.action_type,
-            "contract_version": proposal.contract_version,
-            "customer_id": str(proposal.customer_id),
-            "account_id": str(proposal.account_id or "") or None,
-            "support_session_id": proposal.support_session_id,
-            "runtime_name": proposal.runtime_name,
-            "result_status": result.get("status"),
-        },
-    )
+    # Proposal audit is emitted uniformly by the lifecycle engine.
+    return None
 
 
 def card_execute(db, proposal: ActionProposal) -> dict[str, Any]:
@@ -166,72 +152,6 @@ def fraud_reconcile(db, proposal: ActionProposal) -> dict[str, Any] | None:
     if not action or action.status != "SUCCEEDED":
         return None
     return dict(action.result_payload or {})
-
-
-def fraud_record_commit_started(db, proposal: ActionProposal) -> None:
-    payload = dict(proposal.action_payload or {})
-    record_audit_event(
-        db,
-        "ACTION_PROPOSAL_COMMIT_STARTED",
-        {
-            "proposal_id": str(proposal.id),
-            "correlation_id": str(proposal.id),
-            "action_type": proposal.action_type,
-            "contract_version": proposal.contract_version,
-            "customer_id": str(proposal.customer_id),
-            "account_id": str(proposal.account_id),
-            "support_session_id": proposal.support_session_id,
-            "runtime_name": proposal.runtime_name,
-            "fraud_alert_id": str(payload.get("fraud_alert_id")),
-            "payload_fingerprint": proposal.payload_fingerprint,
-        },
-    )
-
-
-def fraud_record_committed(
-    db, proposal: ActionProposal, result: dict[str, Any]
-) -> None:
-    payload = dict(proposal.action_payload or {})
-    record_audit_event(
-        db,
-        "ACTION_PROPOSAL_COMMITTED",
-        {
-            "proposal_id": str(proposal.id),
-            "correlation_id": str(proposal.id),
-            "action_type": proposal.action_type,
-            "contract_version": proposal.contract_version,
-            "customer_id": str(proposal.customer_id),
-            "account_id": str(proposal.account_id),
-            "support_session_id": proposal.support_session_id,
-            "runtime_name": proposal.runtime_name,
-            "fraud_alert_id": str(payload.get("fraud_alert_id")),
-            "outcome": result.get("outcome"),
-            "payload_fingerprint": proposal.payload_fingerprint,
-        },
-    )
-
-
-def fraud_record_reconciled(
-    db, proposal: ActionProposal, result: dict[str, Any]
-) -> None:
-    fraud_alert_id = (proposal.action_payload or {}).get("fraud_alert_id")
-    action = FraudAlertRepository(db).get_case_action_by_idempotency_key(
-        fraud_alert_id=fraud_alert_id,
-        idempotency_key=fraud_workflow_key(db, proposal),
-    )
-    record_audit_event(
-        db,
-        "ACTION_PROPOSAL_COMMIT_RECONCILED",
-        {
-            "proposal_id": str(proposal.id),
-            "correlation_id": str(proposal.id),
-            "action_type": proposal.action_type,
-            "customer_id": str(proposal.customer_id),
-            "fraud_alert_id": str(fraud_alert_id),
-            "domain_action_id": str(action.id) if action else None,
-            "outcome": result.get("outcome"),
-        },
-    )
 
 
 def normalized_ids(values):
@@ -465,9 +385,6 @@ OPERATIONS = {
         ),
         validate=fraud_validate_current_preconditions,
         reconcile=fraud_reconcile,
-        started=fraud_record_commit_started,
-        committed=fraud_record_committed,
-        reconciled=fraud_record_reconciled,
         pending=fraud_commit_pending_message,
     ),
     "cards.issue_replacement.v1": Operation(

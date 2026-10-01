@@ -24,6 +24,11 @@ run_banking_contract() {
     tests/test_proposal_protocol_kernel.py \
     tests/test_proposal_definitions.py \
     tests/test_playbook_mcp.py \
+    tests/test_proposal_audit.py \
+    tests/test_bootstrap_iceberg_catalog.py \
+    tests/test_audit_outbox_and_repositories.py \
+    tests/test_audit_outbox_relay.py \
+    tests/test_database_lifecycle_bootstrap.py \
     tests/test_action_proposals.py \
     tests/test_action_proposal_context.py \
     tests/test_mcp_tool_surface.py \

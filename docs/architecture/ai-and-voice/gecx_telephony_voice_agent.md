@@ -37,7 +37,9 @@ sequenceDiagram
     
     Note over GECX: GECX Agent processes intent & decides to call tool
     
-    GECX->>MCP: POST /mcp/ (Call Tool: propose_fraud_triage)
+    GECX->>MCP: POST /api/mcp/ (discover_playbooks)
+    GECX->>MCP: POST /api/mcp/ (record_playbook_decision: SELECT)
+    GECX->>MCP: POST /api/mcp/ (prepare_action_proposal)
     Note over MCP: GECX injects x-banking-session-capability and bound session headers
     
     MCP->>MCP: Validate caller Google OIDC Token (Auth Header)
@@ -47,7 +49,7 @@ sequenceDiagram
     GECX-->>User: Present merchants, amounts, card suffix, and actions
     User->>Proxy: Later customer turn
     GECX->>GECX: Model chooses typed commit intent
-    GECX->>MCP: POST /mcp/ (commit_fraud_triage)
+    GECX->>MCP: POST /api/mcp/ (commit_action_proposal)
     MCP->>MCP: Validate presentation and confirmation turn evidence
     MCP->>DB: Claim and execute immutable proposal exactly once
     DB-->>MCP: Committed fraud result
@@ -83,10 +85,10 @@ the demo environment.
 
 The `Credit_Card_Support_Agent` callback chain keeps consent state outside the prompt:
 
-1. `capture_proposal.py` records the opaque proposal id and banking-authored summary after `propose_fraud_triage`.
+1. `capture_proposal.py` records the opaque proposal id and banking-authored summary after `prepare_action_proposal`.
 2. `record_presentation.py` records the completed assistant invocation associated with the active proposal without parsing generated text. Exact-fact presentation remains a conversation-quality evaluation and UI-rendering concern, not a production authorization parser.
-3. The Gemini Live model interprets the later customer response once. Its choice to call `commit_fraud_triage` is the typed semantic decision; there is no second phrase or regex classifier.
-4. `enforce_proposal_context.py` binds an omitted proposal id from callback-owned state and blocks `commit_fraud_triage` unless it occurs on a real customer invocation later than both proposal creation and presentation. It emits `MODEL_TOOL_INTENT` as protected decision-source evidence.
+3. The Gemini Live model interprets the later customer response once. Its choice to call `commit_action_proposal` is the typed semantic decision; there is no second phrase or regex classifier.
+4. `enforce_proposal_context.py` binds an omitted proposal id from callback-owned state and blocks `commit_action_proposal` unless it occurs on a real customer invocation later than both proposal creation and presentation. It emits `MODEL_TOOL_INTENT` as protected decision-source evidence.
 
 The model can attempt a blocked tool call, but the callback returns `PROTECTED_CONFIRMATION_REQUIRED` before the banking or evaluation fake tool executes.
 
@@ -149,3 +151,7 @@ missing or stale protected ordering and scope, but never inspect transcript
 wording.
 
 See [Agent Trajectory Evaluation Architecture](./agent_trajectory_evaluation.md) for the shared evaluator and evidence model, and [CES Voice Qualification](../../../gecx/Credit_Support_Voice_Agent/evaluations/README.md) for commands and fixture boundaries.
+
+## Playbook discovery and audit
+
+The agent uses `discover_playbooks` and silently records its selection, clarification or no-action choice with `record_playbook_decision`. Preparation and commit use the generic proposal surface. Banking records versioned lifecycle and rejected-request evidence in the transactional outbox for BigQuery audit queries. See the [proposal protocol](runtime_neutral_action_proposal_protocol.md) for definitions, authorization, audit fields and assurance boundaries.

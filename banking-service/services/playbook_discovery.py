@@ -66,7 +66,7 @@ def discover_playbooks(registry, customer_need):
         "playbooks": candidates,
         "model_instruction": (
             "Compare the customer's need and trusted conversation/account context with these descriptions. "
-            "Select at most one relevant playbook; no match is valid. If the requested outcome or provider is unsupported, "
+            "Record your selection, clarification or no-action decision with record_playbook_decision using the returned discovery_id and published criteria. Select at most one relevant playbook; no match is valid. If the requested outcome or provider is unsupported, "
             "explain the limitation without promising it or asking to confirm it. Never substitute providers. "
             "Examples are illustrative, not keyword rules. "
             "Do not infer eligibility or authorization from discovery. If intent or required inputs are unclear, "

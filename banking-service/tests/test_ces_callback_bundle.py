@@ -704,6 +704,7 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
         "get_open_fraud_alert",
         "review_fraud_selection",
         "discover_playbooks",
+        "record_playbook_decision",
         "prepare_action_proposal",
         "commit_action_proposal",
         "decide_action_proposal",

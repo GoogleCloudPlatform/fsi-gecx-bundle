@@ -128,3 +128,13 @@ def test_banking_runtime_can_atomically_provision_kyc_records() -> None:
         'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "kyc" '
         'TO "banking_app_rw"'
     ) in statements
+
+
+def test_reset_role_cannot_destroy_audit_history_or_relay_cursor():
+    connection = MagicMock()
+    with patch("scripts.database_lifecycle.grant_database_connect"):
+        reconcile_grants(connection)
+    statements = [str(call.args[0]) for call in connection.execute.call_args_list]
+    assert 'REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit.audit_outbox FROM "banking_reset_rw"' in statements
+    assert 'REVOKE DELETE, TRUNCATE ON TABLE audit.outbox_relay_checkpoint FROM "banking_reset_rw"' in statements
+    assert not any('REVOKE' in sql and 'ledger.account_ledger' in sql and 'banking_reset_rw' in sql for sql in statements)

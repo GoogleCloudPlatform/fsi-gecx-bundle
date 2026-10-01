@@ -16,9 +16,11 @@ flowchart LR
     Topic --> Dataflow["Dataflow Managed Iceberg I/O<br/>validation + fan-out"]
     Dataflow --> Raw["compliance_audit.audit_events<br/>Iceberg v2"]
     Dataflow --> Ledger["financial_ledger.account_ledger_entries<br/>Iceberg v2"]
+    Dataflow --> Evidence["proposal_evidence.snapshots<br/>restricted reconstruction evidence"]
     Dataflow --> DLQ["Malformed-event DLQ"]
     Raw --> Catalog["Lakehouse runtime catalog"]
     Ledger --> Catalog
+    Evidence --> Catalog
     Catalog --> BQ["BigQuery P.C.N.T queries"]
     Catalog --> Spark["Spark REST catalog"]
 ```
@@ -40,9 +42,9 @@ The canonical PostgreSQL journal is `ledger.transactions` plus `ledger.account_l
 
 The scheduled Cloud Run relay reads by the immutable `(created_at, event_id)` cursor, publishes each envelope to Pub/Sub, and advances its checkpoint only after the entire bounded batch is acknowledged. A crash after publication and before checkpoint commit can redeliver events, so delivery is intentionally at-least-once.
 
-Dataflow validates the envelope and the balanced financial contract, writes the complete event to `compliance_audit.audit_events`, and fans financial entries into `financial_ledger.account_ledger_entries`. Invalid records go to `audit-events-iceberg-dlq` with the validation stage and error. Managed Iceberg I/O commits snapshots at the configured interval and authenticates with workload ADC through Iceberg's renewable Google auth manager; no one-hour static token is embedded in the job.
+Dataflow validates the envelope and the balanced financial contract, writes ordinary events to `compliance_audit.audit_events`, routes digest-verified `PROPOSAL_EVIDENCE_SNAPSHOT` records exclusively to `proposal_evidence.snapshots`, and fans financial entries into `financial_ledger.account_ledger_entries`. Invalid records go to `audit-events-iceberg-dlq` with the validation stage and error. Managed Iceberg I/O commits snapshots at the configured interval and authenticates with workload ADC through Iceberg's renewable Google auth manager; no one-hour static token is embedded in the job.
 
-The one-minute commit interval is independent of history retention. Both catalog tables opt in to BigLake automatic table management. The catalog expires snapshots older than six hours while retaining at least 60 snapshots, garbage-collects unreferenced files, and compacts small data files in the background. Because these tables are append-only, snapshot expiration removes superseded time-travel metadata rather than current audit or ledger rows. Iceberg also deletes old metadata versions after each successful commit and retains the 20 most recent metadata documents.
+The one-minute commit interval is independent of history retention. All three catalog tables opt in to BigLake automatic table management. The catalog expires snapshots older than six hours while retaining at least 60 snapshots, garbage-collects unreferenced files, and compacts small data files in the background. Because these tables are append-only, snapshot expiration removes superseded time-travel metadata rather than current audit, ledger or evidence rows. Iceberg also deletes old metadata versions after each successful commit and retains the 20 most recent metadata documents.
 
 ## Query contract
 
@@ -66,8 +68,8 @@ The validation batch reads audit ledger rows and Iceberg snapshot/file metadata,
 
 - Cloud Monitoring alerts on relay failures, Dataflow job failures, excessive Pub/Sub age/backlog, and any DLQ backlog.
 - `audit-iceberg-bootstrap` idempotently enforces the lifecycle properties for new and existing tables on every qualified deployment.
-- `deployment/scripts/manage_audit_iceberg_tables.sh` is the explicit operator reconciliation command. It expires history to the configured horizon, applies the same table-management properties, and reports before/after snapshot counts for both tables.
-- A full transactional reset truncates the outbox and relay checkpoint before seeding, so the new demo lifecycle starts from a coherent cursor.
+- `deployment/scripts/manage_audit_iceberg_tables.sh` is the explicit operator reconciliation command. It expires history to the configured horizon, applies the same table-management properties, and reports before/after snapshot counts for all three tables.
+- A full transactional reset preserves the outbox and relay checkpoint so pending evidence can still be delivered and published history is not discarded.
 - Iceberg history is retained independently. Catalog deletion or recreation is a separate privileged operation and must not be coupled to ordinary presenter reset.
 - Replay is safe: reset the relay cursor or replay Pub/Sub messages, then rely on logical BigQuery deduplication by stable IDs.
 - The legacy `audit-events-bq-sub` subscription and `raw_audit_outbox_cdc` landing table are retired.
@@ -76,7 +78,22 @@ The validation batch reads audit ledger rows and Iceberg snapshot/file metadata,
 
 1. Apply Terraform APIs, IAM, catalog, buckets, topics, subscriptions, jobs, and views.
 2. Run database bootstrap, Alembic migration, and grant reconciliation.
-3. Run `audit-iceberg-bootstrap` to create or reconcile the two namespaces, Iceberg v2 tables, and automatic table-management policy through the REST API.
+3. Run `audit-iceberg-bootstrap` to create or reconcile the three namespaces, Iceberg v2 tables, and automatic table-management policy through the REST API.
 4. Build and launch or update the `nova-audit-iceberg` Flex Template job.
 5. Reset/seed the transactional database, run the relay, and verify BigQuery balance and deduplication views.
 6. Run `deployment/scripts/validate_lakehouse_interoperability.sh` for Spark cross-catalog proof.
+
+## Proposal audit queries
+
+The banking proposal protocol emits `proposal-audit.v2` envelopes for published catalog discovery, model-declared catalog decisions, durable lifecycle transitions, and rejected authenticated requests. Dataflow preserves these nonfinancial schema-version-2 events in the audit table without financial ledger fan-out.
+
+The deduplicated `compliance_audit.proposal_audit_log` view selects this contract from `compliance_audit.audit_events` and exposes customer/session references, definition identity, lifecycle state, decision, failure reason and available banking outcome codes. Metadata references a separate, self-contained `proposal-evidence.v1` snapshot by ID and digest. The snapshot retains the definition, policy, offer, allowlisted banking facts, protected provenance and outcome independently of operational proposal retention. The restricted `proposal_evidence.snapshots` BigQuery view exposes the canonical snapshot string for SHA-256 verification; Dataflow keeps these payloads out of the ordinary audit table. The bootstrap script reconciles this view alongside the other audit views.
+
+See the [banking proposal protocol](../ai-and-voice/runtime_neutral_action_proposal_protocol.md) for event semantics, rollback behavior, retention dependencies and the limits of model-declared decision evidence.
+
+
+## Evidence storage and delivery operations
+
+The BigQuery evidence dataset has no inherited compliance reporting grants or row-expiration default. The pipeline service account owns the logical dataset; existing project-wide roles, catalog/warehouse principals, database owners and transport/DLQ access remain privileged and must be reviewed independently. Namespace separation does not override those grants. The local outbox preserves evidence snapshots during ordinary pruning, and demo reset preserves both outbox history and its relay checkpoint. There is no automatic evidence-row retention purge; an operator must define and verify any future retention process against archive ingestion and recovery requirements.
+
+Deploy the evidence dataset and bootstrap namespace/table before updating the streaming pipeline. Verify the updated Dataflow job is running with its separate evidence output before deploying Banking Service producers. An old pipeline writes every event into the ordinary audit table, so rollout order is part of the access boundary. Audit metadata and evidence are atomic in AlloyDB but land in separate asynchronous Iceberg commits; monitor missing evidence references after the delivery window and replay from retained outbox/DLQ as appropriate. Digest verification detects mismatched bytes, not privileged rewriting of both a snapshot and its reference.

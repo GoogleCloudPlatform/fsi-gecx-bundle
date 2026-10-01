@@ -41,11 +41,13 @@ sequenceDiagram
     API-->>Worker: Suspicious transactions and alert id
     Worker-->>Customer: Ask whether customer recognizes each suspicious transaction
     Customer->>UI: Confirms disputed selection
-    Worker->>API: POST /api/mcp/ (propose_fraud_triage)
+    Worker->>API: POST /api/mcp/ (discover_playbooks)
+    Worker->>API: POST /api/mcp/ (record_playbook_decision: SELECT)
+    Worker->>API: POST /api/mcp/ (prepare_action_proposal)
     API-->>Worker: Opaque proposal id + banking-authored customer-safe summary
     Worker-->>Customer: Present all merchants, amounts, card suffix, and actions
     Customer->>UI: Later explicit confirmation
-    Worker->>API: POST /api/mcp/ (commit_fraud_triage with proposal id)
+    Worker->>API: POST /api/mcp/ (commit_action_proposal with proposal id)
     API->>API: Validate presentation and later-turn confirmation evidence
     API->>DB: Void pending auths, apply provisional credits, block compromised card, issue replacement, write audit/secure message
     API-->>Worker: Triage result
@@ -74,10 +76,10 @@ sequenceDiagram
 ### C. Banking-Owned Action Proposal and Deterministic Fraud Commit
 * **Context**: Gemini Live is good at conversational slot-filling, but it must not construct or mutate a consequential banking payload from free-form conversation. Fraud remediation also needs immutable consent scope, idempotency, audit events, provisional-credit semantics, secure messaging, and card targeting based on the active fraud alert.
 * **Decision**: The agent uses a two-phase banking-owned action proposal:
-  1. The model calls the typed `propose_fraud_triage` tool with the completed selection.
+  1. The model calls the generic `prepare_action_proposal` tool with the discovered definition identity and completed selection in `inputs_json`.
   2. Banking-service normalizes the immutable action payload and returns an opaque proposal id plus a customer-safe summary.
   3. The agent presents the complete summary and stops. The runtime records only that the proposal-producing assistant turn completed; complete and accurate readout is enforced by trajectory evaluation, not a production transcript parser.
-  4. On a later customer turn, the model interprets the response once. Choosing the typed `commit_fraud_triage` tool is the semantic decision; declining, changing, or questioning the proposal does not call the commit tool.
+  4. On a later customer turn, the model interprets the response once. Choosing the typed `commit_action_proposal` tool is the semantic decision; declining, changing, or questioning the proposal does not call the commit tool.
   5. The deterministic adapter checks only proposal identity, action type, session binding, presentation, later-turn ordering, expiry, and reset generation. Banking-service revalidates that protected evidence before claiming and executing the proposal exactly once.
 
 There is no secondary phrase list, regular expression, or transcript
@@ -184,3 +186,7 @@ The agent emits bounded proposal, tool, UI, interruption, and terminal telemetry
 Release qualification checks ordered outcomes rather than only individual tool success. A normal proposal path must contain `PROPOSED → PRESENTED → CONFIRMED → COMMITTED`, must not call the direct compatibility tool, and must not claim spoken success before the structured commit result. A direct-path baseline can be compared with the proposal path for equivalent banking and terminal outcomes.
 
 See [Agent Trajectory Evaluation Architecture](./agent_trajectory_evaluation.md) for the shared ADK/CES event contract, evidence layers, and qualification commands.
+
+## Playbook discovery and audit
+
+The agent uses `discover_playbooks` and silently records its selection, clarification or no-action choice with `record_playbook_decision`. Preparation and commit use the generic proposal surface. Banking records versioned lifecycle and rejected-request evidence in the transactional outbox for BigQuery audit queries. See the [proposal protocol](runtime_neutral_action_proposal_protocol.md) for definitions, authorization, audit fields and assurance boundaries.

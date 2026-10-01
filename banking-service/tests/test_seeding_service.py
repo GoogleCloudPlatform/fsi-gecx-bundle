@@ -227,3 +227,33 @@ def test_seeding_job_clears_maintenance_on_failure(monkeypatch):
 
     assert fake_session.closed is True
     assert maintenance_calls == ["cleared"]
+
+
+def test_full_demo_reset_preserves_unpublished_evidence_and_relay_cursor(monkeypatch, db_session):
+    from models.audit import AuditOutbox, OutboxRelayCheckpoint
+    from models.action_proposal import ActionProposal
+    db_session.add(AuditOutbox(event_id="unpublished-evidence", event_type="PROPOSAL_EVIDENCE_SNAPSHOT", payload="{}"))
+    db_session.add(OutboxRelayCheckpoint(relay_name="audit-events-v1", published_count=7, last_event_id="previous"))
+    db_session.commit()
+    monkeypatch.setattr(seeding_service, "clear_synthetic_scheduler_artifacts", lambda _: None)
+    seeding_service.clean_database(db_session)
+    db_session.commit()
+    assert db_session.query(ActionProposal).count() == 0
+    assert db_session.query(AuditOutbox).filter_by(event_id="unpublished-evidence").count() == 1
+    assert db_session.get(OutboxRelayCheckpoint, "audit-events-v1").published_count == 7
+
+
+def test_postgres_reset_excludes_audit_but_retains_ordinary_reset_tables(monkeypatch):
+    from sqlalchemy.dialects import postgresql
+    statements = []
+    db = SimpleNamespace(bind=SimpleNamespace(dialect=postgresql.dialect()),
+                         execute=lambda statement: statements.append(str(statement)), flush=lambda: None)
+    monkeypatch.setattr(seeding_service, "clear_synthetic_scheduler_artifacts", lambda _: None)
+    monkeypatch.setattr(seeding_service, "enable_session_rbac_override", lambda _: None)
+    seeding_service.clean_database(db)
+    assert len(statements) == 1
+    assert "TRUNCATE TABLE" in statements[0]
+    assert "action_proposals" in statements[0]
+    assert "account_ledger" in statements[0]
+    assert "audit_outbox" not in statements[0]
+    assert "outbox_relay_checkpoint" not in statements[0]

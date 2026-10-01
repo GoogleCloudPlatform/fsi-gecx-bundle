@@ -8,6 +8,7 @@
     {"name":"catalogName","label":"Managed I/O catalog name","helpText":"Local catalog alias","isOptional":true},
     {"name":"auditTable","label":"Audit table","helpText":"Namespace-qualified Iceberg table","isOptional":true},
     {"name":"ledgerTable","label":"Financial ledger table","helpText":"Namespace-qualified Iceberg table","isOptional":true},
+    {"name":"evidenceTable","label":"Restricted proposal evidence table","helpText":"Namespace-qualified Iceberg table; default proposal_evidence.snapshots","isOptional":true},
     {"name":"commitFrequencySeconds","label":"Commit frequency","helpText":"Seconds between batched Iceberg commits","isOptional":true,"regexes":["^[1-9][0-9]*$"]}
   ]
 }

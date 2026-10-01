@@ -64,7 +64,13 @@ def prune_historical_audit_events(db: Session, retention_days: int = 30) -> int:
     if checkpoint_time.tzinfo is None:
         checkpoint_time = checkpoint_time.replace(tzinfo=datetime.timezone.utc)
     safe_cutoff = min(cutoff, checkpoint_time)
-    deleted_count = db.query(AuditOutbox).filter(AuditOutbox.created_at < safe_cutoff).delete()
+    # Publication alone does not prove the restricted archive has ingested the
+    # snapshot. Keep local evidence until a separate verified retention process
+    # is introduced; ordinary event pruning must not destroy the recovery copy.
+    deleted_count = db.query(AuditOutbox).filter(
+        AuditOutbox.created_at < safe_cutoff,
+        AuditOutbox.event_type != "PROPOSAL_EVIDENCE_SNAPSHOT",
+    ).delete()
     db.commit()
     return deleted_count
 

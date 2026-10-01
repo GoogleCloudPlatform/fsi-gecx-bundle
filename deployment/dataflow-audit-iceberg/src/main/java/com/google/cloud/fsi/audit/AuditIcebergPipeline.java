@@ -50,6 +50,7 @@ import org.joda.time.Instant;
 public final class AuditIcebergPipeline {
   private static final ObjectMapper MAPPER = new ObjectMapper();
   static final TupleTag<Row> AUDIT_TAG = new TupleTag<>() {};
+  static final TupleTag<Row> EVIDENCE_TAG = new TupleTag<>() {};
   static final TupleTag<Row> LEDGER_TAG = new TupleTag<>() {};
   static final TupleTag<PubsubMessage> DLQ_TAG = new TupleTag<>() {};
 
@@ -114,6 +115,11 @@ public final class AuditIcebergPipeline {
     String getAuditTable();
     void setAuditTable(String value);
 
+    @Description("Iceberg restricted proposal evidence destination")
+    @Default.String("proposal_evidence.snapshots")
+    String getEvidenceTable();
+    void setEvidenceTable(String value);
+
     @Description("Iceberg financial entry destination")
     @Default.String("financial_ledger.account_ledger_entries")
     String getLedgerTable();
@@ -128,10 +134,12 @@ public final class AuditIcebergPipeline {
   static final class ParsedMessage implements Serializable {
     final Row audit;
     final List<Row> ledgerEntries;
+    final boolean evidence;
 
-    ParsedMessage(Row audit, List<Row> ledgerEntries) {
+    ParsedMessage(Row audit, List<Row> ledgerEntries, boolean evidence) {
       this.audit = audit;
       this.ledgerEntries = ledgerEntries;
+      this.evidence = evidence;
     }
   }
 
@@ -147,6 +155,24 @@ public final class AuditIcebergPipeline {
     Instant sourceCreatedAt = parseTimestamp(requiredText(envelope, "created_at"));
     Instant publishedAt = parseTimestamp(requiredText(envelope, "published_at"));
 
+    boolean evidence = "PROPOSAL_EVIDENCE_SNAPSHOT".equals(eventType);
+    if (evidence) {
+      JsonNode artifact = MAPPER.readTree(payload);
+      if (schemaVersion != 1 || !"proposal-evidence.v1".equals(requiredText(artifact, "evidence_contract"))
+          || !eventId.equals(requiredText(artifact, "artifact_id"))) {
+        throw new IllegalArgumentException("invalid proposal evidence contract");
+      }
+      requiredText(artifact, "audit_event_id");
+      String snapshot = requiredText(artifact, "snapshot_json");
+      if (!MAPPER.readTree(snapshot).isObject()) {
+        throw new IllegalArgumentException("evidence snapshot must be an object");
+      }
+      String digest = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+          .digest(snapshot.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+      if (!digest.equals(requiredText(artifact, "snapshot_digest"))) {
+        throw new IllegalArgumentException("proposal evidence digest mismatch");
+      }
+    }
     List<Row> ledger = new ArrayList<>();
     if ("FINANCIAL_TRANSACTION_POSTED".equals(eventType)) {
       JsonNode financial = MAPPER.readTree(payload);
@@ -236,7 +262,7 @@ public final class AuditIcebergPipeline {
                 message.getMessageId(),
                 MAPPER.writeValueAsString(message.getAttributeMap()))
             .build();
-    return new ParsedMessage(audit, ledger);
+    return new ParsedMessage(audit, ledger, evidence);
   }
 
   private static String requiredText(JsonNode node, String field) {
@@ -264,7 +290,7 @@ public final class AuditIcebergPipeline {
     public void process(@Element PubsubMessage message, MultiOutputReceiver output) {
       try {
         ParsedMessage parsed = parseMessage(message, Instant.now());
-        output.get(AUDIT_TAG).output(parsed.audit);
+        output.get(parsed.evidence ? EVIDENCE_TAG : AUDIT_TAG).output(parsed.audit);
         parsed.ledgerEntries.forEach(output.get(LEDGER_TAG)::output);
       } catch (Exception error) {
         output.get(DLQ_TAG).output(deadLetterMessage(message, error));
@@ -328,9 +354,10 @@ public final class AuditIcebergPipeline {
         messages.apply(
             "ValidateAndFanOut",
             ParDo.of(new ParseEvents())
-                .withOutputTags(AUDIT_TAG, TupleTagList.of(LEDGER_TAG).and(DLQ_TAG)));
+                .withOutputTags(AUDIT_TAG, TupleTagList.of(LEDGER_TAG).and(EVIDENCE_TAG).and(DLQ_TAG)));
 
     PCollection<Row> auditRows = parsed.get(AUDIT_TAG).setRowSchema(AUDIT_SCHEMA);
+    PCollection<Row> evidenceRows = parsed.get(EVIDENCE_TAG).setRowSchema(AUDIT_SCHEMA);
     PCollection<Row> ledgerRows = parsed.get(LEDGER_TAG).setRowSchema(LEDGER_SCHEMA);
     parsed
         .get(DLQ_TAG)
@@ -341,6 +368,10 @@ public final class AuditIcebergPipeline {
         "WriteAuditIceberg",
         Managed.write(Managed.ICEBERG)
             .withConfig(writeConfig(options, options.getAuditTable(), catalogProperties)));
+    evidenceRows.apply(
+        "WriteProposalEvidenceIceberg",
+        Managed.write(Managed.ICEBERG)
+            .withConfig(writeConfig(options, options.getEvidenceTable(), catalogProperties)));
     ledgerRows.apply(
         "WriteLedgerIceberg",
         Managed.write(Managed.ICEBERG)

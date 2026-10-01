@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "bundle_version": "2.7",
-  "published_at": "2026-09-18T00:00:00Z",
+  "bundle_version": "2.8",
+  "published_at": "2026-10-01T00:00:00Z",
   "max_age_days": 90,
   "topics": [
     {
@@ -9,7 +9,9 @@
       "title": "Fraud Golden Path",
       "audience": "CREDIT_SUPPORT_AGENT",
       "channel": "VOICE",
-      "applies_when": ["active_fraud_alert"],
+      "applies_when": [
+        "active_fraud_alert"
+      ],
       "must_do": [
         "Acknowledge suspicious activity on the first turn when fraud context exists.",
         "Inspect the open fraud alert before recommending any mitigation.",
@@ -24,7 +26,8 @@
         "Once the disputed selection is clear, create one immutable banking-owned fraud proposal. Do not separately restate or confirm the selection before creating the proposal.",
         "Present the proposal naturally while preserving every listed disputed merchant and exact amount and every consequential remediation action, then obtain one explicit confirmation in a later customer turn.",
         "After that confirmation, commit the proposal once and describe only the authoritative result. The proposal confirmation is the only confirmation gate for this workflow.",
-        "Keep non-transaction narration brief and specific; never shorten the transaction inventory."
+        "Keep non-transaction narration brief and specific; never shorten the transaction inventory.",
+        "After discovery, silently record selection, clarification, or no action through record_playbook_decision using the discovery ID and bounded published criteria. Audit bookkeeping does not establish eligibility or authorize execution; do not narrate internal audit details to the customer."
       ],
       "must_not_do": [
         "Do not block the card or issue a replacement before the customer confirms fraud.",
@@ -39,12 +42,13 @@
         "get_open_fraud_alert",
         "review_fraud_selection",
         "discover_playbooks",
+        "record_playbook_decision",
         "prepare_action_proposal",
         "commit_action_proposal"
       ],
       "customer_safe_summary": "Review the suspicious charges, treat an unambiguous categorical response as the complete selection, then use one banking-authored proposal confirmation before committing fraud remediation.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.7",
+      "version": "2.8",
       "last_reviewed": "2026-09-18"
     },
     {
@@ -52,7 +56,10 @@
       "title": "Customer-Reported Fraud Intake",
       "audience": "CREDIT_SUPPORT_AGENT",
       "channel": "VOICE",
-      "applies_when": ["customer_reports_unrecognized_charges", "no_active_fraud_alert"],
+      "applies_when": [
+        "customer_reports_unrecognized_charges",
+        "no_active_fraud_alert"
+      ],
       "must_do": [
         "Check for an open fraud alert before starting customer-reported intake.",
         "When no alert exists, retrieve recent transaction history and let the customer identify exact pending authorizations and posted debit transactions they do not recognize.",
@@ -79,12 +86,15 @@
       "title": "Recognized Activity Resolution",
       "audience": "CREDIT_SUPPORT_AGENT",
       "channel": "VOICE",
-      "applies_when": ["customer_recognizes_charges"],
+      "applies_when": [
+        "customer_recognizes_charges"
+      ],
       "must_do": [
         "When the customer recognizes every flagged charge, create one banking-owned fraud proposal with empty disputed authorization and transaction arrays and no replacement.",
         "Classify every flagged identifier as recognized and submit a COMPLETE selection for banking validation before the proposal is created.",
         "Present the proposal's exact customer-safe summary and obtain one later explicit confirmation before committing the recognized-activity resolution.",
-        "After commit succeeds, explain that the alert is resolved and the card remains active because the customer recognized the charges."
+        "After commit succeeds, explain that the alert is resolved and the card remains active because the customer recognized the charges.",
+        "After discovery, silently record selection, clarification, or no action through record_playbook_decision using the discovery ID and bounded published criteria. Audit bookkeeping does not establish eligibility or authorize execution; do not narrate internal audit details to the customer."
       ],
       "must_not_do": [
         "Do not freeze or replace the card when the customer confirms the activity is legitimate.",
@@ -93,12 +103,13 @@
       "tool_dependencies": [
         "review_fraud_selection",
         "discover_playbooks",
+        "record_playbook_decision",
         "prepare_action_proposal",
         "commit_action_proposal"
       ],
       "customer_safe_summary": "If the charges are legitimate, close the alert through the fraud triage workflow and reassure the customer that no card action is required.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.7",
+      "version": "2.8",
       "last_reviewed": "2026-09-18"
     },
     {
@@ -106,7 +117,9 @@
       "title": "Replacement Card",
       "audience": "CREDIT_SUPPORT_AGENT",
       "channel": "VOICE",
-      "applies_when": ["customer_confirms_fraud"],
+      "applies_when": [
+        "customer_confirms_fraud"
+      ],
       "must_do": [
         "For confirmed disputed activity, let the fraud proposal commit block the compromised card and issue the replacement when issue_replacement is true.",
         "After triage succeeds, summarize only confirmed tool results, including whether the compromised card was blocked and whether a replacement card was issued.",
@@ -121,7 +134,7 @@
       ],
       "customer_safe_summary": "When fraud is confirmed, the fraud triage workflow blocks the compromised card and may issue a replacement card as part of the case remediation.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.7",
+      "version": "2.8",
       "last_reviewed": "2026-09-18"
     },
     {
@@ -129,13 +142,16 @@
       "title": "Wallet Provisioning",
       "audience": "CREDIT_SUPPORT_AGENT",
       "channel": "VOICE",
-      "applies_when": ["replacement_card_issued"],
+      "applies_when": [
+        "replacement_card_issued"
+      ],
       "must_do": [
         "Treat wallet provisioning as optional recovery help after fraud triage succeeds.",
         "Offer wallet provisioning only after a replacement card exists and the customer asks for continued card access or explicitly agrees when offered.",
         "When a customer expresses a new payment or card-access need, discover published playbooks and use their intent, exclusions, prerequisites, and input contracts to select an appropriate offer. Do not require the customer to name a wallet or tool. If the need is clear, prepare the selected proposal without a preliminary permission question; otherwise ask a focused clarification. Present the offer and wait for later confirmation before commit.",
         "Describe wallet provisioning as a queued follow-up step.",
-        "Keep wallet language separate from replacement issuance language."
+        "Keep wallet language separate from replacement issuance language.",
+        "After discovery, silently record selection, clarification, or no action through record_playbook_decision using the discovery ID and bounded published criteria. Audit bookkeeping does not establish eligibility or authorize execution; do not narrate internal audit details to the customer."
       ],
       "must_not_do": [
         "Do not push a virtual card to Google Wallet before the customer asks or agrees.",
@@ -143,12 +159,13 @@
       ],
       "tool_dependencies": [
         "discover_playbooks",
+        "record_playbook_decision",
         "prepare_action_proposal",
         "commit_action_proposal"
       ],
       "customer_safe_summary": "After a replacement card is issued, offer to queue it for Google Wallet only if the customer wants immediate card access, and describe the queue as pending until the tool succeeds.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.7",
+      "version": "2.8",
       "last_reviewed": "2026-09-18"
     },
     {
@@ -156,7 +173,10 @@
       "title": "Human Escalation",
       "audience": "CREDIT_SUPPORT_AGENT",
       "channel": "VOICE",
-      "applies_when": ["customer_requests_human", "agent_cannot_resolve"],
+      "applies_when": [
+        "customer_requests_human",
+        "agent_cannot_resolve"
+      ],
       "must_do": [
         "Offer a human handoff when the customer requests a supervisor or the request exceeds tool capabilities.",
         "Preserve the current fraud context for the handoff.",
@@ -171,7 +191,7 @@
       ],
       "customer_safe_summary": "If the customer wants a human representative, transfer the conversation without losing the fraud case context.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.7",
+      "version": "2.8",
       "last_reviewed": "2026-09-18"
     }
   ]

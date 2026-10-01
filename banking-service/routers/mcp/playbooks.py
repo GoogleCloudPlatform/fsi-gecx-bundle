@@ -16,6 +16,7 @@
 
 import json
 import logging
+from typing import Literal
 from fastmcp import Context
 from . import mcp
 from .utils import (
@@ -30,6 +31,11 @@ from .credit_card import (
 )
 from services.action_proposals import ActionProposalService, ProposalError
 from services.action_proposal_context import RuntimeContextError
+from services.proposal_audit import (
+    record_discovery,
+    record_catalog_decision,
+    record_rejection,
+)
 from services.playbook_discovery import discover_playbooks as discover_catalog
 from services.voice_bidi import send_session_event
 from utils.database import SessionLocal
@@ -37,7 +43,7 @@ from utils.database import SessionLocal
 logger = logging.getLogger(__name__)
 
 
-async def _run(operation):
+async def _run(operation, *, audit_operation="PLAYBOOK_REQUEST", audit_request=None):
     context = proposal_runtime_context_var.get()
     if context is None:
         return {
@@ -46,22 +52,30 @@ async def _run(operation):
             "message": "Trusted runtime session context is required.",
         }
     db = SessionLocal()
+    service = None
+    identity = verified_customer_id_var.get()
     try:
-        return await operation(
-            ActionProposalService(db), verified_customer_id_var.get(), context
-        )
-    except (ProposalError, RuntimeContextError) as exc:
-        db.rollback()
-        return _safe_protocol_failure(exc, fallback_error="PROPOSAL_REJECTED")
-    except ValueError:
-        db.rollback()
-        return {
-            "success": False,
-            "error": "INVALID_PLAYBOOK_REQUEST",
-            "message": "Use a published playbook revision and its declared business inputs. Discover again if needed.",
-        }
+        service = ActionProposalService(db)
+        return await operation(service, identity, context)
     except Exception as exc:
         db.rollback()
+        if not getattr(exc, "proposal_audit_recorded", False):
+            if service is None:
+                record_rejection(
+                    db, identity, context, audit_operation, exc, audit_request or {}
+                )
+            else:
+                service.record_request_rejection(
+                    identity, context, audit_operation, exc, audit_request or {}
+                )
+        if isinstance(exc, (ProposalError, RuntimeContextError)):
+            return _safe_protocol_failure(exc, fallback_error="PROPOSAL_REJECTED")
+        if isinstance(exc, ValueError):
+            return {
+                "success": False,
+                "error": "INVALID_PLAYBOOK_REQUEST",
+                "message": "Use a published playbook revision and its declared business inputs. Discover again if needed.",
+            }
         logger.error("Playbook request failed error_type=%s", type(exc).__name__)
         return {
             "success": False,
@@ -86,9 +100,12 @@ async def discover_playbooks(customer_need: str, ctx: Context = None) -> dict:
     async def run(service, identity, context):
         context.require_customer_turn()
         service._resolve_customer_id(identity)
-        return discover_catalog(service.registry, customer_need)
+        result = discover_catalog(service.registry, customer_need)
+        return record_discovery(service, identity, context, result)
 
-    return await _run(run)
+    return await _run(
+        run, audit_operation="DISCOVER", audit_request={"customer_need": customer_need}
+    )
 
 
 @mcp.tool()
@@ -125,7 +142,62 @@ async def prepare_action_proposal(
             idempotency_key=_proposal_idempotency_key(context, payload),
         )
 
-    return await _run(run)
+    return await _run(
+        run,
+        audit_operation="PREPARE",
+        audit_request={
+            "playbook_id": playbook_id,
+            "revision": revision,
+            "digest": digest,
+            "inputs_json": inputs_json,
+        },
+    )
+
+
+@mcp.tool()
+@requires_user_assertion
+async def record_playbook_decision(
+    discovery_id: str,
+    decision: Literal["SELECT", "CLARIFY", "NO_ACTION"],
+    reason_code: Literal[
+        "APPLICABLE",
+        "AMBIGUOUS_INTENT",
+        "MISSING_INPUT",
+        "UNCERTAIN_PREREQUISITE",
+        "NO_MATCH",
+        "UNSUPPORTED_REQUEST",
+        "ALREADY_SATISFIED",
+        "INFORMATION_ONLY",
+    ],
+    playbook_id: str = "",
+    criterion_index: int = -1,
+    ctx: Context = None,
+) -> dict:
+    """Record a bounded catalog decision before acting, clarifying or choosing no action.
+
+    Use the discovery_id returned by discover_playbooks. SELECT uses APPLICABLE
+    and a playbook when_to_use criterion index (zero-based). CLARIFY reasons:
+    AMBIGUOUS_INTENT, MISSING_INPUT, UNCERTAIN_PREREQUISITE. NO_ACTION reasons:
+    NO_MATCH, UNSUPPORTED_REQUEST, ALREADY_SATISFIED, INFORMATION_ONLY.
+    When naming a playbook, supply the zero-based criterion_index in prerequisites
+    for CLARIFY or when_not_to_use for NO_ACTION. Banking derives the field from
+    the decision. With no particular playbook omit playbook_id
+    and leave criterion_index=-1. Do not submit customer text or private reasoning.
+    This records a model-declared decision; it neither checks eligibility nor
+    prepares or authorizes a banking action.
+    """
+    request = dict(
+        discovery_id=discovery_id,
+        decision=decision,
+        reason_code=reason_code,
+        playbook_id=playbook_id,
+        criterion_index=criterion_index,
+    )
+
+    async def run(service, identity, context):
+        return record_catalog_decision(service, identity, context, **request)
+
+    return await _run(run, audit_operation="CATALOG_DECISION", audit_request=request)
 
 
 async def _publish_committed_event(identity, result):
@@ -192,14 +264,10 @@ async def commit_action_proposal(proposal_id: str, ctx: Context = None) -> dict:
     Use only the opaque proposal ID returned by preparation. Questions or uncertain
     responses do not authorize commit. Never change inputs while committing.
     """
-    if not _is_proposal_id(proposal_id):
-        return {
-            "success": False,
-            "error": "INVALID_PROPOSAL_ID",
-            "message": "Invalid proposal ID.",
-        }
 
     async def run(service, identity, context):
+        if not _is_proposal_id(proposal_id):
+            raise ProposalError("Invalid proposal ID.", code="INVALID_PROPOSAL_ID")
         result = service.commit_action_for_identity(
             proposal_id, customer_identity=identity, runtime_context=context
         )
@@ -207,4 +275,6 @@ async def commit_action_proposal(proposal_id: str, ctx: Context = None) -> dict:
             await _publish_committed_event(identity, result)
         return result
 
-    return await _run(run)
+    return await _run(
+        run, audit_operation="COMMIT", audit_request={"proposal_id": proposal_id}
+    )

@@ -1348,6 +1348,7 @@ resource "google_cloud_run_v2_job" "audit_iceberg_bootstrap" {
   depends_on = [
     google_storage_bucket_iam_member.audit_catalog_warehouse_object_user,
     google_project_iam_member.audit_dataflow_biglake_editor,
+    google_bigquery_dataset.proposal_evidence,
   ]
 }
 
