@@ -74,6 +74,16 @@ resource "google_bigquery_dataset" "proposal_evidence" {
 
   access {
     role          = "OWNER"
+    special_group = "projectOwners"
+  }
+
+  access {
+    role          = "OWNER"
     user_by_email = google_service_account.audit_iceberg_dataflow_service_account.email
+  }
+
+  access {
+    role          = "OWNER"
+    user_by_email = google_service_account.cloudbuild_terraform_service_account.email
   }
 }
