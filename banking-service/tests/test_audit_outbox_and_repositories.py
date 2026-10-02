@@ -101,3 +101,15 @@ def test_outbox_cdc_monitoring_and_pruning(test_db):
     deleted = prune_historical_audit_events(test_db, retention_days=30)
     assert deleted == 1
     assert test_db.query(AuditOutbox).count() == 0
+
+
+def test_outbox_pruning_retains_evidence_even_after_publication(test_db):
+    import datetime
+    from utils.audit import prune_historical_audit_events
+    from models.audit import OutboxRelayCheckpoint
+    old = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=60)
+    test_db.add(AuditOutbox(event_id="evidence-retained", event_type="PROPOSAL_EVIDENCE_SNAPSHOT", payload="{}", created_at=old))
+    test_db.add(OutboxRelayCheckpoint(relay_name="audit-events-v1", last_created_at=datetime.datetime.now(datetime.timezone.utc), last_event_id="later", published_count=1))
+    test_db.commit()
+    assert prune_historical_audit_events(test_db) == 0
+    assert test_db.query(AuditOutbox).filter_by(event_id="evidence-retained").count() == 1

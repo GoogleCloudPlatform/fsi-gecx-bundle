@@ -725,7 +725,13 @@ async def commit_card_reissue(
 @mcp.tool()
 @requires_user_assertion
 async def propose_wallet_provisioning(ctx: Context = None) -> dict:
-    """Prepare Google Wallet provisioning for explicit later-turn confirmation."""
+    """Check eligibility and prepare an offer to add the active virtual card to Google Wallet.
+
+    Use when a customer needs to pay with a replacement card, even if they have
+    not named a wallet. Call before presenting the offer; no preliminary approval
+    is needed to prepare it. This does not queue provisioning. Present the returned
+    proposal and require explicit confirmation on a later turn before committing.
+    """
     verified_customer_id = verified_customer_id_var.get()
     runtime_context = proposal_runtime_context_var.get()
     if runtime_context is None:

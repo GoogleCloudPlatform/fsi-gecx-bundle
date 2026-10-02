@@ -22,19 +22,21 @@ from sqlalchemy.orm import sessionmaker
 
 from models.audit import AuditOutbox, OutboxRelayCheckpoint
 from scripts.audit_outbox_relay import AuditOutboxRelay
-from utils.database import Base
 
 
 @pytest.fixture
 def relay_db():
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
+    engine = create_engine("sqlite:///:memory:", execution_options={"schema_translate_map": {schema: None for schema in ("identity", "kyc", "ledger", "cards", "operations", "origination", "audit", "admin", "catalog", "ref_data")}})
+    AuditOutbox.__table__.create(engine)
+    OutboxRelayCheckpoint.__table__.create(engine)
     session = sessionmaker(bind=engine)()
     try:
         yield session
     finally:
         session.close()
-        Base.metadata.drop_all(engine)
+        OutboxRelayCheckpoint.__table__.drop(engine)
+        AuditOutbox.__table__.drop(engine)
+        engine.dispose()
 
 
 def _publisher():
@@ -90,3 +92,16 @@ def test_dry_run_neither_publishes_nor_advances(relay_db):
     assert result.published == 1
     publisher.publish.assert_not_called()
     assert relay_db.get(OutboxRelayCheckpoint, "audit-events-v1") is None
+
+
+def test_relay_preserves_nonfinancial_proposal_contract_version_and_identity(relay_db):
+    relay_db.add(AuditOutbox(event_id="proposal-event", event_type="ACTION_PROPOSAL_CONFIRMED", schema_version=2,
+        payload='{"audit_contract":"proposal-audit.v2","proposal_id":"pinned-proposal"}'))
+    relay_db.commit()
+    publisher = _publisher()
+    result = AuditOutboxRelay(relay_db, publisher, "projects/p/topics/audit").run()
+    message = json.loads(publisher.publish.call_args.args[1])
+    assert result.published == 1
+    assert message["event_id"] == "proposal-event"
+    assert message["schema_version"] == 2
+    assert json.loads(message["payload"])["proposal_id"] == "pinned-proposal"

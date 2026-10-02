@@ -39,7 +39,7 @@ The normalizers deliberately exclude customer identifiers, tool arguments, raw t
 | `INTERRUPTION` | The customer interrupted an agent turn. |
 | `SESSION_ENDED` | The runtime recorded a bounded terminal outcome such as `NORMAL_DISCONNECT`, `HANDOFF`, or `TOOL_FAILURE`. |
 
-The evaluator checks order as well as presence. In particular, a successful `commit_fraud_triage` result is invalid without an earlier `CONFIRMED` proposal event, and a success claim is invalid before the corresponding structured tool result.
+The evaluator checks order as well as presence. In particular, a successful `commit_action_proposal` result is invalid without an earlier `CONFIRMED` proposal event, and a success claim is invalid before the corresponding structured tool result.
 
 ## Runtime evidence adapters
 
@@ -67,7 +67,7 @@ The canary can compare a direct-path baseline with an action-proposal session. P
 
 - native `CES_GEMINI_LIVE` runtime and a saved app version
 - reset-generation and Knowledge Catalog provenance
-- exactly one `get_open_fraud_alert`, `propose_fraud_triage`, and `commit_fraud_triage`
+- exactly one `get_open_fraud_alert`, `prepare_action_proposal`, and `commit_action_proposal`
 - no legacy `triage_fraud_case` call
 - complete review before proposal
 - `PROPOSED → PRESENTED → CONFIRMED → COMMITTED`
@@ -190,3 +190,7 @@ exceptions are normalized. Setup, authentication, scenario, and data-handling
 details are maintained in the [CX Agent Studio tooling guide](../../../scripts/cxas/README.md).
 
 Operational procedures and the complete ADK scenario list are in [Credit Support Agent Operations](../../../adk-agent/credit-support-agent/OPERATIONS.md). CES-specific fixture boundaries are in [CES Voice Qualification](../../../gecx/Credit_Support_Voice_Agent/evaluations/README.md).
+
+## Playbook discovery and audit
+
+The agent uses `discover_playbooks` and silently records its selection, clarification or no-action choice with `record_playbook_decision`. Preparation and commit use the generic proposal surface. Banking records versioned lifecycle and rejected-request evidence in the transactional outbox for BigQuery audit queries. See the [proposal protocol](runtime_neutral_action_proposal_protocol.md) for definitions, authorization, audit fields and assurance boundaries.

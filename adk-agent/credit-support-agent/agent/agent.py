@@ -85,6 +85,7 @@ PROPOSAL_ACTION_BY_TOOL = {
     "propose_wallet_provisioning": PROVISION_GOOGLE_WALLET,
 }
 COMMIT_ACTION_BY_TOOL = {
+    "commit_action_proposal": None,
     "commit_fraud_triage": TRIAGE_FRAUD_CASE,
     "commit_card_reissue": REISSUE_CARD,
     "commit_wallet_provisioning": PROVISION_GOOGLE_WALLET,
@@ -421,6 +422,7 @@ def _record_commit_proposal_event(
         ),
         catalog_snapshot_id=runtime_context.get("catalog_snapshot_id"),
         tool=tool_name,
+        action_type=authorization.get("action_type") or structured.get("action_type"),
         outcome=str(structured.get("status") or outcome),
         latency_ms=latency_ms,
         invalidation_reason=structured.get("invalidation_reason")
@@ -786,7 +788,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
             }
     pending_proposal = fraud_playbook.get("pending_proposal") or {}
     authorization_action = COMMIT_ACTION_BY_TOOL.get(tool_name)
-    if tool_name == "decide_action_proposal":
+    if tool_name in {"decide_action_proposal", "commit_action_proposal"}:
         authorization_action = pending_proposal.get("action_type")
     if tool_name == "triage_customer_reported_fraud":
         authorization_action = TRIAGE_CUSTOMER_REPORTED_FRAUD
@@ -922,6 +924,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
         "reverse_overdraft_fee",
         "request_credit_limit_increase",
         "resolve_fraud_alert",
+        "commit_action_proposal",
         "commit_fraud_triage",
         "commit_card_reissue",
         "commit_wallet_provisioning",
@@ -981,6 +984,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
     )
     mitigation_tools = {
         "resolve_fraud_alert",
+        "commit_action_proposal",
         "commit_fraud_triage",
         "commit_card_reissue",
         "commit_wallet_provisioning",
@@ -1189,7 +1193,10 @@ async def after_tool_callback(
                     **guidance_observability_payload(guidance),
                 }
             )
-        proposal_action = PROPOSAL_ACTION_BY_TOOL.get(tool_name)
+        proposal_action = (
+            structured.get("action_type") if tool_name == "prepare_action_proposal"
+            else PROPOSAL_ACTION_BY_TOOL.get(tool_name)
+        )
         if proposal_action and structured.get("success") is True:
             if "money_facts" in structured or "presentations" in structured:
                 from copy import deepcopy
@@ -1223,6 +1230,7 @@ async def after_tool_callback(
                 contract_version=proposal.get("contract_version"),
                 catalog_snapshot_id=runtime_context.get("catalog_snapshot_id"),
                 tool=tool_name,
+                action_type=proposal_action,
                 outcome="PROPOSED",
                 latency_ms=duration_seconds * 1000,
             )
@@ -1335,9 +1343,17 @@ async def after_tool_callback(
                     ),
                 )
             )
+        completion_tool = tool_name
+        if tool_name == "commit_action_proposal":
+            if structured.get("fraud_alert"):
+                completion_tool = "commit_fraud_triage"
+            elif structured.get("replacement_card"):
+                completion_tool = "commit_card_reissue"
+            elif structured.get("wallet_provisioning_status"):
+                completion_tool = "commit_wallet_provisioning"
         updated_playbook = mark_fraud_tool_completed(
             tool_context.state.get("fraud_playbook", {}),
-            tool_name,
+            completion_tool,
             structured,
         )
         if updated_playbook:
@@ -1396,7 +1412,7 @@ async def after_tool_callback(
             )
             return None
 
-        if tool_name in {
+        if completion_tool in {
             "commit_fraud_triage",
             "triage_customer_reported_fraud",
         }:
@@ -1430,7 +1446,7 @@ async def after_tool_callback(
             return build_triage_model_result(
                 structured, locale=tool_context.state.get("voice_locale", "en-US"))
 
-        if tool_name == "commit_card_reissue":
+        if completion_tool == "commit_card_reissue":
             replacement = structured.get("replacement_card") or {}
             notify_event(
                 {
@@ -1444,7 +1460,7 @@ async def after_tool_callback(
                     "is_virtual": replacement.get("is_virtual", True),
                 }
             )
-        elif tool_name == "commit_wallet_provisioning":
+        elif completion_tool == "commit_wallet_provisioning":
             notify_event(
                 {
                     "type": DataChannelEvent.WALLET_PROVISIONING_QUEUED.value,

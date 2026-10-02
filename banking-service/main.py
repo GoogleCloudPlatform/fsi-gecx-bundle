@@ -100,6 +100,9 @@ async def run_db_seeding():
 
 @asynccontextmanager
 async def combined_lifespan(app_inst: FastAPI):
+    from services.proposal_definitions import load_action_registry
+
+    load_action_registry(None)  # Reject invalid action definitions before accepting traffic.
     import sys
     if "pytest" not in sys.modules and should_run_startup_seeding():
         logging.info("Scheduling background database seeding task on lifespan startup...")

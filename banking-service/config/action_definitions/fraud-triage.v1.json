@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "id": "fraud-triage",
+  "revision": 1,
+  "action_type": "TRIAGE_FRAUD_CASE",
+  "contract_version": "fraud-triage.v1",
+  "type": "service_action",
+  "operation": "fraud.triage.v1",
+  "authorization_policy": "general_acknowledgment.v1",
+  "parameters": {},
+  "payload": {
+    "fraud_alert_id": {
+      "from": "fraud_alert_id"
+    },
+    "disputed_authorization_ids": {
+      "from": "disputed_authorization_ids"
+    },
+    "disputed_transaction_ids": {
+      "from": "disputed_transaction_ids"
+    },
+    "issue_replacement": {
+      "from": "issue_replacement"
+    },
+    "escalate": {
+      "from": "escalate"
+    },
+    "money_facts": {
+      "from": "money_facts"
+    },
+    "card_last_four": {
+      "from": "card_last_four"
+    }
+  },
+  "presentation": {
+    "required_facts": [
+      "card_last_four",
+      "proposed_disposition",
+      "replacement_and_escalation_consequences",
+      "reviewed_activity_selection"
+    ],
+    "display_selection": [
+      "fraud_alert_id",
+      "disputed_authorization_ids",
+      "disputed_transaction_ids",
+      "issue_replacement",
+      "escalate"
+    ],
+    "public_payload_fields": [
+      "money_facts",
+      "card_last_four",
+      "issue_replacement",
+      "escalate"
+    ],
+    "template": null
+  }
+}

@@ -454,15 +454,13 @@ def clean_database(db: Session) -> None:
     enable_session_rbac_override(db)
     clear_synthetic_scheduler_artifacts(db)
         
+    # Audit history and its relay checkpoint are outside the reset boundary.
     # Order matters due to foreign key constraints!
     from models.support import Escalation
     from models.identity import UserDevice, UserSecureMessage
     from models.origination import Application, MortgageApplication, CreditCardApplication, DepositApplication, ApplicationArtifact
-    from models.audit import AuditOutbox, OutboxRelayCheckpoint
 
     reset_models = [
-        OutboxRelayCheckpoint,
-        AuditOutbox,
         Escalation,
         ActionProposal,
         FraudCaseAction,
@@ -536,8 +534,6 @@ def clean_database(db: Session) -> None:
     db.query(MerchantStore).delete(synchronize_session=False)
     db.query(MerchantMaster).delete(synchronize_session=False)
     db.query(MerchantCategoryCode).delete(synchronize_session=False)
-    db.query(OutboxRelayCheckpoint).delete(synchronize_session=False)
-    db.query(AuditOutbox).delete(synchronize_session=False)
 
     db.flush()
 

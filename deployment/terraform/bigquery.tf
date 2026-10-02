@@ -57,3 +57,23 @@ resource "google_bigquery_dataset" "analytics_curated" {
   location                   = "US"
   delete_contents_on_destroy = false
 }
+
+# Evidence contains minimized financial facts and accepted authorization provenance.
+# Do not inherit the ordinary compliance dataset's reporting/viewer bindings.
+# Project-level administrators and pipeline principals retain their privileged access.
+resource "google_bigquery_dataset" "proposal_evidence" {
+  dataset_id                  = "proposal_evidence"
+  friendly_name               = "Restricted Proposal Evidence"
+  description                 = "Durable proposal reconstruction snapshots over Iceberg"
+  location                    = "US"
+  default_table_expiration_ms = null
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  access {
+    role          = "OWNER"
+    user_by_email = google_service_account.audit_iceberg_dataflow_service_account.email
+  }
+}

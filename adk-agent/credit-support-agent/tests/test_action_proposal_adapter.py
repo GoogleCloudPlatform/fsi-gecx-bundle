@@ -411,3 +411,30 @@ async def test_unrelated_tool_failure_cannot_change_in_flight_proposal(
         context.state["fraud_playbook"]["pending_proposal"]["evidence_state"]
         == COMMIT_IN_FLIGHT
     )
+
+
+@pytest.mark.asyncio
+async def test_generic_prepare_captures_unknown_catalog_action_and_protects_commit(monkeypatch):
+    allow_reset(monkeypatch)
+    async def account_details():
+        return {}
+    monkeypatch.setattr(agent, "fetch_updated_account_details", account_details)
+    context = tool_context(None)
+    await agent.after_tool_callback(SimpleNamespace(name="prepare_action_proposal"), {}, context, {
+        "structuredContent": {"success": True, "proposal_id": PROPOSAL_ID,
+                              "action_type": "NEW_CONFIG_ACTION", "contract_version": "new.v1",
+                              "customer_safe_summary": "Confirm replacement."}})
+    pending = context.state["fraud_playbook"]["pending_proposal"]
+    assert pending["action_type"] == "NEW_CONFIG_ACTION"
+    blocked = await agent.before_tool_callback(SimpleNamespace(name="commit_action_proposal"), {"proposal_id": PROPOSAL_ID}, context)
+    assert blocked["authorization_blocked"]
+    pending.update(evidence_state=DECISION_ATTESTED, presentation_turn_id="assistant-turn-10",
+                   confirmation_turn_id="customer-turn-11", presentation_observed_at_epoch_s=2)
+    assert await agent.before_tool_callback(SimpleNamespace(name="commit_action_proposal"), {"proposal_id": PROPOSAL_ID}, context) is None
+    assert context.state["fraud_playbook"]["pending_proposal"]["evidence_state"] == COMMIT_IN_FLIGHT
+
+    await agent.after_tool_callback(SimpleNamespace(name="commit_action_proposal"), {"proposal_id": PROPOSAL_ID}, context, {
+        "structuredContent": {"success": True, "proposal_id": PROPOSAL_ID, "status": "COMMITTED",
+                              "action_type": "NEW_CONFIG_ACTION", "contract_version": "new.v1"}})
+    assert context.state["fraud_playbook"]["pending_proposal"] is None
+    assert context.state["closeout_boundary"]

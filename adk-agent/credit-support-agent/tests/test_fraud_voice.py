@@ -187,15 +187,15 @@ def test_mark_fraud_tool_completed_tracks_commit_results() -> None:
     assert playbook["wallet_push_queued"] is True
 
 
-def test_instruction_exposes_only_typed_consequential_action_protocol() -> None:
+def test_instruction_exposes_catalog_discovery_and_generic_proposal_protocol() -> None:
     text = (
         Path(__file__).parents[1] / "agent" / "resources" / "instruction.txt"
     ).read_text()
 
-    assert "propose_card_reissue" in text
-    assert "commit_card_reissue" in text
-    assert "propose_wallet_provisioning" in text
-    assert "commit_wallet_provisioning" in text
+    assert "discover_playbooks" in text
+    assert "prepare_action_proposal" in text
+    assert "commit_action_proposal" in text
+    assert "propose_wallet_provisioning" not in text
     assert "`report_lost_stolen_card`" not in text
     assert "`push_card_to_google_wallet`" not in text
 

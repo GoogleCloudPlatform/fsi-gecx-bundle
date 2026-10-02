@@ -525,6 +525,13 @@ def reconcile_grants(connection: sa.Connection) -> None:
             sa.text(f"REVOKE UPDATE, DELETE, TRUNCATE ON TABLE {table} FROM PUBLIC")
         )
 
+    connection.execute(
+        sa.text(f"REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit.audit_outbox FROM {qreset}")
+    )
+    connection.execute(
+        sa.text(f"REVOKE DELETE, TRUNCATE ON TABLE audit.outbox_relay_checkpoint FROM {qreset}")
+    )
+
 
 def reconcile_cdc(connection: sa.Connection, config: LifecycleConfig) -> None:
     connection.execute(

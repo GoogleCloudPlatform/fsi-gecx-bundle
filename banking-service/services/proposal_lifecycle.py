@@ -34,6 +34,7 @@ from services.proposal_protocol import (
     ValidatedRuntimeEvidence,
 )
 from utils.audit import record_audit_event
+from services.proposal_audit import record_transition
 
 
 DEFAULT_PROPOSAL_TTL_SECONDS = 180
@@ -196,7 +197,21 @@ class ProposalLifecycleEngine:
             if not str(values.get(field) or "").strip():
                 raise ProposalError(f"{field} is required.")
 
-        specification = self.registry.require(values["action_type"])
+        if "definition_id" in values:
+            specification = self.registry.resolve(
+                values["definition_id"],
+                values["definition_revision"],
+                values["definition_digest"],
+            )
+        else:
+            specification = self.registry.require(values["action_type"])
+            values.update(
+                definition_id=specification.definition_id,
+                definition_revision=specification.definition_revision,
+                definition_digest=specification.definition_digest,
+            )
+        if values["action_type"] != specification.action_type:
+            raise ProposalError("Action type does not match definition.")
         if values["contract_version"] != specification.contract_version:
             raise ProposalError("Action contract version does not match registration.")
         if (
@@ -245,6 +260,7 @@ class ProposalLifecycleEngine:
             with self.db.begin_nested():
                 self.db.add(proposal)
                 self.db.flush()
+                self._record_transition(proposal, "PROPOSED")
         except IntegrityError:
             existing = self._find_idempotent_proposal(values)
             if existing is not None:
@@ -298,7 +314,7 @@ class ProposalLifecycleEngine:
         *,
         runtime_context: ProposalRuntimeContext,
     ) -> ValidatedRuntimeEvidence:
-        specification = self.registry.require(proposal.action_type)
+        specification = self.registry.for_proposal(proposal)
         try:
             return self.evidence_validator.validate_decision(
                 runtime_context,
@@ -331,7 +347,7 @@ class ProposalLifecycleEngine:
     ) -> dict[str, Any]:
         """Execute any registered action through one transaction pipeline."""
         proposal = self._get_locked(proposal_id)
-        specification = self.registry.require(expected_action_type)
+        specification = self.registry.for_proposal(proposal)
         try:
             claim = self.claim_commit(
                 proposal.id,
@@ -364,6 +380,7 @@ class ProposalLifecycleEngine:
                 if result is not None:
                     specification.validate_result(result)
                     self.mark_committed(proposal.id, result_payload=result, now=now)
+                    self._record_transition(proposal, "COMMIT_RECONCILED")
                     handler.record_reconciled(proposal, result)
                     self.db.commit()
                     return self.proposal_result(proposal, idempotent_replay=True)
@@ -440,6 +457,7 @@ class ProposalLifecycleEngine:
         proposal.presented_assistant_turn_id = assistant_turn_id
         proposal.presented_at = now
         self.db.flush()
+        self._record_transition(proposal, "PRESENTED")
         return proposal
 
     def confirm(
@@ -467,7 +485,10 @@ class ProposalLifecycleEngine:
                 )
             return proposal
         self._require_status(proposal, "PRESENTED", transition="confirm")
-        if not customer_turn_id or customer_turn_id == proposal.originating_customer_turn_id:
+        if (
+            not customer_turn_id
+            or customer_turn_id == proposal.originating_customer_turn_id
+        ):
             raise ProposalTransitionError(
                 "Confirmation must come from a later real customer turn.",
                 code="PRESENTATION_EVIDENCE_REQUIRED",
@@ -495,6 +516,7 @@ class ProposalLifecycleEngine:
         proposal.confirmation_evidence = evidence
         proposal.confirmed_at = now
         self.db.flush()
+        self._record_transition(proposal, "CONFIRMED")
         return proposal
 
     def decline(
@@ -515,6 +537,7 @@ class ProposalLifecycleEngine:
         proposal.invalidation_reason = "CUSTOMER_DECLINED"
         proposal.completed_at = now
         self.db.flush()
+        self._record_disposition_event(proposal)
         return proposal
 
     def invalidate(
@@ -535,6 +558,7 @@ class ProposalLifecycleEngine:
         proposal.invalidation_reason = reason
         proposal.completed_at = as_utc(now or utcnow())
         self.db.flush()
+        self._record_disposition_event(proposal)
         return proposal
 
     def claim_commit(
@@ -582,6 +606,7 @@ class ProposalLifecycleEngine:
         proposal.status = "COMMITTING"
         proposal.commit_started_at = now
         self.db.flush()
+        self._record_transition(proposal, "COMMIT_STARTED")
         return CommitClaim(proposal=proposal, should_execute=True)
 
     def mark_committed(
@@ -604,10 +629,11 @@ class ProposalLifecycleEngine:
         proposal.result_payload = result
         proposal.completed_at = as_utc(now or utcnow())
         self.db.flush()
+        self._record_transition(proposal, "COMMITTED")
         return proposal
 
     def proposal_view(self, proposal: ActionProposal) -> dict[str, Any]:
-        specification = self.registry.require(proposal.action_type)
+        specification = self.registry.for_proposal(proposal)
         return {
             "success": True,
             "proposal_id": str(proposal.id),
@@ -714,6 +740,9 @@ class ProposalLifecycleEngine:
     ) -> ActionProposal:
         immutable_match = (
             existing.payload_fingerprint == fingerprint
+            and existing.definition_id == values["definition_id"]
+            and existing.definition_revision == values["definition_revision"]
+            and existing.definition_digest == values["definition_digest"]
             and str(existing.account_id or "") == str(values.get("account_id") or "")
             and existing.contract_version == values["contract_version"]
             and existing.runtime_name == values["runtime_name"]
@@ -731,22 +760,14 @@ class ProposalLifecycleEngine:
             )
         return existing
 
-    def _record_disposition_event(self, proposal: ActionProposal) -> None:
-        self.audit_recorder(
-            self.db,
-            f"ACTION_PROPOSAL_{proposal.status}",
-            {
-                "proposal_id": str(proposal.id),
-                "correlation_id": str(proposal.id),
-                "action_type": proposal.action_type,
-                "contract_version": proposal.contract_version,
-                "customer_id": str(proposal.customer_id),
-                "account_id": str(proposal.account_id or "") or None,
-                "support_session_id": proposal.support_session_id,
-                "runtime_name": proposal.runtime_name,
-                "reason": proposal.invalidation_reason,
-            },
+    def _record_transition(self, proposal, stage):
+        record_transition(
+            self.db, proposal, self.registry.for_proposal(proposal),
+            stage, recorder=self.audit_recorder,
         )
+
+    def _record_disposition_event(self, proposal):
+        self._record_transition(proposal, proposal.status)
 
     def _get_locked(self, proposal_id) -> ActionProposal:
         proposal = (
@@ -770,7 +791,10 @@ class ProposalLifecycleEngine:
     def _expire_if_needed(
         self, proposal: ActionProposal, now: datetime.datetime
     ) -> None:
-        if proposal.status not in TERMINAL_STATUSES and as_utc(proposal.expires_at) <= now:
+        if (
+            proposal.status not in TERMINAL_STATUSES
+            and as_utc(proposal.expires_at) <= now
+        ):
             proposal.status = "EXPIRED"
             proposal.invalidation_reason = "PROPOSAL_EXPIRED"
             proposal.completed_at = now

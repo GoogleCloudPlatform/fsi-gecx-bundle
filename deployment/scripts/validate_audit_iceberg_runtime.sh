@@ -79,8 +79,9 @@ event_visible_in_iceberg() {
     --project_id="${PROJECT_ID}" \
     --use_legacy_sql=false \
     --format=prettyjson \
-    "SELECT COUNT(*) AS matched FROM \`${PROJECT_ID}.compliance_audit.audit_events\` WHERE event_id = '${latest_relay_event_id}'")"
-  [[ "$(jq -r '.[0].matched // "0"' <<<"${result}")" -ge 1 ]]
+    "SELECT COUNT(*) AS matched FROM \`${PROJECT_ID}.compliance_audit.audit_events\` WHERE event_id = '${latest_relay_event_id}'
+     UNION ALL SELECT COUNT(*) AS matched FROM \`${PROJECT_ID}.proposal_evidence.snapshots\` WHERE artifact_id = '${latest_relay_event_id}'")"
+  [[ "$(jq -r '[.[].matched | tonumber] | add' <<<"${result}")" -ge 1 ]]
 }
 retry_until "relay event ${latest_relay_event_id} in logical Iceberg audit history" event_visible_in_iceberg
 
@@ -105,6 +106,26 @@ imbalanced_transactions="$(jq -r '.[0].imbalanced_transactions | tonumber' <<<"$
 [[ "${audit_events}" -eq "${distinct_audit_events}" ]]
 [[ "${ledger_entries}" -eq "${distinct_ledger_entries}" ]]
 [[ "${imbalanced_transactions}" -eq 0 ]]
+
+# Audit and evidence commits can arrive separately; wait for their join and
+# independently verify the exact canonical string, without printing its facts.
+proposal_evidence_complete() {
+  local result
+  result="$(bq query --project_id="${PROJECT_ID}" --use_legacy_sql=false --format=prettyjson \
+    "SELECT COUNT(*) AS invalid FROM \`${PROJECT_ID}.compliance_audit.proposal_audit_log\` a
+     LEFT JOIN \`${PROJECT_ID}.proposal_evidence.snapshots\` e
+       ON a.evidence_artifact_id = e.artifact_id AND a.event_id = e.audit_event_id
+     WHERE a.evidence_artifact_id IS NOT NULL AND
+       (e.artifact_id IS NULL OR a.evidence_artifact_digest != e.snapshot_digest
+        OR LOWER(TO_HEX(SHA256(e.snapshot_json))) != e.snapshot_digest)")"
+  [[ "$(jq -r '.[0].invalid | tonumber' <<<"${result}")" -eq 0 ]]
+}
+retry_until "proposal evidence references and digests to reconcile" proposal_evidence_complete
+
+unexpected_evidence="$(bq query --project_id="${PROJECT_ID}" --use_legacy_sql=false --format=prettyjson \
+  "SELECT COUNT(*) AS leaked FROM \`${PROJECT_ID}.compliance_audit.audit_events\`
+   WHERE event_type = 'PROPOSAL_EVIDENCE_SNAPSHOT'")"
+[[ "$(jq -r '.[0].leaked | tonumber' <<<"${unexpected_evidence}")" -eq 0 ]]
 
 dataflow_errors="$(gcloud logging read \
   "resource.type=\"dataflow_step\" AND resource.labels.job_id=\"${dataflow_job_id}\" AND timestamp>=\"${VALIDATION_START_TIME}\" AND severity>=ERROR" \

@@ -56,6 +56,18 @@ ACTION_TYPE_BY_PROPOSAL_TOOL = {
 
 
 SCENARIOS = {
+    "playbook-fraud": TrajectoryExpectation(
+        required_tools={"get_open_fraud_alert": 1, "discover_playbooks": 1,
+                        "prepare_action_proposal": 1, "commit_action_proposal": 1},
+        required_proposal_outcomes=("PROPOSED", "PRESENTED", "CONFIRMED", "COMMITTED"),
+        required_ui_events=("FRAUD_ALERT_RESOLVED",),
+    ),
+    "playbook-fraud-wallet": TrajectoryExpectation(
+        required_tools={"get_open_fraud_alert": 1, "discover_playbooks": 2,
+                        "prepare_action_proposal": 2, "commit_action_proposal": 2},
+        required_proposal_outcomes=("PROPOSED", "PRESENTED", "CONFIRMED", "COMMITTED"),
+        required_ui_events=("FRAUD_ALERT_RESOLVED", "WALLET_PROVISIONING_QUEUED"),
+    ),
     "fraud": TrajectoryExpectation(
         required_tools={"get_open_fraud_alert": 1, "commit_fraud_triage": 1},
         forbidden_tools=("triage_fraud_case",),
@@ -219,7 +231,7 @@ def extract_trajectory(
                     "proposal_ref": proposal_payload.get("proposal_ref"),
                     "contract_version": proposal_payload.get("contract_version"),
                     "tool": proposal_payload.get("tool"),
-                    "action_type": ACTION_TYPE_BY_PROPOSAL_TOOL.get(
+                    "action_type": proposal_payload.get("action_type") or ACTION_TYPE_BY_PROPOSAL_TOOL.get(
                         proposal_payload.get("tool")
                     ),
                     "outcome": proposal_payload.get("outcome"),

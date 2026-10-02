@@ -1,0 +1,51 @@
+[
+  {
+    "id": "dinner",
+    "context": "Trusted banking context: Fraud remediation completed. The old card is blocked. An active replacement virtual card ending 1552 exists. The customer uses Google Wallet. No provisioning has been queued. No proposal is active.",
+    "utterance": "I have an important client dinner tonight and I am not sure how I will pay now.",
+    "expected_playbook": "google-wallet-provisioning",
+    "expected_behavior": "Discover and prepare a wallet offer without promising that queued provisioning is immediately usable."
+  },
+  {
+    "id": "lost",
+    "context": "Trusted context: There is no fraud alert. The customer has one active physical card. No replacement or proposal exists.",
+    "utterance": "I cannot find my card anywhere. I need a replacement.",
+    "expected_playbook": "card-reissue",
+    "expected_behavior": "Prepare before asking for confirmation; disclose blocking and replacement."
+  },
+  {
+    "id": "ambiguous",
+    "context": "Trusted context: The customer has an active card. No alert or proposal exists.",
+    "utterance": "I need help with my card.",
+    "expected_playbook": null,
+    "expected_behavior": "Ask a focused clarification; do not prepare."
+  },
+  {
+    "id": "no_request",
+    "context": "Trusted banking context: Fraud remediation completed. The old card is blocked. An active replacement virtual card ending 1552 exists. The customer uses Google Wallet. No provisioning has been queued. No proposal is active.",
+    "utterance": "No, that is all. Thank you.",
+    "expected_playbook": null,
+    "expected_behavior": "Do not prepare or commit any proposal."
+  },
+  {
+    "id": "queued",
+    "context": "Trusted banking context: Fraud remediation completed. The old card is blocked. An active replacement virtual card ending 1552 exists. The customer uses Google Wallet. Provisioning to Google Wallet is already QUEUED for this card. No proposal is active.",
+    "utterance": "Can you add my replacement card to Google Wallet?",
+    "expected_playbook": null,
+    "expected_behavior": "Describe existing provisioning as queued, not added, installed or ready."
+  },
+  {
+    "id": "unsupported",
+    "context": "Trusted banking context: Fraud remediation completed. The old card is blocked. An active replacement virtual card ending 1552 exists. The customer uses Apple Wallet. No provisioning has been queued. No proposal is active.",
+    "utterance": "Add my card to Apple Wallet.",
+    "expected_playbook": null,
+    "expected_behavior": "Explain unsupported provider; do not promise or seek confirmation for it."
+  },
+  {
+    "id": "recognized",
+    "context": "Trusted context: An open alert alert-1 contains two flagged authorizations auth-1 and auth-2, no posted items. The customer has just explicitly recognized both. No proposal exists.",
+    "utterance": "Those are all mine; please close the alert.",
+    "expected_playbook": "fraud-triage",
+    "expected_behavior": "Prepare alert closure with empty disputed lists and no replacement."
+  }
+]

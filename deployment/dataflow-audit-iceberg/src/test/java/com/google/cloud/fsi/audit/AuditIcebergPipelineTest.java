@@ -40,6 +40,61 @@ final class AuditIcebergPipelineTest {
   }
 
   @Test
+  void preservesVersionedProposalAuditWithoutFinancialFanout() throws Exception {
+    String payload = "{\"audit_contract\":\"proposal-audit.v2\",\"proposal_id\":\"p-1\","
+        + "\"definition\":{\"id\":\"card-reissue\",\"revision\":2,\"digest\":\"pinned\"}}";
+    for (String eventType : new String[]{"ACTION_PROPOSAL_CONFIRMED", "ACTION_PROPOSAL_REQUEST_REJECTED",
+        "PLAYBOOK_DISCOVERED", "PLAYBOOK_DECISION_RECORDED"}) {
+      String envelope = """
+          {"event_id":"audit-1","event_type":"%s","schema_version":2,
+           "payload":%s,"created_at":"2026-10-01T12:00:00Z","published_at":"2026-10-01T12:00:01Z"}
+          """.formatted(eventType, quote(payload));
+      var parsed = AuditIcebergPipeline.parseMessage(message(envelope), Instant.now());
+      assertEquals(eventType, parsed.audit.getString("event_type"));
+      assertEquals(payload, parsed.audit.getString("payload"));
+      assertEquals(2L, parsed.audit.getInt64("schema_version"));
+      assertEquals(0, parsed.ledgerEntries.size());
+    }
+  }
+
+  private static String evidenceEnvelope(String contract, String id, String digest) throws Exception {
+    String snapshot = "{\"kind\":\"PROPOSAL_TRANSITION\",\"offer\":\"USD 4.99\"}";
+    String payload = "{\"evidence_contract\":" + quote(contract) + ",\"artifact_id\":" + quote(id)
+        + ",\"audit_event_id\":\"audit-1\",\"snapshot_digest\":" + quote(digest)
+        + ",\"snapshot_json\":" + quote(snapshot) + "}";
+    return """
+        {"event_id":"artifact-1","event_type":"PROPOSAL_EVIDENCE_SNAPSHOT","schema_version":1,
+         "payload":%s,"created_at":"2026-10-01T12:00:00Z","published_at":"2026-10-01T12:00:01Z"}
+        """.formatted(quote(payload));
+  }
+
+  @Test
+  void routesDigestVerifiedEvidenceToItsOwnBranchWithoutFinancialFanout() throws Exception {
+    String snapshot = "{\"kind\":\"PROPOSAL_TRANSITION\",\"offer\":\"USD 4.99\"}";
+    String digest = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+        .digest(snapshot.getBytes(StandardCharsets.UTF_8)));
+    var parsed = AuditIcebergPipeline.parseMessage(
+        message(evidenceEnvelope("proposal-evidence.v1", "artifact-1", digest)), Instant.now());
+    assertEquals(true, parsed.evidence);
+    assertEquals(0, parsed.ledgerEntries.size());
+    assertEquals("artifact-1", parsed.audit.getString("event_id"));
+    assertEquals(false, AuditIcebergPipeline.parseMessage(message("""
+        {"event_id":"ordinary","event_type":"ACTION_PROPOSAL_CONFIRMED","schema_version":2,
+         "payload":"{}","created_at":"2026-10-01T12:00:00Z","published_at":"2026-10-01T12:00:01Z"}
+        """), Instant.now()).evidence);
+  }
+
+  @Test
+  void rejectsCorruptOrMismatchedEvidenceInsteadOfArchivingIt() throws Exception {
+    for (String envelope : new String[]{evidenceEnvelope("proposal-evidence.v1", "artifact-1", "bad-digest"),
+        evidenceEnvelope("proposal-evidence.v1", "different-artifact", "bad-digest"),
+        evidenceEnvelope("unsupported", "artifact-1", "bad-digest")}) {
+      assertThrows(IllegalArgumentException.class,
+          () -> AuditIcebergPipeline.parseMessage(message(envelope), Instant.now()));
+    }
+  }
+
+  @Test
   void parsesBalancedFinancialEventAndFansOutEntries() throws Exception {
     String payload = """
         {"event_id":"event-1","schema_version":1,"transaction_id":"tx-1",

@@ -1141,7 +1141,7 @@ resource "google_cloud_run_v2_job" "db_reconcile_job" {
         }
         env {
           name  = "EXPECTED_ALEMBIC_REVISION"
-          value = "c3a91f2b7d44"
+          value = "f7e0f4a9c306"
         }
       }
       vpc_access {
@@ -1348,6 +1348,7 @@ resource "google_cloud_run_v2_job" "audit_iceberg_bootstrap" {
   depends_on = [
     google_storage_bucket_iam_member.audit_catalog_warehouse_object_user,
     google_project_iam_member.audit_dataflow_biglake_editor,
+    google_bigquery_dataset.proposal_evidence,
   ]
 }
 

@@ -78,6 +78,7 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
         "e4b7c9a12f63_preferred_support_locale.py",
         "f5c8d2e7a104_expand_support_locales.py",
         "f6d9e3f8b205_italian_support_locale.py",
+        "f7e0f4a9c306_proposal_definition_identity.py",
     ]
     baseline = versions[0].read_text()
     assert "down_revision: Union[str, Sequence[str], None] = None" in baseline
@@ -116,7 +117,7 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
 
 def test_current_schema_head_is_reconciled_before_banking_deploy() -> None:
     repository_root = Path(__file__).parents[2]
-    expected_head = "c3a91f2b7d44"
+    expected_head = "f7e0f4a9c306"
     cloudbuild = repository_root.joinpath(
         "banking-service", "cloudbuild-publish-deploy.yaml"
     ).read_text()

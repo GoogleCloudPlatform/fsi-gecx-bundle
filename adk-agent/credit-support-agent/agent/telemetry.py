@@ -111,6 +111,7 @@ def record_action_proposal_event(
     latency_ms: float,
     invalidation_reason: str | None = None,
     banking_outcome: str | None = None,
+    action_type: str | None = None,
 ) -> None:
     """Emit bounded metrics plus one correlation-safe proposal lifecycle event."""
     bounded_outcome = str(outcome or "UNKNOWN").upper()[:64]
@@ -141,6 +142,7 @@ def record_action_proposal_event(
                     else None
                 ),
                 "contract_version": attributes["contract_version"],
+                "action_type": str(action_type or "")[:64] or None,
                 "catalog_snapshot_id": str(catalog_snapshot_id or "")[:255] or None,
                 "tool": attributes["tool"],
                 "outcome": bounded_outcome,
