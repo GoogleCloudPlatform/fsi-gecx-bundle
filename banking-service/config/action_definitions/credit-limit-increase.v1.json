@@ -1,0 +1,86 @@
+{
+  "schema_version": 2,
+  "id": "credit-limit-increase",
+  "revision": 1,
+  "action_type": "CREDIT_LIMIT_INCREASE",
+  "contract_version": "credit-limit-increase.v1",
+  "type": "service_action",
+  "operation": "credit.adjust_limit.v1",
+  "authorization_policy": "general_acknowledgment.v1",
+  "parameters": {},
+  "payload": {
+    "account_id": {
+      "from": "account_id"
+    },
+    "current_limit": {
+      "from": "current_limit"
+    },
+    "proposed_limit": {
+      "from": "proposed_limit"
+    },
+    "increase_amount": {
+      "from": "increase_amount"
+    },
+    "credit_limit_policy": {
+      "from": "credit_limit_policy"
+    },
+    "eligibility_facts": {
+      "from": "eligibility_facts"
+    },
+    "approval_semantics": {
+      "from": "approval_semantics"
+    },
+    "prepared_arithmetic": {
+      "from": "prepared_arithmetic"
+    },
+    "bank_decision": {
+      "from": "bank_decision"
+    },
+    "decision_request": {
+      "from": "decision_request"
+    }
+  },
+  "presentation": {
+    "required_facts": [
+      "current_limit",
+      "proposed_limit",
+      "increase_amount",
+      "approval_semantics"
+    ],
+    "display_selection": [
+      "current_limit",
+      "proposed_limit",
+      "increase_amount",
+      "approval_semantics"
+    ],
+    "public_payload_fields": [
+      "current_limit",
+      "proposed_limit",
+      "increase_amount",
+      "approval_semantics"
+    ],
+    "template": null
+  },
+  "discovery": {
+    "title": "Increase an eligible credit-card limit",
+    "purpose": "Apply a bounded demo credit-limit increase after presentation and later explicit confirmation. This is not real underwriting or a review submission.",
+    "when_to_use": [
+      "The customer asks to raise their credit-card limit to a specified new total.",
+      "The customer needs more credit capacity and wants to request a higher limit; clarify the desired new total first."
+    ],
+    "when_not_to_use": [
+      "The customer asks only about their current limit or available balance.",
+      "The customer wants to decrease a limit or increase a deposit balance.",
+      "The customer asks for a loan, underwriting review or unsupported currency."
+    ],
+    "prerequisites": [
+      "Exactly one owned active USD credit-card account and an active credit product with valid limit bounds.",
+      "An explicit requested new total limit and currency; an increase amount alone requires clarification."
+    ],
+    "input_guidance": "Provide requested_limit_minor as an integer new total in USD cents, and currency_code as USD. For $7,500.00 use 750000. Do not send floats, assume a percentage or select an amount. Preparation evaluates product bounds and the demo ceiling of twice the current limit. Present returned current/proposed limits and increase amount, explain confirmation applies an eligible demo increase, then await later explicit confirmation.",
+    "examples": [
+      "Can you raise my credit limit to $7,500.00?",
+      "I need more room on my card for a purchase."
+    ]
+  }
+}

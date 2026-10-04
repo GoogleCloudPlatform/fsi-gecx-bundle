@@ -572,9 +572,11 @@
       "lines": {
         "00dcd1b6e709cc4c30955ce2400606f84ef1e5943a5a73fcd77c9c7504a42cfb": 1,
         "04a74b795f366a4f1b37fce5eaaf8942b8ba27b2bac01060bc88cbc802846326": 1,
+        "0540b9893babdfa94944d46374cfc9df4899ba2fc6ca3250de0a0f29ec922005": 1,
         "073aa53d867df37f13f9ed5e519eda8ac846abe8893e978a1f8808f7c7f38428": 1,
         "0a1b9b9753b8bbdc41c98376fa24c0dea279d8f9345fceba5c42726cd7e6411f": 1,
         "17bb21cb49f4f22a7f07eb5f3c330bc92bf7efbd09d6287fdb9d22439e47e599": 1,
+        "1a1cee5d4292c06fc628c78bfc43fe959b45cc7468b2db9d308075f282207bde": 1,
         "1b06ecd4cb9c9fb4948f2687aeed9c7f68d4b6f047b891d95b3c9c1edfea94bb": 1,
         "22f7fcfe7350ff0c66f19163a5435c8422e53e59a9fa7fc504cd1e7be72298e7": 2,
         "284122060f67f00c97d7f34d75bcfef203674ca3946f104f54f2bbfa6e75be72": 1,
@@ -582,17 +584,24 @@
         "3069bc077e9fcfa5b7e728b0a8bb07214f683ce765204e77c5bf442ceecbde22": 1,
         "3a09562cfd0b880de4d78d1b20fc011f557fe9558b5d14eab2a0ffc87cad6e68": 1,
         "3ee81bd9b7a3634e9376560bb6e6628887bfeecb2355abea930eea29c440f240": 1,
+        "43218f15019cfa46743e754f46665ddd13de5f5cbf2d2bb7815f90ebcefe8b9d": 1,
         "4576624dca645f91dad68f4465ddad4b65508391e2adbbd2346db1f96941e64e": 2,
         "47299c125ae48efcff1dda21c483691259526941d14a09c4d19aee2cffd4be42": 3,
         "4a05b5fc0c2017ae9f971c445f5efccc42924d5c1bded48cffe7ab203ff42e77": 1,
         "58225a943741c1dafe5c7efb40f2f0f64d4d27620de9bcabf41cfeccf5fe33b8": 1,
         "593b755309cd94af7c8d202d3d2547ca113422e11aea22bdbd7cea420d60742e": 1,
+        "5b2827747306de790edcf2dc9dd3759aa055ca78a451767cc53f7cefc1f01da4": 1,
         "5e69f86ea75b543874a971ff14db92da3d9faee946f39dc435e7b66c255df23d": 1,
+        "61516040dbd6c313a50f2ad2f77158bfb573ad73927901a01ca1ca4717130d1d": 1,
+        "6b5a7e4d708ac8ef1d3800b9ded814c67268207e3cb887a968f6fc716e7927cd": 1,
         "6c3efe97fa54de1e9ba8eafb7c995b452847e1636c05bb4fe3ff6deb3a2ce8ae": 1,
+        "6f5793f6f9beb6e407462a67fa54cf151b44749bd05d904ed31b74cd8dd54e3e": 1,
         "7bf8a398adb230cc25038e2072f6731dbd553e1d1d0307e95db211686f02201b": 1,
+        "7f36604df3bde74de8863c383a1edd8f67262eb0922f3c7e672e5c14c3fc6935": 1,
         "8433ba1b3688b5c712f4bb143c4324d4c7dbdce7004d5ff2b573d52e076aa8b9": 1,
         "889924070dcabd43390fb9c395b63df4ec398c4cb8ddf681b21783e3883fc1e3": 1,
         "8d3a8a1eaac2cfa1db71fbbeb9aceab66ebf5bd36c82032f1a8e43b84c2e23c1": 1,
+        "95474c0c9c4f01383c584e28ad5cb7e5cfb842a7e7453f6b4657ca2125aa2fa0": 1,
         "991f618fc819226ca1890c6746832205e6c62bfb6c00ea84321945b9ca002bdf": 2,
         "9935cbd5ec8acdef6c61e26897f9cd589656b134d3c0687edbc76913d98004a9": 1,
         "9dc3d2b891bf60b837f90210dd1a4ace177a67a2b19c6054abdca9eccb6ca6d3": 1,
@@ -613,11 +622,13 @@
         "e5d288162f9bf8b059429e1c2157b3e822e5f9494acfe64604613e432794e39b": 1,
         "e69b784ca8650307d8abdf9ff38611fd16d9303b080252ed932c5257aade584c": 1,
         "ece3586ebba1a45ccc76d2128bd134ad65739214bcb2b834f67065ac9e33d2a6": 1,
+        "ee92d51d089ed9ad955053c5a73c41e95c21d07adc65134ad7a4ce56214943ad": 1,
         "f1d9d57a4502a3d68bfcbe10288362e7d5117ef2ddad2f80db2db8fe648a2093": 1,
         "f3f3d08d9eb5c5c3982b705f54f7fafd8b67a2bc8ba1c307d2a9f28d33f2bc50": 1,
         "f6a0bdaf0f1d9092cb932ec3a4b188b3b875916fffb929610d829ff29eb17563": 1,
         "fb3c41cd448bb3a4e7dc07e083b2249e50aee81aa6c89eb4bdd2c03f5a70edd6": 2,
-        "fcc63253bccdab58ca7ab059fedafbf46fcafec432f3443a8961d70440e8adc0": 1
+        "fcc63253bccdab58ca7ab059fedafbf46fcafec432f3443a8961d70440e8adc0": 1,
+        "ffa944b9453042aa58350bd128b0917141b4b708a87e0e2cb46dc14f00461de8": 1
       },
       "symbols": [
         "amount_cents",
@@ -1689,6 +1700,82 @@
       ],
       "owner": "money-foundation",
       "rationale": "Account-scoped physical storage mapping; centralized immutable pre-Money USD action-result reader."
+    },
+    "banking-service/services/proposal_capabilities.py": {
+      "owner": "banking-service",
+      "rationale": "Explicit adapter/test reads of retained integer account and product storage; model-facing credit-limit contracts use canonical Money.",
+      "lines": {
+        "0540b9893babdfa94944d46374cfc9df4899ba2fc6ca3250de0a0f29ec922005": 1,
+        "1c5a78cd05221a82a9709fa8f76bcfa5863347d563b6b0bbbfc925a874407cf6": 1,
+        "61516040dbd6c313a50f2ad2f77158bfb573ad73927901a01ca1ca4717130d1d": 1,
+        "6ea16d3d4b7a8b79e20a144dd4aa57f8da7eba5c9c703f38191f5ad10e11349c": 2,
+        "71fd94834de9015a76b9039afbf589935c35b633eca3220dd79cf33c4ac77330": 1,
+        "8395ea891c01447bf883059dda6e1b744a40ec551a1930778fd604b9af8ccbc1": 1,
+        "8de2afcafc5506dbcf7ead4585422bccf06c5bc2a6e5e33610467c554f59805a": 1,
+        "94e5424079aa174e42c7be4a1d4a410bce6df1aa3da9eb10f4258779a2cb8119": 2,
+        "9da90d382e1f2ed029805ec994938b3251b41a37f1bd74bd2a06af6139cd6ad3": 1,
+        "b6cca5beeb4950567fbe8f9e74a4714de9400b797d4156d87fb66b214bb1af9c": 1,
+        "d8005cf90fc7c5c519141e1a79c242a8ff405dd64c2f3a43c18f4ab4286eadec": 2,
+        "e8fcfae972dfedd67792f5934b35532475c4b2d5cdc12cd83dd0b218f7c1dee2": 1,
+        "f368aa146c77f5da0629304e937ef81fb7394ec5042c94a42efbb89a1826e872": 2,
+        "ffa944b9453042aa58350bd128b0917141b4b708a87e0e2cb46dc14f00461de8": 1
+      },
+      "symbols": [
+        "available_credit_cents",
+        "credit_limit_cents",
+        "max_credit_limit_cents",
+        "min_credit_limit_cents",
+        "requested_limit_cents"
+      ]
+    },
+    "banking-service/tests/test_credit_limit_playbook.py": {
+      "owner": "banking-service",
+      "rationale": "Explicit adapter/test reads of retained integer account and product storage; model-facing credit-limit contracts use canonical Money.",
+      "lines": {
+        "0081a74383d955454e72def72c1e0e1e71036a136a4c2db21d66406141439440": 1,
+        "31587b2bc7415b76f665ed5ef0dec8e328b916c3a886ade2a4af23a3eeb4153e": 1,
+        "5318ff8020883b95b5352c53055a182730c27344075671d9d2fac5c918eb9c71": 1,
+        "5afd21e2e090fffd29f302c5fb92281594318f329cfa6f8fd2e3ffc4f75874aa": 1,
+        "6b0e7de60cfc59e3ad9f136b424cd692ae3aa323f0673656c1b957b0c3f42ec7": 1,
+        "7f36604df3bde74de8863c383a1edd8f67262eb0922f3c7e672e5c14c3fc6935": 1,
+        "8b6b2e082b6dcbaf6df4878b716277ce5121df7ddc62fc4b62c12e9262a10e3d": 1,
+        "8d6da82cac731e4d03ad7f01e3da3d5dd6644885b9dc5892029332915f203d3b": 1,
+        "a4612ba45cc9339783cb42be27efb24ee1f1406a1e4ff10295dab72bf833534d": 1,
+        "a686816d6bf39b7ddee3189285851486c08fe493e66ba9b745d296a707a6ea0a": 1,
+        "aa93c0c5fcaaf36ffe230ebe97884da1bc8187cb51b382aa85cfdcc12ffab4a6": 2,
+        "abaf56061ef2cd86ccf5425fa1d793c2898136a3cc8021c29b8e0cf7881f9ad2": 1,
+        "b53ce96cf1d3f070f3863f72dcc4d484e0995fa8884a2b02f7a95fbe15996067": 1,
+        "c085719e6fe43cba255e7172da764f99bc33dec28659f44581e99086f59d5a9c": 1,
+        "c2626500d7104862a40df83eb5ff0065e3465ea42767ed237d05e788cd1af860": 1,
+        "c4688e3289dde974e0108db96f63a60b17601ecbfcf1e2a1e44da5ea579da757": 1,
+        "c779407cb0460fb704b1579be9d65b0ca9d083a5a635cca1518e82dddd62f4f2": 1,
+        "e587afc978f1c4ebf577eb2c79a3794927c0d7c89d74daa972a9602989891c77": 1,
+        "f5986dab7bcce508fb5710752f031dc6a3949afd429d10822b6b4503a1210a5e": 13,
+        "fd7332b8baa9cf535148a50fbb968574f0a749e4a6ee1abc4ac5f1e35732201d": 1
+      },
+      "symbols": [
+        "available_credit_cents",
+        "credit_limit_cents",
+        "max_credit_limit_cents",
+        "min_credit_limit_cents"
+      ]
+    },
+    "banking-service/tests/test_credit_limit_postgres.py": {
+      "owner": "banking-service",
+      "rationale": "Explicit adapter/test reads of retained integer account and product storage; model-facing credit-limit contracts use canonical Money.",
+      "lines": {
+        "3445b38e78e2b9698a6f3a6f308a51bb78cb2a84b5726c97b47a095d43f3e04a": 1,
+        "4759e69dd8506da2ee5c7126bcefd8322e0078d1b00090b8eae3f45800ba7378": 1,
+        "503b95cf342a560530c4e3abf008c211b782bc13b5b97095f476d3ddb001e8eb": 1,
+        "66a6fee2a9bab71cd0980ad4182f7d044adaf06c048ad8c44353cc3d78015769": 3,
+        "c4688e3289dde974e0108db96f63a60b17601ecbfcf1e2a1e44da5ea579da757": 1,
+        "dc428e5a4b28204b406f66a0efabc294d66dea9eb4b1eaccb86259b7a29d613d": 1,
+        "f92a492c62286d4f4a0a0602846f71c7c93eff88472fc259f4e5aba41afcdcc8": 1
+      },
+      "symbols": [
+        "available_credit_cents",
+        "credit_limit_cents"
+      ]
     }
   }
 }

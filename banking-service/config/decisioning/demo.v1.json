@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "provider_id": "demo-bank",
+  "policy_id": "demo-credit-limit-decision",
+  "policy_version": 1,
+  "approval_ttl_seconds": 180,
+  "default_scenario": "STANDARD",
+  "scenarios": [
+    "STANDARD",
+    "DECLINE",
+    "NEEDS_INFORMATION",
+    "REFER_FOR_REVIEW"
+  ]
+}

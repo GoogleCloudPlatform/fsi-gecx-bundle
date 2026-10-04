@@ -327,7 +327,7 @@ def test_closeout_contract_requires_checkpoint_transfer_and_terminal_tool() -> N
     rendered = repr(golden)
 
     assert len(golden["turns"]) == 4
-    assert "request_credit_limit_increase" in rendered
+    assert "commit_action_proposal" in rendered
     assert "offer_session_closeout" not in rendered
     action_steps = golden["turns"][2]["steps"]
     action_tools = [
@@ -335,8 +335,8 @@ def test_closeout_contract_requires_checkpoint_transfer_and_terminal_tool() -> N
         for step in action_steps
         if (step.get("expectation") or {}).get("toolCall")
     ]
-    assert action_tools == ["request_credit_limit_increase"]
-    assert action_steps[1]["expectation"]["toolCall"]["args"] == {}
+    assert action_tools == ["commit_action_proposal"]
+    assert action_steps[1]["expectation"]["toolCall"]["args"] == {"proposal_id":"eval-limit-proposal-1"}
     checkpoint = action_steps[3]["expectation"]["updatedVariables"]
     assert checkpoint["closeout_checkpoint_state"] == "OFFERED"
     assert checkpoint["closeout_delegation_authorized"] is False
@@ -401,15 +401,18 @@ def test_conversational_quality_counts_just_to_confirm() -> None:
 
 def test_evaluation_fake_tool_supports_credit_limit_contract() -> None:
     response = fake_tools.fake_tool_call(
-        {"id": "request_credit_limit_increase"},
+        {"id": "commit_action_proposal"},
         {"requested_limit": 11250},
         None,
     )
 
     assert response == {
         "success": True,
-        "new_limit": 11250,
-        "message": "Credit limit increase approved.",
+        "status": "COMMITTED", "action_type": "CREDIT_LIMIT_INCREASE",
+        "proposal_id": "eval-limit-proposal-1", "contract_version": "credit-limit-increase.v1",
+        "credit_limit": {"amount_minor": 1125000, "currency_code": "USD"},
+        "available_credit": {"amount_minor": 1090000, "currency_code": "USD"},
+        "message": "Your credit limit is now $11,250.00.",
     }
 
 

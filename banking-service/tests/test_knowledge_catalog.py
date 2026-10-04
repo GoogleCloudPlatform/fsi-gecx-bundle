@@ -21,7 +21,7 @@ def test_local_guidance_bundle_for_voice_fraud_returns_expected_topics():
 
     assert bundle["source"] == "local_file"
     assert bundle["schema_version"] == 1
-    assert bundle["content_version"] == "2.8"
+    assert bundle["content_version"] == "2.9"
     assert bundle["snapshot_id"]
     assert bundle["retrieved_at"].endswith("Z")
     assert bundle["fallback_reason"] == "KNOWLEDGE_CATALOG_DISABLED"
@@ -31,6 +31,7 @@ def test_local_guidance_bundle_for_voice_fraud_returns_expected_topics():
         "recognized_activity",
         "replacement_card",
         "wallet_provisioning",
+        "credit_limit_increase",
         "human_escalation",
     ]
     assert "Fraud Golden Path" in bundle["agent_guidance_summary"]
@@ -54,6 +55,7 @@ def test_customer_reported_guidance_uses_intake_specific_catalog_topics():
         "customer_reported_fraud",
         "replacement_card",
         "wallet_provisioning",
+        "credit_limit_increase",
         "human_escalation",
     ]
     assert "triage_customer_reported_fraud" in bundle["agent_guidance_summary"]
@@ -128,8 +130,8 @@ def test_local_guidance_release_validation_passes_current_bundle():
     result = KnowledgeCatalogService().validate_local_guidance(strict_freshness=True)
 
     assert result["schema_version"] == 1
-    assert result["bundle_version"] == "2.8"
-    assert result["topic_count"] == 6
+    assert result["bundle_version"] == "2.9"
+    assert result["topic_count"] == 7
 
 
 def test_aspect_data_to_dict_converts_nested_protobuf_values_to_plain_json():

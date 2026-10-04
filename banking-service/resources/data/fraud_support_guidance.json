@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "bundle_version": "2.8",
-  "published_at": "2026-10-01T00:00:00Z",
+  "bundle_version": "2.9",
+  "published_at": "2026-10-02T00:00:00Z",
   "max_age_days": 90,
   "topics": [
     {
@@ -48,7 +48,7 @@
       ],
       "customer_safe_summary": "Review the suspicious charges, treat an unambiguous categorical response as the complete selection, then use one banking-authored proposal confirmation before committing fraud remediation.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.8",
+      "version": "2.9",
       "last_reviewed": "2026-09-18"
     },
     {
@@ -78,7 +78,7 @@
       ],
       "customer_safe_summary": "If no alert exists, review recent transactions with the customer, confirm only the exact charges they identify, then open and triage a customer-reported fraud case through one controlled workflow.",
       "source_policy_ref": "customer_reported_fraud_intake_v1",
-      "version": "2.2",
+      "version": "2.9",
       "last_reviewed": "2026-07-22"
     },
     {
@@ -109,7 +109,7 @@
       ],
       "customer_safe_summary": "If the charges are legitimate, close the alert through the fraud triage workflow and reassure the customer that no card action is required.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.8",
+      "version": "2.9",
       "last_reviewed": "2026-09-18"
     },
     {
@@ -134,7 +134,7 @@
       ],
       "customer_safe_summary": "When fraud is confirmed, the fraud triage workflow blocks the compromised card and may issue a replacement card as part of the case remediation.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.8",
+      "version": "2.9",
       "last_reviewed": "2026-09-18"
     },
     {
@@ -165,7 +165,7 @@
       ],
       "customer_safe_summary": "After a replacement card is issued, offer to queue it for Google Wallet only if the customer wants immediate card access, and describe the queue as pending until the tool succeeds.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.8",
+      "version": "2.9",
       "last_reviewed": "2026-09-18"
     },
     {
@@ -191,8 +191,39 @@
       ],
       "customer_safe_summary": "If the customer wants a human representative, transfer the conversation without losing the fraud case context.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
-      "version": "2.8",
+      "version": "2.9",
       "last_reviewed": "2026-09-18"
+    },
+    {
+      "topic_id": "credit_limit_increase",
+      "title": "Demo Credit-Limit Increase",
+      "audience": "CREDIT_SUPPORT_AGENT",
+      "channel": "VOICE",
+      "applies_when": [
+        "customer_requests_more_credit_capacity"
+      ],
+      "must_do": [
+        "Discover the credit-limit-increase playbook and record the bounded selection or clarification decision.",
+        "Clarify the explicit requested new total limit and currency; convert USD to integer minor units without rounding or assuming a percentage.",
+        "Prepare the offer first; preserve current limit, proposed limit, increase amount and the eligible demo approval-on-confirmation consequence.",
+        "Obtain explicit confirmation in a later real customer turn before generic proposal commit.",
+        "Describe only authoritative results; preserve decimal currency amounts such as $7,500.00 in transcript text."
+      ],
+      "must_not_do": [
+        "Do not use a direct limit mutation tool or infer a default increase.",
+        "Do not characterize demo eligibility as credit-history underwriting or promise a review submission.",
+        "Do not retry a stale offer; prepare and present a new offer from current facts."
+      ],
+      "tool_dependencies": [
+        "discover_playbooks",
+        "record_playbook_decision",
+        "prepare_action_proposal",
+        "commit_action_proposal"
+      ],
+      "customer_safe_summary": "An eligible demo USD credit-limit increase takes effect after you confirm its banking-authored offer.",
+      "source_policy_ref": "demo-credit-limit-increase.v1",
+      "version": "2.9",
+      "last_reviewed": "2026-10-02"
     }
   ]
 }

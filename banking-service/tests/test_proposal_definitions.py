@@ -38,7 +38,7 @@ def test_fourth_action_requires_only_a_definition():
     fourth = deepcopy(docs[0])
     fourth.update(id="replacement-followup", action_type="REPLACEMENT_FOLLOWUP")
     registry = load_action_registry(None, [*docs, fourth])
-    assert len(registry.action_types) == 4
+    assert len(registry.action_types) == 5
     assert {type(registry.require(key).handler) for key in registry.action_types} == {
         ServiceActionHandler
     }
@@ -156,9 +156,10 @@ def test_discovery_uses_only_published_revisions_and_excludes_private_bindings()
         load_action_registry(None), "How will I pay for dinner?"
     )
     assert result["retrieval_mode"] == "FULL_PUBLISHED_CATALOG"
-    assert len(result["playbooks"]) == 3
+    assert len(result["playbooks"]) == 4
     assert all(
-        p["revision"] == 2 and p["eligibility"] == "NOT_CHECKED"
+        p["revision"] == (1 if p["playbook_id"] == "credit-limit-increase" else 2)
+        and p["eligibility"] == "NOT_CHECKED"
         for p in result["playbooks"]
     )
     assert "card_token" not in json.dumps(result)
@@ -181,7 +182,7 @@ def test_fourth_definition_is_discoverable_without_tool_or_engine_changes():
     result = discover_playbooks(
         load_action_registry(None, [*docs, fourth]), "Replace my card"
     )
-    assert len(result["playbooks"]) == 4
+    assert len(result["playbooks"]) == 5
     assert next(
         p for p in result["playbooks"] if p["playbook_id"] == "new-replacement"
     )["input_schema"]["required"] == ["reason"]

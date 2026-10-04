@@ -163,8 +163,9 @@ def validate_definition(document):
 
 
 class ServiceActionHandler:
-    def __init__(self, db, definition):
+    def __init__(self, db, definition, decisioning_provider=None):
         self.db = db
+        self.decisioning_provider = decisioning_provider
         self._definition = deepcopy(definition)
         self.operation = OPERATIONS[definition["operation"]]
 
@@ -175,12 +176,13 @@ class ServiceActionHandler:
             return None
         return deepcopy(d["discovery"])
 
-    def prepare(self, customer_id, inputs):
+    def prepare(self, customer_id, inputs, *, preparation_context=None):
         inputs = deepcopy(inputs)
         validate_inputs(inputs, self.operation.input_schema)
         d = self._definition
         account_id, facts, summary = self.operation.prepare(
-            self.db, customer_id, inputs, d["parameters"]
+            self.db, customer_id, inputs, d["parameters"],
+            provider=self.decisioning_provider, preparation_context=preparation_context,
         )
         payload = {
             key: deepcopy(
@@ -210,7 +212,7 @@ class ServiceActionHandler:
         return self.operation.execute(self.db, proposal)
 
     def validate_current_preconditions(self, proposal):
-        return self.operation.validate(self.db, proposal)
+        return self.operation.validate(self.db, proposal, provider=self.decisioning_provider)
 
     def reconcile(self, proposal):
         return self.operation.reconcile(self.db, proposal)
@@ -228,7 +230,7 @@ class ServiceActionHandler:
         return self.operation.reconciled(self.db, proposal, result)
 
 
-def load_action_registry(db, documents=None):
+def load_action_registry(db, documents=None, *, decisioning_provider=None):
     repository_catalog = documents is None
     if documents is None:
         documents = [
@@ -258,7 +260,7 @@ def load_action_registry(db, documents=None):
                     quality_gate=PresentationQualityGate.RELEASE_EVALUATION,
                     natural_language_allowed=True,
                 ),
-                handler=ServiceActionHandler(db, d),
+                handler=ServiceActionHandler(db, d, decisioning_provider),
                 result_schema={"success": bool},
             )
         )

@@ -315,11 +315,22 @@ def _managed_fake_output(tool: str) -> dict[str, Any]:
             "decision": "DECLINE",
             "invalidation_reason": "CUSTOMER_DECLINED",
         }
-    if tool == "request_credit_limit_increase":
+    if tool in {"discover_playbooks", "record_playbook_decision", "prepare_action_proposal"}:
+        # Keep synthetic generic servicing outputs aligned with managed tool fakes.
+        import importlib.util
+        fake_path = ROOT / "gecx/Credit_Support_Voice_Agent/toolsets/banking_service_mcp_toolset/evaluation_fake_tools.py"
+        spec = importlib.util.spec_from_file_location("qualification_banking_fakes", fake_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.fake_tool_call({"id": tool}, {}, None)
+    if tool == "commit_action_proposal":
         return {
             "success": True,
-            "new_limit": 11250,
-            "message": "Credit limit increase approved.",
+            "status": "COMMITTED", "action_type": "CREDIT_LIMIT_INCREASE",
+            "proposal_id": "eval-limit-proposal-1",
+            "credit_limit": {"amount_minor": 1125000, "currency_code": "USD"},
+            "available_credit": {"amount_minor": 1090000, "currency_code": "USD"},
+            "message": "Your credit limit is now $11,250.00.",
         }
     return {}
 
@@ -986,9 +997,15 @@ def _closeout_contract_golden(app: str) -> dict[str, Any]:
                             "text": "Please raise my credit limit to $11,250."
                         }
                     },
+                    _tool_expectation(app, "discover_playbooks", "eval-limit-discover", {"customer_need": "Raise my credit limit to $11,250.00"}),
+                    _tool_response_expectation(app, "discover_playbooks", "eval-limit-discover"),
+                    _tool_expectation(app, "record_playbook_decision", "eval-limit-select", {"discovery_id": "eval-limit-discovery", "decision": "SELECT", "reason_code": "APPLICABLE", "playbook_id": "credit-limit-increase", "criterion_index": 0}),
+                    _tool_response_expectation(app, "record_playbook_decision", "eval-limit-select"),
+                    _tool_expectation(app, "prepare_action_proposal", "eval-limit-prepare", {"playbook_id": "credit-limit-increase", "revision": 1, "digest": "eval-limit-definition", "inputs_json": '{"requested_limit_minor":1125000,"currency_code":"USD"}'}),
+                    _tool_response_expectation(app, "prepare_action_proposal", "eval-limit-prepare"),
                     _agent_response_expectation(
-                        "To confirm, you want a new credit limit of $11,250. "
-                        "Is that correct?"
+                        "Increase your credit limit from $10,000.00 to $11,250.00, an increase of $1,250.00. "
+                        "This eligible demo increase takes effect after confirmation. Is that correct?"
                     ),
                 ]
             },
@@ -997,12 +1014,13 @@ def _closeout_contract_golden(app: str) -> dict[str, Any]:
                     {"userInput": {"text": "That's correct."}},
                     _tool_expectation(
                         app,
-                        "request_credit_limit_increase",
+                        "commit_action_proposal",
                         "eval-limit-increase",
+                        {"proposal_id": "eval-limit-proposal-1"},
                     ),
                     _tool_response_expectation(
                         app,
-                        "request_credit_limit_increase",
+                        "commit_action_proposal",
                         "eval-limit-increase",
                     ),
                     {

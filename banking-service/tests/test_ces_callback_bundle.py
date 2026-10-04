@@ -381,7 +381,7 @@ def test_ces_closeout_uses_callback_checkpoint_and_later_turn_ordering():
     context = Context(invocation_id="turn-1", variables=variables)
     capture_callback.after_tool_callback(
         SimpleNamespace(
-            name="banking_service_mcp_toolset.request_credit_limit_increase"
+            name="banking_service_mcp_toolset.commit_action_proposal"
         ),
         {},
         context,
@@ -441,7 +441,7 @@ def test_ces_closeout_handoff_accepts_later_input_without_invocation_id():
     )
     capture_callback.after_tool_callback(
         SimpleNamespace(
-            name="banking_service_mcp_toolset.request_credit_limit_increase"
+            name="banking_service_mcp_toolset.commit_action_proposal"
         ),
         {},
         context,
@@ -543,7 +543,7 @@ def test_failed_servicing_action_does_not_open_closeout_checkpoint():
     variables = {"closeout_checkpoint_state": "OFFERED"}
     context = Context(invocation_id="servicing-turn", variables=variables)
     tool = SimpleNamespace(
-        name="banking_service_mcp_toolset.request_credit_limit_increase"
+        name="banking_service_mcp_toolset.commit_action_proposal"
     )
 
     assert after_callback.after_tool_callback(
@@ -691,7 +691,7 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
         "commit_wallet_provisioning",
         "decide_action_proposal",
         "reverse_overdraft_fee",
-        "request_credit_limit_increase",
+        "commit_action_proposal",
     ):
         assert f"{{@TOOL: {tool_name}}}" not in instruction
 
@@ -708,7 +708,7 @@ def test_voice_bundle_has_safe_idle_redaction_and_mcp_references():
         "prepare_action_proposal",
         "commit_action_proposal",
         "decide_action_proposal",
-        "request_credit_limit_increase",
+        "commit_action_proposal",
         "reverse_overdraft_fee",
     }
     assert set(agent["toolsets"][0]["toolIds"]).isdisjoint(

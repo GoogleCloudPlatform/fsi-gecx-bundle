@@ -29,7 +29,6 @@ _COMMIT_TOOLS = {
     "commit_wallet_provisioning",
 }
 _DIRECT_SERVICING_TOOLS = {
-    "request_credit_limit_increase",
     "reverse_overdraft_fee",
 }
 
@@ -235,7 +234,8 @@ def after_tool_callback(tool, input, callback_context, tool_response):
     if payload.get("success") is True and proposal_id and summary:
         facts = {key: payload[key] for key in (
             "proposal_id", "money_facts", "card_last_four", "issue_replacement",
-            "escalate", "customer_safe_summary") if key in payload}
+            "escalate", "customer_safe_summary", "current_limit", "proposed_limit",
+            "increase_amount", "approval_semantics") if key in payload}
         callback_context.variables["proposal_facts_json"] = json.dumps(facts)
         invocation_id = str(callback_context.invocation_id or "")
         callback_context.variables["customer_turn_id"] = invocation_id

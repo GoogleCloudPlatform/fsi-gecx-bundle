@@ -15,6 +15,7 @@
 import logging
 import datetime
 import json
+import hashlib
 import secrets
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
@@ -26,7 +27,7 @@ from models.fdx import (
     PaymentMeta, PaymentNetwork, PaginatedPaymentNetworksResult, FDXAccount
 )
 from services.taxonomy_service import TaxonomyService
-from models.money import Money, money_fields
+from models.money import MAX_MINOR, Money, money_fields
 from services.financial_journal import (
     JournalEntrySpec,
     ensure_credit_journal_account,
@@ -295,49 +296,106 @@ def issue_replacement_card(
         raise e
 
 
-def apply_limit_increase(db: Session, account_id: str, requested_limit_cents: int) -> dict:
+CREDIT_LIMIT_POLICY = {
+    "id": "demo-credit-limit-increase",
+    "revision": 1,
+    "currency_code": "USD",
+    "maximum_current_limit_multiple": 2,
+    "maximum_minor": MAX_MINOR,
+    "requires_active_account": True,
+    "requires_active_product": True,
+    "requires_strict_increase": True,
+    "requires_product_bounds": True,
+    "approval_semantics": "DEMO_APPROVED_ON_CONFIRMATION",
+}
+CREDIT_LIMIT_POLICY = {
+    **CREDIT_LIMIT_POLICY,
+    "digest": hashlib.sha256(json.dumps(
+        CREDIT_LIMIT_POLICY, sort_keys=True, separators=(",", ":")
+    ).encode()).hexdigest(),
+}
+
+
+def evaluate_credit_limit(facts, requested):
+    """Ordered, closed demo eligibility rules; no credit-history inference."""
+    if facts["account_status"] != "ACTIVE":
+        return "ACCOUNT_INACTIVE"
+    if facts["currency_code"] != "USD" or requested["currency_code"] != "USD":
+        return "UNSUPPORTED_CURRENCY"
+    if type(facts["current_limit_minor"]) is not int or not 0 < facts["current_limit_minor"] <= MAX_MINOR:
+        return "ACCOUNT_LIMIT_INVALID"
+    bounds = (facts["minimum_limit_minor"], facts["maximum_limit_minor"])
+    if facts["product_active"] is not True or any(type(v) is not int for v in bounds):
+        return "PRODUCT_POLICY_UNAVAILABLE"
+    if not 0 < bounds[0] <= bounds[1] <= MAX_MINOR:
+        return "PRODUCT_POLICY_INVALID"
+    amount = requested["amount_minor"]
+    if type(amount) is not int or not 0 < amount <= MAX_MINOR:
+        return "REQUESTED_LIMIT_INVALID"
+    if amount <= facts["current_limit_minor"]:
+        return "LIMIT_NOT_INCREASED"
+    if not bounds[0] <= amount <= bounds[1]:
+        return "PRODUCT_LIMIT_OUT_OF_BOUNDS"
+    if amount > facts["current_limit_minor"] * 2:
+        return "DEMO_LIMIT_CEILING_EXCEEDED"
+    return None
+
+
+def apply_limit_increase(
+    db: Session, account_id: str, requested_limit_cents: int, *, commit_transaction: bool = True
+) -> dict:
+    """Apply a strict USD increase under account/product locks.
+
+    Standalone callers own commit/rollback by default. Proposal callers disable
+    both so the lifecycle atomically persists the account, audit and evidence.
     """
-    Processes credit limit adjustments with Pessimistic Row Locking to prevent balance race conditions.
-    """
-    logger.info(f"Processing credit limit request for account: {account_id} to {requested_limit_cents} cents")
+    from models.credit_card import CreditAccount, CreditProduct
+    from models.money import MAX_MINOR
+    from repositories.credit_card import CreditCardRepository
+
     try:
-        # Acquire exclusive database lock on the financial account row until transaction commit
-        from repositories.credit_card import CreditCardRepository
+        if type(requested_limit_cents) is not int or not 0 < requested_limit_cents <= MAX_MINOR:
+            raise ValueError("Requested limit must be positive canonical integer minor units.")
         repo = CreditCardRepository(db)
-        account = repo.get_account_by_id(account_id, lock=True)
+        account = db.query(CreditAccount).filter_by(id=account_id).populate_existing().with_for_update().one_or_none()
         if not account:
-            logger.error(f"Account '{account_id}' not found.")
-            raise ValueError(f"Account '{account_id}' not found.")
-            
-        if account.status != "ACTIVE":
-            raise ValueError(f"Account is in '{account.status}' status and ineligible for credit limit changes.")
-
-        # Product Constraint Check: Validate requested limit against CreditProduct catalog parameters
-        product = repo.get_credit_product(account.product_code)
-        if product:
-            if requested_limit_cents < product.min_credit_limit_cents or requested_limit_cents > product.max_credit_limit_cents:
-                raise ValueError(
-                    f"Requested limit {requested_limit_cents} cents is out of bounds for credit product '{account.product_code}'. "
-                    f"Allowed range: {product.min_credit_limit_cents} to {product.max_credit_limit_cents} cents."
-                )
-
-        limit_change = requested_limit_cents - account.credit_limit_cents
-        account.credit_limit_cents = requested_limit_cents
-        account.available_credit_cents += limit_change
-        
-        repo.save_account(account)
-        record_audit_event(db, "CREDIT_LIMIT_INCREASED", {"account_id": str(account_id), "new_limit_cents": account.credit_limit_cents})
-        db.commit()
-        logger.info(f"Limit updated. New Limit: {account.credit_limit_cents} cents, Available Credit: {account.available_credit_cents} cents")
-        return {
-            "account_id": account_id,
-            "new_limit_cents": account.credit_limit_cents,
-            "available_credit_cents": account.available_credit_cents
+            raise ValueError("An owned account is required.")
+        product = db.query(CreditProduct).filter_by(
+            product_code=account.product_code
+        ).populate_existing().with_for_update().one_or_none()
+        facts = {
+            "account_status": account.status, "currency_code": account.currency,
+            "current_limit_minor": account.credit_limit_cents,
+            "product_active": product.is_active if product else None,
+            "minimum_limit_minor": product.min_credit_limit_cents if product else None,
+            "maximum_limit_minor": product.max_credit_limit_cents if product else None,
         }
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error applying credit limit increase: {e}")
-        raise e
+        reason = evaluate_credit_limit(facts, {"amount_minor": requested_limit_cents, "currency_code": "USD"})
+        if reason:
+            raise ValueError(f"Credit-limit policy refused the request: {reason}.")
+        limit_change = requested_limit_cents - account.credit_limit_cents
+        if type(account.available_credit_cents) is not int or not -MAX_MINOR <= account.available_credit_cents <= MAX_MINOR:
+            raise ValueError("Current available credit exceeds the canonical Money range.")
+        available = account.available_credit_cents + limit_change
+        if not -MAX_MINOR <= available <= MAX_MINOR:
+            raise ValueError("Available credit exceeds the canonical Money range.")
+        account.credit_limit_cents = requested_limit_cents
+        account.available_credit_cents = available
+        repo.save_account(account)
+        record_audit_event(db, "CREDIT_LIMIT_INCREASED", {
+            "account_id": str(account_id), "new_limit_cents": account.credit_limit_cents
+        })
+        if commit_transaction:
+            db.commit()
+        return {
+            "account_id": str(account_id),
+            "new_limit_cents": account.credit_limit_cents,
+            "available_credit_cents": account.available_credit_cents,
+        }
+    except Exception:
+        if commit_transaction:
+            db.rollback()
+        raise
 
 
 def reverse_posted_fee(db: Session, account_id: str, transaction_id: str, reason: str) -> dict:

@@ -438,3 +438,20 @@ async def test_generic_prepare_captures_unknown_catalog_action_and_protects_comm
                               "action_type": "NEW_CONFIG_ACTION", "contract_version": "new.v1"}})
     assert context.state["fraud_playbook"]["pending_proposal"] is None
     assert context.state["closeout_boundary"]
+
+
+@pytest.mark.asyncio
+async def test_limit_commit_emits_authoritative_money_even_without_account_refresh(monkeypatch):
+    allow_reset(monkeypatch)
+    events = []
+    monkeypatch.setattr(agent,"notify_event",events.append)
+    async def missing_account(): return {}
+    monkeypatch.setattr(agent,"fetch_updated_account_details",missing_account)
+    context = tool_context(None)
+    payload = {"success":True,"status":"COMMITTED","proposal_id":PROPOSAL_ID,
+        "action_type":"CREDIT_LIMIT_INCREASE","contract_version":"credit-limit-increase.v1",
+        "credit_limit":{"amount_minor":1500000,"currency_code":"USD"},
+        "available_credit":{"amount_minor":1450000,"currency_code":"USD"}}
+    await agent.after_tool_callback(SimpleNamespace(name="commit_action_proposal"),{},context,{"structuredContent":payload})
+    assert {"type":"LIMIT_UPDATED","proposal_id":PROPOSAL_ID,"credit_limit":payload["credit_limit"],
+        "available_credit":payload["available_credit"]} in events

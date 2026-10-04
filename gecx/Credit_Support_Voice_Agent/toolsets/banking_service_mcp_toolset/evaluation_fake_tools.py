@@ -36,7 +36,10 @@ def fake_tool_call(tool, input, callback_context):
         "propose_wallet_provisioning",
         "commit_wallet_provisioning",
         "decide_action_proposal",
-        "request_credit_limit_increase",
+        "discover_playbooks",
+        "record_playbook_decision",
+        "prepare_action_proposal",
+        "commit_action_proposal",
     )
     tool_id = next(
         (
@@ -462,16 +465,31 @@ def fake_tool_call(tool, input, callback_context):
                 "CANCEL": "CUSTOMER_CANCELLED",
             }.get(decision),
         }
-    elif tool_id == "request_credit_limit_increase":
-        requested_limit = int(
-            (input or {}).get("amount")
-            or (input or {}).get("requested_limit")
-            or 0
-        )
+    elif tool_id == "discover_playbooks":
         output = {
-            "success": requested_limit > 0,
-            "new_limit": requested_limit,
-            "message": "Credit limit increase approved.",
+            "success": True, "discovery_id": "eval-limit-discovery",
+            "playbooks": [{"playbook_id": "credit-limit-increase", "revision": 1,
+                           "digest": "eval-limit-definition", "eligibility": "NOT_CHECKED"}],
+        }
+    elif tool_id == "record_playbook_decision":
+        output = {"success": True, "decision": "SELECT", "authorizes_execution": False}
+    elif tool_id == "prepare_action_proposal":
+        output = {
+            "success": True, "status": "PROPOSED", "action_type": "CREDIT_LIMIT_INCREASE",
+            "proposal_id": "eval-limit-proposal-1", "contract_version": "credit-limit-increase.v1",
+            "customer_safe_summary": "Increase your credit limit from $10,000.00 to $11,250.00. This eligible demo increase takes effect after confirmation.",
+            "current_limit": {"amount_minor": 1000000, "currency_code": "USD"},
+            "proposed_limit": {"amount_minor": 1125000, "currency_code": "USD"},
+            "increase_amount": {"amount_minor": 125000, "currency_code": "USD"},
+            "approval_semantics": "DEMO_APPROVED_ON_CONFIRMATION",
+        }
+    elif tool_id == "commit_action_proposal":
+        output = {
+            "success": True, "status": "COMMITTED", "action_type": "CREDIT_LIMIT_INCREASE",
+            "proposal_id": "eval-limit-proposal-1", "contract_version": "credit-limit-increase.v1",
+            "credit_limit": {"amount_minor": 1125000, "currency_code": "USD"},
+            "available_credit": {"amount_minor": 1090000, "currency_code": "USD"},
+            "message": "Your credit limit is now $11,250.00.",
         }
     else:
         return None

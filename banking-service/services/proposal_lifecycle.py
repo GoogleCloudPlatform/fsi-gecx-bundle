@@ -114,10 +114,31 @@ class ActiveProposalExistsError(ProposalConflictError):
     )
 
 
+class ProposalPolicyError(ProposalError):
+    """Owned eligibility refusal with a bounded typed evidence contract."""
+
+    def __init__(self, evidence):
+        outcome = (evidence.bank_decision or {}).get("outcome")
+        messages = {
+            "DECLINED": "The bank decision declined this demo increase; no limit has changed.",
+            "NEEDS_INFORMATION": "The bank decision requires more information before approval; no increase has been approved or applied.",
+            "REFER_FOR_REVIEW": "The bank decision cannot approve this increase automatically. No review has been submitted and no limit has changed.",
+        }
+        message = messages.get(outcome, "This requested credit-limit increase is not eligible under the demo policy.")
+        if evidence.decision_failure:
+            message = "The bank approval could not be validated; no increase has been approved or applied."
+        super().__init__(
+            "Credit-limit demo policy refused the request.",
+            code=evidence.reason_code,
+            customer_message=message,
+        )
+        self.policy_evidence = evidence
+
+
 class ActionPreconditionError(ProposalTransitionError):
     """The domain state bound to a proposal is no longer executable."""
 
-    def __init__(self, message: str, *, reason: str):
+    def __init__(self, message: str, *, reason: str, policy_evidence=None):
         super().__init__(
             message,
             code="ACTION_PRECONDITION_CHANGED",
@@ -128,6 +149,7 @@ class ActionPreconditionError(ProposalTransitionError):
             ),
         )
         self.reason = reason
+        self.policy_evidence = policy_evidence
 
 
 @dataclass(frozen=True)

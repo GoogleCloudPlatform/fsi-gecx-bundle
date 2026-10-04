@@ -29,12 +29,14 @@ DEFAULT_TOPIC_IDS = [
     "recognized_activity",
     "replacement_card",
     "wallet_provisioning",
+    "credit_limit_increase",
     "human_escalation",
 ]
 CUSTOMER_REPORTED_TOPIC_IDS = [
     "customer_reported_fraud",
     "replacement_card",
     "wallet_provisioning",
+    "credit_limit_increase",
     "human_escalation",
 ]
 SYNC_TOPIC_IDS = list(dict.fromkeys(DEFAULT_TOPIC_IDS + CUSTOMER_REPORTED_TOPIC_IDS))

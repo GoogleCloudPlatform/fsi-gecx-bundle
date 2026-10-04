@@ -16,7 +16,7 @@
 
 
 def input_schema(operation):
-    names = {str: "string", bool: "boolean", list: "array", type(None): "null"}
+    names = {int: "integer", str: "string", bool: "boolean", list: "array", type(None): "null"}
     properties = {}
     for key, types in (operation.public_input_schema or operation.input_schema).items():
         allowed = types if isinstance(types, tuple) else (types,)

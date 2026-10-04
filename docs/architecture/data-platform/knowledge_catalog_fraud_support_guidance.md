@@ -53,6 +53,7 @@ Current default topics are:
 - `recognized_activity`
 - `replacement_card`
 - `wallet_provisioning`
+- `credit_limit_increase` (bounded USD demo increases through generic proposals)
 - `human_escalation`
 
 ---

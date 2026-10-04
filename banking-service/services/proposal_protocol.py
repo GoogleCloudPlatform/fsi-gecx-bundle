@@ -313,6 +313,22 @@ class RuntimeEvidenceValidator:
         )
 
 
+@dataclass(frozen=True)
+class PolicyEvaluationEvidence:
+    """Checked owned facts only; immutable definition bound by the service."""
+
+    policy: dict[str, Any]
+    facts: dict[str, Any]
+    requested_limit: dict[str, Any]
+    reason_code: str
+    definition: dict[str, Any] | None = None
+    approved_facts: dict[str, Any] | None = None
+    bank_decision: dict[str, Any] | None = None
+    decision_failure: str | None = None
+    decision_policy: dict[str, Any] | None = None
+    decision_request: dict[str, Any] | None = None
+
+
 class TypedActionHandler(Protocol):
     """A transaction-participating handler for one registered action."""
 
@@ -391,7 +407,8 @@ class ActionSpecification:
                 f"{self.action_type} payload is missing: {', '.join(sorted(missing))}."
             )
         for name, expected_type in self.payload_schema.items():
-            if not isinstance(payload[name], expected_type):
+            if (not isinstance(payload[name], expected_type)
+                or (expected_type is int and type(payload[name]) is not int)):
                 raise ValueError(f"{self.action_type} payload field {name} is invalid.")
 
     def validate_result(self, result: Mapping[str, Any]) -> None:

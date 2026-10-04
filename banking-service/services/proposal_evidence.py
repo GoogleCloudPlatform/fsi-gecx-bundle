@@ -136,6 +136,51 @@ EVIDENCE = {
 } | {"acknowledged_fact_keys": [None]}
 
 
+LIMIT_POLICY = {key: None for key in (
+    "id", "revision", "digest", "currency_code", "maximum_current_limit_multiple",
+    "maximum_minor", "requires_active_account", "requires_active_product",
+    "requires_strict_increase", "requires_product_bounds", "approval_semantics",
+)}
+LIMIT_FACTS = {key: None for key in (
+    "account_id", "account_status", "currency_code", "product_code",
+    "current_limit_minor", "product_active", "minimum_limit_minor", "maximum_limit_minor",
+    "available_credit_minor", "projected_available_credit_minor",
+)}
+DECISION_POLICY = {key: None for key in ("provider_id", "policy_id", "version", "digest", "approval_ttl_seconds")}
+BANK_DECISION = {key: None for key in ("decision_id", "provider_id", "outcome", "evaluated_at", "expires_at", "request_ref", "scope_ref", "input_ref")} | {
+    "approved_limit": MONEY, "reason_codes": [None], "policy": DECISION_POLICY, "evidence_references": [None],
+}
+DECISION_REQUEST = {"request_ref": None, "scope_ref": None, "input_ref": None, "requested_limit": MONEY, "facts": LIMIT_FACTS}
+PAYLOAD.update({
+    "bank_decision": BANK_DECISION, "decision_request": DECISION_REQUEST,
+    "current_limit": MONEY, "proposed_limit": MONEY, "increase_amount": MONEY,
+    "credit_limit_policy": LIMIT_POLICY, "eligibility_facts": LIMIT_FACTS,
+    "approval_semantics": None,
+    "prepared_arithmetic": {"available_credit_minor": None, "projected_available_credit_minor": None},
+})
+RESULT.update({
+    "previous_credit_limit": MONEY, "credit_limit": MONEY,
+    "increase_amount": MONEY, "available_credit": MONEY, "approval_semantics": None,
+})
+
+
+def policy_evaluation_snapshot(evaluation):
+    return {
+        "kind": "BANK_DECISION" if evaluation.bank_decision or evaluation.decision_failure else "POLICY_EVALUATION",
+        "decision": (evaluation.bank_decision or {}).get("outcome", "REFUSED"),
+        "bank_decision": project(evaluation.bank_decision, BANK_DECISION),
+        "decision_failure": evaluation.decision_failure,
+        "decision_policy": project(evaluation.decision_policy, DECISION_POLICY),
+        "decision_request": project(evaluation.decision_request, DECISION_REQUEST),
+        "reason_code": evaluation.reason_code,
+        "definition": deepcopy(evaluation.definition),
+        "credit_limit_policy": project(evaluation.policy, LIMIT_POLICY),
+        "requested_limit": project(evaluation.requested_limit, MONEY),
+        "evaluated_facts": project(evaluation.facts, LIMIT_FACTS),
+        "approved_facts": project(evaluation.approved_facts, LIMIT_FACTS),
+    }
+
+
 def project(value, schema):
     """Copy only explicit structural fields; reject malformed archive facts."""
     if value is None:

@@ -269,6 +269,26 @@ def audited_request(operation):
 def record_rejection(
     db, identity, context, operation, exc, request, *, customer_id=None
 ):
+    from dataclasses import replace
+    from services.proposal_lifecycle import ProposalPolicyError, ActionPreconditionError
+    from services.proposal_evidence import policy_evaluation_snapshot
+    from services.proposal_protocol import PolicyEvaluationEvidence
+
+    snapshot = None
+    evaluation = exc.policy_evidence if isinstance(exc, (ProposalPolicyError, ActionPreconditionError)) else None
+    if isinstance(evaluation, PolicyEvaluationEvidence) and customer_id:
+        if isinstance(exc, ActionPreconditionError) and exc.proposal is not None:
+            proposal = exc.proposal
+            if (str(proposal.customer_id) == str(customer_id)
+                and proposal.support_session_id == context.support_session_id
+                and proposal.runtime_session_id == context.runtime_session_id
+                and proposal.runtime_name == context.runtime_name):
+                # The caller pinned this proposal after authenticated scope validation.
+                from services.proposal_definitions import load_action_registry
+                spec = load_action_registry(db).for_proposal(proposal)
+                evaluation = replace(evaluation, definition=definition_snapshot(spec))
+        if evaluation.definition is not None:
+            snapshot = policy_evaluation_snapshot(evaluation)
     # Never resolve an attempted proposal ID: it may belong to another customer.
     emit(
         db,
@@ -297,6 +317,7 @@ def record_rejection(
             if isinstance(exc, ValueError)
             else "UNKNOWN",
         },
+        snapshot=snapshot,
     )
     db.commit()
 
