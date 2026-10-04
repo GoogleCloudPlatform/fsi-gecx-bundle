@@ -77,6 +77,7 @@ CONTRACT_PAYLOADS = {
 }
 
 FROZEN_PROPOSAL_COLUMNS = {
+    "bank_decision_ref",
     "id",
     "definition_id",
     "definition_revision",
@@ -447,7 +448,7 @@ def test_fraud_triage_proposal_normalizes_and_binds_immutable_payload(
     assert {
         key: value
         for key, value in proposal.action_payload.items()
-        if key not in {"money_facts", "presentations", "card_last_four"}
+        if key not in {"money_facts", "presentations", "card_last_four", "_business_input_fingerprint"}
     } == {
         "disputed_authorization_ids": ["auth-1", "auth-2"],
         "disputed_transaction_ids": [],
@@ -486,6 +487,7 @@ def test_proposal_creation_retries_idempotently_and_rejects_payload_drift(
     )
 
     assert replay.id == first.id
+    assert len(first.action_payload["_business_input_fingerprint"]) == 64
     assert db_session.query(ActionProposal).count() == 1
 
     with pytest.raises(ProposalConflictError, match="different proposal"):
@@ -1482,3 +1484,11 @@ def test_generic_prepare_rejects_scope_and_private_business_input(
             idempotency_key="injection",
         )
     assert db_session.query(ActionProposal).count() == 0
+
+
+def test_fraud_preparation_is_independent_of_decisioning_configuration(db_session, fraud_alert, monkeypatch):
+    from services import decisioning
+    def unavailable():
+        raise ValueError("invalid decisioning config")
+    monkeypatch.setattr(decisioning, "load_decisioning_provider", unavailable)
+    assert _propose(ActionProposalService(db_session), fraud_alert).status == "PROPOSED"

@@ -73,6 +73,7 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
         "2ea57c78ba89_alloydb_unified_baseline.py",
         "7c4f2a9d1e63_canonical_journal_and_outbox_relay.py",
         "91d7b4a6c2ef_runtime_neutral_action_proposals.py",
+        "a81d2c7f490b_bank_decision_binding.py",
         "c3a91f2b7d44_one_active_proposal_per_session.py",
         "d8e2f6a910bc_money_currency_invariants.py",
         "e4b7c9a12f63_preferred_support_locale.py",
@@ -102,7 +103,7 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
     assert "action_proposals" in proposal_migration
     assert "uq_action_proposals_scope_idempotency" in proposal_migration
 
-    active_proposal_migration = versions[3].read_text()
+    active_proposal_migration = versions[4].read_text()
     assert 'down_revision: Union[str, Sequence[str], None] = "91d7b4a6c2ef"' in (
         active_proposal_migration
     )
@@ -117,7 +118,7 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
 
 def test_current_schema_head_is_reconciled_before_banking_deploy() -> None:
     repository_root = Path(__file__).parents[2]
-    expected_head = "f7e0f4a9c306"
+    expected_head = "a81d2c7f490b"
     cloudbuild = repository_root.joinpath(
         "banking-service", "cloudbuild-publish-deploy.yaml"
     ).read_text()

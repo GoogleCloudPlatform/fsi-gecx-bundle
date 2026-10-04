@@ -114,6 +114,7 @@ def test_current_actions_are_explicitly_registered_on_one_policy() -> None:
     service = ActionProposalService(db=None)
 
     assert service.registry.action_types == {
+        "CREDIT_LIMIT_INCREASE",
         TRIAGE_FRAUD_CASE,
         REISSUE_CARD,
         PROVISION_GOOGLE_WALLET,

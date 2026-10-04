@@ -233,6 +233,12 @@ async def _publish_committed_event(identity, result):
                 )
             },
         }
+    elif result.get("action_type") == "CREDIT_LIMIT_INCREASE":
+        event = {
+            "type": "LIMIT_UPDATED",
+            "credit_limit": result["credit_limit"],
+            "available_credit": result["available_credit"],
+        }
     elif result.get("wallet_provisioning_status"):
         event = {
             "type": "WALLET_PROVISIONING_QUEUED",

@@ -48,12 +48,75 @@ Playbooks are JSON files in `banking-service/config/action_definitions/`. The su
 | `fraud-triage.v2.json` | `fraud.triage.v1` | Review the complete recognized/disputed selection and apply the configured fraud remediation or recognized-alert closure. |
 | `card-reissue.v2.json` | `cards.issue_replacement.v1` | Block the affected card and issue a replacement. |
 | `google-wallet-provisioning.v2.json` | `cards.queue_wallet.v1` | Queue an eligible active virtual card for Google Wallet. Queued does not mean installed or ready to pay. |
+| `credit-limit-increase.v1.json` | `credit.adjust_limit.v1` | Apply an eligible USD demo credit-limit increase after later confirmation. |
 
 A definition contains its ID and revision, action and contract identifiers, registered operation, bounded parameters and literal bindings, presentation contract, authorization policy, and discovery metadata. References bind registered capabilities; they do not execute arbitrary Python, SQL or expressions. Input validation and mandatory operation constraints remain code-owned. Adding another definition over a supported capability does not add an agent tool or handler. A new banking capability requires code and qualification.
 
 The highest bundled revision for an action is published. Discovery metadata and executable configuration share a canonical SHA-256 digest. Each proposal in `operations.action_proposals` pins `definition_id`, `definition_revision`, and `definition_digest`, together with normalized action facts, their fingerprint, customer-safe presentation, protected evidence and result. Older definition revisions must remain available while proposals can reference them. Fresh preparation rejects stale definitions and requires rediscovery; retries resolve the proposal's original pin.
 
 There is no database-backed definition authoring or publishing interface. Operational proposal rows are database-backed; playbook definitions are bundled configuration.
+
+## Credit-limit increase
+
+The credit-limit playbook requires `requested_limit_minor`, a strict integer new
+total limit, and `currency_code`. For $7,500.00 USD, the amount is `750000`.
+Missing totals, floats, booleans, aliases and model-selected percentages are
+refused. Only USD is eligible because the product catalog stores USD limit
+bounds; other recognized currencies receive a bounded policy refusal.
+
+The versioned demo policy requires one unambiguous owned account, active account
+and product, valid product bounds, a strict increase within the product bounds,
+and a maximum new total of twice the current limit. Values and projected
+available credit must remain within canonical Money range. This policy is demo
+servicing, not credit-bureau underwriting or a submission for manual review.
+The offer states current limit, proposed limit, increase and the consequence that
+confirmation applies the eligible demo increase.
+
+Banking owns the decision independently of the agent's catalog selection and
+customer confirmation. `services/decisioning.py` defines a typed
+`DecisioningProvider` contract and an in-process deterministic demo adapter.
+The operator selects `STANDARD`, `DECLINE`, `NEEDS_INFORMATION` or
+`REFER_FOR_REVIEW` through `config/decisioning/demo.v1.json` and optional
+`BANK_DECISIONING_SCENARIO`; these controls are never model inputs. The generic
+receipt contains provider-qualified decision ID, outcome, approved Money,
+bounded reason codes, policy identity/version/digest, aware evaluation/expiry
+times and checked request/scope/input evidence references. Only `APPROVED`
+creates an offer; other outcomes change no limit and do not imply a manual
+review was submitted. Provider/config failures and inconsistent receipts fail
+closed. Counteroffers require a separate contract and are refused in this slice.
+
+The provider evaluates before execution locks. The current adapter has no
+network calls. A future adapter implements the same receipt contract while
+providing local policy metadata; remote revocation and broader underwriting
+require an explicitly qualified contract. The retained local execution guards,
+including the demo ceiling, still bound an injected provider's approval.
+
+Preparation preserves the exact decision receipt, checked request, policy
+identity, revision, digest, product bounds and account eligibility facts. It does not change financial state. Commit locks
+both account and product, rechecks the pinned facts, and invalidates a stale
+offer. Spending or payment changes alone do not invalidate a limit offer: the
+increase delta applies to the latest locked available credit. Account update,
+financial audit, proposal state and evidence outbox persist atomically. Replaying
+a committed proposal returns its stored result without another increase.
+Commit also verifies the pinned approval scope/amount/input references, current
+local policy, expiry and provider-qualified unique binding. It rechecks freshness
+after waiting for account/product locks. A nullable unique `bank_decision_ref`
+on the proposal reserves a decision for one proposal; invalidation, cancellation
+or expiry never releases it. Its `COMMITTED` state consumes approval in the same
+financial transaction. An exact preparation retry returns the immutable existing
+offer before invoking decisioning again; changed inputs or scope reject the retry.
+
+Restricted snapshots preserve approved decisions, checked requests, policy/facts
+and evaluated arithmetic. Nonapprovals and unavailable/invalid provider responses
+archive typed `BANK_DECISION` evidence with only bounded checked facts, validated
+metadata and failure codes; raw provider responses and exception text are excluded.
+Typed eligibility refusals after ownership is established archive the exact
+resolved definition, bounded refusal code, requested amount and evaluated facts.
+Stale refusals preserve both approved and observed facts. Malformed requests or
+unavailable/ambiguous ownership expose no account facts. The generic commit emits
+`LIMIT_UPDATED` with canonical `credit_limit` and `available_credit` Money fields.
+ADK and CES use the generic proposal tools; no direct limit mutation tool is
+published to the model.
 
 ## Generic agent tools
 

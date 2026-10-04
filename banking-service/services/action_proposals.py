@@ -27,21 +27,26 @@ import uuid
 from typing import Any
 
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 
 from models.action_proposal import ActionProposal
 from models.identity import User
 from services.action_proposal_context import ProposalRuntimeContext, RuntimeContextError
 from services.proposal_definitions import action_contract, load_action_registry
+from dataclasses import replace
+from services.proposal_evidence import definition_snapshot
 from services.proposal_lifecycle import (
     ActiveProposalExistsError as ActiveProposalExistsError,
     ProposalConflictError as ProposalConflictError,
     ProposalError,
+    ProposalPolicyError,
     ProposalLifecycleEngine,
     ProposalScopeError,
     ProposalTransitionError,
     TERMINAL_STATUSES,
 )
 from services.proposal_protocol import (
+    PolicyEvaluationEvidence,
     RecoveryClass,
 )
 from utils.audit import record_audit_event
@@ -60,10 +65,10 @@ logger = logging.getLogger(__name__)
 
 
 class ActionProposalService(ProposalLifecycleEngine):
-    def __init__(self, db):
+    def __init__(self, db, *, decisioning_provider=None):
         super().__init__(
             db,
-            registry=load_action_registry(db),
+            registry=load_action_registry(db, decisioning_provider=decisioning_provider),
             audit_recorder=record_audit_event,
         )
 
@@ -627,11 +632,40 @@ class ActionProposalService(ProposalLifecycleEngine):
             if existing
             else specification or self.registry.require(action_type)
         )
-        account_id, payload, summary = specification.handler.prepare(
-            customer_id, inputs
-        )
-        return self._create(
-            action_type=action_type,
+        from services.proposal_lifecycle import canonical_payload
+        from services.proposal_definitions import validate_inputs
+        validate_inputs(inputs, specification.handler.operation.input_schema)
+        inputs = specification.handler.operation.normalize_business_inputs(inputs)
+        _, input_fingerprint = canonical_payload(inputs)
+        if existing:
+            fields = ("support_session_id", "runtime_name", "runtime_session_id", "originating_customer_turn_id", "reset_generation", "catalog_snapshot_id")
+            if (any(getattr(existing, key) != context.get(key) for key in fields)
+                or existing.action_payload.get("_business_input_fingerprint") != input_fingerprint):
+                raise ProposalConflictError("Retry inputs or trusted scope changed for a different proposal.")
+            return existing
+        preparation_context = {
+            "customer_id": str(customer_id), "definition_digest": specification.definition_digest,
+            **{key: context.get(key) for key in ("support_session_id", "runtime_name", "runtime_session_id", "originating_customer_turn_id", "reset_generation", "idempotency_key")},
+            "input_fingerprint": input_fingerprint,
+        }
+        try:
+            account_id, payload, summary = specification.handler.prepare(
+                customer_id, inputs, preparation_context=preparation_context
+            )
+        except ProposalPolicyError as exc:
+            exc.policy_evidence = replace(
+                exc.policy_evidence, definition=definition_snapshot(specification)
+            )
+            raise
+        payload["_business_input_fingerprint"] = input_fingerprint
+        bank_decision_ref = None
+        if "bank_decision" in payload:
+            from services.decisioning import BankDecision
+            bank_decision_ref = BankDecision.model_validate(payload["bank_decision"]).binding_ref
+        try:
+            return self._create(
+                bank_decision_ref=bank_decision_ref,
+                action_type=action_type,
             contract_version=specification.contract_version,
             definition_id=specification.definition_id,
             definition_revision=specification.definition_revision,
@@ -642,7 +676,20 @@ class ActionProposalService(ProposalLifecycleEngine):
             action_payload=payload,
             customer_safe_summary=summary,
             **context,
-        )
+            )
+        except IntegrityError as exc:
+            diagnostic = getattr(exc.orig, "diag", None)
+            binding_violation = getattr(diagnostic, "constraint_name", None) == "uq_action_proposals_bank_decision_ref"
+            if getattr(exc.orig, "sqlite_errorname", None) == "SQLITE_CONSTRAINT_UNIQUE":
+                binding_violation = str(exc.orig).endswith("action_proposals.bank_decision_ref")
+            if bank_decision_ref and binding_violation:
+                raise ProposalPolicyError(PolicyEvaluationEvidence(
+                    policy=payload["credit_limit_policy"], facts=payload["eligibility_facts"],
+                    requested_limit=payload["proposed_limit"], reason_code="BANK_DECISION_ALREADY_BOUND",
+                    bank_decision=payload["bank_decision"], decision_failure="APPROVAL_ALREADY_BOUND",
+                    definition=definition_snapshot(specification),
+                )) from None
+            raise
 
     def proposal_view(self, proposal):
         view = super().proposal_view(proposal)

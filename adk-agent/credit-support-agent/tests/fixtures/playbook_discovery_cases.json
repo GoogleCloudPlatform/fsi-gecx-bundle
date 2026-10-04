@@ -47,5 +47,33 @@
     "utterance": "Those are all mine; please close the alert.",
     "expected_playbook": "fraud-triage",
     "expected_behavior": "Prepare alert closure with empty disputed lists and no replacement."
+  },
+  {
+    "id": "credit_limit_total",
+    "context": "Trusted context: One owned active USD credit account; current limit $10,000.00. No active proposal.",
+    "utterance": "Raise my credit limit to $15,000.00.",
+    "expected_playbook": "credit-limit-increase",
+    "expected_behavior": "Prepare with requested_limit_minor 1500000 and currency_code USD, present current/proposed/increase and demo confirmation consequence, await later confirmation."
+  },
+  {
+    "id": "credit_capacity_missing_total",
+    "context": "Trusted context: One owned active USD credit account. No active proposal.",
+    "utterance": "I need more room on my card for an upcoming purchase.",
+    "expected_playbook": "credit-limit-increase",
+    "expected_behavior": "Discover and record clarification for missing requested new total; ask one focused amount question, never infer a percentage or prepare yet."
+  },
+  {
+    "id": "credit_limit_information",
+    "context": "Trusted context: One owned active USD credit account.",
+    "utterance": "What is my current credit limit?",
+    "expected_playbook": null,
+    "expected_behavior": "Answer from authoritative account read; do not prepare an increase."
+  },
+  {
+    "id": "credit_limit_decrease",
+    "context": "Trusted context: One owned active USD credit account.",
+    "utterance": "Can you lower my limit to $5,000.00?",
+    "expected_playbook": null,
+    "expected_behavior": "Explain unsupported decrease; do not select or prepare increase."
   }
 ]

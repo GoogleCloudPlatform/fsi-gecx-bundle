@@ -74,6 +74,7 @@ class ActionProposal(Base):
             + ")",
             name="ck_action_proposals_confirmation_policy",
         ),
+        UniqueConstraint("bank_decision_ref", name="uq_action_proposals_bank_decision_ref"),
         UniqueConstraint(
             "customer_id",
             "support_session_id",
@@ -108,6 +109,7 @@ class ActionProposal(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    bank_decision_ref = Column(String(193), nullable=True)
     definition_id = Column(String(128), nullable=False)
     definition_revision = Column(Integer, nullable=False)
     definition_digest = Column(String(64), nullable=False)

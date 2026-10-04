@@ -103,7 +103,6 @@ ACTION_COMPLETION_TOOLS = {
     "commit_card_reissue",
     "commit_wallet_provisioning",
     "decide_action_proposal",
-    "request_credit_limit_increase",
     "reverse_overdraft_fee",
     "unfreeze_card",
 }
@@ -922,8 +921,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
     consequential_tools = {
         "unfreeze_card",
         "reverse_overdraft_fee",
-        "request_credit_limit_increase",
-        "resolve_fraud_alert",
+            "resolve_fraud_alert",
         "commit_action_proposal",
         "commit_fraud_triage",
         "commit_card_reissue",
@@ -1474,6 +1472,14 @@ async def after_tool_callback(
                 }
             )
 
+        if tool_name == "commit_action_proposal" and structured.get("action_type") == "CREDIT_LIMIT_INCREASE":
+            notify_event({
+                "type": DataChannelEvent.LIMIT_UPDATED.value,
+                "credit_limit": structured["credit_limit"],
+                "available_credit": structured["available_credit"],
+                "proposal_id": structured["proposal_id"],
+            })
+
         account_data = await fetch_updated_account_details()
         logger.info(
             "[CALLBACK] fetch_updated_account_details returned %s account_loaded=%s",
@@ -1485,26 +1491,6 @@ async def after_tool_callback(
         )
         if account_data:
             if (
-                tool_name == "request_credit_limit_increase"
-                or tool_name == "request_limit_increase"
-            ):
-                logger.info(
-                    "[CALLBACK] LIMIT_UPDATED event broadcasted %s",
-                    format_log_context(
-                        state=tool_context.state
-                        if hasattr(tool_context, "state")
-                        else None,
-                        tool_name=tool_name,
-                    ),
-                )
-                notify_event(
-                    {
-                        "type": DataChannelEvent.LIMIT_UPDATED.value,
-                        "credit_limit": account_data.get("credit_limit"),
-                        "available_credit": account_data.get("available_credit"),
-                    }
-                )
-            elif (
                 tool_name == "reverse_overdraft_fee"
                 or tool_name == "reverse_posted_fee"
             ):

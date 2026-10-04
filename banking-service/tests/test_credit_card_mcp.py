@@ -23,7 +23,6 @@ from routers.mcp.credit_card import (
     push_card_to_google_wallet,
     resolve_fraud_alert,
     report_lost_stolen_card,
-    request_credit_limit_increase,
     reverse_overdraft_fee,
     triage_fraud_case,
     triage_customer_reported_fraud,
@@ -39,6 +38,10 @@ def run_locally_env(monkeypatch):
     """Enforce local running environment variables for tests."""
     monkeypatch.setenv("ENV", "development")
     monkeypatch.setenv("ENABLE_DEMO_FALLBACK", "true")
+    # Development mode still initializes ambient Firebase credentials; keep
+    # servicing fixtures entirely local rather than publishing real messages.
+    monkeypatch.setattr("services.messaging.messaging.send", lambda message: "local-test-message")
+    monkeypatch.setattr("services.messaging.messaging.send_each_for_multicast", lambda message: MagicMock(success_count=0, failure_count=0))
 
 @pytest.fixture
 def db_session(monkeypatch):
@@ -210,55 +213,6 @@ async def test_reverse_overdraft_fee_annual_limit_violation(mock_validate_token,
     assert result2["success"] is False
     assert "Already used annual reversal limit" in result2["message"]
 
-@pytest.mark.asyncio
-@patch("routers.mcp.utils.validate_firebase_token")
-@patch("routers.mcp.credit_card.send_session_event")
-async def test_request_credit_limit_increase_success(mock_send_event, mock_validate_token, db_session):
-    """Verify underwriting auto-approval for limits within reasonable bounds (<2x current)."""
-    mock_validate_token.return_value = MagicMock(claims={"sub": "jane.doe@example.com", "email": "customer@example.com"})
-    
-    mock_ctx = MagicMock()
-    result = await request_credit_limit_increase(
-        account_id="88888888-8888-4888-8888-999999999999",
-        assertion_token="valid-token",
-        requested_limit=15000.0,  # $15,000 (current limit is $10,000, which is < 2x increase)
-        ctx=mock_ctx
-    )
-    
-    assert result["success"] is True
-    assert "limit increase approved" in result["message"].lower()
-    assert result["new_limit"] == 15000.0
-    
-    # Verify db updated
-    account = db_session.query(FinancialAccount).filter_by(id="88888888-8888-4888-8888-999999999999").first()
-    assert account.credit_limit_cents == 1500000
-
-    # Assert OOB WebSocket sync dispatched
-    mock_send_event.assert_called_once()
-    args, kwargs = mock_send_event.call_args
-    assert args[0] == "session-jane.doe@example.com"
-    assert args[1]["type"] == "LIMIT_UPDATED"
-    assert args[1]["credit_limit"] == {
-        "amount_minor": 1500000,
-        "currency_code": "USD",
-    }
-
-@pytest.mark.asyncio
-@patch("routers.mcp.utils.validate_firebase_token")
-async def test_request_credit_limit_increase_denied(mock_validate_token, db_session):
-    """Verify underwriting rejection when requested limit exceeds double the current limit (>2x)."""
-    mock_validate_token.return_value = MagicMock(claims={"sub": "jane.doe@example.com", "email": "customer@example.com"})
-    
-    mock_ctx = MagicMock()
-    result = await request_credit_limit_increase(
-        account_id="88888888-8888-4888-8888-999999999999",
-        assertion_token="valid-token",
-        requested_limit=25000.0,  # $25,000 (current limit is $10,000, 25k is > 2x current limit)
-        ctx=mock_ctx
-    )
-    
-    assert result["success"] is False
-    assert "Request denied due to credit history" in result["message"]
 
 
 @pytest.mark.asyncio

@@ -49,5 +49,4 @@ toolsets:
   - prepare_action_proposal
   - commit_action_proposal
   - decide_action_proposal
-  - request_credit_limit_increase
   - reverse_overdraft_fee

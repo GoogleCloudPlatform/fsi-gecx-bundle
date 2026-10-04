@@ -265,7 +265,7 @@ def test_discovery_and_no_action_are_durable_without_customer_text(audit_service
     )
     event = json.loads(rows(service, "PLAYBOOK_DISCOVERED")[0].payload)
     assert "PRIVATE CUSTOMER DINNER CONCERN" not in json.dumps(event)
-    assert len(event["catalog"]) == 3
+    assert len(event["catalog"]) == 4
     assert event["need_fingerprint"]
     assert event["customer_ref"]
     recorded = record_catalog_decision(
@@ -512,7 +512,7 @@ def test_catalog_choices_reconstruct_without_definition_files(audit_service):
     )
     catalog = snapshot_for(service, rows(service, "PLAYBOOK_DISCOVERED")[0])
     decision = snapshot_for(service, rows(service, "PLAYBOOK_DECISION_RECORDED")[0])
-    assert len(catalog["catalog"]) == 3
+    assert len(catalog["catalog"]) == 4
     assert (
         decision["criterion"]["text"]
         == decision["definition"]["discovery"]["when_to_use"][0]

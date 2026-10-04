@@ -23,6 +23,9 @@ run_banking_contract() {
   uv run --frozen pytest -q \
     tests/test_proposal_protocol_kernel.py \
     tests/test_proposal_definitions.py \
+    tests/test_credit_limit_playbook.py \
+    tests/test_decisioning.py \
+    tests/test_credit_limit_postgres.py \
     tests/test_playbook_mcp.py \
     tests/test_proposal_audit.py \
     tests/test_bootstrap_iceberg_catalog.py \

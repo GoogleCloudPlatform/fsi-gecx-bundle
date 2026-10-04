@@ -33,7 +33,6 @@ from utils.database import SessionLocal
 from utils.log_safety import stable_log_reference
 from repositories.credit_card import CreditCardRepository
 from services.credit_card import (
-    apply_limit_increase,
     freeze_card,
     issue_replacement_card,
     queue_wallet_provisioning,
@@ -1317,94 +1316,6 @@ async def reverse_overdraft_fee(
         db.close()
 
 
-@mcp.tool()
-@requires_user_assertion
-async def request_credit_limit_increase(
-    account_id: str = None,
-    requested_limit: float = None,
-    limit: float = None,
-    amount: float = None,
-    ctx: Context = None,
-) -> dict:
-    """
-    Submits a credit limit increase request for a credit card account.
-    
-    Args:
-        account_id: Optional unique identifier for the credit card account.
-        requested_limit: Optional desired new credit limit amount (in dollars).
-        limit: Desired new credit limit amount (alias in dollars).
-        amount: Desired new credit limit amount (alias in dollars).
-    """
-    verified_customer_id = verified_customer_id_var.get()
-    logger.info(
-        "FastMCP request_credit_limit_increase invoked account_ref=%s customer_ref=%s",
-        stable_log_reference(account_id, "account"),
-        stable_log_reference(verified_customer_id, "customer"),
-    )
-    
-    db = SessionLocal()
-    repo = CreditCardRepository(db)
-    try:
-        if not account_id:
-            account = repo.get_account_by_customer(verified_customer_id)
-            if not account:
-                return {"success": False, "message": "No credit card account found for the user."}
-            account_id = str(account.id)
-
-        if not re.match(r"^[a-zA-Z0-9\-_]{4,64}$", str(account_id)):
-            return {"success": False, "message": "Access Denied: Invalid account ID format."}
-
-        # Enforce BOLA check
-        account = repo.get_account_by_customer(verified_customer_id)
-        if not account or account.id != account_id:
-            logger.error(
-                "Security Alert: BOLA/IDOR attempt or account not found "
-                "account_ref=%s customer_ref=%s",
-                stable_log_reference(account_id, "account"),
-                stable_log_reference(verified_customer_id, "customer"),
-            )
-            return {"success": False, "message": "Account not found or unauthorized."}
-
-        # Concurrency Locking
-        account = repo.get_account_by_id(account_id, lock=True)
-
-        # Check requested limit
-        target_limit = requested_limit or limit or amount
-        if not target_limit:
-            current_limit = account.credit_limit_cents / 100
-            target_limit = current_limit * 1.2
-            
-        requested_limit_cents = int(target_limit * 100)
-
-        # Underwriting rule check: reject if increase is > 2x current limit
-        limit_ceiling_cents = account.credit_limit_cents * 2
-        if requested_limit_cents > limit_ceiling_cents:
-            return {"success": False, "message": "Request denied due to credit history."}
-
-        # Apply increase
-        res = apply_limit_increase(db, account_id=account.id, requested_limit_cents=requested_limit_cents)
-        
-        # Out-of-band push to client WebSocket to sync UI
-        session_id = f"session-{verified_customer_id}"
-        await send_session_event(session_id, {
-            "type": "LIMIT_UPDATED",
-            "credit_limit": Money(amount_minor=res["new_limit_cents"], currency_code=account.currency).model_dump(),
-            "available_credit": Money(amount_minor=res["available_credit_cents"], currency_code=account.currency).model_dump(),
-        })
-
-        return {
-            "success": True,
-            "message": "Credit limit increase approved.",
-            "new_limit": target_limit
-        }
-    except Exception as exc:
-        logger.error(
-            "Error in FastMCP request_credit_limit_increase error_type=%s",
-            type(exc).__name__,
-        )
-        return {"success": False, "message": "Internal error updating credit limit."}
-    finally:
-        db.close()
 
 
 @mcp.tool()
