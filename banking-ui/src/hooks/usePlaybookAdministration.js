@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { useEffect, useRef, useState } from 'react';
+import { useBlocker } from 'react-router-dom';
 import { playbooksAdmin } from '../utils/api.js';
 import { applyConfiguration, playbookError } from '../utils/playbooks.js';
 
@@ -32,6 +33,7 @@ export default function usePlaybookAdministration() {
   const dirty = !!selected && (JSON.stringify(document) !== JSON.stringify(selected.document) || advancedText !== null);
   const head = catalog.find((item) => item.id === selected?.id);
   const editable = selected?.status === 'DRAFT' && !accessDenied;
+  const blocker = useBlocker(dirty);
 
   async function refresh() {
     const result = await playbooksAdmin.list();
@@ -51,13 +53,8 @@ export default function usePlaybookAdministration() {
   useEffect(() => {
     if (!dirty) return;
     const warn = (event) => { event.preventDefault(); event.returnValue = ''; };
-    const warnNavigation = (event) => {
-      const link = event.target.closest?.('a[href]');
-      if (link && link.href !== window.location.href && !window.confirm('Discard unsaved playbook changes?')) { event.preventDefault(); event.stopPropagation(); }
-    };
     window.addEventListener('beforeunload', warn);
-    window.document.addEventListener('click', warnNavigation, true);
-    return () => { window.removeEventListener('beforeunload', warn); window.document.removeEventListener('click', warnNavigation, true); };
+    return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
 
   function install(result) {
@@ -107,7 +104,7 @@ export default function usePlaybookAdministration() {
       await refresh(); install(result); setNotice('Revision published. New proposals use this revision.');
     }),
   };
-  return { catalog, capabilities, selected, document, editable, dirty, busy, error, notice, validation, comparison, head, actions, edit, advancedText, accessDenied,
+  return { catalog, capabilities, selected, document, editable, dirty, busy, error, notice, validation, comparison, head, actions, edit, advancedText, accessDenied, blocker,
     editAdvanced: (text) => { setAdvancedText(text); setValidation(null); setComparison(null); },
     applyAdvanced: () => { try { edit(applyConfiguration(advancedText, selected.document)); setError(''); } catch { setError('Configuration must be a valid JSON definition with discovery guidance.'); } },
   };

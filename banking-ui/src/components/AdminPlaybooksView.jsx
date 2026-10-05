@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import usePlaybookAdministration from '../hooks/usePlaybookAdministration.js';
 import { editDiscovery, validationMessages } from '../utils/playbooks.js';
@@ -24,6 +24,32 @@ const fields = [
 ];
 const inputStyle = 'w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 disabled:bg-slate-100 dark:disabled:bg-slate-800';
 const buttonStyle = 'rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800';
+
+function LeaveDialog({ blocker }) {
+  const previousFocus = useRef(window.document.activeElement);
+  const stayButton = useRef(null);
+  useEffect(() => {
+    stayButton.current?.focus();
+    const original = previousFocus.current;
+    return () => { if (original?.isConnected) original.focus(); };
+  }, []);
+  function keyboard(event) {
+    if (event.key === 'Escape') { event.preventDefault(); blocker.reset(); }
+    if (event.key === 'Tab') {
+      const buttons = [...event.currentTarget.querySelectorAll('button')];
+      const next = event.shiftKey ? buttons.at(-1) : buttons[0];
+      const edge = event.shiftKey ? buttons[0] : buttons.at(-1);
+      if (window.document.activeElement === edge) { event.preventDefault(); next.focus(); }
+    }
+  }
+  return <div className="fixed inset-0 z-[100] bg-slate-900/50 flex items-center justify-center p-6">
+    <div role="alertdialog" aria-modal="true" aria-labelledby="playbook-leave-title" aria-describedby="playbook-leave-description" onKeyDown={keyboard} className="bg-white dark:bg-slate-900 rounded-xl shadow-xl p-6 max-w-md">
+      <h2 id="playbook-leave-title" className="text-xl font-semibold">Discard unsaved changes?</h2>
+      <p id="playbook-leave-description" className="my-4">Your playbook draft has unsaved edits. Stay to save them, or discard them and leave this page.</p>
+      <div className="flex gap-3"><button ref={stayButton} className={buttonStyle} onClick={() => blocker.reset()}>Stay on page</button><button className={buttonStyle} onClick={() => blocker.proceed()}>Discard and leave</button></div>
+    </div>
+  </div>;
+}
 
 export default function AdminPlaybooksView() {
   const state = usePlaybookAdministration();
@@ -47,10 +73,11 @@ export default function AdminPlaybooksView() {
   }
 
   return <section className="pt-24 pb-16 px-6 max-w-7xl mx-auto text-left text-slate-900 dark:text-slate-100">
+    {state.blocker.state === 'blocked' && <LeaveDialog blocker={state.blocker} />}
     <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
       <div><h1 className="text-3xl font-semibold">Playbook administration</h1><p className="mt-2 text-slate-500">Manage versioned definitions for banking action proposals.</p></div>
       <div className="flex gap-2">
-        <button className={buttonStyle} disabled={busy} onClick={() => { if (!dirty || window.confirm('Discard unsaved playbook changes?')) navigate('/admin'); }}>Back to administration</button>
+        <button className={buttonStyle} disabled={busy} onClick={() => navigate('/admin')}>Back to administration</button>
         <button className={buttonStyle} disabled={busy} onClick={actions.reload}>Reload</button>
       </div>
     </div>
