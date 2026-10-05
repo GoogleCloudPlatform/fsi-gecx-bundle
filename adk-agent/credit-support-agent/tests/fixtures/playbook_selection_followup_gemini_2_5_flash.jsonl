@@ -1,0 +1,4 @@
+{"id": "dinner", "output": {"criterion_index": 0, "decision": "SELECT", "playbook_id": "google-wallet-provisioning", "prepare": {"digest": "24b6cab821b727b6c48354cd17230764e1dcfceefa4a2482025680b8fe05d6f5", "inputs": {}, "playbook_id": "google-wallet-provisioning", "revision": 2}, "reason_code": "APPLICABLE"}, "prompt_version": 2}
+{"id": "ambiguous", "output": {"criterion_index": -1, "decision": "CLARIFY", "playbook_id": null, "prepare": null, "reason_code": "AMBIGUOUS_INTENT"}, "prompt_version": 2}
+{"id": "queued", "output": {"criterion_index": 0, "decision": "NO_ACTION", "playbook_id": "google-wallet-provisioning", "prepare": null, "reason_code": "ALREADY_SATISFIED"}, "prompt_version": 2}
+{"id": "credit_capacity_missing_total", "output": {"criterion_index": 1, "decision": "CLARIFY", "playbook_id": "credit-limit-increase", "prepare": null, "reason_code": "MISSING_INPUT"}, "prompt_version": 2}

@@ -294,6 +294,13 @@ function AdminDashboardView() {
 
   const adminModules = [
     {
+      title: "Playbook Administration",
+      description: "View immutable revisions, edit and validate drafts, compare changes, and publish banking playbooks.",
+      path: "/admin/playbooks",
+      icon: Bot,
+      color: "from-indigo-500 to-blue-600"
+    },
+    {
       title: "Underwriting Portal",
       description: "Verify low-confidence W-2 / paystub extractions, execute structural income verification checklists, and audit borrower exceptions.",
       path: "/admin/underwriting",

@@ -25,6 +25,7 @@ export const PAGE_TITLES = {
   '/': 'Home',
   '/accounts': 'Account Ledger',
   '/admin': 'Admin Dashboard',
+  '/admin/playbooks': 'Playbook Administration',
   '/admin/messaging': 'Admin Messaging',
   '/admin/monitoring': 'Admin Monitoring',
   '/admin/simulation': 'Admin Simulation',

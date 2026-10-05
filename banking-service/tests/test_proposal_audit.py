@@ -23,6 +23,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from models.audit import AuditOutbox
+from models.playbook import Playbook, PlaybookRevision
 from models.action_proposal import ActionProposal
 from models.identity import User
 from services.action_proposals import ActionProposalService, ProposalError
@@ -43,8 +44,8 @@ def audit_service(monkeypatch):
             }
         },
     )
-    for model in (User, ActionProposal, AuditOutbox):
-        model.__table__.create(engine)
+    for model in (Playbook, PlaybookRevision, User, ActionProposal, AuditOutbox):
+        model.__table__.create(engine, checkfirst=True)
     with Session(engine) as db:
         user = User(
             id=uuid.uuid4(),
@@ -81,6 +82,8 @@ def audit_service(monkeypatch):
         )
         yield ActionProposalService(db)
         db.rollback()
+    PlaybookRevision.__table__.drop(engine, checkfirst=True)
+    Playbook.__table__.drop(engine, checkfirst=True)
     engine.dispose()
 
 

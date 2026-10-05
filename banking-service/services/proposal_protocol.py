@@ -425,7 +425,7 @@ class ActionSpecification:
 class ActionRegistry:
     """Explicit process-local registry for banking action specifications."""
 
-    def __init__(self, specifications: tuple[ActionSpecification, ...]):
+    def __init__(self, specifications: tuple[ActionSpecification, ...], *, published=None):
         self._versions = {}
         self._specifications = {}
         for item in specifications:
@@ -436,10 +436,10 @@ class ActionRegistry:
             current = self._specifications.get(item.action_type)
             if current and current.definition_id != item.definition_id:
                 raise ValueError("Action type cannot refer to multiple definition IDs.")
-            if (
-                current is None
-                or current.definition_revision < item.definition_revision
-            ):
+            if published is not None:
+                if key in published:
+                    self._specifications[item.action_type] = item
+            elif current is None or current.definition_revision < item.definition_revision:
                 self._specifications[item.action_type] = item
 
     def require(self, action_type: str) -> ActionSpecification:

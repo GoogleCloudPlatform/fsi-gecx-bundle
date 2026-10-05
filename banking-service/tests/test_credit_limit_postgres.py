@@ -28,6 +28,9 @@ from models.audit import AuditOutbox
 from models.credit_card import CreditAccount
 from test_credit_limit_playbook import TABLES, seed_credit, prepare, commit, context
 from services.proposal_lifecycle import ActionPreconditionError
+from services.playbook_repository import bootstrap_catalog
+from services.proposal_definitions import bundled_documents
+from services.proposal_lifecycle import utcnow
 
 
 @pytest.fixture
@@ -46,11 +49,13 @@ def postgres_credit():
         )
     engine = create_engine(raw)
     with engine.begin() as connection:
-        for schema in ("identity", "catalog", "cards", "operations", "audit"):
+        for schema in ("admin", "identity", "catalog", "cards", "operations", "audit"):
             connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
     for table in TABLES:
         table.create(engine, checkfirst=True)
     with Session(engine) as db:
+        bootstrap_catalog(db, bundled_documents(), now=utcnow())
+        db.commit()
         user, account, product = seed_credit(db)
         yield engine, user.auth_provider_uid, account.id
     for table in reversed(TABLES):

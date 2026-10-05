@@ -321,6 +321,7 @@ def init_db():
     import models.fraud  # noqa: F401
     import models.support  # noqa: F401
     import models.action_proposal  # noqa: F401
+    import models.playbook  # noqa: F401
     import models.settings  # noqa: F401
     import models.kyc  # noqa: F401
     import models.reference  # noqa: F401

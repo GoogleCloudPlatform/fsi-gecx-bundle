@@ -72,6 +72,25 @@ class ActionProposalService(ProposalLifecycleEngine):
             audit_recorder=record_audit_event,
         )
 
+    def _require_current_publication(self, specification):
+        """Serialize fresh preparation with publication; pinned retries bypass this."""
+        from services.playbook_repository import SqlPlaybookRepository, RepositoryError
+
+        try:
+            current = SqlPlaybookRepository(self.db).lock_published(
+                specification.definition_id
+            )
+        except RepositoryError as exc:
+            raise ProposalError(
+                "The published playbook is unavailable; discover again."
+            ) from exc
+        expected = (
+            specification.definition_revision,
+            specification.definition_digest,
+        )
+        if current != expected:
+            raise ProposalError("The published playbook changed; discover again.")
+
     def record_request_rejection(self, identity, context, operation, exc, request):
         try:
             customer_id = self._resolve_customer_id(identity)
@@ -142,8 +161,8 @@ class ActionProposalService(ProposalLifecycleEngine):
             pinned = self.registry.for_proposal(existing)
             if pinned.definition_digest != digest:
                 raise ProposalError("Retry the original proposal revision.")
-        elif self.registry.published(playbook_id).definition_digest != digest:
-            raise ProposalError("The published playbook changed; discover again.")
+        else:
+            self._require_current_publication(specification)
         operation = specification.handler.operation
         validate_inputs(inputs, operation.public_input_schema or operation.input_schema)
         normalized = operation.normalize_public_inputs(
@@ -643,6 +662,7 @@ class ActionProposalService(ProposalLifecycleEngine):
                 or existing.action_payload.get("_business_input_fingerprint") != input_fingerprint):
                 raise ProposalConflictError("Retry inputs or trusted scope changed for a different proposal.")
             return existing
+        self._require_current_publication(specification)
         preparation_context = {
             "customer_id": str(customer_id), "definition_digest": specification.definition_digest,
             **{key: context.get(key) for key in ("support_session_id", "runtime_name", "runtime_session_id", "originating_customer_turn_id", "reset_generation", "idempotency_key")},

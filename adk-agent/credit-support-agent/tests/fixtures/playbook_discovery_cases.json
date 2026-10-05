@@ -4,76 +4,205 @@
     "context": "Trusted banking context: Fraud remediation completed. The old card is blocked. An active replacement virtual card ending 1552 exists. The customer uses Google Wallet. No provisioning has been queued. No proposal is active.",
     "utterance": "I have an important client dinner tonight and I am not sure how I will pay now.",
     "expected_playbook": "google-wallet-provisioning",
-    "expected_behavior": "Discover and prepare a wallet offer without promising that queued provisioning is immediately usable."
+    "expected_behavior": "Discover and prepare a wallet offer without promising that queued provisioning is immediately usable.",
+    "expected_decision": "SELECT",
+    "expected_reason_code": "APPLICABLE",
+    "expected_criterion_index": 0,
+    "expected_prepare": {}
   },
   {
     "id": "lost",
     "context": "Trusted context: There is no fraud alert. The customer has one active physical card. No replacement or proposal exists.",
     "utterance": "I cannot find my card anywhere. I need a replacement.",
     "expected_playbook": "card-reissue",
-    "expected_behavior": "Prepare before asking for confirmation; disclose blocking and replacement."
+    "expected_behavior": "Prepare before asking for confirmation; disclose blocking and replacement.",
+    "expected_decision": "SELECT",
+    "expected_reason_code": "APPLICABLE",
+    "expected_criterion_index": 0,
+    "expected_prepare": {
+      "reason": "LOST"
+    }
   },
   {
     "id": "ambiguous",
     "context": "Trusted context: The customer has an active card. No alert or proposal exists.",
     "utterance": "I need help with my card.",
     "expected_playbook": null,
-    "expected_behavior": "Ask a focused clarification; do not prepare."
+    "expected_behavior": "Ask a focused clarification; do not prepare.",
+    "expected_decision": "CLARIFY",
+    "expected_reason_code": "AMBIGUOUS_INTENT",
+    "expected_criterion_index": -1,
+    "expected_prepare": null
   },
   {
     "id": "no_request",
     "context": "Trusted banking context: Fraud remediation completed. The old card is blocked. An active replacement virtual card ending 1552 exists. The customer uses Google Wallet. No provisioning has been queued. No proposal is active.",
     "utterance": "No, that is all. Thank you.",
     "expected_playbook": null,
-    "expected_behavior": "Do not prepare or commit any proposal."
+    "expected_behavior": "Do not prepare or commit any proposal.",
+    "expected_decision": "NO_ACTION",
+    "expected_reason_code": "NO_MATCH",
+    "expected_criterion_index": -1,
+    "expected_prepare": null
   },
   {
     "id": "queued",
     "context": "Trusted banking context: Fraud remediation completed. The old card is blocked. An active replacement virtual card ending 1552 exists. The customer uses Google Wallet. Provisioning to Google Wallet is already QUEUED for this card. No proposal is active.",
     "utterance": "Can you add my replacement card to Google Wallet?",
-    "expected_playbook": null,
-    "expected_behavior": "Describe existing provisioning as queued, not added, installed or ready."
+    "expected_playbook": "google-wallet-provisioning",
+    "expected_behavior": "Describe existing provisioning as queued, not added, installed or ready.",
+    "expected_decision": "NO_ACTION",
+    "expected_reason_code": "ALREADY_SATISFIED",
+    "expected_criterion_index": 0,
+    "expected_prepare": null
   },
   {
     "id": "unsupported",
     "context": "Trusted banking context: Fraud remediation completed. The old card is blocked. An active replacement virtual card ending 1552 exists. The customer uses Apple Wallet. No provisioning has been queued. No proposal is active.",
     "utterance": "Add my card to Apple Wallet.",
-    "expected_playbook": null,
-    "expected_behavior": "Explain unsupported provider; do not promise or seek confirmation for it."
+    "expected_playbook": "google-wallet-provisioning",
+    "expected_behavior": "Explain unsupported provider; do not promise or seek confirmation for it.",
+    "expected_decision": "NO_ACTION",
+    "expected_reason_code": "UNSUPPORTED_REQUEST",
+    "expected_criterion_index": 3,
+    "expected_prepare": null
   },
   {
     "id": "recognized",
     "context": "Trusted context: An open alert alert-1 contains two flagged authorizations auth-1 and auth-2, no posted items. The customer has just explicitly recognized both. No proposal exists.",
     "utterance": "Those are all mine; please close the alert.",
     "expected_playbook": "fraud-triage",
-    "expected_behavior": "Prepare alert closure with empty disputed lists and no replacement."
+    "expected_behavior": "Prepare alert closure with empty disputed lists and no replacement.",
+    "expected_decision": "SELECT",
+    "expected_reason_code": "APPLICABLE",
+    "expected_criterion_index": 1,
+    "expected_prepare": {
+      "fraud_alert_id": "alert-1",
+      "selection_status": "COMPLETE",
+      "disputed_authorization_ids": [],
+      "disputed_transaction_ids": [],
+      "recognized_authorization_ids": [
+        "auth-1",
+        "auth-2"
+      ],
+      "recognized_transaction_ids": [],
+      "issue_replacement": false,
+      "escalate": false
+    }
   },
   {
     "id": "credit_limit_total",
     "context": "Trusted context: One owned active USD credit account; current limit $10,000.00. No active proposal.",
     "utterance": "Raise my credit limit to $15,000.00.",
     "expected_playbook": "credit-limit-increase",
-    "expected_behavior": "Prepare with requested_limit_minor 1500000 and currency_code USD, present current/proposed/increase and demo confirmation consequence, await later confirmation."
+    "expected_behavior": "Prepare with requested_limit_minor 1500000 and currency_code USD, present current/proposed/increase and demo confirmation consequence, await later confirmation.",
+    "expected_decision": "SELECT",
+    "expected_reason_code": "APPLICABLE",
+    "expected_criterion_index": 0,
+    "expected_prepare": {
+      "requested_limit_minor": 1500000,
+      "currency_code": "USD"
+    }
   },
   {
     "id": "credit_capacity_missing_total",
     "context": "Trusted context: One owned active USD credit account. No active proposal.",
     "utterance": "I need more room on my card for an upcoming purchase.",
     "expected_playbook": "credit-limit-increase",
-    "expected_behavior": "Discover and record clarification for missing requested new total; ask one focused amount question, never infer a percentage or prepare yet."
+    "expected_behavior": "Discover and record clarification for missing requested new total; ask one focused amount question, never infer a percentage or prepare yet.",
+    "expected_decision": "CLARIFY",
+    "expected_reason_code": "MISSING_INPUT",
+    "expected_criterion_index": 1,
+    "expected_prepare": null
   },
   {
     "id": "credit_limit_information",
     "context": "Trusted context: One owned active USD credit account.",
     "utterance": "What is my current credit limit?",
-    "expected_playbook": null,
-    "expected_behavior": "Answer from authoritative account read; do not prepare an increase."
+    "expected_playbook": "credit-limit-increase",
+    "expected_behavior": "Answer from authoritative account read; do not prepare an increase.",
+    "expected_decision": "NO_ACTION",
+    "expected_reason_code": "INFORMATION_ONLY",
+    "expected_criterion_index": 0,
+    "expected_prepare": null
   },
   {
     "id": "credit_limit_decrease",
     "context": "Trusted context: One owned active USD credit account.",
     "utterance": "Can you lower my limit to $5,000.00?",
-    "expected_playbook": null,
-    "expected_behavior": "Explain unsupported decrease; do not select or prepare increase."
+    "expected_playbook": "credit-limit-increase",
+    "expected_behavior": "Explain unsupported decrease; do not select or prepare increase.",
+    "expected_decision": "NO_ACTION",
+    "expected_reason_code": "UNSUPPORTED_REQUEST",
+    "expected_criterion_index": 1,
+    "expected_prepare": null
+  },
+  {
+    "id": "damaged_card",
+    "context": "Trusted context: One owned active physical card has a broken chip. No fraud alert or replacement exists.",
+    "utterance": "The chip broke. Please replace this card.",
+    "expected_playbook": "card-reissue",
+    "expected_behavior": "Select card replacement and draft reason DAMAGED.",
+    "expected_decision": "SELECT",
+    "expected_reason_code": "APPLICABLE",
+    "expected_criterion_index": 0,
+    "expected_prepare": {
+      "reason": "DAMAGED"
+    }
+  },
+  {
+    "id": "direct_wallet",
+    "context": "Trusted context: Fraud remediation is complete. An owned active replacement virtual card exists. Google Wallet is the customer preferred provider. Provisioning is not queued.",
+    "utterance": "Add my replacement card to Google Wallet.",
+    "expected_playbook": "google-wallet-provisioning",
+    "expected_behavior": "Select Wallet and draft empty inputs; no claim it is ready to use.",
+    "expected_decision": "SELECT",
+    "expected_reason_code": "APPLICABLE",
+    "expected_criterion_index": 1,
+    "expected_prepare": {}
+  },
+  {
+    "id": "overlap_fraud_reissue",
+    "context": "Trusted context: Open alert alert-2 flags auth-3. Customer has explicitly disputed auth-3 and recognized no other items. The current card is active. No proposal exists.",
+    "utterance": "That charge is not mine. Resolve it and replace my card.",
+    "expected_playbook": "fraud-triage",
+    "expected_behavior": "Choose the reviewed fraud alert flow, including its replacement option, rather than standalone reissue.",
+    "expected_decision": "SELECT",
+    "expected_reason_code": "APPLICABLE",
+    "expected_criterion_index": 0,
+    "expected_prepare": {
+      "fraud_alert_id": "alert-2",
+      "selection_status": "COMPLETE",
+      "disputed_authorization_ids": [
+        "auth-3"
+      ],
+      "disputed_transaction_ids": [],
+      "recognized_authorization_ids": [],
+      "recognized_transaction_ids": [],
+      "issue_replacement": true,
+      "escalate": false
+    }
+  },
+  {
+    "id": "overlap_existing_replacement",
+    "context": "Trusted context: Old physical card is blocked. An owned active replacement virtual card exists. Customer uses Google Wallet and no provisioning has been queued.",
+    "utterance": "My replacement is here, but I need to pay at dinner tonight.",
+    "expected_playbook": "google-wallet-provisioning",
+    "expected_behavior": "Choose payment access through Wallet, not another card replacement.",
+    "expected_decision": "SELECT",
+    "expected_reason_code": "APPLICABLE",
+    "expected_criterion_index": 0,
+    "expected_prepare": {}
+  },
+  {
+    "id": "wallet_provider_uncertain",
+    "context": "Trusted context: An owned active replacement virtual card exists. Wallet provider preference is unknown. No provisioning is queued.",
+    "utterance": "Can I pay with my new card on my phone?",
+    "expected_playbook": "google-wallet-provisioning",
+    "expected_behavior": "Clarify provider before preparing; do not assume Google Wallet.",
+    "expected_decision": "CLARIFY",
+    "expected_reason_code": "UNCERTAIN_PREREQUISITE",
+    "expected_criterion_index": 1,
+    "expected_prepare": null
   }
 ]

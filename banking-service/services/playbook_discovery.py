@@ -14,9 +14,57 @@
 
 """Small-catalog discovery. Semantic selection belongs to the calling agent."""
 
+from dataclasses import dataclass
+from typing import Protocol
+
+
+@dataclass(frozen=True)
+class PublishedPlaybookPin:
+    playbook_id: str
+    revision: int
+    digest: str
+
+
+class PlaybookRetriever(Protocol):
+    """Retrieve candidate pins without eligibility checks or action execution.
+
+    Candidates must be distinct currently published revisions from the supplied
+    registry snapshot. Discovery checks this contract and projects canonical
+    metadata itself; adapters cannot inject executable handlers or descriptions.
+    Ranking and filtering belong here if selection measurements justify them.
+    """
+
+    mode: str
+
+    def retrieve(
+        self, registry, customer_need: str
+    ) -> tuple[PublishedPlaybookPin, ...]: ...
+
+
+class FullPublishedCatalogRetriever:
+    mode = "FULL_PUBLISHED_CATALOG"
+
+    def retrieve(
+        self, registry, customer_need: str
+    ) -> tuple[PublishedPlaybookPin, ...]:
+        return tuple(
+            PublishedPlaybookPin(
+                spec.definition_id, spec.definition_revision, spec.definition_digest
+            )
+            for action_type in sorted(registry.action_types)
+            if (spec := registry.require(action_type)).handler.discovery_view()
+            is not None
+        )
+
 
 def input_schema(operation):
-    names = {int: "integer", str: "string", bool: "boolean", list: "array", type(None): "null"}
+    names = {
+        int: "integer",
+        str: "string",
+        bool: "boolean",
+        list: "array",
+        type(None): "null",
+    }
     properties = {}
     for key, types in (operation.public_input_schema or operation.input_schema).items():
         allowed = types if isinstance(types, tuple) else (types,)
@@ -36,16 +84,31 @@ def input_schema(operation):
     }
 
 
-def discover_playbooks(registry, customer_need):
+def discover_playbooks(
+    registry, customer_need, *, retriever: PlaybookRetriever | None = None
+):
     if (
         not isinstance(customer_need, str)
         or not customer_need.strip()
         or len(customer_need) > 2000
     ):
         raise ValueError("Describe the customer's current need in 1–2000 characters.")
+    customer_need = customer_need.strip()
+    retriever = retriever or FullPublishedCatalogRetriever()
     candidates = []
-    for action_type in sorted(registry.action_types):
-        spec = registry.require(action_type)
+    seen = set()
+    for pin in retriever.retrieve(registry, customer_need):
+        if pin.playbook_id in seen:
+            raise ValueError("Retrieval returned a duplicate playbook.")
+        spec = registry.published(pin.playbook_id)
+        if (spec.definition_revision, spec.definition_digest) != (
+            pin.revision,
+            pin.digest,
+        ):
+            raise ValueError(
+                "Retrieval must return exact currently published playbook pins."
+            )
+        seen.add(pin.playbook_id)
         metadata = spec.handler.discovery_view()
         if metadata is None:
             continue
@@ -61,8 +124,8 @@ def discover_playbooks(registry, customer_need):
         )
     return {
         "success": True,
-        "retrieval_mode": "FULL_PUBLISHED_CATALOG",
-        "customer_need": customer_need.strip(),
+        "retrieval_mode": retriever.mode,
+        "customer_need": customer_need,
         "playbooks": candidates,
         "model_instruction": (
             "Compare the customer's need and trusted conversation/account context with these descriptions. "
