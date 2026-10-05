@@ -43,8 +43,12 @@
     "SELECT->SELECT": 1
   },
   "decision_correct": 4,
+  "decision_protocol_valid_count": 4,
+  "expected_select_count": 1,
   "failure_counts": {},
   "false_prepare_count": 0,
+  "lineage_status": "unverified_legacy_diagnostic",
+  "missing_select_count": 0,
   "model": "gemini-2.5-flash",
   "passed": 4,
   "playbook_correct": 4,
@@ -53,7 +57,7 @@
   ],
   "reason_correct": 4,
   "recorded_count": 4,
+  "recorded_select_count": 1,
   "scope": "isolated_structured_selection",
-  "selected_count": 1,
   "selected_playbook_correct": 1
 }
