@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import axios from 'axios';
+import { playbookClient } from './playbooks.js';
 
 const backendUrl = window.env?.BANKING_API_URL || import.meta.env.VITE_BANKING_API_URL || "http://localhost:8080";
 const defaultDataGeneratorUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -500,3 +501,4 @@ export async function getDepositTransactions(accountId) {
 }
 
 export default api;
+export const playbooksAdmin = playbookClient(api);
