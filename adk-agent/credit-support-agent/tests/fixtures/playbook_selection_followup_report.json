@@ -1,0 +1,59 @@
+{
+  "case_count": 4,
+  "cases": [
+    {
+      "expected": "SELECT",
+      "failures": [],
+      "id": "dinner",
+      "observed": "SELECT",
+      "observed_playbook": "google-wallet-provisioning",
+      "passed": true
+    },
+    {
+      "expected": "CLARIFY",
+      "failures": [],
+      "id": "ambiguous",
+      "observed": "CLARIFY",
+      "observed_playbook": null,
+      "passed": true
+    },
+    {
+      "expected": "NO_ACTION",
+      "failures": [],
+      "id": "queued",
+      "observed": "NO_ACTION",
+      "observed_playbook": "google-wallet-provisioning",
+      "passed": true
+    },
+    {
+      "expected": "CLARIFY",
+      "failures": [],
+      "id": "credit_capacity_missing_total",
+      "observed": "CLARIFY",
+      "observed_playbook": "credit-limit-increase",
+      "passed": true
+    }
+  ],
+  "catalog_size": 4,
+  "catalog_source": "repository_files",
+  "criterion_correct": 4,
+  "decision_confusion": {
+    "CLARIFY->CLARIFY": 2,
+    "NO_ACTION->NO_ACTION": 1,
+    "SELECT->SELECT": 1
+  },
+  "decision_correct": 4,
+  "failure_counts": {},
+  "false_prepare_count": 0,
+  "model": "gemini-2.5-flash",
+  "passed": 4,
+  "playbook_correct": 4,
+  "prompt_versions": [
+    2
+  ],
+  "reason_correct": 4,
+  "recorded_count": 4,
+  "scope": "isolated_structured_selection",
+  "selected_count": 1,
+  "selected_playbook_correct": 1
+}

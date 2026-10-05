@@ -1,0 +1,199 @@
+{
+  "case_count": 16,
+  "cases": [
+    {
+      "expected": "SELECT",
+      "failures": [
+        "gold_decision_mismatch",
+        "invalid_criterion"
+      ],
+      "id": "dinner",
+      "observed": "SELECT",
+      "observed_playbook": "google-wallet-provisioning",
+      "passed": false
+    },
+    {
+      "expected": "SELECT",
+      "failures": [],
+      "id": "lost",
+      "observed": "SELECT",
+      "observed_playbook": "card-reissue",
+      "passed": true
+    },
+    {
+      "expected": "CLARIFY",
+      "failures": [
+        "invalid_decision_reason",
+        "gold_decision_mismatch"
+      ],
+      "id": "ambiguous",
+      "observed": "CLARIFY",
+      "observed_playbook": null,
+      "passed": false
+    },
+    {
+      "expected": "NO_ACTION",
+      "failures": [
+        "invalid_decision_reason",
+        "gold_decision_mismatch"
+      ],
+      "id": "no_request",
+      "observed": "NO_ACTION",
+      "observed_playbook": null,
+      "passed": false
+    },
+    {
+      "expected": "NO_ACTION",
+      "failures": [
+        "invalid_decision_reason",
+        "gold_decision_mismatch",
+        "invalid_criterion"
+      ],
+      "id": "queued",
+      "observed": "NO_ACTION",
+      "observed_playbook": "google-wallet-provisioning",
+      "passed": false
+    },
+    {
+      "expected": "NO_ACTION",
+      "failures": [
+        "invalid_decision_reason",
+        "gold_decision_mismatch"
+      ],
+      "id": "unsupported",
+      "observed": "NO_ACTION",
+      "observed_playbook": null,
+      "passed": false
+    },
+    {
+      "expected": "SELECT",
+      "failures": [],
+      "id": "recognized",
+      "observed": "SELECT",
+      "observed_playbook": "fraud-triage",
+      "passed": true
+    },
+    {
+      "expected": "SELECT",
+      "failures": [],
+      "id": "credit_limit_total",
+      "observed": "SELECT",
+      "observed_playbook": "credit-limit-increase",
+      "passed": true
+    },
+    {
+      "expected": "CLARIFY",
+      "failures": [
+        "invalid_decision_reason",
+        "gold_decision_mismatch",
+        "invalid_criterion"
+      ],
+      "id": "credit_capacity_missing_total",
+      "observed": "CLARIFY",
+      "observed_playbook": "credit-limit-increase",
+      "passed": false
+    },
+    {
+      "expected": "NO_ACTION",
+      "failures": [
+        "invalid_decision_reason",
+        "gold_decision_mismatch"
+      ],
+      "id": "credit_limit_information",
+      "observed": "NO_ACTION",
+      "observed_playbook": null,
+      "passed": false
+    },
+    {
+      "expected": "NO_ACTION",
+      "failures": [
+        "invalid_decision_reason",
+        "gold_decision_mismatch",
+        "invalid_criterion"
+      ],
+      "id": "credit_limit_decrease",
+      "observed": "NO_ACTION",
+      "observed_playbook": "credit-limit-increase",
+      "passed": false
+    },
+    {
+      "expected": "SELECT",
+      "failures": [
+        "gold_decision_mismatch",
+        "invalid_criterion"
+      ],
+      "id": "damaged_card",
+      "observed": "SELECT",
+      "observed_playbook": "card-reissue",
+      "passed": false
+    },
+    {
+      "expected": "SELECT",
+      "failures": [],
+      "id": "direct_wallet",
+      "observed": "SELECT",
+      "observed_playbook": "google-wallet-provisioning",
+      "passed": true
+    },
+    {
+      "expected": "SELECT",
+      "failures": [
+        "gold_decision_mismatch",
+        "invalid_criterion"
+      ],
+      "id": "overlap_fraud_reissue",
+      "observed": "SELECT",
+      "observed_playbook": "fraud-triage",
+      "passed": false
+    },
+    {
+      "expected": "SELECT",
+      "failures": [
+        "gold_decision_mismatch",
+        "invalid_criterion"
+      ],
+      "id": "overlap_existing_replacement",
+      "observed": "SELECT",
+      "observed_playbook": "google-wallet-provisioning",
+      "passed": false
+    },
+    {
+      "expected": "CLARIFY",
+      "failures": [
+        "invalid_decision_reason",
+        "gold_decision_mismatch",
+        "invalid_criterion"
+      ],
+      "id": "wallet_provider_uncertain",
+      "observed": "CLARIFY",
+      "observed_playbook": "google-wallet-provisioning",
+      "passed": false
+    }
+  ],
+  "catalog_size": 4,
+  "catalog_source": "repository_files",
+  "criterion_correct": 6,
+  "decision_confusion": {
+    "CLARIFY->CLARIFY": 3,
+    "NO_ACTION->NO_ACTION": 5,
+    "SELECT->SELECT": 8
+  },
+  "decision_correct": 16,
+  "failure_counts": {
+    "gold_decision_mismatch": 12,
+    "invalid_criterion": 8,
+    "invalid_decision_reason": 8
+  },
+  "false_prepare_count": 0,
+  "model": "gemini-2.5-flash",
+  "passed": 4,
+  "playbook_correct": 14,
+  "prompt_versions": [
+    1
+  ],
+  "reason_correct": 8,
+  "recorded_count": 16,
+  "scope": "isolated_structured_selection",
+  "selected_count": 8,
+  "selected_playbook_correct": 8
+}
