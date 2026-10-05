@@ -38,6 +38,7 @@ from routers.underwriting import router as underwriting_router
 from routers.credit_card import router as credit_card_router, apiv1_router as credit_card_apiv1_router, v1_router as credit_card_v1_router
 from routers.support import router as support_router
 from routers.settings import router as settings_router
+from routers.playbooks_admin import router as playbooks_admin_router
 from models.authentication import ValidatedToken
 from utils.auth import get_current_user
 from utils.env import get_cors_origins, is_cloud_run
@@ -167,6 +168,7 @@ app.include_router(card_network_router)
 app.include_router(card_network_v1_router)
 app.include_router(support_router)
 app.include_router(settings_router)
+app.include_router(playbooks_admin_router)
 app.include_router(voice_bidi_router)
 app.include_router(accounts_router)
 app.include_router(accounts_v1_router)

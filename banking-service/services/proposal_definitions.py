@@ -230,12 +230,24 @@ class ServiceActionHandler:
         return self.operation.reconciled(self.db, proposal, result)
 
 
+def definition_digest(document):
+    return hashlib.sha256(json.dumps(document, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+
+
+def bundled_documents():
+    return [json.loads(path.read_text()) for path in sorted(CATALOG_PATH.glob("*.json"))]
+
+
 def load_action_registry(db, documents=None, *, decisioning_provider=None):
     repository_catalog = documents is None
+    published = None
     if documents is None:
-        documents = [
-            json.loads(path.read_text()) for path in sorted(CATALOG_PATH.glob("*.json"))
-        ]
+        if db is None:
+            documents = bundled_documents()
+        else:
+            from services.playbook_repository import SqlPlaybookRepository
+            snapshot = SqlPlaybookRepository(db).snapshot()
+            documents, published = snapshot.documents, snapshot.published
     specifications = []
     for document in documents:
         d = validate_definition(document)
@@ -246,9 +258,7 @@ def load_action_registry(db, documents=None, *, decisioning_provider=None):
                 contract_version=d["contract_version"],
                 definition_id=d["id"],
                 definition_revision=d["revision"],
-                definition_digest=hashlib.sha256(
-                    json.dumps(d, sort_keys=True, separators=(",", ":")).encode()
-                ).hexdigest(),
+                definition_digest=definition_digest(d),
                 payload_schema=operation.payload_schema,
                 scope_resolver=lambda proposal: (
                     str(proposal.customer_id),
@@ -266,7 +276,7 @@ def load_action_registry(db, documents=None, *, decisioning_provider=None):
         )
     if not specifications:
         raise ValueError("Action catalog is empty.")
-    registry = ActionRegistry(tuple(specifications))
+    registry = ActionRegistry(tuple(specifications), published=published)
     if repository_catalog and any(
         registry.require(key).handler.discovery_view() is None
         for key in registry.action_types

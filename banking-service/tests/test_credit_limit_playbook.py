@@ -22,6 +22,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+from models.playbook import Playbook, PlaybookRevision
 from models.action_proposal import ActionProposal
 from models.audit import AuditOutbox
 from models.credit_card import CreditAccount, CreditProduct
@@ -38,6 +39,8 @@ from services.proposal_lifecycle import (
 from services.playbook_discovery import discover_playbooks
 
 TABLES = (
+    Playbook.__table__,
+    PlaybookRevision.__table__,
     User.__table__,
     CreditProduct.__table__,
     CreditAccount.__table__,

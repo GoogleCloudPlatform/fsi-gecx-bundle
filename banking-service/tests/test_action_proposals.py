@@ -22,6 +22,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
+from models.playbook import Playbook, PlaybookRevision
 from models.action_proposal import (
     ActionProposal,
     CONFIRMATION_POLICIES,
@@ -128,6 +129,8 @@ def isolated_banking_money(monkeypatch):
 @pytest.fixture(name="db_session")
 def fixture_db_session():
     engine = create_engine("sqlite:///:memory:")
+    Playbook.__table__.create(bind=engine, checkfirst=True)
+    PlaybookRevision.__table__.create(bind=engine, checkfirst=True)
     User.__table__.create(bind=engine, checkfirst=True)
     FraudAlert.__table__.create(bind=engine, checkfirst=True)
     ActionProposal.__table__.create(bind=engine, checkfirst=True)
@@ -141,6 +144,8 @@ def fixture_db_session():
     ActionProposal.__table__.drop(bind=engine)
     FraudAlert.__table__.drop(bind=engine)
     User.__table__.drop(bind=engine)
+    PlaybookRevision.__table__.drop(bind=engine, checkfirst=True)
+    Playbook.__table__.drop(bind=engine, checkfirst=True)
     engine.dispose()
 
 
@@ -647,6 +652,8 @@ def test_concurrent_proposal_creation_returns_the_same_idempotent_row(tmp_path):
         f"sqlite:///{tmp_path / 'proposal-race.db'}",
         connect_args={"check_same_thread": False, "timeout": 10},
     )
+    Playbook.__table__.create(bind=engine, checkfirst=True)
+    PlaybookRevision.__table__.create(bind=engine, checkfirst=True)
     User.__table__.create(bind=engine, checkfirst=True)
     FraudAlert.__table__.create(bind=engine, checkfirst=True)
     ActionProposal.__table__.create(bind=engine, checkfirst=True)
@@ -690,6 +697,8 @@ def test_concurrent_proposal_creation_returns_the_same_idempotent_row(tmp_path):
     assert proposal_ids[0] == proposal_ids[1]
     with session_factory() as session:
         assert session.query(ActionProposal).count() == 1
+    PlaybookRevision.__table__.drop(bind=engine, checkfirst=True)
+    Playbook.__table__.drop(bind=engine, checkfirst=True)
     engine.dispose()
 
 
@@ -1271,8 +1280,12 @@ def test_new_definition_executes_and_replays_through_pinned_revision(
     monkeypatch.setattr(
         "services.proposal_capabilities.issue_replacement_card", replace
     )
-    first = json.loads((CATALOG_PATH / "card-reissue.v1.json").read_text())
-    first.update(id="replacement-followup", action_type="REPLACEMENT_FOLLOWUP")
+    first = json.loads((CATALOG_PATH / "card-reissue.v2.json").read_text())
+    first.update(id="replacement-followup", action_type="REPLACEMENT_FOLLOWUP", revision=1)
+    from services.playbook_administration import PlaybookAdministration
+    admin = PlaybookAdministration(db_session)
+    draft = admin.create(first, "operator")
+    admin.publish(first["id"], 1, 1, draft["generation"], "operator")
     service = ActionProposalService(db_session)
     service.registry = load_action_registry(db_session, [first])
     context = dict(
@@ -1342,7 +1355,11 @@ def test_discovered_fourth_playbook_prepares_commits_and_replays_with_generic_to
         "services.proposal_capabilities.issue_replacement_card", replace
     )
     document = json.loads((CATALOG_PATH / "card-reissue.v2.json").read_text())
-    document.update(id="new-replacement", action_type="NEW_REPLACEMENT")
+    document.update(id="new-replacement", action_type="NEW_REPLACEMENT", revision=1)
+    from services.playbook_administration import PlaybookAdministration
+    admin = PlaybookAdministration(db_session)
+    draft = admin.create(document, "operator")
+    admin.publish(document["id"], 1, draft["draft_version"], draft["generation"], "operator")
     service = ActionProposalService(db_session)
     service.registry = load_action_registry(db_session, [document])
     found = discover_playbooks(service.registry, "My card is damaged")["playbooks"][0]
@@ -1372,8 +1389,9 @@ def test_discovered_fourth_playbook_prepares_commits_and_replays_with_generic_to
                 customer_turn_id="customer-turn-11", confirming=True
             ),
         )
-    newer = dict(document, revision=3)
-    service.registry = load_action_registry(db_session, [document, newer])
+    draft = admin.create_draft(document["id"], 1, 2, "operator")
+    admin.publish(document["id"], draft["revision"], draft["draft_version"], draft["generation"], "operator")
+    service.registry = load_action_registry(db_session)
     assert (
         service.prepare_playbook_for_identity(**request)["proposal_id"]
         == proposed["proposal_id"]
