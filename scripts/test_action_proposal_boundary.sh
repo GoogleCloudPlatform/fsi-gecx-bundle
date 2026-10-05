@@ -23,6 +23,8 @@ run_banking_contract() {
   uv run --frozen pytest -q \
     tests/test_proposal_protocol_kernel.py \
     tests/test_proposal_definitions.py \
+    tests/test_playbook_repository.py \
+    tests/test_playbook_retrieval.py \
     tests/test_credit_limit_playbook.py \
     tests/test_decisioning.py \
     tests/test_credit_limit_postgres.py \
@@ -59,7 +61,8 @@ run_adk_contract() {
       tests/test_no_semantic_gating.py \
       tests/test_trajectory_eval.py \
       tests/test_ces_trajectory.py \
-      tests/test_ces_voice_qualification.py
+      tests/test_ces_voice_qualification.py \
+      tests/test_playbook_selection_eval.py
 }
 
 case "${COMPONENT}" in

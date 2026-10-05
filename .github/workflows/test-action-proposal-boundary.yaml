@@ -196,3 +196,12 @@ jobs:
           PYTEST
           uv run alembic upgrade head
         working-directory: banking-service
+
+      - name: Verify persisted playbook contracts on PostgreSQL
+        env:
+          DATABASE_URL: postgresql://postgres:secret@127.0.0.1:5432/banking
+          PLAYBOOK_TEST_DATABASE_URL: postgresql://postgres:secret@127.0.0.1:5432/banking
+          GOOGLE_CLOUD_PROJECT: playbook-contract-test
+          SKIP_IAM_GRANTS: "true"
+        run: uv run --frozen pytest -q tests/test_playbook_repository.py tests/test_playbook_retrieval.py
+        working-directory: banking-service

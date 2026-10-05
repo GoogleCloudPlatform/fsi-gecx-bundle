@@ -124,6 +124,7 @@ export default function AdminPlaybooksView() {
           {comparison && <div className="mt-5"><h3 className="font-semibold">Revision comparison</h3>
             {!comparison.changes.length && <p>No configuration differences.</p>}
             <ul className="space-y-3 mt-2">{comparison.changes.map((change) => <li key={change.path} className="border rounded p-3 text-sm"><p className="font-mono break-all">{change.path}</p>
+              <p className="text-xs mt-1">{change.change_type === 'ADDED' ? 'Field added' : change.change_type === 'REMOVED' ? 'Field removed' : 'Value changed'}</p>
               <div className="grid md:grid-cols-2 gap-2 mt-2"><pre className="whitespace-pre-wrap break-words bg-red-50 dark:bg-red-950 p-2">Before: {JSON.stringify(change.before, null, 2)}</pre><pre className="whitespace-pre-wrap break-words bg-emerald-50 dark:bg-emerald-950 p-2">After: {JSON.stringify(change.after, null, 2)}</pre></div>
             </li>)}</ul>
           </div>}

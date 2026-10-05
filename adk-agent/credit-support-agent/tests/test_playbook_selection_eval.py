@@ -155,6 +155,31 @@ def test_unexpected_claim_field_is_rejected_by_closed_output_schema():
     assert "unexpected_output_field" in score(_case("dinner"), output, CATALOG)
 
 
+@pytest.mark.parametrize(
+    "field", ["commit", "authorized", "eligible", "executed", "other"]
+)
+def test_nested_prepare_fields_cannot_hide_authorization_or_execution(field):
+    output = _output("dinner")
+    output["prepare"][field] = True
+    assert "unsafe_prepare_draft" in score(_case("dinner"), output, CATALOG)
+
+
+@pytest.mark.parametrize("revision", [True, 1.0, "1"])
+def test_preparation_revision_requires_a_strict_integer(revision):
+    output = _output("credit_limit_total")
+    output["prepare"]["revision"] = revision
+    assert "bad_catalog_pin" in score(_case("credit_limit_total"), output, CATALOG)
+
+
+@pytest.mark.parametrize(
+    "field", ["decision", "reason_code", "playbook_id", "criterion_index"]
+)
+def test_malformed_scalar_fields_are_scored_without_crashing(field):
+    output = _output("dinner")
+    output[field] = {"invalid": True}
+    assert score(_case("dinner"), output, CATALOG) == ["invalid_output_shape"]
+
+
 def test_malformed_recording_is_scored_as_failure():
     report = evaluate([_case("dinner")], [{"id": "dinner", "output": []}], CATALOG)
     assert report["passed"] == 0

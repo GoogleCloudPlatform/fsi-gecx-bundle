@@ -9,7 +9,8 @@ A **playbook definition** describes an available action. A **proposal** is a dur
 ```mermaid
 flowchart LR
     Agent[ADK or GECX agent] --> Discovery[Discover and record catalog decision]
-    Files[Versioned JSON playbooks] --> Registry[Validated definition registry]
+    Admin[Playbook administration] --> Repository[Versioned database repository]
+    Repository --> Registry[Validated published registry]
     Registry --> Discovery
     Agent --> Prepare[Prepare immutable offer]
     Registry --> Prepare
@@ -28,6 +29,8 @@ flowchart LR
 | Component | Responsibility |
 | --- | --- |
 | `services/proposal_definitions.py` | Validate definition documents, calculate canonical digests, bind registered capabilities, and compile the registry. One `ServiceActionHandler` serves the supported execution type. |
+| `services/playbook_repository.py` | Repository contract, SQL and memory adapters, explicit publication heads, detached catalog snapshots, and historical revision resolution. |
+| `services/playbook_administration.py` and `routers/playbooks_admin.py` | Administrator authoring, validation, comparison, publication concurrency, and transactional management evidence. |
 | `services/proposal_capabilities.py` | Code-owned input and payload contracts, authoritative fact preparation, eligibility and execution functions, result hooks, and domain reconciliation. |
 | `services/proposal_protocol.py` | Specifications, registry resolution, authorization policy, required presentation facts, and runtime evidence validation. |
 | `services/proposal_lifecycle.py` | Scope, expiry, locking, idempotency, state transitions, commit claims, authoritative results, and transactional transition audit. |
@@ -41,7 +44,7 @@ Paths in this table are relative to `banking-service/`.
 
 ## Definitions, publication and storage
 
-Playbooks are JSON files in `banking-service/config/action_definitions/`. The supported execution type is `service_action`. All current playbooks share one handler and one lifecycle engine; there is no class or module per playbook.
+Playbooks are versioned JSON documents stored in `admin.playbooks` and `admin.playbook_revisions` in the banking database. `PlaybookRepository` defines the storage contract, with SQL and memory adapters. The supported execution type is `service_action`. All current playbooks share one handler and one lifecycle engine; there is no class or module per playbook. Bundled files in `banking-service/config/action_definitions/` supply initial definitions and code-owned capability templates.
 
 | Definition | Registered operation | Banking outcome |
 | --- | --- | --- |
@@ -52,9 +55,17 @@ Playbooks are JSON files in `banking-service/config/action_definitions/`. The su
 
 A definition contains its ID and revision, action and contract identifiers, registered operation, bounded parameters and literal bindings, presentation contract, authorization policy, and discovery metadata. References bind registered capabilities; they do not execute arbitrary Python, SQL or expressions. Input validation and mandatory operation constraints remain code-owned. Adding another definition over a supported capability does not add an agent tool or handler. A new banking capability requires code and qualification.
 
-The highest bundled revision for an action is published. Discovery metadata and executable configuration share a canonical SHA-256 digest. Each proposal in `operations.action_proposals` pins `definition_id`, `definition_revision`, and `definition_digest`, together with normalized action facts, their fingerprint, customer-safe presentation, protected evidence and result. Older definition revisions must remain available while proposals can reference them. Fresh preparation rejects stale definitions and requires rediscovery; retries resolve the proposal's original pin.
+Each playbook has an explicit current publication pointer. Drafts are excluded from discovery; a higher revision number alone does not publish a definition. Discovery metadata and executable configuration share a canonical SHA-256 digest. Each proposal in `operations.action_proposals` pins `definition_id`, `definition_revision`, and `definition_digest`, together with normalized action facts, their fingerprint, customer-safe presentation, protected evidence and result. Published revisions remain available for exact historical resolution and cannot be updated or deleted. PostgreSQL and SQLite triggers enforce published-row immutability.
 
-There is no database-backed definition authoring or publishing interface. Operational proposal rows are database-backed; playbook definitions are bundled configuration.
+The runtime compiles a consistent repository snapshot with explicit published heads and retained history. Fresh preparation checks and locks the authoritative publication head, rejecting stale discovery and requiring rediscovery. Existing proposal retries and commits resolve the original pin. Database failures do not silently fall back to bundled definitions. Initial bootstrap imports bundled history without changing its canonical identity; it never replaces a populated operational catalog. The admin schema is preserved by customer and demo resets.
+
+## Playbook administration
+
+The Banking UI provides `/admin/playbooks` for catalog browsing, revision history, supported-capability draft creation, structured discovery-guidance editing, advanced configuration, saved-draft validation, structural comparison, and explicit publication. Published definitions are read-only. A new configured playbook uses its own ID and unique action type while sharing a registered operation. An existing playbook's execution identity remains fixed.
+
+Every `/admin/playbooks` backend endpoint enforces `require_admin_user`, including reads and capability templates. Signing into the UI does not grant authoring authority. Actor provenance comes from the verified token. Draft edits carry an expected draft version; cloning and publishing carry an expected publication generation. Conflicts require reloading the current state instead of overwriting it.
+
+Publishing revalidates the saved definition against registered operations, required presentation facts, public projections, and the supported authorization policy inside the publication transaction. The publication pointer, immutable revision, management audit event, and restricted canonical evidence snapshot commit together. Draft creation and editing record bounded management metadata; raw editable draft text does not enter the ordinary audit stream. Administration does not execute financial actions, establish customer eligibility, or provide customer confirmation.
 
 ## Credit-limit increase
 
@@ -130,6 +141,9 @@ published to the model.
 
 Discovery performs no server-side semantic ranking or keyword routing. The agent compares the published descriptions with the customer need and trusted account context. It may select one playbook, ask a focused clarification, or choose no action. It records that choice silently; internal audit mechanics do not belong in the customer conversation.
 
+`PlaybookRetriever` isolates candidate retrieval behind discovery. The active adapter returns the full published catalog. Discovery verifies distinct exact published pins and projects canonical metadata itself. A filtering or ranking adapter must preserve that contract and cannot establish eligibility or authorization. The [selection evaluation runner and corpus](../../../adk-agent/credit-support-agent/tests/fixtures/PLAYBOOK_SELECTION_EVAL.md) measure synthetic direct, indirect, ambiguous, overlapping, clarification, and no-action cases, reporting semantic selection separately from reason-code, criterion, pin, and preparation safety. Recorded model responses are distinct from offline tests of the scorer and from qualification of a complete voice runtime.
+
+
 `SELECT` uses reason `APPLICABLE` and a zero-based `when_to_use` criterion index. `CLARIFY` uses `AMBIGUOUS_INTENT`, `MISSING_INPUT`, or `UNCERTAIN_PREREQUISITE`; a named playbook cites `prerequisites`. `NO_ACTION` uses `NO_MATCH`, `UNSUPPORTED_REQUEST`, `ALREADY_SATISFIED`, or `INFORMATION_ONLY`; a named playbook cites `when_not_to_use`. The tool accepts only a criterion index; banking derives the metadata field from the decision. Catalog-wide clarification or no match needs no specific playbook. Banking checks the discovery scope and criterion reference, not the truth of the model's semantic assessment.
 
 Preparation needs no preliminary permission question for a clear need. The agent presents the banking-authored offer, preserves every required fact and consequence, and stops for a later explicit customer confirmation. Questions and uncertainty do not advance authorization. Monetary facts remain canonical numeric currency in response text, with natural voice pronunciation and no recalculation or invented exchange rates.
@@ -190,7 +204,7 @@ Contract rejections are distinguished from unexpected request failures, whose ex
 
 Each lifecycle event, catalog discovery and declared catalog decision also creates a `proposal-evidence.v1` snapshot in the same source transaction. The metadata event carries `evidence_artifact.id` and `evidence_artifact.digest`; the separate `PROPOSAL_EVIDENCE_SNAPSHOT` outbox record contains the exact canonical JSON string and its SHA-256 digest. Evidence writes participate in rollback: neither a banking mutation nor its successful audit can commit without its snapshot.
 
-Lifecycle snapshots preserve the exact bundled definition, the effective authorization and presentation policies, banking scope and source identifiers, the banking-generated offer and allowlisted facts, accepted protected authorization provenance, allowlisted outcome facts and lifecycle timestamps. Fraud facts retain original and billing Money and source posting/authorization references; outcome projections retain released holds, provisional credits and replacement identifiers. Recursive code-owned field allowlists exclude card tokens and unrecognized nested fields. Catalog snapshots retain all returned definition documents, and decision snapshots retain the chosen criterion text and reference the archived catalog. Rejected requests contain requester metadata only and do not retrieve a foreign proposal's evidence.
+Lifecycle snapshots preserve the exact published definition, the effective authorization and presentation policies, banking scope and source identifiers, the banking-generated offer and allowlisted facts, accepted protected authorization provenance, allowlisted outcome facts and lifecycle timestamps. Fraud facts retain original and billing Money and source posting/authorization references; outcome projections retain released holds, provisional credits and replacement identifiers. Recursive code-owned field allowlists exclude card tokens and unrecognized nested fields. Catalog snapshots retain all returned definition documents, and decision snapshots retain the chosen criterion text and reference the archived catalog. Rejected requests contain requester metadata only and do not retrieve a foreign proposal's evidence.
 
 Dataflow verifies the snapshot digest and routes evidence exclusively to `proposal_evidence.snapshots`, separate from `compliance_audit.audit_events`. The deduplicated BigQuery `proposal_evidence.snapshots` view preserves the canonical string for independent digest verification. Reconstruction uses these snapshots and metadata rather than mutable proposal rows, live catalog files or retained operational banking source rows. The offer snapshot is the banking-generated presentation, not a recording or proof of the exact words spoken. Credentials, raw conversations, model reasoning and arbitrary exception text are not archived.
 
