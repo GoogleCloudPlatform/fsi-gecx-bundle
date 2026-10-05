@@ -74,6 +74,7 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
         "7c4f2a9d1e63_canonical_journal_and_outbox_relay.py",
         "91d7b4a6c2ef_runtime_neutral_action_proposals.py",
         "a81d2c7f490b_bank_decision_binding.py",
+        "b92e3d8a601c_versioned_playbook_repository.py",
         "c3a91f2b7d44_one_active_proposal_per_session.py",
         "d8e2f6a910bc_money_currency_invariants.py",
         "e4b7c9a12f63_preferred_support_locale.py",
@@ -81,7 +82,8 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
         "f6d9e3f8b205_italian_support_locale.py",
         "f7e0f4a9c306_proposal_definition_identity.py",
     ]
-    baseline = versions[0].read_text()
+    migrations = {path.name: path.read_text() for path in versions}
+    baseline = migrations["2ea57c78ba89_alloydb_unified_baseline.py"]
     assert "down_revision: Union[str, Sequence[str], None] = None" in baseline
     for forbidden in (
         "cloudsql",
@@ -93,23 +95,27 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
     ):
         assert forbidden not in baseline
 
-    journal_migration = versions[1].read_text()
+    journal_migration = migrations["7c4f2a9d1e63_canonical_journal_and_outbox_relay.py"]
     assert 'down_revision: Union[str, Sequence[str], None] = "2ea57c78ba89"' in journal_migration
     assert "ck_account_ledger_positive_amount" in journal_migration
     assert "outbox_relay_checkpoint" in journal_migration
 
-    proposal_migration = versions[2].read_text()
+    proposal_migration = migrations["91d7b4a6c2ef_runtime_neutral_action_proposals.py"]
     assert 'down_revision: Union[str, Sequence[str], None] = "7c4f2a9d1e63"' in proposal_migration
     assert "action_proposals" in proposal_migration
     assert "uq_action_proposals_scope_idempotency" in proposal_migration
 
-    active_proposal_migration = versions[4].read_text()
+    active_proposal_migration = migrations["c3a91f2b7d44_one_active_proposal_per_session.py"]
     assert 'down_revision: Union[str, Sequence[str], None] = "91d7b4a6c2ef"' in (
         active_proposal_migration
     )
     assert "uq_action_proposals_active_session" in active_proposal_migration
     assert "HAVING COUNT(*) > 1" in active_proposal_migration
     assert "FROM operations.action_proposals" in active_proposal_migration
+    repository_migration = migrations["b92e3d8a601c_versioned_playbook_repository.py"]
+    assert 'down_revision = "a81d2c7f490b"' in repository_migration
+    assert "playbook_revisions" in repository_migration
+    assert "reject_published_playbook_mutation" in repository_migration
     assert any(
         statement.endswith(" AS operations;")
         for statement in _sqlite_attach_statements("/tmp/migration.db")
@@ -118,7 +124,12 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
 
 def test_current_schema_head_is_reconciled_before_banking_deploy() -> None:
     repository_root = Path(__file__).parents[2]
-    expected_head = "a81d2c7f490b"
+    expected_head = "b92e3d8a601c"
+    from alembic.script import ScriptDirectory
+
+    assert ScriptDirectory(
+        str(repository_root / "banking-service" / "alembic")
+    ).get_current_head() == expected_head
     cloudbuild = repository_root.joinpath(
         "banking-service", "cloudbuild-publish-deploy.yaml"
     ).read_text()
