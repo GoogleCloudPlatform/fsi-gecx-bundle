@@ -25,6 +25,7 @@ run_banking_contract() {
     tests/test_proposal_definitions.py \
     tests/test_playbook_repository.py \
     tests/test_playbook_retrieval.py \
+    tests/test_playbook_change_requests.py \
     tests/test_credit_limit_playbook.py \
     tests/test_decisioning.py \
     tests/test_credit_limit_postgres.py \

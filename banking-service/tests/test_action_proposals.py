@@ -22,7 +22,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
-from models.playbook import Playbook, PlaybookRevision
+from models.playbook import Playbook, PlaybookRevision, PlaybookChangeRequest
 from models.action_proposal import (
     ActionProposal,
     CONFIRMATION_POLICIES,
@@ -131,6 +131,7 @@ def fixture_db_session():
     engine = create_engine("sqlite:///:memory:")
     Playbook.__table__.create(bind=engine, checkfirst=True)
     PlaybookRevision.__table__.create(bind=engine, checkfirst=True)
+    PlaybookChangeRequest.__table__.create(bind=engine, checkfirst=True)
     User.__table__.create(bind=engine, checkfirst=True)
     FraudAlert.__table__.create(bind=engine, checkfirst=True)
     ActionProposal.__table__.create(bind=engine, checkfirst=True)
@@ -144,6 +145,7 @@ def fixture_db_session():
     ActionProposal.__table__.drop(bind=engine)
     FraudAlert.__table__.drop(bind=engine)
     User.__table__.drop(bind=engine)
+    PlaybookChangeRequest.__table__.drop(bind=engine, checkfirst=True)
     PlaybookRevision.__table__.drop(bind=engine, checkfirst=True)
     Playbook.__table__.drop(bind=engine, checkfirst=True)
     engine.dispose()
