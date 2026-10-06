@@ -18,6 +18,10 @@ The policy is deployment configuration and is never editable through the admin
 API: an editable toggle would let the checked person disable the check. Phase 1
 supports direct publication only, so any configured approval requirement, or an
 unparsable one, refuses publication instead of being silently ignored.
+
+An empty or whitespace-only approvals value means unset, i.e. 0 (direct publish).
+With 0 approvals the approver allowlist has no effect: publication stays direct and
+only the allowlist size is reported.
 """
 
 from dataclasses import dataclass

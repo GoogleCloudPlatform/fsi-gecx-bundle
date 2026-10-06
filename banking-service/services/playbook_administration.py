@@ -23,6 +23,7 @@ from copy import deepcopy
 import datetime
 import json
 import re
+import unicodedata
 import uuid
 from models.playbook import CHANGE_REQUEST_DESCRIPTION_MAX, CHANGE_REQUEST_TITLE_MAX
 from services.playbook_repository import (
@@ -47,11 +48,19 @@ TITLE_FORBIDDEN = re.compile(r"[\x00-\x1f\x7f]")
 DESCRIPTION_FORBIDDEN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
+def has_format_characters(text):
+    # Category Cf covers bidi overrides/isolates and zero-width characters that can
+    # make a rendered title or description read differently from its stored value.
+    return any(unicodedata.category(character) == "Cf" for character in text)
+
+
 def bounded_change_request_text(title, description):
     if title is not None:
         title = title.strip()
-        if not 1 <= len(title) <= CHANGE_REQUEST_TITLE_MAX or TITLE_FORBIDDEN.search(
-            title
+        if (
+            not 1 <= len(title) <= CHANGE_REQUEST_TITLE_MAX
+            or TITLE_FORBIDDEN.search(title)
+            or has_format_characters(title)
         ):
             raise RepositoryError(
                 f"Change request title must be 1-{CHANGE_REQUEST_TITLE_MAX} printable characters."
@@ -59,6 +68,7 @@ def bounded_change_request_text(title, description):
     if description is not None and (
         len(description) > CHANGE_REQUEST_DESCRIPTION_MAX
         or DESCRIPTION_FORBIDDEN.search(description)
+        or has_format_characters(description)
     ):
         raise RepositoryError(
             f"Change request description must be at most {CHANGE_REQUEST_DESCRIPTION_MAX} characters of text."
@@ -221,14 +231,22 @@ class PlaybookAdministration:
         }
 
     def _change(
-        self, event, actor, operation, *, describe=revision_metadata, evidence=False
+        self,
+        event,
+        actor,
+        operation,
+        *,
+        describe=revision_metadata,
+        evidence=False,
+        follow_on=None,
     ):
         try:
             view = operation(self.clock())
             event_id = str(uuid.uuid4())
+            actor_ref = stable_log_reference(actor, "operator")
             payload = dict(
                 management_contract="playbook-management.v1",
-                actor_ref=stable_log_reference(actor, "operator"),
+                actor_ref=actor_ref,
                 **describe(view),
             )
             if evidence:
@@ -248,6 +266,18 @@ class PlaybookAdministration:
                     recorder=record_audit_event,
                 )
             record_audit_event(self.db, event, payload, event_id=event_id)
+            # Follow-on lifecycle events commit (or roll back) with the primary change.
+            for follow_event, follow_payload in (follow_on(view) if follow_on else []):
+                record_audit_event(
+                    self.db,
+                    follow_event,
+                    dict(
+                        management_contract="playbook-management.v1",
+                        actor_ref=actor_ref,
+                        **follow_payload,
+                    ),
+                    event_id=str(uuid.uuid4()),
+                )
             self.db.commit()
             return view
         except Exception:
@@ -338,6 +368,18 @@ class PlaybookAdministration:
             ),
             describe=lambda view: revision_metadata(view)
             | {"superseded_change_request_id": change_request_id},
+            follow_on=lambda view: [
+                (
+                    "PLAYBOOK_CHANGE_REQUEST_CLOSED",
+                    change_request_metadata(
+                        self.repository.change_request(playbook_id, change_request_id)
+                    )
+                    | {
+                        "reason": "SUPERSEDED",
+                        "superseded_by_change_request_id": view["change_request"]["id"],
+                    },
+                )
+            ],
         )
 
     def edit(self, playbook_id, revision, document, expected_draft_version, actor):

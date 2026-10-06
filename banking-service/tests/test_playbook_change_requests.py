@@ -408,6 +408,89 @@ def test_change_request_text_is_bounded(administration, title, description):
         administration.create(document(), "alice", title=title, description=description)
 
 
+@pytest.mark.parametrize(
+    "title, description",
+    [
+        ("Approve \u202egnp.exe", None),  # right-to-left override
+        ("Safe\u2066title\u2069", None),  # bidi isolates
+        ("zero\u200bwidth", None),  # zero-width space
+        ("ok", "hidden\u200d joiner"),  # zero-width joiner in a rendered description
+        ("ok", "\ufeffbom"),
+    ],
+)
+def test_change_request_text_rejects_format_characters(administration, title, description):
+    d = document()
+    with pytest.raises(RepositoryError):
+        administration.create(d, "alice", title=title, description=description)
+    created = administration.create(d, "alice", title="Plain", description="Line\nbreak")
+    with pytest.raises(RepositoryError):
+        administration.update_change_request(
+            d["id"],
+            created["change_request"]["id"],
+            created["change_request"]["version"],
+            "alice",
+            title=title,
+            description=description,
+        )
+
+
+@pytest.mark.parametrize("value", ["", "   ", "0", " 0 "])
+def test_unset_or_zero_approvals_with_an_allowlist_is_direct_publish(value):
+    policy = PublishPolicy.from_env(
+        {
+            "PLAYBOOK_PUBLISH_APPROVALS_REQUIRED": value,
+            "PLAYBOOK_APPROVER_EMAILS": "a@example.com,b@example.com",
+        }
+    )
+    assert policy.view()["publish_mode"] == "DIRECT"
+    assert policy.view()["approvals_required"] == 0
+    assert policy.view()["approver_allowlist_size"] == 2
+    policy.require_direct_publish()
+
+
+@pytest.mark.parametrize("value", ["1.0", "1000000", "0x0", "\u0660"])
+def test_malformed_approvals_values_fail_closed(value):
+    policy = PublishPolicy.from_env({"PLAYBOOK_PUBLISH_APPROVALS_REQUIRED": value})
+    assert policy.view()["publish_mode"] == "INVALID"
+    with pytest.raises(PlaybookConflict) as refused:
+        policy.require_direct_publish()
+    assert refused.value.code == "PUBLISH_POLICY_INVALID"
+
+
+def test_recreate_from_head_audits_the_superseded_change_request_as_closed(
+    administration,
+):
+    d = document()
+    first = administration.create(d, "alice")
+    administration.publish(d["id"], 1, 1, first["generation"], "alice")
+    stale = administration.create_draft(d["id"], 1, first["generation"] + 1, "bob")
+    other = administration.create_draft(d["id"], 1, stale["generation"], "carol")
+    administration.publish(d["id"], other["revision"], 1, other["generation"], "carol")
+    generation = administration.repository.head(d["id"])["generation"]
+    recreated = administration.recreate_from_head(
+        d["id"], stale["change_request"]["id"], 1, generation, "bob"
+    )
+    [closed] = events(administration, "PLAYBOOK_CHANGE_REQUEST_CLOSED")
+    assert {
+        key: closed[key]
+        for key in (
+            "change_request_id",
+            "status",
+            "reason",
+            "superseded_by_change_request_id",
+        )
+    } == dict(
+        change_request_id=stale["change_request"]["id"],
+        status="CLOSED",
+        reason="SUPERSEDED",
+        superseded_by_change_request_id=recreated["change_request"]["id"],
+    )
+    created = [
+        e for e in events(administration, "PLAYBOOK_DRAFT_CREATED") if e["origin"] == "RECREATE"
+    ]
+    assert created[0]["superseded_change_request_id"] == stale["change_request"]["id"]
+
+
 @pytest.fixture
 def client(administration, monkeypatch):
     from main import app
@@ -516,3 +599,68 @@ def test_change_request_http_contract_and_conflict_envelopes(client):
         json={"expected_generation": recreated.json()["generation"]},
     )
     assert restored.status_code == 201 and restored.json()["base_revision"] == a["revision"]
+
+
+def test_mutating_change_request_routes_do_not_cross_playbooks(client, administration):
+    base = "/admin/playbooks"
+    d = document()
+    created = client.post(base, json={"document": d}).json()
+    pid = d["id"]
+    first = client.post(
+        f"{base}/{pid}/drafts/1/publish",
+        json={"expected_draft_version": 1, "expected_generation": created["generation"]},
+    ).json()
+    second = client.post(
+        f"{base}/{pid}/drafts",
+        json={"source_revision": 1, "expected_generation": first["generation"]},
+    ).json()
+    client.post(
+        f"{base}/{pid}/drafts/{second['revision']}/publish",
+        json={"expected_draft_version": 1, "expected_generation": second["generation"]},
+    ).raise_for_status()
+    head = administration.repository.head(pid)
+    open_cr = client.post(
+        f"{base}/{pid}/drafts",
+        json={
+            "source_revision": head["published_revision"],
+            "expected_generation": head["generation"],
+        },
+    ).json()["change_request"]
+    # A second playbook with only an unpublished revision 1 owns no revision 2.
+    foreign = document()
+    foreign_created = client.post(base, json={"document": foreign}).json()
+    before = client.get(f"{base}/{pid}/change-requests/{open_cr['id']}").json()
+    attempts = [
+        (
+            "PATCH",
+            f"{base}/card-reissue/change-requests/{open_cr['id']}",
+            {"expected_version": open_cr["version"], "title": "hijack"},
+            "CHANGE_REQUEST_NOT_FOUND",
+        ),
+        (
+            "POST",
+            f"{base}/card-reissue/change-requests/{open_cr['id']}/close",
+            None,
+            "CHANGE_REQUEST_NOT_FOUND",
+        ),
+        (
+            "POST",
+            f"{base}/card-reissue/change-requests/{open_cr['id']}/recreate-from-head",
+            {"expected_draft_version": 1, "expected_generation": head["generation"] + 1},
+            "CHANGE_REQUEST_NOT_FOUND",
+        ),
+        (
+            "POST",
+            f"{base}/{foreign['id']}/revisions/{second['revision']}/restore",
+            {"expected_generation": foreign_created["generation"]},
+            "PLAYBOOK_NOT_FOUND",
+        ),
+    ]
+    for method, path, body, code in attempts:
+        response = client.request(method, path, json=body)
+        assert (response.status_code, response.json()["detail"]["code"]) == (404, code), path
+    after = client.get(f"{base}/{pid}/change-requests/{open_cr['id']}").json()
+    assert after["change_request"] == before["change_request"]
+    assert after["draft"]["draft_version"] == before["draft"]["draft_version"]
+    foreign_requests = client.get(f"{base}/{foreign['id']}/change-requests").json()
+    assert [cr["revision"] for cr in foreign_requests["change_requests"]] == [1]
