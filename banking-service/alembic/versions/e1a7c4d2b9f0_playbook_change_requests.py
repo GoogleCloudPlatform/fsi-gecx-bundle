@@ -27,6 +27,26 @@ down_revision = "b92e3d8a601c"
 branch_labels = None
 depends_on = None
 
+# Written only on INSERT (opening a change request, including the legacy backfill);
+# lifecycle updates touch status, closure, publication, title, description and version.
+IDENTITY_COLUMNS = (
+    "id",
+    "playbook_id",
+    "revision",
+    "base_revision",
+    "origin",
+    "previous_base_revision",
+    "opened_by",
+    "opened_at",
+)
+
+STRANDED_DRAFTS = """
+    SELECT count(*) FROM admin.playbook_change_requests cr
+    JOIN admin.playbook_revisions r
+        ON r.playbook_id = cr.playbook_id AND r.revision = cr.revision
+    WHERE cr.status != 'OPEN' AND r.status = 'DRAFT'
+"""
+
 
 def upgrade():
     op.add_column(
@@ -108,10 +128,14 @@ def upgrade():
         FROM admin.playbook_revisions WHERE status = 'DRAFT'
     """)
     if op.get_bind().dialect.name == "postgresql":
-        op.execute("""CREATE FUNCTION admin.reject_final_change_request_mutation() RETURNS trigger
+        identity_changed = " OR ".join(
+            f"NEW.{column} IS DISTINCT FROM OLD.{column}" for column in IDENTITY_COLUMNS
+        )
+        op.execute(f"""CREATE FUNCTION admin.reject_final_change_request_mutation() RETURNS trigger
         LANGUAGE plpgsql AS $$ BEGIN
         IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Change requests cannot be deleted'; END IF;
         IF OLD.status != 'OPEN' THEN RAISE EXCEPTION 'Published or closed change requests are immutable'; END IF;
+        IF {identity_changed} THEN RAISE EXCEPTION 'Change request identity is immutable'; END IF;
         RETURN NEW; END $$""")
         op.execute("""CREATE TRIGGER playbook_change_request_immutable BEFORE UPDATE OR DELETE
         ON admin.playbook_change_requests
@@ -123,9 +147,23 @@ def upgrade():
         op.execute("""CREATE TRIGGER admin.playbook_change_request_immutable_delete
         BEFORE DELETE ON playbook_change_requests
         BEGIN SELECT RAISE(ABORT, 'Change requests cannot be deleted'); END""")
+        op.execute(f"""CREATE TRIGGER admin.playbook_change_request_identity_immutable
+        BEFORE UPDATE OF {", ".join(IDENTITY_COLUMNS)} ON playbook_change_requests
+        WHEN {" OR ".join(f"NEW.{c} IS NOT OLD.{c}" for c in IDENTITY_COLUMNS)}
+        BEGIN SELECT RAISE(ABORT, 'Change request identity is immutable'); END""")
 
 
 def downgrade():
+    # The previous schema gates drafts only on draft_version and generation, so a
+    # closed change request's draft would become editable and publishable again.
+    stranded = op.get_bind().execute(sa.text(STRANDED_DRAFTS)).scalar()
+    if stranded:
+        raise RuntimeError(
+            f"Refusing to downgrade e1a7c4d2b9f0: {stranded} closed change request "
+            "draft(s) would become editable and publishable again under the previous "
+            "schema. Restore a backup taken before this migration, or deliberately "
+            "retire those drafts out of band, before downgrading."
+        )
     # DROP TABLE does not fire row triggers on either dialect.
     op.drop_table("playbook_change_requests", schema="admin")
     if op.get_bind().dialect.name == "postgresql":

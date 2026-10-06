@@ -850,6 +850,187 @@ def test_database_rejects_inconsistent_change_request_state(sql_repository):
         )
 
 
+@pytest.mark.parametrize(
+    "assignment",
+    [
+        "base_revision = 1",
+        "playbook_id = 'card-reissue'",
+        "revision = revision + 100",
+        "origin = 'DRAFT'",
+        "previous_base_revision = 1",
+        "opened_by = 'someone-else'",
+        "opened_at = '2000-01-01 00:00:00+00:00'",
+    ],
+)
+def test_database_freezes_identity_of_open_change_requests(sql_repository, assignment):
+    d = document()
+    draft = sql_repository.create(d, "operator", NOW)
+    cr_id = draft["change_request"]["id"]
+    # Lifecycle metadata stays writable while OPEN.
+    sql_repository.db.execute(
+        text("UPDATE admin.playbook_change_requests SET title='ok', version=2 WHERE id=:id"),
+        {"id": cr_id},
+    )
+    with pytest.raises(DBAPIError, match="identity is immutable"):
+        sql_repository.db.execute(
+            text(f"UPDATE admin.playbook_change_requests SET {assignment} WHERE id=:id"),
+            {"id": cr_id},
+        )
+
+
+@pytest.mark.parametrize("backend", ["sqlite", "postgresql"])
+def test_change_request_downgrade_refuses_to_resurrect_closed_drafts(backend, tmp_path):
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    if backend == "postgresql" and not PG_URL:
+        pytest.skip("isolated PostgreSQL URL required")
+    migration = load_migration("e1a7c4d2b9f0_playbook_change_requests.py")
+    engine = create_engine(
+        PG_URL if backend == "postgresql" else f"sqlite:///{tmp_path / 'downgrade.db'}"
+    )
+    with engine.connect() as connection:
+        transaction = connection.begin()
+        try:
+            operations = Operations(MigrationContext.configure(connection))
+            if backend == "sqlite":
+                repository_migration = load_migration(
+                    "b92e3d8a601c_versioned_playbook_repository.py"
+                )
+                repository_migration.op = migration.op = operations
+                repository_migration.upgrade()
+                migration.upgrade()
+            migration.op = operations
+            db = Session(bind=connection)
+            repository = SqlPlaybookRepository(db)
+            d = document()
+            created = repository.create(d, "operator", NOW)
+            cr_id = created["change_request"]["id"]
+            repository.close_change_request(d["id"], cr_id, "operator", NOW)
+            db.flush()
+            with pytest.raises(RuntimeError, match="Refusing to downgrade e1a7c4d2b9f0"):
+                migration.downgrade()
+            # Nothing was dropped: the closed change request and its draft remain final.
+            assert connection.execute(
+                text("SELECT status FROM admin.playbook_change_requests WHERE id=:id"),
+                {"id": cr_id},
+            ).scalar() == "CLOSED"
+            assert connection.execute(
+                text(
+                    "SELECT base_revision FROM admin.playbook_revisions "
+                    "WHERE playbook_id=:id AND revision=1"
+                ),
+                {"id": d["id"]},
+            ).all() == [(None,)]
+            db.close()
+        finally:
+            transaction.rollback()
+    engine.dispose()
+
+
+def race(engine, *actions):
+    """Run each action(service) in its own session at the same moment."""
+    barrier = threading.Barrier(len(actions))
+    outcomes = [None] * len(actions)
+
+    def run(index, action):
+        with Session(engine) as db:
+            service = PlaybookAdministration(db, clock=lambda: NOW)
+            barrier.wait(timeout=5)
+            try:
+                action(service)
+                outcomes[index] = "ok"
+            except PlaybookConflict as exc:
+                outcomes[index] = exc.code
+
+    threads = [
+        threading.Thread(target=run, args=(index, action))
+        for index, action in enumerate(actions)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+    return outcomes
+
+
+@pytest.mark.skipif(not PG_URL, reason="isolated PostgreSQL URL required")
+def test_postgres_close_and_publish_race_has_one_consistent_outcome():
+    engine = create_engine(PG_URL)
+    d = document()
+    with Session(engine) as db:
+        service = PlaybookAdministration(db, clock=lambda: NOW)
+        created = service.create(d, "operator")
+    cr_id = created["change_request"]["id"]
+    close, publish = race(
+        engine,
+        lambda s: s.close_change_request(d["id"], cr_id, "closer"),
+        lambda s: s.publish(d["id"], 1, 1, created["generation"], "publisher"),
+    )
+    assert sorted([close, publish]) == ["CHANGE_REQUEST_NOT_OPEN", "ok"]
+    with Session(engine) as db:
+        repository = SqlPlaybookRepository(db)
+        cr = repository.change_request(d["id"], cr_id)
+        revision = repository.get(d["id"], 1)
+        head = repository.head(d["id"])
+        if publish == "ok":
+            assert (cr["status"], revision["status"], head["published_revision"]) == (
+                "PUBLISHED",
+                "PUBLISHED",
+                1,
+            )
+        else:
+            assert (cr["status"], revision["status"], head["published_revision"]) == (
+                "CLOSED",
+                "DRAFT",
+                None,
+            )
+    engine.dispose()
+
+
+@pytest.mark.skipif(not PG_URL, reason="isolated PostgreSQL URL required")
+def test_postgres_recreate_and_publish_race_has_one_consistent_outcome():
+    engine = create_engine(PG_URL)
+    d = document()
+    with Session(engine) as db:
+        service = PlaybookAdministration(db, clock=lambda: NOW)
+        initial = service.create(d, "operator")
+        published = service.publish(d["id"], 1, 1, initial["generation"], "operator")
+        stale = service.create_draft(d["id"], 1, published["generation"], "alice")
+        first = service.create_draft(d["id"], 1, stale["generation"], "bob")
+        service.publish(d["id"], first["revision"], 1, first["generation"], "bob")
+        head = service.repository.head(d["id"])
+        current = service.create_draft(
+            d["id"], head["published_revision"], head["generation"], "carol"
+        )
+    stale_id = stale["change_request"]["id"]
+    recreate, publish = race(
+        engine,
+        lambda s: s.recreate_from_head(
+            d["id"], stale_id, 1, current["generation"], "alice"
+        ),
+        lambda s: s.publish(
+            d["id"], current["revision"], 1, current["generation"], "carol"
+        ),
+    )
+    assert sorted([recreate, publish]) == ["PLAYBOOK_CONFLICT", "ok"]
+    with Session(engine) as db:
+        repository = SqlPlaybookRepository(db)
+        statuses = {
+            cr["id"]: cr["status"] for cr in repository.change_requests(d["id"])
+        }
+        published_revision = repository.head(d["id"])["published_revision"]
+        if recreate == "ok":
+            assert statuses[stale_id] == "CLOSED"
+            assert statuses[current["change_request"]["id"]] == "OPEN"
+            assert published_revision == first["revision"]
+        else:
+            assert statuses[stale_id] == "OPEN"
+            assert statuses[current["change_request"]["id"]] == "PUBLISHED"
+            assert published_revision == current["revision"]
+    engine.dispose()
+
+
 @pytest.mark.skipif(not PG_URL, reason="isolated PostgreSQL URL required")
 def test_postgres_concurrent_change_request_publication_has_one_winner():
     engine = create_engine(PG_URL)

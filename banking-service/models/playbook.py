@@ -156,6 +156,27 @@ BEFORE DELETE ON playbook_change_requests
 BEGIN SELECT RAISE(ABORT, 'Change requests cannot be deleted'); END
 """).execute_if(dialect="sqlite"),
 )
+# Identity is written only when a change request is opened, even while it is OPEN.
+CHANGE_REQUEST_IDENTITY_COLUMNS = (
+    "id",
+    "playbook_id",
+    "revision",
+    "base_revision",
+    "origin",
+    "previous_base_revision",
+    "opened_by",
+    "opened_at",
+)
+event.listen(
+    PlaybookChangeRequest.__table__,
+    "after_create",
+    DDL(f"""
+CREATE TRIGGER admin.playbook_change_request_identity_immutable
+BEFORE UPDATE OF {", ".join(CHANGE_REQUEST_IDENTITY_COLUMNS)} ON playbook_change_requests
+WHEN {" OR ".join(f"NEW.{c} IS NOT OLD.{c}" for c in CHANGE_REQUEST_IDENTITY_COLUMNS)}
+BEGIN SELECT RAISE(ABORT, 'Change request identity is immutable'); END
+""").execute_if(dialect="sqlite"),
+)
 
 
 # Local SQLite metadata initialization enforces immutability. PostgreSQL uses
