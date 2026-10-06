@@ -18,14 +18,21 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     DateTime,
+    Index,
     Integer,
     JSON,
     String,
+    Text,
     ForeignKeyConstraint,
+    UniqueConstraint,
     event,
     DDL,
 )
 from utils.database import Base
+
+CHANGE_REQUEST_TITLE_MAX = 200
+CHANGE_REQUEST_DESCRIPTION_MAX = 4000
+CHANGE_REQUEST_ORIGINS = ("CREATE", "DRAFT", "RESTORE", "RECREATE", "LEGACY")
 
 
 class Playbook(Base):
@@ -66,6 +73,110 @@ class PlaybookRevision(Base):
     created_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False)
     published_at = Column(DateTime(timezone=True), nullable=True)
+    # Published revision the draft was cloned onto; NULL for a playbook without a head.
+    base_revision = Column(Integer, nullable=True)
+
+
+class PlaybookChangeRequest(Base):
+    """Review envelope around exactly one draft revision.
+
+    OPEN is the only mutable state. PUBLISHED and CLOSED rows are final and rows are
+    never deleted; the database rejects such writes (migration triggers on
+    PostgreSQL, the DDL below for local SQLite metadata initialization).
+    """
+
+    __tablename__ = "playbook_change_requests"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["playbook_id", "revision"],
+            ["admin.playbook_revisions.playbook_id", "admin.playbook_revisions.revision"],
+        ),
+        UniqueConstraint(
+            "playbook_id", "revision", name="uq_playbook_change_request_revision"
+        ),
+        CheckConstraint(
+            "status IN ('OPEN', 'PUBLISHED', 'CLOSED')",
+            name="ck_playbook_change_request_status",
+        ),
+        CheckConstraint(
+            "origin IN ('CREATE', 'DRAFT', 'RESTORE', 'RECREATE', 'LEGACY')",
+            name="ck_playbook_change_request_origin",
+        ),
+        CheckConstraint(
+            "(status = 'OPEN' AND closed_by IS NULL AND closed_at IS NULL) OR "
+            "(status != 'OPEN' AND closed_by IS NOT NULL AND closed_at IS NOT NULL)",
+            name="ck_playbook_change_request_closure",
+        ),
+        CheckConstraint(
+            "(status = 'PUBLISHED' AND published_revision IS NOT NULL AND published_revision = revision) OR "
+            "(status != 'PUBLISHED' AND published_revision IS NULL)",
+            name="ck_playbook_change_request_publication",
+        ),
+        CheckConstraint(
+            f"length(title) BETWEEN 1 AND {CHANGE_REQUEST_TITLE_MAX} AND "
+            f"length(description) <= {CHANGE_REQUEST_DESCRIPTION_MAX} AND version > 0",
+            name="ck_playbook_change_request_bounds",
+        ),
+        Index("ix_playbook_change_requests_status", "playbook_id", "status"),
+        {"schema": "admin"},
+    )
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    playbook_id = Column(String(128), nullable=False)
+    revision = Column(Integer, nullable=False)
+    base_revision = Column(Integer, nullable=True)
+    # Origin and the revision the content was derived from support lost-update review.
+    origin = Column(String(16), nullable=False)
+    previous_base_revision = Column(Integer, nullable=True)
+    title = Column(String(CHANGE_REQUEST_TITLE_MAX), nullable=False)
+    description = Column(Text, nullable=False, default="")
+    status = Column(String(16), nullable=False)
+    version = Column(Integer, nullable=False, default=1)
+    opened_by = Column(String(255), nullable=False)
+    opened_at = Column(DateTime(timezone=True), nullable=False)
+    closed_by = Column(String(255), nullable=True)
+    closed_at = Column(DateTime(timezone=True), nullable=True)
+    published_revision = Column(Integer, nullable=True)
+
+
+event.listen(
+    PlaybookChangeRequest.__table__,
+    "after_create",
+    DDL("""
+CREATE TRIGGER admin.playbook_change_request_immutable_update
+BEFORE UPDATE ON playbook_change_requests WHEN OLD.status != 'OPEN'
+BEGIN SELECT RAISE(ABORT, 'Published or closed change requests are immutable'); END
+""").execute_if(dialect="sqlite"),
+)
+event.listen(
+    PlaybookChangeRequest.__table__,
+    "after_create",
+    DDL("""
+CREATE TRIGGER admin.playbook_change_request_immutable_delete
+BEFORE DELETE ON playbook_change_requests
+BEGIN SELECT RAISE(ABORT, 'Change requests cannot be deleted'); END
+""").execute_if(dialect="sqlite"),
+)
+# Identity is written only when a change request is opened, even while it is OPEN.
+CHANGE_REQUEST_IDENTITY_COLUMNS = (
+    "id",
+    "playbook_id",
+    "revision",
+    "base_revision",
+    "origin",
+    "previous_base_revision",
+    "opened_by",
+    "opened_at",
+)
+event.listen(
+    PlaybookChangeRequest.__table__,
+    "after_create",
+    DDL(f"""
+CREATE TRIGGER admin.playbook_change_request_identity_immutable
+BEFORE UPDATE OF {", ".join(CHANGE_REQUEST_IDENTITY_COLUMNS)} ON playbook_change_requests
+WHEN {" OR ".join(f"NEW.{c} IS NOT OLD.{c}" for c in CHANGE_REQUEST_IDENTITY_COLUMNS)}
+BEGIN SELECT RAISE(ABORT, 'Change request identity is immutable'); END
+""").execute_if(dialect="sqlite"),
+)
 
 
 # Local SQLite metadata initialization enforces immutability. PostgreSQL uses

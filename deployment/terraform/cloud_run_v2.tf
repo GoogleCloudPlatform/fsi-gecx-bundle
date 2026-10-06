@@ -1141,7 +1141,7 @@ resource "google_cloud_run_v2_job" "db_reconcile_job" {
         }
         env {
           name  = "EXPECTED_ALEMBIC_REVISION"
-          value = "b92e3d8a601c"
+          value = "e1a7c4d2b9f0"
         }
       }
       vpc_access {
