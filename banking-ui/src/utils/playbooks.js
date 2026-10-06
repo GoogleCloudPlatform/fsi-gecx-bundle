@@ -150,6 +150,25 @@ export function revertedPaths(diffVsHead, upstreamChanges) {
     .filter((path) => path !== '/revision' && upstream.some((other) => overlaps(path, other)));
 }
 
+export const LEGACY_BASE_NOTICE = 'Original base unknown; review changes against current carefully.';
+
+/**
+ * Lost-update notice for an open change request. Legacy drafts predate base tracking
+ * (their base was backfilled to the head), so a computed revert list would be falsely
+ * reassuring; they always get the "base unknown" notice instead.
+ */
+export function lostUpdateNotice(detail) {
+  const changeRequest = detail?.change_request;
+  if (changeRequest?.status !== 'OPEN') return null;
+  if (changeRequest.origin === 'LEGACY') return { kind: 'legacy', text: LEGACY_BASE_NOTICE };
+  const paths = revertedPaths(detail.diff_vs_head, detail.upstream_changes);
+  if (!paths.length) return null;
+  return {
+    kind: 'revert', paths, revision: detail.upstream_changes.to_revision,
+    text: `This draft will revert ${paths.length} field(s) changed in revision ${detail.upstream_changes.to_revision}.`,
+  };
+}
+
 export function policyLabel(policy) {
   if (!policy) return { text: 'Policy loading', blocked: false };
   if (policy.publish_mode === 'DIRECT') return { text: 'Direct publish', blocked: false };

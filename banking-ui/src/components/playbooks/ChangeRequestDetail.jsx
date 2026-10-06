@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import React, { useState } from 'react';
-import { behindLabel, fieldLabel, revertedPaths } from '../../utils/playbooks.js';
+import { behindLabel, fieldLabel, lostUpdateNotice } from '../../utils/playbooks.js';
 import ChangesView from './ChangesView.jsx';
 import ChecksPanel from './ChecksPanel.jsx';
 import DefinitionView from './DefinitionView.jsx';
@@ -43,8 +43,7 @@ export default function ChangeRequestDetail({ state, canSave }) {
   const [editingDetails, setEditingDetails] = useState(false);
   const changeRequest = detail.change_request;
   const open = changeRequest.status === 'OPEN';
-  const reverted = open ? revertedPaths(detail.diff_vs_head, detail.upstream_changes) : [];
-  const upstreamRevision = detail.upstream_changes?.to_revision;
+  const notice = lostUpdateNotice(detail);
   const diff = against === 'head' ? detail.diff_vs_head : detail.diff_vs_base;
   const tabs = [[open ? 'edit' : 'definition', open ? 'Edit' : 'Definition'], ['changes', 'Changes']];
   const activeTab = tabs.some(([key]) => key === tab) ? tab : tabs[0][0];
@@ -82,10 +81,10 @@ export default function ChangeRequestDetail({ state, canSave }) {
       {dirty && <p className="text-xs mt-1">Save or discard your edits first.</p>}
     </div>}
 
-    {reverted.length > 0 && <div role="alert" className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-900 dark:text-amber-100 text-sm">
-      <p className="font-medium">This draft will revert {reverted.length} field(s) changed in revision {upstreamRevision}.</p>
-      <ul className="list-disc pl-5 mt-1">{reverted.map((path) => <li key={path}>{fieldLabel(path)}</li>)}</ul>
-      <p className="mt-1">Compare against the current revision to review these fields before publishing.</p>
+    {notice && <div role="alert" className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-900 dark:text-amber-100 text-sm">
+      <p className="font-medium">{notice.text}</p>
+      {notice.kind === 'revert' && <ul className="list-disc pl-5 mt-1">{notice.paths.map((path) => <li key={path}>{fieldLabel(path)}</li>)}</ul>}
+      <p className="mt-1">{notice.kind === 'legacy' ? 'This draft was created before change requests recorded where it started. Compare against the current revision before publishing.' : 'Compare against the current revision to review these fields before publishing.'}</p>
     </div>}
 
     <div className="grid xl:grid-cols-[1fr_280px] gap-6">

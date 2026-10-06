@@ -15,7 +15,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  STALE_PLAYBOOK, behindLabel, describeChange, fieldLabel, isStaleConflict, newPlaybookDocument,
+  LEGACY_BASE_NOTICE, STALE_PLAYBOOK, behindLabel, lostUpdateNotice, describeChange, fieldLabel, isStaleConflict, newPlaybookDocument,
   playbookClient, playbookError, policyLabel, reviewableChanges, revertedPaths,
 } from '../src/utils/playbooks.js';
 
@@ -125,4 +125,22 @@ test('new playbook documents copy the operation template without mutating it', (
   assert.equal(template.id, 'template');
   next.discovery.title = 'changed';
   assert.equal(template.discovery.title, 't');
+});
+
+test('legacy change requests say the original base is unknown instead of a revert count', () => {
+  const diffVsHead = { changes: [{ path: '/discovery/title' }] };
+  const upstream = { from_revision: 1, to_revision: 3, changes: [{ path: '/discovery/title' }] };
+  const detail = (origin, status = 'OPEN', upstreamChanges = upstream) => ({
+    change_request: { origin, status }, diff_vs_head: diffVsHead, upstream_changes: upstreamChanges,
+  });
+  assert.deepEqual(lostUpdateNotice(detail('LEGACY')), { kind: 'legacy', text: LEGACY_BASE_NOTICE });
+  assert.deepEqual(lostUpdateNotice(detail('LEGACY', 'OPEN', null)), { kind: 'legacy', text: LEGACY_BASE_NOTICE });
+  assert.match(LEGACY_BASE_NOTICE, /Original base unknown; review changes against current carefully/);
+  const revert = lostUpdateNotice(detail('RESTORE'));
+  assert.equal(revert.kind, 'revert');
+  assert.equal(revert.text, 'This draft will revert 1 field(s) changed in revision 3.');
+  assert.deepEqual(revert.paths, ['/discovery/title']);
+  assert.equal(lostUpdateNotice(detail('DRAFT', 'OPEN', null)), null);
+  assert.equal(lostUpdateNotice(detail('LEGACY', 'CLOSED')), null);
+  assert.equal(lostUpdateNotice(null), null);
 });
