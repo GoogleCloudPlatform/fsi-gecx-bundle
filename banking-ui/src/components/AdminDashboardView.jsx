@@ -26,6 +26,7 @@ import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 import { logTutorialBeginEvent, logTutorialCompleteEvent } from '../utils/analytics.js';
+import { consoleUrl } from '../utils/consoleAccess.js';
 
 function AdminDashboardView() {
   const { resolvedTheme, brandColorFrom } = useSettings();
@@ -728,7 +729,7 @@ function AdminDashboardView() {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Manage database keys, LiveKit credentials, and Google API secrets securely.</p>
               </div>
               <a
-                href="https://console.cloud.google.com/security/secret-manager"
+                href={consoleUrl('https://console.cloud.google.com/security/secret-manager')}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
@@ -744,7 +745,7 @@ function AdminDashboardView() {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Monitor computing resources, container revisions, and backend traffic scaling.</p>
               </div>
               <a
-                href={`https://console.cloud.google.com/run/overview?project=${projectId}`}
+                href={consoleUrl(`https://console.cloud.google.com/run/overview?project=${projectId}`)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"

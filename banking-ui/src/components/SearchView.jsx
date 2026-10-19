@@ -17,6 +17,7 @@ import { useLocation } from 'react-router-dom';
 import { Search, MessageSquare, RotateCcw, ExternalLink } from 'lucide-react';
 
 import { findAnswer, performSearch } from '../utils/api.js';
+import { consoleUrl } from '../utils/consoleAccess.js';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
 import GcpInfoModal from './GcpInfoModal.jsx';
@@ -283,7 +284,7 @@ function SearchView() {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Manage search and conversational agent flow settings.</p>
               </div>
               <a
-                href={`https://console.cloud.google.com/gen-app-builder/engines?project=${projectId}`}
+                href={consoleUrl(`https://console.cloud.google.com/gen-app-builder/engines?project=${projectId}`)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
@@ -299,7 +300,7 @@ function SearchView() {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Explore structured and unstructured document sources.</p>
               </div>
               <a
-                href={`https://console.cloud.google.com/gen-app-builder/data-stores?project=${projectId}`}
+                href={consoleUrl(`https://console.cloud.google.com/gen-app-builder/data-stores?project=${projectId}`)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"

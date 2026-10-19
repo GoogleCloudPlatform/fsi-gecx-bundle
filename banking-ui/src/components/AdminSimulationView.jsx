@@ -44,6 +44,7 @@ import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 import { logTutorialBeginEvent, logTutorialCompleteEvent } from '../utils/analytics.js';
+import { consoleUrl } from '../utils/consoleAccess.js';
 
 const MIN_RISK_CONDITION_SCORED_EVENTS = 5;
 const ELEVATED_AVERAGE_RISK_SCORE = 25;
@@ -2465,7 +2466,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Inspect the analytical lakehouse destination, CDC-derived views, and anomaly datasets after replication lands.</p>
               </div>
               <a
-                href={`https://console.cloud.google.com/bigquery?project=${projectId}&ws=!1m5!1m4!3m2!1s${projectId}!2soltp_cdc!23sTREE_NODE_SELECTION`}
+                href={consoleUrl(`https://console.cloud.google.com/bigquery?project=${projectId}&ws=!1m5!1m4!3m2!1s${projectId}!2soltp_cdc!23sTREE_NODE_SELECTION`)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
@@ -2481,7 +2482,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Track the banking-service SSE connections, the data-generator pulse worker, and the Redis event bus that powers the live monitor.</p>
               </div>
               <a
-                href={`https://console.cloud.google.com/run/overview?project=${projectId}`}
+                href={consoleUrl(`https://console.cloud.google.com/run/overview?project=${projectId}`)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
@@ -2539,7 +2540,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Inspect the analytical lakehouse destination, CDC-derived views, and anomaly datasets after replication lands.</p>
               </div>
               <a
-                href={`https://console.cloud.google.com/bigquery?project=${projectId}&ws=!1m5!1m4!3m2!1s${projectId}!2soltp_cdc!23sTREE_NODE_SELECTION`}
+                href={consoleUrl(`https://console.cloud.google.com/bigquery?project=${projectId}&ws=!1m5!1m4!3m2!1s${projectId}!2soltp_cdc!23sTREE_NODE_SELECTION`)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
@@ -2555,7 +2556,7 @@ function AdminSimulationView({ mode = 'studio' }) {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Track the banking-service stream endpoints, the data-generator worker, and the Redis event bus that feeds the monitor.</p>
               </div>
               <a
-                href={`https://console.cloud.google.com/run/overview?project=${projectId}`}
+                href={consoleUrl(`https://console.cloud.google.com/run/overview?project=${projectId}`)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
@@ -2643,7 +2644,7 @@ function AdminSimulationView({ mode = 'studio' }) {
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Inspect revisions for banking-service, data-generator, and banking-ui after a scenario-control deployment.</p>
             </div>
             <a
-              href={`https://console.cloud.google.com/run/overview?project=${projectId}`}
+              href={consoleUrl(`https://console.cloud.google.com/run/overview?project=${projectId}`)}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
