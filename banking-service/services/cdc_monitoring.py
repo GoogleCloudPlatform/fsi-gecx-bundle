@@ -609,13 +609,15 @@ class CdcMonitoringService:
                 }
             )
 
+            # Datastream reports latency and freshness in seconds; the *_ms keys
+            # are milliseconds, so those values are scaled by 1000.
             metric_types = [
-                ("system_lag_ms", "datastream.googleapis.com/stream/system_latencies"),
-                ("data_freshness_ms", "datastream.googleapis.com/stream/freshness"),
-                ("total_bytes_processed", "datastream.googleapis.com/stream/bytes_count"),
+                ("system_lag_ms", "datastream.googleapis.com/stream/system_latencies", 1000),
+                ("data_freshness_ms", "datastream.googleapis.com/stream/freshness", 1000),
+                ("total_bytes_processed", "datastream.googleapis.com/stream/bytes_count", 1),
             ]
 
-            for key, metric_type in metric_types:
+            for key, metric_type, scale in metric_types:
                 results = client.list_time_series(
                     request={
                         "name": project_name,
@@ -629,11 +631,11 @@ class CdcMonitoringService:
                     value = result.points[0].value
                     oneof_field = value._pb.WhichOneof("value")
                     if oneof_field == "int64_value":
-                        metrics[key] = int(value.int64_value)
+                        metrics[key] = int(value.int64_value) * scale
                     elif oneof_field == "double_value":
-                        metrics[key] = int(round(value.double_value))
+                        metrics[key] = int(round(value.double_value * scale))
                     elif oneof_field == "distribution_value":
-                        metrics[key] = int(round(value.distribution_value.mean))
+                        metrics[key] = int(round(value.distribution_value.mean * scale))
                     break
         except Exception as exc:
             logger.warning(f"Error fetching cloud monitoring metrics: {exc}")
