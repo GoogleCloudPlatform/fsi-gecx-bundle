@@ -31,6 +31,7 @@ import AnalyticsButton from './AnalyticsButton.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 import { logTutorialBeginEvent, logTutorialCompleteEvent } from '../utils/analytics.js';
+import { consoleUrl } from '../utils/consoleAccess.js';
 
 const CONFIDENCE_THRESHOLDS = {
   ssn: 0.95,
@@ -904,7 +905,7 @@ function AdminUnderwritingView({ fbUser }) {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Configure splitters, custom extractors, and processor versions.</p>
               </div>
               <a
-                href={`https://console.cloud.google.com/ai/document-ai/processors?project=${projectId}`}
+                href={consoleUrl(`https://console.cloud.google.com/ai/document-ai/processors?project=${projectId}`)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"

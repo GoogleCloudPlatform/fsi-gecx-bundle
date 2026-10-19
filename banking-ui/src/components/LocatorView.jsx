@@ -23,6 +23,7 @@ import { useSettings } from '../context/SettingsContext.jsx';
 import { Joyride, STATUS, EVENTS, ACTIONS } from 'react-joyride';
 import { getJoyrideStyles } from '../utils/joyrideStyles.js';
 import { logTutorialBeginEvent, logTutorialCompleteEvent } from '../utils/analytics.js';
+import { consoleUrl } from '../utils/consoleAccess.js';
 
 export default function LocatorView() {
   const {
@@ -407,7 +408,7 @@ export default function LocatorView() {
               </div>
               <div className="flex flex-col items-end gap-1.5 shrink-0">
                 <a
-                  href={`https://console.cloud.google.com/alloydb/clusters?project=${projectId}`}
+                  href={consoleUrl(`https://console.cloud.google.com/alloydb/clusters?project=${projectId}`)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs hover:underline"

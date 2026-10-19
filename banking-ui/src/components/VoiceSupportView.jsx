@@ -52,6 +52,7 @@ import {
 import { DataChannelEvent } from '../utils/constants.js';
 import { encodeTypedCustomerTurn, resolveTypedDelivery } from '../utils/voiceTypedInput.js';
 import { formatMoney } from '../utils/money.js';
+import { consoleUrl } from '../utils/consoleAccess.js';
 import { formatVoiceLedgerAmount } from '../utils/voiceLedger.js';
 import {
   connectSilentPcmSink,
@@ -2576,7 +2577,7 @@ export default function VoiceSupportView({ customerProfile }) {
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">Inspect Multimodal model configuration and settings.</p>
                   </div>
                   <a
-                    href={`https://console.cloud.google.com/vertex-ai?project=${projectId}`}
+                    href={consoleUrl(`https://console.cloud.google.com/vertex-ai?project=${projectId}`)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"

@@ -62,6 +62,7 @@ import {
 } from './utils/api.js';
 import { getFormattedBuildTime, hasReleaseNotes } from './utils/releaseNotes.js';
 import { logInteractionEvent, logLoginEvent, logLogoutEvent } from './utils/analytics.js';
+import { consoleUrl } from './utils/consoleAccess.js';
 import GoogleCloudIcon from './components/icons/GoogleCloudIcon.jsx';
 import CloudBuildIcon from './components/icons/CloudBuildIcon.jsx';
 import GcpInfoModal from './components/GcpInfoModal.jsx';
@@ -131,7 +132,7 @@ const getCloudBuildUrl = (projectId) => {
   const location = window.env?.BUILD_LOCATION || 'us-central1';
   const buildProject = window.env?.BUILD_PROJECT_ID || projectId;
   if (!buildId || buildId === 'local-build') return '';
-  return `https://console.cloud.google.com/cloud-build/builds;region=${location}/${buildId}?project=${buildProject}`;
+  return consoleUrl(`https://console.cloud.google.com/cloud-build/builds;region=${location}/${buildId}?project=${buildProject}`);
 };
 
 const getGithubCommitUrl = () => {
@@ -2369,7 +2370,7 @@ function AppContent() {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Manage OAuth providers, sign-in methods, and security tokens.</p>
               </div>
               <a
-                href={`https://console.cloud.google.com/customer-identity/providers?project=${projectId}`}
+                href={consoleUrl(`https://console.cloud.google.com/customer-identity/providers?project=${projectId}`)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-600 font-semibold text-xs shrink-0 hover:underline"
