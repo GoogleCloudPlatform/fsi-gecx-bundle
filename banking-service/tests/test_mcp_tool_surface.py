@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import httpx
 import pytest
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
 
-from routers.mcp import mcp
+from routers.mcp import mcp, mcp_app
 
 
 RETIRED_TOOLS = {
@@ -123,3 +126,42 @@ async def test_model_visible_proposal_tool_schemas_are_frozen() -> None:
         "REVISE",
         "CANCEL",
     }
+
+
+@pytest.mark.asyncio
+async def test_mcp_http_app_uses_stateless_transport_across_instances() -> None:
+    async with mcp_app.lifespan(mcp_app):
+        route = next(r for r in mcp_app.routes if getattr(r, "path", None) == "/")
+        assert route.app.session_manager.stateless is True
+
+    instance_a = mcp.http_app(path="/", transport="http", stateless_http=True)
+    instance_b = mcp.http_app(path="/", transport="http", stateless_http=True)
+    async with instance_a.lifespan(instance_a), instance_b.lifespan(instance_b):
+        call_count = 0
+        transport_a = httpx.ASGITransport(app=instance_a)
+        transport_b = httpx.ASGITransport(app=instance_b)
+
+        class _RoundRobinTransport(httpx.AsyncBaseTransport):
+            async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+                nonlocal call_count
+                call_count += 1
+                target = transport_a if call_count % 2 == 1 else transport_b
+                return await target.handle_async_request(request)
+
+        def _client_factory(headers=None, timeout=None, auth=None) -> httpx.AsyncClient:
+            return httpx.AsyncClient(
+                transport=_RoundRobinTransport(),
+                headers=headers,
+                timeout=timeout,
+                auth=auth,
+            )
+
+        async with streamablehttp_client(
+            "http://test/", httpx_client_factory=_client_factory
+        ) as (read, write, _):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                tools_result = await session.list_tools()
+
+        assert call_count >= 2
+        assert "get_open_fraud_alert" in {tool.name for tool in tools_result.tools}

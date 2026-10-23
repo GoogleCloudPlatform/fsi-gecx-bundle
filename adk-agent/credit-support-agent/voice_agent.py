@@ -43,7 +43,7 @@ from agent.instructions import compose_session_instruction
 from agent.live_runtime import build_live_run_config, env_flag, normalize_live_event
 from agent.guidance_snapshot import guidance_observability_payload
 from agent.media_bridge import BufferedAudioPlayout, SileroVADTracker, discard_audio_queue
-from agent.log_safety import stable_log_reference
+from agent.log_safety import configure_runtime_logging, stable_log_reference
 from agent.session_coordinator import (
     default_session_bootstrap,
     load_session_bootstrap,
@@ -83,8 +83,8 @@ from google.genai import types
 class HandoffException(Exception):
     pass
 
-# Configure logging to stdout
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+# Configure logging (single-line JSON on Cloud Run so multi-line tracebacks stay in one entry)
+configure_runtime_logging(level=logging.INFO)
 logger = logging.getLogger("voice_agent")
 # Enable verbose debug logs for ADK and GenAI SDK conditionally to trace tool calling packets
 if os.getenv("VERBOSE_LOGGING") == "true":
@@ -1024,7 +1024,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                     clear_session_end_request()
                     schedule_session_end_disconnect("session_end_fallback")
         except Exception as e:
-            logger.error("Error in Gemini run_live loop %s error=%s", session_log_context(room_name, customer_id, session_id, mode), e, exc_info=True)
+            logger.error("Error in Gemini run_live loop %s error=%s", session_log_context(room_name, customer_id, session_id, mode), e)
             raise
         finally:
             if session_end_disconnect_task and not disconnect_event.is_set():

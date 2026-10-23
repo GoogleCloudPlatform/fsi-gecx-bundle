@@ -17,8 +17,45 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import logging
 import os
 from typing import Any
+
+
+class CloudRunJsonFormatter(logging.Formatter):
+    """Single-line JSON formatter so Cloud Run keeps multi-line tracebacks together."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        message = record.getMessage()
+        if record.exc_info:
+            exc_text = record.exc_text or self.formatException(record.exc_info)
+            if exc_text:
+                message = f"{message}\n{exc_text}"
+        if record.stack_info:
+            stack_text = self.formatStack(record.stack_info)
+            if stack_text:
+                message = f"{message}\n{stack_text}"
+        payload = {
+            "severity": record.levelname,
+            "logger": record.name,
+            "message": message,
+        }
+        return json.dumps(payload, ensure_ascii=False)
+
+
+def configure_runtime_logging(level: int = logging.INFO) -> None:
+    """Configure single-entry JSON logging on Cloud Run and plain text locally."""
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    handler = logging.StreamHandler()
+    if os.getenv("K_SERVICE"):
+        handler.setFormatter(CloudRunJsonFormatter())
+    else:
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        )
+    root_logger.handlers = [handler]
 
 
 EXPECTED_TOOL_CHECKPOINT_STATUSES = {
