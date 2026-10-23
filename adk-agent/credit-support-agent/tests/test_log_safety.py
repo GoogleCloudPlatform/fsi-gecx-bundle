@@ -12,10 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import logging
+import sys
 from pathlib import Path
 
 from agent.agent import build_log_context
 from agent.log_safety import (
+    CloudRunJsonFormatter,
     stable_log_reference,
     tool_args_log_summary,
     tool_response_is_expected_checkpoint,
@@ -143,3 +147,43 @@ def test_voice_dispatch_identifiers_do_not_use_logged_query_strings() -> None:
     assert 'json={\n                    "room_name": room_name' in capacity_probe
     assert 'json={\n                    "room_name": room_name' in banking_router
     assert 'headers = {"x-target-customer-id": customer_id}' in canary
+
+
+def test_cloud_run_json_formatter_keeps_multiline_traceback_in_single_entry() -> None:
+    formatter = CloudRunJsonFormatter()
+    try:
+        raise ValueError("Tool 'get_open_fraud_alert' not found.")
+    except ValueError:
+        record = logging.LogRecord(
+            name="voice_agent",
+            level=logging.ERROR,
+            pathname=__file__,
+            lineno=1,
+            msg="Encountered error in voice agent session error=%s",
+            args=("Tool 'get_open_fraud_alert' not found.",),
+            exc_info=sys.exc_info(),
+        )
+
+    formatted = formatter.format(record)
+    assert "\n" not in formatted
+    payload = json.loads(formatted)
+    assert payload["severity"] == "ERROR"
+    assert payload["logger"] == "voice_agent"
+    assert "Traceback (most recent call last):" in payload["message"]
+    assert "ValueError: Tool 'get_open_fraud_alert' not found." in payload["message"]
+
+
+def test_run_gemini_loop_does_not_duplicate_traceback_before_reraising() -> None:
+    root = Path(__file__).resolve().parents[3]
+    voice_runtime = (root / "adk-agent/credit-support-agent/voice_agent.py").read_text()
+
+    assert (
+        'logger.error("Error in Gemini run_live loop %s error=%s", '
+        "session_log_context(room_name, customer_id, session_id, mode), e)"
+        in voice_runtime
+    )
+    assert (
+        'logger.error("Encountered error in voice agent session %s error=%s", '
+        "session_log_context(room_name, customer_id, session_id, mode), e, exc_info=True)"
+        in voice_runtime
+    )

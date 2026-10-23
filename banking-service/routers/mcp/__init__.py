@@ -18,7 +18,9 @@ from fastmcp import FastMCP
 mcp = FastMCP("Banking Service MCP")
 
 # 2. Create the MCP's ASGI app mounted under /mcp/
-mcp_app = mcp.http_app(path="/", transport="http")
+# Enable stateless_http so Cloud Run requests load-balanced across multiple
+# banking-service instances do not fail with 404 Session terminated.
+mcp_app = mcp.http_app(path="/", transport="http", stateless_http=True)
 
 # Import sub-routers so their tool decorators register with the mcp instance
 from . import loan as loan  # noqa: E402
