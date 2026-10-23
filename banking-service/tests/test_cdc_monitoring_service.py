@@ -197,6 +197,38 @@ def test_datastream_metrics_do_not_treat_historical_lakehouse_rows_as_active():
     assert result["active_anomalies"] == 0
 
 
+def test_datastream_latency_metrics_convert_seconds_to_milliseconds():
+    from google.api import distribution_pb2
+    from google.cloud import monitoring_v3
+
+    def series(**value):
+        return monitoring_v3.TimeSeries(points=[monitoring_v3.Point(value=monitoring_v3.TypedValue(**value))])
+
+    responses = {
+        "datastream.googleapis.com/stream/system_latencies": [
+            series(distribution_value=distribution_pb2.Distribution(count=4, mean=5.25))
+        ],
+        "datastream.googleapis.com/stream/freshness": [series(int64_value=7)],
+        "datastream.googleapis.com/stream/bytes_count": [series(int64_value=2048)],
+    }
+
+    def list_time_series(request):
+        return next(v for k, v in responses.items() if k in request["filter"])
+
+    service = CdcMonitoringService(FakeSession(), FakeLakehouseRepository())
+    with patch(
+        "services.cdc_monitoring.execute_redis_command", return_value=None
+    ), patch(
+        "services.cdc_monitoring.monitoring_v3.MetricServiceClient"
+    ) as mock_client:
+        mock_client.return_value.list_time_series.side_effect = list_time_series
+        result = service.get_cached_datastream_metrics()
+
+    assert result["system_lag_ms"] == 5250
+    assert result["data_freshness_ms"] == 7000
+    assert result["total_bytes_processed"] == 2048
+
+
 def test_operations_monitor_summary_builds_windowed_operational_view():
     now = datetime.datetime(2026, 7, 6, 12, 0, 0, tzinfo=datetime.timezone.utc)
     auth = SimpleNamespace(
