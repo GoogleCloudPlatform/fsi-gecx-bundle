@@ -59,6 +59,31 @@ ADK_RUNTIME_TOOL_NAMES = frozenset(
 if not ADK_BANKING_MCP_TOOL_ALLOWLIST.isdisjoint(ADK_RUNTIME_TOOL_NAMES):
     raise RuntimeError("ADK banking MCP and runtime-local tool names must be unique.")
 
+# Tools whose results change proposal, authorization, or banking state. Gemini
+# 3.x Live defaults to asynchronous (NON_BLOCKING) calls and may issue several
+# at once; these must run synchronously and one at a time.
+ORDERED_TOOL_NAMES = frozenset(
+    {
+        "record_playbook_decision",
+        "prepare_action_proposal",
+        "commit_action_proposal",
+        "decide_action_proposal",
+        "triage_customer_reported_fraud",
+        "reverse_overdraft_fee",
+        "unfreeze_card",
+        "prepare_customer_reported_fraud_confirmation",
+        "set_conversation_language",
+    }
+)
+
+# Results added to context without prompting another model turn. The handoff
+# path speaks before the call; end_consultation stays audible because its
+# closeout-block result carries a customer-facing prompt.
+SILENT_RESPONSE_TOOL_NAMES = frozenset({"transfer_to_human"})
+
+if not ORDERED_TOOL_NAMES <= (ADK_BANKING_MCP_TOOL_ALLOWLIST | ADK_RUNTIME_TOOL_NAMES):
+    raise RuntimeError("Ordered Live tools must be exposed ADK tools.")
+
 
 def project_adk_banking_tools(tools: list[BaseTool]) -> list[BaseTool]:
     """Return only the reviewed banking capabilities exposed to ADK."""
@@ -93,9 +118,38 @@ def configure_live_tool(
     *,
     response_scheduling: types.FunctionResponseScheduling = types.FunctionResponseScheduling.WHEN_IDLE,
 ) -> BaseTool:
-    """Apply the voice agent's ADK 2.4 function-response policy."""
+    """Apply the voice agent's ADK 2.4 function-response policy.
+
+    Ordered tools are declared BLOCKING with no response scheduling: ADK 2.4
+    marks every tool that has a ``response_scheduling`` as NON_BLOCKING, and
+    the Live API applies scheduling only to NON_BLOCKING calls. BLOCKING is
+    also the 2.5 default, so the rollback model keeps its proven semantics.
+    """
+    if tool.name in ORDERED_TOOL_NAMES:
+        tool.response_scheduling = None
+        _declare_blocking(tool)
+        return tool
+    if tool.name in SILENT_RESPONSE_TOOL_NAMES:
+        tool.response_scheduling = types.FunctionResponseScheduling.SILENT
+        return tool
     # Audio remains on the proven idle policy. Preview Avatar sessions receive
-    # results immediately so a blocked response cannot remain queued behind a
-    # later successful retry and be narrated out of order.
+    # read results immediately so a blocked response cannot remain queued
+    # behind a later successful retry and be narrated out of order.
     tool.response_scheduling = response_scheduling
     return tool
+
+
+def _declare_blocking(tool: BaseTool) -> None:
+    if getattr(tool, "_live_blocking_declaration", False):
+        return
+    build_declaration = tool._get_declaration
+
+    def blocking_declaration():
+        declaration = build_declaration()
+        if declaration is not None:
+            declaration.behavior = types.Behavior.BLOCKING
+        return declaration
+
+    tool._get_declaration = blocking_declaration
+    tool._live_blocking_declaration = True
+

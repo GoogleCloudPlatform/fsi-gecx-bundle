@@ -21,13 +21,11 @@ from dataclasses import dataclass
 import google
 import httpx
 from google.adk.agents import Agent
-from google.adk.planners import BuiltInPlanner
-from google.genai.types import ThinkingConfig
 from google.adk.tools.mcp_tool.mcp_session_manager import (
     StreamableHTTPConnectionParams,
     create_mcp_http_client,
 )
-from google.adk.tools import ToolContext
+from google.adk.tools import FunctionTool, ToolContext
 
 from agent.events import DataChannelEvent, INTERNAL_TOOL_RUNTIME_STATUS
 from agent.closeout import (
@@ -39,6 +37,7 @@ from agent.log_safety import (
     banking_trace_reference,
     stable_log_reference,
     tool_args_log_summary,
+    tool_response_is_domain_refusal,
     tool_response_is_expected_checkpoint,
     tool_response_succeeded,
     tool_result_log_summary,
@@ -52,7 +51,13 @@ from agent.fraud_voice import (
 from agent.instructions import INSTRUCTION_TEXT
 from agent.money_locale import change_voice_language, select_banking_presentation, MONEY_LANGUAGE_INSTRUCTION
 from agent.reset_guard import validate_reset_generation
-from agent.tooling import RETIRED_MCP_TOOLS, LiveMcpToolset
+from agent.tool_serialization import OrderedToolGate
+from agent.tooling import (
+    ORDERED_TOOL_NAMES,
+    RETIRED_MCP_TOOLS,
+    LiveMcpToolset,
+    configure_live_tool,
+)
 from agent.proposal_evidence import (
     AWAITING_DECISION,
     COMMIT_IN_FLIGHT,
@@ -137,6 +142,13 @@ latest_customer_turn_var: contextvars.ContextVar[dict | None] = contextvars.Cont
 proposal_runtime_context_var: contextvars.ContextVar[dict | None] = (
     contextvars.ContextVar("proposal_runtime_context", default=None)
 )
+ordered_tool_gate_var: contextvars.ContextVar[OrderedToolGate | None] = (
+    contextvars.ContextVar("ordered_tool_gate", default=None)
+)
+COMPLETED_PROPOSALS_STATE_KEY = "completed_proposals"
+PLAYBOOK_SELECTION_STATE_KEY = "playbook_selection"
+COMMITTED_RESOLUTION = "COMMITTED"
+PROPOSAL_LEDGER_STATUSES = {"ALREADY_COMMITTED", "PROPOSAL_ALREADY_RESOLVED"}
 
 
 def get_banking_service_mcp_url() -> str:
@@ -242,6 +254,7 @@ def bind_session_context(
                 "catalog_snapshot_id": None,
             }
         ),
+        "ordered_tool_gate": ordered_tool_gate_var.set(OrderedToolGate()),
     }
 
 
@@ -249,6 +262,7 @@ def reset_session_context(tokens: dict) -> None:
     """Restores prior context-var state for a completed session."""
     if not tokens:
         return
+    ordered_tool_gate_var.reset(tokens["ordered_tool_gate"])
     proposal_runtime_context_var.reset(tokens["proposal_runtime_context"])
     is_processing_tool_var.reset(tokens["is_processing"])
     latest_customer_turn_var.reset(tokens["latest_customer_turn"])
@@ -583,13 +597,17 @@ def set_conversation_language(locale: str, tool_context: ToolContext) -> dict:
     Language never selects currency. A change requires a full new presentation
     and later confirmation of the same proposal before an action can run.
     """
-    return change_voice_language(tool_context.state, locale)
+    return {**change_voice_language(tool_context.state, locale), "retryable": False}
 
 
 def end_consultation() -> dict:
     """Terminates the current voice consultation session. Call this when the customer confirms they are finished or want to end the call."""
     request_session_end()
-    return {"status": "SUCCESS", "message": "Session end signal sent."}
+    return {
+        "status": "SUCCESS",
+        "retryable": False,
+        "message": "Session end signal sent.",
+    }
 
 
 def transfer_to_human(reason: str) -> dict:
@@ -599,7 +617,11 @@ def transfer_to_human(reason: str) -> dict:
         reason: The justification for escalating the call.
     """
     notify_event({"type": DataChannelEvent.HANDOFF_PENDING.value, "reason": reason})
-    return {"status": "SUCCESS", "message": "Escalation sequence initiated."}
+    return {
+        "status": "SUCCESS",
+        "retryable": False,
+        "message": "Escalation sequence initiated.",
+    }
 
 
 def prepare_customer_reported_fraud_confirmation(
@@ -614,6 +636,7 @@ def prepare_customer_reported_fraud_confirmation(
     if not playbook.get("open_alert_inspected") or playbook.get("fraud_alert_id"):
         return {
             "success": False,
+            "retryable": False,
             "error": "ACTIVE_ALERT_CHECK_REQUIRED",
             "message": "Confirm that no active fraud alert exists before preparing this report.",
         }
@@ -628,6 +651,7 @@ def prepare_customer_reported_fraud_confirmation(
     if not requested_authorization_ids and not requested_transaction_ids:
         return {
             "success": False,
+            "retryable": False,
             "error": "EMPTY_DISPUTE_SELECTION",
             "message": "Select at least one recent transaction before preparing confirmation.",
         }
@@ -643,12 +667,14 @@ def prepare_customer_reported_fraud_confirmation(
     if requested_authorization_ids - allowed_authorization_ids:
         return {
             "success": False,
+            "retryable": False,
             "error": "INVALID_DISPUTED_AUTHORIZATION",
             "message": "One or more selected pending authorizations are not in the trusted recent history.",
         }
     if requested_transaction_ids - allowed_transaction_ids:
         return {
             "success": False,
+            "retryable": False,
             "error": "INVALID_DISPUTED_TRANSACTION",
             "message": "One or more selected posted transactions are not eligible entries in the trusted recent history.",
         }
@@ -680,6 +706,7 @@ def prepare_customer_reported_fraud_confirmation(
     state["fraud_playbook"] = playbook
     return {
         "success": True,
+        "retryable": False,
         "confirmation_required": True,
         "action": TRIAGE_CUSTOMER_REPORTED_FRAUD,
         "payload": authorization["payload"],
@@ -726,7 +753,123 @@ def get_auth_headers() -> dict:
     }
 
 
+def _release_ordered_tool_gate() -> None:
+    gate = ordered_tool_gate_var.get()
+    if gate is not None:
+        gate.release()
+
+
+def completed_proposal_result(state, tool_name: str, args: dict) -> dict | None:
+    """Short-circuit a commit/decide for a proposal already resolved here.
+
+    Gemini 3.x Live can cancel a pending BLOCKING call when the customer
+    speaks, while ADK 2.4 still finishes executing it. A re-issued commit must
+    learn that the action already ran instead of being told it has not run,
+    which would invite a fresh proposal and a duplicate banking action.
+    """
+    if tool_name not in PROPOSAL_DECISION_TOOLS:
+        return None
+    proposal_id = str(args.get("proposal_id") or "")
+    if not proposal_id:
+        return None
+    resolution = (state.get(COMPLETED_PROPOSALS_STATE_KEY) or {}).get(proposal_id)
+    if not resolution:
+        return None
+    if resolution == COMMITTED_RESOLUTION:
+        return {
+            "success": True,
+            "isError": False,
+            "status": "ALREADY_COMMITTED",
+            "action_completed": True,
+            "retryable": False,
+            "message": (
+                "This proposal was already committed earlier in this session. "
+                "The banking action is complete."
+            ),
+            "model_instruction": (
+                "Tell the customer the action is complete. Do not prepare, "
+                "commit, or decide this proposal again, and do not create a new "
+                "proposal for the same request."
+            ),
+        }
+    return {
+        "success": False,
+        "isError": False,
+        "status": "PROPOSAL_ALREADY_RESOLVED",
+        "resolution": resolution,
+        "action_completed": False,
+        "retryable": False,
+        "message": (
+            "This proposal was already resolved without committing. Do not "
+            "commit or decide it again; prepare a new proposal only if the "
+            "customer asks for a new action."
+        ),
+    }
+
+
+def playbook_decision_required_result(state, tool_name: str, args: dict) -> dict | None:
+    """Require a recorded SELECT decision for the playbook being prepared."""
+    if tool_name != "prepare_action_proposal":
+        return None
+    playbook_id = str(args.get("playbook_id") or "")
+    selection = state.get(PLAYBOOK_SELECTION_STATE_KEY) or {}
+    if playbook_id and selection.get("playbook_id") == playbook_id:
+        return None
+    return {
+        "success": False,
+        "isError": False,
+        "status": "PLAYBOOK_DECISION_REQUIRED",
+        "action_completed": False,
+        "retryable": True,
+        "required_action": "record_playbook_decision",
+        "message": (
+            "Preparation did not run because no decision is recorded for this "
+            "playbook. Call record_playbook_decision with the discovery_id from "
+            "discover_playbooks, decision=SELECT, reason_code=APPLICABLE, "
+            "playbook_id set to this playbook, and its when_to_use "
+            "criterion_index. Then call prepare_action_proposal again with the "
+            "same arguments."
+        ),
+    }
+
+
+def _record_playbook_selection(state, tool_name: str, args: dict) -> None:
+    if tool_name == "discover_playbooks":
+        state[PLAYBOOK_SELECTION_STATE_KEY] = None
+    elif tool_name == "record_playbook_decision":
+        playbook_id = str(args.get("playbook_id") or "")
+        state[PLAYBOOK_SELECTION_STATE_KEY] = (
+            {
+                "discovery_id": str(args.get("discovery_id") or ""),
+                "playbook_id": playbook_id,
+            }
+            if str(args.get("decision") or "").upper() == "SELECT" and playbook_id
+            else None
+        )
+
+
+def _record_completed_proposal(state, proposal_id: str, resolution: str) -> None:
+    if not proposal_id:
+        return
+    completed = dict(state.get(COMPLETED_PROPOSALS_STATE_KEY) or {})
+    completed[proposal_id] = resolution
+    state[COMPLETED_PROPOSALS_STATE_KEY] = completed
+
+
 async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | None:
+    """Serialize ordered tools for the session, then apply runtime guards.
+
+    The gate is held until the matching after/error callback releases it, so
+    callback state checks and updates of ordered calls never interleave.
+    """
+    tool_name = getattr(tool, "name", str(tool))
+    gate = ordered_tool_gate_var.get()
+    if gate is not None and tool_name in ORDERED_TOOL_NAMES:
+        await gate.acquire()
+    return await _before_tool_callback_impl(tool, args, tool_context, **kwargs)
+
+
+async def _before_tool_callback_impl(tool, args, tool_context, **kwargs) -> dict | None:
     tool_name = getattr(tool, "name", str(tool))
     import logging
 
@@ -747,8 +890,29 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
             "isError": False,
             "status": "LEGACY_DIRECT_ACTION_DISABLED",
             "action_completed": False,
+            "retryable": False,
             "message": "Use the typed proposal and commit tools for this action.",
         }
+    ledger_result = completed_proposal_result(tool_context.state, tool_name, args)
+    if ledger_result:
+        logger.info(
+            "[CALLBACK] resolved proposal short-circuited %s",
+            format_log_context(
+                state=tool_context.state,
+                tool_name=tool_name,
+                drift=ledger_result["status"],
+            ),
+        )
+        return ledger_result
+    decision_result = playbook_decision_required_result(
+        tool_context.state, tool_name, args
+    )
+    if decision_result:
+        logger.info(
+            "[CALLBACK] preparation blocked before playbook decision %s",
+            format_log_context(state=tool_context.state, tool_name=tool_name),
+        )
+        return decision_result
     if tool_name == "end_consultation":
         block_reason = closeout_block_reason(
             closeout_boundary=tool_context.state.get("closeout_boundary"),
@@ -775,6 +939,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
                 "success": False,
                 "isError": False,
                 "status": "SESSION_CLOSE_CONFIRMATION_REQUIRED",
+                "retryable": False,
                 "session_ended": False,
                 "closeout_blocked": True,
                 "required_action": block_reason,
@@ -841,6 +1006,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
                 "isError": False,
                 "status": "AUTHORIZATION_REQUIRED",
                 "action_completed": False,
+                "retryable": False,
                 "message": "The action has not run because protected decision evidence is still required.",
                 "authorization_blocked": True,
                 "required_action": authorization_error,
@@ -865,6 +1031,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
                 "isError": False,
                 "status": "COMMIT_RECOVERY_REQUIRED",
                 "action_completed": False,
+                "retryable": False,
                 "message": (
                     "The prior commit result is unresolved. Retry the same commit "
                     "or transfer to a specialist before another proposal decision."
@@ -905,6 +1072,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
                 "isError": False,
                 "status": "AUTHORIZATION_REQUIRED",
                 "action_completed": False,
+                "retryable": False,
                 "message": "The action has not run because customer confirmation is still required.",
                 "authorization_blocked": True,
                 "required_action": authorization_error,
@@ -956,6 +1124,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
                 "success": False,
                 "isError": True,
                 "error": "SESSION_INVALIDATED",
+                "retryable": False,
                 "message": "This consultation is no longer current because demo data changed. Start a new consultation before taking action.",
                 "required_action": generation_reason,
                 "model_instruction": "Do not claim success or retry this tool in the current session.",
@@ -1006,6 +1175,7 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
             "success": False,
             "isError": True,
             "error": "ACTION_NOT_COMPLETED",
+            "retryable": False,
             "message": f"Action not completed. {sequencing_error}",
             "sequence_blocked": True,
             "required_action": sequencing_error,
@@ -1054,6 +1224,18 @@ async def before_tool_callback(tool, args, tool_context, **kwargs) -> dict | Non
 
 
 async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> None:
+    """Record a tool error, then release the ordered gate."""
+    try:
+        return await _on_tool_error_callback_impl(
+            tool, args, tool_context, error, **kwargs
+        )
+    finally:
+        _release_ordered_tool_gate()
+
+
+async def _on_tool_error_callback_impl(
+    tool, args, tool_context, error, **kwargs
+) -> None:
     tool_name = getattr(tool, "name", str(tool))
     import logging
 
@@ -1127,6 +1309,18 @@ async def on_tool_error_callback(tool, args, tool_context, error, **kwargs) -> N
 async def after_tool_callback(
     tool, args, tool_context, tool_response, **kwargs
 ) -> dict | None:
+    """Apply result-side state transitions, then release the ordered gate."""
+    try:
+        return await _after_tool_callback_impl(
+            tool, args, tool_context, tool_response, **kwargs
+        )
+    finally:
+        _release_ordered_tool_gate()
+
+
+async def _after_tool_callback_impl(
+    tool, args, tool_context, tool_response, **kwargs
+) -> dict | None:
     tool_name = getattr(tool, "name", str(tool))
     import logging
 
@@ -1149,9 +1343,17 @@ async def after_tool_callback(
     )
     success = tool_response_succeeded(tool_name, tool_response)
     expected_checkpoint = tool_response_is_expected_checkpoint(tool_response)
-    outcome = (
-        "checkpoint" if expected_checkpoint else ("success" if success else "failure")
-    )
+    if expected_checkpoint:
+        outcome = "checkpoint"
+    elif success:
+        outcome = "success"
+    elif tool_response_is_domain_refusal(tool_response):
+        # A bank policy refusal is a valid business answer, not a tool fault.
+        outcome = "refusal"
+    else:
+        outcome = "failure"
+    if success:
+        _record_playbook_selection(tool_context.state, tool_name, args)
     tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
     started_at = tool_started.pop(tool_name, None)
     tool_context.state["_voice_tool_started_at"] = tool_started
@@ -1267,6 +1469,13 @@ async def after_tool_callback(
             playbook = dict(tool_context.state.get("fraud_playbook") or {})
             playbook["pending_proposal"] = None
             tool_context.state["fraud_playbook"] = playbook
+            _record_completed_proposal(
+                tool_context.state,
+                str(args.get("proposal_id") or structured.get("proposal_id") or ""),
+                str(
+                    args.get("decision") or structured.get("decision") or "RESOLVED"
+                ).upper(),
+            )
         if (
             tool_name == "get_open_fraud_alert"
             and structured.get("fraud_alert") is None
@@ -1332,6 +1541,11 @@ async def after_tool_callback(
             completed_playbook = dict(tool_context.state.get("fraud_playbook") or {})
             completed_playbook["pending_proposal"] = None
             tool_context.state["fraud_playbook"] = completed_playbook
+            _record_completed_proposal(
+                tool_context.state,
+                str(args.get("proposal_id") or structured.get("proposal_id") or ""),
+                COMMITTED_RESOLUTION,
+            )
         if tool_name in ACTION_COMPLETION_TOOLS:
             latest_turn = (latest_customer_turn_var.get() or {}).get("latest") or {}
             tool_context.state["closeout_boundary"] = (
@@ -1530,8 +1744,13 @@ async def after_tool_callback(
         playbook = dict(tool_context.state.get("fraud_playbook") or {})
         authorization = playbook.get("workflow_authorization") or {}
         pending_proposal = playbook.get("pending_proposal") or {}
+        ledger_short_circuit = (
+            isinstance(tool_response, dict)
+            and tool_response.get("status") in PROPOSAL_LEDGER_STATUSES
+        )
         if (
             tool_name in COMMIT_ACTION_BY_TOOL
+            and not ledger_short_circuit
             and pending_proposal.get("evidence_state") == COMMIT_IN_FLIGHT
         ):
             recovery_class = str((structured or {}).get("recovery_class") or "")
@@ -1558,6 +1777,7 @@ async def after_tool_callback(
                     "status": "COMMIT_RECOVERY_REQUIRED",
                     "action_completed": False,
                     "retry_allowed": retry_allowed,
+                    "retryable": retry_allowed,
                     "model_instruction": (
                         "Retry this exact commit once with the same proposal_id. Do not "
                         "ask the customer to confirm again or claim success."
@@ -1587,23 +1807,28 @@ NAME = "credit_card_support_voice_assistant"
 DESCRIPTION = "A voice assistant that helps customers freeze cards, issue replacement cards, request limit increases, and reverse late fees."
 
 
+def create_runtime_tools() -> list:
+    """Return runtime-local tools with the Live tool policy applied."""
+    return [
+        configure_live_tool(FunctionTool(set_conversation_language)),
+        configure_live_tool(FunctionTool(prepare_customer_reported_fraud_confirmation)),
+        # Left unscheduled (unchanged): its closeout-block result carries a
+        # customer-facing prompt that must be spoken, so it is never SILENT.
+        FunctionTool(end_consultation),
+        configure_live_tool(FunctionTool(transfer_to_human)),
+    ]
+
+
 def create_voice_agent(*, model=None, instruction: str = INSTRUCTION_TEXT) -> Agent:
     return Agent(
         name=NAME,
         description=DESCRIPTION,
         model=model or os.getenv("VOICE_AGENT_AUDIO_MODEL"),
         instruction=instruction,
-        tools=[
-            create_mcp_toolset(),
-            set_conversation_language,
-            prepare_customer_reported_fraud_confirmation,
-            end_consultation,
-            transfer_to_human,
-        ],
+        tools=[create_mcp_toolset(), *create_runtime_tools()],
         before_tool_callback=before_tool_callback,
         after_tool_callback=after_tool_callback,
         on_tool_error_callback=on_tool_error_callback,
-        planner=BuiltInPlanner(thinking_config=ThinkingConfig(include_thoughts=False)),
     )
 
 

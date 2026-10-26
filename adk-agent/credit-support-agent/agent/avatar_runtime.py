@@ -18,7 +18,45 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any
+
+
+@dataclass(frozen=True)
+class AvatarVideoFormat:
+    """Raw RGBA frame format published to LiveKit from the avatar decoder."""
+
+    width: int
+    height: int
+    fps: int
+
+    @property
+    def frame_bytes(self) -> int:
+        return self.width * self.height * 4
+
+    @property
+    def frame_interval_us(self) -> int:
+        return 1_000_000 // self.fps
+
+    def decoder_args(self, audio_port: int) -> list[str]:
+        """FFmpeg args: MP4 on stdin, RGBA frames on stdout, PCM to a socket.
+
+        Scaling to this fixed format keeps every frame exactly
+        ``frame_bytes`` long whatever resolution the model streams.
+        """
+        return [
+            "-threads", "1",
+            "-f", "mp4",
+            "-i", "pipe:0",
+            "-vf", f"scale={self.width}:{self.height}",
+            "-map", "0:v", "-f", "rawvideo", "-pix_fmt", "rgba", "-",
+            "-map", "0:a", "-f", "s16le", "-ar", "24000", "-ac", "1",
+            f"tcp://127.0.0.1:{audio_port}",
+        ]
+
+
+# Gemini 3.8 Live Avatar streams 24 FPS MP4 at a minimum of 704x1280 portrait.
+LIVE_AVATAR_VIDEO_FORMAT = AvatarVideoFormat(width=704, height=1280, fps=24)
 
 
 async def run_with_avatar_fallback(
