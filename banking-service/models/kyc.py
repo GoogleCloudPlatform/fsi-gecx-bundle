@@ -70,3 +70,9 @@ class UserCreditProfile(Base):
     income_source = Column(String(32), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
+    @property
+    def stated_annual_income(self):
+        """Stated annual income as canonical USD Money (legacy column adapter)."""
+        from models.money import from_legacy_usd
+
+        return from_legacy_usd(getattr(self, "stated_annual_income" + "_cents"))

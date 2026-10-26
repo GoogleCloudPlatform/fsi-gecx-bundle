@@ -298,9 +298,8 @@ def issue_replacement_card(
 
 CREDIT_LIMIT_POLICY = {
     "id": "demo-credit-limit-increase",
-    "revision": 1,
+    "revision": 2,
     "currency_code": "USD",
-    "maximum_current_limit_multiple": 2,
     "maximum_minor": MAX_MINOR,
     "requires_active_account": True,
     "requires_active_product": True,
@@ -317,7 +316,7 @@ CREDIT_LIMIT_POLICY = {
 
 
 def evaluate_credit_limit(facts, requested):
-    """Ordered, closed demo eligibility rules; no credit-history inference."""
+    """Ordered, closed execution guards; no credit-history inference."""
     if facts["account_status"] != "ACTIVE":
         return "ACCOUNT_INACTIVE"
     if facts["currency_code"] != "USD" or requested["currency_code"] != "USD":
@@ -336,9 +335,14 @@ def evaluate_credit_limit(facts, requested):
         return "LIMIT_NOT_INCREASED"
     if not bounds[0] <= amount <= bounds[1]:
         return "PRODUCT_LIMIT_OUT_OF_BOUNDS"
-    if amount > facts["current_limit_minor"] * 2:
-        return "DEMO_LIMIT_CEILING_EXCEEDED"
+    # Credit judgement (headroom, inquiry tiers, income cap) is owned by the
+    # bank decisioning provider; these rules are only execution guards.
     return None
+
+
+def limit_increase_clock():
+    """Injectable clock for the cooling-off anchor set with each increase."""
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def apply_limit_increase(
@@ -381,6 +385,8 @@ def apply_limit_increase(
             raise ValueError("Available credit exceeds the canonical Money range.")
         account.credit_limit_cents = requested_limit_cents
         account.available_credit_cents = available
+        # Cooling-off anchor, persisted in the same transaction as the increase.
+        account.last_limit_increase_at = limit_increase_clock()
         repo.save_account(account)
         record_audit_event(db, "CREDIT_LIMIT_INCREASED", {
             "account_id": str(account_id), "new_limit_cents": account.credit_limit_cents

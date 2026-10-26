@@ -58,6 +58,9 @@ Reason = Literal[
     "INCOME_CONFIRMATION_REQUIRED",
     "INQUIRY_CONSENT_REQUIRED",
     "CREDIT_PROFILE_INELIGIBLE",
+    # Tiered provider outcomes (additive).
+    "BUREAU_DECLINED",
+    "INCOME_CAP_EXCEEDED",
 ]
 # The bank, never the model, selects the inquiry tier for a request.
 InquiryType = Literal["NONE", "SOFT", "HARD"]
@@ -68,6 +71,8 @@ NextStep = Literal[
     "PROVIDE_INCOME",
     "RETRY_AFTER_COOLING_OFF",
     "ACCEPT_COUNTEROFFER",
+    "ACCEPT_PREAPPROVED_HEADROOM",
+    "ACCEPT_SOFT_TIER_CAP",
 ]
 CreditTier = Literal["PRIME_EXCELLENT", "PRIME", "NEAR_PRIME", "SUBPRIME"]
 Fingerprint = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
@@ -213,10 +218,15 @@ class DecisionRequest(BaseModel):
     # Additive tiered-contract inputs; omitted from the wire when absent.
     inquiry_consent: InquiryConsent | None = None
     origin: CounterofferOrigin | None = None
+    # Fingerprint of the bank-derived customer signals; the signals themselves
+    # (income, score, tier) are NPI and are never serialized into requests.
+    signals_ref: Fingerprint | None = None
 
     @model_serializer(mode="wrap")
     def _legacy_wire(self, handler):
-        return _omit_absent(handler(self), ("inquiry_consent", "origin"))
+        return _omit_absent(
+            handler(self), ("inquiry_consent", "origin", "signals_ref")
+        )
 
     @model_validator(mode="after")
     def counteroffer_below_origin(self):
@@ -289,6 +299,8 @@ class BankDecision(BaseModel):
                 "LIMIT_CEILING_EXCEEDED",
                 "COOLING_OFF_ACTIVE",
                 "CREDIT_PROFILE_INELIGIBLE",
+                "BUREAU_DECLINED",
+                "INCOME_CAP_EXCEEDED",
             },
             "NEEDS_INFORMATION": {
                 "INFORMATION_REQUIRED",
@@ -296,7 +308,11 @@ class BankDecision(BaseModel):
                 "INQUIRY_CONSENT_REQUIRED",
             },
             "REFER_FOR_REVIEW": {"REVIEW_REQUIRED", "ABOVE_PRODUCT_MAXIMUM"},
-            "COUNTEROFFER": {"COUNTEROFFER_AVAILABLE", "LIMIT_CEILING_EXCEEDED"},
+            "COUNTEROFFER": {
+                "COUNTEROFFER_AVAILABLE",
+                "LIMIT_CEILING_EXCEEDED",
+                "INCOME_CAP_EXCEEDED",
+            },
         }
         offers = self.outcome in {"APPROVED", "COUNTEROFFER"}
         if offers != (self.approved_limit is not None):
@@ -430,24 +446,37 @@ def validate_decision(value, request, policy, now, *, tier_config=None):
 
 
 class DemoDecisioningProvider:
-    def __init__(self, policy, *, scenario="STANDARD", clock: Callable = utcnow):
+    """Deterministic in-process bank decision adapter.
+
+    Operator scenarios other than ``STANDARD`` override every request. Under
+    ``STANDARD``, a request evaluated with bank-derived ``signals`` runs the
+    customer-aware tiered policy (gates, pre-approved headroom, SOFT/HARD
+    inquiry tiers, income cap, simulated bureau); without signals it keeps the
+    legacy approve-as-requested behaviour used by contract tests.
+    """
+
+    def __init__(
+        self, policy, *, scenario="STANDARD", clock: Callable = utcnow, tier_config=None
+    ):
         self._policy = policy
         self.scenario = scenario
         self.clock = clock
+        self.tier_config = tier_config
 
     @property
     def current_policy(self):
         return self._policy
 
-    def evaluate(self, request):
+    def evaluate(self, request, signals=None):
         reason = evaluate_credit_limit(
             request.facts.model_dump(), request.requested_limit.model_dump()
         )
-        if reason not in {None, "DEMO_LIMIT_CEILING_EXCEEDED"}:
+        if reason:
             raise ValueError(
                 "Execution eligibility must be checked before decisioning."
             )
-        scenario = self.scenario
+        if self.scenario == "STANDARD" and signals is not None:
+            return self._evaluate_tiered(request, signals)
         outcomes = {
             "STANDARD": "APPROVED",
             "DECLINE": "DECLINED",
@@ -460,19 +489,32 @@ class DemoDecisioningProvider:
             "NEEDS_INFORMATION": "INFORMATION_REQUIRED",
             "REFER_FOR_REVIEW": "REVIEW_REQUIRED",
         }
-        outcome = "DECLINED" if reason else outcomes[scenario]
+        outcome = outcomes[self.scenario]
+        return self._decision(
+            request,
+            outcome=outcome,
+            approved=request.requested_limit if outcome == "APPROVED" else None,
+            reasons=(reasons[self.scenario],),
+        )
+
+    def _decision(
+        self, request, *, outcome, approved, reasons, inquiry_type=None,
+        counteroffer=None, refusal=None,
+    ):
+        consent = request.inquiry_consent
         evaluated = self.clock()
         return BankDecision(
             decision_id=str(
                 uuid.uuid5(
                     uuid.NAMESPACE_URL,
-                    f"{self.current_policy.digest}:{request.request_ref}",
+                    f"{self.current_policy.digest}:{request.request_ref}"
+                    + (f":{consent.consent_ref}" if consent else ""),
                 )
             ),
             provider_id=self.current_policy.provider_id,
             outcome=outcome,
-            approved_limit=request.requested_limit if outcome == "APPROVED" else None,
-            reason_codes=("LIMIT_CEILING_EXCEEDED" if reason else reasons[scenario],),
+            approved_limit=approved,
+            reason_codes=reasons,
             policy=self.current_policy,
             evaluated_at=evaluated,
             expires_at=evaluated
@@ -480,13 +522,146 @@ class DemoDecisioningProvider:
             request_ref=request.request_ref,
             scope_ref=request.scope_ref,
             input_ref=request.input_ref,
-            evidence_references=(request.input_ref,),
+            evidence_references=(request.input_ref,)
+            + ((consent.consent_ref,) if consent else ()),
+            inquiry_type=inquiry_type,
+            counteroffer=counteroffer,
+            refusal=refusal,
+        )
+
+    def _evaluate_tiered(self, request, signals):
+        signals = CreditSignals.model_validate(signals)
+        if request.signals_ref != signals.ref:
+            raise ValueError("Customer signals are not bound to this request.")
+        tier_config = self.tier_config or load_credit_limit_tier_config()
+        facts = request.facts
+        caps = tier_caps(
+            facts, signals, tier_config.policy_for(facts.product_code), self.clock()
+        )
+        asked = request.requested_limit
+        amount = asked.amount_minor
+
+        def money(value):
+            return Money(amount_minor=value, currency_code=facts.currency_code)
+
+        def refusal(reason_code, next_steps, *, retryable=False, retry_after=None):
+            return RefusalFacts(
+                reason_code=reason_code,
+                retryable=retryable,
+                current_limit=money(caps.current),
+                product_maximum=money(caps.product_maximum),
+                max_instantly_approvable=money(caps.max_instantly_approvable),
+                soft_tier_cap=money(caps.soft_cap),
+                product_name=signals.product_name,
+                next_steps=next_steps,
+                retry_after=retry_after,
+            )
+
+        def refuse(outcome, reason_code, next_steps, inquiry_type="NONE", **extra):
+            return self._decision(
+                request, outcome=outcome, approved=None, reasons=(reason_code,),
+                inquiry_type=inquiry_type,
+                refusal=refusal(reason_code, next_steps, **extra),
+            )
+
+        def counter(offer, reason_codes, next_steps, inquiry_type):
+            return self._decision(
+                request, outcome="COUNTEROFFER", approved=money(offer),
+                reasons=reason_codes, inquiry_type=inquiry_type,
+                counteroffer=Counteroffer(
+                    origin_request_ref=request.request_ref, requested_limit=asked
+                ),
+                refusal=refusal(reason_codes[-1], next_steps),
+            )
+
+        def approve(inquiry_type):
+            return self._decision(
+                request, outcome="APPROVED", approved=asked,
+                reasons=("APPROVED_BY_POLICY",), inquiry_type=inquiry_type,
+            )
+
+        if amount > caps.product_maximum:
+            return refuse(
+                "REFER_FOR_REVIEW", "ABOVE_PRODUCT_MAXIMUM",
+                ("PRODUCT_UPGRADE", "SPECIALIST_REVIEW"),
+            )
+        if caps.gate == "COOLING_OFF_ACTIVE":
+            return refuse(
+                "DECLINED", "COOLING_OFF_ACTIVE", ("RETRY_AFTER_COOLING_OFF",),
+                retryable=True, retry_after=caps.retry_after,
+            )
+        if caps.gate == "INCOME_CONFIRMATION_REQUIRED":
+            return refuse(
+                "NEEDS_INFORMATION", "INCOME_CONFIRMATION_REQUIRED",
+                ("PROVIDE_INCOME", "SPECIALIST_REVIEW"),
+            )
+        if caps.gate == "CREDIT_PROFILE_INELIGIBLE":
+            return refuse(
+                "DECLINED", "CREDIT_PROFILE_INELIGIBLE", ("SPECIALIST_REVIEW",)
+            )
+        if request.origin is not None:
+            # The caller bound this request to a validated post-inquiry
+            # counteroffer (validate_counteroffer_origin); no new inquiry.
+            return approve("NONE")
+        if amount <= caps.max_instantly_approvable:
+            return approve("NONE")
+        if amount > caps.hard_cap:
+            if caps.hard_cap > caps.current:
+                return counter(
+                    caps.hard_cap,
+                    ("COUNTEROFFER_AVAILABLE", "INCOME_CAP_EXCEEDED"),
+                    ("ACCEPT_COUNTEROFFER", "PROVIDE_INCOME", "SPECIALIST_REVIEW"),
+                    "NONE",
+                )
+            return refuse(
+                "DECLINED", "LIMIT_CEILING_EXCEEDED",
+                ("PROVIDE_INCOME", "SPECIALIST_REVIEW"),
+            )
+        tier = "SOFT" if amount <= caps.soft_cap else "HARD"
+        consent = request.inquiry_consent
+        if consent is None or consent.inquiry_type != tier:
+            headroom = caps.max_instantly_approvable > caps.current
+            if tier == "SOFT":
+                steps = ("ACCEPT_PREAPPROVED_HEADROOM",) if headroom else ("SPECIALIST_REVIEW",)
+            else:
+                steps = (
+                    ("ACCEPT_SOFT_TIER_CAP",) if caps.soft_cap > caps.current
+                    else ("SPECIALIST_REVIEW",)
+                )
+            return refuse(
+                "NEEDS_INFORMATION", "INQUIRY_CONSENT_REQUIRED", steps,
+                inquiry_type=tier,
+            )
+        score = signals.credit_score
+        if tier == "SOFT":
+            if score >= SOFT_BUREAU_APPROVE_SCORE:
+                return approve("SOFT")
+            if caps.max_instantly_approvable > caps.current:
+                return counter(
+                    caps.max_instantly_approvable, ("COUNTEROFFER_AVAILABLE",),
+                    ("ACCEPT_COUNTEROFFER", "SPECIALIST_REVIEW"), "SOFT",
+                )
+            return refuse(
+                "DECLINED", "BUREAU_DECLINED", ("SPECIALIST_REVIEW",),
+                inquiry_type="SOFT",
+            )
+        if score >= HARD_BUREAU_APPROVE_SCORE:
+            return approve("HARD")
+        if score >= HARD_BUREAU_COUNTER_SCORE and caps.soft_cap > caps.current:
+            return counter(
+                caps.soft_cap, ("COUNTEROFFER_AVAILABLE",),
+                ("ACCEPT_COUNTEROFFER", "SPECIALIST_REVIEW"), "HARD",
+            )
+        return refuse(
+            "DECLINED", "BUREAU_DECLINED", ("SPECIALIST_REVIEW",), inquiry_type="HARD"
         )
 
 
 def load_decisioning_provider(
-    *, scenario=None, config_path=DEFAULT_CONFIG, clock=utcnow
+    *, scenario=None, config_path=DEFAULT_CONFIG, clock=utcnow,
+    tier_config_path=DEFAULT_TIER_CONFIG,
 ):
+    tier_config = load_credit_limit_tier_config(tier_config_path)
     config = json.loads(Path(config_path).read_text())
     if (
         set(config)
@@ -529,11 +704,14 @@ def load_decisioning_provider(
                 "approval_ttl_seconds": config["approval_ttl_seconds"],
                 "scenario": selected,
                 "execution_policy": CREDIT_LIMIT_POLICY,
+                "tier_policy": digest(tier_config.model_dump(mode="json")),
             }
         ),
         approval_ttl_seconds=config["approval_ttl_seconds"],
     )
-    return DemoDecisioningProvider(policy, scenario=selected, clock=clock)
+    return DemoDecisioningProvider(
+        policy, scenario=selected, clock=clock, tier_config=tier_config
+    )
 
 
 # --- Tiered credit-limit configuration (shape and defaults only) ------------
@@ -640,3 +818,126 @@ class CreditLimitTierConfig(_ClosedConfig):
 
 def load_credit_limit_tier_config(path=DEFAULT_TIER_CONFIG):
     return CreditLimitTierConfig.model_validate_json(Path(path).read_text())
+
+
+# --- Customer signals and deterministic tier caps ---------------------------
+# Simulated bureau thresholds (demo only; no real consumer report is pulled).
+SOFT_BUREAU_APPROVE_SCORE = 660
+HARD_BUREAU_APPROVE_SCORE = 700
+HARD_BUREAU_COUNTER_SCORE = 660
+
+
+def _aware(value):
+    if value is None:
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=datetime.timezone.utc)
+    return value.astimezone(datetime.timezone.utc)
+
+
+class CreditSignals(BaseModel):
+    """Bank-derived customer signals for one decision (NPI; never serialized
+    into payloads, refusal facts, results or logs; bound only by ``ref``)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    credit_score: Annotated[StrictInt, Field(ge=300, le=850)] | None
+    credit_tier: Annotated[str, Field(min_length=1, max_length=50)] | None
+    annual_income_minor: Annotated[StrictInt, Field(ge=0, le=MAX_MINOR)] | None
+    income_confirmed_at: datetime.datetime | None
+    opened_at: datetime.datetime | None
+    last_limit_increase_at: datetime.datetime | None
+    balance_minor: Annotated[StrictInt, Field(ge=-MAX_MINOR, le=MAX_MINOR)]
+    late_payment: StrictBool
+    product_name: str = Field(
+        min_length=1, max_length=100, pattern=r"^[^\x00-\x1f\x7f-\x9f]+$"
+    )
+
+    @field_validator("income_confirmed_at", "opened_at", "last_limit_increase_at")
+    @classmethod
+    def utc(cls, value):
+        return _aware(value)
+
+    @property
+    def ref(self):
+        return digest(self.model_dump(mode="json"))
+
+
+class TierCaps(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    gate: Reason | None
+    retry_after: datetime.date | None
+    tenure_months: StrictInt
+    current: StrictInt
+    product_maximum: StrictInt
+    headroom: StrictInt
+    max_instantly_approvable: StrictInt
+    soft_cap: StrictInt
+    hard_cap: StrictInt
+
+
+def tier_caps(facts, signals, policy, now):
+    """Owner-approved deterministic gates and caps (integer minor units, bps).
+
+    Gate order: cooling-off, income confirmation, credit profile/tenure. Any
+    gate or a late payment yields zero instant headroom. Guarantees
+    ``current <= max_instantly_approvable <= soft_cap <= hard_cap <= product_maximum``.
+    """
+    now = _aware(now)
+    step = policy.rounding_step_minor
+    gates = policy.gates
+
+    def floor_step(value):
+        return (value // step) * step
+
+    L, P = facts.current_limit_minor, facts.maximum_limit_minor
+    opened = signals.opened_at
+    tenure = max(0, (now - opened).days // 30) if opened else 0
+    gate = retry_after = None
+    last = signals.last_limit_increase_at
+    if last is not None and now - last < datetime.timedelta(days=gates.cooling_off_days):
+        gate = "COOLING_OFF_ACTIVE"
+        retry_after = (last + datetime.timedelta(days=gates.cooling_off_days)).date()
+    elif (
+        signals.credit_score is None
+        or not signals.annual_income_minor
+        or signals.income_confirmed_at is None
+        or now - signals.income_confirmed_at
+        > datetime.timedelta(days=gates.income_confirmation_max_age_days)
+    ):
+        gate = "INCOME_CONFIRMATION_REQUIRED"
+    elif (
+        signals.credit_score < gates.minimum_credit_score
+        or tenure < gates.minimum_tenure_months
+    ):
+        gate = "CREDIT_PROFILE_INELIGIBLE"
+    income = signals.annual_income_minor or 0
+    income_cap = max(
+        L, min(P, floor_step(income * policy.headroom.max_limit_to_income_bps // 10000))
+    )
+    utilization = (signals.balance_minor * 10000) // L if L > 0 else 0
+    u_factor = next(
+        (b.factor_bps for b in policy.headroom.utilization_bands if b.max_bps >= utilization),
+        0,
+    )
+    t_factor = 0
+    for band in policy.headroom.tenure_bands:
+        if band.min_months <= tenure:
+            t_factor = band.factor_bps
+    tier_bps = getattr(policy.headroom.tier_bps, signals.credit_tier or "", 0) if (
+        signals.credit_tier in CreditTierBps.model_fields
+    ) else 0
+    raw = floor_step(L * tier_bps * u_factor * t_factor // 10**12)
+    headroom = max(0, min(raw, income_cap - L))
+    if gate is not None or signals.late_payment:
+        headroom = 0
+    instant = L + headroom
+    soft_cap = max(
+        instant,
+        min(P, income_cap, floor_step(L * policy.soft_tier.max_multiple_of_current_bps // 10000)),
+    )
+    hard_cap = max(soft_cap, min(P, income_cap))
+    return TierCaps(
+        gate=gate, retry_after=retry_after, tenure_months=tenure, current=L,
+        product_maximum=P, headroom=headroom, max_instantly_approvable=instant,
+        soft_cap=soft_cap, hard_cap=hard_cap,
+    )

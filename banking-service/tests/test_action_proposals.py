@@ -1518,17 +1518,19 @@ def test_fraud_preparation_is_independent_of_decisioning_configuration(db_sessio
 
 LEGACY_NOW = datetime.datetime(2026, 10, 2, tzinfo=datetime.timezone.utc)
 LEGACY_ACCOUNT = "4b0b3f4e-7c1a-4d55-9a37-1d2f0e6a9b11"
-# Computed against origin/main (e1baae9) before the tiered contract landed.
-# A change here means a CES/ADK-visible payload, a payload fingerprint, the
-# proposal-evidence.v1 snapshot or the proposal-audit.v2 event changed shape:
-# bump the contract version deliberately instead of updating these values.
-# (Lane 2's CREDIT_LIMIT_POLICY change will legitimately move all of them.)
+# Recomputed for Lane 2: CREDIT_LIMIT_POLICY revision 2 (2x ceiling removed)
+# and the tier-policy digest move the bank decision's policy digest, and with
+# it the payload fingerprint, evidence snapshot and audit events. The only
+# shape change is ``credit_limit_policy`` losing ``maximum_current_limit_multiple``;
+# the decision request digest is identical to origin/main e1baae9.
+# Any other change means a CES/ADK-visible payload or the proposal-evidence.v1 /
+# proposal-audit.v2 contract changed shape: bump the version deliberately.
 LEGACY_WIRE_DIGESTS = {
     "decision_request": "70322006e36eea02718b3a862d4e9cc2e91b73be7c9f0204b3b49196f2ce3467",
-    "bank_decision": "dd90fe2a28b57bf4c8c29459b1d3df7ec4c4d891dcc9afecce1a310e10b9b771",
-    "payload_fingerprint": "4b58d8485b5b3aacf17ac05fc816511a3c6d54568ff25de275a1408d050308bc",
-    "evidence_snapshot": "82a9f4517197b8ddf3ea4bcc60c8060db2c2739e31bbc67f033101eb798715a6",
-    "audit_events": "511f76d2eb2607683f5d823ebac26354e1eadc27ae945950763284ff41e14265",
+    "bank_decision": "e61947681394ba450eceb1eae268b129bfc80c0f23a20554e5508070c200eeec",
+    "payload_fingerprint": "90db63e25d05c18afddf8535aa67f30f99e40d0a7b5f9a0d624af53b26a4427e",
+    "evidence_snapshot": "d8cee7cd565e60ea0fa78009cb208300bc34be99ba36540624768d5bbd7dd740",
+    "audit_events": "9ecc594a48e993e1b0bc6a4a0c75c3b803c28f74c62f6c71fa72a536aed20c91",
 }
 
 

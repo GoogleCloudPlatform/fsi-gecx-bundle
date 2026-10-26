@@ -114,10 +114,139 @@ class ActiveProposalExistsError(ProposalConflictError):
     )
 
 
-class ProposalPolicyError(ProposalError):
-    """Owned eligibility refusal with a bounded typed evidence contract."""
+def _usd(money) -> str:
+    amount = money["amount_minor"] if isinstance(money, dict) else money.amount_minor
+    sign, amount = ("-", -amount) if amount < 0 else ("", amount)
+    return f"{sign}${amount // 100:,}.{amount % 100:02d}"
 
-    def __init__(self, evidence):
+
+def credit_refusal_message(refusal, *, outcome=None, requested=None, offer=None):
+    """Customer-safe explanation built only from bounded ``RefusalFacts``.
+
+    Never includes income, credit score or credit tier.
+    """
+    name = refusal.product_name
+    current, maximum = _usd(refusal.current_limit), _usd(refusal.product_maximum)
+    instant = refusal.max_instantly_approvable
+    preapproved = (
+        f" You're pre-approved for a limit of up to {_usd(instant)} without a credit check."
+        if instant.amount_minor > refusal.current_limit.amount_minor
+        else ""
+    )
+    unchanged = " No limit has changed."
+    asked = f"{_usd(requested)} " if requested else ""
+    code = refusal.reason_code
+    if code == "ABOVE_PRODUCT_MAXIMUM":
+        at_max = (
+            " The card is already at its maximum limit."
+            if refusal.current_limit == refusal.product_maximum
+            else ""
+        )
+        return (
+            f"A {asked}limit is above the maximum for your {name} card. The card's "
+            f"current limit is {current} and its maximum credit limit is {maximum}."
+            f"{at_max}{preapproved} A higher limit would need a different card; a "
+            f"specialist can review upgrade options.{unchanged}"
+        )
+    if code == "COOLING_OFF_ACTIVE":
+        when = refusal.retry_after.isoformat() if refusal.retry_after else "later"
+        return (
+            f"The limit on your {name} card was increased recently. You can request "
+            f"another increase on or after {when}.{unchanged}"
+        )
+    if code == "INCOME_CONFIRMATION_REQUIRED":
+        return (
+            f"Before we can review a higher limit on your {name} card, we need to "
+            f"confirm your current income. A specialist can help.{unchanged}"
+        )
+    if code == "CREDIT_PROFILE_INELIGIBLE":
+        return (
+            f"We can't approve a higher limit on your {name} card right now. A "
+            f"specialist can review your account.{unchanged}"
+        )
+    if code == "INQUIRY_CONSENT_REQUIRED":
+        return (
+            f"A {asked}limit on your {name} card needs a credit check that requires "
+            f"your consent. Prepare the request again to review the disclosure."
+            f"{preapproved}{unchanged}"
+        )
+    if outcome == "COUNTEROFFER" and offer is not None:
+        return (
+            f"We can't approve a {asked}limit on your {name} card, but we can offer "
+            f"a limit of {_usd(offer)}. If you'd like it, ask for the {_usd(offer)} "
+            f"limit and confirm it.{unchanged}"
+        )
+    if code == "BUREAU_DECLINED":
+        return (
+            f"Based on the credit check, we can't approve a higher limit on your {name} "
+            f"card right now. A notice with the reasons is in your secure inbox.{unchanged}"
+        )
+    if code in {"LIMIT_CEILING_EXCEEDED", "INCOME_CAP_EXCEEDED"}:
+        return (
+            f"Based on the income we have on file, we can't raise the limit on your "
+            f"{name} card above {current}. You can update your income or ask a "
+            f"specialist for a review.{unchanged}"
+        )
+    return (
+        f"We can't approve a higher limit on your {name} card right now.{preapproved}"
+        f"{unchanged}"
+    )
+
+
+class _RefusalDetails:
+    """Optional structured refusal metadata shared by policy and precondition errors."""
+
+    def _set_refusal(self, bank_decision, refusal_facts, inquiry_type, counteroffer,
+                     retryable, adverse_action):
+        from services.decisioning import Counteroffer, RefusalFacts
+
+        bank_decision = bank_decision if isinstance(bank_decision, dict) else {}
+        refusal = refusal_facts or bank_decision.get("refusal")
+        counter = counteroffer or bank_decision.get("counteroffer")
+        try:
+            self.refusal_facts = (
+                RefusalFacts.model_validate(refusal) if refusal is not None else None
+            )
+            self.counteroffer = (
+                Counteroffer.model_validate(counter) if counter is not None else None
+            )
+        except ValueError:
+            # Malformed metadata never reaches the customer; keep the safe default.
+            self.refusal_facts = self.counteroffer = None
+        self.inquiry_type = inquiry_type or bank_decision.get("inquiry_type")
+        self.offered_limit = (
+            bank_decision.get("approved_limit") if self.counteroffer is not None else None
+        )
+        self.retryable = bool(
+            retryable if retryable is not None
+            else (self.refusal_facts.retryable if self.refusal_facts else False)
+        )
+        self.adverse_action = adverse_action
+
+    def _refusal_result(self, result):
+        result["retryable"] = self.retryable
+        if self.refusal_facts is not None:
+            result["refusal_facts"] = self.refusal_facts.model_dump(mode="json")
+        if self.inquiry_type is not None:
+            result["inquiry_type"] = self.inquiry_type
+        if self.counteroffer is not None:
+            result["counteroffer"] = {
+                **self.counteroffer.model_dump(mode="json"),
+                "offered_limit": self.offered_limit,
+            }
+        return result
+
+
+class ProposalPolicyError(_RefusalDetails, ProposalError):
+    """Owned eligibility refusal with a bounded typed evidence contract.
+
+    Optional structured metadata (``refusal_facts``, ``inquiry_type``,
+    ``counteroffer``, ``retryable``) is derived from the bank decision when not
+    given and is added to ``safe_result`` without changing existing keys.
+    """
+
+    def __init__(self, evidence, *, refusal_facts=None, inquiry_type=None,
+                 counteroffer=None, retryable=None, adverse_action=None):
         outcome = (evidence.bank_decision or {}).get("outcome")
         messages = {
             "DECLINED": "The bank decision declined this demo increase; no limit has changed.",
@@ -125,6 +254,13 @@ class ProposalPolicyError(ProposalError):
             "REFER_FOR_REVIEW": "The bank decision cannot approve this increase automatically. No review has been submitted and no limit has changed.",
         }
         message = messages.get(outcome, "This requested credit-limit increase is not eligible under the demo policy.")
+        self._set_refusal(evidence.bank_decision, refusal_facts, inquiry_type,
+                          counteroffer, retryable, adverse_action)
+        if self.refusal_facts is not None:
+            message = credit_refusal_message(
+                self.refusal_facts, outcome=outcome,
+                requested=evidence.requested_limit, offer=self.offered_limit,
+            )
         if evidence.decision_failure:
             message = "The bank approval could not be validated; no increase has been approved or applied."
         super().__init__(
@@ -134,22 +270,48 @@ class ProposalPolicyError(ProposalError):
         )
         self.policy_evidence = evidence
 
+    def safe_result(self) -> dict[str, Any]:
+        return self._refusal_result(super().safe_result())
 
-class ActionPreconditionError(ProposalTransitionError):
+
+class ActionPreconditionError(_RefusalDetails, ProposalTransitionError):
     """The domain state bound to a proposal is no longer executable."""
 
-    def __init__(self, message: str, *, reason: str, policy_evidence=None):
+    def __init__(self, message: str, *, reason: str, policy_evidence=None,
+                 refusal_facts=None, inquiry_type=None, counteroffer=None,
+                 retryable=None, adverse_action=None):
+        bank_decision = (
+            getattr(policy_evidence, "bank_decision", None) if refusal_facts or counteroffer
+            or inquiry_type else None
+        )
+        self._set_refusal(bank_decision, refusal_facts, inquiry_type, counteroffer,
+                          retryable, adverse_action)
+        customer_message = (
+            "The underlying account state changed. Review current information "
+            "before creating a new proposal."
+        )
+        if self.refusal_facts is not None:
+            customer_message = credit_refusal_message(
+                self.refusal_facts,
+                outcome=(bank_decision or {}).get("outcome"),
+                requested=getattr(policy_evidence, "requested_limit", None),
+                offer=self.offered_limit,
+            )
         super().__init__(
             message,
             code="ACTION_PRECONDITION_CHANGED",
             recovery_class=RecoveryClass.CREATE_NEW_PROPOSAL,
-            customer_message=(
-                "The underlying account state changed. Review current information "
-                "before creating a new proposal."
-            ),
+            customer_message=customer_message,
         )
         self.reason = reason
         self.policy_evidence = policy_evidence
+
+    def safe_result(self) -> dict[str, Any]:
+        result = super().safe_result()
+        if self.refusal_facts is not None:
+            result["reason_code"] = self.reason
+            self._refusal_result(result)
+        return result
 
 
 @dataclass(frozen=True)

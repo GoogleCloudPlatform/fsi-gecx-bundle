@@ -254,7 +254,7 @@ def test_soft_consent_never_authorizes_a_hard_inquiry():
     [
         (None, {"inquiry_type": "HARD"}),
         (None, {"inquiry_type": "SOFT"}),
-        (consent("HARD"), {"inquiry_type": "HARD"}),  # consent_ref not in evidence
+        (consent("HARD"), {"inquiry_type": "HARD", "evidence_references": ["c" * 64]}),  # consent_ref not in evidence
         (consent("SOFT"), {"inquiry_type": "NONE", "evidence_references": None}),
     ],
 )
@@ -513,3 +513,181 @@ def test_tier_config_is_closed_and_bounded(tmp_path, mutate):
     path.write_text(json.dumps(config))
     with pytest.raises(ValidationError):
         load_credit_limit_tier_config(path)
+
+
+# --- Lane 2: customer-aware tiered provider ----------------------------------
+
+from services.decisioning import CreditSignals, tier_caps  # noqa: E402
+
+
+def signals(*, score=720, tier="PRIME", income=15000000, confirmed_days=30,
+            months=36, balance=0, late=False, last_increase_days=None,
+            product="Demo Card"):
+    return CreditSignals(
+        credit_score=score,
+        credit_tier=tier,
+        annual_income_minor=income,
+        income_confirmed_at=None if confirmed_days is None
+        else NOW - datetime.timedelta(days=confirmed_days),
+        opened_at=NOW - datetime.timedelta(days=months * 31),
+        last_limit_increase_at=None if last_increase_days is None
+        else NOW - datetime.timedelta(days=last_increase_days),
+        balance_minor=balance,
+        late_payment=late,
+        product_name=product,
+    )
+
+
+def facts(current, maximum):
+    return {
+        "account_id": str(uuid.uuid4()), "account_status": "ACTIVE",
+        "currency_code": "USD", "product_code": "DEMO",
+        "current_limit_minor": current, "product_active": True,
+        "minimum_limit_minor": 100000, "maximum_limit_minor": maximum,
+    }
+
+
+@pytest.mark.parametrize(
+    "persona,current,maximum,expected",
+    [
+        # A: PRIME_EXCELLENT, 10% utilization, 36 months, $150,000.
+        (dict(tier="PRIME_EXCELLENT", score=780, income=15000000, balance=100000,
+              months=36), 1000000, 3000000, (500000, 1500000, 1500000, 3000000)),
+        # B: NEAR_PRIME, 50% utilization, 12 months, $60,000.
+        (dict(tier="NEAR_PRIME", score=640, income=6000000, balance=250000,
+              months=12), 500000, 1500000, (10000, 510000, 750000, 1500000)),
+        # C: evo demo customer, PRIME/720/$95,000 at L = P = $15,000.
+        (dict(tier="PRIME", score=720, income=9500000), 1500000, 1500000,
+         (0, 1500000, 1500000, 1500000)),
+        # Late payment: no instant headroom; tiers still bounded.
+        (dict(tier="PRIME", late=True), 1000000, 3000000,
+         (0, 1000000, 1500000, 3000000)),
+    ],
+)
+def test_tier_caps_match_the_owner_approved_formula(persona, current, maximum, expected):
+    from services.decisioning import CheckedDecisionFacts
+
+    caps = tier_caps(
+        CheckedDecisionFacts.model_validate(facts(current, maximum)),
+        signals(**persona), TIERS.default, NOW,
+    )
+    assert caps.gate is None
+    assert (caps.headroom, caps.max_instantly_approvable, caps.soft_cap,
+            caps.hard_cap) == expected
+
+
+@pytest.mark.parametrize(
+    "persona,gate",
+    [
+        (dict(last_increase_days=10, confirmed_days=None), "COOLING_OFF_ACTIVE"),
+        (dict(confirmed_days=400, score=500), "INCOME_CONFIRMATION_REQUIRED"),
+        (dict(income=0), "INCOME_CONFIRMATION_REQUIRED"),
+        (dict(score=None), "INCOME_CONFIRMATION_REQUIRED"),
+        (dict(score=619), "CREDIT_PROFILE_INELIGIBLE"),
+        (dict(months=5), "CREDIT_PROFILE_INELIGIBLE"),
+    ],
+)
+def test_gates_apply_in_order_and_remove_headroom(persona, gate):
+    from services.decisioning import CheckedDecisionFacts
+
+    caps = tier_caps(
+        CheckedDecisionFacts.model_validate(facts(1000000, 3000000)),
+        signals(**persona), TIERS.default, NOW,
+    )
+    assert caps.gate == gate
+    assert caps.headroom == 0
+
+
+def tiered(amount, persona=None, *, consent_tier=None, scenario="STANDARD"):
+    provider = load_decisioning_provider(scenario=scenario, clock=lambda: NOW)
+    signal = signals(**(persona or {}))
+    req = DecisionRequest.model_validate({
+        **request().model_dump(mode="json"),
+        "requested_limit": usd(amount),
+        "signals_ref": signal.ref,
+        **({"inquiry_consent": consent(consent_tier)} if consent_tier else {}),
+    })
+    decision = provider.evaluate(req, signals=signal)
+    return validate_decision(
+        decision, req, provider.current_policy, NOW, tier_config=provider.tier_config
+    )
+
+
+# PRIME/720 persona on L=$10,000, P=$30,000: H=$3,000, soft_cap=$15,000, hard_cap=$30,000.
+@pytest.mark.parametrize(
+    "amount,outcome,inquiry",
+    [
+        (1300000, "APPROVED", "NONE"),
+        (1300100, "NEEDS_INFORMATION", "SOFT"),
+        (1500000, "NEEDS_INFORMATION", "SOFT"),
+        (1500100, "NEEDS_INFORMATION", "HARD"),
+        (3000000, "NEEDS_INFORMATION", "HARD"),
+    ],
+)
+def test_tier_routing_boundaries(amount, outcome, inquiry):
+    decision = tiered(amount)
+    assert (decision.outcome, decision.inquiry_type) == (outcome, inquiry)
+    if outcome == "NEEDS_INFORMATION":
+        assert decision.reason_codes == ("INQUIRY_CONSENT_REQUIRED",)
+        assert decision.refusal.max_instantly_approvable.amount_minor == 1300000
+        assert decision.refusal.soft_tier_cap.amount_minor == 1500000
+
+
+def test_soft_consent_never_authorizes_the_hard_tier_bureau():
+    decision = tiered(2000000, consent_tier="SOFT")
+    assert decision.outcome == "NEEDS_INFORMATION"
+    assert decision.inquiry_type == "HARD"
+    assert decision.approved_limit is None
+
+
+@pytest.mark.parametrize(
+    "amount,tier,persona,outcome,offer",
+    [
+        (1400000, "SOFT", dict(score=700), "APPROVED", None),
+        (1400000, "SOFT", dict(score=640), "COUNTEROFFER", 1300000),
+        (1400000, "SOFT", dict(score=640, late=True), "DECLINED", None),
+        (2000000, "HARD", dict(score=720), "APPROVED", None),
+        (2000000, "HARD", dict(score=680), "COUNTEROFFER", 1500000),
+        (2000000, "HARD", dict(score=640), "DECLINED", None),
+    ],
+)
+def test_simulated_bureau_outcomes(amount, tier, persona, outcome, offer):
+    decision = tiered(amount, persona, consent_tier=tier)
+    assert decision.outcome == outcome
+    assert decision.inquiry_type == tier
+    assert decision.evidence_references[-1] == CONSENT_REF
+    if offer:
+        assert decision.approved_limit.amount_minor == offer
+        assert decision.counteroffer.requested_limit.amount_minor == amount
+    if outcome == "DECLINED":
+        assert decision.reason_codes == ("BUREAU_DECLINED",)
+
+
+def test_income_cap_counteroffers_without_an_inquiry():
+    decision = tiered(2000000, dict(income=4000000, tier="PRIME_EXCELLENT"))
+    assert decision.outcome == "COUNTEROFFER"
+    assert decision.approved_limit.amount_minor == 1200000
+    assert decision.reason_codes == ("COUNTEROFFER_AVAILABLE", "INCOME_CAP_EXCEEDED")
+    assert decision.inquiry_type == "NONE"
+
+
+def test_operator_scenarios_still_override_customer_signals():
+    decision = tiered(1300000, scenario="DECLINE")
+    assert (decision.outcome, decision.reason_codes) == ("DECLINED", ("POLICY_DECLINED",))
+    assert decision.refusal is None
+
+
+def test_signals_must_match_the_bound_signals_ref():
+    provider = load_decisioning_provider(clock=lambda: NOW)
+    req = DecisionRequest.model_validate({
+        **request().model_dump(mode="json"), "signals_ref": signals().ref,
+    })
+    with pytest.raises(ValueError, match="not bound"):
+        provider.evaluate(req, signals=signals(income=1))
+
+
+def test_refusal_facts_never_carry_npi():
+    decision = tiered(1400000, dict(score=640), consent_tier="SOFT")
+    blob = json.dumps(decision.model_dump(mode="json"))
+    assert "credit_score" not in blob and "annual_income" not in blob
+    assert "PRIME" not in blob and "15000000" not in blob
