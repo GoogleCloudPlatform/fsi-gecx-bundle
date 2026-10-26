@@ -77,3 +77,9 @@ def test_non_retryable_refusal_is_never_blindly_retried(instruction) -> None:
         "if preparation returns success false with retryable false, do not call "
         "prepare_action_proposal again with the same amount or a guessed amount"
     ) in instruction
+
+
+def test_whole_dollar_speech_and_natural_offer_guidance(instruction) -> None:
+    assert 'Speak whole-dollar amounts naturally without pronouncing ".00"' in instruction
+    assert 'Never say "I have prepared a proposal"' in instruction
+    assert 'without using internal protocol words like "proposal"' in instruction

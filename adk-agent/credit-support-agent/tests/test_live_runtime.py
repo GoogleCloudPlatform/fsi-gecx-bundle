@@ -161,7 +161,20 @@ def test_run_config_sends_no_fields_gemini_3_8_live_removed(mode) -> None:
 
 @pytest.mark.parametrize(
     "transcript",
-    ["<no speech>", "{pause}", "<no speech>{pause}", " <noise> ", "", "   ", "{pause} ."],
+    [
+        "<no speech>",
+        "{pause}",
+        "<no speech>{pause}",
+        "no speech",
+        "No speech.",
+        "<no speech> no speech",
+        "pause",
+        "silence",
+        " <noise> ",
+        "",
+        "   ",
+        "{pause} .",
+    ],
 )
 def test_placeholder_only_transcripts_are_not_publishable(transcript) -> None:
     assert publishable_transcript(transcript) is None
@@ -169,7 +182,13 @@ def test_placeholder_only_transcripts_are_not_publishable(transcript) -> None:
 
 @pytest.mark.parametrize(
     "transcript",
-    ["Is there anything else I can help you with?", "OK", "Thanks {pause} goodbye", "5"],
+    [
+        "Is there anything else I can help you with?",
+        "No, that's all, thank you.",
+        "OK",
+        "Thanks {pause} goodbye",
+        "5",
+    ],
 )
 def test_real_transcripts_are_published_unchanged(transcript) -> None:
     assert publishable_transcript(transcript) == transcript

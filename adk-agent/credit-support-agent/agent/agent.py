@@ -26,6 +26,7 @@ from google.adk.tools.mcp_tool.mcp_session_manager import (
     create_mcp_http_client,
 )
 from google.adk.tools import FunctionTool, ToolContext
+from google.genai import types
 
 from agent.events import DataChannelEvent, INTERNAL_TOOL_RUNTIME_STATUS
 from agent.closeout import (
@@ -1451,12 +1452,20 @@ async def _after_tool_callback_impl(
             else PROPOSAL_ACTION_BY_TOOL.get(tool_name)
         )
         if proposal_action and structured.get("success") is True:
+            proposal_instruction = (
+                MONEY_LANGUAGE_INSTRUCTION
+                + " Explain every proposed consequence conversationally without saying "
+                "'proposal' and wait for a later customer confirmation."
+            )
             if "money_facts" in structured or "presentations" in structured:
                 from copy import deepcopy
                 tool_context.state["banking_proposal_presentation"] = deepcopy(structured)
                 selected = select_banking_presentation(structured, tool_context.state.get("voice_locale", "en-US"))
-                selected["model_instruction"] = MONEY_LANGUAGE_INSTRUCTION + " Explain every proposed consequence and wait for a later customer confirmation."
+                selected["model_instruction"] = proposal_instruction
                 tool_response["structuredContent"] = selected
+            else:
+                structured["model_instruction"] = proposal_instruction
+                tool_response["structuredContent"] = structured
             playbook = dict(tool_context.state.get("fraud_playbook") or {})
             proposal = create_pending_proposal(
                 proposal_id=str(structured.get("proposal_id") or ""),
@@ -1569,6 +1578,13 @@ async def _after_tool_callback_impl(
             "outcome": outcome,
         }
     )
+    if tool_name == "end_consultation":
+        tool.response_scheduling = (
+            types.FunctionResponseScheduling.SILENT
+            if isinstance(tool_response, dict)
+            and tool_response.get("status") == "SUCCESS"
+            else None
+        )
     if isinstance(tool_response, dict) and tool_response.get("status") == "SUCCESS":
         playbook = dict(tool_context.state.get("fraud_playbook") or {})
         if tool_name == "transfer_to_human":
