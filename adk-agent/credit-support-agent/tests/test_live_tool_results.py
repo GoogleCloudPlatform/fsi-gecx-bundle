@@ -192,9 +192,11 @@ def test_already_committed_is_a_successful_result() -> None:
 
 def test_session_instructions_carry_the_live_tool_retry_cap() -> None:
     assert LIVE_TOOL_RETRY_POLICY == (
-        "When a tool returns no results, inform the user before calling the tool "
-        "again. Never issue more than two consecutive function calls without "
-        "speaking back to the user."
+        "When a tool returns no results, a refusal, or an error, tell the customer "
+        "before calling a tool again. Never retry the same tool more than twice in "
+        "a row without speaking to the customer. The required playbook sequence "
+        "(discover_playbooks, record_playbook_decision, prepare_action_proposal) "
+        "is not a retry."
     )
     assert LIVE_TOOL_RETRY_POLICY in INSTRUCTION_TEXT
     assert LIVE_TOOL_RETRY_POLICY in compose_session_instruction(avatar_name="Nova")
