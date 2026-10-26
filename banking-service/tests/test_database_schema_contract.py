@@ -76,6 +76,7 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
         "a81d2c7f490b_bank_decision_binding.py",
         "b92e3d8a601c_versioned_playbook_repository.py",
         "c3a91f2b7d44_one_active_proposal_per_session.py",
+        "c5d1e8f2a417_credit_limit_decisioning.py",
         "d8e2f6a910bc_money_currency_invariants.py",
         "e1a7c4d2b9f0_playbook_change_requests.py",
         "e4b7c9a12f63_preferred_support_locale.py",
@@ -125,7 +126,7 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
 
 def test_current_schema_head_is_reconciled_before_banking_deploy() -> None:
     repository_root = Path(__file__).parents[2]
-    expected_head = "e1a7c4d2b9f0"
+    expected_head = "c5d1e8f2a417"
     from alembic.script import ScriptDirectory
 
     assert ScriptDirectory(
@@ -148,3 +149,73 @@ def test_current_schema_head_is_reconciled_before_banking_deploy() -> None:
     assert "voice_release_metadata.py inspect" in release_script
     assert "EXPECTED_ALEMBIC_REVISION=\"$(" in release_script
     assert ".database.alembic_heads" in release_script
+
+
+def _render_migration_sql(function_name: str) -> str:
+    import io
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    path = (
+        Path(__file__).parents[1]
+        / "alembic/versions/c5d1e8f2a417_credit_limit_decisioning.py"
+    )
+    spec = importlib.util.spec_from_file_location("credit_limit_decisioning", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    buffer = io.StringIO()
+    context = MigrationContext.configure(
+        dialect_name="postgresql", opts={"as_sql": True, "output_buffer": buffer}
+    )
+    module.op = Operations(context)
+    getattr(module, function_name)()
+    assert module.down_revision == "e1a7c4d2b9f0"
+    return buffer.getvalue()
+
+
+def test_credit_limit_decisioning_migration_is_schema_qualified_and_reversible() -> None:
+    upgrade = _render_migration_sql("upgrade")
+    assert (
+        "ALTER TABLE cards.credit_accounts ADD COLUMN last_limit_increase_at "
+        "TIMESTAMP WITH TIME ZONE" in upgrade
+    )
+    assert (
+        "ALTER TABLE kyc.user_credit_profiles ADD COLUMN income_confirmed_at "
+        "TIMESTAMP WITH TIME ZONE" in upgrade
+    )
+    assert "ALTER TABLE kyc.user_credit_profiles ADD COLUMN income_source VARCHAR(32)" in upgrade
+    assert "NOT NULL" not in upgrade
+    assert "ck_user_credit_profiles_income_confirmation_pair" in upgrade
+    assert "(income_confirmed_at IS NULL) = (income_source IS NULL)" in upgrade
+    assert "'SEEDED', 'CUSTOMER_STATED', 'DOCUMENT_VERIFIED'" in upgrade
+
+    downgrade = _render_migration_sql("downgrade")
+    for statement in (
+        "DROP CONSTRAINT ck_user_credit_profiles_income_confirmation_pair",
+        "DROP CONSTRAINT ck_user_credit_profiles_income_source",
+        "ALTER TABLE kyc.user_credit_profiles DROP COLUMN income_source",
+        "ALTER TABLE kyc.user_credit_profiles DROP COLUMN income_confirmed_at",
+        "ALTER TABLE cards.credit_accounts DROP COLUMN last_limit_increase_at",
+    ):
+        assert statement in downgrade
+
+
+def test_credit_limit_decisioning_columns_match_the_runtime_models() -> None:
+    from models.credit_card import CreditAccount
+    from models.kyc import UserCreditProfile
+
+    accounts = _column_contract(CreditAccount.__table__)
+    profiles = _column_contract(UserCreditProfile.__table__)
+    assert accounts["last_limit_increase_at"] == ("DATETIME", True)
+    assert profiles["income_confirmed_at"] == ("DATETIME", True)
+    assert profiles["income_source"] == ("VARCHAR(32)", True)
+    assert {
+        constraint.name
+        for constraint in UserCreditProfile.__table__.constraints
+        if constraint.__class__.__name__ == "CheckConstraint"
+    } >= {
+        "ck_user_credit_profiles_income_source",
+        "ck_user_credit_profiles_income_confirmation_pair",
+    }

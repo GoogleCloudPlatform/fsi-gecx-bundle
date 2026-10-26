@@ -1512,3 +1512,209 @@ def test_fraud_preparation_is_independent_of_decisioning_configuration(db_sessio
         raise ValueError("invalid decisioning config")
     monkeypatch.setattr(decisioning, "load_decisioning_provider", unavailable)
     assert _propose(ActionProposalService(db_session), fraud_alert).status == "PROPOSED"
+
+
+# --- Tiered credit-limit contracts: legacy wire and audit compatibility -----
+
+LEGACY_NOW = datetime.datetime(2026, 10, 2, tzinfo=datetime.timezone.utc)
+LEGACY_ACCOUNT = "4b0b3f4e-7c1a-4d55-9a37-1d2f0e6a9b11"
+# Computed against origin/main (e1baae9) before the tiered contract landed.
+# A change here means a CES/ADK-visible payload, a payload fingerprint, the
+# proposal-evidence.v1 snapshot or the proposal-audit.v2 event changed shape:
+# bump the contract version deliberately instead of updating these values.
+# (Lane 2's CREDIT_LIMIT_POLICY change will legitimately move all of them.)
+LEGACY_WIRE_DIGESTS = {
+    "decision_request": "70322006e36eea02718b3a862d4e9cc2e91b73be7c9f0204b3b49196f2ce3467",
+    "bank_decision": "dd90fe2a28b57bf4c8c29459b1d3df7ec4c4d891dcc9afecce1a310e10b9b771",
+    "payload_fingerprint": "4b58d8485b5b3aacf17ac05fc816511a3c6d54568ff25de275a1408d050308bc",
+    "evidence_snapshot": "82a9f4517197b8ddf3ea4bcc60c8060db2c2739e31bbc67f033101eb798715a6",
+    "audit_events": "511f76d2eb2607683f5d823ebac26354e1eadc27ae945950763284ff41e14265",
+}
+
+
+def _wire_sha(value):
+    import hashlib
+    import json
+
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def _legacy_credit_limit_proposal():
+    from models.money import Money
+    from services.credit_card import CREDIT_LIMIT_POLICY
+    from services.decisioning import DecisionRequest, digest, load_decisioning_provider
+    from services.proposal_definitions import load_action_registry
+    from services.proposal_lifecycle import canonical_payload
+
+    facts = {
+        "account_id": LEGACY_ACCOUNT, "account_status": "ACTIVE", "currency_code": "USD",
+        "product_code": "DEMO", "current_limit_minor": 1000000, "product_active": True,
+        "minimum_limit_minor": 100000, "maximum_limit_minor": 3000000,
+    }
+    requested = {"amount_minor": 1500000, "currency_code": "USD"}
+    request = DecisionRequest(
+        request_ref="a" * 64,
+        scope_ref="b" * 64,
+        input_ref=digest({"facts": facts, "requested_limit": requested}),
+        requested_limit=Money.model_validate(requested),
+        facts=facts,
+    )
+    decision = load_decisioning_provider(
+        scenario="STANDARD", clock=lambda: LEGACY_NOW
+    ).evaluate(request)
+    payload = {
+        "account_id": LEGACY_ACCOUNT,
+        "current_limit": {"amount_minor": 1000000, "currency_code": "USD"},
+        "proposed_limit": requested,
+        "increase_amount": {"amount_minor": 500000, "currency_code": "USD"},
+        "credit_limit_policy": dict(CREDIT_LIMIT_POLICY),
+        "eligibility_facts": facts,
+        "prepared_arithmetic": {
+            "available_credit_minor": 950000, "projected_available_credit_minor": 1450000,
+        },
+        "bank_decision": decision.model_dump(mode="json"),
+        "decision_request": request.model_dump(mode="json"),
+        "approval_semantics": "DEMO_APPROVED_ON_CONFIRMATION",
+    }
+    proposal = SimpleNamespace(
+        id=uuid.UUID("0e4c1d7a-3b8e-4f21-a6d9-5c2b7e1f9a30"), status="CONFIRMED",
+        invalidation_reason=None, customer_id=uuid.UUID("7d9e2a41-5f3c-4b8a-9e16-2c4d8f0b3a57"),
+        account_id=uuid.UUID(LEGACY_ACCOUNT), support_session_id="support-limit",
+        runtime_name="ADK_GEMINI_LIVE", runtime_session_id="runtime-support-limit",
+        reset_generation="reset-1", originating_customer_turn_id="turn-1",
+        catalog_snapshot_id="guidance-2.9",
+        customer_safe_summary="Increase your credit limit from $10,000.00 to $15,000.00.",
+        action_payload=payload, payload_fingerprint=canonical_payload(payload)[1],
+        confirmation_evidence={
+            "method": "EXPLICIT_VERBAL", "source": "MODEL_TOOL_INTENT",
+            "runtime_name": "ADK_GEMINI_LIVE", "runtime_session_id": "runtime-support-limit",
+            "presentation_turn_id": "assistant-1", "confirmation_turn_id": "turn-2",
+            "acknowledged_fact_keys": ["current_limit", "proposed_limit"],
+        },
+        result_payload=None, action_type="CREDIT_LIMIT_INCREASE",
+        contract_version="credit-limit-increase.v1",
+        presented_assistant_turn_id="assistant-1", confirmation_customer_turn_id="turn-2",
+        created_at=LEGACY_NOW, expires_at=LEGACY_NOW + datetime.timedelta(minutes=5),
+        presented_at=LEGACY_NOW, confirmed_at=LEGACY_NOW, commit_started_at=None,
+        completed_at=None,
+    )
+    spec = load_action_registry(None).published("credit-limit-increase")
+    return request, decision, proposal, spec
+
+
+class _NoPriorAuditEvents:
+    def query(self, *_):
+        return self
+
+    def filter(self, *_):
+        return self
+
+    def first(self):
+        return None
+
+
+def test_existing_credit_limit_wire_evidence_and_audit_are_byte_identical(monkeypatch):
+    from services.proposal_audit import record_transition
+    from services.proposal_evidence import transition_snapshot
+
+    monkeypatch.setenv("LOG_REFERENCE_SALT", "fsi-gecx-log-reference")
+    request, decision, proposal, spec = _legacy_credit_limit_proposal()
+    events = []
+    record_transition(
+        _NoPriorAuditEvents(), proposal, spec, "CONFIRMED",
+        recorder=lambda db, event_type, payload, **kw: events.append([event_type, payload, kw]),
+    )
+    assert {
+        "decision_request": _wire_sha(request.model_dump(mode="json")),
+        "bank_decision": _wire_sha(decision.model_dump(mode="json")),
+        "payload_fingerprint": proposal.payload_fingerprint,
+        "evidence_snapshot": _wire_sha(transition_snapshot(proposal, spec, "CONFIRMED")),
+        "audit_events": _wire_sha(events),
+    } == LEGACY_WIRE_DIGESTS
+
+
+@pytest.mark.parametrize("outcome", ["COUNTEROFFER", "INVENTED_OUTCOME"])
+def test_policy_refusal_for_new_or_unknown_outcome_uses_generic_safe_message(outcome):
+    from services.proposal_lifecycle import ProposalPolicyError
+    from services.proposal_protocol import PolicyEvaluationEvidence
+
+    error = ProposalPolicyError(
+        PolicyEvaluationEvidence(
+            policy={}, facts={}, requested_limit={},
+            reason_code="COUNTEROFFER_AVAILABLE", bank_decision={"outcome": outcome},
+        )
+    )
+    assert error.customer_message == (
+        "This requested credit-limit increase is not eligible under the demo policy."
+    )
+
+
+def _consent_evidence(inquiry_type="SOFT", **changes):
+    consent = {
+        "inquiry_type": inquiry_type,
+        "disclosure_version": f"{inquiry_type.lower()}-inquiry-disclosure.v1",
+        "consent_turn_id": "turn-7",
+    }
+    consent.update(changes)
+    return {"runtime_session_id": "runtime-1", "inquiry_consent": consent}
+
+
+def test_soft_consent_evidence_cannot_stand_in_for_hard_consent():
+    from services.decisioning import InquiryConsent
+    from services.proposal_evidence import consent_evidence_ref
+
+    soft_ref = consent_evidence_ref(_consent_evidence("SOFT"), "a" * 64)
+    hard_ref = consent_evidence_ref(_consent_evidence("HARD"), "a" * 64)
+    assert soft_ref != hard_ref
+    # Consent is bound to its originating request, not reusable in the session.
+    assert consent_evidence_ref(_consent_evidence("SOFT"), "b" * 64) != soft_ref
+    with pytest.raises(ValueError):
+        consent_evidence_ref(
+            _consent_evidence("HARD", disclosure_version="soft-inquiry-disclosure.v1"),
+            "a" * 64,
+        )
+    with pytest.raises(ValueError):
+        InquiryConsent(
+            inquiry_type="HARD",
+            disclosure_version="soft-inquiry-disclosure.v1",
+            consent_ref=soft_ref,
+        )
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        None,
+        {"runtime_session_id": "runtime-1"},
+        _consent_evidence("NONE"),
+        _consent_evidence(consent_turn_id=""),
+        _consent_evidence(secret="private"),
+        _consent_evidence(disclosure_version="soft-inquiry-disclosure.v1 plus anything"),
+        _consent_evidence(disclosure_version="soft-inquiry-disclosure.v1" + "0" * 5000),
+        {**_consent_evidence(), "runtime_session_id": None},
+    ],
+)
+def test_consent_evidence_requires_tier_disclosure_and_customer_turn(evidence):
+    from services.proposal_evidence import consent_evidence_ref
+
+    with pytest.raises(ValueError):
+        consent_evidence_ref(evidence, "a" * 64)
+    with pytest.raises(ValueError):
+        consent_evidence_ref(_consent_evidence(), "not-a-request-ref")
+
+
+def test_consent_evidence_is_archived_only_through_the_allowlist():
+    from services.proposal_evidence import EVIDENCE, project
+
+    projected = project(
+        {**_consent_evidence("HARD"), "inquiry_consent": {
+            **_consent_evidence("HARD")["inquiry_consent"], "secret": "private"}},
+        EVIDENCE,
+    )
+    assert projected["inquiry_consent"] == {
+        "inquiry_type": "HARD",
+        "disclosure_version": "hard-inquiry-disclosure.v1",
+        "consent_turn_id": "turn-7",
+    }

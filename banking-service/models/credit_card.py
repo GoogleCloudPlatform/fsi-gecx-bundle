@@ -78,6 +78,8 @@ class CreditAccount(Base):
     
     currency = Column(String(3), nullable=False, default="USD")
     opened_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    # Cooling-off anchor; set in the same transaction as an applied limit increase.
+    last_limit_increase_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     cards = relationship("IssuedCard", back_populates="account", cascade="all, delete-orphan")

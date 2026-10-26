@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "id": "credit-inquiry-consent",
+  "revision": 1,
+  "action_type": "CREDIT_INQUIRY_CONSENT",
+  "contract_version": "credit-inquiry-consent.v1",
+  "status": "CONTRACT_ONLY",
+  "authorization_policy": "general_acknowledgment.v1",
+  "payload_fields": [
+    "account_id",
+    "inquiry_type",
+    "disclosure_version",
+    "score_impact",
+    "origin_request_ref"
+  ],
+  "public_payload_fields": [
+    "inquiry_type",
+    "disclosure_version",
+    "score_impact"
+  ],
+  "required_facts": [
+    "inquiry_type",
+    "disclosure_version",
+    "score_impact"
+  ]
+}
