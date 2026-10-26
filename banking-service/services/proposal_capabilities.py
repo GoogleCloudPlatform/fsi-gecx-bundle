@@ -20,7 +20,7 @@ from models.action_proposal import ActionProposal
 from models.credit_card import CreditAccount, CreditProduct
 from models.money import MAX_MINOR, Money
 from services.money_presentation import project_money
-from services.proposal_protocol import PolicyEvaluationEvidence
+from services.proposal_protocol import PolicyEvaluationEvidence, RecoveryClass
 from models.fraud import FraudAlert
 from repositories.credit_card import CreditCardRepository
 from repositories.fraud import FraudAlertRepository
@@ -394,6 +394,11 @@ def prepare_credit_limit(
         raise ProposalScopeError(
             "Exactly one owned open credit account is required.",
             code="MULTIPLE_OPEN_CREDIT_ACCOUNTS",
+            recovery_class=RecoveryClass.ESCALATE,
+            customer_message=(
+                "More than one open credit card account is on file, so this "
+                "limit change can't be completed here. A specialist can help."
+            ),
         )
     if len(accounts) != 1:
         raise ProposalScopeError("Exactly one owned open credit account is required.")

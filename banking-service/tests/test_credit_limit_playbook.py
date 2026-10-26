@@ -293,20 +293,31 @@ def test_foreign_or_ambiguous_account_has_no_evidence_disclosure(credit_db):
     assert not snapshots(db)
 
 
+def sibling_account(account, status):
+    columns = {
+        column.name: getattr(account, column.name)
+        for column in CreditAccount.__table__.columns
+        if column.name not in {"id", "status"}
+    }
+    return CreditAccount(**columns, id=uuid.uuid4(), status=status)
+
+
+@pytest.mark.parametrize("status", ["FROZEN", "DELINQUENT"])
+def test_inactive_open_account_still_makes_scope_ambiguous(credit_db, status):
+    db, user, account, product = credit_db
+    db.add(sibling_account(account, status))
+    db.commit()
+    with pytest.raises(ProposalScopeError) as error:
+        prepare(db, user)
+    assert error.value.code == "MULTIPLE_OPEN_CREDIT_ACCOUNTS"
+    assert error.value.safe_result()["recovery_class"] == "ESCALATE"
+    assert not snapshots(db)
+
+
 def test_closed_accounts_do_not_make_the_open_account_ambiguous(credit_db):
     db, user, account, product = credit_db
     for _ in range(3):
-        db.add(
-            CreditAccount(
-                id=uuid.uuid4(),
-                customer_id=user.id,
-                product_code=product.product_code,
-                status="CLOSED",
-                currency="USD",
-                credit_limit_cents=1500000,
-                available_credit_cents=1500000,
-            )
-        )
+        db.add(sibling_account(account, "CLOSED"))
     db.commit()
     view = prepare(db, user)
     assert view["proposed_limit"] == {"amount_minor": 1500000, "currency_code": "USD"}
