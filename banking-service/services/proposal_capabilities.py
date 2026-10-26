@@ -20,7 +20,7 @@ from models.action_proposal import ActionProposal
 from models.credit_card import CreditAccount, CreditProduct
 from models.money import MAX_MINOR, Money
 from services.money_presentation import project_money
-from services.proposal_protocol import PolicyEvaluationEvidence
+from services.proposal_protocol import PolicyEvaluationEvidence, RecoveryClass
 from models.fraud import FraudAlert
 from repositories.credit_card import CreditCardRepository
 from repositories.fraud import FraudAlertRepository
@@ -380,15 +380,28 @@ def prepare_credit_limit(
     if inputs["currency_code"] not in {"USD", "MXN", "JPY", "BHD"}:
         raise ProposalError("Use a supported canonical currency code.")
     # No model-supplied account ID; fail closed on ambiguous owned scope.
+    # Closed accounts are terminal and never in scope; frozen or delinquent
+    # accounts stay in scope so policy evaluation can refuse them explicitly.
     accounts = (
         db.query(CreditAccount)
         .filter(
             CreditAccount.customer_id == customer_id,
+            CreditAccount.status != "CLOSED",
         )
         .all()
     )
+    if len(accounts) > 1:
+        raise ProposalScopeError(
+            "Exactly one owned open credit account is required.",
+            code="MULTIPLE_OPEN_CREDIT_ACCOUNTS",
+            recovery_class=RecoveryClass.ESCALATE,
+            customer_message=(
+                "More than one open credit card account is on file, so this "
+                "limit change can't be completed here. A specialist can help."
+            ),
+        )
     if len(accounts) != 1:
-        raise ProposalScopeError("Exactly one owned active credit account is required.")
+        raise ProposalScopeError("Exactly one owned open credit account is required.")
     account = accounts[0]
     product = (
         db.query(CreditProduct).filter_by(product_code=account.product_code).first()
