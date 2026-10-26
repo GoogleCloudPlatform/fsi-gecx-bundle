@@ -759,13 +759,70 @@ def _release_ordered_tool_gate() -> None:
         gate.release()
 
 
-def completed_proposal_result(state, tool_name: str, args: dict) -> dict | None:
+CONSEQUENTIAL_TOOLS = frozenset(
+    {
+        "unfreeze_card",
+        "reverse_overdraft_fee",
+        "resolve_fraud_alert",
+        "commit_action_proposal",
+        "commit_fraud_triage",
+        "commit_card_reissue",
+        "commit_wallet_provisioning",
+        "triage_customer_reported_fraud",
+    }
+)
+
+
+async def _reset_generation_block(tool_name: str, tool_context) -> dict | None:
+    """Return SESSION_INVALIDATED when demo data was reset mid-session."""
+    expected_generation = str(
+        tool_context.state.get("reset_generation_token")
+        or (tool_context.state.get("reset_generation") or {}).get("token")
+        or ""
+    )
+    try:
+        reset_headers = get_auth_headers()
+    except Exception:
+        reset_headers = {}
+    generation_valid, generation_reason = await validate_reset_generation(
+        banking_service_url=BANKING_SERVICE_URL,
+        headers=reset_headers,
+        expected_token=expected_generation,
+    )
+    if generation_valid:
+        return None
+    logger.warning(
+        "[CALLBACK] reset generation blocked consequential tool %s",
+        format_log_context(
+            state=tool_context.state,
+            tool_name=tool_name,
+            drift=generation_reason,
+        ),
+    )
+    return {
+        "success": False,
+        "isError": True,
+        "error": "SESSION_INVALIDATED",
+        "retryable": False,
+        "message": "This consultation is no longer current because demo data changed. Start a new consultation before taking action.",
+        "required_action": generation_reason,
+        "model_instruction": "Do not claim success or retry this tool in the current session.",
+    }
+
+
+def completed_proposal_result(
+    state, tool_name: str, args: dict, pending_proposal: dict | None = None
+) -> dict | None:
     """Short-circuit a commit/decide for a proposal already resolved here.
 
     Gemini 3.x Live can cancel a pending BLOCKING call when the customer
     speaks, while ADK 2.4 still finishes executing it. A re-issued commit must
     learn that the action already ran instead of being told it has not run,
     which would invite a fresh proposal and a duplicate banking action.
+
+    The completed result is returned only when no other proposal is pending.
+    If a different proposal is pending, the call is refused without success
+    and without touching the current proposal's evidence.
     """
     if tool_name not in PROPOSAL_DECISION_TOOLS:
         return None
@@ -775,6 +832,26 @@ def completed_proposal_result(state, tool_name: str, args: dict) -> dict | None:
     resolution = (state.get(COMPLETED_PROPOSALS_STATE_KEY) or {}).get(proposal_id)
     if not resolution:
         return None
+    pending_id = str((pending_proposal or {}).get("proposal_id") or "")
+    if pending_id and pending_id != proposal_id:
+        return {
+            "success": False,
+            "isError": False,
+            "status": "AUTHORIZATION_REQUIRED",
+            "action_completed": False,
+            "retryable": False,
+            "authorization_blocked": True,
+            "required_action": "EARLIER_PROPOSAL_ALREADY_RESOLVED",
+            "message": (
+                "That earlier proposal was already resolved. The current "
+                "proposal has NOT been committed."
+            ),
+            "model_instruction": (
+                "Do not tell the customer the current request is complete. "
+                "Present the current banking proposal and wait for a later "
+                "customer decision before using its opaque proposal id."
+            ),
+        }
     if resolution == COMMITTED_RESOLUTION:
         return {
             "success": True,
@@ -893,14 +970,23 @@ async def _before_tool_callback_impl(tool, args, tool_context, **kwargs) -> dict
             "retryable": False,
             "message": "Use the typed proposal and commit tools for this action.",
         }
-    ledger_result = completed_proposal_result(tool_context.state, tool_name, args)
+    ledger_result = completed_proposal_result(
+        tool_context.state,
+        tool_name,
+        args,
+        fraud_playbook.get("pending_proposal"),
+    )
     if ledger_result:
+        if tool_name in CONSEQUENTIAL_TOOLS:
+            invalidated_result = await _reset_generation_block(tool_name, tool_context)
+            if invalidated_result:
+                return invalidated_result
         logger.info(
             "[CALLBACK] resolved proposal short-circuited %s",
             format_log_context(
                 state=tool_context.state,
                 tool_name=tool_name,
-                drift=ledger_result["status"],
+                drift=ledger_result.get("required_action") or ledger_result["status"],
             ),
         )
         return ledger_result
@@ -1086,49 +1172,10 @@ async def _before_tool_callback_impl(tool, args, tool_context, **kwargs) -> dict
             }
             return blocked_result
         authorization_to_execute = authorization
-    consequential_tools = {
-        "unfreeze_card",
-        "reverse_overdraft_fee",
-            "resolve_fraud_alert",
-        "commit_action_proposal",
-        "commit_fraud_triage",
-        "commit_card_reissue",
-        "commit_wallet_provisioning",
-        "triage_customer_reported_fraud",
-    }
-    if tool_name in consequential_tools:
-        expected_generation = str(
-            tool_context.state.get("reset_generation_token")
-            or (tool_context.state.get("reset_generation") or {}).get("token")
-            or ""
-        )
-        try:
-            reset_headers = get_auth_headers()
-        except Exception:
-            reset_headers = {}
-        generation_valid, generation_reason = await validate_reset_generation(
-            banking_service_url=BANKING_SERVICE_URL,
-            headers=reset_headers,
-            expected_token=expected_generation,
-        )
-        if not generation_valid:
-            logger.warning(
-                "[CALLBACK] reset generation blocked consequential tool %s",
-                format_log_context(
-                    state=tool_context.state,
-                    tool_name=tool_name,
-                    drift=generation_reason,
-                ),
-            )
-            return {
-                "success": False,
-                "isError": True,
-                "error": "SESSION_INVALIDATED",
-                "retryable": False,
-                "message": "This consultation is no longer current because demo data changed. Start a new consultation before taking action.",
-                "required_action": generation_reason,
-                "model_instruction": "Do not claim success or retry this tool in the current session.",
-            }
+    if tool_name in CONSEQUENTIAL_TOOLS:
+        invalidated_result = await _reset_generation_block(tool_name, tool_context)
+        if invalidated_result:
+            return invalidated_result
     if tool_name == "transfer_to_human":
         fraud_playbook["escalation_status"] = "EXECUTING"
         fraud_playbook["escalation_reason"] = str(args.get("reason") or "").strip()
@@ -1343,7 +1390,13 @@ async def _after_tool_callback_impl(
     )
     success = tool_response_succeeded(tool_name, tool_response)
     expected_checkpoint = tool_response_is_expected_checkpoint(tool_response)
-    if expected_checkpoint:
+    # A ledger short-circuit made no banking call; it must not be reported as
+    # a new success, proposal event, or trace.
+    ledger_short_circuit = (
+        isinstance(tool_response, dict)
+        and tool_response.get("status") in PROPOSAL_LEDGER_STATUSES
+    )
+    if expected_checkpoint or ledger_short_circuit:
         outcome = "checkpoint"
     elif success:
         outcome = "success"
@@ -1367,7 +1420,7 @@ async def _after_tool_callback_impl(
         "type": "VOICE_DIAGNOSTICS",
         "tool_ms": round(duration_seconds * 1000, 3) if started_at is not None else None,
     })
-    if tool_name in PROPOSAL_DECISION_TOOLS:
+    if tool_name in PROPOSAL_DECISION_TOOLS and not ledger_short_circuit:
         _record_commit_proposal_event(
             state=tool_context.state,
             tool_name=tool_name,
@@ -1744,10 +1797,6 @@ async def _after_tool_callback_impl(
         playbook = dict(tool_context.state.get("fraud_playbook") or {})
         authorization = playbook.get("workflow_authorization") or {}
         pending_proposal = playbook.get("pending_proposal") or {}
-        ledger_short_circuit = (
-            isinstance(tool_response, dict)
-            and tool_response.get("status") in PROPOSAL_LEDGER_STATUSES
-        )
         if (
             tool_name in COMMIT_ACTION_BY_TOOL
             and not ledger_short_circuit

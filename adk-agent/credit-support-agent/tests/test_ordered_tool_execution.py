@@ -370,6 +370,104 @@ async def test_uncommitted_proposal_never_short_circuits(live_session):
 
 
 @pytest.mark.asyncio
+async def test_ledgered_id_never_succeeds_while_a_different_proposal_is_pending(live_session):
+    banking = FakeBanking()
+    current = presented_limit_proposal()
+    current["proposal_id"] = "proposal-limit-2"
+    context, tools = await invocation(
+        [FakeMcpTool("commit_action_proposal", banking)],
+        {
+            "fraud_playbook": {"pending_proposal": current},
+            agent.COMPLETED_PROPOSALS_STATE_KEY: {PROPOSAL_ID: agent.COMMITTED_RESOLUTION},
+        },
+    )
+    # A later customer turn exists, so the stale call must not attest P2.
+    agent.record_customer_turn(
+        "confirmation", event_id="customer-confirmation", observed_at_epoch_s=time.time() + 1
+    )
+
+    responses = await run_tool_call_message(
+        context, tools, ("commit_action_proposal", {"proposal_id": PROPOSAL_ID})
+    )
+
+    refused = responses["call-0-commit_action_proposal"]
+    assert refused["success"] is False
+    assert refused["isError"] is False
+    assert refused["retryable"] is False
+    assert refused["action_completed"] is False
+    assert "NOT been committed" in refused["message"]
+    assert banking.calls("commit_action_proposal") == 0
+    pending = context.session.state["fraud_playbook"]["pending_proposal"]
+    assert pending == current
+
+
+@pytest.mark.asyncio
+async def test_invalid_reset_generation_wins_over_a_ledger_hit(live_session, monkeypatch):
+    async def generation_is_invalid(**kwargs):
+        return False, "RESET_GENERATION_CHANGED"
+
+    monkeypatch.setattr(agent, "validate_reset_generation", generation_is_invalid)
+    banking = FakeBanking()
+    context, tools = await invocation(
+        [FakeMcpTool("commit_action_proposal", banking)],
+        {agent.COMPLETED_PROPOSALS_STATE_KEY: {PROPOSAL_ID: agent.COMMITTED_RESOLUTION}},
+    )
+
+    responses = await run_tool_call_message(
+        context, tools, ("commit_action_proposal", {"proposal_id": PROPOSAL_ID})
+    )
+
+    result = responses["call-0-commit_action_proposal"]
+    assert result["error"] == "SESSION_INVALIDATED"
+    assert result["success"] is False
+    assert banking.calls("commit_action_proposal") == 0
+
+
+@pytest.mark.asyncio
+async def test_short_circuited_duplicate_emits_no_success_telemetry_or_trace(
+    live_session, monkeypatch
+):
+    banking = FakeBanking()
+    context, tools = await invocation(
+        [FakeMcpTool("commit_action_proposal", banking)],
+        {"fraud_playbook": {"pending_proposal": presented_limit_proposal()}},
+    )
+    agent.record_customer_turn(
+        "confirmation", event_id="customer-confirmation", observed_at_epoch_s=time.time() + 1
+    )
+    await run_tool_call_message(context, tools, ("commit_action_proposal", {"proposal_id": PROPOSAL_ID}))
+
+    events: list[dict] = []
+    tool_outcomes: list[str] = []
+    proposal_events: list[dict] = []
+    monkeypatch.setattr(
+        agent, "record_tool_completed", lambda tool, outcome, seconds: tool_outcomes.append(outcome)
+    )
+    monkeypatch.setattr(
+        agent, "record_action_proposal_event", lambda **kwargs: proposal_events.append(kwargs)
+    )
+    token = agent.session_event_callback_var.set(events.append)
+    try:
+        responses = await run_tool_call_message(
+            context, tools, ("commit_action_proposal", {"proposal_id": PROPOSAL_ID})
+        )
+    finally:
+        agent.session_event_callback_var.reset(token)
+
+    assert responses["call-0-commit_action_proposal"]["status"] == "ALREADY_COMMITTED"
+    assert tool_outcomes == ["checkpoint"]
+    assert proposal_events == []
+    assert not [
+        event for event in events
+        if event.get("type") == agent.DataChannelEvent.PROPOSAL_PROTOCOL_TRACE.value
+    ]
+    assert [
+        event["outcome"] for event in events
+        if event.get("type") == agent.INTERNAL_TOOL_RUNTIME_STATUS
+    ] == ["checkpoint"]
+
+
+@pytest.mark.asyncio
 async def test_failed_commit_is_not_ledgered(live_session):
     class RefusingBanking(FakeBanking):
         def result(self, name, args):

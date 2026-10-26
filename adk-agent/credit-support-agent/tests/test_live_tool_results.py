@@ -30,7 +30,6 @@ from agent.instructions import (
 from agent.log_safety import (
     tool_response_is_domain_refusal,
     tool_response_is_expected_checkpoint,
-    tool_response_succeeded,
 )
 from agent.terminal_outcome import TerminalOutcome, ToolFailureTracker
 
@@ -62,8 +61,8 @@ def tool_context(**state) -> SimpleNamespace:
         ("commit_action_proposal", {"proposal_id": "p-1"}, {}, "AUTHORIZATION_REQUIRED"),
         ("prepare_action_proposal", {"playbook_id": "x"}, {}, "PLAYBOOK_DECISION_REQUIRED"),
         (
-            "commit_action_proposal",
-            {"proposal_id": "p-1"},
+            "decide_action_proposal",
+            {"proposal_id": "p-1", "decision": "DECLINE"},
             {"completed_proposals": {"p-1": "COMMITTED"}},
             "ALREADY_COMMITTED",
         ),
@@ -182,12 +181,6 @@ async def test_bank_refusal_does_not_end_session_as_tool_failure(
 )
 def test_runtime_checkpoints_are_not_tool_failures(status) -> None:
     assert tool_response_is_expected_checkpoint({"success": False, "status": status})
-
-
-def test_already_committed_is_a_successful_result() -> None:
-    assert tool_response_succeeded(
-        "commit_action_proposal", {"success": True, "status": "ALREADY_COMMITTED"}
-    )
 
 
 def test_session_instructions_carry_the_live_tool_retry_cap() -> None:
