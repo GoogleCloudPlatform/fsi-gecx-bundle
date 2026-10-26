@@ -380,15 +380,23 @@ def prepare_credit_limit(
     if inputs["currency_code"] not in {"USD", "MXN", "JPY", "BHD"}:
         raise ProposalError("Use a supported canonical currency code.")
     # No model-supplied account ID; fail closed on ambiguous owned scope.
+    # Closed accounts are terminal and never in scope; frozen or delinquent
+    # accounts stay in scope so policy evaluation can refuse them explicitly.
     accounts = (
         db.query(CreditAccount)
         .filter(
             CreditAccount.customer_id == customer_id,
+            CreditAccount.status != "CLOSED",
         )
         .all()
     )
+    if len(accounts) > 1:
+        raise ProposalScopeError(
+            "Exactly one owned open credit account is required.",
+            code="MULTIPLE_OPEN_CREDIT_ACCOUNTS",
+        )
     if len(accounts) != 1:
-        raise ProposalScopeError("Exactly one owned active credit account is required.")
+        raise ProposalScopeError("Exactly one owned open credit account is required.")
     account = accounts[0]
     product = (
         db.query(CreditProduct).filter_by(product_code=account.product_code).first()

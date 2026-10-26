@@ -287,8 +287,41 @@ def test_foreign_or_ambiguous_account_has_no_evidence_disclosure(credit_db):
     )
     db.add(other)
     db.commit()
-    with pytest.raises(ProposalScopeError):
+    with pytest.raises(ProposalScopeError) as error:
         prepare(db, user)
+    assert error.value.code == "MULTIPLE_OPEN_CREDIT_ACCOUNTS"
+    assert not snapshots(db)
+
+
+def test_closed_accounts_do_not_make_the_open_account_ambiguous(credit_db):
+    db, user, account, product = credit_db
+    for _ in range(3):
+        db.add(
+            CreditAccount(
+                id=uuid.uuid4(),
+                customer_id=user.id,
+                product_code=product.product_code,
+                status="CLOSED",
+                currency="USD",
+                credit_limit_cents=1500000,
+                available_credit_cents=1500000,
+            )
+        )
+    db.commit()
+    view = prepare(db, user)
+    assert view["proposed_limit"] == {"amount_minor": 1500000, "currency_code": "USD"}
+    assert snapshots(db)[0]["offer"]["facts"]["eligibility_facts"]["account_id"] == str(
+        account.id
+    )
+
+
+def test_only_closed_accounts_are_out_of_scope(credit_db):
+    db, user, account, product = credit_db
+    account.status = "CLOSED"
+    db.commit()
+    with pytest.raises(ProposalScopeError) as error:
+        prepare(db, user)
+    assert error.value.code == "PROPOSAL_SCOPE_MISMATCH"
     assert not snapshots(db)
 
 
