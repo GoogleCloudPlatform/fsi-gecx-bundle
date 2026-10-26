@@ -72,7 +72,8 @@ def change_voice_language(state, requested_locale: str, *, runtime_unavailable=F
     changed = selected != state.get("voice_locale", "en-US")
     fallback = selected != requested_locale
     if changed or fallback:
-        if pending: playbook["pending_proposal"] = require_re_presentation(pending)
+        if pending:
+            playbook["pending_proposal"] = require_re_presentation(pending)
         if playbook.get("workflow_authorization"):
             playbook["workflow_authorization"] = invalidate_workflow_authorization(
                 playbook["workflow_authorization"], reason="LANGUAGE_CHANGED")

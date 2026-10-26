@@ -61,6 +61,8 @@ def configure_runtime_logging(level: int = logging.INFO) -> None:
 EXPECTED_TOOL_CHECKPOINT_STATUSES = {
     "AUTHORIZATION_REQUIRED",
     "SESSION_CLOSE_CONFIRMATION_REQUIRED",
+    "PLAYBOOK_DECISION_REQUIRED",
+    "PROPOSAL_ALREADY_RESOLVED",
 }
 
 
@@ -166,4 +168,32 @@ def tool_response_is_expected_checkpoint(tool_response: Any) -> bool:
         isinstance(tool_response, dict)
         and tool_response.get("status") in EXPECTED_TOOL_CHECKPOINT_STATUSES
         and tool_response.get("isError") is not True
+    )
+
+
+# Transient banking failures the runtime retries; unrecovered, they remain a
+# tool failure rather than a policy answer.
+TRANSIENT_RECOVERY_CLASSES = {"RETRY_SAME_PROPOSAL"}
+
+
+def tool_response_is_domain_refusal(tool_response: Any) -> bool:
+    """Return whether banking refused the request as an expected domain outcome.
+
+    A refusal is a structured ``success: false`` result that carries a bank
+    ``recovery_class``. Transport errors, MCP ``isError`` results, and
+    transient retry classes are not refusals.
+    """
+    if not isinstance(tool_response, dict):
+        return False
+    if tool_response.get("isError") is True:
+        return False
+    structured = tool_response.get("structuredContent")
+    result = structured if isinstance(structured, dict) else tool_response
+    if result.get("isError") is True or result.get("success") is not False:
+        return False
+    recovery_class = result.get("recovery_class")
+    return (
+        isinstance(recovery_class, str)
+        and bool(recovery_class.strip())
+        and recovery_class not in TRANSIENT_RECOVERY_CLASSES
     )

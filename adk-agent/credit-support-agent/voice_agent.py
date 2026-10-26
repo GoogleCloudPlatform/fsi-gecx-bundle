@@ -38,9 +38,14 @@ from agent.agent import (
     record_customer_turn,
     reset_session_context,
 )
-from agent.avatar_runtime import run_with_avatar_fallback
+from agent.avatar_runtime import LIVE_AVATAR_VIDEO_FORMAT, run_with_avatar_fallback
 from agent.instructions import compose_session_instruction
-from agent.live_runtime import build_live_run_config, env_flag, normalize_live_event
+from agent.live_runtime import (
+    build_live_run_config,
+    env_flag,
+    normalize_live_event,
+    publishable_transcript,
+)
 from agent.guidance_snapshot import guidance_observability_payload
 from agent.media_bridge import BufferedAudioPlayout, SileroVADTracker, discard_audio_queue
 from agent.log_safety import configure_runtime_logging, stable_log_reference
@@ -831,9 +836,8 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 vh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 240
                 cap.release()
             else:
-                # Google 1P Live Avatar native resolution (scaled for performance and smoothness)
-                vw = 352
-                vh = 640
+                vw = LIVE_AVATAR_VIDEO_FORMAT.width
+                vh = LIVE_AVATAR_VIDEO_FORMAT.height
             
             video_source = rtc.VideoSource(vw, vh)
             local_video_track = rtc.LocalVideoTrack.create_video_track("agent-video", video_source)
@@ -841,7 +845,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 source=rtc.TrackSource.SOURCE_CAMERA,
                 video_encoding=rtc.VideoEncoding(
                     max_bitrate=1_500_000,
-                    max_framerate=30
+                    max_framerate=30 if mock_avatar_enabled else LIVE_AVATAR_VIDEO_FORMAT.fps
                 )
             )
             await room.local_participant.publish_track(local_video_track, video_publish_options)
@@ -970,26 +974,22 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                                     logger.warning("ffmpeg_proc or ffmpeg_proc.stdin is not available!")
                             
                 # Broadcast transcriptions over data channel for UI display when complete
-                if (
-                    live_event.input_transcript is not None
-                    and live_event.input_transcript.strip()
-                ):
-                    if live_event.input_transcript in pending_typed_transcripts:
-                        pending_typed_transcripts.remove(live_event.input_transcript)
+                input_transcript = publishable_transcript(live_event.input_transcript)
+                if input_transcript is not None:
+                    if input_transcript in pending_typed_transcripts:
+                        pending_typed_transcripts.remove(input_transcript)
                     else:
                         on_agent_event({
                             "type": "TRANSCRIPT",
                             "author": "user",
-                            "text": live_event.input_transcript
+                            "text": input_transcript
                         })
-                if (
-                    live_event.output_transcript is not None
-                    and live_event.output_transcript.strip()
-                ):
+                output_transcript = publishable_transcript(live_event.output_transcript)
+                if output_transcript is not None:
                     on_agent_event({
                         "type": "TRANSCRIPT",
                         "author": "agent",
-                        "text": live_event.output_transcript
+                        "text": output_transcript
                     })
                     if is_session_end_requested():
                         logger.info("Session end requested via end_consultation tool %s", session_log_context(room_name, customer_id, session_id, mode))
@@ -1151,12 +1151,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 try:
                     ffmpeg_proc = await asyncio.create_subprocess_exec(
                         'ffmpeg',
-                        '-threads', '1',
-                        '-f', 'mp4',
-                        '-i', 'pipe:0',
-                        '-vf', 'scale=352:640',
-                        '-map', '0:v', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-',
-                        '-map', '0:a', '-f', 's16le', '-ar', '24000', '-ac', '1', f'tcp://127.0.0.1:{audio_port}',
+                        *LIVE_AVATAR_VIDEO_FORMAT.decoder_args(audio_port),
                         stdin=asyncio.subprocess.PIPE,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
@@ -1200,10 +1195,11 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                 asyncio.create_task(log_ffmpeg_stderr())
             
             async def read_ffmpeg_frames_loop():
-                vw, vh = 352, 640
-                frame_size = vw * vh * 4
+                vw = LIVE_AVATAR_VIDEO_FORMAT.width
+                vh = LIVE_AVATAR_VIDEO_FORMAT.height
+                frame_size = LIVE_AVATAR_VIDEO_FORMAT.frame_bytes
                 pts_us = 0
-                frame_delay = 1.0 / 30.0
+                frame_interval_us = LIVE_AVATAR_VIDEO_FORMAT.frame_interval_us
                 try:
                     logger.info("FFmpeg frame reader task started.")
                     frame_count = 0
@@ -1226,7 +1222,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
                             type=proto_video.VideoBufferType.RGBA,
                             data=raw_frame
                         )
-                        pts_us += int(frame_delay * 1_000_000)
+                        pts_us += frame_interval_us
                         if video_source:
                             video_source.capture_frame(lk_frame, timestamp_us=pts_us)
                             if frame_count % 30 == 0 or frame_count <= 5:

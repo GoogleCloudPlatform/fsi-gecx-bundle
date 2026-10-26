@@ -19,9 +19,19 @@ RESOURCE_DIR = Path(__file__).resolve().parent / "resources"
 BASE_INSTRUCTION_PATH = RESOURCE_DIR / "instruction.txt"
 FLOWS_DIR = RESOURCE_DIR / "flows"
 
+# Gemini 3.x Live calls tools asynchronously by default; cap silent retries.
+LIVE_TOOL_RETRY_POLICY = (
+    "When a tool returns no results, a refusal, or an error, tell the customer "
+    "before calling a tool again. Never retry the same tool more than twice in "
+    "a row without speaking to the customer. The required playbook sequence "
+    "(discover_playbooks, record_playbook_decision, prepare_action_proposal) "
+    "is not a retry."
+)
+
 
 def load_base_instruction() -> str:
-    return BASE_INSTRUCTION_PATH.read_text(encoding="utf-8")
+    base = BASE_INSTRUCTION_PATH.read_text(encoding="utf-8").rstrip()
+    return f"{base}\n\n{LIVE_TOOL_RETRY_POLICY}\n"
 
 
 def load_flow_instruction(flow_name: str) -> str:

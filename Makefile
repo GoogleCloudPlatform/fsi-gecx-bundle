@@ -43,8 +43,8 @@ SCRAPI_SCENARIO ?= checkpoint
 SCRAPI_MODALITY ?= audio
 SCRAPI_OUTPUT ?= $(SCRAPI_ARTIFACT_DIR)/closeout.json
 SCRAPI_DEPLOYMENT_ID ?=
-VOICE_AGENT_AUDIO_MODEL ?= publishers/google/models/gemini-live-2.5-flash-native-audio
-VOICE_AGENT_VIDEO_MODEL ?= publishers/google/models/gemini-3.1-flash-live-preview-04-2026
+VOICE_AGENT_AUDIO_MODEL ?= publishers/google/models/gemini-3.8-live
+VOICE_AGENT_VIDEO_MODEL ?= publishers/google/models/gemini-3.8-live
 BRANCH ?= $(shell git branch --show-current)
 
 LOCAL_DB_PORT ?= 5432
@@ -615,7 +615,7 @@ docker-run-credit-support-agent: ## Run the credit-support-agent container local
 	-e PORT=8088 \
 	-e BANKING_SERVICE_URL="http://host.docker.internal:8080" \
 	-e LIVEKIT_URL="ws://host.docker.internal:7880" \
-	-e VOICE_AGENT_AUDIO_MODEL="publishers/google/models/gemini-live-2.5-flash-native-audio" \
-	-e VOICE_AGENT_VIDEO_MODEL="publishers/google/models/gemini-live-2.5-flash-native-audio" \
+	-e VOICE_AGENT_AUDIO_MODEL="publishers/google/models/gemini-3.8-live" \
+	-e VOICE_AGENT_VIDEO_MODEL="publishers/google/models/gemini-3.8-live" \
 	-p 8088:8088 \
 	credit-support-agent-test

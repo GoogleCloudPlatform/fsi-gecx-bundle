@@ -14,11 +14,17 @@
 
 from types import SimpleNamespace
 
+import pytest
 from google.adk.agents.run_config import StreamingMode
 from google.adk.tools.base_tool import BaseTool
+from google.adk.utils import model_name_utils
 from google.genai import types
 
-from agent.live_runtime import build_live_run_config, normalize_live_event
+from agent.live_runtime import (
+    build_live_run_config,
+    normalize_live_event,
+    publishable_transcript,
+)
 from agent.tooling import configure_live_tool
 
 
@@ -141,3 +147,38 @@ def test_configure_live_tool_can_interrupt_preview_avatar_with_result() -> None:
     )
 
     assert tool.response_scheduling is types.FunctionResponseScheduling.INTERRUPT
+
+
+@pytest.mark.parametrize("mode", ["audio", "video"])
+def test_run_config_sends_no_fields_gemini_3_8_live_removed(mode) -> None:
+    config = build_live_run_config(
+        mode=mode, avatar_name="Sam", voice_name="Aoede", language_code="en-US"
+    )
+
+    assert config.enable_affective_dialog is None
+    assert config.proactivity is None
+
+
+@pytest.mark.parametrize(
+    "transcript",
+    ["<no speech>", "{pause}", "<no speech>{pause}", " <noise> ", "", "   ", "{pause} ."],
+)
+def test_placeholder_only_transcripts_are_not_publishable(transcript) -> None:
+    assert publishable_transcript(transcript) is None
+
+
+@pytest.mark.parametrize(
+    "transcript",
+    ["Is there anything else I can help you with?", "OK", "Thanks {pause} goodbye", "5"],
+)
+def test_real_transcripts_are_published_unchanged(transcript) -> None:
+    assert publishable_transcript(transcript) == transcript
+
+
+def test_gemini_3_8_live_streams_tool_calls_immediately() -> None:
+    # ADK yields 3.x Live tool calls without waiting for turn_complete, which
+    # 3.x only sends after the tool response; otherwise the session deadlocks.
+    assert model_name_utils._is_gemini_3_x_live("publishers/google/models/gemini-3.8-live")
+    assert not model_name_utils._is_gemini_3_x_live(
+        "publishers/google/models/gemini-live-2.5-flash-native-audio"
+    )
