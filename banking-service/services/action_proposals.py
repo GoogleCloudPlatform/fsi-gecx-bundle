@@ -121,7 +121,38 @@ class ActionProposalService(ProposalLifecycleEngine):
                 proposal.invalidation_reason = "PROPOSAL_EXPIRED"
                 proposal.completed_at = utcnow()
                 self._record_disposition_event(proposal)
+        if customer_id and getattr(exc, "adverse_action", None):
+            self._record_adverse_action_notice(customer_id, exc.adverse_action)
         record_rejection(self.db, identity, context, operation, exc, request, customer_id=customer_id)
+
+    def _record_adverse_action_notice(self, customer_id, notice):
+        """Durable ECOA/Reg B adverse-action notice in the customer's secure inbox.
+
+        Written in the rejection transaction (the refused operation itself was
+        rolled back). The message id is derived from the bank decision, so a
+        retried request never creates a duplicate notice. Content is built
+        from bounded refusal facts only.
+        """
+        import uuid
+
+        from models.identity import UserSecureMessage
+
+        message_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"credit-limit-notice:{notice['key']}"))
+        if self.db.query(UserSecureMessage).filter_by(message_id=message_id).first():
+            return
+        self.db.add(
+            UserSecureMessage(
+                message_id=message_id,
+                user_id=customer_id,
+                sender="bank",
+                category="CREDIT_LIMIT_DECISION",
+                message=f"{notice['subject']}\n\n{notice['body']}",
+                thread_id=f"credit-limit-decision-{message_id}",
+                is_user_read=False,
+                is_agent_read=True,
+            )
+        )
+        self.db.flush()
 
     @audited_request("PREPARE")
     def prepare_playbook_for_identity(

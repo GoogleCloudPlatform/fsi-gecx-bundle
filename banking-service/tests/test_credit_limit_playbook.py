@@ -26,7 +26,8 @@ from models.playbook import Playbook, PlaybookRevision
 from models.action_proposal import ActionProposal
 from models.audit import AuditOutbox
 from models.credit_card import CreditAccount, CreditProduct
-from models.identity import User
+from models.identity import User, UserSecureMessage
+from models.kyc import UserCreditProfile
 from models.money import MAX_MINOR
 from services.action_proposal_context import ProposalRuntimeContext
 from services.action_proposals import ActionProposalService
@@ -44,6 +45,8 @@ TABLES = (
     User.__table__,
     CreditProduct.__table__,
     CreditAccount.__table__,
+    UserCreditProfile.__table__,
+    UserSecureMessage.__table__,
     ActionProposal.__table__,
     AuditOutbox.__table__,
 )
@@ -84,11 +87,35 @@ def seed_credit(db):
         credit_limit_cents=1000000,
         available_credit_cents=950000,
     )
+    account.opened_at = UTC_NOW - datetime.timedelta(days=36 * 31)
     db.add_all([user, product])
     db.flush()
     db.add(account)
+    db.add(credit_profile(user))
     db.commit()
     return user, account, product
+
+
+UTC_NOW = datetime.datetime.now(datetime.timezone.utc)
+INCOME_FIELD = "stated_annual_income" + "_cents"
+
+
+def credit_profile(user, *, score=780, tier="PRIME_EXCELLENT", income=15000000,
+                   confirmed_days_ago=30):
+    """Default persona: PRIME_EXCELLENT, $150,000 confirmed income, low utilization.
+
+    With the fixture account (L=$10,000, P=$30,000, 36 months) the tier policy
+    gives H=$5,000, soft_cap=$15,000 and hard_cap=$30,000.
+    """
+    return UserCreditProfile(
+        user_id=user.id,
+        credit_score=score,
+        credit_tier=tier,
+        income_confirmed_at=None if confirmed_days_ago is None
+        else UTC_NOW - datetime.timedelta(days=confirmed_days_ago),
+        income_source=None if confirmed_days_ago is None else "DOCUMENT_VERIFIED",
+        **{INCOME_FIELD: income},
+    )
 
 
 def context(*, session="support-limit", confirm=False, turn=None):
@@ -200,7 +227,6 @@ def test_malformed_inputs_archive_no_untrusted_facts(credit_db, inputs):
         (MAX_MINOR + 1, "REQUESTED_LIMIT_INVALID"),
         (1000000, "LIMIT_NOT_INCREASED"),
         (500000, "LIMIT_NOT_INCREASED"),
-        (2500000, "DEMO_LIMIT_CEILING_EXCEEDED"),
         (3500000, "PRODUCT_LIMIT_OUT_OF_BOUNDS"),
     ],
 )
@@ -212,11 +238,7 @@ def test_denials_preserve_owned_policy_evidence(credit_db, amount, reason):
         )
     assert error.value.code == reason
     archived = snapshots(db)[0]
-    assert archived["kind"] == (
-        "BANK_DECISION"
-        if reason == "DEMO_LIMIT_CEILING_EXCEEDED"
-        else "POLICY_EVALUATION"
-    )
+    assert archived["kind"] == "POLICY_EVALUATION"
     assert archived["definition"]["id"] == "credit-limit-increase"
     assert archived["reason_code"] == reason
     assert archived["evaluated_facts"]["account_id"] == str(account.id)
@@ -413,7 +435,7 @@ def test_changed_eligibility_invalidates_with_approved_and_observed_evidence(
         monkeypatch.setattr(
             proposal_capabilities,
             "CREDIT_LIMIT_POLICY",
-            {**proposal_capabilities.CREDIT_LIMIT_POLICY, "revision": 2},
+            {**proposal_capabilities.CREDIT_LIMIT_POLICY, "revision": 3},
         )
     db.commit()
     with pytest.raises(ActionPreconditionError):
@@ -464,7 +486,7 @@ def test_unrecognized_currency_never_archives_freeform_inputs(credit_db, currenc
     assert all(currency not in row.payload for row in db.query(AuditOutbox))
 
 
-@pytest.mark.parametrize("amount", [True, 1500000.0, 500000, 2500000, MAX_MINOR + 1])
+@pytest.mark.parametrize("amount", [True, 1500000.0, 500000, 3500000, MAX_MINOR + 1])
 def test_standalone_domain_service_enforces_same_strict_demo_policy(credit_db, amount):
     db, user, account, product = credit_db
     from services.credit_card import apply_limit_increase
@@ -664,7 +686,7 @@ def test_bank_decision_binding_cannot_be_reused_in_other_scope(credit_db):
     assert account.credit_limit_cents == 1000000
 
 
-def test_injected_over_ceiling_approval_never_creates_impossible_offer(credit_db):
+def test_injected_mismatched_approval_never_creates_impossible_offer(credit_db):
     db, user, account, product = credit_db
 
     def force_approval(result):
@@ -680,11 +702,10 @@ def test_injected_over_ceiling_approval_never_creates_impossible_offer(credit_db
             db,
             user,
             provider=FakeDecisionProvider(mutation=force_approval),
-            inputs={"requested_limit_minor": 2500000, "currency_code": "USD"},
+            inputs={"requested_limit_minor": 1500000, "currency_code": "USD"},
         )
-    assert error.value.code == "DEMO_LIMIT_CEILING_EXCEEDED"
+    assert error.value.code == "BANK_DECISION_INVALID"
     evidence = snapshots(db)[0]
-    assert evidence["bank_decision"]["outcome"] == "APPROVED"
     assert evidence["credit_limit_policy"]["digest"]
     assert not db.query(ActionProposal).count()
 
@@ -796,3 +817,271 @@ def test_standalone_service_available_credit_range(credit_db, available, valid):
         with pytest.raises(ValueError, match="Current available credit"):
             apply_limit_increase(db, account.id, 1500000)
         assert account.credit_limit_cents == 1000000
+
+
+# --- Tiered decisioning (Lane 2) ---------------------------------------------
+# Default fixture: L=$10,000, P=$30,000, 36 months, zero utilization.
+#   PRIME_EXCELLENT/780: H=$5,000, soft_cap=$15,000, hard_cap=$30,000.
+#   PRIME/<score>:       H=$3,000, soft_cap=$15,000, hard_cap=$30,000.
+
+LIMIT_FIELD = "credit_limit" + "_cents"
+MAX_FIELD = "max_credit_limit" + "_cents"
+
+
+def profile_of(db, user):
+    return db.query(UserCreditProfile).filter_by(user_id=user.id).one()
+
+
+def persona(db, user, **changes):
+    profile = profile_of(db, user)
+    for key, value in changes.items():
+        setattr(profile, INCOME_FIELD if key == "income" else key, value)
+    db.commit()
+
+
+def limit_of(db, account):
+    db.refresh(account)
+    return getattr(account, LIMIT_FIELD)
+
+
+def notices(db, user):
+    return db.query(UserSecureMessage).filter_by(
+        user_id=user.id, category="CREDIT_LIMIT_DECISION"
+    ).all()
+
+
+def ask(db, user, amount, *, session="support-limit", turn="turn-1", key="prepare-1"):
+    return prepare(
+        db, user,
+        inputs={"requested_limit_minor": amount, "currency_code": "USD"},
+        ctx=context(session=session, turn=turn), key=key,
+    )
+
+
+def confirm(db, user, view, *, session="support-limit", turn="turn-2"):
+    return commit(db, user, view, context(session=session, confirm=True, turn=turn))
+
+
+# Income value/formatting, tier name and NPI field names (the score is checked
+# by key name only: a bare "780" could appear inside random UUIDs).
+NPI_MARKERS = (
+    "15000000", "150,000", "PRIME_EXCELLENT", "credit_score", "credit_tier",
+    "annual_income", "income_confirmed",
+)
+
+
+def assert_no_npi(*values):
+    blob = json.dumps(values, default=str)
+    assert not any(marker in blob for marker in NPI_MARKERS)
+
+
+def test_preapproved_headroom_is_instant_and_sets_cooling_off_anchor(credit_db):
+    db, user, account, product = credit_db
+    view = ask(db, user, 1500000)
+    proposal = db.get(ActionProposal, view["proposal_id"])
+    assert view["approval_semantics"] == "DEMO_APPROVED_ON_CONFIRMATION"
+    assert proposal.action_payload["bank_decision"]["inquiry_type"] == "NONE"
+    assert_no_npi(proposal.action_payload, view)
+    assert confirm(db, user, view)["success"] is True
+    db.refresh(account)
+    assert limit_of(db, account) == 1500000
+    assert account.last_limit_increase_at is not None
+
+
+def test_cooling_off_blocks_a_second_increase_with_retry_date(credit_db):
+    db, user, account, product = credit_db
+    confirm(db, user, ask(db, user, 1500000))
+    with pytest.raises(ProposalPolicyError) as error:
+        ask(db, user, 1600000, turn="turn-3", key="prepare-2")
+    result = error.value.safe_result()
+    assert result["error"] == "COOLING_OFF_ACTIVE"
+    assert result["retryable"] is True
+    facts = result["refusal_facts"]
+    assert facts["next_steps"] == ["RETRY_AFTER_COOLING_OFF"]
+    expected = (UTC_NOW + datetime.timedelta(days=180)).date()
+    assert abs(datetime.date.fromisoformat(facts["retry_after"]) - expected).days <= 1
+    assert facts["retry_after"] in result["message"]
+    assert len(notices(db, user)) == 1
+    assert limit_of(db, account) == 1500000
+
+
+def test_above_product_maximum_names_the_card_and_its_limits(credit_db):
+    db, user, account, product = credit_db
+    product.product_name = "Cashback Everyday"
+    setattr(product, MAX_FIELD, 1500000)
+    setattr(account, LIMIT_FIELD, 1500000)
+    db.commit()
+    with pytest.raises(ProposalPolicyError) as error:
+        ask(db, user, 1600000)
+    result = error.value.safe_result()
+    assert result["error"] == "PRODUCT_LIMIT_OUT_OF_BOUNDS"
+    assert result["retryable"] is False
+    facts = result["refusal_facts"]
+    assert facts["reason_code"] == "ABOVE_PRODUCT_MAXIMUM"
+    assert facts["product_name"] == "Cashback Everyday"
+    assert facts["current_limit"] == facts["product_maximum"] == {
+        "amount_minor": 1500000, "currency_code": "USD",
+    }
+    assert facts["next_steps"] == ["PRODUCT_UPGRADE", "SPECIALIST_REVIEW"]
+    for text in ("Cashback Everyday", "$15,000.00", "already at its maximum"):
+        assert text in result["message"]
+    [notice] = notices(db, user)
+    assert notice.message.startswith("Credit Limit Request Decision — Cashback Everyday")
+    assert notice.is_user_read is False and notice.sender == "bank"
+    assert_no_npi(result, notice.message)
+
+
+@pytest.mark.parametrize("confirmed_days_ago", [None, 400])
+def test_missing_or_stale_income_requires_confirmation(credit_db, confirmed_days_ago):
+    db, user, account, product = credit_db
+    persona(
+        db, user,
+        income_confirmed_at=None if confirmed_days_ago is None
+        else UTC_NOW - datetime.timedelta(days=confirmed_days_ago),
+        income_source=None if confirmed_days_ago is None else "CUSTOMER_STATED",
+    )
+    with pytest.raises(ProposalPolicyError) as error:
+        ask(db, user, 1200000)
+    result = error.value.safe_result()
+    assert result["error"] == "INCOME_CONFIRMATION_REQUIRED"
+    assert result["refusal_facts"]["next_steps"] == ["PROVIDE_INCOME", "SPECIALIST_REVIEW"]
+    assert not notices(db, user)  # incomplete application, not an adverse action
+
+
+@pytest.mark.parametrize("change", ["score", "tenure"])
+def test_low_score_or_short_tenure_is_ineligible(credit_db, change):
+    db, user, account, product = credit_db
+    if change == "score":
+        persona(db, user, credit_score=600)
+    else:
+        account.opened_at = UTC_NOW - datetime.timedelta(days=90)
+        db.commit()
+    with pytest.raises(ProposalPolicyError) as error:
+        ask(db, user, 1200000)
+    result = error.value.safe_result()
+    assert result["error"] == "CREDIT_PROFILE_INELIGIBLE"
+    assert result["refusal_facts"]["next_steps"] == ["SPECIALIST_REVIEW"]
+    assert len(notices(db, user)) == 1
+    assert_no_npi(result, notices(db, user)[0].message)
+
+
+def test_adverse_action_notice_is_not_duplicated_on_retry(credit_db):
+    db, user, account, product = credit_db
+    persona(db, user, credit_score=600)
+    for _ in range(2):
+        with pytest.raises(ProposalPolicyError):
+            ask(db, user, 1200000)
+    assert len(notices(db, user)) == 1
+
+
+def test_soft_tier_requires_consent_offer_then_bureau_approves(credit_db):
+    db, user, account, product = credit_db
+    persona(db, user, credit_tier="PRIME", credit_score=700)
+    view = ask(db, user, 1400000)
+    proposal = db.get(ActionProposal, view["proposal_id"])
+    decision = proposal.action_payload["bank_decision"]
+    assert view["approval_semantics"] == "SOFT_INQUIRY_CONSENT_ON_CONFIRMATION"
+    assert decision["outcome"] == "NEEDS_INFORMATION"
+    assert decision["reason_codes"] == ["INQUIRY_CONSENT_REQUIRED"]
+    assert decision["inquiry_type"] == "SOFT"
+    assert "does not affect your credit score" in view["customer_safe_summary"]
+    assert limit_of(db, account) == 1000000
+    assert confirm(db, user, view)["success"] is True
+    assert limit_of(db, account) == 1400000
+
+
+def test_hard_tier_consent_offer_discloses_score_impact(credit_db):
+    db, user, account, product = credit_db
+    view = ask(db, user, 2500000)
+    assert view["approval_semantics"] == "HARD_INQUIRY_CONSENT_ON_CONFIRMATION"
+    assert "may affect your credit score" in view["customer_safe_summary"]
+    assert confirm(db, user, view)["success"] is True  # score 780 >= 700
+    assert limit_of(db, account) == 2500000
+
+
+def test_bureau_decline_after_consent_invalidates_with_notice(credit_db):
+    db, user, account, product = credit_db
+    persona(db, user, credit_tier="PRIME", credit_score=640)
+    view = ask(db, user, 2000000)  # HARD tier
+    with pytest.raises(ActionPreconditionError) as error:
+        confirm(db, user, view)
+    result = error.value.safe_result()
+    assert result["reason_code"] == "BUREAU_DECLINED"
+    assert result["inquiry_type"] == "HARD"
+    assert db.get(ActionProposal, view["proposal_id"]).status == "INVALIDATED"
+    [notice] = notices(db, user)
+    assert "consumer reporting agency" in notice.message
+    assert limit_of(db, account) == 1000000
+
+
+def test_post_inquiry_counteroffer_is_bound_to_its_origin_in_scope(credit_db):
+    db, user, account, product = credit_db
+    persona(db, user, credit_tier="PRIME", credit_score=680)
+    view = ask(db, user, 2000000)  # HARD tier; 660-699 counteroffers at soft_cap
+    with pytest.raises(ActionPreconditionError) as error:
+        confirm(db, user, view)
+    result = error.value.safe_result()
+    assert result["reason_code"] == "COUNTEROFFER_AVAILABLE"
+    assert result["counteroffer"]["offered_limit"] == {
+        "amount_minor": 1500000, "currency_code": "USD",
+    }
+    assert "$15,000.00" in result["message"]
+    assert len(notices(db, user)) == 1
+
+    # Another support session cannot reuse the origin: it is a fresh SOFT offer.
+    other = ask(db, user, 1500000, session="support-other", turn="turn-3", key="p-other")
+    assert other["approval_semantics"] == "SOFT_INQUIRY_CONSENT_ON_CONFIRMATION"
+    assert "origin" not in db.get(ActionProposal, other["proposal_id"]).action_payload[
+        "decision_request"
+    ]
+
+    # The same scope binds the counteroffer: no second inquiry, fresh confirmation.
+    accepted = ask(db, user, 1500000, turn="turn-3", key="prepare-2")
+    payload = db.get(ActionProposal, accepted["proposal_id"]).action_payload
+    assert accepted["approval_semantics"] == "DEMO_APPROVED_ON_CONFIRMATION"
+    assert payload["decision_request"]["origin"]["origin_requested_limit"] == {
+        "amount_minor": 2000000, "currency_code": "USD",
+    }
+    assert payload["bank_decision"]["inquiry_type"] == "NONE"
+    assert limit_of(db, account) == 1000000
+    assert confirm(db, user, accepted, turn="turn-4")["success"] is True
+    assert limit_of(db, account) == 1500000
+
+
+def test_income_cap_counteroffer_and_ceiling_decline(credit_db):
+    db, user, account, product = credit_db
+    persona(db, user, income=4000000)  # income cap $12,000
+    with pytest.raises(ProposalPolicyError) as error:
+        ask(db, user, 2000000)
+    result = error.value.safe_result()
+    assert result["error"] == "COUNTEROFFER_AVAILABLE"
+    assert result["counteroffer"]["offered_limit"]["amount_minor"] == 1200000
+    assert result["refusal_facts"]["reason_code"] == "INCOME_CAP_EXCEEDED"
+    persona(db, user, income=3000000)  # income cap below the current limit
+    with pytest.raises(ProposalPolicyError) as error:
+        ask(db, user, 1200000, turn="turn-3", key="prepare-2")
+    assert error.value.safe_result()["error"] == "LIMIT_CEILING_EXCEEDED"
+    assert len(notices(db, user)) == 2
+
+
+def test_changed_signals_invalidate_a_pending_offer(credit_db):
+    db, user, account, product = credit_db
+    view = ask(db, user, 1500000)
+    persona(db, user, income=9000000)
+    with pytest.raises(ActionPreconditionError) as error:
+        confirm(db, user, view)
+    assert error.value.reason == "CREDIT_SIGNALS_CHANGED"
+    assert limit_of(db, account) == 1000000
+
+
+def test_consent_is_never_taken_from_tool_input(credit_db):
+    db, user, account, product = credit_db
+    with pytest.raises(ProposalError):
+        prepare(
+            db, user,
+            inputs={
+                "requested_limit_minor": 2500000, "currency_code": "USD",
+                "inquiry_consent": {"inquiry_type": "HARD"},
+            },
+        )
+    assert not db.query(ActionProposal).count()
