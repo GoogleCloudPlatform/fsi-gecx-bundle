@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "policy_id": "demo-credit-limit-tiers",
+  "policy_version": 1,
+  "default": {
+    "rounding_step_minor": 10000,
+    "gates": {
+      "cooling_off_days": 180,
+      "income_confirmation_max_age_days": 365,
+      "minimum_credit_score": 620,
+      "minimum_tenure_months": 6,
+      "max_late_payments_12m": 0
+    },
+    "headroom": {
+      "tier_bps": {
+        "PRIME_EXCELLENT": 5000,
+        "PRIME": 3000,
+        "NEAR_PRIME": 1500,
+        "SUBPRIME": 0
+      },
+      "utilization_bands": [
+        {"max_bps": 3000, "factor_bps": 10000},
+        {"max_bps": 7000, "factor_bps": 5000}
+      ],
+      "tenure_bands": [
+        {"min_months": 6, "factor_bps": 5000},
+        {"min_months": 24, "factor_bps": 10000}
+      ],
+      "max_limit_to_income_bps": 3000
+    },
+    "soft_tier": {
+      "max_multiple_of_current_bps": 15000
+    },
+    "disclosures": {
+      "SOFT": "soft-inquiry-disclosure.v1",
+      "HARD": "hard-inquiry-disclosure.v1"
+    }
+  },
+  "product_overrides": {}
+}

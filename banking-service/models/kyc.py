@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import datetime
-from sqlalchemy import Column, DateTime, LargeBinary, Index, ForeignKey, String, Integer, BigInteger
+from sqlalchemy import Column, DateTime, LargeBinary, Index, ForeignKey, String, Integer, BigInteger, CheckConstraint
 from utils.database import UniversalUUID as UUID, generate_uuid
 from utils.database import Base
 
@@ -44,7 +44,18 @@ class UserCreditProfile(Base):
     Contains sensitive financial indicators (NPI) linked back to the user.
     """
     __tablename__ = "user_credit_profiles"
-    __table_args__ = {'schema': 'kyc'}
+    __table_args__ = (
+        CheckConstraint(
+            "income_source IS NULL OR income_source IN "
+            "('SEEDED', 'CUSTOMER_STATED', 'DOCUMENT_VERIFIED')",
+            name="ck_user_credit_profiles_income_source",
+        ),
+        CheckConstraint(
+            "(income_confirmed_at IS NULL) = (income_source IS NULL)",
+            name="ck_user_credit_profiles_income_confirmation_pair",
+        ),
+        {'schema': 'kyc'},
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     user_id = Column(UUID(as_uuid=True), ForeignKey("identity.users.id", ondelete="CASCADE"), nullable=False, unique=True)
@@ -53,5 +64,9 @@ class UserCreditProfile(Base):
     credit_score = Column(Integer, nullable=False)  # FICO Range 300–850
     credit_tier = Column(String(50), nullable=False)  # 'PRIME_EXCELLENT', 'PRIME', 'NEAR_PRIME', 'SUBPRIME'
     stated_annual_income_cents = Column(BigInteger, nullable=False, default=0)
+    # When and how stated_annual_income_cents was last confirmed (ability-to-pay
+    # staleness and evidence strength); both NULL until first confirmation.
+    income_confirmed_at = Column(DateTime(timezone=True), nullable=True)
+    income_source = Column(String(32), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
 

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "credit-limit-counteroffer",
+  "revision": 1,
+  "action_type": "CREDIT_LIMIT_COUNTEROFFER",
+  "contract_version": "credit-limit-counteroffer.v1",
+  "status": "CONTRACT_ONLY",
+  "authorization_policy": "general_acknowledgment.v1",
+  "payload_fields": [
+    "account_id",
+    "current_limit",
+    "proposed_limit",
+    "increase_amount",
+    "origin",
+    "bank_decision",
+    "decision_request",
+    "approval_semantics"
+  ],
+  "public_payload_fields": [
+    "current_limit",
+    "proposed_limit",
+    "increase_amount",
+    "approval_semantics"
+  ],
+  "required_facts": [
+    "current_limit",
+    "proposed_limit",
+    "increase_amount",
+    "approval_semantics"
+  ]
+}

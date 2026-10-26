@@ -19,7 +19,19 @@ import hashlib
 import json
 from pathlib import Path
 from string import Formatter
+from typing import Literal
 
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from models.money import Money
+from services.decisioning import (
+    BankDecision,
+    ConsentedInquiryType,
+    CounterofferOrigin,
+    DecisionRequest,
+    DisclosureVersion,
+    Fingerprint,
+)
 from services.proposal_capabilities import OPERATIONS, validate_inputs
 from services.proposal_protocol import (
     ActionRegistry,
@@ -299,3 +311,148 @@ def action_contract(definition_id):
         raise ValueError(f"No active action for definition {definition_id}.")
     specification = matches[0]
     return specification.action_type, specification.contract_version
+
+
+# --- Contract-only decision proposal types ----------------------------------
+# Declared identity and payload shape for the tiered credit-limit flow. These
+# are deliberately NOT loaded into ActionRegistry or discovery: they have no
+# registered operation yet, so no runtime can prepare or execute them.
+
+DECISION_CONTRACTS_PATH = (
+    Path(__file__).resolve().parents[1] / "config" / "decision_proposal_contracts"
+)
+_ACCOUNT_ID = r"^[A-Fa-f0-9-]{36}$"
+
+
+class DecisionProposalContract(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    schema_version: Literal[1]
+    id: str = Field(pattern=r"^[a-z0-9-]{1,128}$")
+    revision: int = Field(ge=1)
+    action_type: str = Field(pattern=r"^[A-Z_]{1,64}$")
+    contract_version: str = Field(
+        max_length=32, pattern=r"^[a-z0-9-]+\.v[1-9][0-9]{0,3}$"
+    )
+    status: Literal["CONTRACT_ONLY"]
+    authorization_policy: Literal["general_acknowledgment.v1"]
+    payload_fields: tuple[str, ...] = Field(min_length=1, max_length=32)
+    public_payload_fields: tuple[str, ...] = Field(min_length=1, max_length=32)
+    required_facts: tuple[str, ...] = Field(min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def coherent_projection(self):
+        payload = DECISION_PAYLOAD_MODELS.get(self.action_type)
+        if payload is None or set(self.payload_fields) != set(payload.model_fields):
+            raise ValueError("Contract payload must match its typed payload model.")
+        fields = (self.payload_fields, self.public_payload_fields, self.required_facts)
+        if any(len(set(v)) != len(v) for v in fields):
+            raise ValueError("Contract field lists must be unique.")
+        if not set(self.required_facts) <= set(self.public_payload_fields) <= set(
+            self.payload_fields
+        ):
+            raise ValueError("Required facts must be public payload fields.")
+        if not self.contract_version.startswith(f"{self.id}.v"):
+            raise ValueError("Contract version must be namespaced by its id.")
+        return self
+
+    @property
+    def digest(self):
+        return definition_digest(self.model_dump(mode="json"))
+
+
+class CreditInquiryConsentPayload(BaseModel):
+    """Consent proposal for one bank-selected SOFT or HARD inquiry."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    account_id: str = Field(pattern=_ACCOUNT_ID)
+    inquiry_type: ConsentedInquiryType
+    disclosure_version: DisclosureVersion
+    score_impact: Literal["NONE", "MAY_AFFECT_SCORE"]
+    origin_request_ref: Fingerprint
+
+    @model_validator(mode="after")
+    def disclosure_matches_tier(self):
+        expected = {"SOFT": "NONE", "HARD": "MAY_AFFECT_SCORE"}[self.inquiry_type]
+        if self.score_impact != expected or not self.disclosure_version.startswith(
+            f"{self.inquiry_type.lower()}-"
+        ):
+            raise ValueError("Consent disclosure and score impact must match the tier.")
+        return self
+
+
+class CreditLimitCounterofferPayload(BaseModel):
+    """A NEW amount-bound proposal linked to the decision that offered it."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    account_id: str = Field(pattern=_ACCOUNT_ID)
+    current_limit: Money
+    proposed_limit: Money
+    increase_amount: Money
+    origin: CounterofferOrigin
+    bank_decision: BankDecision
+    decision_request: DecisionRequest
+    approval_semantics: Literal["DEMO_APPROVED_ON_CONFIRMATION"]
+
+    @model_validator(mode="after")
+    def bound_to_origin_and_own_decision(self):
+        request, decision = self.decision_request, self.bank_decision
+        moneys = (self.current_limit, self.proposed_limit, self.increase_amount)
+        if len({m.currency_code for m in moneys}) != 1 or (
+            self.increase_amount.amount_minor
+            != self.proposed_limit.amount_minor - self.current_limit.amount_minor
+            or self.increase_amount.amount_minor <= 0
+        ):
+            raise ValueError("Counteroffer arithmetic is inconsistent.")
+        if (
+            request.origin != self.origin
+            or request.requested_limit != self.proposed_limit
+            or request.facts.account_id != self.account_id
+            or request.facts.current_limit_minor != self.current_limit.amount_minor
+        ):
+            raise ValueError("Counteroffer request is not bound to this proposal.")
+        if (
+            decision.outcome != "APPROVED"
+            or decision.approved_limit != self.proposed_limit
+            or decision.request_ref != request.request_ref
+        ):
+            raise ValueError("Counteroffer must carry its own exact-amount approval.")
+        return self
+
+
+def validate_counteroffer_origin(payload, origin_decision):
+    """Bind a counteroffer proposal to the COUNTEROFFER decision that offered it."""
+    payload = CreditLimitCounterofferPayload.model_validate(payload)
+    origin_decision = BankDecision.model_validate(
+        origin_decision.model_dump(mode="json")
+        if isinstance(origin_decision, BankDecision)
+        else origin_decision
+    )
+    origin = payload.origin
+    if (
+        origin_decision.outcome != "COUNTEROFFER"
+        or origin_decision.binding_ref != origin.origin_decision_ref
+        or origin_decision.request_ref != origin.origin_request_ref
+        or origin_decision.counteroffer.requested_limit != origin.origin_requested_limit
+        or origin_decision.approved_limit != payload.proposed_limit
+    ):
+        raise ValueError("Counteroffer is not linked to its originating decision.")
+    return payload
+
+
+DECISION_PAYLOAD_MODELS = {
+    "CREDIT_INQUIRY_CONSENT": CreditInquiryConsentPayload,
+    "CREDIT_LIMIT_COUNTEROFFER": CreditLimitCounterofferPayload,
+}
+
+
+def load_decision_proposal_contracts(path=None):
+    """Return {id: contract}; file names must be ``<id>.v<revision>.json``."""
+    contracts = {}
+    for file in sorted(Path(path or DECISION_CONTRACTS_PATH).glob("*.json")):
+        contract = DecisionProposalContract.model_validate_json(file.read_text())
+        if file.name != f"{contract.id}.v{contract.revision}.json":
+            raise ValueError("Contract file name must match its identity.")
+        if contract.id in contracts:
+            raise ValueError("Each contract id must be declared exactly once.")
+        contracts[contract.id] = contract
+    return contracts

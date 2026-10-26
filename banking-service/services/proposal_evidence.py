@@ -133,7 +133,14 @@ EVIDENCE = {
         "presentation_acknowledgment_source",
         "presentation_artifact_id",
     )
-} | {"acknowledged_fact_keys": [None]}
+} | {
+    "acknowledged_fact_keys": [None],
+    # Consent to a bank-selected credit inquiry tier (additive; absent on
+    # legacy evidence, so existing snapshots keep their bytes and digests).
+    "inquiry_consent": {
+        key: None for key in ("inquiry_type", "disclosure_version", "consent_turn_id")
+    },
+}
 
 
 LIMIT_POLICY = {key: None for key in (
@@ -147,21 +154,70 @@ LIMIT_FACTS = {key: None for key in (
     "available_credit_minor", "projected_available_credit_minor",
 )}
 DECISION_POLICY = {key: None for key in ("provider_id", "policy_id", "version", "digest", "approval_ttl_seconds")}
+REFUSAL_FACTS = {key: None for key in ("reason_code", "retryable", "product_name", "retry_after")} | {
+    key: MONEY for key in ("current_limit", "product_maximum", "max_instantly_approvable", "soft_tier_cap")
+} | {"next_steps": [None]}
+COUNTEROFFER_ORIGIN = {"origin_request_ref": None, "origin_decision_ref": None, "origin_requested_limit": MONEY}
 BANK_DECISION = {key: None for key in ("decision_id", "provider_id", "outcome", "evaluated_at", "expires_at", "request_ref", "scope_ref", "input_ref")} | {
     "approved_limit": MONEY, "reason_codes": [None], "policy": DECISION_POLICY, "evidence_references": [None],
+    "inquiry_type": None, "counteroffer": {"origin_request_ref": None, "requested_limit": MONEY}, "refusal": REFUSAL_FACTS,
 }
-DECISION_REQUEST = {"request_ref": None, "scope_ref": None, "input_ref": None, "requested_limit": MONEY, "facts": LIMIT_FACTS}
+DECISION_REQUEST = {"request_ref": None, "scope_ref": None, "input_ref": None, "requested_limit": MONEY, "facts": LIMIT_FACTS} | {
+    "inquiry_consent": {"inquiry_type": None, "disclosure_version": None, "consent_ref": None},
+    "origin": COUNTEROFFER_ORIGIN,
+}
 PAYLOAD.update({
     "bank_decision": BANK_DECISION, "decision_request": DECISION_REQUEST,
     "current_limit": MONEY, "proposed_limit": MONEY, "increase_amount": MONEY,
     "credit_limit_policy": LIMIT_POLICY, "eligibility_facts": LIMIT_FACTS,
     "approval_semantics": None,
     "prepared_arithmetic": {"available_credit_minor": None, "projected_available_credit_minor": None},
+    # Credit-inquiry consent and counteroffer proposal facts (contract-only types).
+    "inquiry_type": None, "disclosure_version": None, "score_impact": None,
+    "origin_request_ref": None, "origin": COUNTEROFFER_ORIGIN,
 })
 RESULT.update({
     "previous_credit_limit": MONEY, "credit_limit": MONEY,
     "increase_amount": MONEY, "available_credit": MONEY, "approval_semantics": None,
 })
+
+
+def consent_evidence_ref(evidence, origin_request_ref):
+    """Fingerprint binding accepted consent to one tier, turn and originating request.
+
+    ``decisioning.InquiryConsent.consent_ref`` must equal this value, and the
+    decision's evidence references must include it, so consent recorded for a
+    SOFT inquiry can never be presented as consent for a HARD inquiry, nor
+    replayed for a different credit-limit request in the same session.
+    """
+    if not isinstance(origin_request_ref, str) or len(origin_request_ref) != 64 or any(
+        c not in "0123456789abcdef" for c in origin_request_ref
+    ):
+        raise ValueError("Consent must be bound to a checked originating request.")
+    consent = (evidence or {}).get("inquiry_consent")
+    runtime_session_id = (evidence or {}).get("runtime_session_id")
+    if not isinstance(consent, dict) or set(consent) != set(EVIDENCE["inquiry_consent"]):
+        raise ValueError("Consent evidence requires exactly the consent fields.")
+    if consent["inquiry_type"] not in {"SOFT", "HARD"} or not str(
+        consent["disclosure_version"]
+    ).startswith(f"{str(consent['inquiry_type']).lower()}-inquiry-disclosure.v"):
+        raise ValueError("Consent disclosure does not match its inquiry type.")
+    if any(
+        not isinstance(value, str) or not value or len(value) > 256
+        for value in (consent["consent_turn_id"], runtime_session_id)
+    ):
+        raise ValueError("Consent must name its customer turn and runtime session.")
+    return hashlib.sha256(
+        json.dumps(
+            {
+                **consent,
+                "runtime_session_id": runtime_session_id,
+                "origin_request_ref": origin_request_ref,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
 
 
 def policy_evaluation_snapshot(evaluation):

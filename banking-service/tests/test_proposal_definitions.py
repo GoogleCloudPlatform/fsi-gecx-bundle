@@ -15,15 +15,31 @@
 """Configuration boundaries and version pinning for declarative actions."""
 
 from copy import deepcopy
+import datetime
+import importlib.util
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError
 
+from services.decisioning import (
+    BankDecision,
+    DecisionRequest,
+    load_decisioning_provider,
+)
 from services.proposal_definitions import (
     CATALOG_PATH,
+    DECISION_CONTRACTS_PATH,
+    CreditInquiryConsentPayload,
+    CreditLimitCounterofferPayload,
+    bundled_documents,
+    definition_digest,
     load_action_registry,
+    load_decision_proposal_contracts,
     ServiceActionHandler,
+    validate_counteroffer_origin,
 )
 
 
@@ -206,3 +222,206 @@ def test_repository_publication_rejects_executable_without_discovery(
     monkeypatch.setattr("services.proposal_definitions.CATALOG_PATH", tmp_path)
     with pytest.raises(ValueError, match="requires discovery metadata"):
         load_action_registry(None)
+
+
+# --- Contract-only decision proposal types ----------------------------------
+
+NOW = datetime.datetime(2026, 10, 2, tzinfo=datetime.timezone.utc)
+ACCOUNT = "4b0b3f4e-7c1a-4d55-9a37-1d2f0e6a9b11"
+
+
+def usd(amount):
+    return {"amount_minor": amount, "currency_code": "USD"}
+
+
+def limit_request(requested, **extra):
+    return DecisionRequest.model_validate(
+        {
+            "request_ref": extra.pop("request_ref", "a" * 64),
+            "scope_ref": "b" * 64,
+            "input_ref": "c" * 64,
+            "requested_limit": usd(requested),
+            "facts": {
+                "account_id": ACCOUNT,
+                "account_status": "ACTIVE",
+                "currency_code": "USD",
+                "product_code": "DEMO",
+                "current_limit_minor": 1000000,
+                "product_active": True,
+                "minimum_limit_minor": 100000,
+                "maximum_limit_minor": 3000000,
+            },
+            **extra,
+        }
+    )
+
+
+def counteroffer_case():
+    provider = load_decisioning_provider(clock=lambda: NOW)
+    origin_request = limit_request(1500000)
+    origin_decision = BankDecision.model_validate(
+        {
+            **provider.evaluate(origin_request).model_dump(mode="json"),
+            "outcome": "COUNTEROFFER",
+            "approved_limit": usd(1200000),
+            "reason_codes": ["COUNTEROFFER_AVAILABLE"],
+            "inquiry_type": "NONE",
+            "counteroffer": {
+                "origin_request_ref": origin_request.request_ref,
+                "requested_limit": usd(1500000),
+            },
+            "refusal": {
+                "reason_code": "COUNTEROFFER_AVAILABLE",
+                "retryable": False,
+                "current_limit": usd(1000000),
+                "product_maximum": usd(3000000),
+                "max_instantly_approvable": usd(1200000),
+                "soft_tier_cap": usd(1500000),
+                "product_name": "Demo",
+                "next_steps": ["ACCEPT_COUNTEROFFER"],
+            },
+        }
+    )
+    origin = {
+        "origin_request_ref": origin_request.request_ref,
+        "origin_decision_ref": origin_decision.binding_ref,
+        "origin_requested_limit": usd(1500000),
+    }
+    request = limit_request(1200000, request_ref="d" * 64, origin=origin)
+    payload = {
+        "account_id": ACCOUNT,
+        "current_limit": usd(1000000),
+        "proposed_limit": usd(1200000),
+        "increase_amount": usd(200000),
+        "origin": origin,
+        "bank_decision": provider.evaluate(request).model_dump(mode="json"),
+        "decision_request": request.model_dump(mode="json"),
+        "approval_semantics": "DEMO_APPROVED_ON_CONFIRMATION",
+    }
+    return payload, origin_decision
+
+
+def test_decision_contracts_have_stable_identity_and_digest():
+    contracts = load_decision_proposal_contracts()
+    assert {c.action_type for c in contracts.values()} == {
+        "CREDIT_INQUIRY_CONSENT",
+        "CREDIT_LIMIT_COUNTEROFFER",
+    }
+    for contract in contracts.values():
+        document = json.loads(
+            (DECISION_CONTRACTS_PATH / f"{contract.id}.v{contract.revision}.json").read_text()
+        )
+        assert contract.digest == definition_digest(document)
+
+
+def test_decision_contracts_are_not_executable_or_discoverable():
+    from services.playbook_discovery import discover_playbooks
+
+    path = Path(__file__).parents[1] / "alembic/versions/b92e3d8a601c_versioned_playbook_repository.py"
+    spec = importlib.util.spec_from_file_location("bootstrap_migration", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    registry = load_action_registry(None)
+    contracts = load_decision_proposal_contracts().values()
+    assert not {c.action_type for c in contracts} & set(registry.action_types)
+    listed = json.dumps(discover_playbooks(registry, "raise my credit limit"))
+    assert all(c.id not in listed and c.action_type not in listed for c in contracts)
+    assert migration.BOOTSTRAP == bundled_documents()
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda d: d.update(secret="private"),
+        lambda d: d.update(status="PUBLISHED"),
+        lambda d: d.update(payload_fields=d["payload_fields"][:-1]),
+        lambda d: d.update(payload_fields=d["payload_fields"] + ["card_token"]),
+        lambda d: d.update(required_facts=d["required_facts"] + ["origin"]),
+        lambda d: d.update(contract_version="other.v1"),
+        lambda d: d.update(revision=2),  # file name no longer matches identity
+        lambda d: d.update(revision=True),
+    ],
+)
+def test_decision_contract_declarations_are_closed(tmp_path, mutate):
+    name = "credit-limit-counteroffer.v1.json"
+    document = json.loads((DECISION_CONTRACTS_PATH / name).read_text())
+    mutate(document)
+    (tmp_path / name).write_text(json.dumps(document))
+    with pytest.raises((ValueError, ValidationError)):
+        load_decision_proposal_contracts(tmp_path)
+
+
+def test_counteroffer_without_origin_link_is_rejected():
+    payload, origin_decision = counteroffer_case()
+    assert validate_counteroffer_origin(payload, origin_decision).origin.origin_decision_ref
+    without_origin = {k: v for k, v in payload.items() if k != "origin"}
+    with pytest.raises(ValidationError):
+        CreditLimitCounterofferPayload.model_validate(without_origin)
+    unlinked_request = {
+        **payload,
+        "decision_request": {
+            k: v for k, v in payload["decision_request"].items() if k != "origin"
+        },
+    }
+    with pytest.raises(ValidationError, match="not bound"):
+        CreditLimitCounterofferPayload.model_validate(unlinked_request)
+
+
+@pytest.mark.parametrize(
+    "decision_change",
+    [
+        {"decision_id": "another-decision"},
+        {"request_ref": "f" * 64},
+        {"approved_limit": usd(1300000)},
+    ],
+)
+def test_counteroffer_is_bound_to_the_decision_that_offered_it(decision_change):
+    payload, origin_decision = counteroffer_case()
+    forged = {**origin_decision.model_dump(mode="json"), **decision_change}
+    if "request_ref" in decision_change:
+        forged["counteroffer"]["origin_request_ref"] = decision_change["request_ref"]
+    with pytest.raises(ValueError):
+        validate_counteroffer_origin(payload, forged)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"increase_amount": usd(300000)},
+        {"proposed_limit": usd(1300000), "increase_amount": usd(300000)},
+        {"approval_semantics": "APPLIED_IMMEDIATELY"},
+        {"account_id": "00000000-0000-0000-0000-000000000000"},
+    ],
+)
+def test_counteroffer_payload_is_amount_bound(change):
+    payload, _ = counteroffer_case()
+    with pytest.raises(ValidationError):
+        CreditLimitCounterofferPayload.model_validate({**payload, **change})
+
+
+@pytest.mark.parametrize(
+    "inquiry_type,disclosure,impact,valid",
+    [
+        ("SOFT", "soft-inquiry-disclosure.v1", "NONE", True),
+        ("HARD", "hard-inquiry-disclosure.v1", "MAY_AFFECT_SCORE", True),
+        ("HARD", "hard-inquiry-disclosure.v1", "NONE", False),
+        ("SOFT", "soft-inquiry-disclosure.v1", "MAY_AFFECT_SCORE", False),
+        ("HARD", "soft-inquiry-disclosure.v1", "MAY_AFFECT_SCORE", False),
+        ("NONE", "soft-inquiry-disclosure.v1", "NONE", False),
+    ],
+)
+def test_consent_payload_binds_tier_disclosure_and_score_impact(
+    inquiry_type, disclosure, impact, valid
+):
+    document = {
+        "account_id": ACCOUNT,
+        "inquiry_type": inquiry_type,
+        "disclosure_version": disclosure,
+        "score_impact": impact,
+        "origin_request_ref": "a" * 64,
+    }
+    if valid:
+        assert CreditInquiryConsentPayload.model_validate(document).inquiry_type == inquiry_type
+    else:
+        with pytest.raises(ValidationError):
+            CreditInquiryConsentPayload.model_validate(document)
