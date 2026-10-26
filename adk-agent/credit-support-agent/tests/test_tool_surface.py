@@ -149,6 +149,46 @@ def test_end_consultation_closeout_block_is_not_silent() -> None:
     assert scheduling is not types.FunctionResponseScheduling.SILENT
 
 
+@pytest.mark.asyncio
+async def test_end_consultation_success_is_silent_and_blocked_resets_to_audible() -> None:
+    end_consultation = next(
+        tool for tool in agent.create_runtime_tools() if tool.name == "end_consultation"
+    )
+    tool_context = SimpleNamespace(state={"fraud_playbook": {}})
+    succeeded = {
+        "status": "SUCCESS",
+        "retryable": False,
+        "message": "Session end signal sent.",
+    }
+
+    await agent.after_tool_callback(
+        end_consultation, {}, tool_context, succeeded
+    )
+    success_content = functions._build_function_response_content(
+        end_consultation, succeeded, "call-success"
+    )
+    assert (
+        success_content.parts[0].function_response.scheduling
+        is types.FunctionResponseScheduling.SILENT
+    )
+
+    blocked = {
+        "success": False,
+        "status": "SESSION_CLOSE_CONFIRMATION_REQUIRED",
+        "customer_response": "Is there anything else I can help you with?",
+    }
+    await agent.after_tool_callback(
+        end_consultation, {}, tool_context, blocked
+    )
+    blocked_content = functions._build_function_response_content(
+        end_consultation, blocked, "call-blocked"
+    )
+    assert (
+        blocked_content.parts[0].function_response.scheduling
+        is not types.FunctionResponseScheduling.SILENT
+    )
+
+
 def test_voice_agent_sends_no_thinking_configuration() -> None:
     voice_agent = agent.create_voice_agent(model="gemini-3.8-live")
 

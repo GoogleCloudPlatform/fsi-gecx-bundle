@@ -31,14 +31,18 @@ def env_flag(name: str, *, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-_PLACEHOLDER_TOKEN = re.compile(r"<[^<>]*>|\{[^{}]*\}")
+_PLACEHOLDER_TOKEN = re.compile(
+    r"<[^<>]*>|\{[^{}]*\}|\b(?:no\s+speech|pause|silence)\b",
+    re.IGNORECASE,
+)
 
 
 def publishable_transcript(text: str | None) -> str | None:
     """Return transcript text worth showing, or None for placeholder-only output.
 
-    Gemini 3.x Live can emit a turn whose transcript is only markup such as
-    ``<no speech>{pause}``. Text with any real words is returned unchanged.
+    Gemini 3.x Live can emit a turn whose transcript is only markup or bare
+    placeholder tokens such as ``<no speech>{pause}`` or ``no speech``. Text
+    with any real words is returned unchanged.
     """
     if text is None:
         return None

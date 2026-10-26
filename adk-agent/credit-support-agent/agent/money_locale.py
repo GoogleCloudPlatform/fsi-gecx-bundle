@@ -32,11 +32,14 @@ def effective_voice_locale(requested: str) -> str:
 MONEY_LANGUAGE_INSTRUCTION = (
     "Explain banking facts naturally in the selected language. Use concise amounts "
     "such as 'twelve ninety-nine' or 'doce con noventa y nueve' when USD is established. "
+    "For whole-dollar amounts, speak natural whole dollars (such as 'ten thousand dollars' "
+    "or 'eleven thousand dollars') and never pronounce 'point zero zero' or 'zero cents'. "
     "Use decimal notation in plain text without extra backslashes before "
     "currency symbols or merchant punctuation. Make the currency explicit when ambiguous, when it "
     "changes, or when original and billing currencies differ. Preserve every amount, "
     "currency, merchant, and action consequence. Never perform FX or recalculate amounts. "
-    "Reference summaries are facts to explain, not scripts to recite."
+    "Reference summaries are facts to explain conversationally, not scripts to recite, and "
+    "never use internal protocol words like 'proposal' with the customer."
 )
 
 

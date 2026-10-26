@@ -844,7 +844,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             video_publish_options = rtc.TrackPublishOptions(
                 source=rtc.TrackSource.SOURCE_CAMERA,
                 video_encoding=rtc.VideoEncoding(
-                    max_bitrate=1_500_000,
+                    max_bitrate=2_500_000,
                     max_framerate=30 if mock_avatar_enabled else LIVE_AVATAR_VIDEO_FORMAT.fps
                 )
             )
