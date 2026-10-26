@@ -150,6 +150,90 @@ def _demo_account_baseline_cents(email: str | None) -> dict[str, int]:
     )
 
 
+# Seeded, provisioned, and reset cards are opened well past the minimum tenure
+# for a credit-limit increase (36 months; the top tenure band starts at 24).
+SEEDED_CREDIT_TENURE = datetime.timedelta(days=36 * 30)
+SEEDED_INCOME_SOURCE = "SEEDED"
+
+# Presenter defaults used when an email is not a static persona. Amounts are
+# USD minor units.
+PRESENTER_CREDIT_BASELINE = {
+    "credit_score": 720,
+    "credit_tier": "PRIME",
+    "income": 9_500_000,
+    "credit_limit": 1_000_000,
+    "credit_product": "CASHBACK_EVERYDAY",
+}
+
+
+def _seeded_credit_account_dates(now: datetime.datetime) -> dict[str, Any]:
+    """Backdated tenure and no prior increase, so the cooling-off gate is clear."""
+    return {"opened_at": now - SEEDED_CREDIT_TENURE, "last_limit_increase_at": None}
+
+
+def _seeded_income_confirmation(now: datetime.datetime) -> dict[str, Any]:
+    return {"income_confirmed_at": now, "income_source": SEEDED_INCOME_SOURCE}
+
+
+def _presenter_credit_baseline(email: str | None) -> dict[str, Any]:
+    """Return the static persona's credit baseline, else the presenter default."""
+    email_lower = (email or "").lower()
+    for persona in get_base_personas():
+        if str(persona.get("email") or "").lower() == email_lower:
+            return {
+                "credit_score": persona["credit_score"],
+                "credit_tier": persona["credit_tier"],
+                "income": persona["stated_annual_income_cents"],
+                "credit_limit": persona["credit_limit_cents"],
+                "credit_product": persona["credit_product"],
+            }
+    return dict(PRESENTER_CREDIT_BASELINE)
+
+
+def _restore_seeded_credit_profile(
+    db: Session,
+    user_id: uuid.UUID,
+    baseline: dict[str, Any],
+    now: datetime.datetime,
+    *,
+    restore_baseline: bool,
+) -> UserCreditProfile:
+    """Create or refresh the credit profile with fresh seeded income confirmation.
+
+    ``restore_baseline`` resets score, tier, and income to ``baseline``;
+    otherwise an existing profile keeps them and only a non-positive income is
+    replaced.
+    """
+    profile = db.query(UserCreditProfile).filter(UserCreditProfile.user_id == user_id).first()
+    if profile is None:
+        profile = UserCreditProfile(
+            id=uuid.uuid4(),
+            user_id=user_id,
+            credit_score=baseline["credit_score"],
+            credit_tier=baseline["credit_tier"],
+            **_seeded_income_confirmation(now),
+            stated_annual_income_cents=baseline["income"],
+        )
+        db.add(profile)
+        record_audit_event(
+            db,
+            "USER_CREDIT_PROFILE_CREATED",
+            {
+                "user_id": str(user_id),
+                "credit_score": baseline["credit_score"],
+            },
+        )
+        return profile
+    if restore_baseline:
+        profile.credit_score = baseline["credit_score"]
+        profile.credit_tier = baseline["credit_tier"]
+    if restore_baseline or (profile.stated_annual_income_cents or 0) <= 0:
+        profile.stated_annual_income_cents = baseline["income"]
+    profile.income_confirmed_at = now
+    profile.income_source = SEEDED_INCOME_SOURCE
+    return profile
+
+
 def _load_json_resource(filename: str) -> Any:
     path = Path(RESOURCE_DIR) / filename
     with path.open("r", encoding="utf-8") as handle:
@@ -684,11 +768,13 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
             )
             
             # 3. Create UserCreditProfile
+            seeded_at = datetime.datetime.now(datetime.timezone.utc)
             credit_prof = UserCreditProfile(
                 id=uuid.uuid4(),
                 user_id=user_uuid,
                 credit_score=p["credit_score"],
                 credit_tier=p["credit_tier"],
+                **_seeded_income_confirmation(seeded_at),
                 stated_annual_income_cents=p["stated_annual_income_cents"]
             )
             db.add(credit_prof)
@@ -747,6 +833,7 @@ def perform_algorithmic_seeding(db: Session) -> Dict[str, Any]:
                 customer_id=user_uuid,
                 product_code=p["credit_product"],
                 status="ACTIVE",
+                **_seeded_credit_account_dates(seeded_at),
                 credit_limit_cents=p["credit_limit_cents"],
                 cleared_balance_cents=debt,
                 available_credit_cents=p["credit_limit_cents"] - debt,
@@ -1255,25 +1342,17 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
                 },
             )
 
-        # 5. Create UserCreditProfile if not exists
-        credit_prof = db.query(UserCreditProfile).filter(UserCreditProfile.user_id == user_uuid).first()
-        if not credit_prof:
-            credit_prof = UserCreditProfile(
-                id=uuid.uuid4(),
-                user_id=user_uuid,
-                credit_score=720,
-                credit_tier="PRIME",
-                stated_annual_income_cents=9500000  # $95,000.00
-            )
-            db.add(credit_prof)
-            record_audit_event(
-                db,
-                "USER_CREDIT_PROFILE_CREATED",
-                {
-                    "user_id": str(user_uuid),
-                    "credit_score": 720,
-                },
-            )
+        # 5. Create the UserCreditProfile, or refresh one kept by a prior
+        # deprovision, with freshly confirmed seeded income.
+        provisioned_at = datetime.datetime.now(datetime.timezone.utc)
+        credit_baseline = _presenter_credit_baseline(email)
+        _restore_seeded_credit_profile(
+            db,
+            user_uuid,
+            credit_baseline,
+            provisioned_at,
+            restore_baseline=False,
+        )
         db.flush()
 
         # 6. Provision checking/savings deposit accounts with harmonized default balances
@@ -1329,9 +1408,10 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             customer_id=user_uuid,
             product_code="CASHBACK_EVERYDAY",
             status="ACTIVE",
-            credit_limit_cents=1000000,  # $10,000.00
+            **_seeded_credit_account_dates(provisioned_at),
+            credit_limit_cents=credit_baseline["credit_limit"],
             cleared_balance_cents=0,
-            available_credit_cents=1000000,
+            available_credit_cents=credit_baseline["credit_limit"],
             payment_due_date=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=15),
             statement_close_date=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=15)
         )
@@ -1487,14 +1567,26 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
         UserSecureMessage.is_user_read.is_(False),
     ).delete(synchronize_session=False)
 
-    # 3. Retire the current card account and instruments. Posted transactions
-    # and their journal entries are immutable, so a presenter reset creates a
-    # fresh account rather than deleting historical statement rows.
+    # 3. Restore the persona (or presenter default) credit profile with
+    # freshly confirmed income so a credit-limit request can be evaluated.
+    now = datetime.datetime.now(datetime.timezone.utc)
+    credit_baseline = _presenter_credit_baseline(user.email)
+    _restore_seeded_credit_profile(
+        db, user_id, credit_baseline, now, restore_baseline=True
+    )
+
+    # 4. Retire every open card account and its instruments, including FROZEN
+    # or DELINQUENT ones, so exactly one open account remains. Posted
+    # transactions and their journal entries are immutable, so a presenter
+    # reset creates a fresh account rather than deleting historical rows.
     credit_accounts = db.query(CreditAccount).filter(
         CreditAccount.customer_id == user_id,
-        CreditAccount.status == "ACTIVE",
+        CreditAccount.status != "CLOSED",
     ).all()
-    prior_credit_account = credit_accounts[0] if credit_accounts else None
+    prior_credit_account = next(
+        (account for account in credit_accounts if account.status == "ACTIVE"),
+        credit_accounts[0] if credit_accounts else None,
+    )
     for account in credit_accounts:
         account.status = "CLOSED"
         for issued_card in db.query(IssuedCard).filter(
@@ -1511,15 +1603,16 @@ def reset_user_suite(db: Session, user_id: uuid.UUID) -> None:
     cred_acc = None
     card = None
     if prior_credit_account:
-        now = datetime.datetime.now(datetime.timezone.utc)
+        # The baseline limit replaces any increase granted during the demo.
         cred_acc = CreditAccount(
             id=uuid.uuid4(),
             customer_id=user_id,
             product_code=prior_credit_account.product_code,
             status="ACTIVE",
-            credit_limit_cents=prior_credit_account.credit_limit_cents,
+            **_seeded_credit_account_dates(now),
+            credit_limit_cents=credit_baseline["credit_limit"],
             cleared_balance_cents=0,
-            available_credit_cents=prior_credit_account.credit_limit_cents,
+            available_credit_cents=credit_baseline["credit_limit"],
             payment_due_date=now + datetime.timedelta(days=15),
             statement_close_date=now - datetime.timedelta(days=15),
             last_payment_amount_cents=0,

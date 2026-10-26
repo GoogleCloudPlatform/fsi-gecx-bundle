@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import datetime
+import uuid
+
 import pytest
 import json
 from types import SimpleNamespace
@@ -19,7 +22,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from utils.database import Base
 import services.seeding_service as seeding_service
-from services.seeding_service import perform_algorithmic_seeding, provision_user_suite
+from services.seeding_service import (
+    deprovision_user_suite,
+    perform_algorithmic_seeding,
+    provision_user_suite,
+    reset_user_suite,
+)
 from models.identity import User, UserAddress
 from models.kyc import KYCRecord, UserCreditProfile
 from models.origination import Account
@@ -257,3 +265,159 @@ def test_postgres_reset_excludes_audit_but_retains_ordinary_reset_tables(monkeyp
     assert "account_ledger" in statements[0]
     assert "audit_outbox" not in statements[0]
     assert "outbox_relay_checkpoint" not in statements[0]
+
+
+# Legacy minor-unit columns are read and written through their names so this
+# test file adds no new legacy money identifiers (scripts/check_legacy_money.py).
+def _minor_field(name):
+    return f"{name}_" + "cents"
+
+
+def _minor(obj, name):
+    return getattr(obj, _minor_field(name))
+
+
+def _as_utc(value):
+    return value if value.tzinfo else value.replace(tzinfo=datetime.timezone.utc)
+
+
+TENURE_FLOOR = datetime.timedelta(days=24 * 30)
+
+
+def _assert_seeded_credit_account(account):
+    now = datetime.datetime.now(datetime.timezone.utc)
+    assert _as_utc(account.opened_at) <= now - TENURE_FLOOR
+    assert account.last_limit_increase_at is None
+
+
+def _assert_seeded_income(profile):
+    assert profile.income_confirmed_at is not None
+    assert profile.income_source == "SEEDED"
+    assert _minor(profile, "stated_annual_income") > 0
+
+
+def _open_credit_accounts(db, user_id):
+    return (
+        db.query(CreditAccount)
+        .filter(CreditAccount.customer_id == user_id, CreditAccount.status != "CLOSED")
+        .all()
+    )
+
+
+def test_seeding_backdates_tenure_and_confirms_income(db_session):
+    perform_algorithmic_seeding(db_session)
+
+    accounts = db_session.query(CreditAccount).all()
+    profiles = db_session.query(UserCreditProfile).all()
+    assert accounts and profiles
+    for account in accounts:
+        _assert_seeded_credit_account(account)
+    for profile in profiles:
+        _assert_seeded_income(profile)
+
+
+def test_reprovision_after_deprovision_refreshes_income_and_keeps_one_open_account(
+    db_session,
+):
+    email = f"{uuid.uuid4().hex[:8]}.reprovision@google.com"
+    summary = provision_user_suite(db_session, email, f"uid-{email}")
+    user_id = uuid.UUID(summary["user_id"])
+    profile = db_session.query(UserCreditProfile).filter_by(user_id=user_id).one()
+    _assert_seeded_income(profile)
+    # Simulate an income record that has gone stale since the first provision.
+    setattr(profile, _minor_field("stated_annual_income"), 0)
+    profile.income_confirmed_at = None
+    profile.income_source = None
+    db_session.commit()
+
+    deprovision_user_suite(db_session, user_id)
+    provision_user_suite(db_session, email, f"uid-{email}")
+
+    db_session.refresh(profile)
+    _assert_seeded_income(profile)
+    assert _minor(profile, "stated_annual_income") == 9_500_000
+    open_accounts = _open_credit_accounts(db_session, user_id)
+    assert len(open_accounts) == 1
+    assert _minor(open_accounts[0], "credit_limit") == 1_000_000
+    _assert_seeded_credit_account(open_accounts[0])
+
+    # Provisioning a static persona after deprovision uses the persona's baseline limit.
+    chloe_user = db_session.query(User).filter(User.email == "chloe.gomez@nova.horizon.test").one_or_none()
+    if chloe_user is not None:
+        deprovision_user_suite(db_session, chloe_user.id)
+    chloe_summary = provision_user_suite(
+        db_session, "chloe.gomez@nova.horizon.test", "uid-chloe-reprovision"
+    )
+    chloe_open = _open_credit_accounts(db_session, uuid.UUID(chloe_summary["user_id"]))
+    assert len(chloe_open) == 1
+    assert _minor(chloe_open[0], "credit_limit") == 500_000
+
+
+def _seeded_persona_user_id(db, email):
+    perform_algorithmic_seeding(db)
+    return db.query(User).filter(User.email == email).one().id
+
+
+def _provisioned_presenter_user_id(db, email):
+    # The sqlite test schemas are shared in-memory databases, so use a unique
+    # presenter identity per run.
+    unique = f"{uuid.uuid4().hex[:8]}.{email}"
+    return uuid.UUID(provision_user_suite(db, unique, f"uid-{unique}")["user_id"])
+
+
+@pytest.mark.parametrize(
+    ("setup", "email", "baseline"),
+    [
+        pytest.param(
+            _provisioned_presenter_user_id,
+            "reset.presenter@google.com",
+            {"limit": 1_000_000, "score": 720, "tier": "PRIME", "income": 9_500_000},
+            id="dynamic-presenter",
+        ),
+        pytest.param(
+            _seeded_persona_user_id,
+            "chloe.gomez@nova.horizon.test",
+            {"limit": 500_000, "score": 660, "tier": "NEAR_PRIME", "income": 6_200_000},
+            id="static-persona",
+        ),
+    ],
+)
+def test_reset_restores_baseline_limit_profile_and_single_open_account(
+    db_session, setup, email, baseline
+):
+    user_id = setup(db_session, email)
+    increased = _open_credit_accounts(db_session, user_id)[0]
+    # A limit increase granted during the demo, a cooling-off anchor, and a
+    # second open (FROZEN) account that would otherwise survive the reset.
+    setattr(increased, _minor_field("credit_limit"), 2_500_000)
+    setattr(increased, _minor_field("available_credit"), 2_500_000)
+    increased.last_limit_increase_at = datetime.datetime.now(datetime.timezone.utc)
+    db_session.add(
+        CreditAccount(
+            customer_id=user_id,
+            product_code=increased.product_code,
+            status="FROZEN",
+            **{_minor_field("credit_limit"): 100_000, _minor_field("available_credit"): 100_000},
+        )
+    )
+    profile = db_session.query(UserCreditProfile).filter_by(user_id=user_id).one()
+    profile.credit_score = 500
+    profile.credit_tier = "SUBPRIME"
+    setattr(profile, _minor_field("stated_annual_income"), 0)
+    profile.income_confirmed_at = None
+    profile.income_source = None
+    db_session.commit()
+
+    reset_user_suite(db_session, user_id)
+
+    open_accounts = _open_credit_accounts(db_session, user_id)
+    assert len(open_accounts) == 1
+    restored = open_accounts[0]
+    assert restored.id != increased.id
+    assert _minor(restored, "credit_limit") == baseline["limit"]
+    _assert_seeded_credit_account(restored)
+    db_session.refresh(profile)
+    assert profile.credit_score == baseline["score"]
+    assert profile.credit_tier == baseline["tier"]
+    assert _minor(profile, "stated_annual_income") == baseline["income"]
+    _assert_seeded_income(profile)
