@@ -234,15 +234,15 @@ def usd(amount):
     return {"amount_minor": amount, "currency_code": "USD"}
 
 
-def limit_request(requested, **extra):
+def limit_request(requested, *, scope_ref="b" * 64, account_id=ACCOUNT, **extra):
     return DecisionRequest.model_validate(
         {
             "request_ref": extra.pop("request_ref", "a" * 64),
-            "scope_ref": "b" * 64,
+            "scope_ref": scope_ref,
             "input_ref": "c" * 64,
             "requested_limit": usd(requested),
             "facts": {
-                "account_id": ACCOUNT,
+                "account_id": account_id,
                 "account_status": "ACTIVE",
                 "currency_code": "USD",
                 "product_code": "DEMO",
@@ -256,9 +256,11 @@ def limit_request(requested, **extra):
     )
 
 
-def counteroffer_case():
+def counteroffer_case(*, origin_scope="b" * 64, origin_account=ACCOUNT):
     provider = load_decisioning_provider(clock=lambda: NOW)
-    origin_request = limit_request(1500000)
+    origin_request = limit_request(
+        1500000, scope_ref=origin_scope, account_id=origin_account
+    )
     origin_decision = BankDecision.model_validate(
         {
             **provider.evaluate(origin_request).model_dump(mode="json"),
@@ -298,7 +300,13 @@ def counteroffer_case():
         "decision_request": request.model_dump(mode="json"),
         "approval_semantics": "DEMO_APPROVED_ON_CONFIRMATION",
     }
-    return payload, origin_decision
+    return payload, origin_decision, origin_request, provider.current_policy
+
+
+def check_origin(payload, origin_decision, origin_request, policy, now=NOW):
+    return validate_counteroffer_origin(
+        payload, origin_decision, origin_request=origin_request, policy=policy, now=now
+    )
 
 
 def test_decision_contracts_have_stable_identity_and_digest():
@@ -352,8 +360,8 @@ def test_decision_contract_declarations_are_closed(tmp_path, mutate):
 
 
 def test_counteroffer_without_origin_link_is_rejected():
-    payload, origin_decision = counteroffer_case()
-    assert validate_counteroffer_origin(payload, origin_decision).origin.origin_decision_ref
+    payload, origin_decision, origin_request, policy = counteroffer_case()
+    assert check_origin(payload, origin_decision, origin_request, policy).origin.origin_decision_ref
     without_origin = {k: v for k, v in payload.items() if k != "origin"}
     with pytest.raises(ValidationError):
         CreditLimitCounterofferPayload.model_validate(without_origin)
@@ -376,12 +384,35 @@ def test_counteroffer_without_origin_link_is_rejected():
     ],
 )
 def test_counteroffer_is_bound_to_the_decision_that_offered_it(decision_change):
-    payload, origin_decision = counteroffer_case()
+    payload, origin_decision, origin_request, policy = counteroffer_case()
     forged = {**origin_decision.model_dump(mode="json"), **decision_change}
     if "request_ref" in decision_change:
         forged["counteroffer"]["origin_request_ref"] = decision_change["request_ref"]
     with pytest.raises(ValueError):
-        validate_counteroffer_origin(payload, forged)
+        check_origin(payload, forged, origin_request, policy)
+
+
+@pytest.mark.parametrize(
+    "case,check",
+    [
+        # Origin decided for another customer/session scope.
+        ({"origin_scope": "e" * 64}, {}),
+        # Origin decided for a different account.
+        ({"origin_account": "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d"}, {}),
+        # Origin decision expired before the counteroffer was bound.
+        ({}, {"now": NOW + datetime.timedelta(seconds=181)}),
+        # Origin decision presented under a foreign policy identity.
+        ({}, {"policy_digest": "f" * 64}),
+    ],
+)
+def test_counteroffer_origin_is_fully_revalidated_and_scope_bound(case, check):
+    payload, origin_decision, origin_request, policy = counteroffer_case(**case)
+    if "policy_digest" in check:
+        policy = policy.model_copy(update={"digest": check["policy_digest"]})
+    with pytest.raises(ValueError):
+        check_origin(
+            payload, origin_decision, origin_request, policy, now=check.get("now", NOW)
+        )
 
 
 @pytest.mark.parametrize(
@@ -394,7 +425,7 @@ def test_counteroffer_is_bound_to_the_decision_that_offered_it(decision_change):
     ],
 )
 def test_counteroffer_payload_is_amount_bound(change):
-    payload, _ = counteroffer_case()
+    payload, *_ = counteroffer_case()
     with pytest.raises(ValidationError):
         CreditLimitCounterofferPayload.model_validate({**payload, **change})
 

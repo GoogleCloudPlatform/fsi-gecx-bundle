@@ -182,6 +182,7 @@ LEGACY_DECISION_KEYS = {
     "input_ref", "evidence_references",
 }
 CONSENT_REF = "e" * 64
+TIERS = load_credit_limit_tier_config()
 
 
 def usd(amount):
@@ -243,9 +244,9 @@ def test_soft_consent_never_authorizes_a_hard_inquiry():
         req, inquiry_type="HARD", evidence_references=[req.input_ref, CONSENT_REF]
     )
     with pytest.raises(ValueError, match="does not authorize"):
-        validate_decision(raw, req, provider.current_policy, NOW)
+        validate_decision(raw, req, provider.current_policy, NOW, tier_config=TIERS)
     raw["inquiry_type"] = "SOFT"
-    assert validate_decision(raw, req, provider.current_policy, NOW).inquiry_type == "SOFT"
+    assert validate_decision(raw, req, provider.current_policy, NOW, tier_config=TIERS).inquiry_type == "SOFT"
 
 
 @pytest.mark.parametrize(
@@ -263,7 +264,7 @@ def test_inquiry_requires_exact_bound_consent(consent_doc, changes):
         changes["evidence_references"] = [req.input_ref, CONSENT_REF]
     provider, raw = receipt(req, **changes)
     with pytest.raises(ValueError):
-        validate_decision(raw, req, provider.current_policy, NOW)
+        validate_decision(raw, req, provider.current_policy, NOW, tier_config=TIERS)
 
 
 @pytest.mark.parametrize(
@@ -273,6 +274,28 @@ def test_inquiry_requires_exact_bound_consent(consent_doc, changes):
 def test_consent_disclosure_is_bound_to_its_tier(inquiry_type, disclosure):
     with pytest.raises(ValidationError):
         InquiryConsent.model_validate(consent(inquiry_type, disclosure))
+
+
+@pytest.mark.parametrize(
+    "inquiry_type,disclosure",
+    [("HARD", "hard-inquiry-disclosure.v999"), ("SOFT", "soft-inquiry-disclosure.v2")],
+)
+def test_consent_must_cite_the_configured_disclosure_version(inquiry_type, disclosure):
+    req = with_request(request(), inquiry_consent=consent(inquiry_type, disclosure))
+    provider, raw = receipt(
+        req, inquiry_type=inquiry_type, evidence_references=[req.input_ref, CONSENT_REF]
+    )
+    with pytest.raises(ValueError, match="current disclosure"):
+        validate_decision(raw, req, provider.current_policy, NOW, tier_config=TIERS)
+
+
+def test_consent_fails_closed_without_the_tier_configuration():
+    req = with_request(request(), inquiry_consent=consent("SOFT"))
+    provider, raw = receipt(
+        req, inquiry_type="SOFT", evidence_references=[req.input_ref, CONSENT_REF]
+    )
+    with pytest.raises(ValueError, match="tier configuration"):
+        validate_decision(raw, req, provider.current_policy, NOW)
 
 
 def test_consent_request_names_a_tier_the_customer_has_not_consented_to():
@@ -285,13 +308,13 @@ def test_consent_request_names_a_tier_the_customer_has_not_consented_to():
         inquiry_type="HARD",
         evidence_references=[req.input_ref, CONSENT_REF],
     )
-    assert validate_decision(raw, req, provider.current_policy, NOW).inquiry_type == "HARD"
+    assert validate_decision(raw, req, provider.current_policy, NOW, tier_config=TIERS).inquiry_type == "HARD"
     raw["inquiry_type"] = "SOFT"
     with pytest.raises(ValueError, match="already gave"):
-        validate_decision(raw, req, provider.current_policy, NOW)
+        validate_decision(raw, req, provider.current_policy, NOW, tier_config=TIERS)
     raw["inquiry_type"] = None
     with pytest.raises(ValidationError):
-        validate_decision(raw, req, provider.current_policy, NOW)
+        validate_decision(raw, req, provider.current_policy, NOW, tier_config=TIERS)
 
 
 @pytest.mark.parametrize(
@@ -320,20 +343,20 @@ def test_counteroffer_without_valid_origin_link_or_bounds_is_rejected(change):
     provider, raw = counteroffer_receipt(req)
     raw.update(change)
     with pytest.raises((ValueError, ValidationError)):
-        validate_decision(raw, req, provider.current_policy, NOW)
+        validate_decision(raw, req, provider.current_policy, NOW, tier_config=TIERS)
 
 
 def test_counteroffer_validates_only_through_the_counteroffer_contract():
     req = request()
     provider, raw = counteroffer_receipt(req)
-    decision = validate_decision(raw, req, provider.current_policy, NOW)
+    decision = validate_decision(raw, req, provider.current_policy, NOW, tier_config=TIERS)
     assert decision.approved_limit.amount_minor == 1200000
     assert decision.counteroffer.origin_request_ref == req.request_ref
     with pytest.raises(ValueError, match="separate contract"):
         validate_decision(
             {**raw, "outcome": "APPROVED", "reason_codes": ["APPROVED_BY_POLICY"],
              "counteroffer": None, "refusal": None},
-            req, provider.current_policy, NOW,
+            req, provider.current_policy, NOW, tier_config=TIERS,
         )
 
 
@@ -348,7 +371,22 @@ def test_counteroffer_above_product_maximum_is_rejected():
         refusal=refusal(soft_tier_cap=usd(3000000)),
     )
     with pytest.raises(ValueError, match="checked bounds"):
-        validate_decision(raw, req, provider.current_policy, NOW)
+        validate_decision(raw, req, provider.current_policy, NOW, tier_config=TIERS)
+
+
+def test_counteroffer_requires_the_request_within_the_product_maximum():
+    base = request()
+    req = with_request(base, requested_limit=usd(3500000))
+    # Offer at the product maximum for an over-maximum request stays rejected;
+    # whether to allow it is a deferred owner decision for the tiered provider.
+    provider, raw = counteroffer_receipt(
+        base,
+        approved_limit=usd(3000000),
+        counteroffer={"origin_request_ref": req.request_ref, "requested_limit": usd(3500000)},
+        refusal=refusal(soft_tier_cap=usd(3000000)),
+    )
+    with pytest.raises(ValueError, match="checked bounds"):
+        validate_decision(raw, req, provider.current_policy, NOW, tier_config=TIERS)
 
 
 def test_counteroffer_proposal_request_cannot_be_countered_again():
@@ -360,7 +398,7 @@ def test_counteroffer_proposal_request_cannot_be_countered_again():
     req = with_request(request(), origin=origin)
     provider, raw = counteroffer_receipt(req)
     with pytest.raises(ValueError, match="cannot itself be countered"):
-        validate_decision(raw, req, provider.current_policy, NOW)
+        validate_decision(raw, req, provider.current_policy, NOW, tier_config=TIERS)
     with pytest.raises(ValidationError):
         with_request(request(), origin={**origin, "origin_requested_limit": usd(1500000)})
     with pytest.raises(ValidationError):
@@ -398,7 +436,7 @@ def test_refusal_facts_are_bounded_and_bound_to_checked_inputs(
     provider, raw = counteroffer_receipt(req, refusal=refusal(**refusal_change))
     raw.update(decision_change)
     with pytest.raises((ValueError, ValidationError)):
-        validate_decision(raw, req, provider.current_policy, NOW)
+        validate_decision(raw, req, provider.current_policy, NOW, tier_config=TIERS)
 
 
 def test_refusal_facts_are_forbidden_on_approval_and_require_coherent_decline():
@@ -406,7 +444,7 @@ def test_refusal_facts_are_forbidden_on_approval_and_require_coherent_decline():
     provider, raw = receipt(req, refusal=refusal(reason_code="APPROVED_BY_POLICY",
                                                  next_steps=["SPECIALIST_REVIEW"]))
     with pytest.raises(ValidationError, match="no refusal facts"):
-        validate_decision(raw, req, provider.current_policy, NOW)
+        validate_decision(raw, req, provider.current_policy, NOW, tier_config=TIERS)
     declined = refusal(
         reason_code="COOLING_OFF_ACTIVE",
         retryable=True,
@@ -418,7 +456,7 @@ def test_refusal_facts_are_forbidden_on_approval_and_require_coherent_decline():
         req, outcome="DECLINED", approved_limit=None,
         reason_codes=["COOLING_OFF_ACTIVE"], inquiry_type="NONE", refusal=declined,
     )
-    decision = validate_decision(raw, req, provider.current_policy, NOW)
+    decision = validate_decision(raw, req, provider.current_policy, NOW, tier_config=TIERS)
     assert decision.refusal.retry_after == datetime.date(2027, 4, 1)
     assert decision.model_dump(mode="json")["refusal"]["product_name"] == "Cash Rewards 2%"
 

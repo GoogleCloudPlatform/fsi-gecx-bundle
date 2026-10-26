@@ -349,13 +349,16 @@ class DecisioningProvider(Protocol):
         ...
 
 
-def validate_decision(value, request, policy, now):
+def validate_decision(value, request, policy, now, *, tier_config=None):
     """Revalidate an untrusted receipt and bind it to the bank-owned request.
 
     Error order: shape/coherence, provider identity, request scope, evidence
-    binding (inputs plus consent), inquiry consent, amount/counteroffer binding,
-    refusal facts, freshness. Every failure raises ``ValueError`` (or a pydantic
-    ``ValidationError``); callers must treat any exception as no approval.
+    binding (inputs plus consent), inquiry consent (tier, then the configured
+    disclosure version), amount/counteroffer binding, refusal facts, freshness.
+    Every failure raises ``ValueError`` (or a pydantic ``ValidationError``);
+    callers must treat any exception as no approval. A request carrying
+    consent requires ``tier_config`` (a ``CreditLimitTierConfig``) and fails
+    closed without it.
     """
     if isinstance(value, BankDecision):
         if set(value.__dict__) != set(BankDecision.model_fields):
@@ -383,6 +386,12 @@ def validate_decision(value, request, policy, now):
         raise ValueError("Inquiry consent does not authorize this inquiry type.")
     elif consent is None and decision.inquiry_type in {"SOFT", "HARD"}:
         raise ValueError("A SOFT or HARD inquiry requires matching consent.")
+    if consent is not None:
+        if tier_config is None:
+            raise ValueError("Consent cannot be checked without the tier configuration.")
+        disclosures = tier_config.policy_for(request.facts.product_code).disclosures
+        if consent.disclosure_version != getattr(disclosures, consent.inquiry_type):
+            raise ValueError("Consent does not cite the current disclosure for its tier.")
     asked = request.requested_limit
     if decision.outcome == "APPROVED" and decision.approved_limit != asked:
         raise ValueError("Counteroffers require a separate contract.")
@@ -400,7 +409,7 @@ def validate_decision(value, request, policy, now):
             or not facts.current_limit_minor
             < offer.amount_minor
             < asked.amount_minor
-            or offer.amount_minor > facts.maximum_limit_minor
+            <= facts.maximum_limit_minor
         ):
             raise ValueError("Counteroffer amount is outside the checked bounds.")
     if decision.refusal is not None:

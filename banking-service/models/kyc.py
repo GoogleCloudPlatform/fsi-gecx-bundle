@@ -64,7 +64,7 @@ class UserCreditProfile(Base):
     credit_score = Column(Integer, nullable=False)  # FICO Range 300–850
     credit_tier = Column(String(50), nullable=False)  # 'PRIME_EXCELLENT', 'PRIME', 'NEAR_PRIME', 'SUBPRIME'
     stated_annual_income_cents = Column(BigInteger, nullable=False, default=0)
-    # When and how stated_annual_income_cents was last confirmed (ability-to-pay
+    # When and how the stated annual income was last confirmed (ability-to-pay
     # staleness and evidence strength); both NULL until first confirmation.
     income_confirmed_at = Column(DateTime(timezone=True), nullable=True)
     income_source = Column(String(32), nullable=True)

@@ -198,10 +198,17 @@ def consent_evidence_ref(evidence, origin_request_ref):
     runtime_session_id = (evidence or {}).get("runtime_session_id")
     if not isinstance(consent, dict) or set(consent) != set(EVIDENCE["inquiry_consent"]):
         raise ValueError("Consent evidence requires exactly the consent fields.")
-    if consent["inquiry_type"] not in {"SOFT", "HARD"} or not str(
-        consent["disclosure_version"]
-    ).startswith(f"{str(consent['inquiry_type']).lower()}-inquiry-disclosure.v"):
-        raise ValueError("Consent disclosure does not match its inquiry type.")
+    from services.decisioning import InquiryConsent
+
+    try:
+        # Full-match tier-namespaced disclosure, the same contract as the decision.
+        InquiryConsent(
+            inquiry_type=consent["inquiry_type"],
+            disclosure_version=consent["disclosure_version"],
+            consent_ref="0" * 64,
+        )
+    except ValueError:
+        raise ValueError("Consent disclosure does not match its inquiry type.") from None
     if any(
         not isinstance(value, str) or not value or len(value) > 256
         for value in (consent["consent_turn_id"], runtime_session_id)

@@ -31,6 +31,7 @@ from services.decisioning import (
     DecisionRequest,
     DisclosureVersion,
     Fingerprint,
+    validate_decision,
 )
 from services.proposal_capabilities import OPERATIONS, validate_inputs
 from services.proposal_protocol import (
@@ -419,23 +420,40 @@ class CreditLimitCounterofferPayload(BaseModel):
         return self
 
 
-def validate_counteroffer_origin(payload, origin_decision):
-    """Bind a counteroffer proposal to the COUNTEROFFER decision that offered it."""
+def validate_counteroffer_origin(
+    payload, origin_decision, *, origin_request, policy, now, tier_config=None
+):
+    """Bind a counteroffer proposal to the COUNTEROFFER decision that offered it.
+
+    The origin decision is fully revalidated against its own bank-owned request
+    (policy identity, scope and freshness) via ``validate_decision``, then bound
+    to this proposal: same decision ref, request ref, original amount, offered
+    amount, scope and account. The counteroffer's ``DecisionRequest`` therefore
+    inherits the origin's ``scope_ref``. Raises ``ValueError`` on any mismatch.
+    """
     payload = CreditLimitCounterofferPayload.model_validate(payload)
-    origin_decision = BankDecision.model_validate(
-        origin_decision.model_dump(mode="json")
-        if isinstance(origin_decision, BankDecision)
-        else origin_decision
+    origin_request = DecisionRequest.model_validate(
+        origin_request.model_dump(mode="json")
+        if isinstance(origin_request, DecisionRequest)
+        else origin_request
     )
-    origin = payload.origin
+    decision = validate_decision(
+        origin_decision, origin_request, policy, now, tier_config=tier_config
+    )
+    origin, request = payload.origin, payload.decision_request
     if (
-        origin_decision.outcome != "COUNTEROFFER"
-        or origin_decision.binding_ref != origin.origin_decision_ref
-        or origin_decision.request_ref != origin.origin_request_ref
-        or origin_decision.counteroffer.requested_limit != origin.origin_requested_limit
-        or origin_decision.approved_limit != payload.proposed_limit
+        decision.outcome != "COUNTEROFFER"
+        or decision.binding_ref != origin.origin_decision_ref
+        or origin_request.request_ref != origin.origin_request_ref
+        or origin_request.requested_limit != origin.origin_requested_limit
+        or decision.approved_limit != payload.proposed_limit
     ):
         raise ValueError("Counteroffer is not linked to its originating decision.")
+    if (
+        origin_request.scope_ref != request.scope_ref
+        or origin_request.facts.account_id != payload.account_id
+    ):
+        raise ValueError("Counteroffer origin belongs to another scope or account.")
     return payload
 
 

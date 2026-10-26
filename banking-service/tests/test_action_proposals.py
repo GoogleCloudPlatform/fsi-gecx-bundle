@@ -1691,6 +1691,8 @@ def test_soft_consent_evidence_cannot_stand_in_for_hard_consent():
         _consent_evidence("NONE"),
         _consent_evidence(consent_turn_id=""),
         _consent_evidence(secret="private"),
+        _consent_evidence(disclosure_version="soft-inquiry-disclosure.v1 plus anything"),
+        _consent_evidence(disclosure_version="soft-inquiry-disclosure.v1" + "0" * 5000),
         {**_consent_evidence(), "runtime_session_id": None},
     ],
 )
