@@ -338,7 +338,19 @@ def test_reprovision_after_deprovision_refreshes_income_and_keeps_one_open_accou
     assert _minor(profile, "stated_annual_income") == 9_500_000
     open_accounts = _open_credit_accounts(db_session, user_id)
     assert len(open_accounts) == 1
+    assert _minor(open_accounts[0], "credit_limit") == 1_000_000
     _assert_seeded_credit_account(open_accounts[0])
+
+    # Provisioning a static persona after deprovision uses the persona's baseline limit.
+    chloe_user = db_session.query(User).filter(User.email == "chloe.gomez@nova.horizon.test").one_or_none()
+    if chloe_user is not None:
+        deprovision_user_suite(db_session, chloe_user.id)
+    chloe_summary = provision_user_suite(
+        db_session, "chloe.gomez@nova.horizon.test", "uid-chloe-reprovision"
+    )
+    chloe_open = _open_credit_accounts(db_session, uuid.UUID(chloe_summary["user_id"]))
+    assert len(chloe_open) == 1
+    assert _minor(chloe_open[0], "credit_limit") == 500_000
 
 
 def _seeded_persona_user_id(db, email):

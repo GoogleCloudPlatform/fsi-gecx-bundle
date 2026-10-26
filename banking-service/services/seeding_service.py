@@ -1345,10 +1345,11 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
         # 5. Create the UserCreditProfile, or refresh one kept by a prior
         # deprovision, with freshly confirmed seeded income.
         provisioned_at = datetime.datetime.now(datetime.timezone.utc)
+        credit_baseline = _presenter_credit_baseline(email)
         _restore_seeded_credit_profile(
             db,
             user_uuid,
-            _presenter_credit_baseline(email),
+            credit_baseline,
             provisioned_at,
             restore_baseline=False,
         )
@@ -1408,9 +1409,9 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             product_code="CASHBACK_EVERYDAY",
             status="ACTIVE",
             **_seeded_credit_account_dates(provisioned_at),
-            credit_limit_cents=1000000,  # $10,000.00
+            credit_limit_cents=credit_baseline["credit_limit"],
             cleared_balance_cents=0,
-            available_credit_cents=1000000,
+            available_credit_cents=credit_baseline["credit_limit"],
             payment_due_date=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=15),
             statement_close_date=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=15)
         )
