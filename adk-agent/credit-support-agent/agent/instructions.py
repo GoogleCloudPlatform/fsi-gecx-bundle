@@ -42,6 +42,57 @@ def apply_avatar_name(instruction: str, avatar_name: str | None) -> str:
     return instruction.replace("{{avatar_name}}", avatar_name or "Nova")
 
 
+def _display_money(field: object) -> str | None:
+    if isinstance(field, dict):
+        display_text = field.get("display_text")
+        if isinstance(display_text, str) and display_text.strip():
+            return display_text.strip()
+        amount_minor = field.get("amount_minor")
+        currency_code = field.get("currency_code") or "USD"
+        exponent = int(field.get("exponent", 2))
+        if isinstance(amount_minor, int):
+            whole, fraction = divmod(abs(amount_minor), 10**exponent)
+            digits = f"{whole:,}"
+            if exponent:
+                digits += f".{fraction:0{exponent}d}"
+            if amount_minor < 0:
+                digits = f"-{digits}"
+            return f"{currency_code} {digits}"
+    return None
+
+
+def format_credit_account_context(credit_account: dict | None) -> str | None:
+    """Render trusted card product and credit-limit facts for the session prompt."""
+    if not isinstance(credit_account, dict) or not credit_account:
+        return None
+    product_name = credit_account.get("product_name") or credit_account.get("product_code")
+    product_code = credit_account.get("product_code")
+    credit_limit = _display_money(credit_account.get("credit_limit"))
+    available_credit = _display_money(credit_account.get("available_credit"))
+    product_max = _display_money(credit_account.get("product_maximum_limit"))
+    lines = ["Customer credit card account context:"]
+    if product_name:
+        if product_code and product_code != product_name:
+            lines.append(f"- Card product: {product_name} ({product_code}).")
+        else:
+            lines.append(f"- Card product: {product_name}.")
+    if credit_limit:
+        if available_credit:
+            lines.append(
+                f"- Starting credit limit: {credit_limit} (available credit: {available_credit})."
+            )
+        else:
+            lines.append(f"- Starting credit limit: {credit_limit}.")
+    if product_max:
+        lines.append(f"- Card product maximum credit limit: {product_max}.")
+    if len(lines) == 1:
+        return None
+    lines.append(
+        "- If a credit-limit action is committed during this session, the latest tool result updates the current credit limit and available credit."
+    )
+    return "\n".join(lines)
+
+
 def compose_session_instruction(
     *,
     avatar_name: str | None,

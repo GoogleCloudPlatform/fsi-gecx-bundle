@@ -365,6 +365,12 @@ def test_confirmation_uses_latest_available_credit_and_replays_once(credit_db):
     db.commit()
     result = commit(db, user, view)
     assert result["credit_limit"] == view["proposed_limit"]
+    assert result["product_code"] == product.product_code
+    assert result["product_name"] == product.product_name
+    assert result["product_maximum"] == {
+        "amount_minor": 3000000,
+        "currency_code": "USD",
+    }
     assert result["available_credit"] == {
         "amount_minor": 1300000,
         "currency_code": "USD",

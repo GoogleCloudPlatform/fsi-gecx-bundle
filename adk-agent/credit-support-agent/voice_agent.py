@@ -39,7 +39,7 @@ from agent.agent import (
     reset_session_context,
 )
 from agent.avatar_runtime import LIVE_AVATAR_VIDEO_FORMAT, run_with_avatar_fallback
-from agent.instructions import compose_session_instruction
+from agent.instructions import compose_session_instruction, format_credit_account_context
 from agent.live_runtime import (
     build_live_run_config,
     env_flag,
@@ -274,7 +274,12 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
     
     from google.adk.models import Gemini
     active_flows = []
-    session_context_text = None
+    context_sections = []
+    account_context_text = format_credit_account_context(
+        voice_context.get("credit_account")
+    )
+    if account_context_text:
+        context_sections.append(account_context_text)
     if voice_context.get("has_active_fraud_alert") and voice_context.get("fraud_alert"):
         active_flows.append("fraud_alert")
         fraud_alert = voice_context["fraud_alert"]
@@ -283,7 +288,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             f"(billed: {txn['presentations'][voice_locale]['billing']['display_text']})"
             for txn in fraud_alert.get("suspicious_transactions", [])
         )
-        session_context_text = (
+        context_sections.append(
             "Session-specific customer context:\n"
             f"- The customer has an active fraud alert on card ending in {fraud_alert['card_last_four']}.\n"
             f"- Fraud alert thread id: {fraud_alert['message_thread_id']}.\n"
@@ -292,6 +297,7 @@ async def run_voice_agent_session(room_name: str, customer_id: str, session_id: 
             f"{suspicious_lines or '- No suspicious transaction details were provided.'}\n"
             "- These are trusted operational facts. Follow the Approved support guidance for workflow policy."
         )
+    session_context_text = "\n\n".join(context_sections) if context_sections else None
     guidance_summary = support_guidance.get("agent_guidance_summary")
     session_instruction = compose_session_instruction(
         avatar_name=avatar_name,
