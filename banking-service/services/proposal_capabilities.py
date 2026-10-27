@@ -1273,6 +1273,14 @@ def validate_credit_limit(db, proposal, *, provider=None):
 
 def execute_credit_limit(db, proposal):
     payload = proposal.action_payload
+    facts = payload.get("eligibility_facts") or {}
+    product_code = facts.get("product_code")
+    product = (
+        db.query(CreditProduct).filter_by(product_code=product_code).first()
+        if product_code
+        else None
+    )
+    max_minor = facts.get("maximum_limit_minor")
     result = apply_limit_increase(
         db,
         account_id=proposal.account_id,
@@ -1283,10 +1291,17 @@ def execute_credit_limit(db, proposal):
         "success": True,
         "message": f"Your credit limit is now {usd_limit_text(Money.model_validate(payload['proposed_limit']))}.",
         "account_id": str(proposal.account_id),
+        "product_code": product_code,
+        "product_name": product.product_name if product else product_code,
         "approval_semantics": payload["approval_semantics"],
         "previous_credit_limit": payload["current_limit"],
         "credit_limit": payload["proposed_limit"],
         "increase_amount": payload["increase_amount"],
+        "product_maximum": (
+            Money(amount_minor=max_minor, currency_code="USD").model_dump()
+            if max_minor is not None
+            else None
+        ),
         "available_credit": Money(
             amount_minor=result["available_credit_cents"], currency_code="USD"
         ).model_dump(),

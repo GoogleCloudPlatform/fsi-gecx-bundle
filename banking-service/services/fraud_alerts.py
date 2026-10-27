@@ -228,6 +228,64 @@ class FraudAlertService:
             "created": True,
         }
 
+    def _build_credit_account_context(
+        self,
+        *,
+        customer_id=None,
+        auth_provider_uid: str | None = None,
+    ) -> dict | None:
+        from models.credit_card import CreditProduct
+        from services.credit_card import get_account_summary_dto
+        from services.proposal_capabilities import credit_limit_facts
+
+        identity = str(auth_provider_uid or customer_id or "")
+        if not identity:
+            return None
+        repo = CreditCardRepository(self.db)
+        account = repo.get_account_by_customer(identity)
+        if account is None:
+            return None
+        summary = get_account_summary_dto(repo, identity) or {}
+        product = (
+            self.db.query(CreditProduct)
+            .filter_by(product_code=account.product_code)
+            .first()
+        )
+        facts = credit_limit_facts(account, product)
+        currency = account.currency
+        min_minor = facts.get("minimum_limit_minor")
+        max_minor = facts.get("maximum_limit_minor")
+        return {
+            "product_code": account.product_code,
+            "product_name": product.product_name if product else account.product_code,
+            "currency_code": currency,
+            "credit_limit": (
+                project_money(Money.model_validate(summary["credit_limit"]))
+                if summary.get("credit_limit") is not None
+                else None
+            ),
+            "available_credit": (
+                project_money(Money.model_validate(summary["available_credit"]))
+                if summary.get("available_credit") is not None
+                else None
+            ),
+            "cleared_balance": (
+                project_money(Money.model_validate(summary["cleared_balance"]))
+                if summary.get("cleared_balance") is not None
+                else None
+            ),
+            "product_minimum_limit": (
+                project_money(Money(amount_minor=min_minor, currency_code=currency))
+                if min_minor is not None
+                else None
+            ),
+            "product_maximum_limit": (
+                project_money(Money(amount_minor=max_minor, currency_code=currency))
+                if max_minor is not None
+                else None
+            ),
+        }
+
     def get_active_voice_context(
         self,
         *,
@@ -239,6 +297,10 @@ class FraudAlertService:
         reset_generation = get_reset_generation(
             self.db, str(auth_provider_uid or customer_id or "")
         )
+        credit_account = self._build_credit_account_context(
+            customer_id=customer_id,
+            auth_provider_uid=auth_provider_uid,
+        )
         alert = self.repo.get_latest_open_alert_for_customer(
             customer_id=customer_id,
             auth_provider_uid=auth_provider_uid,
@@ -248,6 +310,7 @@ class FraudAlertService:
                 "entry_reason": "general_support",
                 "has_active_fraud_alert": False,
                 "fraud_alert": None,
+                "credit_account": credit_account,
                 "reset_generation": reset_generation,
                 "support_guidance": {
                     "source": "not_applicable",
@@ -263,6 +326,7 @@ class FraudAlertService:
             "entry_reason": "fraud_alert",
             "has_active_fraud_alert": True,
             "reset_generation": reset_generation,
+            "credit_account": credit_account,
             "fraud_alert": {
                 "fraud_alert_id": str(alert.id),
                 "status": alert.status,

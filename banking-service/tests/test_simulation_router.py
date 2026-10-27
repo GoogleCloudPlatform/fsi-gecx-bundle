@@ -815,6 +815,9 @@ async def test_inject_anomaly_success(mock_get_tokens, mock_send_multicast, mock
     assert voice_context["fraud_alert"]["fraud_alert_id"] == data["fraud_alert_id"]
     assert voice_context["fraud_alert"]["card_last_four"]
     assert "active fraud alert" in voice_context["fraud_alert"]["summary"].lower()
+    assert voice_context["credit_account"]["product_name"] == "Nova Cashback Everyday"
+    assert voice_context["credit_account"]["credit_limit"]["display_text"] == "USD 10,000.00"
+    assert voice_context["credit_account"]["product_maximum_limit"]["display_text"] == "USD 15,000.00"
 
     mock_claims = {"sub": "voice-agent-sa", "email": "support.agent@google.com"}
     support_context_response = await async_client.get(

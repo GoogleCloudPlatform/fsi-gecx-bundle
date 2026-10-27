@@ -16,7 +16,10 @@
 
 import pytest
 
-from agent.instructions import compose_session_instruction
+from agent.instructions import (
+    compose_session_instruction,
+    format_credit_account_context,
+)
 
 
 @pytest.fixture(scope="module")
@@ -83,3 +86,38 @@ def test_whole_dollar_speech_and_natural_offer_guidance(instruction) -> None:
     assert 'Speak whole-dollar amounts naturally without pronouncing ".00"' in instruction
     assert 'Never say "I have prepared a proposal"' in instruction
     assert 'without using internal protocol words like "proposal"' in instruction
+    assert "Card product and limit inquiries:" in instruction
+    assert (
+        "do not claim you lack access or offer a human transfer just to look up the card product's maximum limit"
+        in instruction
+    )
+
+
+def test_format_credit_account_context_includes_product_and_maximum_limit() -> None:
+    rendered = format_credit_account_context(
+        {
+            "product_code": "CASH_REWARDS_VISA",
+            "product_name": "Nova Horizon Cash Rewards Visa",
+            "credit_limit": {
+                "money": {"amount_minor": 1000000, "currency_code": "USD", "exponent": 2},
+                "locale": "en-US",
+                "display_text": "USD 10,000.00",
+            },
+            "available_credit": {
+                "money": {"amount_minor": 924000, "currency_code": "USD", "exponent": 2},
+                "locale": "en-US",
+                "display_text": "USD 9,240.00",
+            },
+            "product_maximum_limit": {
+                "money": {"amount_minor": 1500000, "currency_code": "USD", "exponent": 2},
+                "locale": "en-US",
+                "display_text": "USD 15,000.00",
+            },
+        }
+    )
+    assert rendered is not None
+    assert "Card product: Nova Horizon Cash Rewards Visa (CASH_REWARDS_VISA)." in rendered
+    assert "Starting credit limit: USD 10,000.00 (available credit: USD 9,240.00)." in rendered
+    assert "Card product maximum credit limit: USD 15,000.00." in rendered
+    assert format_credit_account_context(None) is None
+    assert format_credit_account_context({}) is None
