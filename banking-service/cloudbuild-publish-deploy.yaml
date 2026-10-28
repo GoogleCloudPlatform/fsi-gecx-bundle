@@ -163,7 +163,7 @@ steps:
           if out=$$(gcloud run jobs describe "$$job" --region "${_REGION}" 2>&1); then
             return 0
           fi
-          if echo "$$out" | grep -iq -e "not_found" -e "could not be found" -e "not found"; then
+          if echo "$$out" | grep -q "NOT_FOUND" || echo "$$out" | grep -iq "could not be found"; then
             return 1
           fi
           echo "ERROR: Failed to describe Cloud Run job $$job:" >&2
@@ -242,7 +242,7 @@ steps:
           if out=$$(gcloud run jobs describe "$$job" --region "${_REGION}" 2>&1); then
             return 0
           fi
-          if echo "$$out" | grep -iq -e "not_found" -e "could not be found" -e "not found"; then
+          if echo "$$out" | grep -q "NOT_FOUND" || echo "$$out" | grep -iq "could not be found"; then
             return 1
           fi
           echo "ERROR: Failed to describe Cloud Run job $$job:" >&2
