@@ -214,6 +214,34 @@ steps:
         fi
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "import-credit-knowledge"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        # The revision deployed next grounds search results against the corpus
+        # snapshot in this image, so load that snapshot first. A failed import
+        # fails the build (and skips deploy-service), like migrations.
+        set -euo pipefail
+        IMAGE_TAG=$$(cat /workspace/image_tag.txt)
+        if [ "${_TRIGGER_DEPLOY}" = "true" ]; then
+          if gcloud run jobs describe banking-credit-knowledge-import --region "${_REGION}" >/dev/null 2>&1; then
+            echo "Registering latest image with Cloud Run Credit Knowledge Import Job..."
+            gcloud run jobs update banking-credit-knowledge-import \
+              --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${IMAGE_TAG}" \
+              --region "${_REGION}"
+            echo "Importing the credit knowledge snapshot..."
+            gcloud run jobs execute banking-credit-knowledge-import \
+              --region "${_REGION}" \
+              --wait
+          else
+            echo "Credit knowledge import job banking-credit-knowledge-import not found; skipping import."
+          fi
+        else
+          echo "Skipping credit knowledge import because _TRIGGER_DEPLOY is not true"
+        fi
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     id: "deploy-service"
     entrypoint: "bash"
     args:

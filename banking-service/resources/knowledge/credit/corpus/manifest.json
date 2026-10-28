@@ -1,0 +1,191 @@
+{
+  "documents": [
+    {
+      "doc_id": "CARD-PLATINUM_TRAVEL_REWARDS",
+      "kind": "PRODUCT",
+      "sections": [
+        "overview",
+        "purchase-apr",
+        "balance-transfers",
+        "cash-advances",
+        "fees",
+        "penalty-apr",
+        "rewards",
+        "credit-limits",
+        "feature-1",
+        "feature-2",
+        "feature-3",
+        "feature-4"
+      ],
+      "short_title": "Nova Horizon Platinum Travel",
+      "title": "Nova Horizon Platinum Travel card terms"
+    },
+    {
+      "doc_id": "CARD-CASHBACK_EVERYDAY",
+      "kind": "PRODUCT",
+      "sections": [
+        "overview",
+        "purchase-apr",
+        "balance-transfers",
+        "cash-advances",
+        "fees",
+        "penalty-apr",
+        "rewards",
+        "credit-limits",
+        "feature-1",
+        "feature-2",
+        "feature-3",
+        "feature-4"
+      ],
+      "short_title": "Nova Horizon Everyday Cash",
+      "title": "Nova Horizon Everyday Cash card terms"
+    },
+    {
+      "doc_id": "CARD-LOW_APR_BALANCE_TRANSFER",
+      "kind": "PRODUCT",
+      "sections": [
+        "overview",
+        "purchase-apr",
+        "balance-transfers",
+        "cash-advances",
+        "fees",
+        "penalty-apr",
+        "rewards",
+        "credit-limits",
+        "feature-1",
+        "feature-2",
+        "feature-3",
+        "feature-4"
+      ],
+      "short_title": "Nova Horizon Low Rate",
+      "title": "Nova Horizon Low Rate card terms"
+    },
+    {
+      "doc_id": "CARD-BUSINESS_ADVANTAGE",
+      "kind": "PRODUCT",
+      "sections": [
+        "overview",
+        "purchase-apr",
+        "balance-transfers",
+        "cash-advances",
+        "fees",
+        "penalty-apr",
+        "rewards",
+        "credit-limits",
+        "feature-1",
+        "feature-2",
+        "feature-3",
+        "feature-4"
+      ],
+      "short_title": "Nova Horizon Business Advantage",
+      "title": "Nova Horizon Business Advantage card terms"
+    },
+    {
+      "doc_id": "CARD-SECURED_STARTER",
+      "kind": "PRODUCT",
+      "sections": [
+        "overview",
+        "purchase-apr",
+        "balance-transfers",
+        "cash-advances",
+        "fees",
+        "penalty-apr",
+        "rewards",
+        "credit-limits",
+        "feature-1",
+        "feature-2",
+        "feature-3",
+        "feature-4"
+      ],
+      "short_title": "Nova Horizon Secured Starter",
+      "title": "Nova Horizon Secured Starter card terms"
+    },
+    {
+      "doc_id": "POLICY-APPLY",
+      "kind": "POLICY",
+      "sections": [
+        "web-form",
+        "assistant",
+        "decision"
+      ],
+      "short_title": "Applying for a card",
+      "title": "How to apply for a Nova Horizon credit card"
+    },
+    {
+      "doc_id": "POLICY-PAYMENTS",
+      "kind": "POLICY",
+      "sections": [
+        "due-date",
+        "how-to-pay",
+        "late-payments"
+      ],
+      "short_title": "Payments and due dates",
+      "title": "Card payments and due dates"
+    },
+    {
+      "doc_id": "POLICY-CREDIT-LIMIT",
+      "kind": "POLICY",
+      "sections": [
+        "how-it-works",
+        "decision"
+      ],
+      "short_title": "Credit limit increases",
+      "title": "How credit limit increases work"
+    },
+    {
+      "doc_id": "POLICY-SECURED-GRADUATION",
+      "kind": "POLICY",
+      "sections": [
+        "how-it-works",
+        "deposit"
+      ],
+      "short_title": "Secured card graduation",
+      "title": "Moving from a secured card to an unsecured card"
+    },
+    {
+      "doc_id": "POLICY-LOST-STOLEN-FRAUD",
+      "kind": "POLICY",
+      "sections": [
+        "lost-stolen",
+        "fraud",
+        "alerts"
+      ],
+      "short_title": "Lost, stolen card and fraud",
+      "title": "Lost or stolen cards and suspected fraud"
+    },
+    {
+      "doc_id": "POLICY-DISPUTES",
+      "kind": "POLICY",
+      "sections": [
+        "how-to-dispute",
+        "what-happens"
+      ],
+      "short_title": "Disputes",
+      "title": "Disputing a card transaction"
+    },
+    {
+      "doc_id": "POLICY-FEES",
+      "kind": "POLICY",
+      "sections": [
+        "overview",
+        "where-to-find"
+      ],
+      "short_title": "Fees overview",
+      "title": "Credit card fees overview"
+    },
+    {
+      "doc_id": "POLICY-CONTACT",
+      "kind": "POLICY",
+      "sections": [
+        "channels",
+        "specialist"
+      ],
+      "short_title": "Contacting support",
+      "title": "Contacting Nova Horizon support"
+    }
+  ],
+  "generator": "banking-service/scripts/generate_credit_knowledge_corpus.py",
+  "record_count": 79,
+  "schema_version": 1,
+  "snapshot_id": "1-441c34df7836"
+}

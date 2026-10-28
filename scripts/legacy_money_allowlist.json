@@ -1831,6 +1831,18 @@
       ],
       "owner": "backlog:usd-origination",
       "rationale": "Catalog fixtures and seed-consistency checks address retained BIGINT catalog/persona storage names."
+    },
+    "banking-service/tests/test_credit_knowledge_corpus.py": {
+      "lines": {
+        "ebbfc2617a11a01d8bdb77f44134537c67b2af601d3a65edb5956716d13fa4f6": 1
+      },
+      "symbols": [
+        "annual_fee_cents",
+        "max_credit_limit_cents",
+        "min_credit_limit_cents"
+      ],
+      "owner": "backlog:usd-origination",
+      "rationale": "Fixture catalog proving knowledge-corpus product documents trace the retained BIGINT catalog fee and limit fields."
     }
   }
 }

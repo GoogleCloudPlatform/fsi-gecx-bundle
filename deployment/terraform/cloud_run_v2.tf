@@ -184,6 +184,21 @@ resource "google_cloud_run_v2_service" "banking_service" {
       }
 
       env {
+        name  = "CREDIT_KNOWLEDGE_PROJECT_ID"
+        value = var.project_id
+      }
+
+      env {
+        name  = "CREDIT_KNOWLEDGE_LOCATION"
+        value = google_discovery_engine_data_store.credit_knowledge.location
+      }
+
+      env {
+        name  = "CREDIT_KNOWLEDGE_DATA_STORE_ID"
+        value = google_discovery_engine_data_store.credit_knowledge.data_store_id
+      }
+
+      env {
         name  = "DATA_GENERATOR_URL"
         value = var.deploy_cloud_run_services ? google_cloud_run_v2_service.data_generator[0].uri : "http://localhost:8001"
       }

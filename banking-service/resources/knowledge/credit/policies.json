@@ -1,0 +1,153 @@
+[
+  {
+    "doc_id": "POLICY-APPLY",
+    "title": "How to apply for a Nova Horizon credit card",
+    "short_title": "Applying for a card",
+    "sections": [
+      {
+        "section_id": "web-form",
+        "heading": "Apply online",
+        "text": "You can apply for any Nova Horizon credit card with the online application form on our website. Rates, fees and limits for each card are in that card's product terms."
+      },
+      {
+        "section_id": "assistant",
+        "heading": "Help choosing a card",
+        "text": "The Nova Horizon assistant can explain and compare our cards and point you to the online application form. Applications are submitted through that form."
+      },
+      {
+        "section_id": "decision",
+        "heading": "Application decisions",
+        "text": "The bank reviews each application and decides approval and the starting credit limit. Applying does not guarantee approval or a specific limit."
+      }
+    ]
+  },
+  {
+    "doc_id": "POLICY-PAYMENTS",
+    "title": "Card payments and due dates",
+    "short_title": "Payments and due dates",
+    "sections": [
+      {
+        "section_id": "due-date",
+        "heading": "Due dates",
+        "text": "Each statement shows your payment due date and minimum payment. Pay at least the minimum by the due date to keep your account in good standing."
+      },
+      {
+        "section_id": "how-to-pay",
+        "heading": "Ways to pay",
+        "text": "You can pay your card from a Nova Horizon checking or savings account with bill pay in online banking."
+      },
+      {
+        "section_id": "late-payments",
+        "heading": "Late or returned payments",
+        "text": "A late or returned payment may add a fee and, on some cards, a penalty APR. The amounts for each card are in its product terms."
+      }
+    ]
+  },
+  {
+    "doc_id": "POLICY-CREDIT-LIMIT",
+    "title": "How credit limit increases work",
+    "short_title": "Credit limit increases",
+    "sections": [
+      {
+        "section_id": "how-it-works",
+        "heading": "Requesting an increase",
+        "text": "You can ask the assistant for a higher credit limit at any time. The bank decides eligibility when you make the request."
+      },
+      {
+        "section_id": "decision",
+        "heading": "How the bank decides",
+        "text": "The bank considers your account history and the card's maximum limit, listed in its product terms. A request can be approved in full, in part, or declined."
+      }
+    ]
+  },
+  {
+    "doc_id": "POLICY-SECURED-GRADUATION",
+    "title": "Moving from a secured card to an unsecured card",
+    "short_title": "Secured card graduation",
+    "sections": [
+      {
+        "section_id": "how-it-works",
+        "heading": "Graduation reviews",
+        "text": "Secured card accounts are reviewed for an upgrade to an unsecured card. On-time payments help. The review timeline is in the secured card's product terms."
+      },
+      {
+        "section_id": "deposit",
+        "heading": "Your security deposit",
+        "text": "For questions about your refundable security deposit, ask the assistant or send us a secure message in online banking."
+      }
+    ]
+  },
+  {
+    "doc_id": "POLICY-LOST-STOLEN-FRAUD",
+    "title": "Lost or stolen cards and suspected fraud",
+    "short_title": "Lost, stolen card and fraud",
+    "sections": [
+      {
+        "section_id": "lost-stolen",
+        "heading": "Lost or stolen card",
+        "text": "If your card is lost or stolen, tell the assistant right away. The card can be blocked so it cannot be used, and a replacement card can be issued."
+      },
+      {
+        "section_id": "fraud",
+        "heading": "Suspected fraud",
+        "text": "If you see a charge you do not recognize, report it to the assistant as soon as possible. We review the activity with you and can replace your card if it was compromised."
+      },
+      {
+        "section_id": "alerts",
+        "heading": "Fraud alerts",
+        "text": "We may contact you about unusual activity. We never ask for your full card number, PIN or password in a call or message we start."
+      }
+    ]
+  },
+  {
+    "doc_id": "POLICY-DISPUTES",
+    "title": "Disputing a card transaction",
+    "short_title": "Disputes",
+    "sections": [
+      {
+        "section_id": "how-to-dispute",
+        "heading": "Starting a dispute",
+        "text": "If a purchase is wrong, was not delivered or was not as described, contact the merchant first. If that does not fix it, contact us through the assistant or secure messaging."
+      },
+      {
+        "section_id": "what-happens",
+        "heading": "During a dispute",
+        "text": "We review the charge with you and let you know the outcome when the review is complete."
+      }
+    ]
+  },
+  {
+    "doc_id": "POLICY-FEES",
+    "title": "Credit card fees overview",
+    "short_title": "Fees overview",
+    "sections": [
+      {
+        "section_id": "overview",
+        "heading": "Card fees",
+        "text": "Card fees can include an annual fee, foreign transaction fees, balance transfer and cash advance fees, and late or returned payment fees. Not every card has every fee."
+      },
+      {
+        "section_id": "where-to-find",
+        "heading": "Where to find fee amounts",
+        "text": "The exact fee amounts and rates for each card are listed in that card's product terms. Your statement shows any fees charged in the period."
+      }
+    ]
+  },
+  {
+    "doc_id": "POLICY-CONTACT",
+    "title": "Contacting Nova Horizon support",
+    "short_title": "Contacting support",
+    "sections": [
+      {
+        "section_id": "channels",
+        "heading": "Support channels",
+        "text": "You can reach support through the assistant or through secure messaging in online banking."
+      },
+      {
+        "section_id": "specialist",
+        "heading": "Talking to a specialist",
+        "text": "The assistant can connect you with a human support specialist when you need help it cannot provide."
+      }
+    ]
+  }
+]
