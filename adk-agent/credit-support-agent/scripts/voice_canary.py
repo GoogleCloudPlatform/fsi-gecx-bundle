@@ -166,9 +166,9 @@ def _message(entry: dict[str, Any]) -> str:
     return str(entry.get("textPayload") or (entry.get("jsonPayload") or {}).get("message") or "")
 
 
-def _proposal_payload(entry: dict[str, Any]) -> dict[str, Any] | None:
+def _structured_payload(entry: dict[str, Any], message: str) -> dict[str, Any] | None:
     payload = entry.get("jsonPayload") or {}
-    if payload.get("message") == "voice_action_proposal_event":
+    if payload.get("message") == message:
         return payload
     text = str(entry.get("textPayload") or "").strip()
     if text.startswith("{"):
@@ -176,9 +176,17 @@ def _proposal_payload(entry: dict[str, Any]) -> dict[str, Any] | None:
             decoded = json.loads(text)
         except json.JSONDecodeError:
             return None
-        if decoded.get("message") == "voice_action_proposal_event":
+        if decoded.get("message") == message:
             return decoded
     return None
+
+
+def _proposal_payload(entry: dict[str, Any]) -> dict[str, Any] | None:
+    return _structured_payload(entry, "voice_action_proposal_event")
+
+
+def _knowledge_payload(entry: dict[str, Any]) -> dict[str, Any] | None:
+    return _structured_payload(entry, "voice_knowledge_lookup")
 
 
 def _elapsed_ms(timestamp: str, start: datetime) -> float:
@@ -215,6 +223,7 @@ def extract_trajectory(
         for entry in ordered
         if f"session_ref={session_ref}" in _message(entry)
         or (_proposal_payload(entry) or {}).get("support_session_ref") == session_ref
+        or (_knowledge_payload(entry) or {}).get("support_session_ref") == session_ref
     ]
     if not selected:
         raise ValueError(f"No log entries found for session reference {session_ref}.")
@@ -224,7 +233,18 @@ def extract_trajectory(
         message = _message(entry)
         elapsed_ms = _elapsed_ms(entry["timestamp"], start)
         proposal_payload = _proposal_payload(entry)
-        if proposal_payload:
+        knowledge_payload = _knowledge_payload(entry)
+        if knowledge_payload:
+            events.append(
+                {
+                    "type": "KNOWLEDGE_LOOKUP",
+                    "outcome": knowledge_payload.get("outcome"),
+                    "snapshot_id": knowledge_payload.get("snapshot_id"),
+                    "cite_keys": knowledge_payload.get("cite_keys") or [],
+                    "elapsed_ms": elapsed_ms,
+                }
+            )
+        elif proposal_payload:
             events.append(
                 {
                     "type": "ACTION_PROPOSAL",

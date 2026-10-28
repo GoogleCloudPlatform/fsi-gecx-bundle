@@ -36,6 +36,7 @@ from agent.closeout import (
 from agent.guidance_snapshot import guidance_observability_payload
 from agent.log_safety import (
     banking_trace_reference,
+    knowledge_lookup_summary,
     stable_log_reference,
     tool_args_log_summary,
     tool_response_is_domain_refusal,
@@ -43,7 +44,11 @@ from agent.log_safety import (
     tool_response_succeeded,
     tool_result_log_summary,
 )
-from agent.telemetry import record_action_proposal_event, record_tool_completed
+from agent.telemetry import (
+    record_action_proposal_event,
+    record_knowledge_lookup,
+    record_tool_completed,
+)
 from agent.fraud_voice import (
     build_triage_model_result,
     mark_fraud_tool_completed,
@@ -926,6 +931,27 @@ def _record_playbook_selection(state, tool_name: str, args: dict) -> None:
         )
 
 
+KNOWLEDGE_SEARCH_TOOL = "search_knowledge"
+# Sent only with knowledge results. The banking tool description asks callers
+# to cite cite_keys, which suits chat but must never be spoken in voice.
+KNOWLEDGE_RESULT_INSTRUCTION = (
+    "These snippets describe products and policies in general, not this "
+    "customer's account. Answer only from them and never read cite keys, "
+    "citations, or document IDs aloud."
+)
+
+
+def _record_knowledge_lookup(state, tool_response, latency_ms: float) -> None:
+    runtime_context = proposal_runtime_context_var.get() or {}
+    record_knowledge_lookup(
+        support_session_id=str(
+            runtime_context.get("support_session_id") or state.get("session_id") or ""
+        ),
+        summary=knowledge_lookup_summary(tool_response),
+        latency_ms=latency_ms,
+    )
+
+
 def _record_completed_proposal(state, proposal_id: str, resolution: str) -> None:
     if not proposal_id:
         return
@@ -1304,6 +1330,8 @@ async def _on_tool_error_callback_impl(
     tool_context.state["_voice_tool_started_at"] = tool_started
     duration_seconds = time.monotonic() - started_at if started_at is not None else 0.0
     record_tool_completed(tool_name, "error", duration_seconds)
+    if tool_name == KNOWLEDGE_SEARCH_TOOL:
+        _record_knowledge_lookup(tool_context.state, None, duration_seconds * 1000)
     notify_event({
         "type": "VOICE_DIAGNOSTICS",
         "tool_ms": round(duration_seconds * 1000, 3) if started_at is not None else None,
@@ -1417,6 +1445,16 @@ async def _after_tool_callback_impl(
         outcome,
         duration_seconds,
     )
+    if tool_name == KNOWLEDGE_SEARCH_TOOL:
+        _record_knowledge_lookup(
+            tool_context.state, tool_response, duration_seconds * 1000
+        )
+        if success and isinstance(structured, dict):
+            locale = tool_context.state.get("voice_locale", "en-US")
+            structured["model_instruction"] = (
+                f"Continue in {locale}. {MONEY_LANGUAGE_INSTRUCTION} "
+                f"{KNOWLEDGE_RESULT_INSTRUCTION}"
+            )
     notify_event({
         "type": "VOICE_DIAGNOSTICS",
         "tool_ms": round(duration_seconds * 1000, 3) if started_at is not None else None,

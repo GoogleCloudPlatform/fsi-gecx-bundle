@@ -209,6 +209,45 @@ def test_extracts_normalized_proposal_event_for_same_hashed_session() -> None:
     assert proposal["banking_outcome"] == "CONFIRMED_FRAUD_REMEDIATED"
 
 
+def test_extracts_knowledge_lookup_event_for_same_hashed_session() -> None:
+    session = "11111111-1111-4111-8111-111111111111"
+    session_ref = stable_log_reference(session, prefix="session")
+    entries = [
+        entry(
+            "2026-07-14T20:00:00Z",
+            f"Opened ADK session state session_ref={session_ref} reset_generation=0:3",
+        ),
+        entry(
+            "2026-07-14T20:00:01Z",
+            '{"message":"voice_knowledge_lookup","support_session_ref":"'
+            + session_ref
+            + '","outcome":"MATCHED","snapshot_id":"1-abc",'
+            '"cite_keys":["CARD-PLATINUM_TRAVEL-fees"],"result_count":1}',
+        ),
+        json_entry(
+            "2026-07-14T20:00:02Z",
+            {
+                "message": "voice_knowledge_lookup",
+                "support_session_ref": "session_other",
+                "outcome": "NO_MATCH",
+            },
+        ),
+    ]
+
+    _, events = voice_canary.extract_trajectory(entries, session_selector=session)
+
+    lookups = [event for event in events if event["type"] == "KNOWLEDGE_LOOKUP"]
+    assert lookups == [
+        {
+            "type": "KNOWLEDGE_LOOKUP",
+            "outcome": "MATCHED",
+            "snapshot_id": "1-abc",
+            "cite_keys": ["CARD-PLATINUM_TRAVEL-fees"],
+            "elapsed_ms": 1000.0,
+        }
+    ]
+
+
 def test_canary_scenarios_use_proposal_commit_and_keep_direct_baseline() -> None:
     assert voice_canary.SCENARIOS["fraud"].required_tools["commit_fraud_triage"] == 1
     assert "triage_fraud_case" in voice_canary.SCENARIOS["fraud"].forbidden_tools

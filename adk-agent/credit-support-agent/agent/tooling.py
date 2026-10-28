@@ -44,6 +44,7 @@ ADK_BANKING_MCP_TOOL_ALLOWLIST = frozenset(
         "triage_customer_reported_fraud",
         "reverse_overdraft_fee",
         "get_transaction_history",
+        "search_knowledge",
     }
 )
 
