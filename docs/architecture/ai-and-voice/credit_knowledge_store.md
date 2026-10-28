@@ -15,7 +15,7 @@ flowchart LR
     Gen --> Snapshot["corpus/manifest.json + documents.jsonl (committed)"]
     Snapshot --> Image["banking-service image"]
     Image --> Job["Cloud Run Job banking-credit-knowledge-import"]
-    Job -->|"schema patch + ImportDocuments FULL"| Store["Discovery Engine data store credit-knowledge"]
+    Job -->|"schema patch + inline INCREMENTAL import + prune"| Store["Discovery Engine data store credit-knowledge"]
     Agent["Banking agent"] -->|"MCP search_knowledge(query)"| Tool["banking-service tool"]
     Tool -->|"servingConfigs/default_search:search"| Store
     Tool -->|"grounding check"| Image
@@ -108,7 +108,7 @@ Errors:
   - `title`, `short_title`, `heading` and `text_span` `searchable`;
   - ids `indexable`.
 - **Runtime.** The banking-service SA gets custom role `custom.discoveryengine.knowledgeSearcher`, which has only `discoveryengine.servingConfigs.search`.
-- **Import.** `credit-knowledge-import-sa` gets custom role `custom.discoveryengine.knowledgeImporter`: `documents.import`, `operations.get`, `schemas.get` and `schemas.update`. It's the only identity that can write.
+- **Import.** `credit-knowledge-import-sa` gets custom role `custom.discoveryengine.knowledgeImporter`: `documents.import`, `documents.list`, `documents.delete`, `operations.get`, `schemas.get` and `schemas.update`. It's the only identity that can write. It can manage documents and the schema, but it has no data store, engine, serving config or IAM permissions.
 
 > [!NOTE]
 > Discovery Engine IAM is project-scoped, so both custom roles apply to every data store in the project. The banking-service SA also keeps its pre-existing project-level `roles/discoveryengine.viewer` (used by site search), so its **effective** grant is wider than the searcher role. The narrow role records intent and stays correct if that viewer binding is later removed.
@@ -119,18 +119,25 @@ Errors:
 - A failed import fails the build, so the new revision isn't deployed.
 - The step is skipped only when the job doesn't exist yet.
 
+**Import job flow.** Discovery Engine rejects `inlineSource` with FULL reconciliation (`400 Field "inlineSource" is unsupported when reconciliationMode is FULL`). FULL is only available for GCS and BigQuery sources. The job therefore does three things:
+1. Applies the schema; this is idempotent.
+2. Upserts every snapshot record in one inline `ImportDocuments` request with `reconciliationMode=INCREMENTAL`. It waits on the operation and fails on any error sample or failure count.
+3. Lists every document in `default_branch`, following page tokens, and deletes each one whose id isn't in the snapshot. It logs `kept`, `deleted` and `failed`. It tries every delete, then exits non-zero if any failed, and refuses to prune against an empty snapshot.
+
+The prune runs after the import, so the store is never empty mid-run. A re-run with the same snapshot imports the same records again and deletes nothing.
+
 1. **Provision (owner).** `terraform apply` creates the data store, roles, SA, job and env vars.
 2. **First import.** Run `gcloud run jobs execute banking-credit-knowledge-import --region us-central1 --wait`, or let the next banking-service deploy run it.
 3. **Verify.**
-   - The job logs show `Applied credit knowledge schema fields=...` (or `already current`) and `Imported credit knowledge snapshot snapshot_id=<manifest snapshot_id> records=<record_count>`.
+   - The job logs show `Applied credit knowledge schema fields=...` (or `already current`) `Imported credit knowledge snapshot snapshot_id=<manifest snapshot_id> records=<record_count>` and `Pruned credit knowledge store snapshot_id=<id> kept=<record_count> deleted=<n> failed=0`.
    - A `search_knowledge` call returns `success: true` with that `snapshot_id`.
    - The banking-service logs show `search_knowledge served ... cite_keys=...`.
-4. **Swap window.** Between the import and the new revision taking traffic, old revisions see records from a snapshot they don't ship. They return `DEPENDENCY_UNAVAILABLE`, which agents should treat as "can't look that up right now". Indexing lag right after an import can also briefly return old documents (also unavailable) or no matches.
+4. **Swap window.** Every record carries `snapshot_id`, so a new snapshot rewrites every record during the import. Between the import and the new revision taking traffic, old revisions see records from a snapshot they don't ship. They return `DEPENDENCY_UNAVAILABLE`, which agents should treat as "can't look that up right now". Indexing lag right after an import can also briefly return old documents (also unavailable) or no matches.
 
 ## 7. Follow-ups
 
 - **Agent wiring (PR5).** Add `search_knowledge` to the credit support agent's tool allowlist and instructions.
 - **Blended site search.** Optionally attach `credit-knowledge` to the `nova_horizon_site` engine so header search and answers can also cite curated sections.
-- **Zero-downtime swaps.** Use snapshot-prefixed ids with INCREMENTAL import, a `snapshot_id` filter and pruning, instead of FULL reconciliation.
+- **Zero-downtime swaps.** Use snapshot-prefixed ids and a `snapshot_id` filter, so old and new snapshots can coexist until the prune.
 - **Narrow the effective grant.** Revisit the banking SA's project-level `roles/discoveryengine.viewer` once site search's needs are confirmed.
 - **Grow the corpus.** Once the snapshot exceeds 100 records (the inline import limit), switch the import to a GCS source.

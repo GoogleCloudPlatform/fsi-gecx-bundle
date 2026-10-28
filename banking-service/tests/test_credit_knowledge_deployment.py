@@ -49,14 +49,25 @@ def test_runtime_sa_gets_only_the_search_permission():
     assert "google_service_account.banking_service_account.email" in binding
 
 
-def test_only_the_import_identity_can_write_and_it_cannot_delete_or_administer():
+def test_only_the_import_identity_can_write_and_it_cannot_administer():
     role = _block("google_project_iam_custom_role", "credit_knowledge_importer")
-    assert _permissions(role) == {
+    permissions = _permissions(role)
+    assert permissions == {
+        "discoveryengine.documents.delete",
         "discoveryengine.documents.import",
+        "discoveryengine.documents.list",
         "discoveryengine.operations.get",
         "discoveryengine.schemas.get",
         "discoveryengine.schemas.update",
     }
+    # Document-level writes only: no data store, engine, serving config or schema lifecycle.
+    assert not any(
+        p.startswith(("discoveryengine.dataStores.", "discoveryengine.engines.", "discoveryengine.servingConfigs."))
+        or p.endswith((".create", ".setIamPolicy"))
+        or p == "discoveryengine.schemas.delete"
+        for p in permissions
+    )
+
     binding = _block("google_project_iam_member", "credit_knowledge_import_sa_importer")
     assert "credit_knowledge_import_service_account.email" in binding
     importer_members = re.findall(
@@ -152,27 +163,123 @@ def test_schema_apply_is_idempotent_and_logs_fields(caplog):
 
 
 class FakeDocumentClient:
-    def __init__(self, failure_count=0, error_messages=()):
+    """In-memory branch: import upserts, list paginates, delete removes."""
+
+    def __init__(self, failure_count=0, error_messages=(), stored_ids=(), page_size=2, failing_deletes=()):
         self.failure_count = failure_count
         self.error_messages = error_messages
+        self.page_size = page_size
+        self.failing_deletes = set(failing_deletes)
         self.requests = []
+        self.list_requests = []
+        self.deleted = []
+        self.store = {doc_id: f"{STORE}/branches/default_branch/documents/{doc_id}" for doc_id in stored_ids}
 
     def import_documents(self, request):
         self.requests.append(request)
+        for document in request.inline_source.documents:
+            self.store[document.id] = f"{request.parent}/documents/{document.id}"
         response = SimpleNamespace(error_samples=[SimpleNamespace(message=m) for m in self.error_messages])
         return FakeOperation(response, SimpleNamespace(failure_count=self.failure_count))
 
+    def list_documents(self, request):
+        self.list_requests.append(request)
+        ids = sorted(self.store)
+        start = int(request.page_token or 0)
+        page = ids[start:start + self.page_size]
+        next_token = str(start + self.page_size) if start + self.page_size < len(ids) else ""
+        documents = [SimpleNamespace(id=doc_id, name=self.store[doc_id]) for doc_id in page]
+        return SimpleNamespace(documents=documents, next_page_token=next_token)
 
-def test_import_full_reconciles_the_whole_snapshot_in_one_request():
+    def delete_document(self, request):
+        doc_id = request.name.rsplit("/", 1)[-1]
+        if doc_id in self.failing_deletes:
+            raise api_exceptions.ServiceUnavailable("down")
+        self.deleted.append(doc_id)
+        self.store.pop(doc_id, None)
+
+
+INCREMENTAL = discoveryengine.ImportDocumentsRequest.ReconciliationMode.INCREMENTAL
+FULL = discoveryengine.ImportDocumentsRequest.ReconciliationMode.FULL
+
+
+def test_import_upserts_the_whole_snapshot_incrementally_in_one_request():
     corpus = load_corpus()
     client = FakeDocumentClient()
     assert importer.import_snapshot(client, STORE, corpus) == len(corpus.records)
     (request,) = client.requests
     assert request.parent == f"{STORE}/branches/default_branch"
-    assert request.reconciliation_mode == discoveryengine.ImportDocumentsRequest.ReconciliationMode.FULL
+    assert request.reconciliation_mode == INCREMENTAL
     documents = request.inline_source.documents
     assert [d.id for d in documents] == [r["id"] for r in corpus.records]
     assert dict(documents[0].struct_data) == corpus.records[0]["structData"]
+
+
+def test_inline_import_never_uses_full_reconciliation():
+    # Regression guard: Discovery Engine rejects inlineSource with FULL (400 InvalidArgument).
+    client = FakeDocumentClient()
+    importer.import_snapshot(client, STORE, load_corpus())
+    for request in client.requests:
+        if request.inline_source.documents:
+            assert request.reconciliation_mode != FULL
+
+
+def test_prune_deletes_only_ids_missing_from_the_snapshot_across_pages(caplog):
+    caplog.set_level("INFO")
+    corpus = load_corpus()
+    snapshot_ids = [r["id"] for r in corpus.records]
+    stale = ["CARD-RETIRED-fees", "POLICY-OLD-x", "ZZZ-last-page"]
+    client = FakeDocumentClient(stored_ids=snapshot_ids[:5] + stale, page_size=3)
+    importer.import_snapshot(client, STORE, corpus)
+
+    kept, deleted = importer.prune_documents(client, STORE, corpus)
+
+    assert sorted(client.deleted) == sorted(stale)
+    assert (kept, deleted) == (len(snapshot_ids), len(stale))
+    assert sorted(client.store) == sorted(snapshot_ids)
+    assert len(client.list_requests) > 2  # walked every page
+    assert all(r.parent == f"{STORE}/branches/default_branch" for r in client.list_requests)
+    assert f"kept={len(snapshot_ids)} deleted={len(stale)} failed=0" in caplog.text
+
+
+def test_rerun_with_the_same_snapshot_deletes_nothing():
+    corpus = load_corpus()
+    client = FakeDocumentClient(stored_ids=["CARD-RETIRED-fees"])
+    for _ in range(2):
+        importer.import_snapshot(client, STORE, corpus)
+        importer.prune_documents(client, STORE, corpus)
+    assert client.deleted == ["CARD-RETIRED-fees"]
+    assert importer.prune_documents(client, STORE, corpus) == (len(corpus.records), 0)
+
+
+def test_delete_failure_exits_non_zero_after_attempting_the_rest():
+    corpus = load_corpus()
+    client = FakeDocumentClient(stored_ids=["A-stale", "B-stale"], failing_deletes=["A-stale"])
+    importer.import_snapshot(client, STORE, corpus)
+    with pytest.raises(RuntimeError, match="prune failed for 1 document"):
+        importer.prune_documents(client, STORE, corpus)
+    assert client.deleted == ["B-stale"]
+
+
+def test_prune_refuses_an_empty_snapshot():
+    corpus = load_corpus()
+    client = FakeDocumentClient(stored_ids=[r["id"] for r in corpus.records])
+    with pytest.raises(ValueError, match="empty snapshot"):
+        importer.prune_documents(client, STORE, CorpusSnapshot(corpus.manifest, ()))
+    assert client.deleted == []
+
+
+def test_main_imports_before_pruning(monkeypatch):
+    calls = []
+    monkeypatch.setenv("CREDIT_KNOWLEDGE_PROJECT_ID", "p")
+    monkeypatch.setenv("CREDIT_KNOWLEDGE_DATA_STORE_ID", "credit-knowledge")
+    monkeypatch.setattr(importer, "apply_schema", lambda *a: calls.append("schema"))
+    monkeypatch.setattr(importer, "import_snapshot", lambda *a: calls.append("import"))
+    monkeypatch.setattr(importer, "prune_documents", lambda *a: calls.append("prune"))
+    monkeypatch.setattr(discoveryengine, "SchemaServiceClient", lambda: None)
+    monkeypatch.setattr(discoveryengine, "DocumentServiceClient", lambda: None)
+    assert importer.main() == 0
+    assert calls == ["schema", "import", "prune"]
 
 
 @pytest.mark.parametrize("client", [FakeDocumentClient(failure_count=1), FakeDocumentClient(error_messages=["bad"])])
