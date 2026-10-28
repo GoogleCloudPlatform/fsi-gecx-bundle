@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useSyncExternalStore } from 'react';
 import { getCreditProducts } from './api.js';
 
 let productsFetcher = getCreditProducts;
@@ -54,6 +53,13 @@ export function getCreditProductsSnapshot() {
   return store;
 }
 
+/**
+ * Fetches credit products from the catalog API.
+ * - If products are already cached and not forcing, returns cached products.
+ * - If a request is in flight, returns the shared in-flight promise.
+ * - If the previous request failed (store.error is set), clears error and fetches anew.
+ * - On error, inFlightPromise is cleared immediately so subsequent calls / retries fetch again.
+ */
 export async function fetchCreditProducts(force = false) {
   if (store.products.length > 0 && !force && !store.error) {
     return store.products;
@@ -86,24 +92,6 @@ export function resetCreditProductsCache() {
   store = { products: [], loading: true, error: null };
   inFlightPromise = null;
   notify();
-}
-
-/**
- * Hook providing credit product catalog data with shared module-level caching.
- * Returns { products, loading, error }
- */
-export function useCreditProducts() {
-  useEffect(() => {
-    if (store.products.length === 0 && !inFlightPromise && !store.error) {
-      fetchCreditProducts().catch(() => {});
-    }
-  }, []);
-
-  return useSyncExternalStore(
-    subscribeCreditProducts,
-    getCreditProductsSnapshot,
-    getCreditProductsSnapshot
-  );
 }
 
 /**

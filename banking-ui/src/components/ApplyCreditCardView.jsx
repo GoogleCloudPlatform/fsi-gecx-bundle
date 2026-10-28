@@ -29,7 +29,8 @@ import {
   AlertCircle, 
   CheckCircle2, 
   Loader2,
-  ExternalLink
+  ExternalLink,
+  RefreshCw
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { createApplication } from '../utils/api.js';
@@ -65,7 +66,7 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
   const appId = cxParts.includes('apps') ? cxParts[cxParts.indexOf('apps') + 1] : '';
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
-  const { products, loading: productsLoading } = useCreditProducts();
+  const { products, loading: productsLoading, error: productsError, retry: retryProducts } = useCreditProducts();
 
   const cardParam = searchParams.get('card') || prefill?.product || '';
 
@@ -187,6 +188,34 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
         <div className="inline-flex items-center gap-3 px-6 py-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-sm font-semibold shadow-sm">
           <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
           <span>Loading credit card details...</span>
+        </div>
+      </section>
+    );
+  }
+
+  if (productsError && !productsLoading) {
+    return (
+      <section className="relative pt-24 pb-16 md:pt-28 md:pb-24 px-6 max-w-4xl mx-auto min-h-[calc(100vh-80px)] flex flex-col justify-center items-center text-center">
+        <div className="bg-white dark:bg-slate-900 border border-red-200 dark:border-red-800/40 rounded-3xl p-8 max-w-md w-full shadow-xl space-y-5">
+          <div className="w-14 h-14 rounded-2xl bg-red-500/10 text-red-500 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Unable to Load Product Details</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">
+              We encountered an issue loading card details. Please try again.
+            </p>
+          </div>
+          {retryProducts && (
+            <AnalyticsButton
+              analyticsId="apply_credit_card_retry"
+              onClick={() => retryProducts()}
+              className="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-sm transition-all cursor-pointer shadow-md inline-flex items-center justify-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Try again</span>
+            </AnalyticsButton>
+          )}
         </div>
       </section>
     );

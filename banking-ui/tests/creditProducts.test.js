@@ -14,22 +14,20 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { MemoryRouter } from 'react-router-dom';
 
 import {
   fetchCreditProducts,
   resetCreditProductsCache,
   setCreditProductsFetcher,
   resetCreditProductsFetcher,
+  getCreditProductsSnapshot,
   resolveCreditProduct,
   buildCardApplicationPayload,
-  useCreditProducts,
 } from '../src/utils/creditProducts.js';
 import {
-  CreditCardMatrix,
-  CreditCardVisual,
+  buildComparisonRows,
+  buildCardFacts,
+  applyHref,
   formatIntroOffers,
   formatCreditLimitRange,
   formatBalanceTransferFee,
@@ -135,66 +133,72 @@ const mockProducts = [
   },
 ];
 
-function renderHookSnapshot(hook) {
-  let result;
-  function Harness() {
-    result = hook();
-    return null;
-  }
-  renderToStaticMarkup(React.createElement(Harness));
-  return result;
-}
+// ---------------- 1. Store states, error clearance, retry, and concurrent fetch ----------------
 
-// ---------------- 1. Hook states: loading, success, error, caching ----------------
-
-test('useCreditProducts initial state is loading', () => {
+test('store initial snapshot state is loading with empty products', () => {
   resetCreditProductsCache();
-  const state = renderHookSnapshot(useCreditProducts);
-  assert.equal(state.loading, true);
-  assert.deepEqual(state.products, []);
-  assert.equal(state.error, null);
+  const snapshot = getCreditProductsSnapshot();
+  assert.equal(snapshot.loading, true);
+  assert.deepEqual(snapshot.products, []);
+  assert.equal(snapshot.error, null);
 });
 
-test('useCreditProducts success state updates products and loading', async () => {
+test('fetchCreditProducts success updates snapshot products and loading', async () => {
   resetCreditProductsCache();
   setCreditProductsFetcher(async () => ({ products: mockProducts }));
 
   try {
     const products = await fetchCreditProducts();
     assert.equal(products.length, 3);
-    const state = renderHookSnapshot(useCreditProducts);
-    assert.equal(state.loading, false);
-    assert.equal(state.error, null);
-    assert.equal(state.products.length, 3);
-    assert.equal(state.products[0].product_code, 'PLATINUM_TRAVEL_REWARDS');
+    const snapshot = getCreditProductsSnapshot();
+    assert.equal(snapshot.loading, false);
+    assert.equal(snapshot.error, null);
+    assert.equal(snapshot.products.length, 3);
+    assert.equal(snapshot.products[0].product_code, 'PLATINUM_TRAVEL_REWARDS');
   } finally {
     resetCreditProductsFetcher();
     resetCreditProductsCache();
   }
 });
 
-test('useCreditProducts error state captures failure without showing stale data', async () => {
+test('fetchCreditProducts error captures failure and does not cache error forever', async () => {
   resetCreditProductsCache();
+  let attempt = 0;
   setCreditProductsFetcher(async () => {
-    throw new Error('Catalog network timeout');
+    attempt++;
+    if (attempt === 1) {
+      throw new Error('Catalog network timeout');
+    }
+    return { products: mockProducts };
   });
 
   try {
+    // First attempt fails
     await assert.rejects(async () => {
       await fetchCreditProducts();
     }, /Catalog network timeout/);
 
-    const state = renderHookSnapshot(useCreditProducts);
-    assert.equal(state.loading, false);
-    assert.deepEqual(state.products, []);
-    assert.match(state.error?.message, /Catalog network timeout/);
+    const failSnapshot = getCreditProductsSnapshot();
+    assert.equal(failSnapshot.loading, false);
+    assert.deepEqual(failSnapshot.products, []);
+    assert.match(failSnapshot.error?.message, /Catalog network timeout/);
+
+    // Subsequent call or retry fetches again and succeeds
+    const recovered = await fetchCreditProducts(true);
+    assert.equal(recovered.length, 3);
+    assert.equal(attempt, 2);
+
+    const successSnapshot = getCreditProductsSnapshot();
+    assert.equal(successSnapshot.loading, false);
+    assert.equal(successSnapshot.error, null);
+    assert.equal(successSnapshot.products.length, 3);
   } finally {
     resetCreditProductsFetcher();
     resetCreditProductsCache();
   }
 });
 
-test('useCreditProducts shares a single fetch across callers and caches result', async () => {
+test('concurrent callers share one in-flight request', async () => {
   resetCreditProductsCache();
   let calls = 0;
   setCreditProductsFetcher(async () => {
@@ -203,73 +207,86 @@ test('useCreditProducts shares a single fetch across callers and caches result',
   });
 
   try {
-    const [res1, res2] = await Promise.all([
+    const [res1, res2, res3] = await Promise.all([
+      fetchCreditProducts(),
       fetchCreditProducts(),
       fetchCreditProducts(),
     ]);
-    assert.equal(calls, 1, 'Only one HTTP request should be dispatched for concurrent callers');
+    assert.equal(calls, 1, 'Only one HTTP request dispatched for concurrent callers');
     assert.equal(res1, res2);
+    assert.equal(res2, res3);
 
-    const res3 = await fetchCreditProducts();
-    assert.equal(calls, 1, 'Cached data should be returned on subsequent calls without new fetch');
-    assert.equal(res3.length, 3);
+    // Subsequent call uses cached data without dispatching a new fetch
+    const cached = await fetchCreditProducts();
+    assert.equal(calls, 1);
+    assert.equal(cached.length, 3);
   } finally {
     resetCreditProductsFetcher();
     resetCreditProductsCache();
   }
 });
 
-// ---------------- 2. Matrix and cards render names and APR display_text ----------------
+// ---------------- 2. Pure view-model functions ----------------
 
-test('CreditCardMatrix renders product names and APR display_text from API response', () => {
-  const html = renderToStaticMarkup(
-    React.createElement(
-      MemoryRouter,
-      null,
-      React.createElement(CreditCardMatrix, { products: mockProducts })
-    )
-  );
+test('buildComparisonRows maps API display_text to rows and labels, with None for null values', () => {
+  const rows = buildComparisonRows(mockProducts);
 
-  // Assert card names from catalog
-  assert.match(html, /Nova Horizon Platinum Travel/);
-  assert.match(html, /Nova Horizon Everyday Cash/);
-  assert.match(html, /Nova Horizon Secured Starter/);
+  const annualFeeRow = rows.find((r) => r.key === 'annual_fee');
+  assert.equal(annualFeeRow.label, 'Annual Fee');
+  assert.deepEqual(annualFeeRow.values, ['$395.00', '$0.00', '$0.00']);
 
-  // Assert APR display_text values from catalog
-  assert.match(html, /21\.99%/);
-  assert.match(html, /22\.49%/);
-  assert.match(html, /27\.99%/);
+  const purchaseAprRow = rows.find((r) => r.key === 'purchase_apr');
+  assert.equal(purchaseAprRow.label, 'Purchase APR');
+  assert.deepEqual(purchaseAprRow.values, ['21.99%', '22.49%', '27.99%']);
 
-  // Assert Secured badge appears for secured card
-  assert.match(html, /Secured<\/span>/);
+  const introPurchaseAprRow = rows.find((r) => r.key === 'intro_purchase_apr');
+  assert.equal(introPurchaseAprRow.label, 'Intro Purchase APR');
+  // First product has null intro APR -> 'None', second has 0% intro -> display_text
+  assert.equal(introPurchaseAprRow.values[0], 'None');
+  assert.equal(introPurchaseAprRow.values[1], '0% intro APR for 12 months');
+  assert.equal(introPurchaseAprRow.values[2], 'None');
 
-  // Assert annual fees and rewards display_text from catalog
-  assert.match(html, /\$395\.00/);
-  assert.match(html, /3x points on travel/);
-  assert.match(html, /1\.5% cash back/);
+  const introBalanceTransferAprRow = rows.find((r) => r.key === 'intro_balance_transfer_apr');
+  assert.equal(introBalanceTransferAprRow.label, 'Intro Balance Transfer APR');
+  assert.deepEqual(introBalanceTransferAprRow.values, ['None', 'None', 'None']);
 
-  // Stale names must not appear
-  assert.doesNotMatch(html, /Aura Elite Reserve/);
-  assert.doesNotMatch(html, /Velocity Cash Preferred/);
-  assert.doesNotMatch(html, /Equinox Horizon/);
-  assert.doesNotMatch(html, /Vanguard Builder/);
+  const penaltyAprRow = rows.find((r) => r.key === 'penalty_apr');
+  assert.equal(penaltyAprRow.label, 'Penalty APR');
+  // Third product has null penalty APR -> 'None'
+  assert.equal(penaltyAprRow.values[0], '29.99%');
+  assert.equal(penaltyAprRow.values[1], '29.99%');
+  assert.equal(penaltyAprRow.values[2], 'None');
+
+  const creditLimitRow = rows.find((r) => r.key === 'credit_limit_range');
+  assert.equal(creditLimitRow.label, 'Credit Limit Range');
+  assert.equal(creditLimitRow.values[0], '$10,000.00 – $75,000.00');
+  assert.equal(creditLimitRow.values[1], '$1,000.00 – $25,000.00');
+  assert.equal(creditLimitRow.values[2], '$200.00 – $2,500.00');
 });
 
-test('CreditCardVisual renders card graphic with catalog product name and chip style', () => {
-  const html = renderToStaticMarkup(
-    React.createElement(CreditCardVisual, { product: mockProducts[0], bankName: 'Nova Horizon Bank' })
-  );
+test('applyHref constructs URL using raw product_code', () => {
+  assert.equal(applyHref('CASHBACK_EVERYDAY'), '/apply/credit-card?card=CASHBACK_EVERYDAY');
+  assert.equal(applyHref(mockProducts[0]), '/apply/credit-card?card=PLATINUM_TRAVEL_REWARDS');
+});
 
-  assert.match(html, /Nova Horizon Platinum Travel/);
-  assert.match(html, /Nova Horizon Bank/);
-  assert.match(html, /bg-amber-400\/20/);
+test('buildCardFacts extracts product facts and includes applyHref', () => {
+  const facts = buildCardFacts(mockProducts[0]);
+  assert.equal(facts.productCode, 'PLATINUM_TRAVEL_REWARDS');
+  assert.equal(facts.productName, 'Nova Horizon Platinum Travel');
+  assert.equal(facts.purchaseApr, '21.99%');
+  assert.equal(facts.introPurchaseApr, 'None');
+  assert.equal(facts.annualFee, '$395.00');
+  assert.equal(facts.applyHref, '/apply/credit-card?card=PLATINUM_TRAVEL_REWARDS');
+  assert.equal(facts.isSecured, false);
 });
 
 test('formatting utilities use API display_text without float math', () => {
   assert.equal(formatCreditLimitRange(mockProducts[0]), '$10,000.00 – $75,000.00');
+  assert.equal(formatCreditLimitRange(null), '—');
   assert.equal(formatIntroOffers(mockProducts[1]), '0% intro APR for 12 months');
   assert.equal(formatIntroOffers(mockProducts[0]), 'None');
   assert.equal(formatBalanceTransferFee(mockProducts[0]), '5% (min. $5.00)');
+  assert.equal(formatBalanceTransferFee(null), '—');
 });
 
 // ---------------- 3. Apply flow submits product_type equal to product_code ----------------

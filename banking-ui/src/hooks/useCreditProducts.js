@@ -12,11 +12,47 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export {
-  useCreditProducts as default,
-  useCreditProducts,
+import { useEffect, useCallback, useSyncExternalStore } from 'react';
+import {
+  subscribeCreditProducts,
+  getCreditProductsSnapshot,
   fetchCreditProducts,
-  resetCreditProductsCache,
   resolveCreditProduct,
   buildCardApplicationPayload,
 } from '../utils/creditProducts.js';
+
+/**
+ * Hook providing credit product catalog data with shared module-level caching and retry.
+ * Returns { products, loading, error, retry }
+ */
+export function useCreditProducts() {
+  const snapshot = useSyncExternalStore(
+    subscribeCreditProducts,
+    getCreditProductsSnapshot,
+    getCreditProductsSnapshot
+  );
+
+  useEffect(() => {
+    // If not loaded yet, initiate fetch on mount
+    if (snapshot.products.length === 0) {
+      fetchCreditProducts().catch(() => {});
+    }
+  }, [snapshot.products.length]);
+
+  const retry = useCallback(() => {
+    return fetchCreditProducts(true).catch(() => {});
+  }, []);
+
+  return {
+    products: snapshot.products,
+    loading: snapshot.loading,
+    error: snapshot.error,
+    retry,
+  };
+}
+
+export {
+  useCreditProducts as default,
+  resolveCreditProduct,
+  buildCardApplicationPayload,
+};

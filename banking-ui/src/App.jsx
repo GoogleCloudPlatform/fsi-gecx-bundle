@@ -63,7 +63,7 @@ import {
 import { getFormattedBuildTime, hasReleaseNotes } from './utils/releaseNotes.js';
 import { logInteractionEvent, logLoginEvent, logLogoutEvent } from './utils/analytics.js';
 import { consoleUrl } from './utils/consoleAccess.js';
-import { fetchCreditProducts, resolveCreditProduct } from './utils/creditProducts.js';
+import { fetchCreditProducts, getCreditProductsSnapshot, resolveCreditProduct } from './utils/creditProducts.js';
 import GoogleCloudIcon from './components/icons/GoogleCloudIcon.jsx';
 import CloudBuildIcon from './components/icons/CloudBuildIcon.jsx';
 import GcpInfoModal from './components/GcpInfoModal.jsx';
@@ -658,7 +658,8 @@ function AppContent() {
               console.log('executing populate form function with arguments', { args });
 
               try {
-                const products = await fetchCreditProducts();
+                const hadError = Boolean(getCreditProductsSnapshot()?.error);
+                const products = await fetchCreditProducts(hadError);
                 const matchedProduct = resolveCreditProduct(products, args?.product);
 
                 if (matchedProduct) {

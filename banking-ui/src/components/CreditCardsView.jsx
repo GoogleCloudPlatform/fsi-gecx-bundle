@@ -41,6 +41,7 @@ import { useCreditProducts } from '../hooks/useCreditProducts.js';
 import { getCreditCardStyle } from '../utils/creditCardStyles.js';
 import { formatIntroOffers, formatCreditLimitRange, formatBalanceTransferFee } from '../utils/creditCardPresentation.js';
 import CreditCardMatrix from './CreditCardMatrix.jsx';
+import CreditCardVisual from './CreditCardVisual.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
 
 
@@ -55,7 +56,7 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [selectedCardIndex, setSelectedCardIndex] = useState(0);
 
-  const { products, loading, error } = useCreditProducts();
+  const { products, loading, error, retry } = useCreditProducts();
 
   const handleApply = (productCode) => {
     if (!fbUser) {
@@ -115,6 +116,16 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
               <p className="text-sm text-slate-600 dark:text-slate-400">
                 We could not load current credit card terms and rates. Please refresh or try again later.
               </p>
+              {retry && (
+                <button
+                  type="button"
+                  onClick={() => retry()}
+                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-sm transition cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Try again</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -150,50 +161,7 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
                 
                 {/* Left side: CSS Rendered Realistic Card Graphic */}
                 <div className="lg:col-span-5 flex justify-center">
-                  <div className={`relative w-full max-w-[420px] aspect-[1.58] rounded-2xl p-6 shadow-2xl flex flex-col justify-between overflow-hidden transition-all duration-500 hover:scale-105 hover:rotate-1 border border-white/10 bg-gradient-to-tr text-white group ${cardStyle.cardStyle}`} style={{ backgroundImage: 'linear-gradient(to top right, #0f172a, #1e293b)' }}>
-                    {/* Glossy overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent opacity-50 pointer-events-none"></div>
-                    
-                    {/* Background glow based on active card */}
-                    <div className="absolute -right-20 -bottom-20 w-60 h-60 rounded-full blur-3xl opacity-30 transition-all duration-500 group-hover:opacity-50" style={{ backgroundColor: cardStyle.accentColor }}></div>
-
-                    {/* Top Row: Bank Name & Contactless icon */}
-                    <div className="flex justify-between items-center relative z-10">
-                      <span className="font-bold tracking-wider text-sm opacity-90">{bankName}</span>
-                      <div className="flex items-center space-x-1 opacity-80">
-                        <Wifi className="w-4 h-4 rotate-90" />
-                      </div>
-                    </div>
-
-                    {/* Middle Row: Smart Chip & Card Title */}
-                    <div className="relative z-10 my-auto space-y-3">
-                      <div className={`w-11 h-9 rounded-md flex items-center justify-center border ${cardStyle.chipStyle}`}>
-                        <div className="w-6 h-4 border-y border-current opacity-40"></div>
-                      </div>
-                      <div>
-                        <div className="text-xs uppercase tracking-widest opacity-60 font-medium">
-                          {selectedCard.is_secured ? 'Secured Credit Line' : 'Revolving Credit Line'}
-                        </div>
-                        <div className="text-xl md:text-2xl font-black tracking-tight mt-0.5 text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-200">
-                          {selectedCard.product_name}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Bottom Row: Cardholder Placeholder & Hologram */}
-                    <div className="flex justify-between items-end relative z-10 pt-4 border-t border-white/10">
-                      <div>
-                        <div className="text-[10px] uppercase tracking-wider opacity-50">Authorized Member</div>
-                        <div className="font-mono text-xs tracking-widest mt-0.5 font-semibold">VALUED MEMBER</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="italic font-black tracking-tighter text-sm bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
-                          VISA
-                        </div>
-                        <div className="text-[8px] tracking-widest opacity-40 uppercase">Signature</div>
-                      </div>
-                    </div>
-                  </div>
+                  <CreditCardVisual product={selectedCard} bankName={bankName} />
                 </div>
 
                 {/* Right side: Deep Feature Breakdown */}
