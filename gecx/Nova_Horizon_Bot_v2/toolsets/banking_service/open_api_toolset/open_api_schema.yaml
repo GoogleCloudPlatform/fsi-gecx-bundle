@@ -1651,12 +1651,10 @@ components:
       title: ProductCategory
     ProductType:
       type: string
-      enum:
-      - RESIDENTIAL_MORTGAGE
-      - AURA_ELITE_RESERVE
-      - VELOCITY_CASH_PREFERRED
-      - EQUINOX_HORIZON
-      - VANGUARD_BUILDER
+      pattern: ^[A-Z0-9_]{1,50}$
+      description: For LOAN, RESIDENTIAL_MORTGAGE. For CARD, an active credit product_code
+        from GET /api/v1/catalog/credit-products (e.g. CASHBACK_EVERYDAY). Unknown or
+        inactive card codes return 422 with detail.code UNKNOWN_CREDIT_PRODUCT.
       title: ProductType
     RegisterDevice:
       properties:
