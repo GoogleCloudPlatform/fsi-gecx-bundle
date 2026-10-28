@@ -153,6 +153,10 @@ steps:
     args:
       - "-c"
       - |
+        # Fail the build (and skip deploy-service) if any migration, reconcile,
+        # or job update fails. Steps that are intentionally non-blocking say so
+        # explicitly with `|| echo ...`.
+        set -euo pipefail
         IMAGE_TAG=$$(cat /workspace/image_tag.txt)
         if [ "${_TRIGGER_DEPLOY}" = "true" ]; then
           echo "Registering latest image with Cloud Run Migration Job..."
@@ -192,7 +196,8 @@ steps:
             gcloud datastream streams update banking-alloydb-oltp-cdc-stream \
               --location "${_REGION}" \
               --state=RUNNING \
-              --update-mask=state
+              --update-mask=state \
+              || echo "WARNING: Datastream CDC stream did not start; continuing deployment (start it manually)."
           else
             echo "Datastream stream banking-alloydb-oltp-cdc-stream not found; skipping CDC bootstrap."
           fi
