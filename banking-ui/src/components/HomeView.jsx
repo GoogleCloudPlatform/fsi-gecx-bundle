@@ -538,9 +538,9 @@ function HomeView({
                       <CreditCard className="w-6 h-6" />
                     </div>
                     <span className="text-xs font-semibold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 px-3 py-1 rounded-full">1.5% Unlimited Cash</span>
-                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-4 mb-3">Nova Everyday Card</h3>
+                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-4 mb-3">Nova Horizon Everyday Cash</h3>
                     <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-8">
-                      Enjoy unlimited cash back on gas, groceries, and dining with a prime credit limit up to $10,000 and no annual fees.
+                      Simple, unlimited cash back on everything you buy with zero annual fees.
                     </p>
                   </div>
                   <Link 

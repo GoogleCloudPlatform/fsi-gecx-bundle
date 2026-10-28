@@ -46,12 +46,15 @@ import BillPayModal from './BillPayModal.jsx';
 import SpendAnalyzerModal from './SpendAnalyzerModal.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
 import ConsoleAccessStep from './ConsoleAccessStep.jsx';
+import { useCreditProducts } from '../hooks/useCreditProducts.js';
+import { buildCardFacts } from '../utils/creditCardPresentation.js';
 
 
 function AccountsView({ fbUser, customerProfile, isReady }) {
   const [locale] = useMoneyLocale();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { products: catalogProducts } = useCreditProducts();
 
   const [accountsData, setAccountsData] = useState(null);
   const [selectedAccountId, setSelectedAccountId] = useState(null);
@@ -142,6 +145,17 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
   } else if (selectedAccountType === 'credit') {
     activeAccountObj = accountsData?.credit_accounts?.find(a => String(a.account_id) === String(selectedAccountId));
   }
+
+  const activeCreditProductFacts = useMemo(() => {
+    if (selectedAccountType !== 'credit' || !activeAccountObj?.product_code) return null;
+    const match = (catalogProducts || []).find(
+      p => p.product_code?.toUpperCase() === activeAccountObj.product_code.toUpperCase()
+    );
+    return match ? buildCardFacts(match) : null;
+  }, [selectedAccountType, activeAccountObj, catalogProducts]);
+
+  const creditCardDisplayName = activeCreditProductFacts?.productName || activeAccountObj?.product_name || 'Credit Card';
+  const accountPurchaseApr = activeCreditProductFacts?.purchaseApr || null;
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -604,7 +618,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
                 <div className="space-y-6">
                   <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-5">
                     <div>
-                      <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Nova Everyday Visa</h2>
+                      <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{creditCardDisplayName}</h2>
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                         <span className="rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 px-2.5 py-1 font-bold uppercase">
                           {activeAccountObj?.status}
@@ -1377,7 +1391,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
           onClose={() => setIsSpendAnalyzerOpen(false)}
           transactions={transactions}
           cards={activeAccountObj?.cards || []}
-          accountName="Nova Everyday Visa"
+          accountName={creditCardDisplayName}
         />
       )}
 
@@ -1387,7 +1401,7 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full p-8 space-y-6 shadow-2xl">
             <div className="flex justify-between items-start">
               <div>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Nova Everyday Visa</h3>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white">{creditCardDisplayName}</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Agreement and product specifications</p>
               </div>
               <AnalyticsButton
@@ -1400,9 +1414,11 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
             </div>
             
             <div className="space-y-4 text-sm text-slate-655 dark:text-slate-300 overflow-y-auto max-h-96 pr-2 leading-relaxed">
-              <p>
-                <strong>Interest Rates and Interest Charges:</strong> Annual Percentage Rate (APR) for Purchases is 18.99% to 24.99% variable, based on your creditworthiness.
-              </p>
+              {accountPurchaseApr && (
+                <p>
+                  <strong>Interest Rates and Interest Charges:</strong> Annual Percentage Rate (APR) for Purchases is {accountPurchaseApr}.
+                </p>
+              )}
               <p>
                 <strong>Late Payment Fee:</strong> Up to $35.00 per occurrence. Late payments may trigger internal collections workflows or supervisor audit reviews.
               </p>

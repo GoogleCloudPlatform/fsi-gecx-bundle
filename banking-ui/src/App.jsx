@@ -63,6 +63,7 @@ import {
 import { getFormattedBuildTime, hasReleaseNotes } from './utils/releaseNotes.js';
 import { logInteractionEvent, logLoginEvent, logLogoutEvent } from './utils/analytics.js';
 import { consoleUrl } from './utils/consoleAccess.js';
+import { fetchCreditProducts, getCreditProductsSnapshot, resolveCreditProduct } from './utils/creditProducts.js';
 import GoogleCloudIcon from './components/icons/GoogleCloudIcon.jsx';
 import CloudBuildIcon from './components/icons/CloudBuildIcon.jsx';
 import GcpInfoModal from './components/GcpInfoModal.jsx';
@@ -653,19 +654,28 @@ function AppContent() {
           node.registerClientSideFunction(
             populateToolName,
             populateToolId,
-            (args) => {
+            async (args) => {
               console.log('executing populate form function with arguments', { args });
 
-              // Map product name to URL param format (e.g. "Equinox Horizon" -> "equinox-horizon")
-              const cardParam = args.product ? args.product.toLowerCase().replace(/\s+/g, '-') : 'aura-elite-reserve';
+              try {
+                const hadError = Boolean(getCreditProductsSnapshot()?.error);
+                const products = await fetchCreditProducts(hadError);
+                const matchedProduct = resolveCreditProduct(products, args?.product);
 
-              // Close chat window so user can see the form
-              // setIsChatOpen(false);
+                if (matchedProduct) {
+                  navigate(`/apply/credit-card?card=${matchedProduct.product_code}`, {
+                    state: { prefill: args }
+                  });
+                  return { status: 'success' };
+                }
 
-              // Navigate using React Router state
-              navigate(`/apply/credit-card?card=${cardParam}`, { state: { prefill: args } });
-
-              return Promise.resolve({ status: 'success' });
+                navigate('/credit-cards');
+                return { status: 'product_not_found' };
+              } catch (err) {
+                console.error('Error resolving credit product in populate tool:', err);
+                navigate('/credit-cards');
+                return { status: 'product_not_found' };
+              }
             }
           );
         }
