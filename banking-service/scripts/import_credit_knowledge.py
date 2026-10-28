@@ -20,8 +20,17 @@ Runs as the Cloud Run Job ``banking-credit-knowledge-import`` (identity
 1. Make the data store ``default_schema`` declare the corpus fields (grounded
    fields retrievable, text fields searchable, ids indexable). Skipped when the
    current schema already matches.
-2. Import every record inline with FULL reconciliation, so the store holds
-   exactly this snapshot. Exits non-zero on any failed document.
+2. Import every record inline with INCREMENTAL reconciliation (Discovery
+   Engine rejects FULL for inline sources). Exits non-zero on any failed
+   document.
+3. Prune: list the branch and delete every document whose id is not in the
+   snapshot, so the store holds exactly this snapshot. Pruning runs after the
+   import, so searches never see an empty store. Exits non-zero if any delete
+   fails. Re-running with the same snapshot deletes nothing. If any stale
+   document is not a corpus record, the prune aborts with zero deletes.
+
+The job refuses to run against any data store other than
+``EXPECTED_CREDIT_KNOWLEDGE_DATA_STORE_ID``.
 
 Environment: CREDIT_KNOWLEDGE_PROJECT_ID, CREDIT_KNOWLEDGE_LOCATION (default
 ``global``), CREDIT_KNOWLEDGE_DATA_STORE_ID.
@@ -30,6 +39,7 @@ import json
 import logging
 import os
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +57,11 @@ logger = logging.getLogger("import_credit_knowledge")
 
 INLINE_IMPORT_LIMIT = 100
 OPERATION_TIMEOUT_S = 900
+LIST_PAGE_SIZE = 100
+EXPECTED_CREDIT_KNOWLEDGE_DATA_STORE_ID = "credit-knowledge"
+"""The only store this job may write (deployment/terraform/credit_knowledge.tf)."""
+CORPUS_KINDS = frozenset({"PRODUCT", "POLICY"})
+CORPUS_DOC_ID_PREFIXES = ("CARD-", "POLICY-")
 
 
 def corpus_json_schema() -> dict[str, Any]:
@@ -102,12 +117,19 @@ def apply_schema(schema_client, data_store_name: str) -> bool:
     return True
 
 
+def _branch(data_store_name: str) -> str:
+    return f"{data_store_name}/branches/default_branch"
+
+
 def import_snapshot(document_client, data_store_name: str, corpus: CorpusSnapshot) -> int:
-    """FULL-reconcile the store to this snapshot in one request; returns the record count."""
+    """Upsert every snapshot record in one INCREMENTAL inline request; returns the record count.
+
+    Discovery Engine allows FULL reconciliation only for GCS/BigQuery sources;
+    ``prune_documents`` removes records that are not in the snapshot.
+    """
     from google.cloud import discoveryengine_v1 as discoveryengine
 
     if len(corpus.records) > INLINE_IMPORT_LIMIT:
-        # FULL reconciliation across several requests would delete earlier batches.
         raise ValueError(
             f"Snapshot has {len(corpus.records)} records; inline import allows {INLINE_IMPORT_LIMIT}. "
             "Switch the import to a GCS source."
@@ -118,9 +140,9 @@ def import_snapshot(document_client, data_store_name: str, corpus: CorpusSnapsho
     ]
     operation = document_client.import_documents(
         request=discoveryengine.ImportDocumentsRequest(
-            parent=f"{data_store_name}/branches/default_branch",
+            parent=_branch(data_store_name),
             inline_source=discoveryengine.ImportDocumentsRequest.InlineSource(documents=documents),
-            reconciliation_mode=discoveryengine.ImportDocumentsRequest.ReconciliationMode.FULL,
+            reconciliation_mode=discoveryengine.ImportDocumentsRequest.ReconciliationMode.INCREMENTAL,
         )
     )
     response = operation.result(timeout=OPERATION_TIMEOUT_S)
@@ -139,12 +161,96 @@ def import_snapshot(document_client, data_store_name: str, corpus: CorpusSnapsho
     return len(documents)
 
 
+def _stored_documents(document_client, data_store_name: str):
+    from google.cloud import discoveryengine_v1 as discoveryengine
+
+    page_token = ""
+    while True:
+        page = document_client.list_documents(
+            request=discoveryengine.ListDocumentsRequest(
+                parent=_branch(data_store_name), page_size=LIST_PAGE_SIZE, page_token=page_token
+            )
+        )
+        yield from page.documents
+        page_token = page.next_page_token
+        if not page_token:
+            return
+
+
+def _is_corpus_record(document) -> bool:
+    """A document this job could have written: never delete anything else."""
+    struct = document.struct_data
+    if not isinstance(struct, Mapping):
+        return False
+    return (
+        bool(str(struct.get("snapshot_id") or "").strip())
+        and struct.get("kind") in CORPUS_KINDS
+        and str(struct.get("doc_id") or "").startswith(CORPUS_DOC_ID_PREFIXES)
+    )
+
+
+def prune_documents(document_client, data_store_name: str, corpus: CorpusSnapshot) -> tuple[int, int]:
+    """Delete stored documents whose id is not in the snapshot; returns (kept, deleted).
+
+    Runs only after a successful import. If any stale document does not look
+    like a corpus record, aborts with zero deletes. Raises if any delete fails,
+    after attempting the rest, so the job exits non-zero.
+    """
+    from google.api_core import exceptions as api_exceptions
+    from google.cloud import discoveryengine_v1 as discoveryengine
+
+    snapshot_ids = {record["id"] for record in corpus.records}
+    if not snapshot_ids:
+        raise ValueError("Refusing to prune against an empty snapshot.")
+    stale = []
+    foreign = 0
+    kept = 0
+    for document in _stored_documents(document_client, data_store_name):
+        document_id = document.id or document.name.rsplit("/", 1)[-1]
+        if document_id in snapshot_ids:
+            kept += 1
+        elif _is_corpus_record(document):
+            stale.append(document.name)
+        else:
+            foreign += 1
+    if foreign:
+        raise RuntimeError(
+            f"Refusing to prune: {foreign} stored document(s) are not credit knowledge corpus records; "
+            "check the configured data store."
+        )
+    deleted, failed = 0, 0
+    for name in stale:
+        try:
+            document_client.delete_document(request=discoveryengine.DeleteDocumentRequest(name=name))
+            deleted += 1
+        except api_exceptions.NotFound:
+            deleted += 1  # Already gone: the end state is what pruning wants.
+        except api_exceptions.GoogleAPIError as exc:
+            failed += 1
+            logger.error("Credit knowledge prune delete failed error_type=%s", type(exc).__name__)
+    logger.info(
+        "Pruned credit knowledge store snapshot_id=%s kept=%d deleted=%d failed=%d",
+        corpus.snapshot_id,
+        kept,
+        deleted,
+        failed,
+    )
+    if failed:
+        raise RuntimeError(f"Credit knowledge prune failed for {failed} document(s).")
+    return kept, deleted
+
+
 def data_store_name(environ: dict[str, str]) -> str:
     project = environ.get("CREDIT_KNOWLEDGE_PROJECT_ID", "").strip()
     store = environ.get("CREDIT_KNOWLEDGE_DATA_STORE_ID", "").strip()
     location = environ.get("CREDIT_KNOWLEDGE_LOCATION", "").strip() or "global"
     if not project or not store:
         raise ValueError("CREDIT_KNOWLEDGE_PROJECT_ID and CREDIT_KNOWLEDGE_DATA_STORE_ID are required.")
+    if store != EXPECTED_CREDIT_KNOWLEDGE_DATA_STORE_ID:
+        raise ValueError(
+            f"Refusing to write data store {store!r}; this job only manages "
+            f"{EXPECTED_CREDIT_KNOWLEDGE_DATA_STORE_ID!r}."
+        )
     return f"projects/{project}/locations/{location}/collections/default_collection/dataStores/{store}"
 
 
@@ -155,7 +261,9 @@ def main() -> int:
     name = data_store_name(dict(os.environ))
     corpus = load_corpus()
     apply_schema(discoveryengine.SchemaServiceClient(), name)
-    import_snapshot(discoveryengine.DocumentServiceClient(), name, corpus)
+    document_client = discoveryengine.DocumentServiceClient()
+    import_snapshot(document_client, name, corpus)
+    prune_documents(document_client, name, corpus)
     return 0
 
 

@@ -19,7 +19,8 @@
 # engine (discovery_engine.tf), which keep serving the website header search.
 # Documents are one record per corpus section, imported from the snapshot the
 # banking-service image ships (banking-service/resources/knowledge/credit/corpus)
-# by the `banking-credit-knowledge-import` job; the schema is applied by that job.
+# by the `banking-credit-knowledge-import` job (inline INCREMENTAL import, then a
+# prune of ids absent from the snapshot); the schema is applied by that job.
 #
 # Discovery Engine IAM is project-scoped (no per-data-store policies), so both
 # custom roles below apply to every data store in the project. The banking
@@ -49,9 +50,11 @@ resource "google_project_iam_custom_role" "credit_knowledge_searcher" {
 resource "google_project_iam_custom_role" "credit_knowledge_importer" {
   role_id     = "custom.discoveryengine.knowledgeImporter"
   title       = "Credit Knowledge Importer"
-  description = "Apply the corpus schema and import the credit knowledge snapshot."
+  description = "Apply the corpus schema, import the credit knowledge snapshot and prune stale documents."
   permissions = [
+    "discoveryengine.documents.delete",
     "discoveryengine.documents.import",
+    "discoveryengine.documents.list",
     "discoveryengine.operations.get",
     "discoveryengine.schemas.get",
     "discoveryengine.schemas.update",
