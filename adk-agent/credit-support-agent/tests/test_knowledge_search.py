@@ -31,7 +31,12 @@ from agent import agent
 from agent.instructions import compose_session_instruction
 from agent.money_locale import MONEY_LANGUAGE_INSTRUCTION
 from agent.tooling import configure_live_tool
+from agent.fraud_voice import validate_fraud_tool_sequence
 from agent.trajectory_eval import TrajectoryExpectation, evaluate_trajectory
+from agent.workflow_authorization import (
+    TRIAGE_CUSTOMER_REPORTED_FRAUD,
+    mark_authorization_executing,
+)
 
 SEARCH = SimpleNamespace(name="search_knowledge")
 PREPARE = SimpleNamespace(name="prepare_action_proposal")
@@ -182,6 +187,208 @@ async def test_knowledge_lookup_does_not_wait_for_the_ordered_tool_gate(events) 
         await holder
 
     assert result is None
+
+
+# --- Parallel reads cannot move another tool's state -----------------------
+#
+# Live runs unordered reads concurrently with an ordered tool, so a read that
+# succeeds mid-execution must leave that tool's protected state alone.
+
+TRANSACTIONS = SimpleNamespace(name="get_transaction_history")
+TRIAGE = SimpleNamespace(name="triage_customer_reported_fraud")
+READ_RESULTS = [
+    pytest.param(SEARCH, MATCHED, id="search_knowledge"),
+    pytest.param(SEARCH, UNAVAILABLE, id="search_knowledge-unavailable"),
+    pytest.param(
+        TRANSACTIONS,
+        {"structuredContent": {"success": True, "data": []}},
+        id="get_transaction_history",
+    ),
+]
+
+
+def executing_triage_state() -> dict:
+    authorization = mark_authorization_executing(
+        {
+            "status": "CONFIRMED",
+            "action": TRIAGE_CUSTOMER_REPORTED_FRAUD,
+            "session_id": SESSION_ID,
+        }
+    )
+    return {
+        "fraud_playbook": {
+            "entry_mode": "CUSTOMER_REPORTED_FRAUD",
+            "open_alert_inspected": True,
+            "workflow_authorization": authorization,
+        }
+    }
+
+
+async def run_read(tool, context, response: dict) -> None:
+    await agent.before_tool_callback(tool, {}, context)
+    await agent.after_tool_callback(tool, {}, context, copy(response))
+
+
+@pytest.fixture
+def account_refreshes(monkeypatch) -> list[str]:
+    calls: list[str] = []
+
+    async def refresh() -> dict:
+        calls.append("refresh")
+        return {}
+
+    monkeypatch.setattr(agent, "fetch_updated_account_details", refresh)
+    return calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("tool", "response"), READ_RESULTS)
+async def test_read_leaves_executing_triage_authorization_to_its_owner(
+    events, account_refreshes, tool, response
+) -> None:
+    context = tool_context(**executing_triage_state())
+
+    await run_read(tool, context, response)
+
+    authorization = context.state["fraud_playbook"]["workflow_authorization"]
+    assert authorization["status"] == "EXECUTING"
+    closeout = await agent.before_tool_callback(
+        SimpleNamespace(name="end_consultation"), {}, context
+    )
+    assert closeout["required_action"] == "WORKFLOW_AUTHORIZATION_EXECUTING"
+    await agent.after_tool_callback(
+        TRIAGE,
+        {},
+        context,
+        {"isError": True, "structuredContent": {"success": False}},
+    )
+    authorization = context.state["fraud_playbook"]["workflow_authorization"]
+    assert authorization["status"] == "RECOVERY_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_owner_triage_success_still_completes_its_authorization(
+    events, account_refreshes
+) -> None:
+    context = tool_context(**executing_triage_state())
+
+    await agent.after_tool_callback(
+        TRIAGE, {}, context, {"structuredContent": {"success": True}}
+    )
+
+    authorization = context.state["fraud_playbook"]["workflow_authorization"]
+    assert authorization["status"] == "COMPLETED"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("tool", "response"), READ_RESULTS)
+async def test_read_leaves_commit_in_flight_proposal_unchanged(
+    events, account_refreshes, tool, response
+) -> None:
+    proposal = {
+        "proposal_id": "proposal-1",
+        "action_type": "CREDIT_LIMIT_INCREASE",
+        "evidence_state": "COMMIT_IN_FLIGHT",
+    }
+    context = tool_context(fraud_playbook={"pending_proposal": dict(proposal)})
+
+    await run_read(tool, context, response)
+
+    assert context.state["fraud_playbook"]["pending_proposal"] == proposal
+    assert "completed_proposals" not in context.state
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("tool", "response"), READ_RESULTS)
+async def test_read_leaves_fraud_progress_and_closeout_boundary_unchanged(
+    events, account_refreshes, tool, response
+) -> None:
+    playbook = {
+        "entry_mode": "FRAUD_ALERT",
+        "fraud_alert_id": "alert-1",
+        "open_alert_inspected": False,
+    }
+    boundary = {"status": "ACTION_COMPLETED", "originating_customer_event_id": "t-1"}
+    context = tool_context(fraud_playbook=dict(playbook), closeout_boundary=dict(boundary))
+
+    await run_read(tool, context, response)
+
+    assert context.state["fraud_playbook"] == playbook
+    assert context.state["closeout_boundary"] == boundary
+    assert validate_fraud_tool_sequence(
+        context.state["fraud_playbook"], "commit_fraud_triage", {"fraud_alert_id": "alert-1"}
+    ) == "Inspect the open fraud alert before taking mitigation actions."
+
+
+@pytest.mark.asyncio
+async def test_read_finishing_does_not_clear_processing_for_a_running_ordered_tool(
+    events, account_refreshes
+) -> None:
+    ordered_started = asyncio.Event()
+    finish_ordered = asyncio.Event()
+    context = tool_context()
+
+    decision = SimpleNamespace(name="record_playbook_decision")
+
+    async def ordered_tool() -> None:
+        assert await agent.before_tool_callback(decision, {}, context) is None
+        ordered_started.set()
+        await finish_ordered.wait()
+        await agent.after_tool_callback(
+            decision, {}, context, {"structuredContent": {"success": False}}
+        )
+
+    agent.set_tool_processing(False)
+    ordered = asyncio.create_task(ordered_tool())
+    await ordered_started.wait()
+    await asyncio.create_task(run_read(SEARCH, context, MATCHED))
+
+    assert agent.is_tool_processing() is True
+    finish_ordered.set()
+    await ordered
+    assert agent.is_tool_processing() is False
+
+
+@pytest.mark.asyncio
+async def test_cancelled_tool_task_releases_processing(events) -> None:
+    started = asyncio.Event()
+
+    async def cancelled_tool() -> None:
+        await agent.before_tool_callback(SEARCH, query_args(), tool_context())
+        started.set()
+        await asyncio.Event().wait()
+
+    agent.set_tool_processing(False)
+    task = asyncio.create_task(cancelled_tool())
+    await started.wait()
+    assert agent.is_tool_processing() is True
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert agent.is_tool_processing() is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool", "refreshed"),
+    [
+        ("search_knowledge", False),
+        ("get_transaction_history", False),
+        ("reverse_overdraft_fee", True),
+    ],
+)
+async def test_account_refresh_runs_only_for_tools_that_use_it(
+    events, account_refreshes, monkeypatch, tool, refreshed
+) -> None:
+    await agent.after_tool_callback(
+        SimpleNamespace(name=tool),
+        {},
+        tool_context(),
+        {"structuredContent": {"success": True, "snippets": [], "data": []}},
+    )
+
+    assert bool(account_refreshes) is refreshed
 
 
 # --- Telemetry and audit ----------------------------------------------------
