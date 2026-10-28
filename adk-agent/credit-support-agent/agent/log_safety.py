@@ -197,3 +197,56 @@ def tool_response_is_domain_refusal(tool_response: Any) -> bool:
         and bool(recovery_class.strip())
         and recovery_class not in TRANSIENT_RECOVERY_CLASSES
     )
+
+
+KNOWLEDGE_LOOKUP_MAX_CITE_KEYS = 5
+KNOWLEDGE_LOOKUP_MAX_FIELD_CHARS = 128
+
+
+def knowledge_lookup_summary(tool_response: Any) -> dict[str, Any]:
+    """Project a search_knowledge result onto audit-safe corpus identifiers.
+
+    Only corpus identifiers (snapshot and cite keys) and a bounded outcome are
+    kept. Snippet text and the customer's query are never read.
+    """
+    if not isinstance(tool_response, dict) or tool_response.get("isError") is True:
+        return _knowledge_summary("UNAVAILABLE")
+    structured = tool_response.get("structuredContent")
+    result = structured if isinstance(structured, dict) else tool_response
+    if result.get("success") is not True:
+        outcome = (
+            "INVALID_QUERY" if result.get("error") == "INVALID_QUERY" else "UNAVAILABLE"
+        )
+        return _knowledge_summary(outcome)
+    snippets = result.get("snippets")
+    if not isinstance(snippets, list):
+        return _knowledge_summary("UNAVAILABLE")
+    cite_keys = [
+        str(snippet.get("cite_key"))[:KNOWLEDGE_LOOKUP_MAX_FIELD_CHARS]
+        for snippet in snippets[:KNOWLEDGE_LOOKUP_MAX_CITE_KEYS]
+        if isinstance(snippet, dict) and snippet.get("cite_key")
+    ]
+    return _knowledge_summary(
+        "MATCHED" if snippets else "NO_MATCH",
+        snapshot_id=str(result.get("snapshot_id") or "")[
+            :KNOWLEDGE_LOOKUP_MAX_FIELD_CHARS
+        ]
+        or None,
+        cite_keys=cite_keys,
+        result_count=len(snippets),
+    )
+
+
+def _knowledge_summary(
+    outcome: str,
+    *,
+    snapshot_id: str | None = None,
+    cite_keys: list[str] | None = None,
+    result_count: int = 0,
+) -> dict[str, Any]:
+    return {
+        "outcome": outcome,
+        "snapshot_id": snapshot_id,
+        "cite_keys": cite_keys or [],
+        "result_count": result_count,
+    }

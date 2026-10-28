@@ -140,6 +140,18 @@ Terminal telemetry distinguishes `NORMAL_DISCONNECT`, `HANDOFF`,
 `CANCELLED`. A tool failure that succeeds on a same-tool retry is resolved and
 does not misclassify an otherwise normal session.
 
+### Product and policy knowledge lookups
+
+`search_knowledge` is an unordered, read-only banking MCP tool. Each lookup
+emits one `voice_knowledge_lookup` structured log (hashed support session
+reference, `outcome` of `MATCHED`, `NO_MATCH`, `INVALID_QUERY` or `UNAVAILABLE`,
+corpus `snapshot_id`, `cite_keys`, result count, latency) and the
+`voice.knowledge.lookups{outcome}` metric. The customer's query and snippet text
+are never logged. `voice_canary.py` turns these logs into `KNOWLEDGE_LOOKUP`
+trajectory events. An unrecovered `UNAVAILABLE` lookup is a tool failure like
+any other: it ends an otherwise normal session as `TOOL_FAILURE`, while a
+completed handoff stays `HANDOFF`.
+
 ## Capacity, telemetry, and retention
 
 - Terraform limits simultaneous control requests and sets the per-instance

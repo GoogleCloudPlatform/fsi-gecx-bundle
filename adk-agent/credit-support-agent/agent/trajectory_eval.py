@@ -387,6 +387,10 @@ def evaluate_trajectory(
             "banking_outcome": banking_outcomes[-1] if banking_outcomes else None,
             "redundant_preproposal_turns": redundant_preproposal_turns,
             "fraud_review_stages": review_stages,
+            "knowledge_lookup_outcomes": [
+                str(event.get("outcome") or "UNKNOWN")
+                for event in _events_of_type(events, "KNOWLEDGE_LOOKUP")
+            ],
         },
     )
 

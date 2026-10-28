@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import os
 import contextvars
 import logging
@@ -36,6 +37,7 @@ from agent.closeout import (
 from agent.guidance_snapshot import guidance_observability_payload
 from agent.log_safety import (
     banking_trace_reference,
+    knowledge_lookup_summary,
     stable_log_reference,
     tool_args_log_summary,
     tool_response_is_domain_refusal,
@@ -43,7 +45,11 @@ from agent.log_safety import (
     tool_response_succeeded,
     tool_result_log_summary,
 )
-from agent.telemetry import record_action_proposal_event, record_tool_completed
+from agent.telemetry import (
+    record_action_proposal_event,
+    record_knowledge_lookup,
+    record_tool_completed,
+)
 from agent.fraud_voice import (
     build_triage_model_result,
     mark_fraud_tool_completed,
@@ -100,10 +106,22 @@ PROPOSAL_DECISION_TOOLS = {
     *COMMIT_ACTION_BY_TOOL,
     "decide_action_proposal",
 }
+# Tools that consume a confirmed authorization. Only these may move a
+# workflow authorization out of EXECUTING; an unordered read that finishes
+# while one is running must not complete it.
 AUTHORIZATION_EXECUTION_TOOLS = {
     *COMMIT_ACTION_BY_TOOL,
     "triage_customer_reported_fraud",
 }
+# Tools whose UI events need the refreshed account; other tools skip the
+# extra banking round-trip before their result reaches the model.
+ACCOUNT_REFRESH_TOOLS = frozenset(
+    {
+        "reverse_overdraft_fee",
+        "reverse_posted_fee",
+        "block_card_instrument",
+    }
+)
 ACTION_COMPLETION_TOOLS = {
     *AUTHORIZATION_EXECUTION_TOOLS,
     "commit_card_reissue",
@@ -508,11 +526,57 @@ def record_customer_turn(
 
 
 def set_tool_processing(is_processing: bool) -> None:
+    """Force the session's tool-processing flag, discarding in-flight tracking."""
+    holder = _tool_processing_holder()
+    _clear_tool_processing_tasks(holder)
+    holder["active"] = is_processing
+
+
+def begin_tool_processing() -> None:
+    """Mark the current tool task in flight for this session.
+
+    Live runs each function call in its own task, so a read finishing must not
+    clear the flag while an ordered tool is still executing. A task that ends
+    without reaching an after or error callback is released by its
+    done-callback.
+    """
+    holder = _tool_processing_holder()
+    tasks = holder.setdefault("tasks", {})
+    task = asyncio.current_task()
+    if task is not None and task not in tasks:
+
+        def release(done: asyncio.Task) -> None:
+            _finish_tool_processing(holder, done)
+
+        tasks[task] = release
+        task.add_done_callback(release)
+    holder["active"] = True
+
+
+def end_tool_processing() -> None:
+    """Release the current tool task; the flag clears with the last one."""
+    _finish_tool_processing(_tool_processing_holder(), asyncio.current_task())
+
+
+def _tool_processing_holder() -> dict:
     holder = is_processing_tool_var.get()
     if holder is None:
-        is_processing_tool_var.set({"active": is_processing})
-    else:
-        holder["active"] = is_processing
+        holder = {"active": False}
+        is_processing_tool_var.set(holder)
+    return holder
+
+
+def _finish_tool_processing(holder: dict, task: asyncio.Task | None) -> None:
+    tasks = holder.setdefault("tasks", {})
+    release = tasks.pop(task, None)
+    if release is not None:
+        task.remove_done_callback(release)
+    holder["active"] = bool(tasks)
+
+
+def _clear_tool_processing_tasks(holder: dict) -> None:
+    for task, release in (holder.pop("tasks", None) or {}).items():
+        task.remove_done_callback(release)
 
 
 def notify_event(event_dict):
@@ -926,6 +990,27 @@ def _record_playbook_selection(state, tool_name: str, args: dict) -> None:
         )
 
 
+KNOWLEDGE_SEARCH_TOOL = "search_knowledge"
+# Sent only with knowledge results. The banking tool description asks callers
+# to cite cite_keys, which suits chat but must never be spoken in voice.
+KNOWLEDGE_RESULT_INSTRUCTION = (
+    "These snippets describe products and policies in general, not this "
+    "customer's account. Answer only from them and never read cite keys, "
+    "citations, or document IDs aloud."
+)
+
+
+def _record_knowledge_lookup(state, tool_response, latency_ms: float) -> None:
+    runtime_context = proposal_runtime_context_var.get() or {}
+    record_knowledge_lookup(
+        support_session_id=str(
+            runtime_context.get("support_session_id") or state.get("session_id") or ""
+        ),
+        summary=knowledge_lookup_summary(tool_response),
+        latency_ms=latency_ms,
+    )
+
+
 def _record_completed_proposal(state, proposal_id: str, resolution: str) -> None:
     if not proposal_id:
         return
@@ -1263,8 +1348,8 @@ async def _before_tool_callback_impl(tool, args, tool_context, **kwargs) -> dict
                 f"{action_payload_fingerprint(action, args)[:24]}"
             )
         tool_context.state["fraud_playbook"] = fraud_playbook
-    set_tool_processing(True)
-    tool_context.state["is_processing_tool"] = True
+    begin_tool_processing()
+    tool_context.state["is_processing_tool"] = is_tool_processing()
     tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
     tool_started[tool_name] = time.monotonic()
     tool_context.state["_voice_tool_started_at"] = tool_started
@@ -1297,13 +1382,15 @@ async def _on_tool_error_callback_impl(
         type(error).__name__,
         tool_args_log_summary(tool_name, args),
     )
-    set_tool_processing(False)
-    tool_context.state["is_processing_tool"] = False
+    end_tool_processing()
+    tool_context.state["is_processing_tool"] = is_tool_processing()
     tool_started = dict(tool_context.state.get("_voice_tool_started_at") or {})
     started_at = tool_started.pop(tool_name, None)
     tool_context.state["_voice_tool_started_at"] = tool_started
     duration_seconds = time.monotonic() - started_at if started_at is not None else 0.0
     record_tool_completed(tool_name, "error", duration_seconds)
+    if tool_name == KNOWLEDGE_SEARCH_TOOL:
+        _record_knowledge_lookup(tool_context.state, None, duration_seconds * 1000)
     notify_event({
         "type": "VOICE_DIAGNOSTICS",
         "tool_ms": round(duration_seconds * 1000, 3) if started_at is not None else None,
@@ -1381,8 +1468,8 @@ async def _after_tool_callback_impl(
         ),
         tool_result_log_summary(tool_response),
     )
-    set_tool_processing(False)
-    tool_context.state["is_processing_tool"] = False
+    end_tool_processing()
+    tool_context.state["is_processing_tool"] = is_tool_processing()
     # Check if the tool succeeded
     structured = (
         tool_response.get("structuredContent")
@@ -1417,6 +1504,16 @@ async def _after_tool_callback_impl(
         outcome,
         duration_seconds,
     )
+    if tool_name == KNOWLEDGE_SEARCH_TOOL:
+        _record_knowledge_lookup(
+            tool_context.state, tool_response, duration_seconds * 1000
+        )
+        if success and isinstance(structured, dict):
+            locale = tool_context.state.get("voice_locale", "en-US")
+            structured["model_instruction"] = (
+                f"Continue in {locale}. {MONEY_LANGUAGE_INSTRUCTION} "
+                f"{KNOWLEDGE_RESULT_INSTRUCTION}"
+            )
     notify_event({
         "type": "VOICE_DIAGNOSTICS",
         "tool_ms": round(duration_seconds * 1000, 3) if started_at is not None else None,
@@ -1600,7 +1697,11 @@ async def _after_tool_callback_impl(
         authorization = tool_context.state.get("fraud_playbook", {}).get(
             "workflow_authorization"
         )
-        if authorization and authorization.get("status") == "EXECUTING":
+        if (
+            tool_name in AUTHORIZATION_EXECUTION_TOOLS
+            and authorization
+            and authorization.get("status") == "EXECUTING"
+        ):
             completed_playbook = dict(tool_context.state.get("fraud_playbook") or {})
             completed_playbook["workflow_authorization"] = mark_authorization_completed(
                 authorization
@@ -1763,6 +1864,8 @@ async def _after_tool_callback_impl(
                 "proposal_id": structured["proposal_id"],
             })
 
+        if tool_name not in ACCOUNT_REFRESH_TOOLS:
+            return None
         account_data = await fetch_updated_account_details()
         logger.info(
             "[CALLBACK] fetch_updated_account_details returned %s account_loaded=%s",

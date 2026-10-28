@@ -26,6 +26,7 @@ from agent.tooling import (
     ADK_RUNTIME_TOOL_NAMES,
     ORDERED_TOOL_NAMES,
     RETIRED_MCP_TOOLS,
+    SILENT_RESPONSE_TOOL_NAMES,
     configure_live_tool,
     project_adk_banking_tools,
 )
@@ -57,6 +58,14 @@ def test_catalog_actions_share_one_model_visible_discovery_and_lifecycle_surface
         "propose_fraud_triage", "commit_fraud_triage", "propose_card_reissue",
         "commit_card_reissue", "propose_wallet_provisioning", "commit_wallet_provisioning",
     })
+
+
+def test_knowledge_search_is_an_unordered_audible_read_tool() -> None:
+    # Read-only and stateless: it must not hold the ordered-tool gate, and its
+    # result must prompt a spoken answer.
+    assert "search_knowledge" in ADK_BANKING_MCP_TOOL_ALLOWLIST
+    assert "search_knowledge" not in ORDERED_TOOL_NAMES
+    assert "search_knowledge" not in SILENT_RESPONSE_TOOL_NAMES
 
 
 def _live_declarations(tools) -> dict:

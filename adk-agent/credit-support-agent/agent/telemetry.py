@@ -158,3 +158,39 @@ def record_action_proposal_event(
         + "\n"
     )
     sys.stdout.flush()
+
+
+_knowledge_lookups = _meter.create_counter("voice.knowledge.lookups")
+
+
+def record_knowledge_lookup(
+    *,
+    support_session_id: str,
+    summary: dict,
+    latency_ms: float,
+) -> None:
+    """Emit one audit event per knowledge lookup; never the query or snippet text."""
+    outcome = str(summary.get("outcome") or "UNKNOWN").upper()[:32]
+    _knowledge_lookups.add(1, {"outcome": outcome})
+    sys.stdout.write(
+        json.dumps(
+            {
+                "severity": "INFO",
+                "message": "voice_knowledge_lookup",
+                "component": "credit-support-agent",
+                "runtime_version": BUILD_VERSION[:64],
+                "support_session_ref": stable_log_reference(
+                    support_session_id, prefix="session"
+                ),
+                "outcome": outcome,
+                "snapshot_id": summary.get("snapshot_id"),
+                "cite_keys": list(summary.get("cite_keys") or []),
+                "result_count": int(summary.get("result_count") or 0),
+                "latency_ms": round(max(0.0, float(latency_ms)), 3),
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    sys.stdout.flush()

@@ -1,0 +1,61 @@
+{
+  "status": "unmeasured_inputs",
+  "description": "Synthetic first-response routing cases for product and policy questions answered with search_knowledge. Each expectation maps onto agent.trajectory_eval.TrajectoryExpectation and is scored against recorded voice-canary trajectories; discovery_gold applies only if discovery runs. No model responses are recorded.",
+  "cases": [
+    {
+      "id": "knowledge_annual_fee",
+      "context": "Trusted context: One owned active USD credit account on Nova Horizon Everyday Cash. No proposal is active.",
+      "utterance": "What's the annual fee on Platinum Travel?",
+      "expected_behavior": "Look up product terms and answer only from the snippets; no discovery, proposal, or account claim.",
+      "expectation": {
+        "required_tools": {"search_knowledge": 1},
+        "forbidden_tools": ["discover_playbooks", "prepare_action_proposal", "commit_action_proposal"]
+      },
+      "discovery_gold": {"decision": "NO_ACTION", "reason_code": "NO_MATCH", "playbook_id": null, "criterion_index": -1}
+    },
+    {
+      "id": "knowledge_apply_low_rate",
+      "context": "Trusted context: One owned active USD credit account on Nova Horizon Everyday Cash. No proposal is active.",
+      "utterance": "How do I apply for the Low Rate card?",
+      "expected_behavior": "Explain from the snippets and point to the online application form; do not claim to submit an application.",
+      "expectation": {
+        "required_tools": {"search_knowledge": 1},
+        "forbidden_tools": ["discover_playbooks", "prepare_action_proposal", "commit_action_proposal"]
+      },
+      "discovery_gold": {"decision": "NO_ACTION", "reason_code": "NO_MATCH", "playbook_id": null, "criterion_index": -1}
+    },
+    {
+      "id": "knowledge_product_max_other_card",
+      "context": "Trusted context: One owned active USD credit account on Nova Horizon Everyday Cash with a USD 15,000.00 product maximum. No proposal is active.",
+      "utterance": "What's the max limit on the Platinum Travel card?",
+      "expected_behavior": "Answer the other product's limit range from the snippets; never present it as the customer's own limit or eligibility.",
+      "expectation": {
+        "required_tools": {"search_knowledge": 1},
+        "forbidden_tools": ["prepare_action_proposal", "commit_action_proposal"]
+      },
+      "discovery_gold": {"decision": "NO_ACTION", "reason_code": "NO_MATCH", "playbook_id": null, "criterion_index": -1}
+    },
+    {
+      "id": "mixed_my_max_and_raise",
+      "context": "Trusted context: One owned active USD credit account on Nova Horizon Everyday Cash. Current limit USD 10,000.00; product maximum USD 15,000.00. No proposal is active.",
+      "utterance": "What's the max on my card, and can you raise my limit?",
+      "expected_behavior": "State the product maximum from the account context, discover the limit-increase playbook, and ask for the desired new total; do not use knowledge for the customer's own card.",
+      "expectation": {
+        "required_tools": {"discover_playbooks": 1},
+        "forbidden_tools": ["search_knowledge", "commit_action_proposal"]
+      },
+      "discovery_gold": {"decision": "CLARIFY", "reason_code": "MISSING_INPUT", "playbook_id": "credit-limit-increase", "criterion_index": 1}
+    },
+    {
+      "id": "action_raise_limit",
+      "context": "Trusted context: One owned active USD credit account on Nova Horizon Everyday Cash. Current limit USD 10,000.00. No proposal is active.",
+      "utterance": "Raise my limit.",
+      "expected_behavior": "Use discovery and the proposal flow; knowledge alone never answers or authorizes an action.",
+      "expectation": {
+        "required_tools": {"discover_playbooks": 1},
+        "forbidden_tools": ["commit_action_proposal"]
+      },
+      "discovery_gold": {"decision": "CLARIFY", "reason_code": "MISSING_INPUT", "playbook_id": "credit-limit-increase", "criterion_index": 1}
+    }
+  ]
+}
