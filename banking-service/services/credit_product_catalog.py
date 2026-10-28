@@ -16,9 +16,11 @@
 
 Guarantees:
 - ``sync_credit_product_catalog`` makes the table match credit_products.json:
-  it validates every row, inserts missing products and overwrites changed
-  terms. It is idempotent and never deletes (credit accounts reference
-  products with ON DELETE RESTRICT); retire a product with ``is_active: false``.
+  it validates every row, inserts missing products, overwrites changed terms
+  and deactivates products absent from the seed. It is idempotent (unchanged
+  rows produce no write), race-safe against concurrent inserts (ON CONFLICT DO
+  NOTHING, then re-read), and never deletes (credit accounts reference
+  products with ON DELETE RESTRICT).
 - ``list_active_credit_products`` returns active products ordered by
   ``display_order`` then ``product_code``.
 - ``find_active_credit_product`` returns None for unknown and inactive codes
@@ -28,6 +30,7 @@ import json
 from decimal import Decimal
 from pathlib import Path
 
+from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.orm import Session
 
 from models.credit_card import CreditProduct
@@ -59,27 +62,37 @@ def load_credit_product_seed(path: Path = CREDIT_PRODUCTS_SEED_PATH) -> list[Cre
     return rows
 
 
+_UPSERT_DIALECTS = {"postgresql": postgresql.insert, "sqlite": sqlite.insert}
+
+
 def sync_credit_product_catalog(
     db: Session, seed: list[CreditProductSeed] | None = None
 ) -> None:
-    """Upsert the catalog from its seed. Unchanged rows produce no UPDATE."""
+    """Make the catalog match its seed. Unchanged rows produce no INSERT or UPDATE."""
     rows = load_credit_product_seed() if seed is None else seed
-    existing = {
-        product.product_code: product
-        for product in db.query(CreditProduct).filter(
-            CreditProduct.product_code.in_([row.product_code for row in rows])
-        )
-    }
-    for row in rows:
-        values = row.model_dump()
-        product = existing.get(row.product_code)
-        if product is None:
-            db.add(CreditProduct(**values))
+    seeded = {row.product_code: row.model_dump() for row in rows}
+    present = {code for (code,) in db.query(CreditProduct.product_code)}
+    missing = [values for code, values in seeded.items() if code not in present]
+    if missing:
+        _insert_ignoring_conflicts(db, missing)
+
+    for product in db.query(CreditProduct):
+        values = seeded.get(product.product_code)
+        if values is None:
+            if product.is_active:
+                product.is_active = False
             continue
         for column, value in values.items():
             if getattr(product, column) != value:
                 setattr(product, column, value)
     db.flush()
+
+
+def _insert_ignoring_conflicts(db: Session, rows: list[dict]) -> None:
+    """A concurrent sync may insert the same code first; its row is then updated."""
+    insert = _UPSERT_DIALECTS[db.get_bind().dialect.name]
+    table = CreditProduct.__table__
+    db.execute(insert(table).values(rows).on_conflict_do_nothing(index_elements=["product_code"]))
 
 
 def list_active_credit_products(db: Session) -> list[CreditProduct]:

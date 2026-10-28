@@ -33,7 +33,9 @@ from models.credit_card import CreditProduct
 from models.credit_product_catalog import CreditProductSeed
 from models.origination import Application
 from services import seeding_service
+from scripts import database_lifecycle
 from services.credit_product_catalog import (
+    _insert_ignoring_conflicts,
     load_credit_product_seed,
     sync_credit_product_catalog,
 )
@@ -224,14 +226,111 @@ def test_sync_refreshes_stale_terms_and_is_idempotent(catalog_db):
     assert refreshed.is_active is target.is_active
     assert refreshed.features == target.features
 
-    updates = []
+    writes = _count_writes(catalog_db)
+    sync_credit_product_catalog(catalog_db)
+    assert writes == []
+
+
+def _count_writes(db):
+    writes = []
     event.listen(
-        catalog_db.get_bind(), "before_cursor_execute",
-        lambda conn, cursor, statement, *args: updates.append(statement)
+        db.get_bind(), "before_cursor_execute",
+        lambda conn, cursor, statement, *args: writes.append(statement)
         if statement.lstrip().upper().startswith(("UPDATE", "INSERT")) else None,
     )
+    return writes
+
+
+async def test_sync_deactivates_products_missing_from_seed(client, catalog_db):
+    catalog_db.add(_product("DISCONTINUED_CARD", display_order=0))
+    catalog_db.commit()
+
     sync_credit_product_catalog(catalog_db)
-    assert updates == []
+    catalog_db.commit()
+
+    assert catalog_db.get(CreditProduct, "DISCONTINUED_CARD").is_active is False
+    listed = [p["product_code"] for p in (await client.get(CATALOG_PATH)).json()["products"]]
+    assert "DISCONTINUED_CARD" not in listed
+    writes = _count_writes(catalog_db)
+    sync_credit_product_catalog(catalog_db)
+    assert writes == []
+
+
+def test_sync_refreshes_row_left_with_migration_defaults(catalog_db):
+    target = load_credit_product_seed()[0]
+    catalog_db.add(CreditProduct(
+        product_code=target.product_code,
+        product_name="Legacy name",
+        min_credit_limit_cents=1,
+        max_credit_limit_cents=2,
+        purchase_apr=Decimal("0.1"),
+    ))
+    catalog_db.commit()
+    stale = catalog_db.get(CreditProduct, target.product_code)
+    assert (stale.tagline, stale.features, stale.late_fee_maximum_minor) == ("", [], 0)
+
+    sync_credit_product_catalog(catalog_db)
+    catalog_db.commit()
+
+    assert stale.tagline == target.tagline
+    assert stale.features == target.features
+    assert stale.late_fee_maximum_minor == target.late_fee_maximum_minor
+    assert stale.max_credit_limit_cents == target.max_credit_limit_cents
+
+
+def test_insert_tolerates_a_row_created_concurrently(catalog_db):
+    target = load_credit_product_seed()[0]
+    catalog_db.add(_product(target.product_code, display_order=99, product_name="Concurrent writer"))
+    catalog_db.commit()
+
+    _insert_ignoring_conflicts(catalog_db, [target.model_dump()])
+    sync_credit_product_catalog(catalog_db)
+    catalog_db.commit()
+
+    assert catalog_db.get(CreditProduct, target.product_code).product_name == target.product_name
+
+
+def test_reconcile_syncs_catalog_after_verifying_schema_head(monkeypatch):
+    calls = []
+    for step in ("reconcile_ownership", "reconcile_grants", "reconcile_cdc", "ensure_replication_slot"):
+        monkeypatch.setattr(database_lifecycle, step, lambda *a, **k: None)
+    monkeypatch.setattr(
+        database_lifecycle, "verify",
+        lambda *a, **k: calls.append("verify") or {"phase": "reconcile", "status": "ok"},
+    )
+    monkeypatch.setattr(database_lifecycle, "sync_reference_catalogs", lambda engine: calls.append("sync"))
+    engine = create_db_engine("sqlite:///:memory:", poolclass=StaticPool)
+
+    result = database_lifecycle.reconcile(engine, _lifecycle_config())
+
+    assert calls == ["verify", "sync"]
+    assert result["reference_catalogs"] == "synced"
+
+
+def test_reference_catalog_sync_commits_seed_lineup():
+    engine = create_db_engine("sqlite:///:memory:", poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+
+    database_lifecycle.sync_reference_catalogs(engine)
+
+    with sessionmaker(bind=engine)() as db:
+        codes = {p.product_code for p in db.query(CreditProduct).filter_by(is_active=True)}
+    assert codes == {row.product_code for row in load_credit_product_seed() if row.is_active}
+    engine.dispose()
+
+
+def _lifecycle_config():
+    return database_lifecycle.LifecycleConfig(
+        project_id="example-project",
+        target_database="banking",
+        migration_user="migration@example-project.iam",
+        cdc_user="banking_bq_connector",
+        create_missing_principals=False,
+        reconcile_cdc=False,
+        expected_revision=None,
+        support_users=(),
+        viewer_users=(),
+    )
 
 
 @pytest.mark.parametrize(

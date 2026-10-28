@@ -1159,11 +1159,14 @@
       "lines": {
         "84786a1ff4939747ab6ffc673a01cc14a9d0e37c1f2466d75ab45ba2f31d7ed1": 1,
         "8aa6ab855da0c76256b940eb288b741e40be1e44d9acd35a9dbff99f9bdbec02": 1,
-        "a9fe661439b04f9e583822424d901a752743f2dca2a0ac7600d465cb94ea0556": 1
+        "a9fe661439b04f9e583822424d901a752743f2dca2a0ac7600d465cb94ea0556": 1,
+        "ceb5df5d4ecd448a04d3a3dcee15555f33597f149a7fe3a2410f1a52c964b204": 1
       },
       "symbols": [
         "cleared_balance_cents",
-        "credit_limit_cents"
+        "credit_limit_cents",
+        "max_credit_limit_cents",
+        "min_credit_limit_cents"
       ],
       "owner": "packet-02",
       "rationale": "Existing USD journal/seed caller or persistence projection; migrate active posting inputs, preserve storage naming."
@@ -1813,8 +1816,11 @@
     "banking-service/tests/test_credit_product_catalog.py": {
       "lines": {
         "059416d25d12369ff1c3d3fa5ac15f8c27d1cac5951758c9c77182fc021afcc4": 1,
+        "1414f1934ae5f2af3c9be29ac17cb3fbda777bce3c188370179ba07b1b0635cb": 1,
         "4962050edac97cb685fc0e5069f2bd720ac67bcfb2f9d97d72ee610518482c1b": 1,
+        "57c10be7930585c9ace589e3f7d091d451b26ceab72880e0109e805d591aaafc": 1,
         "9ac7e000e842379d795748e88906783862eeac652f55de31b7893609feb38bd0": 1,
+        "bbf985bea07b06806c096ac6d9fe2f25f80ae728409dbad0dc030febf44c34df": 1,
         "e4c5bc2064cd7ba80a6f1236e52ed017af027e5d032126f054401f88f38f1c1b": 1,
         "eac1cfc2f78237a3bc6fd8a931edb4b6288e577fc562cb48217c7be577fe18c4": 1
       },

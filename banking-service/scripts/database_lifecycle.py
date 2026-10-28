@@ -31,6 +31,9 @@ from typing import Iterable
 
 import sqlalchemy as sa
 
+from sqlalchemy.orm import Session
+
+from services.credit_product_catalog import sync_credit_product_catalog
 from utils.database import DATABASE_URL, create_db_engine
 
 
@@ -582,7 +585,20 @@ def reconcile(
         if config.reconcile_cdc:
             reconcile_cdc(connection, config)
     ensure_replication_slot(replication_engine or engine, config)
-    return verify(engine, config, phase="reconcile")
+    result = verify(engine, config, phase="reconcile")
+    sync_reference_catalogs(engine)
+    result["reference_catalogs"] = "synced"
+    return result
+
+
+def sync_reference_catalogs(engine: sa.Engine) -> None:
+    """Refresh seed-owned catalogs once the schema head is verified.
+
+    Deploys then serve current product terms without waiting for a demo reset.
+    """
+    with Session(engine) as db:
+        sync_credit_product_catalog(db)
+        db.commit()
 
 
 def password_database_url(url: str, password: str) -> str:
