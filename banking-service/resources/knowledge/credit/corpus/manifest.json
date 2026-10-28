@@ -187,5 +187,5 @@
   "generator": "banking-service/scripts/generate_credit_knowledge_corpus.py",
   "record_count": 79,
   "schema_version": 1,
-  "snapshot_id": "1-02fb8dc2d05f"
+  "snapshot_id": "1-5ffbd10e9f3e"
 }

@@ -12,7 +12,7 @@
       {
         "section_id": "assistant",
         "heading": "Apply with the assistant",
-        "text": "You can also ask the Nova Horizon assistant to start a card application for you. It collects the same details as the online form and you review everything before you submit."
+        "text": "The Nova Horizon assistant can explain and compare our cards and point you to the online application form. Applications are submitted through that form."
       },
       {
         "section_id": "decision",
@@ -34,7 +34,7 @@
       {
         "section_id": "how-to-pay",
         "heading": "Ways to pay",
-        "text": "You can pay your card from a Nova Horizon checking account or a linked external bank account in online banking, and you can schedule automatic payments."
+        "text": "You can pay your card from a Nova Horizon checking or savings account with bill pay in online banking."
       },
       {
         "section_id": "late-payments",
@@ -51,7 +51,7 @@
       {
         "section_id": "how-it-works",
         "heading": "Requesting an increase",
-        "text": "You can ask for a higher credit limit at any time, online or through the assistant. The bank decides eligibility when you make the request."
+        "text": "You can ask the assistant for a higher credit limit at any time. The bank decides eligibility when you make the request."
       },
       {
         "section_id": "decision",
@@ -73,7 +73,7 @@
       {
         "section_id": "deposit",
         "heading": "Your security deposit",
-        "text": "If your account graduates to an unsecured card, your refundable security deposit is returned to you after any balance owed on it is settled."
+        "text": "For questions about your refundable security deposit, ask the assistant or send us a secure message in online banking."
       }
     ]
   },
@@ -85,12 +85,12 @@
       {
         "section_id": "lost-stolen",
         "heading": "Lost or stolen card",
-        "text": "If your card is lost or stolen, tell us right away. We block the card so it cannot be used and send you a replacement card."
+        "text": "If your card is lost or stolen, tell the assistant right away. The card can be blocked so it cannot be used, and a replacement card can be issued."
       },
       {
         "section_id": "fraud",
         "heading": "Suspected fraud",
-        "text": "If you see a charge you do not recognize, report it as soon as possible. We review the activity with you and can replace your card if it was compromised."
+        "text": "If you see a charge you do not recognize, report it to the assistant as soon as possible. We review the activity with you and can replace your card if it was compromised."
       },
       {
         "section_id": "alerts",
@@ -107,12 +107,12 @@
       {
         "section_id": "how-to-dispute",
         "heading": "Starting a dispute",
-        "text": "If a purchase is wrong, was not delivered or was not as described, contact the merchant first. If that does not fix it, you can dispute the charge with us."
+        "text": "If a purchase is wrong, was not delivered or was not as described, contact the merchant first. If that does not fix it, contact us through the assistant or secure messaging."
       },
       {
         "section_id": "what-happens",
         "heading": "During a dispute",
-        "text": "While we review a dispute we may ask for details or documents. We let you know the outcome when the review is complete."
+        "text": "We review the charge with you and let you know the outcome when the review is complete."
       }
     ]
   },
@@ -141,12 +141,12 @@
       {
         "section_id": "channels",
         "heading": "Support channels",
-        "text": "You can reach support through the assistant, secure messaging in online banking, or the Contact us page on our website."
+        "text": "You can reach support through the assistant or through secure messaging in online banking."
       },
       {
         "section_id": "specialist",
         "heading": "Talking to a specialist",
-        "text": "The assistant can connect you with a support specialist when you need help it cannot provide, such as reviewing a complex dispute."
+        "text": "The assistant can connect you with a human support specialist when you need help it cannot provide."
       }
     ]
   }
