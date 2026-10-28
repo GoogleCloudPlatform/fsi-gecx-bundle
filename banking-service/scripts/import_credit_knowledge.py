@@ -26,7 +26,11 @@ Runs as the Cloud Run Job ``banking-credit-knowledge-import`` (identity
 3. Prune: list the branch and delete every document whose id is not in the
    snapshot, so the store holds exactly this snapshot. Pruning runs after the
    import, so searches never see an empty store. Exits non-zero if any delete
-   fails. Re-running with the same snapshot deletes nothing.
+   fails. Re-running with the same snapshot deletes nothing. If any stale
+   document is not a corpus record, the prune aborts with zero deletes.
+
+The job refuses to run against any data store other than
+``EXPECTED_CREDIT_KNOWLEDGE_DATA_STORE_ID``.
 
 Environment: CREDIT_KNOWLEDGE_PROJECT_ID, CREDIT_KNOWLEDGE_LOCATION (default
 ``global``), CREDIT_KNOWLEDGE_DATA_STORE_ID.
@@ -35,6 +39,7 @@ import json
 import logging
 import os
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +58,10 @@ logger = logging.getLogger("import_credit_knowledge")
 INLINE_IMPORT_LIMIT = 100
 OPERATION_TIMEOUT_S = 900
 LIST_PAGE_SIZE = 100
+EXPECTED_CREDIT_KNOWLEDGE_DATA_STORE_ID = "credit-knowledge"
+"""The only store this job may write (deployment/terraform/credit_knowledge.tf)."""
+CORPUS_KINDS = frozenset({"PRODUCT", "POLICY"})
+CORPUS_DOC_ID_PREFIXES = ("CARD-", "POLICY-")
 
 
 def corpus_json_schema() -> dict[str, Any]:
@@ -168,11 +177,24 @@ def _stored_documents(document_client, data_store_name: str):
             return
 
 
+def _is_corpus_record(document) -> bool:
+    """A document this job could have written: never delete anything else."""
+    struct = document.struct_data
+    if not isinstance(struct, Mapping):
+        return False
+    return (
+        bool(str(struct.get("snapshot_id") or "").strip())
+        and struct.get("kind") in CORPUS_KINDS
+        and str(struct.get("doc_id") or "").startswith(CORPUS_DOC_ID_PREFIXES)
+    )
+
+
 def prune_documents(document_client, data_store_name: str, corpus: CorpusSnapshot) -> tuple[int, int]:
     """Delete stored documents whose id is not in the snapshot; returns (kept, deleted).
 
-    Runs only after a successful import. Raises if any delete fails, after
-    attempting the rest, so the job exits non-zero.
+    Runs only after a successful import. If any stale document does not look
+    like a corpus record, aborts with zero deletes. Raises if any delete fails,
+    after attempting the rest, so the job exits non-zero.
     """
     from google.api_core import exceptions as api_exceptions
     from google.cloud import discoveryengine_v1 as discoveryengine
@@ -181,13 +203,21 @@ def prune_documents(document_client, data_store_name: str, corpus: CorpusSnapsho
     if not snapshot_ids:
         raise ValueError("Refusing to prune against an empty snapshot.")
     stale = []
+    foreign = 0
     kept = 0
     for document in _stored_documents(document_client, data_store_name):
         document_id = document.id or document.name.rsplit("/", 1)[-1]
         if document_id in snapshot_ids:
             kept += 1
-        else:
+        elif _is_corpus_record(document):
             stale.append(document.name)
+        else:
+            foreign += 1
+    if foreign:
+        raise RuntimeError(
+            f"Refusing to prune: {foreign} stored document(s) are not credit knowledge corpus records; "
+            "check the configured data store."
+        )
     deleted, failed = 0, 0
     for name in stale:
         try:
@@ -216,6 +246,11 @@ def data_store_name(environ: dict[str, str]) -> str:
     location = environ.get("CREDIT_KNOWLEDGE_LOCATION", "").strip() or "global"
     if not project or not store:
         raise ValueError("CREDIT_KNOWLEDGE_PROJECT_ID and CREDIT_KNOWLEDGE_DATA_STORE_ID are required.")
+    if store != EXPECTED_CREDIT_KNOWLEDGE_DATA_STORE_ID:
+        raise ValueError(
+            f"Refusing to write data store {store!r}; this job only manages "
+            f"{EXPECTED_CREDIT_KNOWLEDGE_DATA_STORE_ID!r}."
+        )
     return f"projects/{project}/locations/{location}/collections/default_collection/dataStores/{store}"
 
 

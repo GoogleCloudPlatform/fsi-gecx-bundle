@@ -122,7 +122,9 @@ Errors:
 **Import job flow.** Discovery Engine rejects `inlineSource` with FULL reconciliation (`400 Field "inlineSource" is unsupported when reconciliationMode is FULL`). FULL is only available for GCS and BigQuery sources. The job therefore does three things:
 1. Applies the schema; this is idempotent.
 2. Upserts every snapshot record in one inline `ImportDocuments` request with `reconciliationMode=INCREMENTAL`. It waits on the operation and fails on any error sample or failure count.
-3. Lists every document in `default_branch`, following page tokens, and deletes each one whose id isn't in the snapshot. It logs `kept`, `deleted` and `failed`. It tries every delete, then exits non-zero if any failed, and refuses to prune against an empty snapshot.
+3. Lists every document in `default_branch`, following page tokens, and deletes each one whose id isn't in the snapshot. It logs `kept`, `deleted` and `failed`. It tries every delete, then exits non-zero if any failed, and refuses to prune against an empty snapshot. Before deleting anything, it checks that every stale document looks like a corpus record: `snapshot_id` present, `kind` in {PRODUCT, POLICY}, and `doc_id` starting with `CARD-` or `POLICY-`. If even one doesn't, the prune aborts with zero deletes and the job exits non-zero.
+
+The job also refuses to run, before the schema step, if `CREDIT_KNOWLEDGE_DATA_STORE_ID` isn't `credit-knowledge` (`EXPECTED_CREDIT_KNOWLEDGE_DATA_STORE_ID`). A test pins the Terraform `data_store_id` to the same constant.
 
 The prune runs after the import, so the store is never empty mid-run. A re-run with the same snapshot imports the same records again and deletes nothing.
 
@@ -140,4 +142,5 @@ The prune runs after the import, so the store is never empty mid-run. A re-run w
 - **Blended site search.** Optionally attach `credit-knowledge` to the `nova_horizon_site` engine so header search and answers can also cite curated sections.
 - **Zero-downtime swaps.** Use snapshot-prefixed ids and a `snapshot_id` filter, so old and new snapshots can coexist until the prune.
 - **Narrow the effective grant.** Revisit the banking SA's project-level `roles/discoveryengine.viewer` once site search's needs are confirmed.
+- **Concurrent builds.** Two overlapping deploy builds could import and prune different snapshots against the same store. Serialize the import, for example with a build concurrency limit or a lock, or compare the manifest snapshot before pruning.
 - **Grow the corpus.** Once the snapshot exceeds 100 records (the inline import limit), switch the import to a GCS source.

@@ -165,7 +165,9 @@ def test_schema_apply_is_idempotent_and_logs_fields(caplog):
 class FakeDocumentClient:
     """In-memory branch: import upserts, list paginates, delete removes."""
 
-    def __init__(self, failure_count=0, error_messages=(), stored_ids=(), page_size=2, failing_deletes=()):
+    def __init__(
+        self, failure_count=0, error_messages=(), stored_ids=(), page_size=2, failing_deletes=(), foreign_ids=()
+    ):
         self.failure_count = failure_count
         self.error_messages = error_messages
         self.page_size = page_size
@@ -174,11 +176,20 @@ class FakeDocumentClient:
         self.list_requests = []
         self.deleted = []
         self.store = {doc_id: f"{STORE}/branches/default_branch/documents/{doc_id}" for doc_id in stored_ids}
+        # Pre-existing documents look like records of an older snapshot unless marked foreign.
+        self.struct = {
+            doc_id: {"snapshot_id": "1-000000000000", "kind": "POLICY", "doc_id": "POLICY-OLD"}
+            for doc_id in stored_ids
+        }
+        for doc_id in foreign_ids:
+            self.store[doc_id] = f"{STORE}/branches/default_branch/documents/{doc_id}"
+            self.struct[doc_id] = {"title": "Something else"}
 
     def import_documents(self, request):
         self.requests.append(request)
         for document in request.inline_source.documents:
             self.store[document.id] = f"{request.parent}/documents/{document.id}"
+            self.struct[document.id] = dict(document.struct_data)
         response = SimpleNamespace(error_samples=[SimpleNamespace(message=m) for m in self.error_messages])
         return FakeOperation(response, SimpleNamespace(failure_count=self.failure_count))
 
@@ -188,7 +199,9 @@ class FakeDocumentClient:
         start = int(request.page_token or 0)
         page = ids[start:start + self.page_size]
         next_token = str(start + self.page_size) if start + self.page_size < len(ids) else ""
-        documents = [SimpleNamespace(id=doc_id, name=self.store[doc_id]) for doc_id in page]
+        documents = [
+            SimpleNamespace(id=doc_id, name=self.store[doc_id], struct_data=self.struct[doc_id]) for doc_id in page
+        ]
         return SimpleNamespace(documents=documents, next_page_token=next_token)
 
     def delete_document(self, request):
@@ -267,6 +280,41 @@ def test_prune_refuses_an_empty_snapshot():
     with pytest.raises(ValueError, match="empty snapshot"):
         importer.prune_documents(client, STORE, CorpusSnapshot(corpus.manifest, ()))
     assert client.deleted == []
+
+
+@pytest.mark.parametrize("foreign_struct", [
+    {"title": "Something else"},
+    {"snapshot_id": "1-x", "kind": "PRODUCT", "doc_id": "SITE-page"},
+    {"snapshot_id": "1-x", "kind": "WEBPAGE", "doc_id": "CARD-x"},
+    {"kind": "POLICY", "doc_id": "POLICY-x"},
+])
+def test_a_single_foreign_document_blocks_the_prune_with_zero_deletes(foreign_struct):
+    corpus = load_corpus()
+    client = FakeDocumentClient(stored_ids=["CARD-RETIRED-fees"], foreign_ids=["zz-foreign"], page_size=3)
+    client.struct["zz-foreign"] = foreign_struct
+    importer.import_snapshot(client, STORE, corpus)
+    with pytest.raises(RuntimeError, match="Refusing to prune: 1 stored document"):
+        importer.prune_documents(client, STORE, corpus)
+    assert client.deleted == []
+    assert "CARD-RETIRED-fees" in client.store and "zz-foreign" in client.store
+
+
+def test_wrong_data_store_is_refused_before_any_api_call(monkeypatch):
+    monkeypatch.setenv("CREDIT_KNOWLEDGE_PROJECT_ID", "p")
+    monkeypatch.setenv("CREDIT_KNOWLEDGE_DATA_STORE_ID", "banking-site_1778875783412")
+    calls = []
+    monkeypatch.setattr(discoveryengine, "SchemaServiceClient", lambda: calls.append("schema_client"))
+    monkeypatch.setattr(discoveryengine, "DocumentServiceClient", lambda: calls.append("document_client"))
+    monkeypatch.setattr(importer, "apply_schema", lambda *a: calls.append("schema"))
+    with pytest.raises(ValueError, match="Refusing to write data store 'banking-site_1778875783412'"):
+        importer.main()
+    assert calls == []
+
+
+def test_terraform_data_store_id_matches_the_import_guard():
+    store = _block("google_discovery_engine_data_store", "credit_knowledge")
+    (data_store_id,) = re.findall(r'^\s*data_store_id\s*=\s*"([^"]+)"', store, re.M)
+    assert data_store_id == importer.EXPECTED_CREDIT_KNOWLEDGE_DATA_STORE_ID
 
 
 def test_main_imports_before_pruning(monkeypatch):
