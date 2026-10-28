@@ -157,6 +157,19 @@ steps:
         # or job update fails. Steps that are intentionally non-blocking say so
         # explicitly with `|| echo ...`.
         set -euo pipefail
+        job_exists() {
+          local job="$$1"
+          local out
+          if out=$$(gcloud run jobs describe "$$job" --region "${_REGION}" 2>&1); then
+            return 0
+          fi
+          if echo "$$out" | grep -iq -e "not_found" -e "could not be found" -e "not found"; then
+            return 1
+          fi
+          echo "ERROR: Failed to describe Cloud Run job $$job:" >&2
+          echo "$$out" >&2
+          exit 1
+        }
         IMAGE_TAG=$$(cat /workspace/image_tag.txt)
         if [ "${_TRIGGER_DEPLOY}" = "true" ]; then
           echo "Registering latest image with Cloud Run Migration Job..."
@@ -166,7 +179,7 @@ steps:
             --args "upgrade,head" \
             --update-env-vars "^|^IAM_DBA_USERS=${_IAM_DBA_USERS}|IAM_DB_VIEWER_USERS=${_IAM_DB_VIEWER_USERS}|REQUIRE_CDC_BOOTSTRAP=true" \
             --region "${_REGION}"
-          if gcloud run jobs describe banking-db-reset --region "${_REGION}" >/dev/null 2>&1; then
+          if job_exists banking-db-reset; then
             echo "Registering latest image with Cloud Run Reset Job..."
             gcloud run jobs update banking-db-reset \
               --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${IMAGE_TAG}" \
@@ -178,7 +191,7 @@ steps:
           gcloud run jobs execute banking-db-migrate \
             --region "${_REGION}" \
             --wait
-          if gcloud run jobs describe banking-db-reconcile --region "${_REGION}" >/dev/null 2>&1; then
+          if job_exists banking-db-reconcile; then
             echo "Registering latest image and schema head with Cloud Run Reconcile Job..."
             gcloud run jobs update banking-db-reconcile \
               --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${IMAGE_TAG}" \
@@ -201,7 +214,7 @@ steps:
           else
             echo "Datastream stream banking-alloydb-oltp-cdc-stream not found; skipping CDC bootstrap."
           fi
-          if gcloud run jobs describe lakehouse-view-reconcile --region "${_REGION}" >/dev/null 2>&1; then
+          if job_exists lakehouse-view-reconcile; then
             echo "Starting non-blocking lakehouse view reconciliation..."
             gcloud run jobs execute lakehouse-view-reconcile \
               --region "${_REGION}" \
@@ -223,9 +236,22 @@ steps:
         # snapshot in this image, so load that snapshot first. A failed import
         # fails the build (and skips deploy-service), like migrations.
         set -euo pipefail
+        job_exists() {
+          local job="$$1"
+          local out
+          if out=$$(gcloud run jobs describe "$$job" --region "${_REGION}" 2>&1); then
+            return 0
+          fi
+          if echo "$$out" | grep -iq -e "not_found" -e "could not be found" -e "not found"; then
+            return 1
+          fi
+          echo "ERROR: Failed to describe Cloud Run job $$job:" >&2
+          echo "$$out" >&2
+          exit 1
+        }
         IMAGE_TAG=$$(cat /workspace/image_tag.txt)
         if [ "${_TRIGGER_DEPLOY}" = "true" ]; then
-          if gcloud run jobs describe banking-credit-knowledge-import --region "${_REGION}" >/dev/null 2>&1; then
+          if job_exists banking-credit-knowledge-import; then
             echo "Registering latest image with Cloud Run Credit Knowledge Import Job..."
             gcloud run jobs update banking-credit-knowledge-import \
               --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/fsi-gecx-bundle/banking-service:$${IMAGE_TAG}" \

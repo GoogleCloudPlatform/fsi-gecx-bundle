@@ -30,7 +30,7 @@ from sqlalchemy.pool import StaticPool
 
 from main import app
 from models.credit_card import CreditProduct
-from models.credit_product_catalog import CreditProductSeed
+from models.credit_product_catalog import CreditProductResponse, CreditProductSeed
 from models.origination import Application
 from services import seeding_service
 from scripts import database_lifecycle
@@ -124,6 +124,43 @@ async def test_v1_alias_serves_the_same_catalog(client, test_products):
 
     assert alias.status_code == 200
     assert alias.json() == primary.json()
+
+
+async def test_public_catalog_key_set_is_pinned(client, test_products):
+    expected_keys = {
+        "annual_fee",
+        "balance_transfer_fee_minimum",
+        "balance_transfer_fee_rate",
+        "best_for",
+        "cash_advance_apr",
+        "cash_advance_fee_minimum",
+        "cash_advance_fee_rate",
+        "currency_code",
+        "display_order",
+        "features",
+        "foreign_transaction_fee_rate",
+        "intro_balance_transfer_apr",
+        "intro_purchase_apr",
+        "is_secured",
+        "late_fee_maximum",
+        "max_credit_limit",
+        "min_credit_limit",
+        "penalty_apr",
+        "product_code",
+        "product_name",
+        "purchase_apr",
+        "returned_payment_fee_maximum",
+        "rewards",
+        "tagline",
+    }
+    assert expected_keys == set(CreditProductResponse.model_fields.keys())
+
+    response = await client.get(CATALOG_PATH)
+    assert response.status_code == 200
+    products = response.json()["products"]
+    assert len(products) > 0
+    for product in products:
+        assert set(product.keys()) == expected_keys
 
 
 async def test_money_and_rates_use_repo_presentation_shapes(client, test_products):
@@ -305,6 +342,73 @@ def test_reconcile_syncs_catalog_after_verifying_schema_head(monkeypatch):
 
     assert calls == ["verify", "sync"]
     assert result["reference_catalogs"] == "synced"
+
+
+def test_reconcile_failure_aborts_and_leaves_catalog_unchanged(monkeypatch):
+    for step in ("reconcile_ownership", "reconcile_grants", "reconcile_cdc", "ensure_replication_slot"):
+        monkeypatch.setattr(database_lifecycle, step, lambda *a, **k: None)
+    monkeypatch.setattr(
+        database_lifecycle, "verify",
+        lambda *a, **k: {"phase": "reconcile", "status": "ok"},
+    )
+    engine = create_db_engine("sqlite:///:memory:", poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    with sessionmaker(bind=engine)() as db:
+        db.add(_product("INITIAL_CARD", display_order=1, product_name="Original Name"))
+        db.commit()
+
+    def fail_sync(db):
+        db.add(_product("UNCOMMITTED_CORRUPT", display_order=99))
+        raise RuntimeError("simulated sync failure")
+
+    monkeypatch.setattr(database_lifecycle, "sync_credit_product_catalog", fail_sync)
+
+    with pytest.raises(RuntimeError, match="simulated sync failure"):
+        database_lifecycle.reconcile(engine, _lifecycle_config())
+
+    with sessionmaker(bind=engine)() as db:
+        products = db.query(CreditProduct).all()
+        assert len(products) == 1
+        assert products[0].product_code == "INITIAL_CARD"
+        assert products[0].product_name == "Original Name"
+
+    engine.dispose()
+
+
+def test_reconcile_sync_failure_causes_main_to_exit_non_zero(monkeypatch):
+    import sys
+
+    for step in ("reconcile_ownership", "reconcile_grants", "reconcile_cdc", "ensure_replication_slot"):
+        monkeypatch.setattr(database_lifecycle, step, lambda *a, **k: None)
+    monkeypatch.setattr(
+        database_lifecycle, "verify",
+        lambda *a, **k: {"phase": "reconcile", "status": "ok"},
+    )
+    engine = create_db_engine("sqlite:///:memory:", poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    with sessionmaker(bind=engine)() as db:
+        db.add(_product("INITIAL_CARD", display_order=1, product_name="Original Name"))
+        db.commit()
+
+    def fail_sync(db):
+        raise RuntimeError("simulated sync failure")
+
+    monkeypatch.setattr(database_lifecycle, "sync_credit_product_catalog", fail_sync)
+    monkeypatch.setattr(database_lifecycle.LifecycleConfig, "from_env", _lifecycle_config)
+    monkeypatch.setattr(database_lifecycle, "create_db_engine", lambda url: engine)
+    monkeypatch.setattr(database_lifecycle, "DATABASE_URL", "sqlite:///:memory:")
+    monkeypatch.setattr(engine.dialect, "name", "postgresql")
+    monkeypatch.setattr(sys, "argv", ["database_lifecycle.py", "reconcile"])
+
+    with pytest.raises(RuntimeError, match="simulated sync failure"):
+        database_lifecycle.main()
+
+    with sessionmaker(bind=engine)() as db:
+        products = db.query(CreditProduct).all()
+        assert len(products) == 1
+        assert products[0].product_code == "INITIAL_CARD"
+
+    engine.dispose()
 
 
 def test_reference_catalog_sync_commits_seed_lineup():

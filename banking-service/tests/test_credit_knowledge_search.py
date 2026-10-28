@@ -30,6 +30,7 @@ from services.credit_knowledge_search import (
     KnowledgeUnavailable,
     UnavailableKnowledge,
     credit_knowledge_search_from_env,
+    grounded_snippet,
 )
 
 CORPUS = load_corpus()
@@ -293,3 +294,36 @@ def test_real_discovery_engine_response_shape_is_grounded():
     hits = _adapter(ProtoClient()).search("late fee", page_size=3)
     assert [s.cite_key for s in hits] == [FEES_ID]
     assert hits[0].text_span == stored["structData"]["text_span"]
+
+
+def test_grounded_snippet_carries_full_stored_text_span():
+    full_span = "X" * 200
+    mock_records = {
+        "TEST-1": {
+            "id": "TEST-1",
+            "structData": {
+                "snapshot_id": "snap1",
+                "doc_id": "TEST",
+                "section_id": "s1",
+                "short_title": "Test Title",
+                "text_span": full_span,
+            },
+        }
+    }
+    struct = dict(mock_records["TEST-1"]["structData"])
+    snippet = grounded_snippet("TEST-1", struct, mock_records)
+    assert snippet.text_span == full_span
+    assert len(snippet.text_span) == 200
+
+
+def test_search_deduplicates_duplicate_result_ids_in_response_order():
+    policy_id = "POLICY-FEES-overview"
+    results = [
+        _result(FEES_ID, _stored(FEES_ID)["structData"]),
+        _result(policy_id, _stored(policy_id)["structData"]),
+        _result(FEES_ID, _stored(FEES_ID)["structData"]),
+    ]
+    client = FakeSearchClient(results)
+    hits = _adapter(client).search("fees", page_size=5)
+
+    assert [s.cite_key for s in hits] == [FEES_ID, policy_id]

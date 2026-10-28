@@ -331,4 +331,9 @@ def load_corpus(corpus_dir: Path = CORPUS_DIR) -> CorpusSnapshot:
             not str(struct.get(field) or "").strip() for field in GROUNDED_FIELDS
         ):
             raise ValueError(f"Credit knowledge record {record.get('id')!r} is not grounded in the snapshot.")
+        text_span = str(struct.get("text_span") or "")
+        if len(text_span) > MAX_SPAN_CHARS:
+            raise ValueError(
+                f"{record.get('id')!r}: text_span is {len(text_span)} chars; the limit is {MAX_SPAN_CHARS}"
+            )
     return CorpusSnapshot(manifest=manifest, records=records)
