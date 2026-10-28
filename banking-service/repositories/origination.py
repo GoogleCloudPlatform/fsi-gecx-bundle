@@ -17,7 +17,7 @@ import logging
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from models.identity import User
-from models.origination import Application, ApplicationArtifact
+from models.origination import Application, ApplicationArtifact, CreditCardApplication
 from utils.audit import record_audit_event
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,7 @@ def log_application(
     product_category: str,
     product_type: str,
     requested_amount: Optional[float],
+    card_product_code: Optional[str] = None,
 ) -> str:
     user = db.query(User).filter(User.auth_provider_uid == auth_provider_uid).first()
     if not user:
@@ -46,6 +47,10 @@ def log_application(
         status="SUBMITTED",
         requested_amount_cents=amount_cents,
     )
+    if card_product_code is not None:
+        if app.credit_card_detail is None:
+            app.credit_card_detail = CreditCardApplication()
+        app.credit_card_detail.card_product_id = card_product_code
     db.add(app)
     db.flush()
 

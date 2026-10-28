@@ -815,9 +815,15 @@ async def test_inject_anomaly_success(mock_get_tokens, mock_send_multicast, mock
     assert voice_context["fraud_alert"]["fraud_alert_id"] == data["fraud_alert_id"]
     assert voice_context["fraud_alert"]["card_last_four"]
     assert "active fraud alert" in voice_context["fraud_alert"]["summary"].lower()
-    assert voice_context["credit_account"]["product_name"] == "Nova Cashback Everyday"
+    from services.credit_product_catalog import load_credit_product_seed, present_credit_product
+    from models.credit_card import CreditProduct
+
+    seeded = {row.product_code: row for row in load_credit_product_seed()}
+    held = seeded[voice_context["credit_account"]["product_code"]]
+    catalog_view = present_credit_product(CreditProduct(**held.model_dump()))
+    assert voice_context["credit_account"]["product_name"] == held.product_name
     assert voice_context["credit_account"]["credit_limit"]["display_text"] == "USD 10,000.00"
-    assert voice_context["credit_account"]["product_maximum_limit"]["display_text"] == "USD 15,000.00"
+    assert voice_context["credit_account"]["product_maximum_limit"] == catalog_view.max_credit_limit.model_dump(mode="json")
 
     mock_claims = {"sub": "voice-agent-sa", "email": "support.agent@google.com"}
     support_context_response = await async_client.get(

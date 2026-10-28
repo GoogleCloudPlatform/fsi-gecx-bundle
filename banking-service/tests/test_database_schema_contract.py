@@ -73,6 +73,7 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
         "2ea57c78ba89_alloydb_unified_baseline.py",
         "7c4f2a9d1e63_canonical_journal_and_outbox_relay.py",
         "91d7b4a6c2ef_runtime_neutral_action_proposals.py",
+        "a3f8c1d5e902_credit_product_customer_terms.py",
         "a81d2c7f490b_bank_decision_binding.py",
         "b92e3d8a601c_versioned_playbook_repository.py",
         "c3a91f2b7d44_one_active_proposal_per_session.py",
@@ -126,7 +127,7 @@ def test_alloydb_migration_chain_and_baseline_have_no_deployment_side_effects() 
 
 def test_current_schema_head_is_reconciled_before_banking_deploy() -> None:
     repository_root = Path(__file__).parents[2]
-    expected_head = "c5d1e8f2a417"
+    expected_head = "a3f8c1d5e902"
     from alembic.script import ScriptDirectory
 
     assert ScriptDirectory(

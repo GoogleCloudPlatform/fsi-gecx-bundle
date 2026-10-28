@@ -91,7 +91,7 @@ async def test_answers_endpoint_success(async_client, monkeypatch):
             from google.cloud.discoveryengine_v1.types import Answer, Session
             self.answer = Answer(
                 name="projects/fsi-gecx-2000/locations/global/collections/default_collection/engines/test_1778802748392/sessions/mock-session-id/answers/mock-query-id-999",
-                answer_text="Nova Horizon offers four credit cards: Aura Elite Reserve, Velocity Cash Preferred, Equinox Horizon, and Vanguard Builder.",
+                answer_text="Nova Horizon offers five credit cards: Platinum Travel, Everyday Cash, Low Rate, Business Advantage, and Secured Starter.",
                 related_questions=["Which card has the lowest APR?", "How do I apply for a card?"]
             )
             self.session = Session(
@@ -120,7 +120,7 @@ async def test_answers_endpoint_success(async_client, monkeypatch):
     assert "answer" in resp_json
     assert "session" in resp_json
     assert "queryId" in resp_json
-    assert "four credit cards" in resp_json["answer"]
+    assert "five credit cards" in resp_json["answer"]
     assert resp_json["queryId"] == "mock-query-id-999"
     assert "relatedQuestions" in resp_json
     assert len(resp_json["relatedQuestions"]) == 2

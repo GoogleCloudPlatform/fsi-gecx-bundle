@@ -14,20 +14,73 @@
 
 import datetime
 from sqlalchemy import (
-    Column, String, Boolean, BigInteger, Integer, CheckConstraint,
+    JSON, Column, String, Boolean, BigInteger, Integer, CheckConstraint,
     DateTime, Numeric, ForeignKey, Index
 )
 from utils.database import UniversalUUID as UUID, generate_uuid
 from sqlalchemy.orm import relationship
 from utils.database import Base
 
+# Rate columns hold fractions (0.2249 == 22.49%); bounds are enforced in the DB.
+CREDIT_PRODUCT_RATE_COLUMNS = (
+    "purchase_apr",
+    "cashback_rate",
+    "intro_purchase_apr",
+    "intro_balance_transfer_apr",
+    "balance_transfer_fee_rate",
+    "foreign_transaction_fee_rate",
+    "cash_advance_apr",
+    "cash_advance_fee_rate",
+    "penalty_apr",
+)
+CREDIT_PRODUCT_INTRO_OFFERS = ("intro_purchase_apr", "intro_balance_transfer_apr")
+
+
+def _credit_product_constraints():
+    rate_checks = [
+        CheckConstraint(
+            f"{column} IS NULL OR ({column} >= 0 AND {column} <= 1)",
+            name=f"ck_credit_products_{column}_range",
+        )
+        for column in CREDIT_PRODUCT_RATE_COLUMNS
+    ]
+    intro_checks = [
+        CheckConstraint(
+            f"({offer} IS NULL AND {offer}_months IS NULL) OR "
+            f"({offer} IS NOT NULL AND {offer}_months IS NOT NULL AND {offer}_months > 0)",
+            name=f"ck_credit_products_{offer}_months",
+        )
+        for offer in CREDIT_PRODUCT_INTRO_OFFERS
+    ]
+    # Limit bounds (min <= max) are validated at seed time, not by a DB CHECK:
+    # credit-limit decisioning must fail closed on corrupt bounds, and its
+    # tests store such rows on purpose.
+    return (
+        *rate_checks,
+        *intro_checks,
+        CheckConstraint(
+            "balance_transfer_fee_minimum_minor >= 0 AND cash_advance_fee_minimum_minor >= 0 "
+            "AND late_fee_maximum_minor >= 0 AND returned_payment_fee_maximum_minor >= 0",
+            name="ck_credit_products_fee_amounts",
+        ),
+        CheckConstraint(
+            "currency_code IN ('USD', 'MXN', 'JPY', 'BHD')",
+            name="ck_credit_products_currency_code",
+        ),
+        {'schema': 'catalog'},
+    )
+
+
 class CreditProduct(Base):
     """
     Catalog definition for revolving credit card products.
     Enforces pricing disclosures (APR, fees) and rewards parameters.
+
+    This table is the single source of truth for the card lineup; it is
+    seeded and refreshed from resources/data/credit_products.json.
     """
     __tablename__ = "credit_products"
-    __table_args__ = {'schema': 'catalog'}
+    __table_args__ = _credit_product_constraints()
 
     product_code = Column(String(50), primary_key=True)  # e.g. 'PLATINUM_TRAVEL_REWARDS'
     product_name = Column(String(100), nullable=False)
@@ -42,7 +95,29 @@ class CreditProduct(Base):
     travel_multiplier = Column(Integer, nullable=False, default=1)  # multiplier (e.g. 3x)
     dining_multiplier = Column(Integer, nullable=False, default=1)
     annual_fee_cents = Column(BigInteger, nullable=False, default=0)
-    
+
+    # Customer-facing terms. Money is in minor units of currency_code; a NULL
+    # intro or penalty APR means the product has none.
+    currency_code = Column(String(3), nullable=False, default="USD")
+    tagline = Column(String(160), nullable=False, default="")
+    best_for = Column(String(200), nullable=False, default="")
+    intro_purchase_apr = Column(Numeric(5, 4), nullable=True)
+    intro_purchase_apr_months = Column(Integer, nullable=True)
+    intro_balance_transfer_apr = Column(Numeric(5, 4), nullable=True)
+    intro_balance_transfer_apr_months = Column(Integer, nullable=True)
+    balance_transfer_fee_rate = Column(Numeric(5, 4), nullable=False, default=0)
+    balance_transfer_fee_minimum_minor = Column(BigInteger, nullable=False, default=0)
+    foreign_transaction_fee_rate = Column(Numeric(5, 4), nullable=False, default=0)
+    cash_advance_apr = Column(Numeric(5, 4), nullable=False, default=0)
+    cash_advance_fee_rate = Column(Numeric(5, 4), nullable=False, default=0)
+    cash_advance_fee_minimum_minor = Column(BigInteger, nullable=False, default=0)
+    late_fee_maximum_minor = Column(BigInteger, nullable=False, default=0)
+    returned_payment_fee_maximum_minor = Column(BigInteger, nullable=False, default=0)
+    penalty_apr = Column(Numeric(5, 4), nullable=True)
+    features = Column(JSON, nullable=False, default=list)
+    is_secured = Column(Boolean, nullable=False, default=False)
+    display_order = Column(Integer, nullable=False, default=0)
+
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 

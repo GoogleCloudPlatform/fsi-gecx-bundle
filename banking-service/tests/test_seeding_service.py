@@ -79,6 +79,26 @@ def test_perform_algorithmic_seeding_success(db_session):
     assert loaded_manifest["jane"]["token"] == "tok_visa_jane_doe"
 
 
+def test_full_reset_rebuilds_catalog_from_seed_lineup(db_session, monkeypatch):
+    from models.credit_card import CreditProduct
+    from services.credit_product_catalog import load_credit_product_seed
+
+    monkeypatch.setenv("SEED_MOCK_USER_COUNT", "0")
+    db_session.add(CreditProduct(
+        product_code="PRE_RESET_ONLY", product_name="Stale", purchase_apr=0.1,
+        min_credit_limit_cents=1, max_credit_limit_cents=2,
+    ))
+    db_session.commit()
+
+    perform_algorithmic_seeding(db_session)
+
+    stored = {p.product_code: p for p in db_session.query(CreditProduct)}
+    seed = {row.product_code: row for row in load_credit_product_seed()}
+    assert stored.keys() == seed.keys()
+    assert all(stored[code].product_name == row.product_name for code, row in seed.items())
+    assert all(stored[code].is_active is row.is_active for code, row in seed.items())
+
+
 def test_perform_algorithmic_seeding_can_reset_existing_card_data(db_session):
     first_manifest = perform_algorithmic_seeding(db_session)
     second_manifest = perform_algorithmic_seeding(db_session)
