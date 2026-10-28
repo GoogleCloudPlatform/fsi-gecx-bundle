@@ -36,7 +36,7 @@
         },
         "product": {
           "type": "STRING",
-          "description": "The product for which the applicant wants to apply"
+          "description": "The credit card the applicant wants to apply for: its exact product name as shown on the Nova Horizon credit cards page (e.g. Nova Horizon Everyday Cash) or its product code (e.g. CASHBACK_EVERYDAY)"
         }
       }
     },

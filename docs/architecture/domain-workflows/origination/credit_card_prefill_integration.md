@@ -24,7 +24,7 @@ sequenceDiagram
 
     %% Phase 2: Dialogue & Intent
     Note over Customer, Agent: 2. Chat Conversation
-    Customer->>Messenger: "I want to apply for the Aura Elite Reserve card."
+    Customer->>Messenger: "I want to apply for the Nova Horizon Everyday Cash card."
     Messenger->>Agent: Send user query payload
     Note over Agent: Agent parses intent: Credit Card Application.<br/>Collects profile info (e.g. income).
     Agent->>Messenger: Trigger Client Tool Call: populate_form_content(args)
@@ -32,8 +32,8 @@ sequenceDiagram
     %% Phase 3: Client Action & Redirect
     Note over Messenger, View: 3. Browser-Side Redirect & Prefill
     Messenger->>UI: Invoke registered client-side callback(args)
-    UI->>UI: Close chat window & format card ID param
-    UI->>View: React Router: Navigate to /apply/credit-card?card=aura-elite-reserve (state: { prefill: args })
+    UI->>UI: Close chat window & resolve args.product against the credit product catalog
+    UI->>View: React Router: Navigate to /apply/credit-card?card=<product_code> (state: { prefill: args })
     View->>View: Mount component & Read location.state.prefill
     View->>View: Populate form fields (income, employment, name, etc.)
     UI-->>Messenger: Resolve client-side function with { status: 'success' }
@@ -51,7 +51,7 @@ sequenceDiagram
 
 ### B. Route Prefill Isolation using React Router State
 * **Context**: Passing prefilled profile metadata (e.g., employment details, annual income, phone numbers) through URL query parameters exposes sensitive personal identifiable information (PII) in browser history logs.
-* **Decision**: We isolate the prefill payload using **React Router State** (`location.state`). While the product code name is passed safely as a URL query parameter (`card=aura-elite-reserve`), the sensitive field values are passed inside the ephemeral router history state, keeping PII out of browser addresses.
+* **Decision**: We isolate the prefill payload using **React Router State** (`location.state`). While the catalog product code is passed safely as a URL query parameter (`card=CASHBACK_EVERYDAY`), the sensitive field values are passed inside the ephemeral router history state, keeping PII out of browser addresses.
 
 ---
 
@@ -67,7 +67,7 @@ The `populate_form_content` tool is registered in the conversational agent's sco
   "input_schema": {
     "type": "OBJECT",
     "properties": {
-      "product": { "type": "STRING", "description": "The specific card product chosen (e.g. Aura Elite Reserve)" },
+      "product": { "type": "STRING", "description": "The card chosen: its product name (e.g. Nova Horizon Everyday Cash) or product code (e.g. CASHBACK_EVERYDAY)" },
       "annual_income": { "type": "NUMBER", "description": "User's annual income" },
       "employment_status": { "type": "STRING", "description": "Employment status (e.g. EMPLOYED, SELF_EMPLOYED)" },
       "housing_payment": { "type": "NUMBER", "description": "Monthly housing payment amount" },
@@ -87,13 +87,16 @@ node.registerClientSideFunction(
   populateToolName,
   populateToolId,
   (args) => {
-    // Map product display name to canonical URL parameter format
-    const cardParam = args.product 
-      ? args.product.toLowerCase().replace(/\s+/g, '-') 
-      : 'aura-elite-reserve';
+    // Resolve the agent's product (code first, then name, case-insensitive)
+    // against GET /api/v1/catalog/credit-products. No silent default card.
+    const product = resolveCreditProduct(catalogProducts, args.product);
+    if (!product) {
+      navigate('/credit-cards');
+      return Promise.resolve({ status: 'product_not_found' });
+    }
 
     // Route to page with data injected in state
-    navigate(`/apply/credit-card?card=${cardParam}`, { state: { prefill: args } });
+    navigate(`/apply/credit-card?card=${product.product_code}`, { state: { prefill: args } });
 
     return Promise.resolve({ status: 'success' });
   }
@@ -123,3 +126,9 @@ Once navigated to [ApplyCreditCardView.jsx](../../banking-ui/src/components/Appl
 ```
 
 This allows the customer to perform a visual verification, edit any incorrect fields, and complete their application submission securely.
+
+---
+
+## 4. Product Source of Truth
+
+Card products come from the banking-service catalog (`catalog.credit_products`, exposed publicly at `GET /api/v1/catalog/credit-products`). The application API validates `product_type` against **active** catalog codes and rejects anything else with HTTP 422 `UNKNOWN_CREDIT_PRODUCT`. Neither the UI nor the agent may hardcode a card lineup.
