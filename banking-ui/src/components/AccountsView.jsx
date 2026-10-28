@@ -47,6 +47,7 @@ import SpendAnalyzerModal from './SpendAnalyzerModal.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
 import ConsoleAccessStep from './ConsoleAccessStep.jsx';
 import { useCreditProducts } from '../hooks/useCreditProducts.js';
+import { buildCardFacts } from '../utils/creditCardPresentation.js';
 
 
 function AccountsView({ fbUser, customerProfile, isReady }) {
@@ -145,15 +146,16 @@ function AccountsView({ fbUser, customerProfile, isReady }) {
     activeAccountObj = accountsData?.credit_accounts?.find(a => String(a.account_id) === String(selectedAccountId));
   }
 
-  const activeCreditProduct = useMemo(() => {
+  const activeCreditProductFacts = useMemo(() => {
     if (selectedAccountType !== 'credit' || !activeAccountObj?.product_code) return null;
-    return (catalogProducts || []).find(
+    const match = (catalogProducts || []).find(
       p => p.product_code?.toUpperCase() === activeAccountObj.product_code.toUpperCase()
-    ) || null;
+    );
+    return match ? buildCardFacts(match) : null;
   }, [selectedAccountType, activeAccountObj, catalogProducts]);
 
-  const creditCardDisplayName = activeCreditProduct?.product_name || activeAccountObj?.product_name || 'Credit Card';
-  const accountPurchaseApr = activeCreditProduct?.purchase_apr?.display_text || null;
+  const creditCardDisplayName = activeCreditProductFacts?.productName || activeAccountObj?.product_name || 'Credit Card';
+  const accountPurchaseApr = activeCreditProductFacts?.purchaseApr || null;
 
   const activeFilterCount = useMemo(() => {
     let count = 0;

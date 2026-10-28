@@ -36,6 +36,7 @@ import { useSettings } from '../context/SettingsContext.jsx';
 import { createApplication } from '../utils/api.js';
 import { useCreditProducts, resolveCreditProduct, buildCardApplicationPayload } from '../hooks/useCreditProducts.js';
 import { getCreditCardStyle } from '../utils/creditCardStyles.js';
+import { buildCardFacts } from '../utils/creditCardPresentation.js';
 import { formatPhoneNumber } from '../utils/formatters.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
@@ -75,7 +76,11 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
     return resolveCreditProduct(products, cardParam);
   }, [products, cardParam]);
 
-  const cardStyle = getCreditCardStyle(selectedProduct?.product_code);
+  const selectedProductFacts = useMemo(() => {
+    return selectedProduct ? buildCardFacts(selectedProduct) : null;
+  }, [selectedProduct]);
+
+  const cardStyle = getCreditCardStyle(selectedProductFacts?.productCode);
   const [annualIncome, setAnnualIncome] = useState('');
   const [housingPayment, setHousingPayment] = useState('');
   const [employmentStatus, setEmploymentStatus] = useState('EMPLOYED');
@@ -147,7 +152,7 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
       return;
     }
 
-    if (!selectedProduct) {
+    if (!selectedProductFacts) {
       setErrorMsg('Please select a valid credit card product.');
       return;
     }
@@ -155,7 +160,7 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
     setIsSubmitting(true);
 
     try {
-      const payload = buildCardApplicationPayload(selectedProduct.product_code, annualIncome);
+      const payload = buildCardApplicationPayload(selectedProductFacts.productCode, annualIncome);
 
       const result = await createApplication(payload);
       setApplicationId(result.application_id);
@@ -221,7 +226,7 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
     );
   }
 
-  if (!productsLoading && !selectedProduct) {
+  if (!productsLoading && !selectedProductFacts) {
     return (
       <section className="relative pt-24 pb-16 md:pt-28 md:pb-24 px-6 max-w-4xl mx-auto min-h-[calc(100vh-80px)] flex flex-col justify-center items-center text-center">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 max-w-md w-full shadow-xl space-y-5">
@@ -304,7 +309,7 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
             <div className="space-y-2">
               <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{successMsg}</h2>
               <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto">
-                Thank you for applying for the <strong>{selectedProduct.product_name}</strong>. Your application ID is:
+                Thank you for applying for the <strong>{selectedProductFacts.productName}</strong>. Your application ID is:
               </p>
               <div className="inline-block bg-slate-100 dark:bg-slate-800 px-4 py-2 rounded-xl font-mono text-sm text-slate-950 dark:text-emerald-400 select-all border border-slate-200 dark:border-slate-700">
                 {applicationId}
@@ -336,15 +341,18 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
                   </label>
                   <select
                     id="card_select"
-                    value={selectedProduct.product_code}
+                    value={selectedProductFacts.productCode}
                     onChange={(e) => setSearchParams({ card: e.target.value })}
                     className="w-full px-4 py-3 text-sm rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-semibold cursor-pointer"
                   >
-                    {products.map((p) => (
-                      <option key={p.product_code} value={p.product_code}>
-                        {p.product_name}
-                      </option>
-                    ))}
+                    {products.map((p) => {
+                      const facts = buildCardFacts(p);
+                      return (
+                        <option key={facts.productCode} value={facts.productCode}>
+                          {facts.productName}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
                 {/* Visual Card Preview */}
@@ -356,10 +364,10 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
                     </div>
                     <div className="my-auto">
                       <div className="text-[9px] uppercase tracking-wider opacity-60">
-                        {selectedProduct.is_secured ? 'Secured Line' : 'Visa Signature'}
+                        {selectedProductFacts.isSecured ? 'Secured Line' : 'Visa Signature'}
                       </div>
                       <div className="text-sm font-extrabold tracking-tight mt-0.5 truncate">
-                        {selectedProduct.product_name}
+                        {selectedProductFacts.productName}
                       </div>
                     </div>
                     <div className="flex justify-between items-end border-t border-white/10 pt-2">

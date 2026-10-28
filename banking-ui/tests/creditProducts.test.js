@@ -269,15 +269,40 @@ test('applyHref constructs URL using raw product_code', () => {
   assert.equal(applyHref(mockProducts[0]), '/apply/credit-card?card=PLATINUM_TRAVEL_REWARDS');
 });
 
-test('buildCardFacts extracts product facts and includes applyHref', () => {
-  const facts = buildCardFacts(mockProducts[0]);
-  assert.equal(facts.productCode, 'PLATINUM_TRAVEL_REWARDS');
-  assert.equal(facts.productName, 'Nova Horizon Platinum Travel');
-  assert.equal(facts.purchaseApr, '21.99%');
-  assert.equal(facts.introPurchaseApr, 'None');
-  assert.equal(facts.annualFee, '$395.00');
-  assert.equal(facts.applyHref, '/apply/credit-card?card=PLATINUM_TRAVEL_REWARDS');
-  assert.equal(facts.isSecured, false);
+test('buildCardFacts asserts every field CreditCardsView uses for unsecured and secured cards', () => {
+  // 1. Unsecured card facts
+  const travelFacts = buildCardFacts(mockProducts[0]);
+  assert.equal(travelFacts.productCode, 'PLATINUM_TRAVEL_REWARDS');
+  assert.equal(travelFacts.productName, 'Nova Horizon Platinum Travel');
+  assert.equal(travelFacts.tagline, 'Premium travel rewards with lounge access');
+  assert.equal(travelFacts.bestFor, 'Frequent travelers');
+  assert.equal(travelFacts.purchaseApr, '21.99%');
+  assert.equal(travelFacts.introOffers, 'None');
+  assert.equal(travelFacts.hasIntroOffers, false);
+  assert.equal(travelFacts.annualFee, '$395.00');
+  assert.equal(travelFacts.rewardsSummary, '3x points on travel, 3x points on dining, 1x points on everything else');
+  assert.deepEqual(travelFacts.features, ['$200 annual travel statement credit', 'Airport lounge access']);
+  assert.equal(travelFacts.foreignTransactionFee, '0%');
+  assert.equal(travelFacts.balanceTransferFee, '5% (min. $5.00)');
+  assert.equal(travelFacts.creditLimitRange, '$10,000.00 – $75,000.00');
+  assert.equal(travelFacts.isSecured, false);
+  assert.equal(travelFacts.securedBadgeText, null);
+  assert.equal(travelFacts.applyHref, '/apply/credit-card?card=PLATINUM_TRAVEL_REWARDS');
+
+  // 2. Card with intro offer
+  const cashFacts = buildCardFacts(mockProducts[1]);
+  assert.equal(cashFacts.productCode, 'CASHBACK_EVERYDAY');
+  assert.equal(cashFacts.hasIntroOffers, true);
+  assert.equal(cashFacts.introOffers, '0% intro APR for 12 months');
+  assert.equal(cashFacts.foreignTransactionFee, '3%');
+  assert.equal(cashFacts.applyHref, '/apply/credit-card?card=CASHBACK_EVERYDAY');
+
+  // 3. Secured card facts
+  const securedFacts = buildCardFacts(mockProducts[2]);
+  assert.equal(securedFacts.productCode, 'SECURED_STARTER');
+  assert.equal(securedFacts.isSecured, true);
+  assert.equal(securedFacts.securedBadgeText, 'Secured Card');
+  assert.equal(securedFacts.applyHref, '/apply/credit-card?card=SECURED_STARTER');
 });
 
 test('formatting utilities use API display_text without float math', () => {

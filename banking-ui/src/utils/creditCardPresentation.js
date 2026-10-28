@@ -18,7 +18,7 @@
 export function applyHref(productOrCode) {
   const code = typeof productOrCode === 'string'
     ? productOrCode
-    : productOrCode?.product_code || '';
+    : productOrCode?.product_code || productOrCode?.productCode || '';
   return `/apply/credit-card?card=${encodeURIComponent(code)}`;
 }
 
@@ -56,10 +56,19 @@ export function formatBalanceTransferFee(product) {
 }
 
 /**
- * Extracts and formats the primary facts for a single credit card product.
+ * Extracts and formats the complete set of presentation facts for a single credit card product.
+ * Guarantees all facts needed by CreditCardsView and other components are pre-formatted strings/booleans.
  */
 export function buildCardFacts(product) {
   if (!product) return null;
+
+  const hasIntroOffers = Boolean(product.intro_purchase_apr || product.intro_balance_transfer_apr);
+  const rewardsSummary = typeof product.rewards === 'object' && product.rewards?.display_text
+    ? product.rewards.display_text
+    : typeof product.rewards === 'string'
+      ? product.rewards
+      : '—';
+
   return {
     productCode: product.product_code,
     productName: product.product_name,
@@ -68,12 +77,18 @@ export function buildCardFacts(product) {
     purchaseApr: product.purchase_apr?.display_text || 'Variable',
     introPurchaseApr: product.intro_purchase_apr?.display_text || 'None',
     introBalanceTransferApr: product.intro_balance_transfer_apr?.display_text || 'None',
+    introOffers: formatIntroOffers(product),
+    hasIntroOffers,
     annualFee: product.annual_fee?.display_text || '$0',
     creditLimitRange: formatCreditLimitRange(product),
     balanceTransferFee: formatBalanceTransferFee(product),
+    foreignTransactionFee: product.foreign_transaction_fee_rate?.display_text || '—',
     penaltyApr: product.penalty_apr?.display_text || 'None',
+    cashAdvanceApr: product.cash_advance_apr?.display_text || '—',
     isSecured: Boolean(product.is_secured),
-    rewards: Array.isArray(product.rewards) ? product.rewards : [],
+    securedBadgeText: product.is_secured ? 'Secured Card' : null,
+    rewards: product.rewards || null,
+    rewardsSummary,
     features: Array.isArray(product.features) ? product.features : [],
     applyHref: applyHref(product),
   };

@@ -39,7 +39,7 @@ import {
 import { useSettings } from '../context/SettingsContext.jsx';
 import { useCreditProducts } from '../hooks/useCreditProducts.js';
 import { getCreditCardStyle } from '../utils/creditCardStyles.js';
-import { formatIntroOffers, formatCreditLimitRange, formatBalanceTransferFee } from '../utils/creditCardPresentation.js';
+import { buildCardFacts } from '../utils/creditCardPresentation.js';
 import CreditCardMatrix from './CreditCardMatrix.jsx';
 import CreditCardVisual from './CreditCardVisual.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
@@ -66,8 +66,9 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
     }
   };
 
-  const selectedCard = products[selectedCardIndex] || products[0];
-  const cardStyle = getCreditCardStyle(selectedCard?.product_code);
+  const cardFactsList = (products || []).map(buildCardFacts).filter(Boolean);
+  const selectedCard = cardFactsList[selectedCardIndex] || cardFactsList[0] || null;
+  const cardStyle = getCreditCardStyle(selectedCard?.productCode);
 
   return (
     <div className="pb-24">
@@ -133,12 +134,12 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
             <>
               {/* Card Tabs */}
               <div className="flex flex-wrap justify-center gap-3 mb-12">
-                {products.map((card, idx) => {
+                {cardFactsList.map((card, idx) => {
                   const isSelected = idx === selectedCardIndex;
                   return (
                     <AnalyticsButton
                       analyticsId="credit_cards_view_01"
-                      key={card.product_code}
+                      key={card.productCode}
                       onClick={() => setSelectedCardIndex(idx)}
                       className={`px-5 py-3 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center space-x-2 border ${
                         isSelected 
@@ -147,8 +148,8 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
                       }`}
                     >
                       <CreditCard className={`w-4 h-4 ${isSelected ? 'text-emerald-400 dark:text-emerald-600' : ''}`} />
-                      <span>{card.product_name}</span>
-                      {card.is_secured && (
+                      <span>{card.productName}</span>
+                      {card.isSecured && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 uppercase tracking-wider">Secured</span>
                       )}
                     </AnalyticsButton>
@@ -167,13 +168,13 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
                 {/* Right side: Deep Feature Breakdown */}
                 <div className="lg:col-span-7 space-y-6">
                   <div className="flex flex-wrap items-center gap-3">
-                    {selectedCard.is_secured && (
+                    {selectedCard.isSecured && (
                       <span className="px-3 py-1 rounded-full text-xs font-bold border bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400 uppercase tracking-wider">
-                        Secured Card
+                        {selectedCard.securedBadgeText}
                       </span>
                     )}
                     <span className={`px-3 py-1 rounded-full text-xs font-bold border ${cardStyle.badgeBg}`}>
-                      {selectedCard.best_for}
+                      {selectedCard.bestFor}
                     </span>
                     <span className="text-xs text-slate-500 flex items-center gap-1">
                       <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
@@ -183,18 +184,18 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
 
                   <div className="border-b border-slate-200 dark:border-slate-800 pb-6">
                     <h2 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white mt-1">
-                      {selectedCard.product_name}
+                      {selectedCard.productName}
                     </h2>
                     <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">
                       {selectedCard.tagline}
                     </p>
-                    {(selectedCard.intro_purchase_apr || selectedCard.intro_balance_transfer_apr) && (
+                    {selectedCard.hasIntroOffers && (
                       <div className="mt-4 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40">
                         <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
                           Introductory Offer
                         </div>
                         <div className="text-sm font-semibold text-slate-900 dark:text-white mt-1">
-                          {formatIntroOffers(selectedCard)}
+                          {selectedCard.introOffers}
                         </div>
                       </div>
                     )}
@@ -204,29 +205,29 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-3 border border-slate-200 dark:border-slate-800/60">
                       <div className="text-[11px] text-slate-500">Rewards Program</div>
-                      <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 truncate" title={selectedCard.rewards?.display_text}>
-                        {selectedCard.rewards?.display_text || '—'}
+                      <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 truncate" title={selectedCard.rewardsSummary}>
+                        {selectedCard.rewardsSummary}
                       </div>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-3 border border-slate-200 dark:border-slate-800/60">
                       <div className="text-[11px] text-slate-500">Annual Fee</div>
-                      <div className="text-sm font-bold text-emerald-500 mt-0.5">{selectedCard.annual_fee?.display_text || '—'}</div>
+                      <div className="text-sm font-bold text-emerald-500 mt-0.5">{selectedCard.annualFee}</div>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-3 border border-slate-200 dark:border-slate-800/60">
                       <div className="text-[11px] text-slate-500">Purchase APR</div>
-                      <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 font-mono">{selectedCard.purchase_apr?.display_text || '—'}</div>
+                      <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 font-mono">{selectedCard.purchaseApr}</div>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-3 border border-slate-200 dark:border-slate-800/60">
                       <div className="text-[11px] text-slate-500">Credit Limit Range</div>
-                      <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5 font-mono">{formatCreditLimitRange(selectedCard)}</div>
+                      <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5 font-mono">{selectedCard.creditLimitRange}</div>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-3 border border-slate-200 dark:border-slate-800/60">
                       <div className="text-[11px] text-slate-500">Balance Transfer Fee</div>
-                      <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">{formatBalanceTransferFee(selectedCard)}</div>
+                      <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">{selectedCard.balanceTransferFee}</div>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-3 border border-slate-200 dark:border-slate-800/60">
                       <div className="text-[11px] text-slate-500">Foreign Tx Fee</div>
-                      <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">{selectedCard.foreign_transaction_fee_rate?.display_text || '—'}</div>
+                      <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">{selectedCard.foreignTransactionFee}</div>
                     </div>
                   </div>
 
@@ -247,7 +248,7 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
                   <div className="pt-4 flex flex-col sm:flex-row gap-4 items-center">
                     <AnalyticsButton
                       analyticsId="credit_cards_view_apply_now"
-                      onClick={() => handleApply(selectedCard.product_code)}
+                      onClick={() => handleApply(selectedCard.productCode)}
                       className="w-full sm:w-auto px-8 py-3.5 rounded-full text-slate-950 font-bold text-sm shadow-lg hover:scale-105 transition-all duration-300 flex items-center justify-center space-x-2 cursor-pointer"
                       style={{ backgroundImage: `linear-gradient(to right, ${brandColorFrom}, ${brandColorTo})`, boxShadow: `0 10px 15px -3px ${brandColorFrom}33` }}
                     >

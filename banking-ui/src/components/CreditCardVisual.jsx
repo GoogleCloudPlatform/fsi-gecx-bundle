@@ -15,10 +15,14 @@
 import React from 'react';
 import { Wifi } from 'lucide-react';
 import { getCreditCardStyle } from '../utils/creditCardStyles.js';
+import { buildCardFacts } from '../utils/creditCardPresentation.js';
 
 export function CreditCardVisual({ product, bankName = 'Nova Horizon Bank' }) {
   if (!product) return null;
-  const cardStyle = getCreditCardStyle(product.product_code);
+  const facts = product.productCode ? product : buildCardFacts(product);
+  if (!facts) return null;
+
+  const cardStyle = getCreditCardStyle(facts.productCode);
 
   return (
     <div
@@ -43,10 +47,10 @@ export function CreditCardVisual({ product, bankName = 'Nova Horizon Bank' }) {
         </div>
         <div>
           <div className="text-xs uppercase tracking-widest opacity-60 font-medium">
-            {product.is_secured ? 'Secured Credit Line' : 'Revolving Credit Line'}
+            {facts.isSecured ? 'Secured Credit Line' : 'Revolving Credit Line'}
           </div>
           <div className="text-xl md:text-2xl font-black tracking-tight mt-0.5 text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-200">
-            {product.product_name}
+            {facts.productName}
           </div>
         </div>
       </div>
