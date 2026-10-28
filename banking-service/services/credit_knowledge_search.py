@@ -124,7 +124,7 @@ def _snippet(record_id: str, fields: Mapping[str, str]) -> KnowledgeSnippet:
         doc_id=fields["doc_id"],
         section_id=fields["section_id"],
         citation=format_citation(fields["short_title"], fields["section_id"], fields["snapshot_id"]),
-        text_span=fields["text_span"][:MAX_SPAN_CHARS],
+        text_span=fields["text_span"],
     )
 
 
@@ -236,14 +236,19 @@ class DiscoveryEngineKnowledge:
         if cached is not None:
             return SearchHits(cached, snapshot_id=self._snapshot_id, cache_hit=True)
         snippets = []
+        seen_ids: set[str] = set()
         for result in self._results(key[0], size):
             document = getattr(result, "document", None)
             if document is None:
                 raise KnowledgeUnavailable("knowledge search returned a malformed result")
+            doc_id = str(getattr(document, "id", "") or "")
+            if doc_id in seen_ids:
+                continue
+            seen_ids.add(doc_id)
             struct_data = document.struct_data
             snippets.append(
                 grounded_snippet(
-                    document.id,
+                    doc_id,
                     dict(struct_data) if isinstance(struct_data, Mapping) else struct_data,
                     self._records_by_id,
                 )

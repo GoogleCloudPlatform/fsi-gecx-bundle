@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """The curated credit knowledge corpus: freshness, catalog traceability, policy hygiene."""
+import json
 import re
 from decimal import Decimal
 
@@ -73,6 +74,32 @@ def test_shipped_snapshot_loads_and_every_record_is_grounded_and_bounded():
         assert struct["citation"] == (
             f"{struct['short_title']} §{struct['section_id']} (snapshot {snapshot.snapshot_id})"
         )
+
+
+def test_load_corpus_rejects_overlong_span(tmp_path):
+    manifest = {
+        "schema_version": 1,
+        "snapshot_id": "1-test",
+        "generator": "test",
+        "record_count": 1,
+        "documents": [],
+    }
+    (tmp_path / MANIFEST_FILE).write_text(json.dumps(manifest), encoding="utf-8")
+    record = {
+        "id": "POLICY-TEST-s1",
+        "structData": {
+            "snapshot_id": "1-test",
+            "doc_id": "POLICY-TEST",
+            "section_id": "s1",
+            "short_title": "Test",
+            "text_span": "x" * 201,
+            "citation": "Test §s1 (snapshot 1-test)",
+        },
+    }
+    (tmp_path / DOCUMENTS_FILE).write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"text_span is 201 chars; the limit is 200"):
+        load_corpus(tmp_path)
 
 
 def test_every_product_fact_traces_to_a_catalog_field():
