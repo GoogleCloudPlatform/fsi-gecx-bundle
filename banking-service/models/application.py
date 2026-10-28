@@ -14,15 +14,11 @@
 
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
-class ProductType(str, Enum):
+class MortgageProductType(str, Enum):
     residential_mortgage = "RESIDENTIAL_MORTGAGE"
-    aura_elite_reserve = "AURA_ELITE_RESERVE"
-    velocity_cash_preferred = "VELOCITY_CASH_PREFERRED"
-    equinox_horizon = "EQUINOX_HORIZON"
-    vanguard_builder = "VANGUARD_BUILDER"
 
 
 class ProductCategory(str, Enum):
@@ -41,10 +37,33 @@ class ProductCategory(str, Enum):
     general = "GENERAL"
 
 
+CARD_PRODUCT_CATEGORIES = frozenset({ProductCategory.CARD, ProductCategory.CREDIT_CARD})
+
+
 class ApplicationCreateRequest(BaseModel):
+    """Card applications name a catalog product code in ``product_type``.
+
+    Shape is validated here; whether a card code is an active catalog product
+    is checked by OriginationService against catalog.credit_products.
+    """
+
     product_category: ProductCategory
-    product_type: ProductType
+    product_type: str = Field(pattern=r"^[A-Z0-9_]{1,50}$")
     requested_amount: float | None = Field(default=None, gt=0)
+
+    @property
+    def is_card_application(self) -> bool:
+        return self.product_category in CARD_PRODUCT_CATEGORIES
+
+    @model_validator(mode="after")
+    def _non_card_types_are_known(self) -> "ApplicationCreateRequest":
+        if self.is_card_application:
+            return self
+        if self.product_type not in {t.value for t in MortgageProductType}:
+            raise ValueError(
+                f"product_type {self.product_type!r} is not valid for category {self.product_category.value}"
+            )
+        return self
 
 
 class ApplicationUpdateRequest(BaseModel):

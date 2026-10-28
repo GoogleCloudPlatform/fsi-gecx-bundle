@@ -305,16 +305,18 @@
     },
     "banking-service/resources/data/credit_products.json": {
       "lines": {
-        "169de192bb1a7008782cfe4bdcd800e77468e2cd9f0a7c43d7bf4070206532b4": 1,
         "174b2af0207ae65e023028453ac7b356687be8b71df6385c0629299a08fbf716": 1,
-        "482d2182bf46e99421d85543df83f1d918fd75a7e1e57b4dc55733d6dea992e2": 3,
-        "5ae69bdfc4bbf3d28204187eba67b8d2be56d6e9c975f369779966ff73b12464": 1,
-        "963fc96478704803bf031ea4a2cd770cdbe1826586ab0f422042da902a4b8563": 1,
-        "9b41256abaec1695294c3811d779d328f958262268e8b730d92b7289d1a1f46e": 1,
-        "a6ff248e54d4b03b361eed71dcc97c242bd9b442afa810234930e8083da8dfa0": 1,
-        "a8593d5b8d6384bbb245dec72ad6245ff64ab05403d6f68189ffe9ff7c4561fc": 1,
+        "3158942d80ddf3466773586441f6960441798480091480fb77a8e7c253b8c2d8": 1,
+        "5ff79c5ff16e47755b8eeceaa319becf928a98d70df0f592e72a5c16cf8c1e7e": 1,
+        "6e49cb7be2aae4ec625b3c77a2e2123802f7c434949805777780c04593257bdb": 1,
+        "a6418e52f8f42a67e28bbc1eee1c871ef9368c69b112ec4c12a19c0a5ad0e900": 1,
+        "ac68b90acfef1aa33b837c5ed8d11e9e96fb4e6e50b5e4c53c2c74b3cc10f688": 1,
+        "b1236f7134d0a3fc5022f188b78f8969d20c40575f1d639caea6e47576b99356": 1,
+        "c4e3e436feb66cde619ffa122cf5aaf39d39e9fc269381e13885f5d0ecd38a09": 4,
+        "d21976a1e642b5d125004ab369b06ba7d18c1b75ff3dc1f7fb1f0cafbd7862b9": 1,
         "d252017920213fb75b25c140d245e93b6c42eadb9ed802a30862a34356d4921c": 1,
-        "f72a22cddbf422685d8c8b76a247e1e44e54bd014155985b9b125f1bd7b8bf22": 1
+        "dc5d7e31b492131ba486c0deb5f6912bd7eb483438cd19c01c470d664f57a67b": 1,
+        "eee026fb4576932603b4f0692db1614e4ce336f6c56f99123897be863e7a6f5e": 1
       },
       "symbols": [
         "annual_fee_cents",
@@ -1778,6 +1780,51 @@
         "available_credit_cents",
         "credit_limit_cents"
       ]
+    },
+    "banking-service/models/credit_product_catalog.py": {
+      "lines": {
+        "3d3cf7eae6d77405895f422d7cfa7ac2e13e4c836e43407892755c1344bd3185": 1,
+        "6f99d6dce11246d0d16d6bab63e9f9639aea50d576c7a6793db3fd6dd226cfbf": 1,
+        "dbe3e306c84bd0d18365d621bbbf7015a7c12b1e904f2aa69010e5f24e61e761": 1,
+        "f61a5d1dd85e079713d69e9706859ac7b6e5372cee0355c1f79d4d8d81f18b59": 1
+      },
+      "symbols": [
+        "annual_fee_cents",
+        "max_credit_limit_cents",
+        "min_credit_limit_cents"
+      ],
+      "owner": "backlog:usd-origination",
+      "rationale": "Credit catalog seed validator mirrors retained BIGINT storage names of catalog.credit_products; new money terms use _minor and responses use canonical Money."
+    },
+    "banking-service/services/credit_product_catalog.py": {
+      "lines": {
+        "1f9dd9fbc6ea2ca7989864ccb7bddc3de155c11b52701059435780f7610b479c": 1,
+        "3d2f72c0e0c03cd85075001e42430b509f4bb07671870da5cdaf0505134ffcfe": 1,
+        "419dc143b07e9fd8d9977f96ca8df7b624e0da345ae43ec75b75cca11eee7fe8": 1
+      },
+      "symbols": [
+        "annual_fee_cents",
+        "max_credit_limit_cents",
+        "min_credit_limit_cents"
+      ],
+      "owner": "backlog:usd-origination",
+      "rationale": "Reads retained BIGINT catalog storage names and projects them to canonical Money via project_money."
+    },
+    "banking-service/tests/test_credit_product_catalog.py": {
+      "lines": {
+        "059416d25d12369ff1c3d3fa5ac15f8c27d1cac5951758c9c77182fc021afcc4": 1,
+        "4962050edac97cb685fc0e5069f2bd720ac67bcfb2f9d97d72ee610518482c1b": 1,
+        "9ac7e000e842379d795748e88906783862eeac652f55de31b7893609feb38bd0": 1,
+        "e4c5bc2064cd7ba80a6f1236e52ed017af027e5d032126f054401f88f38f1c1b": 1,
+        "eac1cfc2f78237a3bc6fd8a931edb4b6288e577fc562cb48217c7be577fe18c4": 1
+      },
+      "symbols": [
+        "credit_limit_cents",
+        "max_credit_limit_cents",
+        "min_credit_limit_cents"
+      ],
+      "owner": "backlog:usd-origination",
+      "rationale": "Catalog fixtures and seed-consistency checks address retained BIGINT catalog/persona storage names."
     }
   }
 }

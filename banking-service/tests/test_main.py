@@ -234,9 +234,15 @@ async def test_create_application_success(async_client):
 
 @pytest.mark.asyncio
 async def test_create_credit_card_application_success(async_client):
+    from services.credit_product_catalog import sync_credit_product_catalog
+
+    db = SessionLocal()
+    sync_credit_product_catalog(db)
+    db.commit()
+    db.close()
     data = {
         "product_category": "CARD",
-        "product_type": "AURA_ELITE_RESERVE",
+        "product_type": "CASHBACK_EVERYDAY",
         "requested_amount": 5000.0
     }
 

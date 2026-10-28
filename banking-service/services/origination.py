@@ -28,6 +28,7 @@ from models.artifact import ArtifactUploadRequest, SignedUrlRequest
 from models.authentication import ValidatedToken
 from models.origination import ApplicationArtifact
 from repositories import origination as origination_repo
+from services.credit_product_catalog import find_active_credit_product
 from utils.gcp import get_project_id
 from utils.gemini import extract_data
 from utils.lazy_clients import LazyClient
@@ -48,12 +49,26 @@ class OriginationService:
         self.db = db
 
     def create_application(self, request: ApplicationCreateRequest, token: ValidatedToken) -> Dict[str, Any]:
+        card_product_code = None
+        if request.is_card_application:
+            # Unknown and inactive codes share one refusal; nothing is written.
+            if find_active_credit_product(self.db, request.product_type) is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "UNKNOWN_CREDIT_PRODUCT",
+                        "message": "product_type is not an active credit product",
+                        "product_type": request.product_type,
+                    },
+                )
+            card_product_code = request.product_type
         application_id = origination_repo.log_application(
             self.db,
             token.user_id,
             request.product_category,
             request.product_type,
-            request.requested_amount
+            request.requested_amount,
+            card_product_code=card_product_code,
         )
         return {
             "message": "Application created successfully",

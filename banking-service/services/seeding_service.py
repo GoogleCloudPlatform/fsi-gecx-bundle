@@ -47,6 +47,7 @@ from models.settings import SystemSetting
 from models.reference import MerchantCategoryCode
 from services.taxonomy_service import TaxonomyService
 from services.merchant_service import MerchantEnrichmentService
+from services.credit_product_catalog import sync_credit_product_catalog
 from models.money import Money
 from services.financial_journal import (
     JournalEntrySpec,
@@ -155,6 +156,10 @@ def _demo_account_baseline_cents(email: str | None) -> dict[str, int]:
 SEEDED_CREDIT_TENURE = datetime.timedelta(days=36 * 30)
 SEEDED_INCOME_SOURCE = "SEEDED"
 
+# Catalog product held by generated, VIP, and dynamic presenter demo users.
+# Static personas name their own product in static_personas.json.
+DEFAULT_SEEDED_CREDIT_PRODUCT = "CASHBACK_EVERYDAY"
+
 # Presenter defaults used when an email is not a static persona. Amounts are
 # USD minor units.
 PRESENTER_CREDIT_BASELINE = {
@@ -162,7 +167,7 @@ PRESENTER_CREDIT_BASELINE = {
     "credit_tier": "PRIME",
     "income": 9_500_000,
     "credit_limit": 1_000_000,
-    "credit_product": "CASHBACK_EVERYDAY",
+    "credit_product": DEFAULT_SEEDED_CREDIT_PRODUCT,
 }
 
 
@@ -331,7 +336,7 @@ def get_seeding_personas():
             "credit_tier": vip["credit_tier"],
             "stated_annual_income_cents": 35000000,
             "credit_limit_cents": 2500000,
-            "credit_product": "CASHBACK_EVERYDAY",
+            "credit_product": DEFAULT_SEEDED_CREDIT_PRODUCT,
             "home_metro": vip["home_metro"],
             "is_vip_googler": True,
             "address": {
@@ -423,7 +428,7 @@ def get_seeding_personas():
             "credit_tier": tier,
             "stated_annual_income_cents": income,
             "credit_limit_cents": limit,
-            "credit_product": "CASHBACK_EVERYDAY",
+            "credit_product": DEFAULT_SEEDED_CREDIT_PRODUCT,
             "home_metro": metro_name,
             "is_vip_googler": False,
             "address": {
@@ -623,11 +628,9 @@ def clean_database(db: Session) -> None:
 
 def seed_catalogs_if_missing(db: Session) -> None:
     """Ensures CreditProduct and DepositProduct catalogs are seeded in the database."""
-    if db.query(CreditProduct).count() == 0:
-        logger.info("Seeding CreditProduct catalog...")
-        data = _load_json_resource("credit_products.json")
-        products = [CreditProduct(**item) for item in data]
-        db.add_all(products)
+    # Credit products are refreshed on every call so an existing database
+    # picks up catalog term changes without a full reset.
+    sync_credit_product_catalog(db)
 
     if db.query(DepositProduct).count() == 0:
         logger.info("Seeding DepositProduct catalog...")
@@ -1406,7 +1409,7 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
         cred_acc = CreditAccount(
             id=cred_acc_id,
             customer_id=user_uuid,
-            product_code="CASHBACK_EVERYDAY",
+            product_code=credit_baseline["credit_product"],
             status="ACTIVE",
             **_seeded_credit_account_dates(provisioned_at),
             credit_limit_cents=credit_baseline["credit_limit"],
@@ -1422,7 +1425,7 @@ def provision_user_suite(db: Session, email: str, firebase_uid: str) -> Dict[str
             {
                 "user_id": str(user_uuid),
                 "account_id": str(cred_acc.id),
-                "product_code": "CASHBACK_EVERYDAY",
+                "product_code": cred_acc.product_code,
             },
         )
         db.flush()

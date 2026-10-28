@@ -44,6 +44,7 @@ from utils.auth import get_current_user
 from utils.env import get_cors_origins, is_cloud_run
 from utils.version import BUILD_VERSION, BUILD_COMMIT_ID
 from routers.locator import router as locator_router
+from routers.catalog import router as catalog_router, v1_router as catalog_v1_router
 from routers.accounts import router as accounts_router, v1_router as accounts_v1_router, alias_router as accounts_alias_router
 from routers.fdx import router as fdx_router
 from routers.simulation import router as simulation_router, v1_router as simulation_v1_router, alias_router as simulation_alias_router
@@ -155,6 +156,8 @@ app.include_router(ccai_auth_router)
 app.include_router(cxas_auth_router)
 app.include_router(internal_router)
 app.include_router(locator_router)
+app.include_router(catalog_router)
+app.include_router(catalog_v1_router)
 app.include_router(notification_router)
 app.include_router(profile_router)
 app.include_router(health_router)
