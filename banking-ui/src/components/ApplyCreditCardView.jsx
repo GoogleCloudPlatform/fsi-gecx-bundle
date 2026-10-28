@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -33,37 +33,12 @@ import {
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { createApplication } from '../utils/api.js';
+import { useCreditProducts, resolveCreditProduct, buildCardApplicationPayload } from '../hooks/useCreditProducts.js';
+import { getCreditCardStyle } from '../utils/creditCardStyles.js';
 import { formatPhoneNumber } from '../utils/formatters.js';
 import GcpInfoModal from './GcpInfoModal.jsx';
 import GoogleCloudIcon from './icons/GoogleCloudIcon.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
-
-const CARDS_MAP = {
-  'aura-elite-reserve': {
-    id: 'AURA_ELITE_RESERVE',
-    name: 'Aura Elite Reserve',
-    color: 'from-slate-900 via-slate-800 to-slate-950 text-amber-400 border-amber-500/30',
-    tag: 'Premium Travel & Lifestyle'
-  },
-  'velocity-cash-preferred': {
-    id: 'VELOCITY_CASH_PREFERRED',
-    name: 'Velocity Cash Preferred',
-    color: 'from-emerald-900 via-teal-900 to-cyan-950 text-emerald-400 border-emerald-500/30',
-    tag: 'Maximum Cash Back'
-  },
-  'equinox-horizon': {
-    id: 'EQUINOX_HORIZON',
-    name: 'Equinox Horizon',
-    color: 'from-sky-900 via-blue-950 to-slate-900 text-sky-400 border-sky-500/30',
-    tag: 'Low APR & Balance Transfers'
-  },
-  'vanguard-builder': {
-    id: 'VANGUARD_BUILDER',
-    name: 'Vanguard Builder',
-    color: 'from-indigo-950 via-slate-900 to-indigo-900 text-indigo-400 border-indigo-500/30',
-    tag: 'Secured Rebuilding'
-  }
-};
 
 const cleanNumericValue = (val) => {
   if (val === undefined || val === null) return '';
@@ -80,7 +55,7 @@ const formatNumberWithCommas = (val) => {
 
 function ApplyCreditCardView({ customerProfile, fbUser }) {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const prefill = location.state?.prefill;
   const { brandColorFrom, brandColorTo, bankName } = useSettings();
@@ -90,17 +65,16 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
   const appId = cxParts.includes('apps') ? cxParts[cxParts.indexOf('apps') + 1] : '';
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
-  // Get initial card parameter
-  const getInitialCard = () => {
-    if (prefill?.product) {
-      const formatted = prefill.product.toLowerCase().replace(/\s+/g, '-');
-      if (CARDS_MAP[formatted]) return formatted;
-    }
-    const cardParam = searchParams.get('card') || 'aura-elite-reserve';
-    return CARDS_MAP[cardParam] ? cardParam : 'aura-elite-reserve';
-  };
+  const { products, loading: productsLoading } = useCreditProducts();
 
-  const [selectedCardKey, setSelectedCardKey] = useState(getInitialCard());
+  const cardParam = searchParams.get('card') || prefill?.product || '';
+
+  const selectedProduct = useMemo(() => {
+    if (!products || products.length === 0) return null;
+    return resolveCreditProduct(products, cardParam);
+  }, [products, cardParam]);
+
+  const cardStyle = getCreditCardStyle(selectedProduct?.product_code);
   const [annualIncome, setAnnualIncome] = useState('');
   const [housingPayment, setHousingPayment] = useState('');
   const [employmentStatus, setEmploymentStatus] = useState('EMPLOYED');
@@ -172,28 +146,76 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
       return;
     }
 
+    if (!selectedProduct) {
+      setErrorMsg('Please select a valid credit card product.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      const cardDetail = CARDS_MAP[selectedCardKey];
-      const payload = {
-        product_category: 'CARD',
-        product_type: cardDetail.id,
-        requested_amount: Number(annualIncome) // Log requested amount as annual income / requested limit
-      };
+      const payload = buildCardApplicationPayload(selectedProduct.product_code, annualIncome);
 
       const result = await createApplication(payload);
       setApplicationId(result.application_id);
       setSuccessMsg('Your credit card application has been submitted successfully!');
     } catch (err) {
       console.error('Error submitting credit card application:', err);
-      setErrorMsg(err.response?.data?.detail || err.message || 'An unexpected error occurred. Please try again.');
+      const detail = err.response?.data?.detail;
+      const isUnknownProduct =
+        (typeof detail === 'object' && detail?.code === 'UNKNOWN_CREDIT_PRODUCT') ||
+        detail === 'UNKNOWN_CREDIT_PRODUCT' ||
+        (err.response?.status === 422 && String(detail).includes('UNKNOWN_CREDIT_PRODUCT'));
+
+      if (isUnknownProduct) {
+        setErrorMsg('The selected credit card product is currently unavailable. Please choose another card to apply.');
+      } else {
+        setErrorMsg(
+          typeof detail === 'string'
+            ? detail
+            : detail?.message || err.message || 'An unexpected error occurred. Please try again.'
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const currentCard = CARDS_MAP[selectedCardKey];
+  if (productsLoading) {
+    return (
+      <section className="relative pt-24 pb-16 md:pt-28 md:pb-24 px-6 max-w-4xl mx-auto min-h-[calc(100vh-80px)] flex flex-col justify-center items-center text-center">
+        <div className="inline-flex items-center gap-3 px-6 py-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-sm font-semibold shadow-sm">
+          <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
+          <span>Loading credit card details...</span>
+        </div>
+      </section>
+    );
+  }
+
+  if (!productsLoading && !selectedProduct) {
+    return (
+      <section className="relative pt-24 pb-16 md:pt-28 md:pb-24 px-6 max-w-4xl mx-auto min-h-[calc(100vh-80px)] flex flex-col justify-center items-center text-center">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 max-w-md w-full shadow-xl space-y-5">
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Product Not Available</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">
+              The credit card you requested is not currently available in our catalog.
+            </p>
+          </div>
+          <AnalyticsButton
+            analyticsId="apply_credit_card_view_all_cards"
+            onClick={() => navigate('/credit-cards')}
+            className="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-sm transition-all cursor-pointer shadow-md"
+          >
+            Explore Available Cards
+          </AnalyticsButton>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="relative pt-24 pb-16 md:pt-28 md:pb-24 px-6 max-w-6xl mx-auto min-h-[calc(100vh-80px)] flex flex-col text-left w-full">
@@ -253,7 +275,7 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
             <div className="space-y-2">
               <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{successMsg}</h2>
               <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto">
-                Thank you for applying for the <strong>{currentCard?.name}</strong>. Your application ID is:
+                Thank you for applying for the <strong>{selectedProduct.product_name}</strong>. Your application ID is:
               </p>
               <div className="inline-block bg-slate-100 dark:bg-slate-800 px-4 py-2 rounded-xl font-mono text-sm text-slate-950 dark:text-emerald-400 select-all border border-slate-200 dark:border-slate-700">
                 {applicationId}
@@ -285,28 +307,30 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
                   </label>
                   <select
                     id="card_select"
-                    value={selectedCardKey}
-                    onChange={(e) => setSelectedCardKey(e.target.value)}
-                    className="w-full px-4 py-3 text-sm rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-semibold"
+                    value={selectedProduct.product_code}
+                    onChange={(e) => setSearchParams({ card: e.target.value })}
+                    className="w-full px-4 py-3 text-sm rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-semibold cursor-pointer"
                   >
-                    {Object.entries(CARDS_MAP).map(([key, value]) => (
-                      <option key={key} value={key}>
-                        {value.name}
+                    {products.map((p) => (
+                      <option key={p.product_code} value={p.product_code}>
+                        {p.product_name}
                       </option>
                     ))}
                   </select>
                 </div>
                 {/* Visual Card Preview */}
                 <div className="md:col-span-6 flex justify-center">
-                  <div className={`w-full max-w-[280px] aspect-[1.58] rounded-xl p-4 shadow-lg border bg-gradient-to-tr text-white flex flex-col justify-between overflow-hidden transition-all duration-300 ${currentCard?.color}`}>
+                  <div className={`w-full max-w-[280px] aspect-[1.58] rounded-xl p-4 shadow-lg border bg-gradient-to-tr text-white flex flex-col justify-between overflow-hidden transition-all duration-300 ${cardStyle.cardStyle}`} style={{ backgroundImage: 'linear-gradient(to top right, #0f172a, #1e293b)' }}>
                     <div className="flex justify-between items-center">
                       <span className="font-bold text-[10px] tracking-wider opacity-95">{bankName}</span>
                       <div className="w-2.5 h-2.5 rounded-full bg-white/20"></div>
                     </div>
                     <div className="my-auto">
-                      <div className="text-[9px] uppercase tracking-wider opacity-60">Visa Signature</div>
+                      <div className="text-[9px] uppercase tracking-wider opacity-60">
+                        {selectedProduct.is_secured ? 'Secured Line' : 'Visa Signature'}
+                      </div>
                       <div className="text-sm font-extrabold tracking-tight mt-0.5 truncate">
-                        {currentCard?.name}
+                        {selectedProduct.product_name}
                       </div>
                     </div>
                     <div className="flex justify-between items-end border-t border-white/10 pt-2">
@@ -560,7 +584,7 @@ function ApplyCreditCardView({ customerProfile, fbUser }) {
             To apply for a credit card, you can fill out this application form manually or leverage the <strong>Home Loan Assistant</strong> conversational agent to prefill it for you automatically.
           </p>
           <p>
-            When talking to the agent, asking to apply for a card (e.g., <em>"I want to apply for the Aura Elite Reserve card"</em>) triggers a client extension action. The agent gathers required information from the context, generates structured parameters, and redirects you to this page with secure pre-filled form values.
+            When talking to the agent, asking to apply for a card (e.g., <em>"I want to apply for the {products?.[0]?.product_name || 'Nova Horizon Everyday Cash'} card"</em>) triggers a client extension action. The agent gathers required information from the context, generates structured parameters, and redirects you to this page with secure pre-filled form values.
           </p>
           <p>
             The agent extension configurations, dialog flows, and prompt boundaries are managed in <strong>CX Agent Studio</strong>:

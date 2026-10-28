@@ -15,11 +15,12 @@
 import axios from 'axios';
 import { playbookClient } from './playbooks.js';
 
-const backendUrl = window.env?.BANKING_API_URL || import.meta.env.VITE_BANKING_API_URL || "http://localhost:8080";
-const defaultDataGeneratorUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+const envWindow = typeof window !== 'undefined' ? window : globalThis.window;
+const backendUrl = envWindow?.env?.BANKING_API_URL || import.meta.env?.VITE_BANKING_API_URL || "http://localhost:8080";
+const defaultDataGeneratorUrl = envWindow?.location?.hostname === 'localhost' || envWindow?.location?.hostname === '127.0.0.1'
   ? 'http://localhost:8001'
-  : `${window.location.origin}/data-generator`;
-const dataGeneratorUrl = window.env?.DATA_GENERATOR_API_URL || import.meta.env.VITE_DATA_GENERATOR_API_URL || defaultDataGeneratorUrl;
+  : (envWindow?.location?.origin ? `${envWindow.location.origin}/data-generator` : 'http://localhost:8001');
+const dataGeneratorUrl = envWindow?.env?.DATA_GENERATOR_API_URL || import.meta.env?.VITE_DATA_GENERATOR_API_URL || defaultDataGeneratorUrl;
 const REQUEST_TIMEOUT_MS = 20000;
 const TOKEN_TIMEOUT_MS = 8000;
 
@@ -153,6 +154,12 @@ export async function updateCustomerProfile(profileData) {
 
 export async function createApplication(applicationData) {
   const res = await api.post('applications', applicationData);
+  return res.data;
+}
+
+// Catalog
+export async function getCreditProducts() {
+  const res = await api.get('api/v1/catalog/credit-products');
   return res.data;
 }
 
