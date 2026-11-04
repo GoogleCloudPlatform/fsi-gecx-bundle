@@ -296,6 +296,8 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "asyncpg" },
+    { name = "authlib" },
+    { name = "filelock" },
     { name = "google-adk", extra = ["db"] },
     { name = "google-cloud-logging" },
     { name = "google-cloud-speech" },
@@ -322,6 +324,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "asyncpg", specifier = ">=0.30.0,<1.0.0" },
+    { name = "authlib", specifier = ">=1.9.4,<2.0.0" },
+    { name = "filelock", specifier = ">=4.2.8,<5.0.0" },
     { name = "google-adk", extras = ["db"], specifier = "==2.4.0" },
     { name = "google-cloud-logging", specifier = ">=3.14.0,<4.0.0" },
     { name = "google-cloud-speech", specifier = ">=2.30.0" },

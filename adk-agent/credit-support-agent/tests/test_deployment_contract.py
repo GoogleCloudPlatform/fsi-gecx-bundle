@@ -17,6 +17,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 MCP_RUNTIME_VERSION = "1.30.0"
+CONTAINER_SECURITY_FLOORS = (
+    "authlib>=1.9.4,<2.0.0",
+    "filelock>=4.2.8,<5.0.0",
+)
 
 
 def test_container_runtime_pins_adk_compatible_mcp_api() -> None:
@@ -24,10 +28,15 @@ def test_container_runtime_pins_adk_compatible_mcp_api() -> None:
     requirements = (
         ROOT / "adk-agent/credit-support-agent/requirements.txt"
     ).read_text()
+    requirement_lines = requirements.splitlines()
 
     expected = f"mcp=={MCP_RUNTIME_VERSION}"
     assert f'"{expected}"' in package
-    assert expected in requirements.splitlines()
+    assert expected in requirement_lines
+
+    for spec in CONTAINER_SECURITY_FLOORS:
+        assert f'"{spec}"' in package
+        assert spec in requirement_lines
 
     from mcp.client.streamable_http import McpHttpClientFactory
 
