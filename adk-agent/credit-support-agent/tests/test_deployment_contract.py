@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[3]
-MCP_RUNTIME_VERSION = "1.28.1"
+MCP_RUNTIME_VERSION = "1.30.0"
 
 
 def test_container_runtime_pins_adk_compatible_mcp_api() -> None:
