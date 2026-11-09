@@ -30,7 +30,8 @@ steps:
     args:
       - "-c"
       - |
-        apt-get update -qq && apt-get install -y -qq jq zip
+        # The cloud-sdk image no longer ships a system python3; the release scripts need it (stdlib only).
+        apt-get update -qq && apt-get install -y -qq jq zip python3
         export PATH="/workspace:$${PATH}"
         /workspace/deployment/scripts/run_alloydb_release.sh
     env:
