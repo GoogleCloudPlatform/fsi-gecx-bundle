@@ -302,10 +302,16 @@ def build_rollback_target(
         value is True for value in validation.values()
     ):
         errors.append("rollback manifest does not contain successful validation")
-    # A schema 4 (or bootstrap-bearing) manifest must itself be coherent, so a
-    # hand-edited "null target" manifest cannot become a rollback anchor.
+    # Any manifest that declares a schema version or carries rollback fields
+    # must have a coherent rollback block before it can anchor a release. This
+    # rejects malformed or downgraded shapes (for example a v3 or unversioned
+    # manifest with a null target or a bootstrap key). It is a consistency
+    # check, not forgery protection: bucket IAM and the operator-supplied URI
+    # are the trust anchor. Only pre-rollback legacy manifests (no schema
+    # version and no rollback fields) are exempt.
     if (
-        manifest.get("schema_version") == MANIFEST_SCHEMA_VERSION
+        manifest.get("schema_version") is not None
+        or "rollback_target" in manifest
         or "rollback_bootstrap" in manifest
     ):
         errors.extend(

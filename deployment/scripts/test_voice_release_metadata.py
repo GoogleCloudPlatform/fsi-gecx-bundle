@@ -25,6 +25,23 @@ assert SPEC and SPEC.loader
 metadata = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(metadata)
 
+# CI (.github/workflows/test-action-proposal-boundary.yaml) runs only this
+# file. Re-export the executable shell refusal tests so they run there too
+# without a workflow change.
+_SHELL_SPEC = importlib.util.spec_from_file_location(
+    "test_release_retention_lib", Path(__file__).with_name("test_release_retention_lib.py")
+)
+assert _SHELL_SPEC and _SHELL_SPEC.loader
+_shell_tests = importlib.util.module_from_spec(_SHELL_SPEC)
+_SHELL_SPEC.loader.exec_module(_shell_tests)
+globals().update(
+    {
+        name: getattr(_shell_tests, name)
+        for name in dir(_shell_tests)
+        if name.startswith("test_") or name == "harness"
+    }
+)
+
 
 def _write_source(root: Path) -> None:
     ces = root / metadata.CES_AGENT_RELATIVE_PATH
@@ -313,6 +330,41 @@ def test_bootstrap_manifest_is_a_valid_later_rollback_target(tmp_path: Path) -> 
     assert any(error.startswith("rollback manifest: missing coherent") for error in errors)
 
 
+def test_downgraded_null_target_manifest_cannot_anchor_a_rollback(
+    tmp_path: Path,
+) -> None:
+    _write_source(tmp_path)
+    expected = metadata.inspect_source(tmp_path)
+    bootstrap = _bootstrap_manifest(expected, commit="b" * 40)
+
+    downgrades = []
+    for schema_version in (3, None):
+        for keep_bootstrap_key in (True, False):
+            downgraded = dict(bootstrap)
+            if schema_version is None:
+                del downgraded["schema_version"]
+            else:
+                downgraded["schema_version"] = schema_version
+            if not keep_bootstrap_key:
+                del downgraded["rollback_bootstrap"]
+            downgrades.append(downgraded)
+    unversioned_bootstrap_only = dict(bootstrap)
+    del unversioned_bootstrap_only["schema_version"]
+    del unversioned_bootstrap_only["rollback_target"]
+    downgrades.append(unversioned_bootstrap_only)
+
+    for downgraded in downgrades:
+        plan, errors = _plan("gs://demo/downgraded.json", "false", downgraded)
+        assert plan is None, downgraded
+        assert any(error.startswith("rollback manifest: ") for error in errors)
+
+    pre_rollback_legacy = dict(bootstrap)
+    for key in ("schema_version", "rollback_target", "rollback_bootstrap"):
+        del pre_rollback_legacy[key]
+    plan, errors = _plan("gs://demo/legacy.json", "false", pre_rollback_legacy)
+    assert errors == []
+
+
 def test_release_retention_tag_is_digest_bound_and_prefixed() -> None:
     commit = "0123456789ab" + "c" * 28
     image = f"us-central1-docker.pkg.dev/p/r/banking-ui@sha256:{'d' * 12}{'e' * 52}"
@@ -369,23 +421,14 @@ def test_release_bootstrap_flag_defaults_closed_and_is_forwarded() -> None:
     assert "ALLOW_NO_ROLLBACK_TARGET=${_ALLOW_NO_ROLLBACK_TARGET}" in release_build
     assert 'ALLOW_NO_ROLLBACK_TARGET="${ALLOW_NO_ROLLBACK_TARGET:-false}"' in release
     assert '--allow-no-rollback-target "${ALLOW_NO_ROLLBACK_TARGET}"' in release
-    # The only shell-side branch on the sentinel skips the download; the
-    # flag/sentinel pairing itself is enforced by build_rollback_plan.
-    assert release.count('"${ROLLBACK_MANIFEST_URI}" != "NONE"') == 1
 
 
-def test_release_protects_pinned_digests_before_deploy() -> None:
+def test_registry_keeps_release_tagged_digests() -> None:
     root = Path(__file__).resolve().parents[2]
-    release = (root / "deployment/scripts/run_alloydb_release.sh").read_text()
     registry = (root / "deployment/terraform/artifact_registry.tf").read_text()
-    before_terraform = release.split("terraform -chdir=deployment/terraform init", 1)[0]
 
-    assert 'protect_release_image "${images[$component]}"' in before_terraform
-    assert 'require_release_retention "${images[$component]}"' in before_terraform
-    assert "gcloud artifacts docker tags add" in release
-    # Promotion is read-only against the source registry.
-    promote_check = release.split("require_release_retention() {", 1)[1].split("\n}\n", 1)[0]
-    assert "tags add" not in promote_check
+    # The shell tagging/refusal behavior is executed in
+    # test_release_retention_lib.py; this pins the matching cleanup policy.
     keep_policy = registry.split('id     = "keep-release-pinned"', 1)[1].split(
         "cleanup_policies", 1
     )[0]
