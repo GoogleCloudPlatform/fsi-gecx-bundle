@@ -173,7 +173,7 @@ const articles = [
   }
 ];
 
-function HelpCenterView({ activeBot, setActiveBot }) {
+function HelpCenterView({ launchAssistant }) {
   const location = useLocation();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -359,27 +359,21 @@ function HelpCenterView({ activeBot, setActiveBot }) {
               Launch our highly capable context bots at any time from the floating primary desktop module, or directly connect with specialized regional consumer loan and security staff.
             </p>
             
-            {activeBot !== undefined && setActiveBot && (
+            {launchAssistant && (
               <div className="pt-2 flex flex-wrap justify-center gap-3">
                 <AnalyticsButton
                   analyticsId="help_center_view_launch_security_advisor"
-                  onClick={() => {
-                    setActiveBot('Security & Fraud Bot');
-                    setTimeout(() => setActiveBot(null), 4000);
-                  }}
+                  onClick={() => launchAssistant({ channel: 'voice' })}
                   className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
                 >
-                  Launch Security Advisor
+                  Talk to Card & Fraud Support
                 </AnalyticsButton>
                 <AnalyticsButton
                   analyticsId="help_center_view_launch_wealth_expert"
-                  onClick={() => {
-                    setActiveBot('Wealth Management Bot');
-                    setTimeout(() => setActiveBot(null), 4000);
-                  }}
+                  onClick={() => launchAssistant({ channel: 'chat' })}
                   className="px-4 py-2 rounded-lg bg-emerald-500 text-xs font-bold text-slate-950 hover:bg-emerald-400 transition-colors"
                 >
-                  Launch Wealth Expert
+                  Chat with the Assistant
                 </AnalyticsButton>
               </div>
             )}

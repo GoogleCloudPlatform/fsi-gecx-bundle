@@ -51,8 +51,7 @@ function HomeView({
   setLoanAmount,
   loanTerm,
   setLoanTerm,
-  activeBot,
-  setActiveBot,
+  launchAssistant,
   calculateMonthlyPayment,
   interestRate
 }) {
@@ -787,39 +786,59 @@ function HomeView({
               How can we help you today?
             </h2>
             <p className="text-slate-600 dark:text-slate-400">
-              Select an inquiry below to instantly launch a specialized AI support agent trained to resolve your specific request.
+              Select an inquiry below to connect with an AI support agent, already briefed on your request.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               {
-                title: "Account & Login",
-                desc: "Unlock your account, reset passwords, or troubleshoot two-factor authentication issues.",
-                botName: "Account Support Bot"
+                id: "lost_card",
+                title: "Lost or Stolen Card",
+                desc: "Report a lost, stolen, or damaged card, lock it, and get a replacement from our voice agent.",
+                cta: "Talk to Card Support",
+                channel: "voice"
               },
               {
-                title: "Loan Applications",
-                desc: "Check pre-approval status, calculate customized rates, or upload pending documents.",
-                botName: "Loan Advisor Bot"
+                id: "fraud",
+                title: "Fraud & Suspicious Charges",
+                desc: "Review a fraud alert, confirm or dispute the flagged charges, and clear the block on your card.",
+                cta: "Talk to Card Support",
+                channel: "voice"
               },
               {
-                title: "Fraud & Security",
-                desc: "Report unauthorized charges, freeze debit/credit cards instantly, or dispute a transaction.",
-                botName: "Security & Fraud Bot"
+                id: "fee_reversal_credit_limit",
+                title: "Fees & Credit Limit",
+                desc: "Ask for a credit card fee to be reversed or request a credit limit increase.",
+                cta: "Talk to Card Support",
+                channel: "voice"
               },
               {
-                title: "Rates & Yields",
-                desc: "Learn about high-yield savings tiers, certificate of deposit (CD) rates, and IRA structures.",
-                botName: "Wealth Management Bot"
+                id: "credit_card_application",
+                title: "Apply for a Credit Card",
+                desc: "Compare our cards, find the right fit, and get your application started with the assistant.",
+                cta: "Chat with the Assistant",
+                channel: "chat",
+                prompt: "I'd like to apply for a new credit card."
               },
               {
-                title: "Lost Credit Card",
-                desc: "Instantly freeze a missing card, report it lost or stolen, and request an expedited replacement.",
-                botName: "Lost Card Agent"
+                id: "mortgage_application",
+                title: "Apply for a Mortgage",
+                desc: "Start a home loan application and upload your income documents for verification.",
+                cta: "Chat with the Assistant",
+                channel: "chat",
+                prompt: "I'd like to apply for a new mortgage."
+              },
+              {
+                id: "branch_atm",
+                title: "Find a Branch or ATM",
+                desc: "Locate the branches and ATMs nearest to you, based on your current location.",
+                cta: "Chat with the Assistant",
+                channel: "chat",
+                prompt: "Can you help me find the nearest branch or ATM?"
               }
-            ].map((inquiry, idx) => (
-              <div key={idx} className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 rounded-3xl p-6 flex flex-col justify-between hover:border-teal-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all duration-300 group shadow-sm dark:shadow-none">
+            ].map((inquiry) => (
+              <div key={inquiry.id} className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 rounded-3xl p-6 flex flex-col justify-between hover:border-teal-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all duration-300 group shadow-sm dark:shadow-none">
                 <div>
                   <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
                     {inquiry.title}
@@ -829,31 +848,15 @@ function HomeView({
                   </p>
                 </div>
                 <AnalyticsButton
-                  analyticsId="home_view_launch_inquirybot_name" 
-                  onClick={() => {
-                    setActiveBot(inquiry.botName);
-                    setTimeout(() => setActiveBot(null), 3500);
-                  }}
+                  analyticsId={`home_view_launch_assistant_${inquiry.id}`}
+                  onClick={() => launchAssistant?.({ channel: inquiry.channel, prompt: inquiry.prompt })}
                   className="w-full py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-teal-500 hover:text-slate-950 dark:hover:bg-teal-500 dark:hover:text-slate-950 transition-all duration-300 shadow-sm hover:shadow-teal-500/20"
                 >
-                  Launch {inquiry.botName}
+                  {inquiry.cta}
                 </AnalyticsButton>
               </div>
             ))}
           </div>
-
-          {/* Interactive Bot Launch Modal/Toast */}
-          {activeBot && (
-            <div className="fixed bottom-8 right-8 z-50 bg-white dark:bg-slate-900 border border-teal-500/50 rounded-2xl p-4 shadow-2xl shadow-teal-500/20 flex items-center space-x-4 animate-bounce">
-              <div className="w-10 h-10 rounded-xl bg-teal-500/20 flex items-center justify-center text-teal-400">
-                <div className="w-2 h-2 bg-teal-400 rounded-full animate-ping"></div>
-              </div>
-              <div>
-                <div className="text-xs text-teal-500 dark:text-teal-400 font-semibold uppercase tracking-wider">Connecting...</div>
-                <div className="text-sm font-medium text-slate-900 dark:text-white">Initializing {activeBot}</div>
-              </div>
-            </div>
-          )}
 
           <GcpInfoModal
             isOpen={isSchemaModalOpen}

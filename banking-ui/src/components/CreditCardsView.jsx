@@ -45,7 +45,7 @@ import CreditCardVisual from './CreditCardVisual.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
 
 
-function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
+function CreditCardsView({ fbUser, launchAssistant }) {
   const navigate = useNavigate();
   const { 
     bankName, 
@@ -256,16 +256,16 @@ function CreditCardsView({ fbUser, activeBot, setActiveBot }) {
                       <ArrowRight className="w-4 h-4" />
                     </AnalyticsButton>
                     
-                    {activeBot !== undefined && setActiveBot && (
+                    {launchAssistant && (
                       <AnalyticsButton
                         analyticsId="credit_cards_view_03" 
-                        onClick={() => {
-                          setActiveBot(cardStyle.botName);
-                          setTimeout(() => setActiveBot(null), 4000);
-                        }}
+                        onClick={() => launchAssistant({
+                          channel: 'chat',
+                          prompt: `I'm interested in applying for the ${selectedCard.productName} credit card.`
+                        })}
                         className="w-full sm:w-auto px-6 py-3.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-semibold transition-colors flex items-center justify-center space-x-2 cursor-pointer"
                       >
-                        <span>Ask {cardStyle.botName.split(' ')[0]} Advisor</span>
+                        <span>Ask the Assistant</span>
                       </AnalyticsButton>
                     )}
                   </div>

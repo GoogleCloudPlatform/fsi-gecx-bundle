@@ -44,7 +44,7 @@ import CheckingMatrix from './CheckingMatrix.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
 
 
-function CheckingAccountsView({ activeBot, setActiveBot }) {
+function CheckingAccountsView() {
   const { 
     bankName, 
     brandColorFrom, 
@@ -245,19 +245,6 @@ function CheckingAccountsView({ activeBot, setActiveBot }) {
                   <span>Open {selectedAccount.name.split(' ')[1]} Now</span>
                   <ArrowRight className="w-4 h-4" />
                 </AnalyticsButton>
-                
-                {activeBot !== undefined && setActiveBot && (
-                  <AnalyticsButton
-                    analyticsId="checking_accounts_view_04" 
-                    onClick={() => {
-                      setActiveBot(selectedAccount.botName);
-                      setTimeout(() => setActiveBot(null), 4000);
-                    }}
-                    className="w-full sm:w-auto px-6 py-3.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-semibold transition-colors flex items-center justify-center space-x-2"
-                  >
-                    <span>Ask {selectedAccount.botName.split(' ')[0]} Specialist</span>
-                  </AnalyticsButton>
-                )}
               </div>
             </div>
 

@@ -75,7 +75,7 @@ const feeItems = [
   { item: "International outbound sovereign SWIFT transmission", fee: "$50.00", cat: "Funds Transfer" }
 ];
 
-function FeeScheduleView({ activeBot, setActiveBot }) {
+function FeeScheduleView({ launchAssistant }) {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -204,20 +204,17 @@ function FeeScheduleView({ activeBot, setActiveBot }) {
       {/* Help support fallback */}
       <section className="px-6">
         <div className="max-w-4xl mx-auto text-center space-y-4">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Unsure about an item charge?</h3>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Charged a credit card fee you didn't expect?</h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto">
-            Our digital advisors instantly trace any statement line context to resolve balance queries.
+            Our card support voice agent can review the fee with you and request a reversal.
           </p>
-          {activeBot !== undefined && setActiveBot && (
+          {launchAssistant && (
             <AnalyticsButton
               analyticsId="fee_schedule_view_launch_account_concierge"
-              onClick={() => {
-                setActiveBot('Account Support Bot');
-                setTimeout(() => setActiveBot(null), 4000);
-              }}
+              onClick={() => launchAssistant({ channel: 'voice' })}
               className="px-5 py-2 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold text-xs hover:scale-105 transition-all"
             >
-              Launch Account Concierge
+              Talk to Card Support
             </AnalyticsButton>
           )}
         </div>

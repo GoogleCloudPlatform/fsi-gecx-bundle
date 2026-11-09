@@ -166,7 +166,6 @@ function AppContent() {
 
   const [loanAmount, setLoanAmount] = useState(25000);
   const [loanTerm, setLoanTerm] = useState(60);
-  const [activeBot, setActiveBot] = useState(null);
 
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isGcpInfoModalOpen, setIsGcpInfoModalOpen] = useState(false);
@@ -525,6 +524,8 @@ function AppContent() {
   const messengerNodeRef = useRef(null);
   const customerProfileRef = useRef(null);
   const chatSessionInitializedRef = useRef(false);
+  // Topic-specific opener queued by launchAssistant(); sent instead of the default "Hello".
+  const pendingChatPromptRef = useRef(null);
   const ccaasInstanceRef = useRef(null);
 
   useEffect(() => {
@@ -761,8 +762,10 @@ function AppContent() {
             console.log("setVariables invoked with:", custDict);
 
             setTimeout(() => {
-              console.log("🗣️ Triggering initial agent greeting...");
-              node.sendQuery("Hello");
+              const opener = pendingChatPromptRef.current || "Hello";
+              pendingChatPromptRef.current = null;
+              console.log("🗣️ Triggering initial agent greeting...", opener);
+              node.sendQuery(opener);
             }, 500);
           }
         };
@@ -796,6 +799,11 @@ function AppContent() {
         // injectDataAndGreet();
           node.startNewSession();
           chatSessionInitializedRef.current = true;
+        } else if (pendingChatPromptRef.current) {
+          // Session already exists (chat re-opened): deliver the queued topic prompt directly.
+          const prompt = pendingChatPromptRef.current;
+          pendingChatPromptRef.current = null;
+          setTimeout(() => node.sendQuery(prompt), 500);
         }
       };
 
@@ -812,6 +820,36 @@ function AppContent() {
       messengerNodeRef.current = null;
     }
   }, [navigate]);
+
+  const isChatAvailable = Boolean(isReady && fbUser && isCxAgentEnabled && isChatSdkReady);
+
+  /**
+   * Routes in-page "talk to an agent" buttons to a real agent.
+   *  - channel 'voice': Credit Support Voice Agent (card activation, balances, lost cards, fraud).
+   *  - channel 'chat' (default): Nova Horizon chat assistant, opened with an optional topic prompt.
+   * Falls back to the Help Center when the chat assistant is unavailable.
+   */
+  const launchAssistant = useCallback(({ channel = 'chat', prompt } = {}) => {
+    if (channel === 'voice') {
+      navigate('/support/voice');
+      return;
+    }
+    if (!isChatAvailable) {
+      console.warn("Chat assistant unavailable (signed out, disabled, or SDK not loaded); opening Help Center.");
+      navigate('/help-center');
+      return;
+    }
+    // Chat is hidden on these pages, so move to home before opening it.
+    if (isSearchPage || isVoiceSupportPage) navigate('/');
+
+    const node = messengerNodeRef.current;
+    if (isChatOpen && chatSessionInitializedRef.current && node && typeof node.sendQuery === 'function') {
+      if (prompt) node.sendQuery(prompt);
+      return;
+    }
+    pendingChatPromptRef.current = prompt || null;
+    setIsChatOpen(true);
+  }, [navigate, isChatAvailable, isChatOpen, isSearchPage, isVoiceSupportPage]);
 
   const initializeFirebaseSession = async (user) => {
     try {
@@ -1618,8 +1656,7 @@ function AppContent() {
           setLoanAmount={setLoanAmount}
           loanTerm={loanTerm}
           setLoanTerm={setLoanTerm}
-          activeBot={activeBot}
-          setActiveBot={setActiveBot}
+          launchAssistant={launchAssistant}
           calculateMonthlyPayment={calculateMonthlyPayment}
           interestRate={interestRate}
         />
