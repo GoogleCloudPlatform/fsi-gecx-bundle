@@ -47,41 +47,10 @@ resolve_image() {
   exit 1
 }
 
-# Release-pinned digests carry a release-* tag so the Artifact Registry
-# cleanup policy keeps them (deployment/terraform/artifact_registry.tf).
-retention_tag_digest() {
-  gcloud artifacts docker images describe "$1" --format='value(image_summary.digest)' 2>/dev/null || true
-}
-
-protect_release_image() {
-  local image="$1"
-  local repository="${image%@*}"
-  local digest="${image##*@}"
-  local tag current
-  tag="$(python3 deployment/scripts/voice_release_metadata.py release-tag --commit "${RELEASE_COMMIT}" --image "${image}")"
-  current="$(retention_tag_digest "${repository}:${tag}")"
-  # Never move an existing tag: tags may be immutable, and a moved tag would
-  # silently drop retention from the digest an older manifest pinned.
-  if [[ -z "${current}" ]]; then
-    gcloud artifacts docker tags add "${image}" "${repository}:${tag}" --quiet
-    current="$(retention_tag_digest "${repository}:${tag}")"
-  fi
-  [[ "${current}" == "${digest}" ]] || {
-    echo "Retention tag ${repository}:${tag} resolves to '${current}', expected ${digest}" >&2
-    exit 1
-  }
-}
-
-require_release_retention() {
-  local image="$1"
-  local tag current
-  tag="$(python3 deployment/scripts/voice_release_metadata.py release-tag --commit "${RELEASE_COMMIT}" --image "${image}")"
-  current="$(retention_tag_digest "${image%@*}:${tag}")"
-  [[ "${current}" == "${image##*@}" ]] || {
-    echo "Qualified image ${image} lacks retention tag ${tag}; re-qualify ${RELEASE_COMMIT} before promotion." >&2
-    exit 1
-  }
-}
+# Retention tagging and rollback-manifest fetch refusal paths live in a
+# sourceable library so tests can execute them with stub gcloud/gsutil.
+# shellcheck disable=SC1091  # release_retention_lib.sh, resolved at runtime
+source "$(dirname "${BASH_SOURCE[0]}")/release_retention_lib.sh"
 
 if [[ "${RELEASE_MODE}" == "promote" ]]; then
   : "${MANIFEST_URI:?MANIFEST_URI is required for promotion}"
@@ -102,10 +71,7 @@ else
 fi
 
 rollback_manifest_args=()
-if [[ "${ROLLBACK_MANIFEST_URI}" != "NONE" ]]; then
-  gsutil cp "${ROLLBACK_MANIFEST_URI}" "${rollback_manifest_path}"
-  rollback_manifest_args=(--manifest "${rollback_manifest_path}")
-fi
+fetch_rollback_manifest "${ROLLBACK_MANIFEST_URI}" "${rollback_manifest_path}"
 python3 deployment/scripts/voice_release_metadata.py rollback-target \
   "${rollback_manifest_args[@]}" \
   --environment "${PROJECT_ID}" \
@@ -135,9 +101,9 @@ for component in "${components[@]}"; do
   # deploying. Promotion reuses those source-registry digests read-only, so it
   # only proves the qualify-time protection exists.
   if [[ "${RELEASE_MODE}" == "promote" ]]; then
-    require_release_retention "${images[$component]}"
+    require_release_retention "${RELEASE_COMMIT}" "${images[$component]}"
   else
-    protect_release_image "${images[$component]}"
+    protect_release_image "${RELEASE_COMMIT}" "${images[$component]}"
   fi
 done
 
