@@ -338,7 +338,7 @@ def test_downgraded_null_target_manifest_cannot_anchor_a_rollback(
     bootstrap = _bootstrap_manifest(expected, commit="b" * 40)
 
     downgrades = []
-    for schema_version in (3, None):
+    for schema_version in (3, 2, 1, None):
         for keep_bootstrap_key in (True, False):
             downgraded = dict(bootstrap)
             if schema_version is None:
@@ -363,6 +363,132 @@ def test_downgraded_null_target_manifest_cannot_anchor_a_rollback(
         del pre_rollback_legacy[key]
     plan, errors = _plan("gs://demo/legacy.json", "false", pre_rollback_legacy)
     assert errors == []
+
+
+def _v2_manifest(expected: dict, *, commit: str) -> dict:
+    # Field layout written by run_alloydb_release.sh at schema_version 2
+    # (commit 0af31fe): no rollback_target / rollback_bootstrap.
+    return {
+        "schema_version": 2,
+        "status": "qualified",
+        "mode": "qualify",
+        "commit": commit,
+        "environment": "demo-project",
+        "alembic_revision": expected["database"]["alembic_heads"][0],
+        "database": expected["database"],
+        "images": {
+            component: f"repo/{component}@sha256:{'b' * 64}"
+            for component in metadata.RELEASE_COMPONENTS
+        },
+        "ces": {
+            "app": "apps/a",
+            "version": "apps/a/versions/v",
+            "deployment": "apps/a/deployments/d",
+            "config_sha256": expected["ces_config"]["sha256"],
+            "model": expected["ces_config"]["model"],
+        },
+        "knowledge_catalog": expected["knowledge_catalog"],
+        "data_platform": {
+            "oltp_cdc_dataset": "oltp_cdc",
+            "curated_dataset": "analytics_curated",
+            "audit_dataset": "compliance_audit",
+        },
+        "cutover": {"final_cloud_sql_backup_id": None},
+        "validation": {
+            "terraform": True,
+            "bootstrap": True,
+            "migration": True,
+            "reconciliation": True,
+            "reset_seed": True,
+            "knowledge_catalog": True,
+            "ces_deployment": True,
+            "datastream": True,
+            "federation": True,
+            "audit_iceberg_dataflow": True,
+            "service_health": True,
+        },
+        "completed_at": "2026-07-29T00:00:00Z",
+    }
+
+
+def _v1_manifest(*, commit: str) -> dict:
+    # Field layout written at schema_version 1 (commit 0177db4): three images,
+    # no CES / catalog / database identity, no rollback fields.
+    return {
+        "schema_version": 1,
+        "status": "qualified",
+        "mode": "qualify",
+        "commit": commit,
+        "environment": "demo-project",
+        "alembic_revision": "002",
+        "images": {
+            component: f"repo/{component}@sha256:{'b' * 64}"
+            for component in ("banking-service", "credit-support-agent", "data-generator")
+        },
+        "cutover": {"final_cloud_sql_backup_id": None},
+        "validation": {
+            "terraform": True,
+            "bootstrap": True,
+            "migration": True,
+            "reconciliation": True,
+            "reset_seed": True,
+            "datastream": True,
+            "federation": True,
+            "service_health": True,
+        },
+        "completed_at": "2026-07-01T00:00:00Z",
+    }
+
+
+def test_genuine_v1_and_v2_manifests_keep_their_anchor_behavior(tmp_path: Path) -> None:
+    _write_source(tmp_path)
+    expected = metadata.inspect_source(tmp_path)
+
+    v2 = _v2_manifest(expected, commit="b" * 40)
+    plan, errors = _plan("gs://demo/v2.json", "false", v2)
+    assert errors == []
+    assert plan["rollback_target"]["commit"] == "b" * 40
+
+    # v1 predates the CES/catalog/database identity, so it was never a usable
+    # anchor; only those identity errors apply, never a schema/rollback error.
+    _, errors = metadata.build_rollback_target(
+        _v1_manifest(commit="b" * 40),
+        environment="demo-project",
+        manifest_uri="gs://demo/v1.json",
+        sha256="c" * 64,
+    )
+    assert errors
+    assert all(error.startswith("rollback manifest ") for error in errors)
+    assert not any(
+        error.startswith("rollback manifest: ") or "schema_version" in error
+        for error in errors
+    )
+
+    for schema_version, change in (
+        (2, {"rollback_target": None}),
+        (2, {"rollback_bootstrap": {"reason": "no_valid_rollback_target", "acknowledged": True}}),
+        (1, {"rollback_target": None}),
+    ):
+        legacy = (
+            _v2_manifest(expected, commit="b" * 40)
+            if schema_version == 2
+            else _v1_manifest(commit="b" * 40)
+        )
+        _, errors = metadata.build_rollback_target(
+            {**legacy, **change},
+            environment="demo-project",
+            manifest_uri="gs://demo/legacy.json",
+            sha256="c" * 64,
+        )
+        assert "rollback manifest: unsupported manifest schema_version " + str(
+            schema_version
+        ) in errors, change
+
+    v3_null = {**_v2_manifest(expected, commit="b" * 40), "schema_version": 3, "rollback_target": None}
+    _, errors = metadata.build_rollback_target(
+        v3_null, environment="demo-project", manifest_uri="gs://demo/v3.json", sha256="c" * 64
+    )
+    assert "rollback manifest: missing coherent rollback target" in errors
 
 
 def test_release_retention_tag_is_digest_bound_and_prefixed() -> None:

@@ -55,6 +55,8 @@ RELEASE_COMPONENTS = (
 # unversioned legacy manifests remain readable but always carry a target.
 MANIFEST_SCHEMA_VERSION = 4
 SUPPORTED_SCHEMA_VERSIONS = {None, 3, MANIFEST_SCHEMA_VERSION}
+# Schemas written before rollback targets existed; rollback fields are absent.
+PRE_ROLLBACK_SCHEMA_VERSIONS = {None, 1, 2}
 NO_ROLLBACK_SENTINEL = "NONE"
 ROLLBACK_BOOTSTRAP_REASON = "no_valid_rollback_target"
 # Artifact Registry cleanup keeps every version carrying this tag prefix
@@ -302,15 +304,16 @@ def build_rollback_target(
         value is True for value in validation.values()
     ):
         errors.append("rollback manifest does not contain successful validation")
-    # Any manifest that declares a schema version or carries rollback fields
-    # must have a coherent rollback block before it can anchor a release. This
-    # rejects malformed or downgraded shapes (for example a v3 or unversioned
-    # manifest with a null target or a bootstrap key). It is a consistency
-    # check, not forgery protection: bucket IAM and the operator-supplied URI
-    # are the trust anchor. Only pre-rollback legacy manifests (no schema
-    # version and no rollback fields) are exempt.
+    # Manifests written before rollback targets existed (unversioned, schema 1
+    # and schema 2) carry no rollback fields and remain usable anchors exactly
+    # as before. Any other manifest, or a pre-rollback manifest that carries a
+    # rollback key, must have a coherent rollback block. This rejects
+    # malformed or downgraded shapes (for example a v3 manifest with a null
+    # target, or a v1/v2/unversioned manifest with rollback_target: null or a
+    # rollback_bootstrap key). It is a consistency check, not forgery
+    # protection: bucket IAM and the operator-supplied URI are the trust anchor.
     if (
-        manifest.get("schema_version") is not None
+        manifest.get("schema_version") not in PRE_ROLLBACK_SCHEMA_VERSIONS
         or "rollback_target" in manifest
         or "rollback_bootstrap" in manifest
     ):
