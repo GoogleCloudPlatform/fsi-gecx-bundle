@@ -718,56 +718,67 @@ function AppContent() {
           );
         }
 
+        // Sets customer/auth session variables on this messenger node.
+        // Returns false when the profile isn't loaded yet; initializeFirebaseSession()
+        // restarts the session once it is, so any queued prompt is delivered then.
+        const injectVariables = async () => {
+          if (typeof node.setVariables !== 'function') return false;
+          const profile = customerProfileRef.current;
+          if (!profile) {
+            console.log("⚠️ Profile not ready yet. Skipping variable injection.");
+            return false;
+          }
+          console.log("customer profile: ", profile);
+
+          const customerEmail = profile?.email;
+          const userId = profile?.user_id;
+          const firstName = profile?.first_name;
+          const lastName = profile?.last_name;
+          const phoneNumber = profile?.phone_number;
+          const customerName = (firstName || lastName)
+            ? `${firstName || ''} ${lastName || ''}`.trim()
+            : customerEmail;
+
+          let cxas_token = window.cxasToken;
+          if (!cxas_token) {
+            try {
+              const data = await getCxasAuthToken();
+              cxas_token = data.token;
+            } catch (err) {
+              console.error("Error fetching CXAS token:", err);
+            }
+          }
+
+          let custDict = {
+            is_ujet_sdk: false,
+            email: customerEmail,
+            user_id: userId,
+            first_name: firstName,
+            last_name: lastName,
+            phone_number: phoneNumber,
+            customer_name: customerName,
+            access_token: `Bearer ${cxas_token}`
+          };
+
+          node.setVariables(custDict);
+          console.log("setVariables invoked with:", custDict);
+          return true;
+        };
+
+        // Sends the queued topic prompt if there is one, otherwise `fallback` (if given).
+        const sendOpener = (fallback) => {
+          const opener = pendingChatPromptRef.current || fallback;
+          pendingChatPromptRef.current = null;
+          if (!opener) return;
+          setTimeout(() => {
+            console.log("🗣️ Sending opener to agent:", opener);
+            node.sendQuery(opener);
+          }, 500);
+        };
+
         const injectDataAndGreet = async () => {
           console.log("injectDataAndGreet called");
-          if (typeof node.setVariables === 'function') {
-            const profile = customerProfileRef.current;
-            if (!profile) {
-              console.log("⚠️ Profile not ready yet. Skipping variable injection.");
-              return;
-            }
-            console.log("customer profile: ", profile);
-
-            const customerEmail = profile?.email;
-            const userId = profile?.user_id;
-            const firstName = profile?.first_name;
-            const lastName = profile?.last_name;
-            const phoneNumber = profile?.phone_number;
-            const customerName = (firstName || lastName)
-              ? `${firstName || ''} ${lastName || ''}`.trim()
-              : customerEmail;
-
-            let cxas_token = window.cxasToken;
-            if (!cxas_token) {
-              try {
-                const data = await getCxasAuthToken();
-                cxas_token = data.token;
-              } catch (err) {
-                console.error("Error fetching CXAS token:", err);
-              }
-            }
-
-            let custDict = {
-              is_ujet_sdk: false,
-              email: customerEmail,
-              user_id: userId,
-              first_name: firstName,
-              last_name: lastName,
-              phone_number: phoneNumber,
-              customer_name: customerName,
-              access_token: `Bearer ${cxas_token}`
-            };
-
-            node.setVariables(custDict);
-            console.log("setVariables invoked with:", custDict);
-
-            setTimeout(() => {
-              const opener = pendingChatPromptRef.current || "Hello";
-              pendingChatPromptRef.current = null;
-              console.log("🗣️ Triggering initial agent greeting...", opener);
-              node.sendQuery(opener);
-            }, 500);
-          }
+          if (await injectVariables()) sendOpener("Hello");
         };
 
         // Examples:
@@ -799,11 +810,11 @@ function AppContent() {
         // injectDataAndGreet();
           node.startNewSession();
           chatSessionInitializedRef.current = true;
-        } else if (pendingChatPromptRef.current) {
-          // Session already exists (chat re-opened): deliver the queued topic prompt directly.
-          const prompt = pendingChatPromptRef.current;
-          pendingChatPromptRef.current = null;
-          setTimeout(() => node.sendQuery(prompt), 500);
+        } else {
+          // Session already exists but this is a freshly mounted node (chat re-opened or
+          // returned from a page that hides it): re-apply session variables, then deliver
+          // any queued topic prompt. No default greeting, to preserve the existing conversation.
+          injectVariables().then((ok) => { if (ok) sendOpener(); });
         }
       };
 
