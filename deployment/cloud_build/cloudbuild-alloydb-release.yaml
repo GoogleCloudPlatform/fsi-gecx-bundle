@@ -41,6 +41,7 @@ steps:
       - "RELEASE_COMMIT=${_RELEASE_COMMIT}"
       - "MANIFEST_URI=${_MANIFEST_URI}"
       - "ROLLBACK_MANIFEST_URI=${_ROLLBACK_MANIFEST_URI}"
+      - "ALLOW_NO_ROLLBACK_TARGET=${_ALLOW_NO_ROLLBACK_TARGET}"
       - "ALLOW_CLOUD_SQL_CUTOVER=${_ALLOW_CLOUD_SQL_CUTOVER}"
       - "CLOUD_SQL_BACKUP_ID=${_CLOUD_SQL_BACKUP_ID}"
 
@@ -57,5 +58,8 @@ substitutions:
   _RELEASE_COMMIT: "REQUIRED"
   _MANIFEST_URI: ""
   _ROLLBACK_MANIFEST_URI: "REQUIRED"
+  # Owner-approved bootstrap only: set to "true" together with
+  # _ROLLBACK_MANIFEST_URI=NONE when no valid rollback manifest exists.
+  _ALLOW_NO_ROLLBACK_TARGET: "false"
   _ALLOW_CLOUD_SQL_CUTOVER: "false"
   _CLOUD_SQL_BACKUP_ID: ""

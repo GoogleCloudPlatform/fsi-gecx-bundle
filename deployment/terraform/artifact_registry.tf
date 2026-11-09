@@ -26,6 +26,19 @@ resource "google_artifact_registry_repository" "fsi_gecx_bundle" {
     }
   }
 
+  # Digests pinned by a qualify manifest are tagged release-<commit>-<digest>
+  # by deployment/scripts/run_alloydb_release.sh. They remain rollback targets
+  # and may serve promoted environments that pull from this registry, so they
+  # must survive the age-based DELETE below (KEEP takes precedence).
+  cleanup_policies {
+    id     = "keep-release-pinned"
+    action = "KEEP"
+    condition {
+      tag_state    = "TAGGED"
+      tag_prefixes = ["release-"]
+    }
+  }
+
   cleanup_policies {
     id     = "delete-older-than-30-days"
     action = "DELETE"

@@ -21,12 +21,15 @@ set -euo pipefail
 RELEASE_MODE="${RELEASE_MODE:-qualify}"
 MANIFEST_URI="${MANIFEST_URI:-}"
 : "${ROLLBACK_MANIFEST_URI:?ROLLBACK_MANIFEST_URI is required}"
+# Bootstrap without a rollback target only with ROLLBACK_MANIFEST_URI=NONE and
+# ALLOW_NO_ROLLBACK_TARGET=true; voice_release_metadata.py enforces the pairing.
+ALLOW_NO_ROLLBACK_TARGET="${ALLOW_NO_ROLLBACK_TARGET:-false}"
 ALLOW_CLOUD_SQL_CUTOVER="${ALLOW_CLOUD_SQL_CUTOVER:-false}"
 cloud_sql_backup_id="${CLOUD_SQL_BACKUP_ID:-}"
 source_metadata_path="/workspace/voice-release-source-metadata.json"
 ces_release_result_path="/workspace/ces-release-result.json"
 rollback_manifest_path="/workspace/rollback-release-manifest.json"
-rollback_target_path="/workspace/rollback-target.json"
+rollback_plan_path="/workspace/rollback-plan.json"
 
 declare -A images
 components=(banking-service banking-ui credit-support-agent data-generator)
@@ -42,6 +45,42 @@ resolve_image() {
   fi
   echo "No image tagged with exact release commit for ${component}: ${RELEASE_COMMIT}" >&2
   exit 1
+}
+
+# Release-pinned digests carry a release-* tag so the Artifact Registry
+# cleanup policy keeps them (deployment/terraform/artifact_registry.tf).
+retention_tag_digest() {
+  gcloud artifacts docker images describe "$1" --format='value(image_summary.digest)' 2>/dev/null || true
+}
+
+protect_release_image() {
+  local image="$1"
+  local repository="${image%@*}"
+  local digest="${image##*@}"
+  local tag current
+  tag="$(python3 deployment/scripts/voice_release_metadata.py release-tag --commit "${RELEASE_COMMIT}" --image "${image}")"
+  current="$(retention_tag_digest "${repository}:${tag}")"
+  # Never move an existing tag: tags may be immutable, and a moved tag would
+  # silently drop retention from the digest an older manifest pinned.
+  if [[ -z "${current}" ]]; then
+    gcloud artifacts docker tags add "${image}" "${repository}:${tag}" --quiet
+    current="$(retention_tag_digest "${repository}:${tag}")"
+  fi
+  [[ "${current}" == "${digest}" ]] || {
+    echo "Retention tag ${repository}:${tag} resolves to '${current}', expected ${digest}" >&2
+    exit 1
+  }
+}
+
+require_release_retention() {
+  local image="$1"
+  local tag current
+  tag="$(python3 deployment/scripts/voice_release_metadata.py release-tag --commit "${RELEASE_COMMIT}" --image "${image}")"
+  current="$(retention_tag_digest "${image%@*}:${tag}")"
+  [[ "${current}" == "${image##*@}" ]] || {
+    echo "Qualified image ${image} lacks retention tag ${tag}; re-qualify ${RELEASE_COMMIT} before promotion." >&2
+    exit 1
+  }
 }
 
 if [[ "${RELEASE_MODE}" == "promote" ]]; then
@@ -62,15 +101,23 @@ else
   done
 fi
 
-gsutil cp "${ROLLBACK_MANIFEST_URI}" "${rollback_manifest_path}"
+rollback_manifest_args=()
+if [[ "${ROLLBACK_MANIFEST_URI}" != "NONE" ]]; then
+  gsutil cp "${ROLLBACK_MANIFEST_URI}" "${rollback_manifest_path}"
+  rollback_manifest_args=(--manifest "${rollback_manifest_path}")
+fi
 python3 deployment/scripts/voice_release_metadata.py rollback-target \
-  --manifest "${rollback_manifest_path}" \
+  "${rollback_manifest_args[@]}" \
   --environment "${PROJECT_ID}" \
   --manifest-uri "${ROLLBACK_MANIFEST_URI}" \
-  > "${rollback_target_path}"
+  --allow-no-rollback-target "${ALLOW_NO_ROLLBACK_TARGET}" \
+  > "${rollback_plan_path}"
+if jq -e '.rollback_target == null' "${rollback_plan_path}" >/dev/null; then
+  echo "WARNING: owner-approved rollback bootstrap; this release records no rollback target." >&2
+fi
 while IFS= read -r rollback_image; do
   gcloud artifacts docker images describe "${rollback_image}" >/dev/null
-done < <(jq -er '.images[]' "${rollback_target_path}")
+done < <(jq -r '(.rollback_target.images // {})[]' "${rollback_plan_path}")
 
 python3 deployment/scripts/voice_release_metadata.py inspect --root /workspace \
   > "${source_metadata_path}"
@@ -84,6 +131,14 @@ EXPECTED_ALEMBIC_REVISION="$(
 for component in "${components[@]}"; do
   [[ "${images[$component]}" =~ @sha256:[a-f0-9]{64}$ ]] || { echo "Mutable or invalid image for ${component}" >&2; exit 1; }
   gcloud artifacts docker images describe "${images[$component]}" >/dev/null
+  # Qualification pins digests in its own registry and protects them before
+  # deploying. Promotion reuses those source-registry digests read-only, so it
+  # only proves the qualify-time protection exists.
+  if [[ "${RELEASE_MODE}" == "promote" ]]; then
+    require_release_retention "${images[$component]}"
+  else
+    protect_release_image "${images[$component]}"
+  fi
 done
 
 terraform -chdir=deployment/terraform init -reconfigure -input=false \
@@ -205,9 +260,9 @@ jq -n \
   --arg cloud_sql_backup_id "${cloud_sql_backup_id}" \
   --slurpfile source_metadata "${source_metadata_path}" \
   --slurpfile ces_result "${ces_release_result_path}" \
-  --slurpfile rollback_target "${rollback_target_path}" \
+  --slurpfile rollback_plan "${rollback_plan_path}" \
   '{
-    schema_version:3,
+    schema_version:4,
     status:(if $mode=="promote" then "promoted" else "qualified" end),
     mode:$mode,
     commit:$commit,
@@ -228,7 +283,8 @@ jq -n \
       model:$source_metadata[0].ces_config.model
     },
     knowledge_catalog:$source_metadata[0].knowledge_catalog,
-    rollback_target:$rollback_target[0],
+    rollback_target:$rollback_plan[0].rollback_target,
+    rollback_bootstrap:$rollback_plan[0].rollback_bootstrap,
     data_platform:{
       oltp_cdc_dataset:"oltp_cdc",
       curated_dataset:"analytics_curated",
