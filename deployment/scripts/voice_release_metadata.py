@@ -28,6 +28,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import sys
 from typing import Any
 
 
@@ -49,6 +50,18 @@ RELEASE_COMPONENTS = (
     "credit-support-agent",
     "data-generator",
 )
+
+# Manifest schema 4 adds the explicit no-rollback bootstrap shape. Schema 3 and
+# unversioned legacy manifests remain readable but always carry a target.
+MANIFEST_SCHEMA_VERSION = 4
+SUPPORTED_SCHEMA_VERSIONS = {None, 3, MANIFEST_SCHEMA_VERSION}
+NO_ROLLBACK_SENTINEL = "NONE"
+ROLLBACK_BOOTSTRAP_REASON = "no_valid_rollback_target"
+# Artifact Registry cleanup keeps every version carrying this tag prefix
+# (deployment/terraform/artifact_registry.tf).
+RELEASE_RETENTION_TAG_PREFIX = "release-"
+_IMMUTABLE_IMAGE = re.compile(r"@sha256:([0-9a-f]{64})$")
+_FULL_COMMIT = re.compile(r"[0-9a-f]{40}")
 
 
 def _sha256_file(path: Path) -> str:
@@ -195,18 +208,49 @@ def validate_manifest(
     for field in ("app", "version", "deployment"):
         if not isinstance(ces.get(field), str) or not ces[field]:
             errors.append(f"missing CES {field}")
-    rollback_target = manifest.get("rollback_target")
-    if not isinstance(rollback_target, dict):
-        errors.append("missing coherent rollback target")
-    else:
-        errors.extend(
-            _validate_release_identity(
-                rollback_target,
-                expected_environment=str(manifest.get("environment") or ""),
-                label="rollback target",
-            )
-        )
+    errors.extend(_validate_rollback_fields(manifest))
     return errors
+
+
+def _is_explicit_rollback_bootstrap(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and set(value) == {"reason", "acknowledged"}
+        and value["reason"] == ROLLBACK_BOOTSTRAP_REASON
+        and value["acknowledged"] is True
+    )
+
+
+def _validate_rollback_fields(manifest: dict[str, Any]) -> list[str]:
+    """Check that a manifest names a rollback target or an explicit bootstrap.
+
+    A manifest either records a coherent environment-local rollback target and
+    no bootstrap, or (schema 4 only) records ``rollback_target: null`` together
+    with the exact acknowledged bootstrap block. Every other shape fails.
+    """
+    schema_version = manifest.get("schema_version")
+    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
+        return [f"unsupported manifest schema_version {schema_version!r}"]
+    rollback_target = manifest.get("rollback_target")
+    bootstrap = manifest.get("rollback_bootstrap")
+    if rollback_target is None:
+        if schema_version != MANIFEST_SCHEMA_VERSION:
+            return ["missing coherent rollback target"]
+        if not _is_explicit_rollback_bootstrap(bootstrap):
+            return [
+                "missing coherent rollback target and no explicit rollback "
+                "bootstrap acknowledgement"
+            ]
+        return []
+    if not isinstance(rollback_target, dict):
+        return ["missing coherent rollback target"]
+    if bootstrap is not None:
+        return ["manifest records both a rollback target and a rollback bootstrap"]
+    return _validate_release_identity(
+        rollback_target,
+        expected_environment=str(manifest.get("environment") or ""),
+        label="rollback target",
+    )
 
 
 def _validate_release_identity(
@@ -258,6 +302,16 @@ def build_rollback_target(
         value is True for value in validation.values()
     ):
         errors.append("rollback manifest does not contain successful validation")
+    # A schema 4 (or bootstrap-bearing) manifest must itself be coherent, so a
+    # hand-edited "null target" manifest cannot become a rollback anchor.
+    if (
+        manifest.get("schema_version") == MANIFEST_SCHEMA_VERSION
+        or "rollback_bootstrap" in manifest
+    ):
+        errors.extend(
+            f"rollback manifest: {error}"
+            for error in _validate_rollback_fields(manifest)
+        )
     target = {
         "manifest_uri": manifest_uri,
         "manifest_sha256": sha256,
@@ -270,6 +324,72 @@ def build_rollback_target(
         "completed_at": manifest.get("completed_at"),
     }
     return target, errors
+
+
+def build_rollback_plan(
+    *,
+    manifest_uri: str,
+    allow_no_rollback_target: str,
+    manifest_bytes: bytes | None,
+    environment: str,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Decide the rollback fields of the next manifest.
+
+    Returns ``{"rollback_target": ..., "rollback_bootstrap": ...}``. Bootstrap
+    (no rollback target) happens only when the operator passes both the
+    ``NONE`` sentinel URI and ``allow_no_rollback_target == "true"``. An empty
+    or missing flag means false. Any mismatch fails closed.
+    """
+    if allow_no_rollback_target not in {"true", "false", ""}:
+        return None, [
+            "ALLOW_NO_ROLLBACK_TARGET must be 'true' or 'false', got "
+            f"{allow_no_rollback_target!r}"
+        ]
+    allowed = allow_no_rollback_target == "true"
+    if manifest_uri == NO_ROLLBACK_SENTINEL:
+        if not allowed:
+            return None, [
+                f"ROLLBACK_MANIFEST_URI={NO_ROLLBACK_SENTINEL} requires "
+                "ALLOW_NO_ROLLBACK_TARGET=true"
+            ]
+        return {
+            "rollback_target": None,
+            "rollback_bootstrap": {
+                "reason": ROLLBACK_BOOTSTRAP_REASON,
+                "acknowledged": True,
+            },
+        }, []
+    if allowed:
+        return None, [
+            "ALLOW_NO_ROLLBACK_TARGET=true is only valid with "
+            f"ROLLBACK_MANIFEST_URI={NO_ROLLBACK_SENTINEL}"
+        ]
+    if manifest_bytes is None:
+        return None, ["a rollback manifest is required"]
+    target, errors = build_rollback_target(
+        json.loads(manifest_bytes),
+        environment=environment,
+        manifest_uri=manifest_uri,
+        sha256=hashlib.sha256(manifest_bytes).hexdigest(),
+    )
+    if errors:
+        return None, errors
+    return {"rollback_target": target, "rollback_bootstrap": None}, []
+
+
+def release_retention_tag(commit: str, image: str) -> str:
+    """Return the cleanup-exempt tag for a release-pinned image digest.
+
+    The tag is derived from both the commit and the digest, so it is stable
+    for a given pin and a rebuilt digest for the same commit gets a distinct
+    tag instead of moving the old one.
+    """
+    if not _FULL_COMMIT.fullmatch(commit):
+        raise ValueError(f"invalid full commit {commit!r}")
+    match = _IMMUTABLE_IMAGE.search(image)
+    if not match:
+        raise ValueError(f"image is not pinned by digest: {image!r}")
+    return f"{RELEASE_RETENTION_TAG_PREFIX}{commit[:12]}-{match.group(1)[:12]}"
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -285,28 +405,39 @@ def _parser() -> argparse.ArgumentParser:
     validate_parser.add_argument("--commit", required=True)
 
     rollback_parser = subparsers.add_parser("rollback-target")
-    rollback_parser.add_argument("--manifest", type=Path, required=True)
+    rollback_parser.add_argument("--manifest", type=Path)
     rollback_parser.add_argument("--environment", required=True)
     rollback_parser.add_argument("--manifest-uri", required=True)
+    rollback_parser.add_argument("--allow-no-rollback-target", default="false")
+
+    tag_parser = subparsers.add_parser("release-tag")
+    tag_parser.add_argument("--commit", required=True)
+    tag_parser.add_argument("--image", required=True)
     return parser
 
 
 def main() -> int:
     args = _parser().parse_args()
     if args.command == "rollback-target":
-        manifest_bytes = args.manifest.read_bytes()
-        manifest = json.loads(manifest_bytes)
-        target, errors = build_rollback_target(
-            manifest,
-            environment=args.environment,
+        plan, errors = build_rollback_plan(
             manifest_uri=args.manifest_uri,
-            sha256=hashlib.sha256(manifest_bytes).hexdigest(),
+            allow_no_rollback_target=args.allow_no_rollback_target,
+            manifest_bytes=args.manifest.read_bytes() if args.manifest else None,
+            environment=args.environment,
         )
         if errors:
             for error in errors:
-                print(f"ERROR: {error}")
+                print(f"ERROR: {error}", file=sys.stderr)
             return 1
-        print(json.dumps(target, sort_keys=True))
+        print(json.dumps(plan, sort_keys=True))
+        return 0
+
+    if args.command == "release-tag":
+        try:
+            print(release_retention_tag(args.commit, args.image))
+        except ValueError as error:
+            print(f"ERROR: {error}", file=sys.stderr)
+            return 1
         return 0
 
     root = args.root.resolve()

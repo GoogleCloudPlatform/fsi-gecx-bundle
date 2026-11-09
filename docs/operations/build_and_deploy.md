@@ -120,6 +120,60 @@ verifies the commit, image digests, CES source digest and model, catalog
 snapshot, and Alembic head, then runs the same ordered deployment and validation
 controller in the target. It does not rebuild the container images.
 
+### Release image retention
+
+The Artifact Registry repository deletes versions older than 30 days unless
+they are among the 10 most recent. Release-pinned digests are exempt.
+
+- Before qualification deploys anything, it tags each pinned digest in the
+  source registry with `release-<commit12>-<digest12>`. The repository's
+  `keep-release-pinned` cleanup policy keeps every version with a `release-`
+  tag, and KEEP takes precedence over the age-based DELETE.
+- The tag is derived from the digest, so the controller never moves an
+  existing tag. If the tag already names a different digest, qualification
+  fails.
+- Promotion deploys the source project's digests unchanged (for example,
+  `fsi-demo-1841` runs images from the `evo-genai-workspace` registry). It
+  performs a read-only check that each digest carries its qualify-time
+  `release-` tag and refuses to promote otherwise. Re-qualify the commit if
+  this check fails, for example for a manifest written before this protection
+  existed.
+- Do not delete `release-*` tags by hand. Doing so removes rollback targets
+  and can break promoted environments that pull those digests.
+
+### Bootstrap without a rollback target
+
+Every release normally needs `_ROLLBACK_MANIFEST_URI` to point to a previous
+successful manifest in the same environment, and the controller verifies that
+all of that manifest's images still exist. When no such manifest exists (a new
+environment, or every earlier manifest pins images that have since been
+deleted), you can run one explicit bootstrap release instead.
+
+- **Requires explicit owner approval** recorded with the release request.
+- Intended to happen once per environment, only when no valid rollback manifest
+  exists. Do not use it to bypass a rollback manifest that fails validation for
+  any other reason.
+- Set both substitutions. Either one alone fails closed, and so does any value
+  other than `true`/`false`:
+
+```bash
+--substitutions="_RELEASE_COMMIT=$COMMIT,_ROLLBACK_MANIFEST_URI=NONE,_ALLOW_NO_ROLLBACK_TARGET=true"
+```
+
+For promotion, add `_MANIFEST_URI=$MANIFEST` as usual. The resulting manifest
+(`schema_version: 4`) records:
+
+```json
+"rollback_target": null,
+"rollback_bootstrap": {"reason": "no_valid_rollback_target", "acknowledged": true}
+```
+
+Manifest validation accepts a missing rollback target only in exactly this
+shape. The bootstrap manifest is itself a normal successful release and
+becomes the rollback target for the next release in that environment: pass its
+URI as `_ROLLBACK_MANIFEST_URI` and leave `_ALLOW_NO_ROLLBACK_TARGET` at its
+default `false`.
+
 ## What the release manifest covers
 
 The manifest pins and promotes these runtime images:
@@ -136,7 +190,8 @@ It also records and verifies:
 - the Knowledge Catalog seed snapshot
 - the Alembic schema head
 - one environment-local, previously successful manifest as the coherent
-  rollback target
+  rollback target, or the explicit owner-approved bootstrap record described
+  above
 
 The release controller rejects a rollback manifest from another environment,
 a manifest without successful validation, a mutable component image, or a
