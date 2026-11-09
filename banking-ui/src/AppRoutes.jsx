@@ -60,8 +60,7 @@ export default function AppRoutes({
   setLoanAmount,
   loanTerm,
   setLoanTerm,
-  activeBot,
-  setActiveBot,
+  launchAssistant,
   calculateMonthlyPayment,
   interestRate
 }) {
@@ -103,14 +102,13 @@ export default function AppRoutes({
           setLoanAmount={setLoanAmount}
           loanTerm={loanTerm}
           setLoanTerm={setLoanTerm}
-          activeBot={activeBot}
-          setActiveBot={setActiveBot}
+          launchAssistant={launchAssistant}
           calculateMonthlyPayment={calculateMonthlyPayment}
           interestRate={interestRate}
         />
       } />
       <Route path="/checking-accounts" element={
-        <CheckingAccountsView activeBot={activeBot} setActiveBot={setActiveBot} />
+        <CheckingAccountsView launchAssistant={launchAssistant} />
       } />
       <Route path="/accounts" element={
         <ProtectedRoute isReady={isReady} fbUser={fbUser}>
@@ -124,19 +122,19 @@ export default function AppRoutes({
         <CertificateAccountsView />
       } />
       <Route path="/credit-cards" element={
-        <CreditCardsView fbUser={fbUser} activeBot={activeBot} setActiveBot={setActiveBot} />
+        <CreditCardsView fbUser={fbUser} launchAssistant={launchAssistant} />
       } />
       <Route path="/mortgages" element={
-        <MortgagesView activeBot={activeBot} setActiveBot={setActiveBot} />
+        <MortgagesView launchAssistant={launchAssistant} />
       } />
       <Route path="/mortgage-rates" element={
         <MortgageRatesView />
       } />
       <Route path="/help-center" element={
-        <HelpCenterView activeBot={activeBot} setActiveBot={setActiveBot} />
+        <HelpCenterView launchAssistant={launchAssistant} />
       } />
       <Route path="/fee-schedule" element={
-        <FeeScheduleView activeBot={activeBot} setActiveBot={setActiveBot} />
+        <FeeScheduleView launchAssistant={launchAssistant} />
       } />
       <Route path="/disclosures" element={
         <DisclosuresView />

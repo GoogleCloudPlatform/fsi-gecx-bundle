@@ -41,7 +41,7 @@ import { useSettings } from '../context/SettingsContext.jsx';
 import AnalyticsButton from './AnalyticsButton.jsx';
 
 
-function MortgagesView({ activeBot, setActiveBot }) {
+function MortgagesView({ launchAssistant }) {
   const { 
     bankName, 
     brandColorFrom, 
@@ -62,7 +62,6 @@ function MortgagesView({ activeBot, setActiveBot }) {
       accentColor: "#0284c7",
       badgeBg: "bg-sky-500/10 border-sky-500/20 text-sky-600 dark:text-sky-400",
       icon: Shield,
-      botName: "Civic Lending Bot",
       benefits: [
         "Zero lender application or automated processing fee overhead",
         "Dedicated municipal single-point underwriting support contact",
@@ -77,7 +76,6 @@ function MortgagesView({ activeBot, setActiveBot }) {
       accentColor: "#10b981",
       badgeBg: "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400",
       icon: Gift,
-      botName: "Mortgage Savings Bot",
       benefits: [
         "20% effective direct contribution multiplier trigger on matched principal",
         "Seamless continuous principal transfer integration from active checking core",
@@ -92,7 +90,6 @@ function MortgagesView({ activeBot, setActiveBot }) {
       accentColor: "#8b5cf6",
       badgeBg: "bg-purple-500/10 border-purple-500/20 text-purple-600 dark:text-purple-400",
       icon: Award,
-      botName: "First-Home Grant Bot",
       benefits: [
         "Direct municipal and regional housing equity credit assistance integration",
         "Combines natively with our low down-payment fixed rate lines",
@@ -107,7 +104,6 @@ function MortgagesView({ activeBot, setActiveBot }) {
       accentColor: "#f59e0b",
       badgeBg: "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400",
       icon: RefreshCw,
-      botName: "Amortization Sweep Bot",
       benefits: [
         "Shave projected amortization timelines significantly without expensive refi overhead",
         "Fully flexible participation architecture allowing modification at any time",
@@ -321,16 +317,16 @@ function MortgagesView({ activeBot, setActiveBot }) {
                       Connect Program Context
                     </AnalyticsButton>
                     
-                    {activeBot !== undefined && setActiveBot && (
+                    {launchAssistant && (
                       <AnalyticsButton
                         analyticsId="mortgages_view_ask_advisor" 
-                        onClick={() => {
-                          setActiveBot(prog.botName);
-                          setTimeout(() => setActiveBot(null), 4000);
-                        }}
+                        onClick={() => launchAssistant({
+                          channel: 'chat',
+                          prompt: `I'd like to apply for a mortgage with the ${prog.name} program.`
+                        })}
                         className="text-xs text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium transition-colors"
                       >
-                        Ask Advisor
+                        Ask the Assistant
                       </AnalyticsButton>
                     )}
                   </div>

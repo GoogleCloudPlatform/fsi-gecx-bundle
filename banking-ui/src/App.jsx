@@ -166,7 +166,6 @@ function AppContent() {
 
   const [loanAmount, setLoanAmount] = useState(25000);
   const [loanTerm, setLoanTerm] = useState(60);
-  const [activeBot, setActiveBot] = useState(null);
 
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isGcpInfoModalOpen, setIsGcpInfoModalOpen] = useState(false);
@@ -525,6 +524,8 @@ function AppContent() {
   const messengerNodeRef = useRef(null);
   const customerProfileRef = useRef(null);
   const chatSessionInitializedRef = useRef(false);
+  // Topic-specific opener queued by launchAssistant(); sent instead of the default "Hello".
+  const pendingChatPromptRef = useRef(null);
   const ccaasInstanceRef = useRef(null);
 
   useEffect(() => {
@@ -717,54 +718,67 @@ function AppContent() {
           );
         }
 
+        // Sets customer/auth session variables on this messenger node.
+        // Returns false when the profile isn't loaded yet; initializeFirebaseSession()
+        // restarts the session once it is, so any queued prompt is delivered then.
+        const injectVariables = async () => {
+          if (typeof node.setVariables !== 'function') return false;
+          const profile = customerProfileRef.current;
+          if (!profile) {
+            console.log("⚠️ Profile not ready yet. Skipping variable injection.");
+            return false;
+          }
+          console.log("customer profile: ", profile);
+
+          const customerEmail = profile?.email;
+          const userId = profile?.user_id;
+          const firstName = profile?.first_name;
+          const lastName = profile?.last_name;
+          const phoneNumber = profile?.phone_number;
+          const customerName = (firstName || lastName)
+            ? `${firstName || ''} ${lastName || ''}`.trim()
+            : customerEmail;
+
+          let cxas_token = window.cxasToken;
+          if (!cxas_token) {
+            try {
+              const data = await getCxasAuthToken();
+              cxas_token = data.token;
+            } catch (err) {
+              console.error("Error fetching CXAS token:", err);
+            }
+          }
+
+          let custDict = {
+            is_ujet_sdk: false,
+            email: customerEmail,
+            user_id: userId,
+            first_name: firstName,
+            last_name: lastName,
+            phone_number: phoneNumber,
+            customer_name: customerName,
+            access_token: `Bearer ${cxas_token}`
+          };
+
+          node.setVariables(custDict);
+          console.log("setVariables invoked with:", custDict);
+          return true;
+        };
+
+        // Sends the queued topic prompt if there is one, otherwise `fallback` (if given).
+        const sendOpener = (fallback) => {
+          const opener = pendingChatPromptRef.current || fallback;
+          pendingChatPromptRef.current = null;
+          if (!opener) return;
+          setTimeout(() => {
+            console.log("🗣️ Sending opener to agent:", opener);
+            node.sendQuery(opener);
+          }, 500);
+        };
+
         const injectDataAndGreet = async () => {
           console.log("injectDataAndGreet called");
-          if (typeof node.setVariables === 'function') {
-            const profile = customerProfileRef.current;
-            if (!profile) {
-              console.log("⚠️ Profile not ready yet. Skipping variable injection.");
-              return;
-            }
-            console.log("customer profile: ", profile);
-
-            const customerEmail = profile?.email;
-            const userId = profile?.user_id;
-            const firstName = profile?.first_name;
-            const lastName = profile?.last_name;
-            const phoneNumber = profile?.phone_number;
-            const customerName = (firstName || lastName)
-              ? `${firstName || ''} ${lastName || ''}`.trim()
-              : customerEmail;
-
-            let cxas_token = window.cxasToken;
-            if (!cxas_token) {
-              try {
-                const data = await getCxasAuthToken();
-                cxas_token = data.token;
-              } catch (err) {
-                console.error("Error fetching CXAS token:", err);
-              }
-            }
-
-            let custDict = {
-              is_ujet_sdk: false,
-              email: customerEmail,
-              user_id: userId,
-              first_name: firstName,
-              last_name: lastName,
-              phone_number: phoneNumber,
-              customer_name: customerName,
-              access_token: `Bearer ${cxas_token}`
-            };
-
-            node.setVariables(custDict);
-            console.log("setVariables invoked with:", custDict);
-
-            setTimeout(() => {
-              console.log("🗣️ Triggering initial agent greeting...");
-              node.sendQuery("Hello");
-            }, 500);
-          }
+          if (await injectVariables()) sendOpener("Hello");
         };
 
         // Examples:
@@ -796,6 +810,11 @@ function AppContent() {
         // injectDataAndGreet();
           node.startNewSession();
           chatSessionInitializedRef.current = true;
+        } else {
+          // Session already exists but this is a freshly mounted node (chat re-opened or
+          // returned from a page that hides it): re-apply session variables, then deliver
+          // any queued topic prompt. No default greeting, to preserve the existing conversation.
+          injectVariables().then((ok) => { if (ok) sendOpener(); });
         }
       };
 
@@ -812,6 +831,36 @@ function AppContent() {
       messengerNodeRef.current = null;
     }
   }, [navigate]);
+
+  const isChatAvailable = Boolean(isReady && fbUser && isCxAgentEnabled && isChatSdkReady);
+
+  /**
+   * Routes in-page "talk to an agent" buttons to a real agent.
+   *  - channel 'voice': Credit Support Voice Agent (card activation, balances, lost cards, fraud).
+   *  - channel 'chat' (default): Nova Horizon chat assistant, opened with an optional topic prompt.
+   * Falls back to the Help Center when the chat assistant is unavailable.
+   */
+  const launchAssistant = useCallback(({ channel = 'chat', prompt } = {}) => {
+    if (channel === 'voice') {
+      navigate('/support/voice');
+      return;
+    }
+    if (!isChatAvailable) {
+      console.warn("Chat assistant unavailable (signed out, disabled, or SDK not loaded); opening Help Center.");
+      navigate('/help-center');
+      return;
+    }
+    // Chat is hidden on these pages, so move to home before opening it.
+    if (isSearchPage || isVoiceSupportPage) navigate('/');
+
+    const node = messengerNodeRef.current;
+    if (isChatOpen && chatSessionInitializedRef.current && node && typeof node.sendQuery === 'function') {
+      if (prompt) node.sendQuery(prompt);
+      return;
+    }
+    pendingChatPromptRef.current = prompt || null;
+    setIsChatOpen(true);
+  }, [navigate, isChatAvailable, isChatOpen, isSearchPage, isVoiceSupportPage]);
 
   const initializeFirebaseSession = async (user) => {
     try {
@@ -1618,8 +1667,7 @@ function AppContent() {
           setLoanAmount={setLoanAmount}
           loanTerm={loanTerm}
           setLoanTerm={setLoanTerm}
-          activeBot={activeBot}
-          setActiveBot={setActiveBot}
+          launchAssistant={launchAssistant}
           calculateMonthlyPayment={calculateMonthlyPayment}
           interestRate={interestRate}
         />
