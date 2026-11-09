@@ -618,12 +618,12 @@ def test_guidance_check_rejects_malformed_bundles(tmp_path: Path) -> None:
 
 
 def test_checked_in_guidance_passes_release_freshness_gate() -> None:
-    from datetime import datetime, timezone
+    from datetime import date
 
+    # Fixed date so CI does not start failing on its own as time passes;
+    # banking-service/tests/test_knowledge_catalog.py checks the live date.
     root = Path(__file__).resolve().parents[2]
-    assert metadata.guidance_freshness_errors(
-        root, datetime.now(timezone.utc).date()
-    ) == []
+    assert metadata.guidance_freshness_errors(root, date(2026, 11, 9)) == []
 
 
 def test_release_checks_guidance_before_any_mutation() -> None:
