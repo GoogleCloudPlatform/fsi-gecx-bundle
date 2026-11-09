@@ -31,6 +31,8 @@ on:
       - "deployment/scripts/run_alloydb_release.sh"
       - "deployment/scripts/voice_release_metadata.py"
       - "deployment/scripts/test_voice_release_metadata.py"
+      - "deployment/scripts/release_retention_lib.sh"
+      - "deployment/scripts/test_release_retention_lib.py"
       - "deployment/terraform/**"
       - "gecx/Credit_Support_Voice_Agent/**"
       - "scripts/cxas/**"
@@ -44,6 +46,8 @@ on:
       - "deployment/scripts/run_alloydb_release.sh"
       - "deployment/scripts/voice_release_metadata.py"
       - "deployment/scripts/test_voice_release_metadata.py"
+      - "deployment/scripts/release_retention_lib.sh"
+      - "deployment/scripts/test_release_retention_lib.py"
       - "deployment/terraform/**"
       - "gecx/Credit_Support_Voice_Agent/**"
       - "scripts/cxas/**"
@@ -78,6 +82,7 @@ jobs:
           uv run pytest -q ../deployment/scripts/test_voice_release_metadata.py
           python3 ../scripts/cxas/test_materialize_agent_bundle.py
           bash -n ../deployment/scripts/run_alloydb_release.sh
+          bash -n ../deployment/scripts/release_retention_lib.sh
           bash -n ../scripts/cxas/overwrite_cxas_agent.sh
         working-directory: banking-service
 
