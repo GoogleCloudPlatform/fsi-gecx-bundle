@@ -571,3 +571,73 @@ def test_serverless_neg_backends_do_not_set_unsupported_timeouts() -> None:
 
     assert 'network_endpoint_type = "SERVERLESS"' not in serverless_section
     assert "timeout_sec" not in serverless_section
+
+
+def _write_guidance(root: Path, document: object) -> None:
+    path = root / metadata.CATALOG_RELATIVE_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(document))
+
+
+def test_guidance_check_matches_catalog_freshness_rule(tmp_path: Path) -> None:
+    from datetime import date
+
+    today = date(2026, 11, 9)
+    topics = [
+        {"topic_id": "a", "last_reviewed": "2026-11-01"},
+        {"topic_id": "b", "last_reviewed": "2026-02-01"},
+    ]
+    _write_guidance(tmp_path, {"max_age_days": 365, "topics": topics})
+    assert metadata.guidance_freshness_errors(tmp_path, today) == []
+
+    # Boundary: exactly max_age_days old is still fresh (service uses <=).
+    _write_guidance(tmp_path, {"max_age_days": 281, "topics": topics})
+    assert metadata.guidance_freshness_errors(tmp_path, today) == []
+    _write_guidance(tmp_path, {"max_age_days": 280, "topics": topics})
+    errors = metadata.guidance_freshness_errors(tmp_path, today)
+    assert len(errors) == 1 and "oldest review is 2026-02-01" in errors[0]
+
+    # Missing max_age_days falls back to the service default of 90.
+    _write_guidance(tmp_path, {"topics": topics})
+    assert metadata.guidance_freshness_errors(tmp_path, today)
+
+
+def test_guidance_check_rejects_malformed_bundles(tmp_path: Path) -> None:
+    from datetime import date
+
+    today = date(2026, 11, 9)
+    assert metadata.guidance_freshness_errors(tmp_path, today)  # file missing
+    for document in (
+        {"max_age_days": 365, "topics": []},
+        {"max_age_days": "soon", "topics": [{"last_reviewed": "2026-11-01"}]},
+        {"max_age_days": 365, "topics": [{"topic_id": "x", "last_reviewed": "n/a"}]},
+        [],
+    ):
+        _write_guidance(tmp_path, document)
+        assert metadata.guidance_freshness_errors(tmp_path, today), document
+
+
+def test_checked_in_guidance_passes_release_freshness_gate() -> None:
+    from datetime import date
+
+    # Fixed date so CI does not start failing on its own as time passes;
+    # banking-service/tests/test_knowledge_catalog.py checks the live date.
+    root = Path(__file__).resolve().parents[2]
+    assert metadata.guidance_freshness_errors(root, date(2026, 11, 9)) == []
+
+
+def test_release_checks_guidance_before_any_mutation() -> None:
+    root = Path(__file__).resolve().parents[2]
+    release = (root / "deployment/scripts/run_alloydb_release.sh").read_text()
+    check = "voice_release_metadata.py check-guidance --root /workspace"
+
+    assert release.count(check) == 1
+    position = release.index(check)
+    for mutation in (
+        "terraform -chdir=deployment/terraform init",
+        "protect_release_image",
+        "gcloud run jobs execute banking-db-reset",
+        "gcloud run jobs execute banking-knowledge-catalog-sync",
+    ):
+        assert mutation in release[position:], mutation
+        assert mutation not in release[:position], mutation

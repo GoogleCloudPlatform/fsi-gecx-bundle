@@ -70,6 +70,10 @@ else
   done
 fi
 
+# Fail before terraform, migrations, or the demo reset if the guidance bundle
+# would be rejected by the late banking-knowledge-catalog-sync job.
+python3 deployment/scripts/voice_release_metadata.py check-guidance --root /workspace
+
 rollback_manifest_args=()
 fetch_rollback_manifest "${ROLLBACK_MANIFEST_URI}" "${rollback_manifest_path}"
 python3 deployment/scripts/voice_release_metadata.py rollback-target \

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+from datetime import date, datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -401,6 +402,44 @@ def release_retention_tag(commit: str, image: str) -> str:
     return f"{RELEASE_RETENTION_TAG_PREFIX}{commit[:12]}-{match.group(1)[:12]}"
 
 
+def guidance_freshness_errors(root: Path, today: date) -> list[str]:
+    """Fail-early mirror of KnowledgeCatalogService.validate_local_guidance.
+
+    The banking-db-reset and knowledge-catalog-sync jobs run late in the
+    release; checking the same freshness rule here stops a stale bundle before
+    terraform apply or the demo reset. Keep this in step with
+    banking-service/services/knowledge_catalog.py (_guidance_freshness).
+    """
+    try:
+        document = json.loads((root / CATALOG_RELATIVE_PATH).read_text())
+    except (OSError, ValueError) as error:
+        return [f"cannot read fraud support guidance: {error}"]
+    topics = document.get("topics") if isinstance(document, dict) else None
+    if not isinstance(topics, list) or not topics:
+        return ["fraud support guidance has no topics"]
+    try:
+        max_age_days = int(document.get("max_age_days", 90))
+    except (TypeError, ValueError):
+        return ["fraud support guidance has invalid max_age_days"]
+    errors: list[str] = []
+    reviewed: list[date] = []
+    for topic in topics:
+        topic_id = topic.get("topic_id", "<unknown>") if isinstance(topic, dict) else "<unknown>"
+        try:
+            reviewed.append(date.fromisoformat(str(topic.get("last_reviewed"))))
+        except (AttributeError, ValueError):
+            errors.append(f"{topic_id}: invalid last_reviewed")
+    if reviewed:
+        oldest = min(reviewed)
+        age_days = (today - oldest).days
+        if age_days > max_age_days:
+            errors.append(
+                f"guidance is stale; oldest review is {oldest.isoformat()} "
+                f"({age_days} days, max {max_age_days})"
+            )
+    return errors
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -418,6 +457,9 @@ def _parser() -> argparse.ArgumentParser:
     rollback_parser.add_argument("--environment", required=True)
     rollback_parser.add_argument("--manifest-uri", required=True)
     rollback_parser.add_argument("--allow-no-rollback-target", default="false")
+
+    guidance_parser = subparsers.add_parser("check-guidance")
+    guidance_parser.add_argument("--root", type=Path, default=Path.cwd())
 
     tag_parser = subparsers.add_parser("release-tag")
     tag_parser.add_argument("--commit", required=True)
@@ -439,6 +481,17 @@ def main() -> int:
                 print(f"ERROR: {error}", file=sys.stderr)
             return 1
         print(json.dumps(plan, sort_keys=True))
+        return 0
+
+    if args.command == "check-guidance":
+        errors = guidance_freshness_errors(
+            args.root.resolve(), datetime.now(timezone.utc).date()
+        )
+        if errors:
+            for error in errors:
+                print(f"ERROR: {error}", file=sys.stderr)
+            return 1
+        print("Fraud support guidance is fresh.")
         return 0
 
     if args.command == "release-tag":

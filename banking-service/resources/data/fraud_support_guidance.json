@@ -2,7 +2,7 @@
   "schema_version": 1,
   "bundle_version": "2.9",
   "published_at": "2026-10-02T00:00:00Z",
-  "max_age_days": 90,
+  "max_age_days": 365,
   "topics": [
     {
       "topic_id": "fraud_golden_path",
@@ -49,7 +49,7 @@
       "customer_safe_summary": "Review the suspicious charges, treat an unambiguous categorical response as the complete selection, then use one banking-authored proposal confirmation before committing fraud remediation.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
       "version": "2.9",
-      "last_reviewed": "2026-09-18"
+      "last_reviewed": "2026-11-09"
     },
     {
       "topic_id": "customer_reported_fraud",
@@ -79,7 +79,7 @@
       "customer_safe_summary": "If no alert exists, review recent transactions with the customer, confirm only the exact charges they identify, then open and triage a customer-reported fraud case through one controlled workflow.",
       "source_policy_ref": "customer_reported_fraud_intake_v1",
       "version": "2.9",
-      "last_reviewed": "2026-07-22"
+      "last_reviewed": "2026-11-09"
     },
     {
       "topic_id": "recognized_activity",
@@ -110,7 +110,7 @@
       "customer_safe_summary": "If the charges are legitimate, close the alert through the fraud triage workflow and reassure the customer that no card action is required.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
       "version": "2.9",
-      "last_reviewed": "2026-09-18"
+      "last_reviewed": "2026-11-09"
     },
     {
       "topic_id": "replacement_card",
@@ -135,7 +135,7 @@
       "customer_safe_summary": "When fraud is confirmed, the fraud triage workflow blocks the compromised card and may issue a replacement card as part of the case remediation.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
       "version": "2.9",
-      "last_reviewed": "2026-09-18"
+      "last_reviewed": "2026-11-09"
     },
     {
       "topic_id": "wallet_provisioning",
@@ -166,7 +166,7 @@
       "customer_safe_summary": "After a replacement card is issued, offer to queue it for Google Wallet only if the customer wants immediate card access, and describe the queue as pending until the tool succeeds.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
       "version": "2.9",
-      "last_reviewed": "2026-09-18"
+      "last_reviewed": "2026-11-09"
     },
     {
       "topic_id": "human_escalation",
@@ -192,7 +192,7 @@
       "customer_safe_summary": "If the customer wants a human representative, transfer the conversation without losing the fraud case context.",
       "source_policy_ref": "fraud_alert_voice_mitigation_v2",
       "version": "2.9",
-      "last_reviewed": "2026-09-18"
+      "last_reviewed": "2026-11-09"
     },
     {
       "topic_id": "credit_limit_increase",
@@ -223,7 +223,7 @@
       "customer_safe_summary": "An eligible demo USD credit-limit increase takes effect after you confirm its banking-authored offer.",
       "source_policy_ref": "demo-credit-limit-increase.v1",
       "version": "2.9",
-      "last_reviewed": "2026-10-02"
+      "last_reviewed": "2026-11-09"
     }
   ]
 }
