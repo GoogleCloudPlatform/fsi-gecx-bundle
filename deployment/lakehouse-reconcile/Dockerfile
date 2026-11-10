@@ -14,6 +14,12 @@
 
 FROM gcr.io/google.com/cloudsdktool/cloud-sdk:slim
 
+# The cloud-sdk:slim base no longer ships a system python3 (same change that
+# broke the release step in #310); the reconcile script needs it (stdlib only).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY scripts/datastream/reconcile_lakehouse_views.py /app/reconcile_lakehouse_views.py
